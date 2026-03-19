@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Expose OpenRouter to users via the web app — API key settings, dynamic model picker with search/filter/multi-select, and research page integration. Zero backend changes.
+**Goal:** Expose OpenRouter to users via the web app — API key settings, curated model picker with 14 frontier models, and research page integration. Zero backend changes.
 
-**Architecture:** Add OpenRouter as a 5th provider in the existing UI. Unlike static providers (2-3 hardcoded models each), OpenRouter uses a dynamic model catalog fetched from `GET /research/openrouter/models` (built in Phase A). A new `OpenRouterModelSelector` component handles search, category filtering, and multi-select (max 5). Selected models use `or:` prefixed IDs in the `selectedModels` array alongside static models.
+**Architecture:** Add OpenRouter as a 5th provider in the existing UI. Unlike static providers (2-3 hardcoded models each), OpenRouter displays a curated allowlist of 14 models from 10 providers, fetched from `GET /research/openrouter/models` (built in Phase A). The endpoint enriches the allowlist with live pricing. Selected models use `or:` prefixed IDs in the `selectedModels` array alongside static models. Web search is enabled by the backend via the `:online` suffix — no frontend logic needed.
 
 **Tech Stack:** React, TailwindCSS, TypeScript strict mode, `useApiClient` hook for data fetching.
 
@@ -14,39 +14,41 @@
 
 ---
 
+## Existing Patterns (from exploration)
+
+**Key patterns to follow:**
+- `PROVIDERS` array in `ApiKeysSettingsPage.tsx` — add `{ id: 'openrouter', name: 'OpenRouter' }`
+- `validateApiKeyFormat()` switch — add `case 'openrouter'` with `sk-or-` prefix validation
+- `PROVIDER_MODELS` in `ModelSelector.tsx` — static providers use this; OpenRouter renders separately
+- `configuredProviders` is built from `PROVIDER_MODELS.filter(p => keys[p.id] !== null)` — OpenRouter must be added separately since it's not in `PROVIDER_MODELS`
+- `useLlmKeys()` hook — returns `keys` with provider fields as masked strings or `null`
+- `useApiClient()` hook — `request<T>(baseUrl, path, options)` for API calls
+- `getErrorMessage` — imported from `@intexuraos/common-core/errors`
+- `apiRequest(baseUrl, path, accessToken, options)` — concatenates `${baseUrl}${path}` for URL
+
+---
+
 ## File Structure
 
 ### New Files
 
-| File                                                       | Responsibility                                   |
-| ---------------------------------------------------------- | ------------------------------------------------ |
-| `apps/web/src/components/OpenRouterModelSelector.tsx`      | Searchable, filterable multi-select model picker |
-| `apps/web/src/hooks/useOpenRouterModels.ts`                | Fetch and cache model catalog from backend       |
-| `apps/web/src/hooks/__tests__/useOpenRouterModels.test.ts` | Hook tests (required per CLAUDE.md)              |
+| File                                                       | Responsibility                                 |
+| ---------------------------------------------------------- | ---------------------------------------------- |
+| `apps/web/src/components/OpenRouterModelSelector.tsx`      | Curated model picker with multi-select (max 5) |
+| `apps/web/src/hooks/useOpenRouterModels.ts`                | Fetch allowlist from backend                   |
+| `apps/web/src/hooks/__tests__/useOpenRouterModels.test.ts` | Hook tests (required per CLAUDE.md)            |
 
 ### Modified Files
 
-| File                                              | Change                                               |
-| ------------------------------------------------- | ---------------------------------------------------- |
-| `apps/web/src/pages/ApiKeysSettingsPage.tsx`      | Add OpenRouter provider with `sk-or-` key validation |
-| `apps/web/src/components/ModelSelector.tsx`       | Add OpenRouter section with dynamic model picker     |
-| `apps/web/src/pages/ResearchAgentPage.tsx`        | Handle mixed static + OpenRouter model state         |
-| `apps/web/src/pages/ResearchDetailPage.tsx`       | Extend configuredProviders to include OpenRouter     |
-| `apps/web/src/services/researchAgentApi.types.ts` | Add `OpenRouterModelInfo` type, extend model types   |
-| `apps/web/src/services/researchAgentApi.ts`       | Add `fetchOpenRouterModels()` API function           |
-
----
-
-## Existing Patterns (from exploration)
-
-**Key patterns to follow:**
-- `PROVIDERS` array in `ApiKeysSettingsPage.tsx` — add OpenRouter entry with `{ id: 'openrouter', name: 'OpenRouter' }`
-- `validateApiKeyFormat()` switch — add `case 'openrouter'` with `sk-or-` prefix validation
-- `PROVIDER_MODELS` array in `ModelSelector.tsx` — static providers use this; OpenRouter section renders separately
-- `useLlmKeys()` hook — already returns `keys` with provider fields; backend Phase A added `openrouter`
-- `useApiClient()` hook — `request<T>(baseUrl, path, options)` for API calls
-- `Map<LlmProvider, SupportedModel | null>` — model selection state in `ResearchAgentPage`
-- `getSelectedModelsList()` — extracts non-null models from Map for submission
+| File                                              | Change                                                                     |
+| ------------------------------------------------- | -------------------------------------------------------------------------- |
+| `apps/web/src/pages/ApiKeysSettingsPage.tsx`      | Add OpenRouter provider with `sk-or-` key validation                       |
+| `apps/web/src/components/ModelSelector.tsx`       | Add OpenRouter section with curated model picker                           |
+| `apps/web/src/pages/ResearchAgentPage.tsx`        | Handle mixed static + OpenRouter model state, extend `configuredProviders` |
+| `apps/web/src/pages/ResearchDetailPage.tsx`       | Extend `configuredProviders` to include OpenRouter                         |
+| `apps/web/src/services/researchAgentApi.types.ts` | Add `OpenRouterModelInfo` type, update `getProviderForModel()`             |
+| `apps/web/src/services/researchAgentApi.ts`       | Add `fetchOpenRouterModels()` API function                                 |
+| `apps/web/src/services/llmKeysApi.types.ts`       | Add `openrouter` to `LlmKeysResponse` and `testResults`                    |
 
 ---
 
@@ -57,39 +59,71 @@
 **Files:**
 - Modify: `apps/web/src/services/researchAgentApi.types.ts`
 - Modify: `apps/web/src/services/researchAgentApi.ts`
+- Modify: `apps/web/src/services/llmKeysApi.types.ts`
 
-- [ ] **Step 1: Add OpenRouterModelInfo type**
+- [ ] **Step 1: Add openrouter to LlmKeysResponse**
+
+In `apps/web/src/services/llmKeysApi.types.ts`, add `openrouter` fields:
+
+```typescript
+export interface LlmKeysResponse {
+  defaultModel: string | null;
+  google: string | null;
+  openai: string | null;
+  anthropic: string | null;
+  perplexity: string | null;
+  openrouter: string | null;  // NEW
+  testResults: {
+    google: LlmTestResult | null;
+    openai: LlmTestResult | null;
+    anthropic: LlmTestResult | null;
+    perplexity: LlmTestResult | null;
+    openrouter: LlmTestResult | null;  // NEW
+  };
+}
+```
+
+- [ ] **Step 2: Update getProviderForModel for OpenRouter models**
+
+In `apps/web/src/services/researchAgentApi.types.ts`, the web `getProviderForModel()` uses a static `MODEL_TO_PROVIDER` map. Update it to handle `or:` prefixed models:
+
+```typescript
+import { isOpenRouterModel, LlmProviders } from '@intexuraos/llm-contract';
+
+export function getProviderForModel(model: SupportedModel): LlmProvider {
+  if (isOpenRouterModel(model)) {
+    return LlmProviders.OpenRouter;
+  }
+  return MODEL_TO_PROVIDER[model as Exclude<SupportedModel, OpenRouterModelId>];
+}
+```
+
+- [ ] **Step 3: Add OpenRouterModelInfo type**
 
 In `apps/web/src/services/researchAgentApi.types.ts`:
 
 ```typescript
-/** Model info from OpenRouter catalog API */
+/** Model info from OpenRouter curated allowlist */
 export interface OpenRouterModelInfo {
-  /** Model ID (e.g., 'anthropic/claude-sonnet-4') — without or: prefix */
   id: string;
-  /** Display name (e.g., 'Anthropic: Claude Sonnet 4') */
   name: string;
-  /** Maximum context length in tokens */
+  provider: string;
   contextLength: number;
-  /** Pricing per token */
   pricing: {
     promptPerToken: number;
     completionPerToken: number;
   };
-  /** Input modalities (e.g., ['text', 'image']) */
   inputModalities: string[];
-  /** Output modalities (e.g., ['text']) */
   outputModalities: string[];
 }
 
-/** Response from GET /research/openrouter/models */
 export interface OpenRouterModelsResponse {
   models: OpenRouterModelInfo[];
   cachedAt: string;
 }
 ```
 
-- [ ] **Step 2: Add API function**
+- [ ] **Step 4: Add API function**
 
 In `apps/web/src/services/researchAgentApi.ts`:
 
@@ -105,11 +139,11 @@ export async function fetchOpenRouterModels(
 }
 ```
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add apps/web/src/services/
-git commit -m "feat(web): add OpenRouter model catalog API types and service function"
+git add apps/web/src/services/researchAgentApi.types.ts apps/web/src/services/researchAgentApi.ts apps/web/src/services/llmKeysApi.types.ts
+git commit -m "feat(web): add OpenRouter API types, key response types, and service function"
 ```
 
 ---
@@ -122,92 +156,17 @@ git commit -m "feat(web): add OpenRouter model catalog API types and service fun
 
 - [ ] **Step 1: Write failing hook tests**
 
-`apps/web/src/hooks/__tests__/useOpenRouterModels.test.ts`:
+Test that:
+- Fetches models when `isConfigured` is true, returns model list
+- Returns empty array when `isConfigured` is false, no fetch made
+- Handles API errors gracefully (sets error state, returns empty array)
+- Does not re-fetch on every render (uses `fetchedRef`)
 
-```typescript
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
-import { useOpenRouterModels } from '../useOpenRouterModels.js';
-
-// Mock useApiClient
-const mockRequest = vi.fn();
-vi.mock('../useApiClient.js', () => ({
-  useApiClient: () => ({ request: mockRequest, isAuthenticated: true }),
-}));
-
-describe('useOpenRouterModels', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('fetches models when OpenRouter key is configured', async () => {
-    mockRequest.mockResolvedValueOnce({
-      models: [
-        {
-          id: 'anthropic/claude-sonnet-4',
-          name: 'Claude Sonnet 4',
-          contextLength: 200000,
-          pricing: { promptPerToken: 0.000003, completionPerToken: 0.000015 },
-          inputModalities: ['text'],
-          outputModalities: ['text'],
-        },
-      ],
-      cachedAt: '2026-03-19T00:00:00Z',
-    });
-
-    const { result } = renderHook(() => useOpenRouterModels(true));
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
-    expect(result.current.models).toHaveLength(1);
-    expect(result.current.models[0]?.id).toBe('anthropic/claude-sonnet-4');
-    expect(result.current.error).toBeNull();
-  });
-
-  it('returns empty array when no OpenRouter key configured', () => {
-    const { result } = renderHook(() => useOpenRouterModels(false));
-
-    expect(result.current.models).toEqual([]);
-    expect(result.current.loading).toBe(false);
-    expect(mockRequest).not.toHaveBeenCalled();
-  });
-
-  it('handles API error gracefully', async () => {
-    mockRequest.mockRejectedValueOnce(new Error('Network error'));
-
-    const { result } = renderHook(() => useOpenRouterModels(true));
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
-    expect(result.current.models).toEqual([]);
-    expect(result.current.error).toBe('Network error');
-  });
-
-  it('does not re-fetch on every render', async () => {
-    mockRequest.mockResolvedValueOnce({ models: [], cachedAt: '' });
-
-    const { result, rerender } = renderHook(() => useOpenRouterModels(true));
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
-    rerender();
-    rerender();
-
-    expect(mockRequest).toHaveBeenCalledTimes(1);
-  });
-});
-```
+Mock `useApiClient` via `vi.mock('../useApiClient.js', ...)`.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run apps/web/src/hooks/__tests__/useOpenRouterModels.test.ts`
-Expected: FAIL — module not found
 
 - [ ] **Step 3: Implement hook**
 
@@ -227,10 +186,6 @@ interface UseOpenRouterModelsResult {
   refresh: () => Promise<void>;
 }
 
-/**
- * Fetch OpenRouter model catalog. Only fetches when `isConfigured` is true.
- * Caches results — re-fetch via `refresh()`.
- */
 export function useOpenRouterModels(isConfigured: boolean): UseOpenRouterModelsResult {
   const { request } = useApiClient();
   const [models, setModels] = useState<OpenRouterModelInfo[]>([]);
@@ -293,13 +248,7 @@ git commit -m "feat(web): add useOpenRouterModels hook for model catalog fetchin
 - [ ] **Step 1: Add OpenRouter to PROVIDERS array**
 
 ```typescript
-const PROVIDERS: ProviderConfig[] = [
-  { id: 'google', name: 'Google (Gemini)' },
-  { id: 'openai', name: 'OpenAI (GPT)' },
-  { id: 'anthropic', name: 'Anthropic (Claude)' },
-  { id: 'perplexity', name: 'Perplexity (Sonar)' },
-  { id: 'openrouter', name: 'OpenRouter' },
-];
+{ id: 'openrouter', name: 'OpenRouter' },
 ```
 
 - [ ] **Step 2: Add key format validation**
@@ -314,12 +263,7 @@ case 'openrouter':
   break;
 ```
 
-- [ ] **Step 3: Verify manually in dev**
-
-Run: `pnpm --filter web dev`
-Navigate to settings page, verify OpenRouter provider row appears.
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add apps/web/src/pages/ApiKeysSettingsPage.tsx
@@ -335,30 +279,17 @@ git commit -m "feat(web): add OpenRouter to API key settings page"
 
 - [ ] **Step 1: Implement component**
 
-`apps/web/src/components/OpenRouterModelSelector.tsx`:
+Props: `availableModels: OpenRouterModelInfo[]`, `selectedModelIds: string[]`, `onChange: (ids: string[]) => void`, `maxModels?: number` (default 5), `loading?: boolean`, `disabled?: boolean`.
 
-The component should:
-- Accept props: `availableModels: OpenRouterModelInfo[]`, `selectedModelIds: string[]`, `onChange: (ids: string[]) => void`, `maxModels?: number` (default 5), `loading?: boolean`, `disabled?: boolean`
-- Render a search input that filters models by name
-- Show a scrollable list of models with checkboxes
-- Each model row shows: name, context length, pricing (input/output per 1M tokens)
-- Disable further selection when max reached (show message)
-- Show selected models as removable chips/tags above the list
-- Use TailwindCSS classes consistent with existing UI patterns
-- Handle loading state with spinner
-- Handle empty state (no models found / no search results)
+Features:
+- Search input filtering by model name (case-insensitive `includes()`)
+- Each model row shows: name, provider, context length, pricing (per 1M tokens: `(price * 1_000_000).toFixed(2)`)
+- Checkboxes for multi-select, disabled when max reached
+- Selected models as removable chips above the list
+- Loading spinner, empty state
+- Model IDs passed to parent are raw (without `or:` prefix) — parent adds prefix
 
-Key implementation details:
-- Format pricing: convert per-token to per-million for display (`(price * 1_000_000).toFixed(2)`)
-- Search: case-insensitive `includes()` on `model.name`
-- Selection: toggle model ID in/out of `selectedModelIds` array
-- Model IDs passed to parent are raw (without `or:` prefix) — the parent adds the prefix
-
-- [ ] **Step 2: Verify in Storybook or dev**
-
-Manually check rendering with mock data.
-
-- [ ] **Step 3: Commit**
+- [ ] **Step 2: Commit**
 
 ```bash
 git add apps/web/src/components/OpenRouterModelSelector.tsx
@@ -374,25 +305,11 @@ git commit -m "feat(web): add OpenRouterModelSelector component with search and 
 
 - [ ] **Step 1: Extend ModelSelectorProps**
 
-Add new props:
-
-```typescript
-interface ModelSelectorProps {
-  // ... existing props ...
-  /** OpenRouter models from catalog API */
-  openRouterModels?: OpenRouterModelInfo[];
-  /** Currently selected OpenRouter model IDs (without or: prefix) */
-  selectedOpenRouterModels?: string[];
-  /** Callback when OpenRouter selection changes */
-  onOpenRouterChange?: (modelIds: string[]) => void;
-  /** Whether OpenRouter models are loading */
-  openRouterLoading?: boolean;
-}
-```
+Add: `openRouterModels?`, `selectedOpenRouterModels?`, `onOpenRouterChange?`, `openRouterLoading?`, `isOpenRouterConfigured?`.
 
 - [ ] **Step 2: Add OpenRouter section**
 
-After the existing provider rows, conditionally render the OpenRouter section:
+After existing provider rows, conditionally render:
 
 ```tsx
 {isOpenRouterConfigured && (
@@ -418,17 +335,21 @@ After the existing provider rows, conditionally render the OpenRouter section:
 
 - [ ] **Step 3: Update getSelectedModelsList**
 
-Extend the helper to include OpenRouter models with `or:` prefix:
+Include OpenRouter models with `or:` prefix using `createOpenRouterModelId()` to maintain type safety:
 
 ```typescript
+import { createOpenRouterModelId } from '@intexuraos/llm-contract';
+
 export function getSelectedModelsList(
   selections: Map<LlmProvider, SupportedModel | null>,
   openRouterModelIds?: string[]
-): string[] {
-  const staticModels: string[] = Array.from(selections.values()).filter(
+): SupportedModel[] {
+  const staticModels = Array.from(selections.values()).filter(
     (m): m is SupportedModel => m !== null
   );
-  const orModels = (openRouterModelIds ?? []).map((id) => `or:${id}`);
+  const orModels: SupportedModel[] = (openRouterModelIds ?? []).map(
+    (id) => createOpenRouterModelId(id)
+  );
   return [...staticModels, ...orModels];
 }
 ```
@@ -442,10 +363,11 @@ git commit -m "feat(web): integrate OpenRouterModelSelector into ModelSelector"
 
 ---
 
-### Task 6: ResearchAgentPage Integration
+### Task 6: ResearchAgentPage & ResearchDetailPage Integration
 
 **Files:**
 - Modify: `apps/web/src/pages/ResearchAgentPage.tsx`
+- Modify: `apps/web/src/pages/ResearchDetailPage.tsx`
 
 - [ ] **Step 1: Add OpenRouter state**
 
@@ -462,7 +384,7 @@ const { models: openRouterModels, loading: openRouterLoading } = useOpenRouterMo
 
 - [ ] **Step 3: Extend configuredProviders to include OpenRouter**
 
-Both `ResearchAgentPage.tsx` and `ResearchDetailPage.tsx` build `configuredProviders` from `PROVIDER_MODELS.filter(...)`. Since OpenRouter is NOT in `PROVIDER_MODELS` (it's dynamic, not static), add OpenRouter manually:
+Both `ResearchAgentPage.tsx` and `ResearchDetailPage.tsx` build `configuredProviders` from `PROVIDER_MODELS.filter(...)`. Since OpenRouter is NOT in `PROVIDER_MODELS`, add it manually:
 
 ```typescript
 const configuredProviders: LlmProvider[] =
@@ -474,8 +396,6 @@ const configuredProviders: LlmProvider[] =
       ];
 ```
 
-Apply the same pattern in `ResearchDetailPage.tsx`.
-
 - [ ] **Step 4: Pass props to ModelSelector**
 
 ```tsx
@@ -485,10 +405,11 @@ Apply the same pattern in `ResearchDetailPage.tsx`.
   selectedOpenRouterModels={selectedOpenRouterModels}
   onOpenRouterChange={setSelectedOpenRouterModels}
   openRouterLoading={openRouterLoading}
+  isOpenRouterConfigured={isOpenRouterConfigured}
 />
 ```
 
-- [ ] **Step 4: Update submission to include OpenRouter models**
+- [ ] **Step 5: Update submission to include OpenRouter models**
 
 Where `getSelectedModelsList()` is called, pass `selectedOpenRouterModels`:
 
@@ -496,13 +417,13 @@ Where `getSelectedModelsList()` is called, pass `selectedOpenRouterModels`:
 const allModels = getSelectedModelsList(modelSelections, selectedOpenRouterModels);
 ```
 
-- [ ] **Step 5: Update autosave to track OpenRouter model changes**
+- [ ] **Step 6: Update autosave to track OpenRouter model changes**
 
 Include `selectedOpenRouterModels` in the change-detection logic for autosave.
 
-- [ ] **Step 6: Handle edit mode (loading from draft)**
+- [ ] **Step 7: Handle edit mode (loading from draft)**
 
-When loading a draft that contains `or:` prefixed models, extract them into `selectedOpenRouterModels` state:
+When loading a draft with `or:` prefixed models, extract them:
 
 ```typescript
 const orModels = draft.selectedModels
@@ -511,20 +432,11 @@ const orModels = draft.selectedModels
 setSelectedOpenRouterModels(orModels);
 ```
 
-- [ ] **Step 7: Verify end-to-end in dev**
-
-Run: `pnpm --filter web dev`
-1. Configure OpenRouter API key in settings
-2. Open new research page
-3. Verify OpenRouter section appears with models
-4. Select models, submit research
-5. Verify `or:` prefixed models in request payload (browser DevTools)
-
 - [ ] **Step 8: Commit**
 
 ```bash
-git add apps/web/src/pages/ResearchAgentPage.tsx
-git commit -m "feat(web): integrate OpenRouter model selection into research page"
+git add apps/web/src/pages/ResearchAgentPage.tsx apps/web/src/pages/ResearchDetailPage.tsx
+git commit -m "feat(web): integrate OpenRouter model selection into research pages"
 ```
 
 ---
@@ -539,16 +451,15 @@ Expected: ALL PASS
 - [ ] **Step 2: Manual end-to-end test**
 
 1. Configure OpenRouter API key → verify stored and validated
-2. Open research page → verify model catalog loads
-3. Search for a model → verify filtering works
-4. Select 5 models → verify max enforced
-5. Create research with mixed static + OpenRouter models → verify results display
-6. Save as draft → verify OpenRouter models persist
-7. Load draft → verify OpenRouter models restored
+2. Open research page → verify 14 curated models load
+3. Select up to 5 models → verify max enforced
+4. Create research with mixed static + OpenRouter models → verify results display
+5. Save as draft → verify OpenRouter models persist
+6. Load draft → verify OpenRouter models restored
 
 - [ ] **Step 3: Final commit**
 
-Stage all modified files by name (use `git status` to identify them).
+Stage all modified files by name.
 
 ```bash
 git commit -m "feat(web): complete OpenRouter frontend integration"
@@ -560,6 +471,6 @@ git commit -m "feat(web): complete OpenRouter frontend integration"
 
 1. `pnpm run ci:tracked` — all tests pass
 2. Hook tests pass with full coverage for `useOpenRouterModels`
-3. Manual: configure API key, search/select models, run research, verify results
+3. Manual: configure API key, select models, run research, verify results
 4. Manual: draft save/load preserves OpenRouter model selections
 5. Manual: verify existing (non-OpenRouter) research flow is unchanged
