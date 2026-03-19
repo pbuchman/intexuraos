@@ -3,9 +3,9 @@
  */
 
 export interface QueueConfig {
-  /** Maximum number of tasks in queue (default 10) */
+  /** Maximum number of tasks in queue (default 50) */
   maxSize: number;
-  /** TTL for queued tasks in minutes (default 360) */
+  /** TTL for queued tasks in minutes (default 30) */
   ttlMinutes: number;
 }
 
