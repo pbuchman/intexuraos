@@ -1,7 +1,7 @@
 export { BookmarksListPage } from './BookmarksListPage.js';
 export { CalendarPage } from './CalendarPage.js';
 export { DataInsightsPage } from './DataInsightsPage.js';
-export { PREventsPage } from './PREventsPage.js';
+export { GitHubEventLogPage } from './GitHubEventLogPage.js';
 export { HomePage } from './HomePage.js';
 export { LoginPage } from './LoginPage.js';
 export { NotionConnectionPage } from './NotionConnectionPage.js';
@@ -34,3 +34,4 @@ export { CodeTaskViewPageV2 } from './CodeTaskViewPageV2.js';
 export { CodeTaskNewPage } from './CodeTaskNewPage.js';
 export { VisualizationsListPage } from './VisualizationsListPage.js';
 export { WorkerSettingsPage } from './WorkerSettingsPage.js';
+export { CronSchedulesPage, CronScheduleViewPage, CronScheduleNewPage, CronExecutionsPage } from './cron-agent/index.js';

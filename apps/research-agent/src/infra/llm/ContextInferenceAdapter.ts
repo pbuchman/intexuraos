@@ -32,7 +32,7 @@ import type { ZodSchema, ZodError } from 'zod';
  */
 const RESEARCH_CONTEXT_SCHEMA = `{
   "language": string (e.g., "en"),
-  "domain": string (e.g., "technical", "legal"),
+  "domain": string (e.g., "technical", "legal", "outdoor_recreation", "fishing"),
   "mode": string (e.g., "standard", "deep"),
   "intent_summary": string,
   "defaults_applied": Array<{ key, value, reason }>,
@@ -42,7 +42,7 @@ const RESEARCH_CONTEXT_SCHEMA = `{
   "locale_scope": { country_or_region, jurisdiction, currency },
   "research_plan": { key_questions, search_queries, preferred_source_types, avoid_source_types },
   "output_format": { wants_table, wants_steps, wants_pros_cons, wants_budget_numbers },
-  "safety": { high_stakes, required_disclaimers },
+  "safety": { high_stakes, required_disclaimers, user_exclusions },
   "red_flags": string[]
 }`;
 
@@ -61,7 +61,7 @@ const SYNTHESIS_CONTEXT_SCHEMA = `{
   "defaults_applied": Array<{ key, value, reason }>,
   "assumptions": string[],
   "output_format": { wants_table, wants_actionable_summary },
-  "safety": { high_stakes, required_disclaimers },
+  "safety": { high_stakes, required_disclaimers, user_exclusions },
   "red_flags": string[]
 }`;
 

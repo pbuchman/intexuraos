@@ -179,6 +179,7 @@ export interface AppConfig {
   linearAgentUrl: string;
   codeAgentUrl: string;
   chatAgentUrl: string;
+  cronAgentUrl: string;
   appSettingsServiceUrl: string;
   firebaseProjectId: string;
   firebaseApiKey: string;
@@ -1424,3 +1425,16 @@ export interface GitHubEventLogResponse {
   rows: GitHubEventLogRow[];
   nextCursor?: string;
 }
+
+// Cron Agent types
+export type {
+  CronSchedule,
+  CronScheduleStatus,
+  CronExecution,
+  CronExecutionStatus,
+  ToolCallLog,
+  ServiceInfo,
+  ListSchedulesResponse,
+  ListExecutionsResponse,
+  CreateScheduleRequest,
+} from './cronAgent.js';

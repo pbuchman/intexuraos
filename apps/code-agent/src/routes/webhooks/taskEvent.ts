@@ -5,14 +5,13 @@
  * to the unified PR automation log. Best-effort — failures are logged
  * but never block the caller.
  *
- * Auth: X-Internal-Auth + HMAC-SHA256 orchestrator signature.
+ * Auth: X-Internal-Auth + HMAC-SHA256 per-task webhook signature.
  */
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import { getServices } from '../../services.js';
-import { validateOrchestratorSignature } from '../../infra/webhookValidation.js';
-import { loadConfig } from '../../config.js';
+import { validateWebhookSignature } from '../../infra/webhookValidation.js';
 import type { AutomationEvent } from '../../domain/ports/automationLog.js';
 
 // ---------------------------------------------------------------------------
@@ -155,22 +154,23 @@ export const taskEventRoute: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('UNAUTHORIZED', 'Internal authentication failed');
       }
 
-      // Step 2: Validate orchestrator HMAC signature
-      const signatureResult = validateOrchestratorSignature(request, {
-        orchestratorSecret: loadConfig().orchestratorSecret,
+      // Step 2: Validate webhook HMAC signature (per-task secret)
+      const signatureResult = await validateWebhookSignature(request, {
+        getWebhookSecret: async (taskId) => {
+          const { codeTaskRepo } = getServices();
+          const taskResult = await codeTaskRepo.findById(taskId);
+          if (!taskResult.ok) return null;
+          return taskResult.value.webhookSecret ?? null;
+        },
       });
 
       if (!signatureResult.ok) {
-        request.log.warn({ error: signatureResult.error }, 'Orchestrator signature validation failed for task-event');
+        request.log.warn({ error: signatureResult.error }, 'Webhook signature validation failed for task-event');
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
 
-      // Step 3: Validate request body
+      // Step 3: Validate request body (taskId non-empty guaranteed by validateWebhookSignature)
       const { taskId, event } = request.body;
-
-      if (taskId === '') {
-        return await reply.fail('INVALID_REQUEST', 'Missing taskId');
-      }
 
       if (!VALID_EVENTS.has(event as TaskEventType)) {
         return await reply.fail('INVALID_REQUEST', `Unknown event type: ${event}`);

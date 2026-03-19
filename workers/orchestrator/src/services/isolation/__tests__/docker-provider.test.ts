@@ -1071,7 +1071,7 @@ describe('DockerProvider', () => {
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
       const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
-      expect(modelEntry).toBe('ANTHROPIC_MODEL=MiniMax-M2.5');
+      expect(modelEntry).toBe('ANTHROPIC_MODEL=MiniMax-M2.7');
     });
 
     it('uses per-task session path with credential file overlay for sonnet workers', async () => {

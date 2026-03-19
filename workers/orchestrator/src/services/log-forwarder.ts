@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { createHmac } from 'node:crypto';
-import type { Logger } from '@intexuraos/common-core';
+import { getErrorCauseChain, type Logger } from '@intexuraos/common-core';
 import { stripDockerHeaders, stripBulkMetadata } from './log-formatter.js';
 
 export interface LogForwarderConfig {
@@ -406,7 +406,9 @@ export class LogForwarder {
       } catch (error) {
         /* v8 ignore start -- ts-type: error type narrowing for non-Error throwables @preserve */
         const errorInfo =
-          error instanceof Error ? { name: error.name, message: error.message } : { error };
+          error instanceof Error
+            ? { name: error.name, message: error.message, cause: getErrorCauseChain(error) }
+            : { error };
         /* v8 ignore stop @preserve */
         /* v8 ignore start -- test-infra: log statement that executes but branch coverage sees as untested @preserve */
         this.logger.warn(

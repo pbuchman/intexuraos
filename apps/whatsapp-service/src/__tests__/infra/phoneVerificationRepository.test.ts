@@ -11,6 +11,7 @@ import {
   updateVerificationStatus,
   incrementVerificationAttempts,
   countRecentVerificationsByPhone,
+  createVerificationWithChecks,
 } from '../../infra/firestore/index.js';
 import type { PhoneVerification } from '../../domain/whatsapp/models/PhoneVerification.js';
 
@@ -413,6 +414,181 @@ describe('phoneVerificationRepository', () => {
         '15551234567',
         new Date().toISOString()
       );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PERSISTENCE_ERROR');
+      }
+    });
+  });
+
+  describe('createVerificationWithChecks', () => {
+    const baseParams = {
+      userId: 'user-123',
+      phoneNumber: '15551234567',
+      code: '123456',
+      expiresAt: Math.floor(Date.now() / 1000) + 600,
+      cooldownSeconds: 60,
+      maxRequestsPerHour: 5,
+      windowStartTime: new Date(Date.now() - 3600000).toISOString(),
+    };
+
+    it('creates verification when no pending exists and rate limit not exceeded', async () => {
+      const result = await createVerificationWithChecks(baseParams);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.verification.userId).toBe('user-123');
+        expect(result.value.verification.phoneNumber).toBe('15551234567');
+        expect(result.value.verification.code).toBe('123456');
+        expect(result.value.verification.status).toBe('pending');
+        expect(result.value.cooldownUntil).toBeDefined();
+      }
+    });
+
+    it('returns cooldown error when pending verification exists within cooldown period', async () => {
+      // Create a pending verification within cooldown
+      const pendingVerification = await createVerification({
+        userId: 'user-123',
+        phoneNumber: '15551234567',
+        code: '654321',
+        attempts: 0,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        expiresAt: Math.floor(Date.now() / 1000) + 600,
+      });
+      expect(pendingVerification.ok).toBe(true);
+      if (!pendingVerification.ok) return;
+
+      // Try to create another verification immediately (within 60s cooldown)
+      const result = await createVerificationWithChecks(baseParams);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('COOLDOWN_ACTIVE');
+        expect(result.error.details).toBeDefined();
+        expect((result.error.details as { existingPendingId?: string }).existingPendingId).toBe(
+          pendingVerification.value.id
+        );
+      }
+    });
+
+    it('allows new verification after cooldown period expires', async () => {
+      // Create a pending verification with a createdAt time older than cooldown
+      const oldTime = new Date(Date.now() - 120000).toISOString(); // 2 minutes ago (cooldown is 60s)
+      const pendingVerification = await createVerification({
+        userId: 'user-123',
+        phoneNumber: '15551234567',
+        code: '654321',
+        attempts: 0,
+        status: 'pending',
+        createdAt: oldTime,
+        expiresAt: Math.floor(Date.now() / 1000) + 600,
+      });
+      expect(pendingVerification.ok).toBe(true);
+
+      // Use a shorter cooldown to allow new verification
+      const result = await createVerificationWithChecks({
+        ...baseParams,
+        cooldownSeconds: 30, // 30s cooldown, but verification is 2 minutes old
+      });
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('returns rate limit exceeded error when max requests per hour reached', async () => {
+      // Create 5 verifications (maxRequestsPerHour = 5) within the window
+      for (let i = 0; i < 5; i++) {
+        const createResult = await createVerification({
+          userId: `user-${i}`,
+          phoneNumber: '15551234567',
+          code: `code${i}`,
+          attempts: 0,
+          status: 'pending',
+          createdAt: new Date(Date.now() - 1000 * i).toISOString(), // Within the hour window
+          expiresAt: Math.floor(Date.now() / 1000) + 600,
+        });
+        expect(createResult.ok).toBe(true);
+      }
+
+      // Try to create another verification
+      const result = await createVerificationWithChecks(baseParams);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('RATE_LIMIT_EXCEEDED');
+        expect(result.error.message).toContain('Too many verification requests');
+      }
+    });
+
+    it('allows verification when under rate limit', async () => {
+      // Create only 3 verifications (under the limit of 5)
+      for (let i = 0; i < 3; i++) {
+        const createResult = await createVerification({
+          userId: `user-${i}`,
+          phoneNumber: '15551234567',
+          code: `code${i}`,
+          attempts: 0,
+          status: 'pending',
+          createdAt: new Date(Date.now() - 1000 * i).toISOString(),
+          expiresAt: Math.floor(Date.now() / 1000) + 600,
+        });
+        expect(createResult.ok).toBe(true);
+      }
+
+      const result = await createVerificationWithChecks(baseParams);
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('returns already verified error when phone is already verified for user', async () => {
+      // Create a verified verification
+      const verifiedResult = await createVerification({
+        userId: 'user-123',
+        phoneNumber: '15551234567',
+        code: '123456',
+        attempts: 0,
+        status: 'verified',
+        createdAt: new Date().toISOString(),
+        expiresAt: Math.floor(Date.now() / 1000) + 600,
+      });
+      expect(verifiedResult.ok).toBe(true);
+
+      const result = await createVerificationWithChecks(baseParams);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('ALREADY_VERIFIED');
+        expect(result.error.message).toContain('already verified');
+      }
+    });
+
+    it('excludes verifications outside the rate limit window', async () => {
+      // Create verifications outside the window (more than 1 hour ago)
+      const oldWindowStart = new Date(Date.now() - 7200000).toISOString(); // 2 hours ago
+      for (let i = 0; i < 5; i++) {
+        const createResult = await createVerification({
+          userId: `user-${i}`,
+          phoneNumber: '15551234567',
+          code: `code${i}`,
+          attempts: 0,
+          status: 'pending',
+          createdAt: oldWindowStart,
+          expiresAt: Math.floor(Date.now() / 1000) + 600,
+        });
+        expect(createResult.ok).toBe(true);
+      }
+
+      // Should still be able to create - old verifications are outside window
+      const result = await createVerificationWithChecks(baseParams);
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('returns error on persistence failure', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Transaction error') });
+
+      const result = await createVerificationWithChecks(baseParams);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {

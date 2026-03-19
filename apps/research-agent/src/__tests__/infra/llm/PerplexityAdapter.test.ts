@@ -64,7 +64,7 @@ describe('PerplexityAdapter', () => {
         expect(result.value.content).toBe('Research result');
         expect(result.value.sources).toContain('https://source.com');
       }
-      expect(mockResearch).toHaveBeenCalledWith('Test prompt');
+      expect(mockResearch).toHaveBeenCalledWith(expect.stringContaining('Test prompt'));
     });
 
     it('maps RATE_LIMITED error code correctly', async () => {

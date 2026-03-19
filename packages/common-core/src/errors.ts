@@ -110,10 +110,15 @@ export function getErrorMessage(error: unknown, fallback = 'Unknown error'): str
 }
 
 const MAX_STACK_LENGTH = 2000;
+const MAX_CAUSE_DEPTH = 10;
 
 /**
  * Serialized error object suitable for structured logging.
  * Contains all non-enumerable Error properties extracted explicitly.
+ *
+ * @property cause - Recursive chain of serialized causes (max depth 10).
+ *   Present when the original error has an `error.cause` property, mirroring
+ *   the standard `Error.cause` chain as a plain JSON-safe structure.
  */
 export interface SerializedError {
   message: string;
@@ -122,6 +127,7 @@ export interface SerializedError {
   code?: string;
   errno?: number;
   syscall?: string;
+  cause?: SerializedError;
 }
 
 /**
@@ -143,7 +149,7 @@ export interface SerializedError {
  * }
  * ```
  */
-export function serializeError(error: unknown): SerializedError {
+export function serializeError(error: unknown, depth = 0): SerializedError {
   if (!(error instanceof Error)) {
     const message = getErrorMessage(error);
     if (typeof error === 'object' && error !== null) {
@@ -183,5 +189,48 @@ export function serializeError(error: unknown): SerializedError {
     result.syscall = errorWithCode.syscall;
   }
 
+  if (error.cause !== undefined && depth < MAX_CAUSE_DEPTH) {
+    result.cause = serializeError(error.cause, depth + 1);
+  }
+
   return result;
+}
+
+/**
+ * Walk the error.cause chain and return a human-readable string.
+ *
+ * Each cause is rendered as `message [CODE]` (code only if present),
+ * joined by ` -> `. Returns `undefined` when no cause chain exists.
+ *
+ * @example
+ * ```typescript
+ * // TypeError: fetch failed
+ * //   cause: Error: connect ECONNREFUSED 34.143.76.2:443 { code: 'ECONNREFUSED' }
+ * getErrorCauseChain(error)
+ * // => 'connect ECONNREFUSED 34.143.76.2:443 [ECONNREFUSED]'
+ * ```
+ */
+export function getErrorCauseChain(error: unknown): string | undefined {
+  if (!(error instanceof Error) || error.cause === undefined) {
+    return undefined;
+  }
+
+  const parts: string[] = [];
+  let current: unknown = error.cause;
+  let depth = 0;
+
+  while (current !== undefined && depth < MAX_CAUSE_DEPTH) {
+    if (current instanceof Error) {
+      const code = (current as Error & { code?: unknown }).code;
+      const suffix = typeof code === 'string' ? ` [${code}]` : '';
+      parts.push(`${current.message}${suffix}`);
+      current = current.cause;
+      depth++;
+    } else {
+      parts.push(getErrorMessage(current));
+      break;
+    }
+  }
+
+  return parts.join(' -> ');
 }
