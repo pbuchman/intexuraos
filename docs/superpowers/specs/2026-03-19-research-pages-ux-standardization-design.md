@@ -124,7 +124,8 @@ Extracted from lines 1031-1198. Renders the main report section:
 - Synthesis report card (with copy button)
 - Single-model report card
 - Individual LLM Results section
-- Moves `LlmResultCard`, `CollapsibleInputContext` into this file
+- Moves `LlmResultCard` into this file
+- Imports `CollapsibleInputContext` from `ProcessingStatus.tsx` (single owner — see 3e)
 - Moves helper functions used by these components: `formatTokenCount`, `formatCost`, `formatNumber`
 - Research Summary card (token usage, duration, cost — lines 948-991) is also included here since it is closely related to the results display
 - Synthesis error banner (lines 1145-1150) included here

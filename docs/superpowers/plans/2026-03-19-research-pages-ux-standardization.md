@@ -457,8 +457,9 @@ Replace the 1819-line file with a ~150-line composition:
 - `copyToClipboard` — updates `copiedSection` state
 
 **Handler functions that MOVE to sub-components:**
-- `handleShare`, `handleCopyShareUrl` → `ResearchHeader.tsx` (share/copy logic is self-contained)
 - `handleEnhanceModelChange`, `toggleRemoveContext`, `resetEnhanceModal` → `EnhanceModal.tsx` (modal owns its own form state)
+
+**Note on share flow:** `handleShare` and `handleCopyShareUrl` stay in the parent (not in `ResearchHeader`) because `shareToast` state lives in the parent and the Share button lives in `ResearchActions`. The parent passes `onShare` as a callback to `ResearchActions`. The `shareToast` floating notification renders in the parent. This keeps the share-to-clipboard feedback loop in one place.
 
 **Delete:** local `MarkdownContent`, `renderPromptWithLinks`, `ResearchStatusBadge`, `ProcessingStatus`, `StatusDot`, `ErrorDisplay`, `LlmResultCard`, `CollapsibleInputContext`, `PartialFailureConfirmation`, `formatTokenCount`, `formatCost`, `formatNumber`, `getModelDisplayName`, `SYNTHESIS_CAPABLE_MODELS`
 
