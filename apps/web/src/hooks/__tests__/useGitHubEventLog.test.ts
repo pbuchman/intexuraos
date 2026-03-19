@@ -263,4 +263,173 @@ describe('useGitHubEventLog', () => {
 
     expect(result.current.rows.find((row) => row.id === 'delivery-1')).toBe(originalFirstRow);
   });
+
+  it('filters out unsupported event types from API fetch response', async () => {
+    const supportedRow = createRow('delivery-supported', { eventType: 'pull_request' as const });
+    const unsupportedPing = createRow('delivery-ping', { eventType: 'ping' as 'pull_request' });
+    const unsupportedWorkflow = createRow('delivery-workflow', { eventType: 'workflow_run' as 'pull_request' });
+    const supportedPush = createRow('delivery-push', { eventType: 'push' as 'pull_request' });
+
+    mockGetGitHubEventLog.mockResolvedValue({
+      rows: [supportedRow, unsupportedPing, unsupportedWorkflow, supportedPush],
+      nextCursor: undefined,
+    });
+    mockOnSnapshot.mockImplementation((_query: unknown, _onNext: unknown) => vi.fn());
+
+    const { result } = renderHook(() => useGitHubEventLog());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    const ids = result.current.rows.map((row) => row.id);
+    expect(ids).toContain('delivery-supported');
+    expect(ids).toContain('delivery-push');
+    expect(ids).not.toContain('delivery-ping');
+    expect(ids).not.toContain('delivery-workflow');
+    expect(result.current.rows).toHaveLength(2);
+  });
+
+  it('filters out unsupported event types from Firestore live listener', async () => {
+    let snapshotHandler: ((snapshot: SnapshotValue<{
+      githubEventName: string;
+      eventType: string;
+      action: string | null;
+      repository: string | null;
+      pullRequestNumber: number | null;
+      authPassedAt: { toDate: () => Date };
+      updatedAt: { toDate: () => Date };
+      decisionState: 'pending' | 'completed';
+      decisionOutcome: 'dispatch' | 'skip' | 'request_review' | null;
+      rowVersion: number;
+    }>) => void) | undefined;
+
+    mockGetGitHubEventLog.mockResolvedValue({
+      rows: [createRow('delivery-existing')],
+      nextCursor: undefined,
+    });
+    mockHydrateGitHubEventLogRows.mockResolvedValue({ rows: [] });
+    mockOnSnapshot.mockImplementation((_query: unknown, onNext: typeof snapshotHandler) => {
+      snapshotHandler = onNext;
+      return vi.fn();
+    });
+
+    const { result } = renderHook(() => useGitHubEventLog());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    // Skip initial snapshot
+    await act(async () => {
+      snapshotHandler?.({ docChanges: () => [] });
+    });
+
+    // Fire snapshot with a mix of supported and unsupported events
+    await act(async () => {
+      snapshotHandler?.({
+        docChanges: () => [
+          {
+            type: 'added' as const,
+            doc: {
+              id: 'delivery-pr-review',
+              data: (): {
+                githubEventName: string;
+                eventType: string;
+                action: string | null;
+                repository: string | null;
+                pullRequestNumber: number | null;
+                authPassedAt: { toDate: () => Date };
+                updatedAt: { toDate: () => Date };
+                decisionState: 'pending' | 'completed';
+                decisionOutcome: 'dispatch' | 'skip' | 'request_review' | null;
+                rowVersion: number;
+              } => ({
+                githubEventName: 'pull_request_review',
+                eventType: 'pull_request_review',
+                action: 'submitted',
+                repository: 'intexuraos/test-repo',
+                pullRequestNumber: 99,
+                authPassedAt: { toDate: (): Date => new Date('2026-03-12T12:00:00.000Z') },
+                updatedAt: { toDate: (): Date => new Date('2026-03-12T12:00:00.000Z') },
+                decisionState: 'pending',
+                decisionOutcome: null,
+                rowVersion: 1,
+              }),
+            },
+          },
+          {
+            type: 'added' as const,
+            doc: {
+              id: 'delivery-ping-live',
+              data: (): {
+                githubEventName: string;
+                eventType: string;
+                action: string | null;
+                repository: string | null;
+                pullRequestNumber: number | null;
+                authPassedAt: { toDate: () => Date };
+                updatedAt: { toDate: () => Date };
+                decisionState: 'pending' | 'completed';
+                decisionOutcome: 'dispatch' | 'skip' | 'request_review' | null;
+                rowVersion: number;
+              } => ({
+                githubEventName: 'ping',
+                eventType: 'ping',
+                action: null,
+                repository: 'intexuraos/test-repo',
+                pullRequestNumber: null,
+                authPassedAt: { toDate: (): Date => new Date('2026-03-12T12:01:00.000Z') },
+                updatedAt: { toDate: (): Date => new Date('2026-03-12T12:01:00.000Z') },
+                decisionState: 'pending',
+                decisionOutcome: null,
+                rowVersion: 1,
+              }),
+            },
+          },
+          {
+            type: 'added' as const,
+            doc: {
+              id: 'delivery-unknown-live',
+              data: (): {
+                githubEventName: string;
+                eventType: string;
+                action: string | null;
+                repository: string | null;
+                pullRequestNumber: number | null;
+                authPassedAt: { toDate: () => Date };
+                updatedAt: { toDate: () => Date };
+                decisionState: 'pending' | 'completed';
+                decisionOutcome: 'dispatch' | 'skip' | 'request_review' | null;
+                rowVersion: number;
+              } => ({
+                githubEventName: 'unknown',
+                eventType: 'unknown',
+                action: null,
+                repository: 'intexuraos/test-repo',
+                pullRequestNumber: null,
+                authPassedAt: { toDate: (): Date => new Date('2026-03-12T12:02:00.000Z') },
+                updatedAt: { toDate: (): Date => new Date('2026-03-12T12:02:00.000Z') },
+                decisionState: 'pending',
+                decisionOutcome: null,
+                rowVersion: 1,
+              }),
+            },
+          },
+        ],
+      });
+    });
+
+    // Only the supported event should appear; ping and unknown should be filtered
+    const ids = result.current.rows.map((row) => row.id);
+    expect(ids).toContain('delivery-existing');
+    expect(ids).toContain('delivery-pr-review');
+    expect(ids).not.toContain('delivery-ping-live');
+    expect(ids).not.toContain('delivery-unknown-live');
+
+    // Hydration should only be called for the visible event
+    await waitFor(() => {
+      expect(mockHydrateGitHubEventLogRows).toHaveBeenCalledWith('test-token', ['delivery-pr-review']);
+    });
+  });
 });
