@@ -57,9 +57,7 @@ export async function findCommentById(
   try {
     const db = getFirestore();
     const doc = await db.collection(COLLECTION_NAME).doc(id).get();
-    /* v8 ignore start -- test-infra: findCommentById not called by any route handler @preserve */
     if (!doc.exists) return ok(null);
-    /* v8 ignore stop @preserve */
 
     const data = doc.data() as LinearCommentDoc;
     return ok(docToComment(data));
@@ -119,7 +117,6 @@ const FIRESTORE_IN_LIMIT = 30;
  * Chunks issueIds into groups of 30 (Firestore `in` operator limit).
  * Aggregates count and max createdAt per issueId in memory.
  */
-/* v8 ignore start -- test-infra: Firestore integration requires real database mock @preserve */
 export async function getCommentSummaries(
   issueIds: string[]
 ): Promise<Result<CommentSummary[], LinearError>> {
@@ -167,7 +164,6 @@ export async function getCommentSummaries(
     });
   }
 }
-/* v8 ignore stop @preserve */
 
 export async function deleteCommentById(id: string): Promise<Result<void, LinearError>> {
   try {

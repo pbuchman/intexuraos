@@ -107,11 +107,9 @@ export async function findLinearIssueById(
 
     if (snapshot.empty) return ok(null);
 
-    /* v8 ignore start -- test-infra: Firestore integration requires real database mock @preserve */
     const data = snapshot.docs[0]?.data() as SyncedLinearIssueDoc | undefined;
     if (data === undefined) return ok(null);
     return ok(docToIssue(data));
-    /* v8 ignore stop @preserve */
   } catch (error) {
     return err({
       code: 'INTERNAL_ERROR',
@@ -142,11 +140,9 @@ export async function findLinearIssueByIdentifier(
 
     if (snapshot.empty) return ok(null);
 
-    /* v8 ignore start -- test-infra: Firestore integration requires real database mock @preserve */
     const data = snapshot.docs[0]?.data() as SyncedLinearIssueDoc | undefined;
     if (data === undefined) return ok(null);
     return ok(docToIssue(data));
-    /* v8 ignore stop @preserve */
   } catch (error) {
     return err({
       code: 'INTERNAL_ERROR',
@@ -161,7 +157,6 @@ const FIRESTORE_IN_LIMIT = 30;
  * Find multiple issues by identifiers, scoped to a user.
  * Chunks identifiers into groups of 30 (Firestore `in` operator limit).
  */
-/* v8 ignore start -- test-infra: Firestore integration requires real database mock @preserve */
 export async function findLinearIssuesByIdentifiers(
   identifiers: string[],
   userId: string
@@ -193,7 +188,6 @@ export async function findLinearIssuesByIdentifiers(
     });
   }
 }
-/* v8 ignore stop @preserve */
 
 export async function listLinearIssuesByUserId(
   userId: string
@@ -244,11 +238,9 @@ export async function findUserIdsByIssueId(
       .where('id', '==', issueId)
       .get();
 
-    /* v8 ignore start -- test-infra: Firestore integration requires real database mock @preserve */
     if (snapshot.empty) return ok([]);
     const userIds = snapshot.docs.map((doc) => (doc.data() as SyncedLinearIssueDoc).userId);
     return ok(userIds);
-    /* v8 ignore stop @preserve */
   } catch (error) {
     return err({
       code: 'INTERNAL_ERROR',
