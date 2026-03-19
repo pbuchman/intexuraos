@@ -55,18 +55,19 @@ function loadSortFromStorage(): ResearchSortOption {
   return 'created';
 }
 
+function safeTimestamp(dateStr: string): number {
+  const ms = new Date(dateStr).getTime();
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
 function sortResearches(items: Research[], sort: ResearchSortOption): Research[] {
   const sorted = [...items];
   if (sort === 'created') {
-    sorted.sort((a, b) => {
-      const aTime = new Date(a.startedAt).getTime();
-      const bTime = new Date(b.startedAt).getTime();
-      return bTime - aTime;
-    });
+    sorted.sort((a, b) => safeTimestamp(b.startedAt) - safeTimestamp(a.startedAt));
   } else if (sort === 'completed') {
     sorted.sort((a, b) => {
-      const aTime = a.completedAt !== undefined ? new Date(a.completedAt).getTime() : 0;
-      const bTime = b.completedAt !== undefined ? new Date(b.completedAt).getTime() : 0;
+      const aTime = a.completedAt !== undefined ? safeTimestamp(a.completedAt) : 0;
+      const bTime = b.completedAt !== undefined ? safeTimestamp(b.completedAt) : 0;
       return bTime - aTime;
     });
   } else {
@@ -75,9 +76,7 @@ function sortResearches(items: Research[], sort: ResearchSortOption): Research[]
       const aFav = a.favourite === true ? 1 : 0;
       const bFav = b.favourite === true ? 1 : 0;
       if (aFav !== bFav) return bFav - aFav;
-      const aTime = new Date(a.startedAt).getTime();
-      const bTime = new Date(b.startedAt).getTime();
-      return bTime - aTime;
+      return safeTimestamp(b.startedAt) - safeTimestamp(a.startedAt);
     });
   }
   return sorted;
@@ -343,18 +342,20 @@ export function ResearchListPage(): React.JSX.Element {
     useResearches();
   const { getAccessToken } = useAuth();
   const [updatingFavourite, setUpdatingFavourite] = useState<string | null>(null);
+  const [favouriteError, setFavouriteError] = useState<string | null>(null);
   const [activeFilters, setActiveFilters] = useState<Set<ResearchGroupStatus>>(() => loadFiltersFromStorage());
   const [activeSort, setActiveSort] = useState<ResearchSortOption>(() => loadSortFromStorage());
 
   const handleToggleFavourite = (researchId: string, favourite: boolean): void => {
     setUpdatingFavourite(researchId);
+    setFavouriteError(null);
     void (async (): Promise<void> => {
       try {
         const token = await getAccessToken();
         await toggleResearchFavourite(token, researchId, favourite);
         await refresh();
-      } catch {
-        // Silently fail for now
+      } catch (err) {
+        setFavouriteError(err instanceof Error ? err.message : 'Failed to update favourite');
       } finally {
         setUpdatingFavourite(null);
       }
@@ -415,6 +416,7 @@ export function ResearchListPage(): React.JSX.Element {
       <PageHeader total={researches.length} counts={counts} />
 
       <ErrorBanner message={error} className="mb-6" />
+      <ErrorBanner message={favouriteError} className="mb-6" />
 
       {researches.length === 0 ? (
         <div className="rounded-lg border border-slate-200 bg-white p-12 text-center dark:border-slate-700 dark:bg-slate-800">
