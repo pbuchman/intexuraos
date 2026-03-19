@@ -252,6 +252,7 @@ Owner: code-agent (register in `firestore-collections.json`).
 interface MergeQueueWatch {
   id: string;
   userId: string;             // Auth0 user ID — resolves GitHub token at merge time
+  gitHubUsername: string;     // Resolved at creation time via GitHub GET /user — used for author matching
   owner: string;
   repo: string;
   baseBranch: string;
@@ -275,7 +276,7 @@ interface MergedPr {
 
 interface SkippedPr {
   prNumber: number;
-  reason: 'merge_conflict' | 'checks_failing' | 'checks_pending' | 'not_eligible_author';
+  reason: 'merge_conflict' | 'checks_failing' | 'checks_pending' | 'mergeability_unknown' | 'not_eligible_author';
 }
 ```
 
