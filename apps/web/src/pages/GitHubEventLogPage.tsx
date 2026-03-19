@@ -1,6 +1,6 @@
 import { AlertCircle, RadioTower, RefreshCw } from 'lucide-react';
 import { Button, Layout } from '@/components';
-import { GitHubEventLogTableRow } from '@/components/GitHubEventLogTableRow';
+import { GitHubEventLogTableRow } from '@/components';
 import { useGitHubEventLog } from '@/hooks';
 
 // --- PageHeader ---
@@ -47,7 +47,7 @@ function PageHeader({ totalCount, listenerHealthy, refreshing, onRefresh }: Page
 
 function ColumnHeader(): React.JSX.Element {
   return (
-    <div className="mb-1 hidden grid-cols-[100px_1fr_160px_120px_36px] gap-2 px-4 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500 lg:grid">
+    <div className="mb-1 hidden grid-cols-[100px_1fr_160px_120px_36px] gap-2 px-3 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500 lg:grid">
       <div>Time</div>
       <div>Event</div>
       <div>Decision</div>
@@ -126,7 +126,7 @@ export function GitHubEventLogPage(): React.JSX.Element {
                 onClick={(): void => { void loadMore(); }}
                 disabled={loadingMore}
                 isLoading={loadingMore}
-                loadingText="Loading..."
+                loadingText="Loading…"
               >
                 Load older events
               </Button>
