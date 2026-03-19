@@ -28,30 +28,31 @@ All OpenRouter models support web search by appending `:online` to the model ID 
 
 ```typescript
 // packages/infra-openrouter/src/allowlist.ts
+// Pricing: per-token strings from OpenRouter API (converted at runtime via toModelPricing)
 export const OPENROUTER_ALLOWED_MODELS = [
   // Qwen
-  { id: 'qwen/qwen3.5-plus-02-15', name: 'Qwen 3.5 Plus', provider: 'Qwen' },
-  { id: 'qwen/qwen3.5-flash-02-23', name: 'Qwen 3.5 Flash', provider: 'Qwen' },
+  { id: 'qwen/qwen3.5-plus-02-15', name: 'Qwen 3.5 Plus', provider: 'Qwen', promptPerToken: '0.00000026', completionPerToken: '0.00000156' },
+  { id: 'qwen/qwen3.5-flash-02-23', name: 'Qwen 3.5 Flash', provider: 'Qwen', promptPerToken: '0.00000007', completionPerToken: '0.00000026' },
   // MiniMax
-  { id: 'minimax/minimax-m2.7', name: 'MiniMax M2.7', provider: 'MiniMax' },
+  { id: 'minimax/minimax-m2.7', name: 'MiniMax M2.7', provider: 'MiniMax', promptPerToken: '0.0000003', completionPerToken: '0.0000012' },
   // xAI
-  { id: 'x-ai/grok-4.20-beta', name: 'Grok 4.20 Beta', provider: 'xAI' },
-  { id: 'x-ai/grok-4.1-fast', name: 'Grok 4.1 Fast', provider: 'xAI' },
+  { id: 'x-ai/grok-4.20-beta', name: 'Grok 4.20 Beta', provider: 'xAI', promptPerToken: '0.000002', completionPerToken: '0.000006' },
+  { id: 'x-ai/grok-4.1-fast', name: 'Grok 4.1 Fast', provider: 'xAI', promptPerToken: '0.0000002', completionPerToken: '0.0000005' },
   // Moonshot
-  { id: 'moonshotai/kimi-k2.5', name: 'Kimi K2.5', provider: 'Moonshot' },
+  { id: 'moonshotai/kimi-k2.5', name: 'Kimi K2.5', provider: 'Moonshot', promptPerToken: '0.00000045', completionPerToken: '0.0000022' },
   // Anthropic
-  { id: 'anthropic/claude-sonnet-4.6', name: 'Claude Sonnet 4.6', provider: 'Anthropic' },
-  { id: 'anthropic/claude-opus-4.6', name: 'Claude Opus 4.6', provider: 'Anthropic' },
+  { id: 'anthropic/claude-sonnet-4.6', name: 'Claude Sonnet 4.6', provider: 'Anthropic', promptPerToken: '0.000003', completionPerToken: '0.000015' },
+  { id: 'anthropic/claude-opus-4.6', name: 'Claude Opus 4.6', provider: 'Anthropic', promptPerToken: '0.000005', completionPerToken: '0.000025' },
   // Google
-  { id: 'google/gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro', provider: 'Google' },
-  { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'Google' },
+  { id: 'google/gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro', provider: 'Google', promptPerToken: '0.000002', completionPerToken: '0.000012' },
+  { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'Google', promptPerToken: '0.0000003', completionPerToken: '0.0000025' },
   // OpenAI
-  { id: 'openai/gpt-5.4', name: 'GPT-5.4', provider: 'OpenAI' },
-  { id: 'openai/gpt-5.4-mini', name: 'GPT-5.4 Mini', provider: 'OpenAI' },
+  { id: 'openai/gpt-5.4', name: 'GPT-5.4', provider: 'OpenAI', promptPerToken: '0.0000025', completionPerToken: '0.000015' },
+  { id: 'openai/gpt-5.4-mini', name: 'GPT-5.4 Mini', provider: 'OpenAI', promptPerToken: '0.00000075', completionPerToken: '0.0000045' },
   // Xiaomi
-  { id: 'xiaomi/mimo-v2-pro', name: 'MiMo V2 Pro', provider: 'Xiaomi' },
+  { id: 'xiaomi/mimo-v2-pro', name: 'MiMo V2 Pro', provider: 'Xiaomi', promptPerToken: '0.000001', completionPerToken: '0.000003' },
   // Z.ai
-  { id: 'z-ai/glm-5-turbo', name: 'GLM 5 Turbo', provider: 'Z.ai' },
+  { id: 'z-ai/glm-5-turbo', name: 'GLM 5 Turbo', provider: 'Z.ai', promptPerToken: '0.00000096', completionPerToken: '0.0000032' },
 ] as const;
 ```
 
@@ -223,7 +224,7 @@ git commit -m "feat(llm-contract): add OpenRouter provider type and OpenRouterMo
 
 - [ ] **Step 3: Create allowlist.ts**
 
-`packages/infra-openrouter/src/allowlist.ts` — hardcoded array of 14 `AllowedOpenRouterModel` entries with `id`, `name`, `provider`. Export `OPENROUTER_ALLOWED_MODELS` constant and `isAllowedModel(id: string): boolean` helper.
+`packages/infra-openrouter/src/allowlist.ts` — hardcoded array of 14 `AllowedOpenRouterModel` entries with `id`, `name`, `provider`, and **fallback pricing** (`promptPerToken`, `completionPerToken`). Export `OPENROUTER_ALLOWED_MODELS` constant, `isAllowedModel(id: string): boolean` helper, and `getAllowlistPricing(rawModelId: string): ModelPricing | undefined` that converts the fallback pricing to `ModelPricing` format via `toModelPricing()`. This fallback pricing is used at execution time (in `POST /research` handler) when the catalog endpoint hasn't been called. The `GET /research/openrouter/models` endpoint enriches these entries with live pricing from OpenRouter's API when available.
 
 - [ ] **Step 4: Write failing cost calculator tests**
 
@@ -378,8 +379,9 @@ git commit -m "feat(user-service): add OpenRouter API key storage and validation
 
 Follow `PerplexityAdapter.test.ts` pattern. Test:
 - Constructor creates client with correct config (or: prefix stripped)
-- `research()` delegates to client and returns result
-- `synthesize()` delegates to `client.generate()` with synthesis prompt
+- `research()` appends `:online` to model ID and delegates to client
+- `research()` extracts `annotations` from response as citation sources
+- `synthesize()` delegates to `client.generate()` with synthesis prompt (no `:online`)
 - Error codes are mapped correctly
 
 - [ ] **Step 2: Implement OpenRouterAdapter**
@@ -387,8 +389,8 @@ Follow `PerplexityAdapter.test.ts` pattern. Test:
 `apps/research-agent/src/infra/llm/OpenRouterAdapter.ts`:
 - Implements `LlmResearchProvider` AND `LlmSynthesisProvider`
 - Constructor strips `or:` prefix via `getOpenRouterRawId()`
-- `research()` — delegates to `client.research()`, maps errors via `mapToLlmError()`
-- `synthesize()` — builds synthesis prompt, delegates to `client.generate()`, returns `{ content, usage }`
+- `research()` — appends `:online` to the model ID before calling the client to enable web search, extracts `annotations` from response for citation URLs, delegates to `client.research()`, maps errors via `mapToLlmError()`
+- `synthesize()` — builds synthesis prompt, delegates to `client.generate()` (NO `:online` suffix for synthesis — it doesn't need web search), returns `{ content, usage }`
 - `mapToLlmError()` — normalizes error codes (same pattern as `PerplexityAdapter`)
 
 - [ ] **Step 3: Update factory**
@@ -486,8 +488,15 @@ Add `case 'openrouter':` with appropriate handling in every file that switches o
 - [ ] **Step 3: Add pricing resolution for OpenRouter models**
 
 In research-agent's LLM call processing (where `pricingContext.getPricing(model)` is called), add a guard:
-- If `isOpenRouterModel(model)` → use `toModelPricing()` from `infra-openrouter` with pricing from the allowlist/catalog
+- If `isOpenRouterModel(model)`:
+  1. Validate against allowlist: `if (!isAllowedModel(getOpenRouterRawId(model)))` → reject with error (model not in curated list)
+  2. Resolve pricing: use `getAllowlistPricing(getOpenRouterRawId(model))` from `infra-openrouter` which returns a `ModelPricing` with `useProviderCost: true`
 - Else → existing `pricingContext.getPricing(model)` path
+
+Apply this guard in both:
+- `apps/research-agent/src/routes/researchRoutes.ts` (research creation)
+- `apps/research-agent/src/routes/internalRoutes.ts` (LLM call processing at line ~868)
+- `apps/research-agent/src/routes/helpers/synthesisHelper.ts` (synthesis provider creation)
 
 - [ ] **Step 4: Run full CI**
 
