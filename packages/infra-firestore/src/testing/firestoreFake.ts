@@ -285,7 +285,7 @@ class FakeQuery {
   /**
    * Execute query against a specific store (used by FakeTransaction).
    */
-  async executeOnStore(store: DocumentStore): Promise<FakeQuerySnapshot> {
+  executeOnStore(store: DocumentStore): Promise<FakeQuerySnapshot> {
     const collection = store.get(this.collectionName) ?? new Map<string, DocumentData>();
     let docs = Array.from(collection.entries()).map(
       ([id, data]: [string, DocumentData | undefined]) =>
@@ -359,7 +359,7 @@ class FakeQuery {
       docs = docs.slice(0, this.limitCount);
     }
 
-    return await Promise.resolve(new FakeQuerySnapshot(docs));
+    return Promise.resolve(new FakeQuerySnapshot(docs));
   }
 
   get(): Promise<FakeQuerySnapshot> {
