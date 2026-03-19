@@ -121,10 +121,14 @@ export function deriveGroupStatus(status: ResearchStatus): ResearchGroupStatus {
   return 'failed';
 }
 
+const ACCENT_SHADOW: Record<ResearchGroupStatus, string> = {
+  processing:       'shadow-[inset_3px_0_0_theme(colors.blue.500)]',
+  'action-required': 'shadow-[inset_3px_0_0_theme(colors.orange.500)]',
+  completed:        'shadow-[inset_3px_0_0_theme(colors.green.500)]',
+  failed:           'shadow-[inset_3px_0_0_theme(colors.red.500)]',
+  draft:            '',
+};
+
 export function getAccentShadow(groupStatus: ResearchGroupStatus): string {
-  if (groupStatus === 'processing') return 'shadow-[inset_3px_0_0_theme(colors.blue.500)]';
-  if (groupStatus === 'action-required') return 'shadow-[inset_3px_0_0_theme(colors.orange.500)]';
-  if (groupStatus === 'completed') return 'shadow-[inset_3px_0_0_theme(colors.green.500)]';
-  if (groupStatus === 'failed') return 'shadow-[inset_3px_0_0_theme(colors.red.500)]';
-  return '';
+  return ACCENT_SHADOW[groupStatus];
 }
