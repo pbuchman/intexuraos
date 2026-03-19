@@ -60,10 +60,6 @@
       ],
       "description": "Firestore batch query functions (getCommentSummaries, findByIdentifiers) — requires emulator to exercise real chunked in-queries"
     },
-    "PENDING-packages-internal-clients": {
-      "files": ["packages/internal-clients/src/user-service/client.ts"],
-      "description": "Write tests for tightened v8 ignore blocks in packages/internal-clients"
-    },
     "PENDING-workers-orchestrator": {
       "files": [
         "workers/orchestrator/src/github/token-service.ts",
