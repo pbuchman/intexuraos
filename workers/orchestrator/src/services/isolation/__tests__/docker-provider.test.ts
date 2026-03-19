@@ -100,6 +100,9 @@ function createMockDocker(): MockDockerResult {
     modem: {
       followProgress: vi.fn(
         (_stream: unknown, onFinished: (err: Error | null) => void, _onProgress?: () => void) => {
+          // Simulate multiple Docker progress events like the real modem
+          _onProgress?.();
+          _onProgress?.();
           _onProgress?.();
           onFinished(null);
         }
@@ -1276,6 +1279,42 @@ describe('DockerProvider', () => {
 
       expect(onProgress).toHaveBeenCalledWith('Pulling image...');
       expect(onProgress).toHaveBeenCalledWith(expect.stringContaining('Image pull completed in'));
+    });
+
+    it('throttles progress messages to one per 10s interval', async () => {
+      const baseTime = 1_700_000_000_000;
+      let callCount = 0;
+      const dateNowSpy = vi.spyOn(Date, 'now');
+
+      // Date.now() is called at these points:
+      // 1: pullStart
+      // 2: 1st onProgress → passes throttle (baseTime - 0 >= 10_000)
+      // 3: 2nd onProgress → blocked (baseTime+5000 - baseTime < 10_000)
+      // 4: 3rd onProgress → passes (baseTime+11000 - baseTime >= 10_000)
+      // 5: pullDurationMs calculation
+      dateNowSpy.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return baseTime;
+        if (callCount === 2) return baseTime;
+        if (callCount === 3) return baseTime + 5_000;
+        if (callCount === 4) return baseTime + 11_000;
+        return baseTime + 12_000;
+      });
+
+      const onProgress = vi.fn();
+      await provider.pullImage('test-task-123', onProgress);
+
+      dateNowSpy.mockRestore();
+
+      // Should receive: 'Pulling image...', throttled progress at 0s, throttled progress at 11s, completion
+      // The 5s call should be suppressed by the 10s throttle
+      const progressCalls = onProgress.mock.calls.map((c) => String(c[0]));
+      const inProgressMessages = progressCalls.filter((msg) =>
+        msg.startsWith('Image pull in progress')
+      );
+      expect(inProgressMessages).toHaveLength(2);
+      expect(inProgressMessages[0]).toBe('Image pull in progress (0s)...');
+      expect(inProgressMessages[1]).toBe('Image pull in progress (11s)...');
     });
 
     it('returns image name unchanged when pull policy is if-not-present', async () => {
