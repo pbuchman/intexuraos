@@ -39,6 +39,7 @@ export interface ResearchDetailActions {
   shareToast: string | null;
   onShare: () => void;
   togglingFavourite: boolean;
+  favouriteError: string | null;
   onToggleFavourite: () => void;
   showEnhanceModal: boolean;
   onShowEnhanceModal: () => void;
@@ -74,6 +75,7 @@ export function useResearchDetailActions(
   const [retryError, setRetryError] = useState<string | null>(null);
   const [showEnhanceModal, setShowEnhanceModal] = useState(false);
   const [togglingFavourite, setTogglingFavourite] = useState(false);
+  const [favouriteError, setFavouriteError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState<{ mainPageUrl: string } | null>(null);
@@ -230,12 +232,13 @@ export function useResearchDetailActions(
   const handleToggleFavourite = async (): Promise<void> => {
     if (research === null) return;
     setTogglingFavourite(true);
+    setFavouriteError(null);
     try {
       const token = await getAccessToken();
       await toggleResearchFavourite(token, research.id, !(research.favourite ?? false));
       await refresh();
-    } catch {
-      // Silently fail for now
+    } catch (err) {
+      setFavouriteError(err instanceof Error ? err.message : 'Failed to update favourite');
     } finally {
       setTogglingFavourite(false);
     }
@@ -303,6 +306,7 @@ export function useResearchDetailActions(
     shareToast,
     onShare: (): void => { void handleShare(); },
     togglingFavourite,
+    favouriteError,
     onToggleFavourite: (): void => { void handleToggleFavourite(); },
     showEnhanceModal,
     onShowEnhanceModal: (): void => { setShowEnhanceModal(true); },

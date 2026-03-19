@@ -66,6 +66,7 @@ export function ResearchDetailPage(): React.JSX.Element {
       <ResearchHeader
         research={research}
         togglingFavourite={actions.togglingFavourite}
+        favouriteError={actions.favouriteError}
         onToggleFavourite={actions.onToggleFavourite}
         copiedSection={actions.copiedSection}
         onCopyToClipboard={actions.copyToClipboard}
