@@ -112,4 +112,4 @@ USER QUERY:
 ${userQuery}
 """`;
 }
-// Prompt version: 2.1.0
+// Prompt version: 2.0.0
