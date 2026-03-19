@@ -64,6 +64,11 @@ export const DefaultAppliedSchema = z.object({
 export const SafetyInfoSchema = z.object({
   high_stakes: z.boolean(),
   required_disclaimers: z.array(z.string()),
+  /**
+   * Zod `.optional().transform()` creates divergent input/output types.
+   * The `as unknown as` cast forces both to `string[]`, preventing TS2719
+   * errors when types resolve from both `dist/` and source paths.
+   */
   user_exclusions: z
     .array(z.string())
     .optional()
