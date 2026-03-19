@@ -357,6 +357,80 @@ describe('WebhookClient', () => {
       vi.useRealTimers();
     });
 
+    it('should include cause chain in network error message', async () => {
+      vi.useFakeTimers();
+
+      const cause = new Error('connect ECONNREFUSED 34.143.76.2:443') as Error & { code: string };
+      cause.code = 'ECONNREFUSED';
+      mockFetch.mockRejectedValue(new TypeError('fetch failed', { cause }));
+
+      const statePersistence = createStatePersistence();
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
+
+      const payload: WebhookPayload = {
+        taskId: 'task-cause',
+        status: 'completed',
+        duration: 1000,
+      };
+
+      const result = client.send({
+        url: 'https://example.com/webhook',
+        secret: 'test-secret',
+        payload,
+        taskId: 'task-cause',
+      });
+
+      await vi.advanceTimersByTimeAsync(70000);
+      await vi.runAllTimersAsync();
+
+      const resolved = await result;
+      expect(resolved.ok).toBe(false);
+      if (!resolved.ok) {
+        expect(resolved.error.type).toBe('network');
+        expect(resolved.error.message).toContain('ECONNREFUSED');
+      }
+
+      vi.useRealTimers();
+    });
+
+    it('should include cause chain in fallback error message for generic Error', async () => {
+      vi.useFakeTimers();
+
+      const cause = new Error('SSL handshake failed') as Error & { code: string };
+      cause.code = 'ERR_TLS_CERT_ALTNAME_INVALID';
+      const error = new Error('request failed', { cause });
+      mockFetch.mockRejectedValue(error);
+
+      const statePersistence = createStatePersistence();
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
+
+      const payload: WebhookPayload = {
+        taskId: 'task-generic-cause',
+        status: 'completed',
+        duration: 1000,
+      };
+
+      const result = client.send({
+        url: 'https://example.com/webhook',
+        secret: 'test-secret',
+        payload,
+        taskId: 'task-generic-cause',
+      });
+
+      await vi.advanceTimersByTimeAsync(70000);
+      await vi.runAllTimersAsync();
+
+      const resolved = await result;
+      expect(resolved.ok).toBe(false);
+      if (!resolved.ok) {
+        expect(resolved.error.type).toBe('network');
+        expect(resolved.error.message).toContain('SSL handshake failed');
+        expect(resolved.error.message).toContain('ERR_TLS_CERT_ALTNAME_INVALID');
+      }
+
+      vi.useRealTimers();
+    });
+
     it('should classify 5xx errors correctly', async () => {
       vi.useFakeTimers();
 
