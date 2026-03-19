@@ -48,7 +48,7 @@ const testSchedule: CronSchedule = {
   userId: TEST_USER_ID,
   name: 'Test Schedule',
   description: 'Every minute',
-  cronExpression: '* * * * *',
+  cronExpression: '*/5 * * * *',
   timezone: 'UTC',
   action: { services: ['code-agent'], instruction: 'do something' },
   status: 'active',
@@ -139,7 +139,7 @@ function createFakeServices(overrides: Partial<ServiceContainer> = {}): ServiceC
       ),
       generate: vi.fn(async () =>
         ok({
-          content: '{"cronExpression": "* * * * *", "humanSummary": "Every minute"}',
+          content: '{"cronExpression": "*/5 * * * *", "humanSummary": "Every 5 minutes"}',
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
         }),
       ),

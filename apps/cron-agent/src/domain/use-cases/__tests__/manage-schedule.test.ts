@@ -58,7 +58,7 @@ function createFakeParseDeps(): never {
       generate: async () =>
         ok({
           content:
-            '{"cronExpression": "* * * * *", "humanSummary": "Every minute"}',
+            '{"cronExpression": "*/5 * * * *", "humanSummary": "Every 5 minutes"}',
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
         }),
     },
@@ -98,6 +98,36 @@ describe('createScheduleManager', () => {
       timezone: 'UTC',
     });
     expect(result.ok).toBe(true);
+  });
+
+  it('rejects creation when user has reached schedule limit', async () => {
+    const fullSchedules = Array.from({ length: 50 }, (_, i) =>
+      ({ ...testSchedule, id: `schedule-${String(i)}` }),
+    );
+    const fullRepo: ScheduleRepository = {
+      ...createFakeScheduleRepo(),
+      findByUserId: async (): Promise<Result<ListSchedulesResponse, ScheduleRepositoryError>> =>
+        ok({ schedules: fullSchedules, nextCursor: null, count: 50 }),
+    };
+
+    const manager = createScheduleManager({
+      logger: createTestLogger(),
+      scheduleRepo: fullRepo,
+      parseDeps: createFakeParseDeps(),
+      toolRegistry: createFakeToolRegistry(),
+      executeDeps: {} as never,
+    });
+
+    const result = await manager.create('user-1', {
+      name: 'One too many',
+      description: 'Every hour',
+      action: { services: ['code-agent'], instruction: 'test' },
+      timezone: 'UTC',
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('VALIDATION_ERROR');
+    expect(result.error.message).toContain('Maximum');
   });
 
   it('rejects unknown service keys', async () => {
@@ -419,7 +449,7 @@ describe('createScheduleManager', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.description).toBe('every 5 minutes');
-    expect(result.value.cronExpression).toBe('* * * * *');
+    expect(result.value.cronExpression).toBe('*/5 * * * *');
   });
 
   it('returns PARSE_FAILED when description update parse fails', async () => {

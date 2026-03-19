@@ -46,6 +46,16 @@ export function createScheduleManager(deps: ManageScheduleDeps): ScheduleManager
       userId: string,
       input: CreateScheduleInput,
     ): Promise<Result<CronSchedule, ScheduleError>> {
+      // Enforce per-user schedule limit
+      const MAX_SCHEDULES_PER_USER = 50;
+      const existingResult = await scheduleRepo.findByUserId(userId, { limit: MAX_SCHEDULES_PER_USER, status: ['active', 'paused'] });
+      if (existingResult.ok && existingResult.value.schedules.length >= MAX_SCHEDULES_PER_USER) {
+        return err({
+          code: 'VALIDATION_ERROR',
+          message: `Maximum of ${String(MAX_SCHEDULES_PER_USER)} schedules per user reached`,
+        });
+      }
+
       // Validate service keys
       const availableServices = await toolRegistry.listServiceTools();
       const availableKeys = new Set(availableServices.map((s) => s.key));
