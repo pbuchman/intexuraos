@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import type { Result, Logger } from '@intexuraos/common-core';
+import { getErrorCauseChain, type Result, type Logger } from '@intexuraos/common-core';
 import type { StatePersistence } from './state-persistence.js';
 import type { PendingWebhook } from '../types/state.js';
 
@@ -247,19 +247,21 @@ export class WebhookClient {
         };
       }
 
+      const cause = getErrorCauseChain(error);
+      const causeSuffix = cause !== undefined ? ` (${cause})` : '';
+
       // TypeError is typically a network/client error, not server error
-      if (error.name === 'TypeError') {
-        return {
-          type: 'network',
-          message: `Network or client error: ${error.message}`,
-          originalError: error,
-        };
-      }
+      const prefix = error.name === 'TypeError' ? 'Network or client error: ' : '';
+      return {
+        type: 'network',
+        message: `${prefix}${error.message}${causeSuffix}`,
+        originalError: error,
+      };
     }
 
     return {
       type: 'network',
-      message: error instanceof Error ? error.message : 'Unknown error',
+      message: 'Unknown error',
       originalError: error,
     };
   }
