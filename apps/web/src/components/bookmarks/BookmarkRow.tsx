@@ -20,6 +20,8 @@ export function BookmarkRow({
 }: BookmarkRowProps): React.JSX.Element {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [ogImageError, setOgImageError] = useState(false);
+  const [faviconError, setFaviconError] = useState(false);
 
   const handleDelete = async (): Promise<void> => {
     setIsDeleting(true);
@@ -42,39 +44,27 @@ export function BookmarkRow({
       <div className="grid grid-cols-[40px_1fr_auto_140px_80px] items-center gap-2">
         {/* Thumbnail */}
         <div className="shrink-0">
-          {ogImage !== null ? (
+          {ogImage !== null && !ogImageError ? (
             <img
               src={ogImage}
               alt=""
               className="h-10 w-10 rounded object-cover"
-              onError={(e): void => {
-                e.currentTarget.style.display = 'none';
-                const fallback = e.currentTarget.nextElementSibling as HTMLElement | null;
-                if (fallback !== null) {
-                  fallback.style.display = 'flex';
-                }
-              }}
+              onError={(): void => { setOgImageError(true); }}
             />
           ) : null}
           <div
-            className={`h-10 w-10 items-center justify-center rounded bg-slate-100 dark:bg-slate-700 ${ogImage !== null ? 'hidden' : 'flex'}`}
+            className={`h-10 w-10 items-center justify-center rounded bg-slate-100 dark:bg-slate-700 ${ogImage === null || ogImageError ? 'flex' : 'hidden'}`}
           >
-            {favicon !== null ? (
+            {favicon !== null && !faviconError ? (
               <img
                 src={favicon}
                 alt=""
                 className="h-6 w-6"
-                onError={(e): void => {
-                  e.currentTarget.style.display = 'none';
-                  const fallback = e.currentTarget.nextElementSibling as HTMLElement | null;
-                  if (fallback !== null) {
-                    fallback.style.display = 'block';
-                  }
-                }}
+                onError={(): void => { setFaviconError(true); }}
               />
             ) : null}
             <Globe
-              className={`h-6 w-6 text-slate-400 dark:text-slate-500 ${favicon !== null ? 'hidden' : ''}`}
+              className={`h-6 w-6 text-slate-400 dark:text-slate-500 ${favicon === null || faviconError ? '' : 'hidden'}`}
             />
           </div>
         </div>
