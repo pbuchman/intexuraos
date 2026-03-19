@@ -358,7 +358,9 @@ class FakeQuery {
     return this.executeGet(this.store);
   }
 
-  private executeGet(store: DocumentStore): Promise<FakeQuerySnapshot | FakeQuerySnapshotWithCount> {
+  private executeGet(
+    store: DocumentStore
+  ): Promise<FakeQuerySnapshot | FakeQuerySnapshotWithCount> {
     const collection = store.get(this.collectionName) ?? new Map<string, DocumentData>();
     let docs = Array.from(collection.entries()).map(
       ([id, data]: [string, DocumentData | undefined]) =>
