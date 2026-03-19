@@ -595,7 +595,7 @@ steps:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
   # ===========================================================================
-  # BATCH 7 - Code Agent, Chat Agent (ADD NEW SERVICES HERE, max 3)
+  # BATCH 7 - Code Agent, Chat Agent, Cron Agent (max 3 - FULL)
   # ===========================================================================
 
   # --- Batch 7 Builds (wait for Batch 6 deploys) ---
@@ -621,6 +621,17 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'COMMIT_SHA=$COMMIT_SHA'
 
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-cron-agent'
+    waitFor: ['deploy-calendar-agent', 'deploy-linear-agent', 'deploy-web-agent']
+    timeout: 900s
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'cron-agent', 'apps/cron-agent/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
   # --- Batch 7 Deploys ---
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-code-agent'
@@ -638,6 +649,17 @@ steps:
     waitFor: ['build-push-chat-agent']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-chat-agent.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-cron-agent'
+    waitFor: ['build-push-cron-agent']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-cron-agent.sh']
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
@@ -674,7 +696,7 @@ steps:
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'fetch-web-config'
-    waitFor: ['deploy-code-agent', 'deploy-chat-agent', 'deploy-all-workers']
+    waitFor: ['deploy-code-agent', 'deploy-chat-agent', 'deploy-cron-agent', 'deploy-all-workers']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -700,6 +722,7 @@ steps:
           "app-settings-service:APP_SETTINGS_SERVICE"
           "linear-agent:LINEAR_AGENT"
           "code-agent:CODE_AGENT"
+          "cron-agent:CRON_AGENT"
         )
 
         # Fetch service URLs

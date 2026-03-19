@@ -30,6 +30,7 @@ steps:
           "image-service:IMAGE_SERVICE"
           "web-agent:WEB_AGENT"
           "app-settings-service:APP_SETTINGS_SERVICE"
+          "cron-agent:CRON_AGENT"
         )
 
         # Fetch service URLs from Cloud Run API (not secrets)
