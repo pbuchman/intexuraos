@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Archive,
   Ban,
@@ -67,6 +67,14 @@ export function TodoModal({
   const [newItemTitle, setNewItemTitle] = useState('');
   const [addingItem, setAddingItem] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return (): void => { document.removeEventListener('keydown', handleKeyDown); };
+  }, [onClose]);
 
   const handleSave = async (): Promise<void> => {
     setSaving(true);

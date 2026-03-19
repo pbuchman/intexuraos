@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { Button, ErrorBanner, Input } from '@/components';
 import type { CreateTodoRequest, Todo, TodoPriority } from '@/types';
@@ -16,6 +16,14 @@ export function CreateTodoModal({ onClose, onCreate }: CreateTodoModalProps): Re
   const [dueDate, setDueDate] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return (): void => { document.removeEventListener('keydown', handleKeyDown); };
+  }, [onClose]);
 
   const handleCreate = async (): Promise<void> => {
     if (title.trim() === '') {
