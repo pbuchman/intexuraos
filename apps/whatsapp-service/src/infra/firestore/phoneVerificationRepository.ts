@@ -69,7 +69,7 @@ export async function findPendingByUserAndPhone(
 
     if (snapshot.empty) return ok(null);
     const doc = snapshot.docs[0];
-    /* v8 ignore start -- test-infra: fake repository behavior in tests @preserve */
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires undefined guard despite snapshot.empty check guaranteeing docs[0] exists @preserve */
     if (!doc) return ok(null);
     /* v8 ignore stop @preserve */
     return ok(doc.data() as PhoneVerification);
@@ -232,7 +232,6 @@ export async function createVerificationWithChecks(
         .where('status', '==', 'verified')
         .limit(1);
       const verifiedSnapshot = await transaction.get(verifiedQuery);
-/* v8 ignore start -- test-infra: fake repository behavior in tests @preserve */
 
       if (!verifiedSnapshot.empty) {
         return err({
@@ -240,7 +239,6 @@ export async function createVerificationWithChecks(
           message: 'Phone number already verified',
         });
       }
-      /* v8 ignore stop @preserve */
 
       // Check 2: Pending verification within cooldown window
       const pendingQuery = collection
@@ -250,19 +248,16 @@ export async function createVerificationWithChecks(
         .where('expiresAt', '>', nowSeconds)
         .orderBy('expiresAt', 'desc')
         .limit(1);
-      /* v8 ignore start -- test-infra: fake repository behavior in tests @preserve */
       const pendingSnapshot = await transaction.get(pendingQuery);
-      /* v8 ignore stop @preserve */
-/* v8 ignore start -- test-infra: fake repository behavior in tests @preserve */
 
       if (!pendingSnapshot.empty) {
         const pendingDoc = pendingSnapshot.docs[0];
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires undefined guard despite snapshot.empty check guaranteeing docs[0] exists @preserve */
         if (pendingDoc === undefined) {
           return err({ code: 'PERSISTENCE_ERROR', message: 'Unexpected undefined doc' });
         }
-        /* v8 ignore start -- test-infra: fake repository behavior in tests @preserve */
-        const pending = pendingDoc.data() as PhoneVerification;
         /* v8 ignore stop @preserve */
+        const pending = pendingDoc.data() as PhoneVerification;
         const createdAtTime = new Date(pending.createdAt).getTime();
         const cooldownEnd = createdAtTime + params.cooldownSeconds * 1000;
 
@@ -277,14 +272,11 @@ export async function createVerificationWithChecks(
           });
         }
       }
-      /* v8 ignore stop @preserve */
 
       // Check 3: Rate limit (max requests per hour)
-      /* v8 ignore start -- test-infra: fake repository behavior in tests @preserve */
       const rateLimitQuery = collection
         .where('phoneNumber', '==', params.phoneNumber)
         .where('createdAt', '>=', params.windowStartTime);
-      /* v8 ignore stop @preserve */
       const rateLimitSnapshot = await transaction.get(rateLimitQuery);
 
       if (rateLimitSnapshot.size >= params.maxRequestsPerHour) {
