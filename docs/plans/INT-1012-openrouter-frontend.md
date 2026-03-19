@@ -424,13 +424,11 @@ Extend the helper to include OpenRouter models with `or:` prefix:
 export function getSelectedModelsList(
   selections: Map<LlmProvider, SupportedModel | null>,
   openRouterModelIds?: string[]
-): SupportedModel[] {
-  const staticModels = Array.from(selections.values()).filter(
+): string[] {
+  const staticModels: string[] = Array.from(selections.values()).filter(
     (m): m is SupportedModel => m !== null
   );
-  const orModels = (openRouterModelIds ?? []).map(
-    (id) => `or:${id}` as SupportedModel
-  );
+  const orModels = (openRouterModelIds ?? []).map((id) => `or:${id}`);
   return [...staticModels, ...orModels];
 }
 ```
@@ -550,8 +548,9 @@ Expected: ALL PASS
 
 - [ ] **Step 3: Final commit**
 
+Stage all modified files by name (use `git status` to identify them).
+
 ```bash
-git add -A
 git commit -m "feat(web): complete OpenRouter frontend integration"
 ```
 
