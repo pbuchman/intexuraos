@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { Button, Input } from '@/components';
+import { handleBackdropClick } from './shared.js';
 
 interface CreateNoteModalProps {
   onClose: () => void;
@@ -36,16 +37,10 @@ export function CreateNoteModal({ onClose, onCreate }: CreateNoteModalProps): Re
     }
   };
 
-  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>): void => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={handleBackdropClick}
+      onClick={(e) => { handleBackdropClick(e, onClose); }}
     >
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl dark:bg-slate-800">
         <div className="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-700">

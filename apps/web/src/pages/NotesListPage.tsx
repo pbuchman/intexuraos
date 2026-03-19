@@ -72,8 +72,8 @@ export function NotesListPage(): React.JSX.Element {
     return Array.from(tagSet).sort();
   }, [notes]);
 
-  // Toggle tag selection — empty set means "show all"
-  const toggleTag = (): void => {
+  // Clear all tag filters to show all notes
+  const clearTagFilters = (): void => {
     setSelectedTags(new Set<string>());
     localStorage.setItem('notes-tag-filter', JSON.stringify([]));
   };
@@ -159,7 +159,7 @@ export function NotesListPage(): React.JSX.Element {
       {allTags.length > 0 ? (
         <div className="mb-4 flex flex-wrap gap-2">
           <button
-            onClick={(): void => { toggleTag(); }}
+            onClick={(): void => { clearTagFilters(); }}
             className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors ${
               selectedTags.size === 0 ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/30 dark:text-blue-400' : INACTIVE_CLASS
             }`}
