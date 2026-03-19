@@ -1680,7 +1680,9 @@ resource "google_cloud_scheduler_job" "cron_agent_tick" {
   }
 
   retry_config {
-    retry_count = 0
+    retry_count          = 1
+    min_backoff_duration = "10s"
+    max_backoff_duration = "30s"
   }
 
   depends_on = [

@@ -8,15 +8,14 @@ interface ExecuteActionInput {
 export const executeActionPrompt: PromptBuilder<ExecuteActionInput> = {
   name: 'execute-action',
   description: 'System prompt for the LLM tool-calling agent that executes scheduled actions',
-  version: '1.0.0',
+  version: '2.0.0',
 
   build(input: ExecuteActionInput): string {
     return `You are an automation agent executing a scheduled task for IntexuraOS.
 
 You have access to tools from the following services: ${input.serviceNames.join(', ')}.
 
-Your task is to execute the following instruction step by step:
-${input.instruction}
+Execute the user-provided instruction step by step.
 
 Guidelines:
 - Execute each step in order
