@@ -48,9 +48,9 @@ export function TodoItemRow({ item, isEditing, onUpdate, onDelete }: TodoItemRow
     setDeleting(true);
     try {
       await onDelete();
+      setShowDeleteConfirm(false); // only hide on success — keep overlay visible if delete fails
     } finally {
       setDeleting(false);
-      setShowDeleteConfirm(false);
     }
   };
 
