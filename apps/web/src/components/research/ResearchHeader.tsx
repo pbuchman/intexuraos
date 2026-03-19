@@ -4,8 +4,7 @@ import type { Research } from '@/services/researchAgentApi.types';
 import { getProviderForModel } from '@/services/researchAgentApi.types';
 import { formatRelative } from '@/utils/dateFormat';
 import { stripMarkdown } from '@/utils';
-import { ResearchStatusBadge } from './shared.js';
-import { getModelDisplayName } from './shared.js';
+import { ResearchStatusBadge, getModelDisplayName } from './shared.js';
 
 interface ResearchHeaderProps {
   research: Research;
