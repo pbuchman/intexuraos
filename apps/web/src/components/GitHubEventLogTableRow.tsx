@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { ExternalLink, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import type { GitHubEventLogListRow } from '@/hooks';
 import { formatTimeOnly } from '@/utils/dateFormat';
 
@@ -7,12 +7,21 @@ export interface GitHubEventLogTableRowProps {
   row: GitHubEventLogListRow;
 }
 
-function formatEventLabel(row: GitHubEventLogListRow): string {
-  const base = row.githubEventName;
-  if (row.action === null || row.action === 'unknown') {
-    return base;
+function formatEntityLabel(row: GitHubEventLogListRow): string {
+  if (row.pullRequestNumber !== null) {
+    return `Pull Request #${String(row.pullRequestNumber)}`;
   }
-  return `${base}.${row.action}`;
+  if (row.repository !== null) {
+    return row.repository;
+  }
+  return '—';
+}
+
+function truncateText(text: string, maxLen: number): string {
+  if (text.length <= maxLen) {
+    return text;
+  }
+  return `${text.slice(0, maxLen)}…`;
 }
 
 function formatDecisionSummary(row: GitHubEventLogListRow): string {
@@ -95,44 +104,50 @@ function GitHubEventLogTableRowComponent({ row }: GitHubEventLogTableRowProps): 
       className={`group overflow-hidden rounded-lg border border-slate-200 bg-white transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800 ${getAccentShadow(row)}`}
     >
       {/* Desktop: grid layout */}
-      <div className="hidden items-center gap-2 px-3 py-1.5 lg:grid lg:grid-cols-[100px_1fr_160px_120px_36px]">
+      <div className="hidden items-center gap-2 px-3 py-1.5 lg:grid lg:grid-cols-[80px_160px_120px_100px_1fr_220px]">
         {/* Time */}
         <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
           {formatTimeOnly(row.authPassedAt)}
         </span>
 
-        {/* Event Type */}
+        {/* Event */}
         <div className="flex min-w-0 items-center gap-2">
           <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-[0.08em] ring-1 ${eventClasses(row)}`}>
-            {formatEventLabel(row)}
+            {row.githubEventName}
           </span>
           {row.isHydrating ? (
             <Loader2 className="h-3 w-3 shrink-0 animate-spin text-amber-500" />
           ) : null}
         </div>
 
+        {/* Action */}
+        <span className="truncate text-xs text-slate-600 dark:text-slate-400">
+          {row.action ?? '—'}
+        </span>
+
         {/* Decision */}
         <span className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] ring-1 ${decisionClasses(row)}`}>
           {formatDecisionSummary(row)}
         </span>
 
-        {/* User */}
-        <span className="truncate text-xs text-slate-600 dark:text-slate-400">
-          @{row.senderLogin ?? 'system'}
+        {/* Reason */}
+        <span className="truncate text-xs text-slate-500 dark:text-slate-400" title={row.reason ?? undefined}>
+          {row.reason ?? '—'}
         </span>
 
-        {/* Link */}
+        {/* Entity */}
         {entityUrl !== null ? (
           <a
             href={entityUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center text-slate-400 transition-colors hover:text-blue-600 dark:hover:text-blue-400"
-            aria-label="Open on GitHub"
+            className="truncate text-xs text-blue-600 hover:underline dark:text-blue-400"
           >
-            <ExternalLink className="h-3.5 w-3.5" />
+            {truncateText(formatEntityLabel(row), 30)}
           </a>
-        ) : null}
+        ) : (
+          <span className="truncate text-xs text-slate-400">—</span>
+        )}
       </div>
 
       {/* Mobile: compact flex row */}
@@ -141,7 +156,7 @@ function GitHubEventLogTableRowComponent({ row }: GitHubEventLogTableRowProps): 
           {formatTimeOnly(row.authPassedAt)}
         </span>
         <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-[0.08em] ring-1 ${eventClasses(row)}`}>
-          {formatEventLabel(row)}
+          {row.githubEventName}
         </span>
         {row.isHydrating ? (
           <Loader2 className="h-3 w-3 shrink-0 animate-spin text-amber-500" />
