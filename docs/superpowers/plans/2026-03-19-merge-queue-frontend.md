@@ -71,6 +71,7 @@ export type PrFilterStatus = 'mergeable' | 'pending' | 'blocked';
 export interface MergedPrEntry {
   prNumber: number;
   title: string;
+  author: string;
   mergedAt: string;
 }
 
@@ -292,16 +293,19 @@ git commit -m "feat(web): add BranchSelector component"
 
 Props: `watch: MergeQueueWatch | null`, `onToggle: () => void`, `isToggling: boolean`
 
-Four states:
+Five states:
 
-1. **No watch (`null`)**: Show toggle switch in off position with label "Auto-merge"
-2. **Active (no error)**: Blue card (`border-blue-200 bg-blue-50`), Loader2 animate-spin, stats, toggle ON
-3. **Active with error**: Red card (`border-red-200 bg-red-50`), AlertCircle, error message, toggle ON
-4. **Drained**: Emerald card (`border-emerald-200 bg-emerald-50`), CheckCircle2, stats, toggle OFF
+1. **No watch (`null`)**: Show toggle switch in off position with label "Auto-merge". No card background — just the toggle + label inline.
+2. **Active (no error)**: Blue card (`border-blue-200 bg-blue-50`), Loader2 animate-spin, stats line: `"Merged: {mergedPrs.length} · Skipped: {skippedPrs.length} · Last tick: {formatRelative(lastTickAt)}"`, toggle ON
+3. **Active with error** (`lastError` non-null): Red card (`border-red-200 bg-red-50`), AlertCircle, error message + `formatRelative(lastErrorAt)`, stats line below, toggle ON
+4. **Drained**: Emerald card (`border-emerald-200 bg-emerald-50`), CheckCircle2, `"Merged: {mergedPrs.length} · Completed {formatRelative(drainedAt)}"`, toggle OFF
+5. **Cancelled**: No card — same as "no watch" state (toggle OFF). Cancelled watches are past state; the UI treats them as inactive.
 
-Toggle switch: CSS-only implementation matching the mockup. When `isToggling` is true, disable the toggle and show loading state.
+Toggle switch: CSS-only implementation matching the mockup v2. When `isToggling` is true, disable the toggle and show a small spinner.
 
-Use `formatRelative` from `@/utils/dateFormat` for timestamps.
+Import `formatRelative` from `@/utils/dateFormat` for timestamps.
+
+Toggling ON → calls `createWatch`. Toggling OFF → calls `cancelWatch`.
 
 - [ ] **Step 2: Commit**
 
@@ -386,7 +390,7 @@ Follow the `IssueTimeline` pattern from `apps/web/src/components/code-tasks/Issu
 - Outer: `border-t border-slate-200 bg-slate-50 px-4 py-3 dark:border-zinc-700 dark:bg-zinc-900/50`
 - "Merge History" section header
 - Timeline: `border-l-2 border-slate-300 pl-2 dark:border-zinc-700`
-- Each item: relative positioned dot (`bg-emerald-500 h-2.5 w-2.5 rounded-full`), PR number (blue mono link), title, "Merged {relative time}" + author
+- Each item: relative positioned dot (`bg-emerald-500 h-2.5 w-2.5 rounded-full`), PR number (blue mono link), title, `"Merged {formatRelative(mergedAt)} · {author}"`
 - Collapsible: show/hide with state. Footer button: "{count} merged · click to collapse"
 - If `mergedPrs` is empty, don't render at all
 
@@ -410,6 +414,13 @@ git commit -m "feat(web): add MergeHistoryTimeline component"
 
 Replace the placeholder with the full implementation. The page manages:
 
+**Constants:**
+
+```typescript
+const DEFAULT_OWNER = 'pbuchman';
+const DEFAULT_REPO = 'intexuraos';
+```
+
 **State:**
 - `branches: MergeQueueBranch[]` — from `listBranches` API
 - `selectedBranch: string | null` — currently selected branch
@@ -418,30 +429,50 @@ Replace the placeholder with the full implementation. The page manages:
 - `activeFilters: Set<PrFilterStatus>` — default: all three enabled
 - `isToggling: boolean` — loading state for watch create/cancel
 - `loading: boolean` — initial page load
+- `error: string | null` — API error message for initial load failure
+- `prsLoading: boolean` — loading state when switching branches or refreshing PR list
 
 **Data flow:**
-1. On mount: fetch `listBranches` + `listWatches` in parallel
+1. On mount: fetch `listBranches` + `listWatches` in parallel. If either fails, set `error`.
 2. Auto-select first branch (most PRs)
-3. On branch select: fetch `listPrs` for that branch
-4. Poll `listWatches` every 30s to update watch state (merged count, skipped, last tick)
-5. Poll `listPrs` every 60s to update mergeability
+3. On branch select: set `prsLoading = true`, fetch `listPrs` for that branch, clear on completion
+4. Poll `listWatches` every 30s to update watch state (merged count, skipped, last tick). Use `document.visibilityState` — pause polling when tab is hidden.
+5. Poll `listPrs` every 60s to update mergeability. Same visibility check.
 
 **Toggle handler:**
 - If no active watch for selected branch → call `createWatch`
 - If active watch exists → call `cancelWatch`
 - Set `isToggling` during the API call
+- On success, refetch watches immediately
 
-**Layout (matching mockup):**
+**Error/empty states:**
+- **API error on initial load**: Show error banner (red card with retry button), no other components
+- **Empty branches** (no open PRs in repo): Show empty state: "No open pull requests found in {owner}/{repo}"
+- **Empty PRs for branch**: Show empty state: "No open PRs targeting {branch}"
+- **PR list loading**: Show skeleton/spinner in the PR list area while `prsLoading` is true
+
+**PageHeader subtitle:**
+
+Compute from `prs` array:
+```typescript
+const open = prs.length;
+const mergeable = prs.filter(p => p.mergeable === true && p.checksStatus === 'success').length;
+const blocked = prs.filter(p => p.mergeable === false || p.checksStatus === 'failure').length;
+const pending = open - mergeable - blocked;
+// → "8 open · 4 mergeable · 2 blocked · 2 pending"
 ```
-PageHeader (title + repo selector)
+
+**Layout (matching mockup v2):**
+```
+PageHeader (title + subtitle + repo selector)
 BranchSelector
-WatchStatusCard
+WatchStatusCard (with toggle)
 PrStatusPipeline
-PrList
+PrList (fixed oldest-first order, no SortSelector — descoped per mockup v2)
 MergeHistoryTimeline
 ```
 
-**Hardcoded repo for now**: Use `owner: 'pbuchman'`, `repo: 'intexuraos'` as defaults. The repo selector is a secondary concern — start with hardcoded values, can add a dropdown later.
+**Hardcoded repo for now**: Extracted to `DEFAULT_OWNER` / `DEFAULT_REPO` constants. The repo selector is a secondary concern — start with constants, can add a dropdown later.
 
 - [ ] **Step 2: Verify visually**
 
