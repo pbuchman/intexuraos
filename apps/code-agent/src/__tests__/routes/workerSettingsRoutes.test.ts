@@ -175,7 +175,7 @@ describe('Worker Settings Routes', () => {
       taskEnqueueService: {} as never,
       mergeConflictDetector: {
         detectOnPush: vi.fn().mockResolvedValue(undefined),
-        reconcile: vi.fn().mockResolvedValue({ checked: 0 }),
+        reconcile: vi.fn().mockResolvedValue({ attempted: 0 }),
       },
     } as ServiceContainer);
 

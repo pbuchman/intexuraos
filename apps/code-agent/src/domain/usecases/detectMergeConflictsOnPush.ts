@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { err, ok, type Logger, type Result } from '@intexuraos/common-core';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { MERGE_CONFLICT_SYSTEM_PROMPT_HASH, type CodeTask } from '../models/codeTask.js';
@@ -1054,19 +1055,19 @@ export function createDetectMergeConflictsOnPush(
       const openResult = await deps.gitHubPRSummaryRepo.findAllOpen();
       if (!openResult.ok) {
         logger.warn({ error: openResult.error }, 'Failed to load open PR summaries for merge-conflict reconciliation');
-        return { checked: 0 };
+        return { attempted: 0 };
       }
 
       const summaries = openResult.value;
       if (summaries.length === 0) {
         logger.debug({}, 'No open PR summaries to reconcile for merge conflicts');
-        return { checked: 0 };
+        return { attempted: 0 };
       }
 
       logger.info({ count: summaries.length }, 'Reconciling merge conflicts for open PRs');
 
-      const reconcileId = `reconcile-${String(Date.now())}`;
-      let checked = 0;
+      const reconcileId = randomUUID();
+      let attempted = 0;
 
       for (const existingSummary of summaries) {
         const parsedRepository = parseOwnerRepo(existingSummary.repository);
@@ -1081,11 +1082,18 @@ export function createDetectMergeConflictsOnPush(
           lastActivityAt: existingSummary.lastActivityAt,
         };
 
-        await processOpenSummaryOnPush(deps, trigger, logger, parsedRepository, existingSummary);
-        checked++;
+        try {
+          await processOpenSummaryOnPush(deps, trigger, logger, parsedRepository, existingSummary);
+        } catch (err: unknown) {
+          logger.error(
+            { error: err, repository: existingSummary.repository, prNumber: existingSummary.pullRequestNumber },
+            'Unhandled error processing PR in merge-conflict reconcile; continuing'
+          );
+        }
+        attempted++;
       }
 
-      return { checked };
+      return { attempted };
     },
   };
 }

@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
 
 import { buildServer } from '../../server.js';
-import { getServices, resetServices } from '../../services.js';
+import { getServices, resetServices, setServices } from '../../services.js';
 import { resetFirestore } from '@intexuraos/infra-firestore';
 import { setupTestServices } from '../helpers/mockServices.js';
 
@@ -82,6 +82,9 @@ describe('POST /internal/merge-conflicts/reconcile', () => {
     expect(body.accepted).toBe(true);
   });
 
+  // Application-level OIDC token validation is intentionally absent: Cloud Run
+  // validates the OIDC token at the infrastructure layer before requests reach
+  // this handler. See authenticateInternalScheduler for the full security note.
   it('returns 200 with accepted:true when authenticated via OIDC Bearer token', async () => {
     const response = await app.inject({
       method: 'POST',
@@ -106,14 +109,16 @@ describe('POST /internal/merge-conflicts/reconcile', () => {
 
     const reconcileSpy = vi.fn().mockImplementation(async () => {
       resolveFn();
-      return { checked: 3 };
+      return { attempted: 3 };
     });
 
-    // Override the reconcile spy via setServices so the route picks it up
-    getServices().mergeConflictDetector = {
-      ...services.mergeConflictDetector,
-      reconcile: reconcileSpy,
-    };
+    setServices({
+      ...services,
+      mergeConflictDetector: {
+        ...services.mergeConflictDetector,
+        reconcile: reconcileSpy,
+      },
+    });
 
     const response = await app.inject({
       method: 'POST',

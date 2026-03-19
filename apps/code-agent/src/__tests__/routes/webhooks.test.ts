@@ -225,7 +225,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       taskEnqueueService: {} as never,
       mergeConflictDetector: {
         detectOnPush: vi.fn().mockResolvedValue(undefined),
-        reconcile: vi.fn().mockResolvedValue({ checked: 0 }),
+        reconcile: vi.fn().mockResolvedValue({ attempted: 0 }),
       },
     } as {
       firestore: Firestore;
@@ -4548,7 +4548,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       taskEnqueueService: {} as never,
       mergeConflictDetector: {
         detectOnPush: vi.fn().mockResolvedValue(undefined),
-        reconcile: vi.fn().mockResolvedValue({ checked: 0 }),
+        reconcile: vi.fn().mockResolvedValue({ attempted: 0 }),
       },
     } as {
       firestore: Firestore;
@@ -4911,7 +4911,7 @@ describe('POST /internal/logs', () => {
       taskEnqueueService: {} as never,
       mergeConflictDetector: {
         detectOnPush: vi.fn().mockResolvedValue(undefined),
-        reconcile: vi.fn().mockResolvedValue({ checked: 0 }),
+        reconcile: vi.fn().mockResolvedValue({ attempted: 0 }),
       },
     } as {
       firestore: Firestore;
@@ -5497,7 +5497,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       taskEnqueueService: {} as never,
       mergeConflictDetector: {
         detectOnPush: vi.fn().mockResolvedValue(undefined),
-        reconcile: vi.fn().mockResolvedValue({ checked: 0 }),
+        reconcile: vi.fn().mockResolvedValue({ attempted: 0 }),
       },
     } as {
       firestore: Firestore;

@@ -1415,7 +1415,7 @@ describe('createDetectMergeConflictsOnPush', () => {
   });
 
   describe('reconcile()', () => {
-    it('returns { checked: 0 } when findAllOpen fails', async () => {
+    it('returns { attempted: 0 } when findAllOpen fails', async () => {
       const logger = createLogger();
       const deps = createDeps(logger);
       deps.gitHubPRSummaryRepo.findAllOpen.mockResolvedValue(err({
@@ -1426,7 +1426,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       const detector = createDetectMergeConflictsOnPush(deps as never);
       const result = await detector.reconcile(logger);
 
-      expect(result).toEqual({ checked: 0 });
+      expect(result).toEqual({ attempted: 0 });
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ error: expect.anything() }),
         expect.stringContaining('Failed to load open PR summaries')
@@ -1434,7 +1434,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       expect(deps.gitHubPRClient.getPullRequestDetails).not.toHaveBeenCalled();
     });
 
-    it('returns { checked: 0 } when there are no open PR summaries', async () => {
+    it('returns { attempted: 0 } when there are no open PR summaries', async () => {
       const logger = createLogger();
       const deps = createDeps(logger);
       deps.gitHubPRSummaryRepo.findAllOpen.mockResolvedValue(ok([]));
@@ -1442,7 +1442,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       const detector = createDetectMergeConflictsOnPush(deps as never);
       const result = await detector.reconcile(logger);
 
-      expect(result).toEqual({ checked: 0 });
+      expect(result).toEqual({ attempted: 0 });
       expect(deps.gitHubPRClient.getPullRequestDetails).not.toHaveBeenCalled();
     });
 
@@ -1459,7 +1459,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       const detector = createDetectMergeConflictsOnPush(deps as never);
       const result = await detector.reconcile(logger);
 
-      expect(result).toEqual({ checked: 2 });
+      expect(result).toEqual({ attempted: 2 });
       expect(deps.gitHubPRClient.getPullRequestDetails).toHaveBeenCalledTimes(2);
       expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledTimes(2);
     });
@@ -1476,7 +1476,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       const detector = createDetectMergeConflictsOnPush(deps as never);
       const result = await detector.reconcile(logger);
 
-      expect(result).toEqual({ checked: 1 });
+      expect(result).toEqual({ attempted: 1 });
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ repository: 'bad-repo-no-slash' }),
         expect.stringContaining('invalid repository')
@@ -1512,7 +1512,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       const detector = createDetectMergeConflictsOnPush(deps as never);
       const result = await detector.reconcile(logger);
 
-      expect(result).toEqual({ checked: 1 });
+      expect(result).toEqual({ attempted: 1 });
       expect(deps.gitHubPRClient.postPRComment).toHaveBeenCalledTimes(1);
       expect(deps.codeTaskRepo.create).toHaveBeenCalledTimes(1);
     });

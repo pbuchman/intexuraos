@@ -26,10 +26,12 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           401: {
             description: 'Unauthorized',
             type: 'object',
+            additionalProperties: false,
             properties: {
               success: { type: 'boolean', enum: [false] },
               error: {
                 type: 'object',
+                additionalProperties: false,
                 properties: {
                   code: { type: 'string', enum: ['UNAUTHORIZED'] },
                   message: { type: 'string' },
@@ -59,7 +61,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Fire-and-forget: Cloud Scheduler expects a fast 200 response.
       // The reconciliation runs asynchronously in the background.
       void mergeConflictDetector.reconcile(logger).then((result) => {
-        logger.info({ checked: result.checked }, 'Merge-conflict reconciliation completed');
+        logger.info({ attempted: result.attempted }, 'Merge-conflict reconciliation completed');
       }).catch((err: unknown) => {
         logger.error({ error: err }, 'Unhandled error in merge-conflict reconciliation');
       });

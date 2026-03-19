@@ -2,7 +2,8 @@ import type { Logger } from 'pino';
 import type { GitHubPREvent } from '../models/gitHubPREvent.js';
 
 export interface ReconcileResult {
-  checked: number;
+  /** Number of PRs for which reconciliation was attempted (includes both successes and per-PR errors). */
+  attempted: number;
 }
 
 export interface MergeConflictDetector {
