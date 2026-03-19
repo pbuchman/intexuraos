@@ -1,623 +1,33 @@
-import { useCallback, useEffect, useState } from 'react';
-import {
-  AudioPlayer,
-  Button,
-  Card,
-  ImageModal,
-  ImageThumbnail,
-  Layout,
-  LinkPreviewList,
-} from '@/components';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowUpDown, MessageSquare, RefreshCw } from 'lucide-react';
+import { Button, Card, ErrorBanner, ImageModal, Layout } from '@/components';
 import { useAuth } from '@/context';
 import {
   ApiError,
   deleteWhatsAppMessage,
-  getMessageMediaUrl,
   getWhatsAppMessages,
 } from '@/services';
-import { formatDateTime } from '@/utils/dateFormat';
 import type { WhatsAppMessage } from '@/types';
+
 import {
-  Check,
-  Copy,
-  ExternalLink,
-  Image,
-  MessageSquare,
-  Mic,
-  RefreshCw,
-  Trash2,
-  X,
-} from 'lucide-react';
+  MessageItem,
+} from '@/components/whatsapp/MessageItem.js';
+import {
+  NoteDetailModal,
+} from '@/components/whatsapp/NoteDetailModal.js';
+import {
+  TranscriptionDetailModal,
+} from '@/components/whatsapp/TranscriptionDetailModal.js';
+import {
+  WHATSAPP_MEDIA_FILTER_CONFIG,
+  WHATSAPP_MEDIA_TYPES,
+  WHATSAPP_SORT_OPTIONS,
+  type WhatsAppMediaType,
+  type WhatsAppSortOption,
+} from '@/components/whatsapp/shared.js';
 
-const TEXT_PREVIEW_LIMIT = 800;
-
-/**
- * URL regex pattern for detecting links in text.
- */
-const URL_REGEX = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g;
-
-/**
- * Renders text with clickable links.
- */
-function TextWithLinks({ text }: { text: string }): React.JSX.Element {
-  const parts = text.split(URL_REGEX);
-
-  return (
-    <>
-      {parts.map((part, index) => {
-        if (URL_REGEX.test(part)) {
-          // Reset regex lastIndex after test
-          URL_REGEX.lastIndex = 0;
-          return (
-            <a
-              key={index}
-              href={part}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 underline hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-              onClick={(e): void => {
-                e.stopPropagation();
-              }}
-            >
-              {part}
-            </a>
-          );
-        }
-        return <span key={index}>{part}</span>;
-      })}
-    </>
-  );
-}
-
-interface MessageItemProps {
-  message: WhatsAppMessage;
-  accessToken: string;
-  onDelete: (id: string) => void;
-  onImageClick: (messageId: string) => void;
-  onNoteClick: (message: WhatsAppMessage) => void;
-  onTranscriptionClick: (message: WhatsAppMessage) => void;
-  isDeleting: boolean;
-}
-
-/**
- * Modal to display full note content (and optional image).
- */
-interface NoteDetailModalProps {
-  message: WhatsAppMessage;
-  accessToken: string;
-  onClose: () => void;
-}
-
-function NoteDetailModal({
-  message,
-  onClose,
-}: Omit<NoteDetailModalProps, 'accessToken'>): React.JSX.Element {
-  const [copied, setCopied] = useState(false);
-
-  const textToCopy = message.caption ?? message.text;
-  const hasTextContent = textToCopy !== '';
-
-  const handleCopy = async (): Promise<void> => {
-    if (!hasTextContent) return;
-
-    try {
-      await navigator.clipboard.writeText(textToCopy);
-      setCopied(true);
-      setTimeout(() => {
-        setCopied(false);
-      }, 2000);
-    } catch {
-      // Clipboard API failed, ignore
-    }
-  };
-
-  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>): void => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
-
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    document.addEventListener('keydown', handleEscape);
-    return (): void => {
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={handleBackdropClick}
-    >
-      <div className="relative max-h-[90vh] w-full max-w-2xl overflow-auto rounded-lg bg-white shadow-xl dark:bg-slate-800">
-        {/* Header */}
-        <div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
-          <div className="text-sm text-slate-500 dark:text-slate-400">
-            {formatDateTime(message.receivedAt)}
-          </div>
-          <div className="flex items-center gap-2">
-            {hasTextContent && (
-              <button
-                onClick={(): void => {
-                  void handleCopy();
-                }}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
-                  copied
-                    ? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
-                }`}
-                aria-label={copied ? 'Copied!' : 'Copy text'}
-              >
-                {copied ? (
-                  <>
-                    <Check className="h-4 w-4" />
-                    <span>Copied!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-4 w-4" />
-                    <span>Copy</span>
-                  </>
-                )}
-              </button>
-            )}
-            <button
-              onClick={onClose}
-              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
-              aria-label="Close"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="p-4">
-          {/* Text content */}
-          {message.text !== '' && (
-            <p className="whitespace-pre-wrap break-word text-slate-800 dark:text-slate-200">
-              <TextWithLinks text={message.text} />
-            </p>
-          )}
-
-          {/* Caption for media */}
-          {message.caption !== null &&
-            message.caption !== '' &&
-            message.caption !== message.text && (
-              <p className="mt-3 whitespace-pre-wrap break-word text-slate-600 italic dark:text-slate-400">
-                <TextWithLinks text={message.caption} />
-              </p>
-            )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Modal to display full transcription content.
- */
-function TranscriptionDetailModal({
-  message,
-  onClose,
-}: {
-  message: WhatsAppMessage;
-  onClose: () => void;
-}): React.JSX.Element {
-  const [copied, setCopied] = useState(false);
-
-  const transcriptionText = message.transcription ?? '';
-  const hasContent = transcriptionText !== '';
-
-  const handleCopy = async (): Promise<void> => {
-    if (!hasContent) return;
-
-    try {
-      await navigator.clipboard.writeText(transcriptionText);
-      setCopied(true);
-      setTimeout(() => {
-        setCopied(false);
-      }, 2000);
-    } catch {
-      // Clipboard API failed, ignore
-    }
-  };
-
-  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>): void => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
-
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    document.addEventListener('keydown', handleEscape);
-    return (): void => {
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={handleBackdropClick}
-    >
-      <div className="relative max-h-[90vh] w-full max-w-2xl overflow-auto rounded-lg bg-white shadow-xl dark:bg-slate-800">
-        {/* Header */}
-        <div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
-          <div className="flex items-center gap-2">
-            <Mic className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Transcription</span>
-            <span className="text-sm text-slate-500 dark:text-slate-400">• {formatDateTime(message.receivedAt)}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {hasContent && (
-              <button
-                onClick={(): void => {
-                  void handleCopy();
-                }}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
-                  copied
-                    ? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
-                }`}
-                aria-label={copied ? 'Copied!' : 'Copy transcription'}
-              >
-                {copied ? (
-                  <>
-                    <Check className="h-4 w-4" />
-                    <span>Copied!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-4 w-4" />
-                    <span>Copy</span>
-                  </>
-                )}
-              </button>
-            )}
-            <button
-              onClick={onClose}
-              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
-              aria-label="Close"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="p-4">
-          <p className="whitespace-pre-wrap break-word text-slate-800 dark:text-slate-200">
-            <TextWithLinks text={transcriptionText} />
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MessageItem({
-  message,
-  accessToken,
-  onDelete,
-  onImageClick,
-  onNoteClick,
-  onTranscriptionClick,
-  isDeleting,
-}: MessageItemProps): React.JSX.Element {
-  const [copied, setCopied] = useState(false);
-  const [copiedTranscription, setCopiedTranscription] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
-  const handleCopy = async (): Promise<void> => {
-    const textToCopy = message.caption ?? message.text;
-    if (textToCopy === '') return;
-
-    try {
-      await navigator.clipboard.writeText(textToCopy);
-      setCopied(true);
-      setTimeout(() => {
-        setCopied(false);
-      }, 2000);
-    } catch {
-      // Clipboard API failed, ignore
-    }
-  };
-
-  const handleCopyTranscription = async (): Promise<void> => {
-    if (message.transcription === undefined || message.transcription === '') return;
-
-    try {
-      await navigator.clipboard.writeText(message.transcription);
-      setCopiedTranscription(true);
-      setTimeout(() => {
-        setCopiedTranscription(false);
-      }, 2000);
-    } catch {
-      // Clipboard API failed, ignore
-    }
-  };
-
-  const handleDeleteClick = (): void => {
-    setShowDeleteConfirm(true);
-  };
-
-  const handleDeleteConfirm = (): void => {
-    setShowDeleteConfirm(false);
-    onDelete(message.id);
-  };
-
-  const handleDeleteCancel = (): void => {
-    setShowDeleteConfirm(false);
-  };
-
-  const handleOpenFullSize = async (messageId: string): Promise<void> => {
-    try {
-      const response = await getMessageMediaUrl(accessToken, messageId);
-      window.open(response.url, '_blank', 'noopener,noreferrer');
-    } catch {
-      // Failed to get URL, ignore
-    }
-  };
-
-  const hasTextContent =
-    message.text !== '' || (message.caption !== null && message.caption !== '');
-
-  return (
-    <div
-      className={`group rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 dark:border-slate-700 dark:bg-slate-800 ${
-        isDeleting ? 'scale-95 opacity-50' : 'hover:border-slate-300 hover:shadow-md dark:hover:border-slate-600'
-      }`}
-    >
-      {/* Delete confirmation dialog */}
-      {showDeleteConfirm && (
-        <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/30">
-          <p className="mb-2 text-sm text-red-700 dark:text-red-300">Are you sure you want to delete this message?</p>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="danger"
-              size="sm"
-              onClick={handleDeleteConfirm}
-              disabled={isDeleting}
-            >
-              Delete
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={handleDeleteCancel}
-              disabled={isDeleting}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
-
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          {/* Media type indicator - only show for actual image/audio messages */}
-          {(message.mediaType === 'image' || message.mediaType === 'audio') && (
-            <div className="mb-2 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-              {message.mediaType === 'image' ? (
-                <>
-                  <Image className="h-3.5 w-3.5" />
-                  <span>Image</span>
-                </>
-              ) : (
-                <>
-                  <Mic className="h-3.5 w-3.5" />
-                  <span>Audio</span>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Image thumbnail */}
-          {message.mediaType === 'image' && message.hasMedia && (
-            <div className="mb-3">
-              <ImageThumbnail
-                messageId={message.id}
-                accessToken={accessToken}
-                onClick={(): void => {
-                  onImageClick(message.id);
-                }}
-              />
-            </div>
-          )}
-
-          {/* Audio player */}
-          {message.mediaType === 'audio' && message.hasMedia && (
-            <div className="mb-3">
-              <AudioPlayer messageId={message.id} accessToken={accessToken} />
-
-              {/* Transcription status/content */}
-              {message.transcriptionStatus === 'pending' ||
-              message.transcriptionStatus === 'processing' ? (
-                <div className="mt-2 flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-                  {/* WhatsApp-style typing indicator */}
-                  <div className="flex items-center gap-1">
-                    <div className="h-2 w-2 animate-bounce rounded-full bg-slate-400 dark:bg-slate-500 [animation-delay:0ms]" />
-                    <div className="h-2 w-2 animate-bounce rounded-full bg-slate-400 dark:bg-slate-500 [animation-delay:150ms]" />
-                    <div className="h-2 w-2 animate-bounce rounded-full bg-slate-400 dark:bg-slate-500 [animation-delay:300ms]" />
-                  </div>
-                  <span className="text-xs text-slate-400 dark:text-slate-500">Transcribing...</span>
-                </div>
-              ) : message.transcriptionStatus === 'completed' &&
-                message.transcription !== undefined &&
-                message.transcription !== '' ? (
-                <div className="mt-2 rounded-md bg-slate-50 p-3 dark:bg-slate-700">
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Transcription:</p>
-                    <button
-                      onClick={(e): void => {
-                        e.stopPropagation();
-                        void handleCopyTranscription();
-                      }}
-                      className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-all ${
-                        copiedTranscription
-                          ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400'
-                          : 'bg-slate-200 text-slate-600 hover:bg-slate-300 dark:bg-slate-600 dark:text-slate-300 dark:hover:bg-slate-500'
-                      }`}
-                      aria-label={copiedTranscription ? 'Copied!' : 'Copy transcription'}
-                    >
-                      {copiedTranscription ? (
-                        <>
-                          <Check className="h-3 w-3" />
-                          <span>Copied!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="h-3 w-3" />
-                          <span>Copy</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  <div
-                    onClick={(): void => {
-                      onTranscriptionClick(message);
-                    }}
-                    className="cursor-pointer hover:bg-slate-100 -mx-1 px-1 py-1 rounded transition-colors dark:hover:bg-slate-600"
-                  >
-                    <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">
-                      <TextWithLinks text={message.transcription} />
-                    </p>
-                    {message.transcription.length > TEXT_PREVIEW_LIMIT && (
-                      <span className="text-sm text-blue-600 hover:underline dark:text-blue-400">show more</span>
-                    )}
-                  </div>
-                </div>
-              ) : message.transcriptionStatus === 'failed' ? (
-                <div className="mt-2 rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/30 dark:text-red-400">
-                  <p className="font-medium">Transcription failed</p>
-                  {message.transcriptionError?.message !== undefined && (
-                    <p className="mt-1 text-xs text-red-500 dark:text-red-400">{message.transcriptionError.message}</p>
-                  )}
-                </div>
-              ) : null}
-            </div>
-          )}
-
-          {/* Text content with clickable links */}
-          {message.text !== '' && (
-            <div
-              onClick={(): void => {
-                onNoteClick(message);
-              }}
-              className={
-                message.mediaType !== 'audio'
-                  ? 'cursor-pointer hover:bg-slate-50 -mx-2 px-2 py-1 rounded transition-colors dark:hover:bg-slate-700'
-                  : ''
-              }
-            >
-              <p className="whitespace-pre-wrap break-word text-slate-800 dark:text-slate-200">
-                {message.text.length > TEXT_PREVIEW_LIMIT ? (
-                  <>
-                    <TextWithLinks text={message.text.slice(0, TEXT_PREVIEW_LIMIT)} />
-                    <span className="text-slate-400 dark:text-slate-500">...</span>
-                    <span className="ml-1 text-sm text-blue-600 hover:underline dark:text-blue-400">show more</span>
-                  </>
-                ) : (
-                  <TextWithLinks text={message.text} />
-                )}
-              </p>
-            </div>
-          )}
-
-          {/* Caption for media with clickable links - only show if different from text */}
-          {message.caption !== null &&
-            message.caption !== '' &&
-            message.caption !== message.text && (
-              <div
-                onClick={(): void => {
-                  onNoteClick(message);
-                }}
-                className="cursor-pointer hover:bg-slate-50 -mx-2 px-2 py-1 rounded transition-colors dark:hover:bg-slate-700"
-              >
-                <p className="mt-2 whitespace-pre-wrap break-word text-slate-600 italic dark:text-slate-400">
-                  {message.caption.length > TEXT_PREVIEW_LIMIT ? (
-                    <>
-                      <TextWithLinks text={message.caption.slice(0, TEXT_PREVIEW_LIMIT)} />
-                      <span className="text-slate-400 dark:text-slate-500">...</span>
-                      <span className="ml-1 text-sm text-blue-600 hover:underline dark:text-blue-400">show more</span>
-                    </>
-                  ) : (
-                    <TextWithLinks text={message.caption} />
-                  )}
-                </p>
-              </div>
-            )}
-
-          {/* Link previews */}
-          <LinkPreviewList linkPreview={message.linkPreview} />
-
-          <div className="mt-2 flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-            <span>{formatDateTime(message.receivedAt)}</span>
-            {message.mediaType === 'image' && message.hasMedia && (
-              <>
-                <span>•</span>
-                <button
-                  onClick={(): void => {
-                    void handleOpenFullSize(message.id);
-                  }}
-                  className="flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
-                  title="Open full size in new tab"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  <span>Full size</span>
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Action buttons */}
-        <div className="flex shrink-0 gap-1">
-          {/* Copy button */}
-          {hasTextContent && (
-            <button
-              onClick={(): void => {
-                void handleCopy();
-              }}
-              className={`rounded-lg p-2 transition-all ${
-                copied
-                  ? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400'
-                  : 'text-slate-400 opacity-0 hover:bg-slate-100 hover:text-slate-600 focus:opacity-100 group-hover:opacity-100 dark:hover:bg-slate-700 dark:hover:text-slate-300'
-              }`}
-              aria-label={copied ? 'Copied!' : 'Copy message'}
-              title={copied ? 'Copied!' : 'Copy message'}
-            >
-              {copied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
-            </button>
-          )}
-
-          {/* Delete button */}
-          <button
-            onClick={handleDeleteClick}
-            disabled={isDeleting || showDeleteConfirm}
-            className="rounded-lg p-2 text-slate-400 opacity-0 transition-all hover:bg-red-50 hover:text-red-600 focus:opacity-100 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-red-900/30 dark:hover:text-red-400"
-            aria-label="Delete message"
-          >
-            <Trash2 className="h-5 w-5" />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+const INACTIVE_CLASS =
+  'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500';
 
 export function WhatsAppNotesPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
@@ -633,6 +43,38 @@ export function WhatsAppNotesPage(): React.JSX.Element {
   const [selectedNote, setSelectedNote] = useState<WhatsAppMessage | null>(null);
   const [selectedTranscription, setSelectedTranscription] = useState<WhatsAppMessage | null>(null);
   const [currentAccessToken, setCurrentAccessToken] = useState<string | null>(null);
+
+  // Filter state
+  const [mediaFilter, setMediaFilter] = useState<WhatsAppMediaType>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('whatsapp-media-filter');
+      if (stored && WHATSAPP_MEDIA_TYPES.includes(stored as WhatsAppMediaType)) {
+        return stored as WhatsAppMediaType;
+      }
+    }
+    return 'all';
+  });
+
+  // Sort state
+  const [sort, setSort] = useState<WhatsAppSortOption>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('whatsapp-sort');
+      if (stored && WHATSAPP_SORT_OPTIONS.some((o) => o.key === stored)) {
+        return stored as WhatsAppSortOption;
+      }
+    }
+    return 'newest';
+  });
+
+  // Persist filter selection
+  useEffect(() => {
+    localStorage.setItem('whatsapp-media-filter', mediaFilter);
+  }, [mediaFilter]);
+
+  // Persist sort selection
+  useEffect(() => {
+    localStorage.setItem('whatsapp-sort', sort);
+  }, [sort]);
 
   const fetchMessages = useCallback(
     async (showRefreshing?: boolean): Promise<void> => {
@@ -712,6 +154,47 @@ export function WhatsAppNotesPage(): React.JSX.Element {
     void fetchMessages(true);
   };
 
+  const toggleMediaFilter = (filter: WhatsAppMediaType): void => {
+    setMediaFilter(filter);
+  };
+
+  // Compute filtered and sorted messages
+  const filteredMessages = useMemo(() => {
+    let result = [...messages];
+
+    // Filter by media type
+    if (mediaFilter !== 'all') {
+      result = result.filter((m) => m.mediaType === mediaFilter);
+    }
+
+    // Sort
+    result.sort((a, b) => {
+      if (sort === 'newest') {
+        return new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime();
+      } else {
+        return new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime();
+      }
+    });
+
+    return result;
+  }, [messages, mediaFilter, sort]);
+
+  // Compute counts for filter pills
+  const mediaCounts = useMemo(() => {
+    const counts: Record<WhatsAppMediaType, number> = {
+      all: messages.length,
+      text: 0,
+      image: 0,
+      audio: 0,
+    };
+    for (const msg of messages) {
+      if (msg.mediaType === 'text') counts.text++;
+      else if (msg.mediaType === 'image') counts.image++;
+      else counts.audio++;
+    }
+    return counts;
+  }, [messages]);
+
   if (isLoading) {
     return (
       <Layout>
@@ -724,17 +207,21 @@ export function WhatsAppNotesPage(): React.JSX.Element {
 
   return (
     <Layout>
+      {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">WhatsApp Notes</h2>
-          {fromNumber !== null && fromNumber !== '' ? (
-            <p className="text-slate-600 dark:text-slate-300">
-              Messages from{' '}
-              <span className="font-mono font-medium text-slate-800 dark:text-slate-200">{fromNumber}</span>
-            </p>
-          ) : (
-            <p className="text-slate-600 dark:text-slate-300">Your saved WhatsApp messages</p>
-          )}
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {filteredMessages.length} message{filteredMessages.length === 1 ? '' : 's'}
+            {fromNumber !== null && fromNumber !== '' && (
+              <>
+                {' '}from{' '}
+                <span className="font-mono font-medium text-slate-700 dark:text-slate-200">
+                  {fromNumber}
+                </span>
+              </>
+            )}
+          </p>
         </div>
         <button
           onClick={handleRefresh}
@@ -746,14 +233,62 @@ export function WhatsAppNotesPage(): React.JSX.Element {
         </button>
       </div>
 
-      {error !== null && error !== '' ? (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
-          {error}
-        </div>
-      ) : null}
+      {/* Error banner */}
+      <ErrorBanner message={error} className="mb-6" />
 
-      <div className="space-y-4">
-        {messages.length === 0 ? (
+      {/* Media type filter pills */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        {WHATSAPP_MEDIA_TYPES.map((mediaType) => {
+          const config = WHATSAPP_MEDIA_FILTER_CONFIG[mediaType];
+          const isActive = mediaFilter === mediaType;
+          const count = mediaCounts[mediaType];
+
+          return (
+            <button
+              key={mediaType}
+              onClick={(): void => {
+                toggleMediaFilter(mediaType);
+              }}
+              className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                isActive ? config.activeClass : INACTIVE_CLASS
+              }`}
+            >
+              <span className={`inline-block h-2 w-2 rounded-full ${config.dotClass}`} />
+              {config.label}
+              <span className="font-medium">{String(count)}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Sort selector */}
+      <div className="mb-4 flex items-center gap-2">
+        <ArrowUpDown className="h-3.5 w-3.5 text-slate-400" />
+        <span className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500">
+          Sort
+        </span>
+        <div className="flex gap-1.5">
+          {WHATSAPP_SORT_OPTIONS.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={(): void => {
+                setSort(key);
+              }}
+              className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                sort === key
+                  ? 'border-slate-400 bg-slate-100 font-medium text-slate-700 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200'
+                  : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Messages list */}
+      <div className="space-y-1">
+        {filteredMessages.length === 0 ? (
           <Card title="">
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <MessageSquare className="mb-4 h-12 w-12 text-slate-300 dark:text-slate-600" />
@@ -764,7 +299,7 @@ export function WhatsAppNotesPage(): React.JSX.Element {
             </div>
           </Card>
         ) : (
-          messages.map((message) => (
+          filteredMessages.map((message) => (
             <MessageItem
               key={message.id}
               message={message}
@@ -804,7 +339,8 @@ export function WhatsAppNotesPage(): React.JSX.Element {
 
       {messages.length > 0 ? (
         <p className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
-          Showing {String(messages.length)} message{messages.length === 1 ? '' : 's'}
+          Showing {String(filteredMessages.length)} of {String(messages.length)} message
+          {messages.length === 1 ? '' : 's'}
         </p>
       ) : null}
 
