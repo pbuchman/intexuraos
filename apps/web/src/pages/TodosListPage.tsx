@@ -32,8 +32,12 @@ function getStoredStatuses(): Set<TodoStatus> {
 }
 
 function getStoredSort(): TodoSortOption {
-  const stored = localStorage.getItem('todos-sort');
-  if (stored === 'created' || stored === 'priority' || stored === 'updated') return stored;
+  try {
+    const stored = localStorage.getItem('todos-sort');
+    if (stored === 'created' || stored === 'priority' || stored === 'updated') return stored;
+  } catch {
+    // Corrupted localStorage data — silently fall back to defaults rather than crashing the page
+  }
   return 'created';
 }
 
