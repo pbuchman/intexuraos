@@ -166,7 +166,7 @@ describe('server configuration', () => {
       taskEnqueueService: {} as never,
       mergeConflictDetector: {
         async detectOnPush() { /* no-op */ },
-        async reconcile() { return { attempted: 0 }; },
+        async reconcile() { return { processed: 0 }; },
       },
     } as {
       firestore: Firestore;

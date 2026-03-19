@@ -282,7 +282,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     taskEnqueueService,
     mergeConflictDetector: {
       async detectOnPush() { /* no-op for tests */ },
-      async reconcile() { return { attempted: 0 }; },
+      async reconcile() { return { processed: 0 }; },
     },
   };
 
