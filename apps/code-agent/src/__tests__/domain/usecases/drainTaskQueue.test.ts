@@ -29,7 +29,7 @@ import {
 // Mock config
 vi.mock('../../../config.js', () => ({
   loadConfig: (): { queue: { maxSize: number; ttlMinutes: number }; serviceUrl: string } => ({
-    queue: { maxSize: 10, ttlMinutes: 360 },
+    queue: { maxSize: 50, ttlMinutes: 360 },
     serviceUrl: 'https://code-agent.test',
   }),
 }));
