@@ -7,7 +7,7 @@
 
 Automated PR merge queue. User selects a base branch, starts watching it. A cron (every 1 minute) iterates open PRs oldest-first, merges the first one that is mergeable (no conflicts + all status checks passing), skips the rest. Continues until no open PRs remain with any skipped PRs still present (watches for them to become mergeable after conflict resolution). Records skip reasons for visibility.
 
-Only PRs authored by the authenticated user or the IntexuraOS bot are eligible.
+Only PRs authored by the authenticated user or a bot in the existing `ALLOWED_BOTS` set (`claude[bot]`, `chatgpt-codex-connector[bot]`, `intexuraos-code-worker[bot]`) are eligible. The merge queue use case imports and reuses this set from `routes/webhooks/github.ts`.
 
 Merge strategy: merge commit.
 
@@ -86,11 +86,11 @@ JWT-authenticated. Creates a watch on a base branch.
 **Validation:**
 
 - One active watch per (userId, owner, repo, baseBranch) — reject duplicate with 409.
-- Verify user has push access to the repo via GitHub API before creating.
+- Verify user has push access to the repo via GitHub API before creating. Uses the user's OAuth token resolved via `userServiceClient`.
 
 #### `DELETE /code/merge-queue/watch/:watchId`
 
-JWT-authenticated. Cancels an active watch. Sets status to `cancelled`.
+JWT-authenticated. Cancels an active watch. Sets status to `cancelled`. Only the user who created the watch can cancel it (else 403).
 
 **Response:** `{ "success": true }`
 
@@ -111,12 +111,17 @@ JWT-authenticated. Lists watches for the authenticated user.
       "repo": "intexuraos",
       "baseBranch": "development",
       "status": "active",
-      "mergedPrs": [1335, 1336, 1337],
-      "mergedCount": 3,
+      "mergedPrs": [
+        { "prNumber": 1335, "title": "feat: add caching", "mergedAt": "2026-03-19T12:01:00Z" },
+        { "prNumber": 1336, "title": "fix: null check", "mergedAt": "2026-03-19T12:02:00Z" },
+        { "prNumber": 1337, "title": "chore: bump deps", "mergedAt": "2026-03-19T12:03:00Z" }
+      ],
       "skippedPrs": [
         { "prNumber": 1340, "reason": "merge_conflict" },
         { "prNumber": 1341, "reason": "checks_failing" }
       ],
+      "lastError": null,
+      "lastErrorAt": null,
       "createdAt": "2026-03-19T12:00:00Z",
       "lastTickAt": "2026-03-19T12:05:00Z",
       "drainedAt": null
@@ -168,7 +173,7 @@ JWT-authenticated. Returns open PRs for a base branch with mergeability info.
     {
       "number": 1340,
       "title": "fix: retry logic",
-      "author": "intexuraos-bot[bot]",
+      "author": "intexuraos-code-worker[bot]",
       "authorIsEligible": true,
       "mergeable": false,
       "mergeableState": "conflicting",
@@ -180,7 +185,7 @@ JWT-authenticated. Returns open PRs for a base branch with mergeability info.
 }
 ```
 
-`authorIsEligible` — true if the author is the watch creator or the IntexuraOS bot. The UI uses this to visually indicate which PRs would be picked up by the watch.
+`authorIsEligible` — true if the author is the watch creator or a login in `ALLOWED_BOTS`. The UI uses this to visually indicate which PRs would be picked up by the watch. When no active watch exists for the selected branch, eligibility is computed against the authenticated user + `ALLOWED_BOTS`.
 
 ### Modified
 
@@ -196,19 +201,46 @@ All existing `/internal/` and `/code/` endpoints remain unchanged.
 
 ## GitHubPRClient Port Changes
 
-New method on the `GitHubPRClient` port:
+All new methods follow the existing per-call token convention (`token` as first parameter) and use `GitHubPRClientError` as the error type.
+
+### New method: `mergePullRequest`
 
 ```typescript
-mergePullRequest(params: {
-  owner: string;
-  repo: string;
-  pullNumber: number;
-  mergeMethod: 'merge';
-  commitTitle?: string;
-}): Promise<Result<{ sha: string; merged: boolean }, GitHubApiError>>;
+mergePullRequest(
+  token: string,
+  owner: string,
+  repo: string,
+  pullNumber: number,
+  mergeMethod: 'merge',
+  commitTitle?: string
+): Promise<Result<{ sha: string; merged: boolean }, GitHubPRClientError>>;
 ```
 
-Implementation: `PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge` via GitHub REST API.
+Implementation: `PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge` via GitHub REST API. Returns 405 if already merged — handle gracefully as success (idempotent).
+
+### New method: `getCombinedCheckStatus`
+
+```typescript
+getCombinedCheckStatus(
+  token: string,
+  owner: string,
+  repo: string,
+  ref: string
+): Promise<Result<{ state: 'success' | 'failure' | 'pending' }, GitHubPRClientError>>;
+```
+
+Implementation: `GET /repos/{owner}/{repo}/commits/{ref}/status` via GitHub REST API. Returns the combined status of all status checks for a commit ref (typically the head SHA of the PR).
+
+### Extended interface: `GitHubPullRequestDetails`
+
+Add `headSha` field to the existing interface so the tick logic can pass it to `getCombinedCheckStatus`:
+
+```typescript
+export interface GitHubPullRequestDetails {
+  // ... existing fields ...
+  headSha: string;  // NEW — needed for check status lookup
+}
+```
 
 ## Firestore
 
@@ -224,12 +256,20 @@ interface MergeQueueWatch {
   repo: string;
   baseBranch: string;
   status: 'active' | 'drained' | 'cancelled';
-  mergedPrs: number[];        // PR numbers merged by this watch
-  skippedPrs: SkippedPr[];    // Current tick's skip reasons
+  mergedPrs: MergedPr[];      // PRs merged by this watch (with title + timestamp for UI timeline)
+  skippedPrs: SkippedPr[];    // Current tick's skip reasons (overwritten each tick)
+  lastError: string | null;   // Last error message from a failed tick (null when healthy)
+  lastErrorAt: Timestamp | null;
   createdAt: Timestamp;
   lastTickAt: Timestamp | null;
   drainedAt: Timestamp | null;
   cancelledAt: Timestamp | null;
+}
+
+interface MergedPr {
+  prNumber: number;
+  title: string;
+  mergedAt: Timestamp;
 }
 
 interface SkippedPr {
@@ -245,31 +285,41 @@ MergeQueueTickUseCase:
   1. Query all watches where status === 'active'
   2. For each watch:
      a. Resolve GitHub token via userServiceClient (userId → token)
-     b. List open PRs for (owner, repo, baseBranch) ordered by createdAt ASC
-     c. Filter to eligible authors (watch creator's GitHub username + intexuraos bot)
-     d. For each PR (oldest first):
-        - Get PR details (mergeable, mergeableState, checks)
-        - If mergeable === true AND checksStatus === 'success':
-          → Call mergePullRequest()
-          → Append PR number to watch.mergedPrs
+        - On token resolution failure: set lastError, return action: 'error', continue to next watch
+     b. List open PRs for (owner, repo, baseBranch) ordered by createdAt ASC, tiebreak by PR number ASC
+     c. Filter to eligible authors (watch creator's GitHub username + ALLOWED_BOTS set)
+     d. For each eligible PR (oldest first):
+        - Get PR details via getPullRequestDetails (mergeable, mergeableState, headSha)
+        - Get check status via getCombinedCheckStatus(token, owner, repo, headSha)
+        - If mergeable === true AND checkStatus.state === 'success':
+          → Call mergePullRequest(token, owner, repo, prNumber, 'merge')
+          → If merge returns 405 (already merged): treat as success, do not add to mergedPrs
+          → Append { prNumber, title, mergedAt: now } to watch.mergedPrs
           → Record skipped PRs from earlier in the iteration
+          → Clear lastError
           → Return action: 'merged'
           → STOP (one merge per tick per watch)
-        - Else: add to skipped list with reason
+        - Else: add to skipped list with reason:
+          - mergeable === false → 'merge_conflict'
+          - checkStatus.state === 'failure' → 'checks_failing'
+          - checkStatus.state === 'pending' → 'checks_pending'
      e. If no PR was merged:
-        - If open eligible PRs exist → action: 'skipped_all'
-        - If zero open PRs remain → set status: 'drained', action: 'drained'
-     f. Update watch document (lastTickAt, skippedPrs, etc.)
+        - If eligible PRs exist (any were skipped) → action: 'skipped_all'
+        - If zero eligible PRs exist → set status: 'drained', action: 'drained'
+          (Note: "zero eligible PRs" means zero open PRs from eligible authors.
+           Non-eligible-author PRs are ignored for drain calculation.)
+     f. Update watch document (lastTickAt, skippedPrs, lastError, etc.)
   3. Return results array
 ```
 
 ## Auto-Termination
 
-Watch transitions to `drained` when:
-- Zero open PRs remain targeting the base branch from eligible authors, AND
-- Zero PRs were skipped in this tick
+Watch transitions to `drained` when zero open PRs from eligible authors remain targeting the base branch. "Eligible authors" = the watch creator's GitHub username + logins in `ALLOWED_BOTS`.
 
-This means: if 3 PRs are stuck with conflicts, the watch stays `active` — they might become mergeable after someone pushes a fix. Only when the branch is truly empty does it stop.
+This means:
+- If 3 eligible-author PRs are stuck with conflicts → watch stays `active` (they might become mergeable after a fix push).
+- If 5 PRs exist but none are from eligible authors → watch drains (it has nothing to act on).
+- Only when zero eligible PRs remain does the watch stop.
 
 ## Cron Setup
 
@@ -279,6 +329,10 @@ Cloud Scheduler job: `merge-queue-tick`
 - Auth: HMAC-SHA256 internal auth header
 
 The tick endpoint is idempotent — if no active watches exist, it returns an empty results array.
+
+## Environment Variables
+
+No new env vars required. The tick endpoint uses the existing `INTEXURAOS_INTERNAL_AUTH_TOKEN` for HMAC validation (same as all other `/internal/` endpoints). GitHub tokens are resolved per-user at runtime via `userServiceClient`.
 
 ## Web UI
 
@@ -336,6 +390,17 @@ When **active**:
 ```
 
 Matches the progress card pattern from `CodeTaskViewPageV2`.
+
+When **active with error** (`lastError` is non-null):
+
+```
+┌─ Card variant: border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/30 ─────┐
+│  ⚠ (AlertCircle) Active — Error                                                      │
+│  Token expired: unable to resolve GitHub token · 2 min ago                            │
+│  Merged: 3 · Skipped: 2                                                              │
+│                                                          [Stop Watching] (danger btn) │
+└───────────────────────────────────────────────────────────────────────────────────────┘
+```
 
 When **drained**:
 
@@ -402,7 +467,7 @@ Non-eligible author PRs shown with reduced opacity (`opacity-50`) and a tooltip:
 
 #### MergeHistoryTimeline (IssueTimeline pattern)
 
-Below the PR list. Collapsible section.
+Below the PR list. Collapsible section. Data sourced directly from the watch document's `mergedPrs` array (contains `prNumber`, `title`, `mergedAt` — no additional GitHub API calls needed).
 
 ```
 border-t border-slate-200 bg-slate-50 px-4 py-3 dark:border-zinc-700
@@ -420,10 +485,12 @@ Dot: `bg-emerald-500 rounded-full h-2.5 w-2.5`
 
 ## Error Handling
 
-- **Token expired:** Tick marks watch with `error` action, does not transition status. Next tick retries.
-- **Rate limited:** Tick backs off, returns `error` action with reason.
-- **Merge conflict at merge time** (race condition — was clean, now conflicting): Skip the PR, record `merge_conflict`, continue to next.
-- **Watch creator deleted/deactivated:** Token resolution fails, watch stays active but errors until manually cancelled.
+- **Token expired:** Tick sets `lastError` + `lastErrorAt` on the watch document, returns `error` action. Does not transition status. Next tick retries. UI shows error state on the watch card when `lastError` is non-null.
+- **Rate limited:** Tick sets `lastError` with rate limit details, returns `error` action. Next tick retries.
+- **Merge conflict at merge time** (race condition — was clean, now conflicting): Skip the PR, record `merge_conflict`, continue to next eligible PR in the same tick.
+- **PR already merged** (race condition — another user merged it between list and merge): GitHub returns 405. Treat as success, do not add to `mergedPrs`, continue to next.
+- **Watch creator deleted/deactivated:** Token resolution fails, `lastError` set. Watch stays active but errors until manually cancelled.
+- **Concurrent ticks:** If Cloud Scheduler fires while a previous tick is still running, two ticks could attempt to merge the same PR. Mitigation: `mergePullRequest` is idempotent (GitHub returns 405 if already merged). The Firestore update uses a transaction on the watch document to prevent double-appending to `mergedPrs`.
 
 ## Testing
 
