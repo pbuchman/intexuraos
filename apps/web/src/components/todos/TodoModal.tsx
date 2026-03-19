@@ -140,11 +140,14 @@ export function TodoModal({
   const handleAddItem = async (): Promise<void> => {
     if (newItemTitle.trim() === '') return;
     setAddingItem(true);
+    setError(null);
     try {
       const updated = await onAddItem({ title: newItemTitle.trim() });
       setCurrentTodo(updated);
       setNewItemTitle('');
       setShowAddItem(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add item');
     } finally {
       setAddingItem(false);
     }
@@ -154,13 +157,23 @@ export function TodoModal({
     itemId: string,
     request: UpdateTodoItemRequest
   ): Promise<void> => {
-    const updated = await onUpdateItem(itemId, request);
-    setCurrentTodo(updated);
+    setError(null);
+    try {
+      const updated = await onUpdateItem(itemId, request);
+      setCurrentTodo(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update item');
+    }
   };
 
   const handleDeleteItem = async (itemId: string): Promise<void> => {
-    const updated = await onDeleteItem(itemId);
-    setCurrentTodo(updated);
+    setError(null);
+    try {
+      const updated = await onDeleteItem(itemId);
+      setCurrentTodo(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete item');
+    }
   };
 
   const completedCount = currentTodo.items.filter((i) => i.status === 'completed').length;

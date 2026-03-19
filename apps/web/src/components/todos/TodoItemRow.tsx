@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Calendar, Edit2, Trash2 } from 'lucide-react';
-import { Button, Input } from '@/components';
+import { Button, ErrorBanner, Input } from '@/components';
 import { ItemStatusIcon, PriorityBadge } from '@/components/todos/shared.js';
 import { formatDate, formatDateForInput } from '@/utils/dateFormat.js';
 import type { TodoItem, TodoPriority, TodoStatus, UpdateTodoItemRequest } from '@/types';
@@ -20,6 +20,7 @@ export function TodoItemRow({ item, isEditing, onUpdate, onDelete }: TodoItemRow
   const [saving, setSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleToggleStatus = async (): Promise<void> => {
     const newStatus: TodoStatus = item.status === 'completed' ? 'pending' : 'completed';
@@ -28,6 +29,7 @@ export function TodoItemRow({ item, isEditing, onUpdate, onDelete }: TodoItemRow
 
   const handleSaveItem = async (): Promise<void> => {
     setSaving(true);
+    setSaveError(null);
     try {
       await onUpdate({
         title,
@@ -35,6 +37,8 @@ export function TodoItemRow({ item, isEditing, onUpdate, onDelete }: TodoItemRow
         dueDate: dueDate !== '' ? new Date(dueDate).toISOString() : null,
       });
       setEditingItem(false);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save item');
     } finally {
       setSaving(false);
     }
@@ -56,11 +60,13 @@ export function TodoItemRow({ item, isEditing, onUpdate, onDelete }: TodoItemRow
     setDueDate(formatDateForInput(item.dueDate));
     setEditingItem(false);
     setShowDeleteConfirm(false);
+    setSaveError(null);
   };
 
   if (editingItem) {
     return (
       <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+        <ErrorBanner message={saveError} />
         <Input
           label="Title"
           value={title}
