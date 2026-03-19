@@ -83,8 +83,8 @@ export interface WorkerConfig {
   secrets: WorkerSecrets;
   gcpSaKeyPath: string;
   githubAppKeyPath: string;
-  continueSession?: boolean;
   resolvedImage?: string;
+  continueSession?: boolean;
   onLog?: (chunk: string) => void;
   onComplete?: (exitCode: number) => void;
 }
