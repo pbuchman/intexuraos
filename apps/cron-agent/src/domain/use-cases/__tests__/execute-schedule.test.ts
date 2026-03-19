@@ -434,6 +434,49 @@ describe('executeSchedule', () => {
     expect(warnCalls.length).toBe(1);
   });
 
+  it('logs warning when executionRepo.update fails in catch block', async () => {
+    const warnCalls: unknown[] = [];
+    const warnLogger = {
+      info: () => { /* noop */ },
+      warn: (...args: unknown[]) => { warnCalls.push(args); },
+      error: () => { /* noop */ },
+      debug: () => { /* noop */ },
+      child: () => warnLogger,
+    } as never;
+
+    const deps: ExecuteScheduleDeps = {
+      logger: warnLogger,
+      executionRepo: {
+        create: async () => ok(testExecution),
+        findById: async () => ok(null),
+        findByUserId: async () => ok({ executions: [], nextCursor: null, count: 0 }),
+        findByScheduleId: async () => ok({ executions: [], nextCursor: null, count: 0 }),
+        findRunningByScheduleId: async () => ok(null),
+        update: async () => err({ code: 'INTERNAL_ERROR' as const, message: 'DB write failed' }),
+      },
+      scheduleRepo: {
+        create: async () => ok(testSchedule),
+        findById: async () => ok(testSchedule),
+        findByUserId: async () => ok({ schedules: [], nextCursor: null, count: 0 }),
+        findDueSchedules: async () => ok([]),
+        update: async () => ok(testSchedule),
+        incrementCounters: async () => ok(undefined),
+      },
+      actionDeps: createThrowingActionDeps(),
+    };
+
+    const result = await executeSchedule(deps, testSchedule, 'scheduled');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('EXECUTION_FAILED');
+    // Should have logged a warning about the failed execution update
+    const execUpdateWarn = warnCalls.find((call) => {
+      const args = call as unknown[];
+      return typeof args[1] === 'string' && args[1].includes('Failed to mark execution as failed');
+    });
+    expect(execUpdateWarn).toBeDefined();
+  });
+
   it('computes next execution with invalid cron expression gracefully', async () => {
     const scheduleWithBadCron: CronSchedule = {
       ...testSchedule,

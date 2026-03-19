@@ -427,7 +427,7 @@ describe('OpenApiToolRegistry', () => {
     expect(tools[0]?.name).toBe('code_agent__getItems');
   });
 
-  it('truncates response text exceeding 50000 characters', async () => {
+  it('truncates response text exceeding 50000 characters via streaming', async () => {
     nock('http://code-agent:8128')
       .get('/openapi.json')
       .reply(200, TEST_OPENAPI_SPEC);
@@ -443,9 +443,84 @@ describe('OpenApiToolRegistry', () => {
     if (getTasks === undefined) { expect(getTasks).toBeDefined(); return; }
 
     const result = await getTasks.run({});
-    const expectedSuffix = `... [RESPONSE TRUNCATED - original size: ${String(60_000)} bytes]`;
+    const expectedSuffix = `... [RESPONSE TRUNCATED - exceeded ${String(50_000)} byte limit]`;
     expect(result).toContain(expectedSuffix);
     expect(result.length).toBe(50_000 + expectedSuffix.length);
+  });
+
+  it('truncates response via fallback when response.body is null', async () => {
+    nock('http://code-agent:8128')
+      .get('/openapi.json')
+      .reply(200, TEST_OPENAPI_SPEC);
+
+    // Fetch tools first with normal fetch so the spec is cached
+    const tools = await registry.getToolsForService('code-agent');
+    const getTasks = tools.find((t) => t.name === 'code_agent__getRunningTasks');
+    if (getTasks === undefined) { expect(getTasks).toBeDefined(); return; }
+
+    const largeBody = 'z'.repeat(60_000);
+    nock('http://code-agent:8128')
+      .get('/internal/tasks')
+      .matchHeader('X-Internal-Auth', 'test-token')
+      .reply(200, largeBody);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (...args: Parameters<typeof fetch>): Promise<Response> => {
+      const resp = await originalFetch(...args);
+      const text = await resp.text();
+      return {
+        ok: resp.ok,
+        status: resp.status,
+        headers: resp.headers,
+        body: null,
+        text: () => Promise.resolve(text),
+      } as unknown as Response;
+    };
+
+    try {
+      const result = await getTasks.run({});
+      const expectedSuffix = '... [RESPONSE TRUNCATED]';
+      expect(result).toContain(expectedSuffix);
+      expect(result.length).toBe(50_000 + expectedSuffix.length);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('returns full response via fallback when response.body is null and within limit', async () => {
+    nock('http://code-agent:8128')
+      .get('/openapi.json')
+      .reply(200, TEST_OPENAPI_SPEC);
+
+    const tools = await registry.getToolsForService('code-agent');
+    const getTasks = tools.find((t) => t.name === 'code_agent__getRunningTasks');
+    if (getTasks === undefined) { expect(getTasks).toBeDefined(); return; }
+
+    const smallBody = 'hello world';
+    nock('http://code-agent:8128')
+      .get('/internal/tasks')
+      .matchHeader('X-Internal-Auth', 'test-token')
+      .reply(200, smallBody);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (...args: Parameters<typeof fetch>): Promise<Response> => {
+      const resp = await originalFetch(...args);
+      const text = await resp.text();
+      return {
+        ok: resp.ok,
+        status: resp.status,
+        headers: resp.headers,
+        body: null,
+        text: () => Promise.resolve(text),
+      } as unknown as Response;
+    };
+
+    try {
+      const result = await getTasks.run({});
+      expect(result).toBe(smallBody);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it('does not truncate response text within 50000 characters', async () => {

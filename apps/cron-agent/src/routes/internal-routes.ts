@@ -50,7 +50,12 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       //
       // For defense in depth, internal callers should prefer the x-internal-auth header path.
       const authHeader = request.headers.authorization;
-      const isOidcAuth = typeof authHeader === 'string' && authHeader.startsWith('Bearer ');
+      // Cloud Scheduler sends OIDC JWTs which always have 3 dot-separated segments.
+      // Reject bare "Bearer <garbage>" to prevent trivial auth bypass when Cloud Run
+      // ingress settings change.
+      const JWT_STRUCTURE = /^Bearer [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+      const isOidcAuth =
+        typeof authHeader === 'string' && JWT_STRUCTURE.test(authHeader);
 
       if (isOidcAuth) {
         request.log.info('Authenticated via OIDC token (Cloud Scheduler)');

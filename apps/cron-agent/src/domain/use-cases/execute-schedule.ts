@@ -115,12 +115,15 @@ export async function executeSchedule(
     const errorMsg = String(error);
     const failedAt = new Date().toISOString();
 
-    await executionRepo.update(execution.id, {
+    const execUpdateResult = await executionRepo.update(execution.id, {
       status: 'failure',
       completedAt: failedAt,
       durationMs,
       error: errorMsg,
     });
+    if (!execUpdateResult.ok) {
+      logger.warn({ executionId: execution.id, error: execUpdateResult.error.message }, 'Failed to mark execution as failed');
+    }
 
     const scheduleUpdateResult = await scheduleRepo.incrementCounters(schedule.id,
       { executionCount: true, failureCount: true },
