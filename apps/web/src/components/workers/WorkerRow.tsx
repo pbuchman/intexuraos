@@ -243,16 +243,6 @@ export function WorkerRow({
       {isEditing ? (
         <div className="mt-4 space-y-3">
           <Input
-            label="Worker Name"
-            placeholder="home-mac"
-            value={url}
-            onChange={(e): void => {
-              setUrl(e.target.value);
-              setFormError(null);
-            }}
-            disabled={isSaving}
-          />
-          <Input
             label="Worker URL"
             type="url"
             placeholder="https://your-worker.example.com"
