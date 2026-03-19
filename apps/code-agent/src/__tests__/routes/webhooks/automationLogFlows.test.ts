@@ -117,6 +117,7 @@ describe('Automation log integration flows', () => {
       findRecentlyActive: vi.fn().mockResolvedValue(ok([])),
       findByPullRequest: vi.fn().mockResolvedValue(ok(null)),
       findOpenByBaseBranch: vi.fn().mockResolvedValue(ok([])),
+      findAllOpen: vi.fn().mockResolvedValue(ok([])),
     };
 
     mockAuditRepo = {
@@ -239,6 +240,10 @@ describe('Automation log integration flows', () => {
       unifiedEvaluator,
       automationLog: mockAutomationLog as AutomationLog,
       taskEnqueueService: {} as never,
+      mergeConflictDetector: {
+        detectOnPush: vi.fn().mockResolvedValue(undefined),
+        reconcile: vi.fn().mockResolvedValue({ checked: 0 }),
+      },
     };
 
     setServices(mockServices);

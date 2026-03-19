@@ -160,6 +160,10 @@ describe('OpenAPI contract', () => {
       unifiedEvaluator: {} as never,
       automationLog: {} as never,
       taskEnqueueService: {} as never,
+      mergeConflictDetector: {
+        detectOnPush: vi.fn().mockResolvedValue(undefined),
+        reconcile: vi.fn().mockResolvedValue({ checked: 0 }),
+      },
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -192,6 +196,7 @@ describe('OpenAPI contract', () => {
       unifiedEvaluator: import('../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
       automationLog: import('../domain/ports/automationLog.js').AutomationLog;
       taskEnqueueService: import('../domain/services/taskEnqueueService.js').TaskEnqueueService;
+      mergeConflictDetector: import('../domain/services/mergeConflictDetector.js').MergeConflictDetector;
     });
 
     app = await buildServer();

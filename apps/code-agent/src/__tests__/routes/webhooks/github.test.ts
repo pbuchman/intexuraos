@@ -123,6 +123,7 @@ describe('POST /webhooks/github', () => {
       findRecentlyActive: vi.fn().mockResolvedValue(ok([])),
       findByPullRequest: vi.fn().mockResolvedValue(ok(null)),
       findOpenByBaseBranch: vi.fn().mockResolvedValue(ok([])),
+      findAllOpen: vi.fn().mockResolvedValue(ok([])),
     };
 
     mockAuditRepo = {
@@ -226,6 +227,10 @@ describe('POST /webhooks/github', () => {
       eventDecisionRepo: mockEventDecisionRepo,
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: { evaluate: vi.fn().mockResolvedValue(undefined) },
+      mergeConflictDetector: {
+        detectOnPush: vi.fn().mockResolvedValue(undefined),
+        reconcile: vi.fn().mockResolvedValue({ checked: 0 }),
+      },
       automationLog: { record: vi.fn().mockResolvedValue(undefined) },
       taskEnqueueService: {} as never,
     };
@@ -804,11 +809,11 @@ describe('POST /webhooks/github', () => {
       expect(body.success).toBe(true);
     });
 
-    it('triggers merge-conflict detection for push events when detector is configured', async () => {
+    it('does not trigger merge-conflict detection from push webhook (now handled by cron reconcile)', async () => {
       const { getServices } = await import('../../../services.js');
       const currentServices = getServices();
       const mockDetectOnPush = vi.fn().mockResolvedValue(undefined);
-      currentServices.mergeConflictDetector = { detectOnPush: mockDetectOnPush };
+      currentServices.mergeConflictDetector.detectOnPush = mockDetectOnPush;
 
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'push-event-id',
@@ -867,9 +872,9 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await waitForDetachedAsync(() => mockDetectOnPush.mock.calls.length >= 1);
+      await waitForSettlement();
 
-      expect(mockDetectOnPush).toHaveBeenCalledTimes(1);
+      expect(mockDetectOnPush).not.toHaveBeenCalled();
     });
   });
 

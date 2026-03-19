@@ -164,6 +164,10 @@ describe('server configuration', () => {
       unifiedEvaluator: {} as never,
       automationLog: {} as never,
       taskEnqueueService: {} as never,
+      mergeConflictDetector: {
+        async detectOnPush() { /* no-op */ },
+        async reconcile() { return { checked: 0 }; },
+      },
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -196,6 +200,7 @@ describe('server configuration', () => {
       unifiedEvaluator: import('../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
       automationLog: import('../domain/ports/automationLog.js').AutomationLog;
       taskEnqueueService: import('../domain/services/taskEnqueueService.js').TaskEnqueueService;
+      mergeConflictDetector: import('../domain/services/mergeConflictDetector.js').MergeConflictDetector;
     });
 
     app = await buildServer();

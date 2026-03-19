@@ -280,6 +280,10 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     }),
     automationLog,
     taskEnqueueService,
+    mergeConflictDetector: {
+      async detectOnPush() { /* no-op for tests */ },
+      async reconcile() { return { checked: 0 }; },
+    },
   };
 
   setServices(container);
