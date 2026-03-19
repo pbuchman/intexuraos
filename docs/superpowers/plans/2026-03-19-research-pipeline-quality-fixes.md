@@ -4,13 +4,229 @@
 
 **Goal:** Fix 5 quality gaps identified in research 23f84d5f that cause language cascade failures, missing quality gates, safety override of user instructions, unusable Gemini citations, and imprecise domain classification.
 
-**Architecture:** Changes span two packages (`llm-prompts`, `infra-gemini`) and one app (`research-agent`). Each task modifies prompt builders, schemas, or adapters. All changes are backwards-compatible — no HTTP endpoint changes, no migration needed, no Firestore schema changes.
+**Architecture:** Changes span five packages (`llm-prompts`, `infra-gemini`, `infra-gpt`, `infra-claude`, `infra-perplexity`) and one app (`research-agent`). Each task modifies prompt builders, schemas, or adapters. All changes are backwards-compatible — no HTTP endpoint changes, no migration needed, no Firestore schema changes.
 
 **Tech Stack:** TypeScript, Zod schemas, Vitest, Fastify (research-agent)
 
 **Debug report:** https://intexuraos.cloud/share/claude/research-debug-23f84d5f.html
 
 **Endpoint Changes:** None — all changes are internal prompt/schema/adapter modifications.
+
+---
+
+## Parallelization Strategy
+
+### Dependency Graph
+
+```
+T0 (thread context) ──blocks──▶ T1 (language), T3 (disclaimers), T5 (domains)
+T3 + T5 ──blocks──▶ T6 (repair prompt alignment)
+T2 (quality gate) ── fully independent
+T4 (Vertex URLs) ── independent (file overlap with T0.1 on infra-gemini/src/client.ts)
+```
+
+### Subagent Assignment
+
+| Stream                | Agent      | Tasks                  | Start Condition                                                | Files Touched                                                          |
+| --------------------- | ---------- | ---------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| **A (critical path)** | Main agent | T0 → T1 → T3 → T5 → T6 | Immediate                                                      | infra-\*, llm-prompts, research-agent (ports, adapters, routes, fakes) |
+| **B**                 | Subagent 1 | T2 (quality gate)      | Immediate — no file overlap with Stream A                      | research-agent (models, routes, usecases)                              |
+| **C**                 | Subagent 2 | T4 (Vertex URLs)       | **After T0.1 lands** — both touch `infra-gemini/src/client.ts` | infra-gemini (client, tests)                                           |
+
+### Why This Split
+
+- **T2 is fully independent:** It only adds `qualityFlag` to the Research model, adds a length check in internalRoutes (different section than T0.3), and annotates reports in runSynthesis. No overlap with prompt schemas, adapters, or infra clients.
+- **T4 must wait for T0.1:** Both modify `packages/infra-gemini/src/client.ts`. T0.1 removes `buildResearchPrompt()` from the client; T4 adds `resolveVertexRedirectUrls()`. Running them simultaneously would cause merge conflicts. Once T0.1 is committed, T4 can proceed on the updated file.
+- **T1/T3/T5/T6 are sequential on Stream A:** Each builds on the previous task's schema changes (language → exclusions → domains → repair alignment).
+
+### Subagent Briefs
+
+#### Subagent 1 Brief: T2 — Quality Gate (Chunk 2)
+
+**Scope:** Add a minimum-length quality gate on LLM results before synthesis.
+
+**Files to modify:**
+- `apps/research-agent/src/domain/research/models/Research.ts` — add `qualityFlag?: 'normal' | 'low_quality'` to `LlmResult`
+- `apps/research-agent/src/routes/internalRoutes.ts` — add quality check after LLM call (around line 904), BEFORE the result is saved
+- `apps/research-agent/src/domain/research/usecases/runSynthesis.ts` — annotate low-quality reports with `[QUALITY WARNING]` prefix
+
+**Test files:**
+- `apps/research-agent/src/__tests__/routes.test.ts` — test quality flag assignment
+- `apps/research-agent/src/__tests__/domain/research/usecases/runSynthesis.test.ts` — test quality annotation in synthesis
+
+**Constants:**
+- `MIN_QUALITY_CHARS = 800` (~200 tokens)
+
+**TDD workflow:** Write failing test → verify failure → implement → verify pass → commit. Three sub-tasks (T2.1, T2.2, T2.3), one commit each.
+
+**Constraints:**
+- Do NOT modify any files outside the listed scope
+- Do NOT touch prompt builders, schemas, adapters, or infra clients
+- Follow existing test patterns: `setServices({fakes})` in `beforeEach`, `resetServices()` in `afterEach`, `app.inject()` for routes
+- Use `/* v8 ignore ... */` only as last resort with valid blocker reason
+
+**Done criteria:**
+- `pnpm run verify:workspace:tracked -- research-agent` passes
+- 3 commits (T2.1, T2.2, T2.3) on the feature branch
+
+---
+
+#### Subagent 2 Brief: T4 — Vertex URL Resolution (Chunk 4)
+
+**Start condition:** Wait until T0.1 is committed (removes `buildResearchPrompt` from infra-gemini client).
+
+**Scope:** Resolve Vertex AI grounding redirect URLs to actual destination URLs.
+
+**Files to modify:**
+- `packages/infra-gemini/src/client.ts` — add `resolveVertexRedirectUrls()` function (after `extractSourcesFromResponse`), integrate into `research()` method
+
+**Test files:**
+- `packages/infra-gemini/src/__tests__/client.test.ts` — test URL resolution (redirect, fallback, skip non-Vertex, timeout)
+
+**Key implementation details:**
+- `VERTEX_REDIRECT_PREFIX = 'vertexaisearch.cloud.google.com/grounding-api-redirect/'`
+- Use `fetch(url, { method: 'HEAD', redirect: 'manual' })` to get `Location` header
+- 3-second timeout per URL via `AbortController`
+- Fall back to original URL on any failure (network error, no Location header, timeout)
+- Export `resolveVertexRedirectUrls` for testing
+- Use `vi.stubGlobal('fetch', mockFetch)` pattern for tests (NOT nock)
+
+**Constraints:**
+- Do NOT modify any files outside `packages/infra-gemini/`
+- Do NOT touch adapters, ports, routes, or prompt builders
+- The `research()` method should already accept a raw prompt string (T0.1 removed the `buildResearchPrompt` call) — do NOT re-add it
+
+**Done criteria:**
+- `pnpm run verify:workspace:tracked -- research-agent` passes (infra-gemini is a dependency)
+- 1 commit (T4.1) on the feature branch
+
+---
+
+### Review Instructions
+
+After each subagent completes, run a review step to cross-check against the plan. Use the `superpowers:code-reviewer` agent or manual review.
+
+#### Review Checklist: Subagent 1 (T2 — Quality Gate)
+
+```markdown
+## T2 Review Checklist
+
+### T2.1 — qualityFlag model field
+- [ ] `LlmResult` interface in `Research.ts` has `qualityFlag?: 'normal' | 'low_quality'`
+- [ ] Field is optional (backwards-compatible with existing Firestore documents)
+- [ ] No other model changes were made
+
+### T2.2 — Minimum length quality check
+- [ ] `MIN_QUALITY_CHARS = 800` constant defined in `internalRoutes.ts`
+- [ ] Quality check runs AFTER LLM call succeeds, BEFORE saving result
+- [ ] Results below threshold get `qualityFlag: 'low_quality'`
+- [ ] Results at or above threshold do NOT get a qualityFlag set
+- [ ] Logger.warn called when flagging low_quality (with model and contentLength)
+- [ ] Test covers: short output → low_quality flag
+- [ ] Test covers: sufficient output → no flag (undefined)
+- [ ] No changes to the LLM call itself or error handling
+
+### T2.3 — Quality flags passed to synthesis
+- [ ] In `runSynthesis.ts`, reports mapped with `[QUALITY WARNING]` prefix for low_quality results
+- [ ] Normal/undefined qualityFlag results pass through unchanged
+- [ ] Test verifies quality warning appears in synthesis input for flagged reports
+- [ ] Test verifies no warning for normal reports
+
+### Cross-cutting
+- [ ] No files outside scope were modified (only Research.ts, internalRoutes.ts, runSynthesis.ts + tests)
+- [ ] No prompt builders, schemas, adapters, or infra clients were touched
+- [ ] `pnpm run verify:workspace:tracked -- research-agent` passes
+- [ ] 3 separate commits with descriptive messages
+- [ ] No v8-ignore added without valid blocker reason
+```
+
+#### Review Checklist: Subagent 2 (T4 — Vertex URLs)
+
+```markdown
+## T4 Review Checklist
+
+### T4.1 — resolveVertexRedirectUrls
+- [ ] Function `resolveVertexRedirectUrls` exported from `client.ts`
+- [ ] Uses `VERTEX_REDIRECT_PREFIX` constant for URL detection
+- [ ] Uses `fetch(url, { method: 'HEAD', redirect: 'manual' })` — NOT GET, NOT following redirects
+- [ ] Has `AbortController` with 3-second timeout
+- [ ] Returns resolved URL from `Location` header when available
+- [ ] Falls back to original URL when: no Location header, fetch throws, timeout
+- [ ] Skips resolution entirely for non-Vertex URLs (no fetch call)
+- [ ] Integrated into `research()` method: `extractSourcesFromResponse` → `resolveVertexRedirectUrls` → return
+- [ ] Does NOT re-introduce `buildResearchPrompt` (T0.1 removed it)
+
+### Tests
+- [ ] Test: redirect URL resolved to actual destination
+- [ ] Test: non-Vertex URL passed through unchanged (fetch not called)
+- [ ] Test: graceful fallback when no Location header
+- [ ] Test: graceful fallback when fetch throws
+- [ ] Uses `vi.stubGlobal('fetch', mockFetch)` pattern (not nock)
+- [ ] `vi.unstubAllGlobals()` in afterEach
+
+### Cross-cutting
+- [ ] No files outside `packages/infra-gemini/` were modified
+- [ ] `pnpm run verify:workspace:tracked -- research-agent` passes
+- [ ] 1 commit with descriptive message
+- [ ] `resolveVertexRedirectUrls` accepts optional `ResolveOptions` with `timeoutMs`
+```
+
+#### Review Checklist: Main Agent (Stream A — T0, T1, T3, T5, T6)
+
+```markdown
+## Stream A Review Checklist
+
+### T0.1 — Remove prompt build from infra clients
+- [ ] `buildResearchPrompt` import removed from all 4 infra clients
+- [ ] Each client's `research()` method uses `prompt` parameter directly
+- [ ] No prompt wrapping logic remains in any infra client
+- [ ] Tests updated in all 4 `__tests__/client.test.ts` files
+
+### T0.2 — Add ResearchContext to adapter layer
+- [ ] `LlmResearchProvider` interface updated: `research(prompt: string, ctx?: ResearchContext)`
+- [ ] All 4 adapters call `buildResearchPrompt(prompt, ctx)` before forwarding to infra client
+- [ ] Fake LLM provider updated to accept and record `ctx`
+- [ ] `ctx` parameter is optional (backwards compatible)
+
+### T0.3 — Pass context in route handler
+- [ ] `internalRoutes.ts` passes `research.researchContext` to `llmProvider.research()`
+- [ ] No Pub/Sub changes were made
+- [ ] Research is loaded from DB (existing line ~776), not from Pub/Sub message
+
+### T1 — Language enforcement (verify per plan Chunk 1 steps)
+- [ ] Language instruction at TOP of research prompt (before Research Request section)
+- [ ] Existing language instruction at end kept as reinforcement
+- [ ] `languageOverride` added to `InferSynthesisContextParams`
+- [ ] `runSynthesis.ts` passes `researchContext.language` as `languageOverride`
+
+### T3 — User exclusions (verify per plan Chunk 3 steps)
+- [ ] `user_exclusions: z.array(z.string()).default([])` added to `SafetyInfoSchema`
+- [ ] Context inference prompt includes user_exclusions extraction instruction
+- [ ] Research prompt filters disclaimers against user_exclusions when NOT high_stakes
+- [ ] Synthesis prompt applies same filtering
+- [ ] High-stakes disclaimers NEVER filtered (even with matching exclusions)
+
+### T5 — Domain classification (verify per plan Chunk 5 steps)
+- [ ] `outdoor_recreation` and `fishing` added to DOMAINS array
+- [ ] Domain guidelines added to `domainGuides` in researchPrompt.ts
+- [ ] Fishing guideline includes: species, technique-specific tackle, community forums, tidal/weather
+- [ ] Both context inference prompts updated with new domain options
+
+### T6 — Repair prompt alignment
+- [ ] Research repair prompt includes `outdoor_recreation|fishing` in domain list
+- [ ] Synthesis repair prompt includes `outdoor_recreation|fishing` in domain list
+- [ ] Both repair prompts include `user_exclusions` in safety schema
+- [ ] `RESEARCH_CONTEXT_SCHEMA` in ContextInferenceAdapter updated
+- [ ] `SYNTHESIS_CONTEXT_SCHEMA` in ContextInferenceAdapter updated
+- [ ] Repair prompt test file created: `research/__tests__/repairPrompt.test.ts`
+- [ ] Existing synthesis repair prompt test file updated
+
+### Prompt versions (all bumps per CLAUDE.md semver rules)
+- [ ] researchPrompt.ts: 1.1.0 → 2.0.0 (T1) → 3.0.0 (T3) → 3.1.0 (T5)
+- [ ] research/contextInference.ts: 1.0.0 → 2.0.0 (T3) → 2.1.0 (T5)
+- [ ] synthesis/contextInference.ts: 1.1.0 → 2.0.0 (T1) → 2.1.0 (T5)
+- [ ] repair prompt versions bumped (patch)
+```
 
 ---
 
@@ -26,22 +242,294 @@
 | 4   | `packages/llm-prompts/src/synthesis/contextInference.ts`           | Synthesis context inference prompt                   | T1         |
 | 5   | `packages/llm-prompts/src/synthesis/contextSchemas.ts`             | SynthesisContext schema, InferSynthesisContextParams | T1         |
 | 6   | `packages/llm-prompts/src/research/synthesisPrompt.ts`             | Synthesis prompt builder                             | T3         |
-| 7   | `packages/infra-gemini/src/client.ts`                              | Gemini API client, source extraction                 | T4         |
-| 8   | `apps/research-agent/src/domain/research/usecases/runSynthesis.ts` | Synthesis orchestration                              | T1         |
-| 9   | `apps/research-agent/src/routes/internalRoutes.ts`                 | LLM call handler                                     | T2         |
+| 7   | `packages/infra-gemini/src/client.ts`                              | Gemini API client, source extraction                 | T0, T4     |
+| 8   | `packages/infra-gpt/src/client.ts`                                 | GPT API client                                       | T0         |
+| 9   | `packages/infra-claude/src/client.ts`                              | Claude API client                                    | T0         |
+| 10  | `packages/infra-perplexity/src/client.ts`                          | Perplexity API client                                | T0         |
+| 11  | `apps/research-agent/src/domain/research/ports/llmProvider.ts`     | LlmResearchProvider interface                        | T0         |
+| 12  | `apps/research-agent/src/infra/llm/GeminiAdapter.ts`               | Gemini LLM adapter                                   | T0         |
+| 13  | `apps/research-agent/src/infra/llm/GptAdapter.ts`                  | GPT LLM adapter                                      | T0         |
+| 14  | `apps/research-agent/src/infra/llm/ClaudeAdapter.ts`               | Claude LLM adapter                                   | T0         |
+| 15  | `apps/research-agent/src/infra/llm/PerplexityAdapter.ts`           | Perplexity LLM adapter                               | T0         |
+| 16  | `apps/research-agent/src/__tests__/fakes.ts`                       | Fake LLM provider for tests                          | T0         |
+| 17  | `apps/research-agent/src/domain/research/usecases/runSynthesis.ts` | Synthesis orchestration                              | T1         |
+| 18  | `apps/research-agent/src/routes/internalRoutes.ts`                 | LLM call handler                                     | T0, T2     |
+| 19  | `packages/llm-prompts/src/research/repairPrompt.ts`                | Research repair prompt                               | T6         |
+| 20  | `packages/llm-prompts/src/synthesis/repairPrompt.ts`               | Synthesis repair prompt                              | T6         |
+| 21  | `apps/research-agent/src/infra/llm/ContextInferenceAdapter.ts`     | Context inference schema constants                   | T6         |
 
 ### Test Files (modified or created)
 
 | File                                                                              | Tests For   |
 | --------------------------------------------------------------------------------- | ----------- |
+| `packages/infra-gemini/src/__tests__/client.test.ts`                              | T0, T4      |
+| `packages/infra-gpt/src/__tests__/client.test.ts`                                 | T0          |
+| `packages/infra-claude/src/__tests__/client.test.ts`                              | T0          |
+| `packages/infra-perplexity/src/__tests__/client.test.ts`                          | T0          |
 | `packages/llm-prompts/src/research/__tests__/researchPrompt.test.ts`              | T1, T5      |
 | `packages/llm-prompts/src/research/__tests__/contextInference.test.ts`            | T3, T5      |
 | `packages/llm-prompts/src/synthesis/__tests__/contextInference.test.ts`           | T1          |
 | `packages/llm-prompts/src/shared/__tests__/contextSchemas.test.ts`                | T3, T5      |
-| `packages/infra-gemini/src/__tests__/client.test.ts`                              | T4          |
 | `apps/research-agent/src/__tests__/domain/research/usecases/runSynthesis.test.ts` | T1          |
-| `apps/research-agent/src/__tests__/routes.test.ts`                                | T2          |
+| `apps/research-agent/src/__tests__/routes.test.ts`                                | T0, T2      |
 | `packages/llm-prompts/src/research/__tests__/synthesisPrompt.test.ts`             | T3          |
+| `packages/llm-prompts/src/research/__tests__/repairPrompt.test.ts`                | T6          |
+| `packages/llm-prompts/src/synthesis/__tests__/repairPrompt.test.ts`               | T6          |
+
+---
+
+## Chunk 0: Thread ResearchContext to LLM Calls (Task 0)
+
+### Task 0: Thread ResearchContext through LLM call path
+
+**Problem:** `buildContextualResearchPrompt` is dead code in production — ResearchContext is inferred and stored in Firestore but never threaded to LLM calls. All 4 infra clients (Gemini, GPT, Claude, Perplexity) call `buildResearchPrompt(prompt)` internally, producing a non-contextual prompt. All plan changes to the contextual prompt (T1 language, T3 disclaimers, T5 domains) would have zero effect until this is fixed.
+
+**Blocks:** T1, T3, T5 — without threading context to LLM calls, all prompt modifications in those tasks would be dead code.
+
+**Fix strategy (3 parts):**
+1. Remove `buildResearchPrompt()` call from 4 infra client `research()` methods — they become pure API transport, accepting a pre-built prompt string
+2. Add optional `ResearchContext` parameter to `LlmResearchProvider` interface and adapters — adapters now own prompt building via `buildResearchPrompt(prompt, ctx)`
+3. Pass `researchContext` from the already-loaded research in the route handler to the LLM provider
+
+**Key design decisions:**
+- No Pub/Sub changes — research is already loaded from DB in the handler (line 776)
+- Optional parameter (`ctx?`) at every layer — backwards compatible, existing callers unaffected
+- Responsibility shift — infra clients become pure API transport; adapters own prompt building
+
+---
+
+#### Task 0.1: Remove prompt building from infra clients
+
+**Files:**
+- Modify: `packages/infra-gemini/src/client.ts:106-107`
+- Modify: `packages/infra-gpt/src/client.ts:165-166`
+- Modify: `packages/infra-claude/src/client.ts:149`
+- Modify: `packages/infra-perplexity/src/client.ts:243-244`
+- Test: `packages/infra-gemini/src/__tests__/client.test.ts`
+- Test: `packages/infra-gpt/src/__tests__/client.test.ts`
+- Test: `packages/infra-claude/src/__tests__/client.test.ts`
+- Test: `packages/infra-perplexity/src/__tests__/client.test.ts`
+
+- [ ] **Step 1: Write the failing tests**
+
+In each infra client's test file (`__tests__/client.test.ts`), update the research method test to verify the client passes through the prompt string as-is, without wrapping it via `buildResearchPrompt`:
+
+```typescript
+it('should pass the prompt string directly to the API without wrapping', async () => {
+  const rawPrompt = 'Pre-built research prompt with context';
+  const result = await client.research(rawPrompt);
+  // Verify the API was called with the raw prompt, not a wrapped version
+  expect(mockApi.lastPrompt).toBe(rawPrompt);
+});
+```
+
+Apply this pattern to all 4 infra client test files.
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run for each package:
+```
+cd packages/infra-gemini && pnpm vitest run src/__tests__/client.test.ts -t "prompt string directly"
+cd packages/infra-gpt && pnpm vitest run src/__tests__/client.test.ts -t "prompt string directly"
+cd packages/infra-claude && pnpm vitest run src/__tests__/client.test.ts -t "prompt string directly"
+cd packages/infra-perplexity && pnpm vitest run src/__tests__/client.test.ts -t "prompt string directly"
+```
+Expected: FAIL — clients still wrap the prompt via `buildResearchPrompt()`.
+
+- [ ] **Step 3: Implement — remove buildResearchPrompt from infra clients**
+
+In each infra client's `research()` method:
+
+1. Remove the `import { buildResearchPrompt } from '@intexuraos/llm-prompts'` import
+2. Remove the `const wrappedPrompt = buildResearchPrompt(prompt)` call (or equivalent)
+3. Use the `prompt` parameter directly in the API call
+
+Files and approximate lines:
+- `packages/infra-gemini/src/client.ts:106-107` — remove `buildResearchPrompt(prompt)`, use `prompt` directly
+- `packages/infra-gpt/src/client.ts:165-166` — same
+- `packages/infra-claude/src/client.ts:149` — same
+- `packages/infra-perplexity/src/client.ts:243-244` — same
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `pnpm vitest run` in each infra package.
+Expected: ALL PASS
+
+- [ ] **Step 5: Commit**
+
+```
+refactor(infra-*): remove prompt building from infra clients
+
+Infra clients (Gemini, GPT, Claude, Perplexity) no longer call
+buildResearchPrompt() internally. They now accept a pre-built prompt
+string, becoming pure API transport. Prompt building responsibility
+moves to the adapter layer in Task 0.2.
+```
+
+---
+
+#### Task 0.2: Add optional ResearchContext to adapter layer
+
+**Files:**
+- Modify: `apps/research-agent/src/domain/research/ports/llmProvider.ts:42-44`
+- Modify: `apps/research-agent/src/infra/llm/GeminiAdapter.ts:42`
+- Modify: `apps/research-agent/src/infra/llm/GptAdapter.ts:36`
+- Modify: `apps/research-agent/src/infra/llm/ClaudeAdapter.ts:32`
+- Modify: `apps/research-agent/src/infra/llm/PerplexityAdapter.ts:39`
+- Modify: `apps/research-agent/src/__tests__/fakes.ts`
+- Test: `apps/research-agent/src/__tests__/routes.test.ts`
+
+- [ ] **Step 1: Write the failing test**
+
+In `apps/research-agent/src/__tests__/routes.test.ts`, add:
+
+```typescript
+it('should call adapter with ResearchContext when researchContext is available', async () => {
+  const research = createTestResearch({
+    researchContext: mockResearchContext,
+  });
+  fakeResearchRepo.setResearch(research);
+
+  await app.inject({
+    method: 'POST',
+    url: '/internal/llm/pubsub/process-llm-call',
+    payload: createPubSubPayload({ researchId: research.id, model: 'gemini-2.5-pro', prompt: 'test query' }),
+    headers: { 'x-internal-auth': validToken },
+  });
+
+  // Verify the LLM provider received the ResearchContext
+  expect(fakeLlmProvider.lastResearchContext).toEqual(mockResearchContext);
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd apps/research-agent && pnpm vitest run src/__tests__/routes.test.ts -t "ResearchContext when researchContext"`
+Expected: FAIL — adapters don't accept ResearchContext yet.
+
+- [ ] **Step 3: Implement — update interface and adapters**
+
+In `apps/research-agent/src/domain/research/ports/llmProvider.ts`, update the `LlmResearchProvider` interface:
+
+```typescript
+import type { ResearchContext } from '@intexuraos/llm-prompts';
+
+export interface LlmResearchProvider {
+  research(prompt: string, ctx?: ResearchContext): Promise<Result<LlmResearchResult>>;
+}
+```
+
+In each adapter (`GeminiAdapter.ts`, `GptAdapter.ts`, `ClaudeAdapter.ts`, `PerplexityAdapter.ts`), update the `research()` method:
+
+```typescript
+import { buildResearchPrompt, type ResearchContext } from '@intexuraos/llm-prompts';
+
+async research(prompt: string, ctx?: ResearchContext): Promise<Result<LlmResearchResult>> {
+  const builtPrompt = buildResearchPrompt(prompt, ctx);
+  return this.client.research(builtPrompt);
+}
+```
+
+In `apps/research-agent/src/__tests__/fakes.ts`, update the fake to accept and record the context:
+
+```typescript
+async research(prompt: string, ctx?: ResearchContext): Promise<Result<LlmResearchResult>> {
+  this.lastResearchContext = ctx;
+  // ... existing fake implementation
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd apps/research-agent && pnpm vitest run src/__tests__/routes.test.ts`
+Expected: ALL PASS
+
+- [ ] **Step 5: Commit**
+
+```
+feat(research-agent): add ResearchContext to LlmResearchProvider interface
+
+Adapters now own prompt building via buildResearchPrompt(prompt, ctx).
+Each adapter (Gemini, GPT, Claude, Perplexity) accepts an optional
+ResearchContext and builds the contextual prompt before forwarding
+to the infra client.
+```
+
+---
+
+#### Task 0.3: Pass researchContext from loaded research to LLM provider
+
+**Files:**
+- Modify: `apps/research-agent/src/routes/internalRoutes.ts:855-863`
+- Test: `apps/research-agent/src/__tests__/routes.test.ts`
+
+- [ ] **Step 1: Write the failing test**
+
+In `apps/research-agent/src/__tests__/routes.test.ts`, add:
+
+```typescript
+it('should pass research.researchContext to llmProvider.research()', async () => {
+  const researchContext = {
+    language: 'en',
+    domain: 'fishing',
+    safety: { high_stakes: false, required_disclaimers: [], user_exclusions: [] },
+    // ... other required fields from ResearchContext
+  };
+  const research = createTestResearch({ researchContext });
+  fakeResearchRepo.setResearch(research);
+
+  await app.inject({
+    method: 'POST',
+    url: '/internal/llm/pubsub/process-llm-call',
+    payload: createPubSubPayload({ researchId: research.id, model: 'gemini-2.5-pro', prompt: 'test query' }),
+    headers: { 'x-internal-auth': validToken },
+  });
+
+  expect(fakeLlmProvider.research).toHaveBeenCalledWith(
+    'test query',
+    researchContext,
+  );
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd apps/research-agent && pnpm vitest run src/__tests__/routes.test.ts -t "researchContext to llmProvider"`
+Expected: FAIL — handler doesn't pass context yet.
+
+- [ ] **Step 3: Implement — pass researchContext in route handler**
+
+In `apps/research-agent/src/routes/internalRoutes.ts` line 863, change:
+
+```typescript
+// Before:
+const llmResult = await llmProvider.research(event.prompt);
+
+// After:
+const llmResult = await llmProvider.research(event.prompt, research.researchContext);
+```
+
+The `research` object is already loaded from DB at line 776 and contains `researchContext`. No Pub/Sub changes needed.
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd apps/research-agent && pnpm vitest run src/__tests__/routes.test.ts`
+Expected: ALL PASS
+
+- [ ] **Step 5: Build and verify**
+
+Run: `pnpm run verify:workspace:tracked -- research-agent`
+Expected: PASS
+
+- [ ] **Step 6: Commit**
+
+```
+feat(research-agent): thread researchContext to LLM provider calls
+
+Closes the dead-code gap: research.researchContext is now passed from
+the route handler through to llmProvider.research(), enabling all
+contextual prompt features (language, safety, domain guidelines).
+```
 
 ---
 
@@ -1037,6 +1525,140 @@ Bump researchPrompt.ts: 3.0.0 → 3.1.0 (minor: new domain guidelines)
 
 ---
 
+## Chunk 6: Update Repair Prompts and Schema Constants (Task 6)
+
+### Task 6: Update repair prompts and schema constants
+
+**Problem:** Repair prompt schemas hardcode the old domain list and safety shape. After T3 adds `user_exclusions` to SafetyInfo and T5 adds `outdoor_recreation|fishing` domains, the repair fallback would undo these changes — it would strip `user_exclusions` from safety objects and reject the new domains, reverting repaired context to the old shape.
+
+**Fix strategy (2 parts):**
+1. Update domain list strings and safety schemas in both research and synthesis repair prompts
+2. Update `RESEARCH_CONTEXT_SCHEMA` and `SYNTHESIS_CONTEXT_SCHEMA` string constants in `ContextInferenceAdapter`
+
+---
+
+#### Task 6.1: Update repair prompt domain lists and safety schemas
+
+**Files:**
+- Modify: `packages/llm-prompts/src/research/repairPrompt.ts:47,77-80`
+- Modify: `packages/llm-prompts/src/synthesis/repairPrompt.ts:45,69-72`
+- Create: `packages/llm-prompts/src/research/__tests__/repairPrompt.test.ts`
+- Modify: `packages/llm-prompts/src/synthesis/__tests__/repairPrompt.test.ts`
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `packages/llm-prompts/src/research/__tests__/repairPrompt.test.ts`:
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { buildResearchRepairPrompt } from '../repairPrompt.js';
+
+describe('buildResearchRepairPrompt', () => {
+  it('should include outdoor_recreation and fishing in domain list', () => {
+    const result = buildResearchRepairPrompt('{}');
+    expect(result).toContain('outdoor_recreation');
+    expect(result).toContain('fishing');
+  });
+
+  it('should include user_exclusions in safety schema', () => {
+    const result = buildResearchRepairPrompt('{}');
+    expect(result).toContain('user_exclusions');
+  });
+});
+```
+
+In `packages/llm-prompts/src/synthesis/__tests__/repairPrompt.test.ts`, add:
+
+```typescript
+it('should include outdoor_recreation and fishing in domain list', () => {
+  const result = buildSynthesisRepairPrompt('{}');
+  expect(result).toContain('outdoor_recreation');
+  expect(result).toContain('fishing');
+});
+
+it('should include user_exclusions in safety schema', () => {
+  const result = buildSynthesisRepairPrompt('{}');
+  expect(result).toContain('user_exclusions');
+});
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run:
+```
+cd packages/llm-prompts && pnpm vitest run src/research/__tests__/repairPrompt.test.ts
+cd packages/llm-prompts && pnpm vitest run src/synthesis/__tests__/repairPrompt.test.ts -t "outdoor_recreation"
+```
+Expected: FAIL — new domains and `user_exclusions` not in repair prompts yet.
+
+- [ ] **Step 3: Implement — update repair prompts**
+
+In `packages/llm-prompts/src/research/repairPrompt.ts`:
+- Line 47: Add `outdoor_recreation|fishing` to the domain list string (pipe-delimited list of valid domains)
+- Lines 77-80: Add `"user_exclusions": ["<string>"]` to the safety schema in the JSON template
+
+In `packages/llm-prompts/src/synthesis/repairPrompt.ts`:
+- Line 45: Add `outdoor_recreation|fishing` to the domain list string
+- Lines 69-72: Add `"user_exclusions": ["<string>"]` to the safety schema in the JSON template
+
+Bump prompt versions in both files (patch: schema update, no behavior change).
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `cd packages/llm-prompts && pnpm vitest run src/research/__tests__/repairPrompt.test.ts && pnpm vitest run src/synthesis/__tests__/repairPrompt.test.ts`
+Expected: ALL PASS
+
+- [ ] **Step 5: Commit**
+
+```
+fix(llm-prompts): update repair prompts with new domains and user_exclusions
+
+Repair prompts hardcoded the old domain list and safety shape.
+After T3/T5 changes, the repair fallback would strip user_exclusions
+and reject outdoor_recreation/fishing domains. Now aligned with
+current schemas.
+```
+
+---
+
+#### Task 6.2: Update ContextInferenceAdapter schema constants
+
+**Files:**
+- Modify: `apps/research-agent/src/infra/llm/ContextInferenceAdapter.ts:33-47,53-66`
+
+- [ ] **Step 1: Read the current schema constants**
+
+Read `apps/research-agent/src/infra/llm/ContextInferenceAdapter.ts` and find `RESEARCH_CONTEXT_SCHEMA` and `SYNTHESIS_CONTEXT_SCHEMA` string constants.
+
+- [ ] **Step 2: Update RESEARCH_CONTEXT_SCHEMA**
+
+In the domain enum section of `RESEARCH_CONTEXT_SCHEMA` (around line 33-47), add `outdoor_recreation` and `fishing` to the list of valid domain values.
+
+In the safety section, add `"user_exclusions": ["<string>"]`.
+
+- [ ] **Step 3: Update SYNTHESIS_CONTEXT_SCHEMA**
+
+In the domain enum section of `SYNTHESIS_CONTEXT_SCHEMA` (around line 53-66), add `outdoor_recreation` and `fishing` to the list of valid domain values.
+
+In the safety section, add `"user_exclusions": ["<string>"]`.
+
+- [ ] **Step 4: Build and verify**
+
+Run: `pnpm run verify:workspace:tracked -- research-agent`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```
+fix(research-agent): update ContextInferenceAdapter schema constants
+
+RESEARCH_CONTEXT_SCHEMA and SYNTHESIS_CONTEXT_SCHEMA now include
+outdoor_recreation/fishing domains and user_exclusions in safety.
+Keeps adapter schemas aligned with llm-prompts after T3/T5 changes.
+```
+
+---
+
 ## Final Verification
 
 - [ ] **Step 1: Build all packages**
@@ -1057,17 +1679,22 @@ Expected: PASS
 
 ## Summary: Implementation Order
 
-| Order   | Task                                   | Chunk   | Packages Modified   |
-| ------- | -------------------------------------- | ------- | ------------------- |
-| 1       | T1.1 — Language at top of prompt       | 1       | llm-prompts         |
-| 2       | T1.2 — languageOverride param          | 1       | llm-prompts         |
-| 3       | T1.3 — Pass language to synthesis      | 1       | research-agent      |
-| 4       | T2.1 — qualityFlag model field         | 2       | research-agent      |
-| 5       | T2.2 — Min length quality check        | 2       | research-agent      |
-| 6       | T2.3 — Pass quality flags to synthesis | 2       | research-agent      |
-| 7       | T3.1 — user_exclusions schema          | 3       | llm-prompts         |
-| 8       | T3.2 — Context inference prompt        | 3       | llm-prompts         |
-| 9       | T3.3 — Filter disclaimers              | 3       | llm-prompts         |
-| 10      | T4.1 — Resolve redirect URLs           | 4       | infra-gemini        |
-| 11      | T5.1 — Add domains to schema           | 5       | llm-prompts         |
-| 12      | T5.2 — Add domain guidelines           | 5       | llm-prompts         |
+| Order | Task                                        | Chunk | Packages Modified                                       |
+| ----- | ------------------------------------------- | ----- | ------------------------------------------------------- |
+| 1     | T0.1 — Remove prompt build from infra       | 0     | infra-gemini, infra-gpt, infra-claude, infra-perplexity |
+| 2     | T0.2 — Add ResearchContext to adapters      | 0     | research-agent                                          |
+| 3     | T0.3 — Pass context in route handler        | 0     | research-agent                                          |
+| 4     | T1.1 — Language at top of prompt            | 1     | llm-prompts                                             |
+| 5     | T1.2 — languageOverride param               | 1     | llm-prompts                                             |
+| 6     | T1.3 — Pass language to synthesis           | 1     | research-agent                                          |
+| 7     | T2.1 — qualityFlag model field              | 2     | research-agent                                          |
+| 8     | T2.2 — Min length quality check             | 2     | research-agent                                          |
+| 9     | T2.3 — Pass quality flags to synthesis      | 2     | research-agent                                          |
+| 10    | T3.1 — user_exclusions schema               | 3     | llm-prompts                                             |
+| 11    | T3.2 — Context inference prompt             | 3     | llm-prompts                                             |
+| 12    | T3.3 — Filter disclaimers                   | 3     | llm-prompts                                             |
+| 13    | T4.1 — Resolve redirect URLs                | 4     | infra-gemini                                            |
+| 14    | T5.1 — Add domains to schema                | 5     | llm-prompts                                             |
+| 15    | T5.2 — Add domain guidelines                | 5     | llm-prompts                                             |
+| 16    | T6.1 — Update repair prompt schemas         | 6     | llm-prompts                                             |
+| 17    | T6.2 — Update ContextInference schemas      | 6     | research-agent                                          |
