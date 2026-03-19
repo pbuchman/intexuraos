@@ -9,6 +9,7 @@ import type { SynthesisContext } from '@intexuraos/llm-prompts';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import {
+  LOW_QUALITY_WARNING_PREFIX,
   runSynthesis,
   type RunSynthesisDeps,
 } from '../../../../domain/research/usecases/runSynthesis.js';
@@ -279,8 +280,7 @@ describe('runSynthesis', () => {
         { model: LlmModels.Gemini20Flash, content: 'Google Result' },
         {
           model: LlmModels.O4MiniDeepResearch,
-          content:
-            '[QUALITY WARNING: This report was flagged as low quality \u2014 very short output. Deprioritize this source.]\n\nShort OpenAI Result',
+          content: `${LOW_QUALITY_WARNING_PREFIX}\n\nShort OpenAI Result`,
         },
       ],
       undefined,
@@ -315,8 +315,7 @@ describe('runSynthesis', () => {
         { model: LlmModels.Gemini20Flash, content: 'Google Result' },
         {
           model: LlmModels.O4MiniDeepResearch,
-          content:
-            '[QUALITY WARNING: This report was flagged as low quality \u2014 very short output. Deprioritize this source.]\n\n',
+          content: `${LOW_QUALITY_WARNING_PREFIX}\n\n`,
         },
       ],
       undefined,

@@ -242,4 +242,4 @@ Adjust your approach based on the topic:
 
 Write the ENTIRE response in the SAME LANGUAGE as the Research Request (Polish → Polish, Spanish → Spanish, etc.)`;
 }
-// Prompt version: 3.1.0
+// Prompt version: 2.0.0
