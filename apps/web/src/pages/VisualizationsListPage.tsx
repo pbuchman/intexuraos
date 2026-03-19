@@ -212,11 +212,12 @@ export function VisualizationsListPage(): React.JSX.Element {
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <BarChart2 className="mb-4 h-12 w-12 text-slate-300 dark:text-slate-600" />
             <h3 className="mb-2 text-lg font-medium text-slate-900 dark:text-slate-100">
-              No saved visualizations yet
+              {visualizations.length === 0 ? 'No saved visualizations yet' : 'No visualizations match your filters'}
             </h3>
             <p className="max-w-md text-slate-500 dark:text-slate-400">
-              Go to a composite feed, analyze your data, and click &quot;Save Visualization&quot; on a chart
-              to save it here.
+              {visualizations.length === 0
+                ? 'Go to a composite feed, analyze your data, and click &quot;Save Visualization&quot; on a chart to save it here.'
+                : 'Try adjusting your filters to see more visualizations.'}
             </p>
           </div>
         </Card>
