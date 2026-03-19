@@ -47,7 +47,7 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
   minimax: {
     apiBaseUrl: 'https://api.minimax.io/anthropic',
     apiKeyEnvVar: 'MINIMAX_API_KEY',
-    model: 'MiniMax-M2.5',
+    model: 'MiniMax-M2.7',
   },
   glm: {
     apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',

@@ -399,6 +399,17 @@ const IssueGroupRow = memo(function IssueGroupRow({
                     <ExternalLink className="h-3 w-3" />
                     #{pipeline.pr.number}
                   </a>
+                ) : aggregateStatus === 'failed' ? (
+                  <button
+                    onClick={(e): void => {
+                      e.stopPropagation();
+                      onAction(latestTask.id, 'retry');
+                    }}
+                    className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:border-slate-400 hover:text-slate-700 dark:border-slate-600 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-300"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    Retry
+                  </button>
                 ) : aggregateStatus === 'active' ? (
                   <PulsingDot />
                 ) : null}

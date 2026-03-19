@@ -184,6 +184,32 @@ describe('ApiKeyValidator', () => {
     expect(result.valid).toBe(true);
   });
 
+  it('should include cause chain in network error warning log', async () => {
+    const warnSpy = vi.fn();
+    const loggerWithWarn: Logger = {
+      info(): void {},
+      warn: warnSpy,
+      error(): void {},
+      debug(): void {},
+    };
+
+    const cause = new Error('connect ECONNREFUSED 34.143.76.2:443') as Error & { code: string };
+    cause.code = 'ECONNREFUSED';
+    fetchSpy.mockRejectedValueOnce(new TypeError('fetch failed', { cause }));
+
+    const validator = new ApiKeyValidator({ ANTHROPIC_API_KEY: 'sk-ant-test' }, loggerWithWarn);
+    const result = await validator.validate('anthropic');
+
+    expect(result.valid).toBe(true);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: 'fetch failed',
+        cause: 'connect ECONNREFUSED 34.143.76.2:443 [ECONNREFUSED]',
+      }),
+      'API key validation request failed (network issue), treating as valid'
+    );
+  });
+
   it('should not cache network error results', async () => {
     fetchSpy.mockRejectedValueOnce(new Error('Network timeout'));
     fetchSpy.mockResolvedValueOnce(new Response('{}', { status: 200 }));
