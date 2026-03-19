@@ -54,7 +54,7 @@ describe('FakeFirestore', () => {
 
         const snapshot = await docRef.get();
         expect(snapshot.exists).toBe(true);
-        expect(snapshot.data()).toEqual({ name: 'John', age: 30 });
+        expect(snapshot.data()).toMatchObject({ name: 'John', age: 30 });
       });
 
       it('overwrites existing document', async () => {
@@ -79,7 +79,7 @@ describe('FakeFirestore', () => {
         await docRef.set({ role: 'admin' }, { merge: true });
 
         const snapshot = await docRef.get();
-        expect(snapshot.data()).toEqual({ name: 'John', age: 30, role: 'admin' });
+        expect(snapshot.data()).toMatchObject({ name: 'John', age: 30, role: 'admin' });
       });
 
       it('deeply merges nested objects with merge: true', async () => {
@@ -88,7 +88,7 @@ describe('FakeFirestore', () => {
         await docRef.set({ settings: { theme: 'light' } }, { merge: true });
 
         const snapshot = await docRef.get();
-        expect(snapshot.data()).toEqual({
+        expect(snapshot.data()).toMatchObject({
           name: 'John',
           settings: { theme: 'light', lang: 'en' },
         });
@@ -147,7 +147,7 @@ describe('FakeFirestore', () => {
         const snapshot = await docRef.get();
         expect(snapshot.exists).toBe(true);
         expect(snapshot.id).toBe('user-1');
-        expect(snapshot.data()).toEqual({ name: 'John' });
+        expect(snapshot.data()).toMatchObject({ name: 'John' });
       });
 
       it('returns non-existing snapshot for missing document', async () => {
@@ -173,7 +173,7 @@ describe('FakeFirestore', () => {
         await docRef.update({ age: 31 });
 
         const snapshot = await docRef.get();
-        expect(snapshot.data()).toEqual({ name: 'John', age: 31 });
+        expect(snapshot.data()).toMatchObject({ name: 'John', age: 31 });
       });
 
       it('adds new fields to existing document', async () => {
@@ -182,7 +182,7 @@ describe('FakeFirestore', () => {
         await docRef.update({ role: 'admin' });
 
         const snapshot = await docRef.get();
-        expect(snapshot.data()).toEqual({ name: 'John', role: 'admin' });
+        expect(snapshot.data()).toMatchObject({ name: 'John', role: 'admin' });
       });
 
       it('throws error when document does not exist', () => {
@@ -527,7 +527,7 @@ describe('FakeFirestore', () => {
       await batch.commit();
 
       const snapshot = await db.collection('users').doc('user-1').get();
-      expect(snapshot.data()).toEqual({ name: 'Alice', age: 26 });
+      expect(snapshot.data()).toMatchObject({ name: 'Alice', age: 26 });
     });
 
     it('batch delete removes documents', async () => {

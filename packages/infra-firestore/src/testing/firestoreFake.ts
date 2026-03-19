@@ -174,6 +174,30 @@ function deleteNestedField(obj: Record<string, unknown>, path: string): void {
 }
 
 /**
+ * Generate a unique timestamp string for ordering documents.
+ * Uses a base timestamp plus milliseconds offset.
+ * This ensures documents created in rapid succession have distinct, ordered timestamps.
+ */
+let timestampCounter = 0;
+function generateUniqueTimestamp(): string {
+  const baseTime = Date.now();
+  const msOffset = timestampCounter++;
+  return new Date(baseTime + msOffset).toISOString();
+}
+
+/**
+ * Check if a value looks like a Firestore Timestamp object.
+ */
+function isTimestamp(value: unknown): value is { toDate: () => Date } {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    'toDate' in value &&
+    typeof (value as { toDate: unknown }).toDate === 'function'
+  );
+}
+
+/**
  * Fake DocumentSnapshot implementation.
  */
 class FakeDocumentSnapshot {
@@ -225,10 +249,30 @@ class FakeDocumentSnapshot {
 }
 
 /**
+ * Extract milliseconds since epoch from Timestamp or Date objects.
+ * Returns undefined if the value is not a timestamp-like object.
+ */
+function getTimestampValue(value: unknown): number | undefined {
+  if (value === null || typeof value !== 'object') return undefined;
+
+  // Firestore Timestamp has toMillis() method
+  if ('toMillis' in value && typeof (value as { toMillis: unknown }).toMillis === 'function') {
+    return (value as { toMillis: () => number }).toMillis();
+  }
+
+  // Date object has getTime() method
+  if ('getTime' in value && typeof (value as { getTime: unknown }).getTime === 'function') {
+    return (value as { getTime: () => number }).getTime();
+  }
+
+  return undefined;
+}
+
+/**
  * Fake QuerySnapshot implementation.
  */
 class FakeQuerySnapshot {
-  constructor(private readonly _docs: FakeDocumentSnapshot[]) {}
+  constructor(protected readonly _docs: FakeDocumentSnapshot[]) {}
 
   get docs(): FakeDocumentSnapshot[] {
     return this._docs;
@@ -241,6 +285,41 @@ class FakeQuerySnapshot {
   get size(): number {
     return this._docs.length;
   }
+
+  /**
+   * Get data from the first document in the snapshot.
+   * Returns undefined for empty snapshots or when used with aggregate queries.
+   */
+  data(): DocumentData | undefined {
+    return this._docs[0]?.data();
+  }
+}
+
+/**
+ * Fake QuerySnapshot with count() support.
+ * Represents an AggregateQuerySnapshot from Firestore's count() aggregation.
+ */
+class FakeQuerySnapshotWithCount extends FakeQuerySnapshot {
+  private readonly _count: number;
+
+  constructor(
+    docs: FakeDocumentSnapshot[],
+    _collectionName: string,
+    _store: DocumentStore,
+    _filters: { field: string; op: string; value: unknown }[]
+  ) {
+    super(docs);
+    // Count is the number of filtered documents passed in
+    this._count = docs.length;
+  }
+
+  /**
+   * Get count data from the snapshot.
+   * Returns an object with the count property, matching Firestore's AggregateQuerySnapshot.
+   */
+  override data(): { count: number } {
+    return { count: this._count };
+  }
 }
 
 /**
@@ -251,6 +330,7 @@ class FakeQuery {
   private ordering: { field: string; direction: 'asc' | 'desc' }[] = [];
   private limitCount: number | null = null;
   private startAfterValue: unknown = null;
+  private countRequested = false;
 
   constructor(
     protected readonly collectionName: string,
@@ -282,7 +362,16 @@ class FakeQuery {
     return query;
   }
 
-  get(): Promise<FakeQuerySnapshot> {
+  /**
+   * Request count aggregation for this query.
+   */
+  count(): FakeQuery {
+    const query = this.clone();
+    query.countRequested = true;
+    return query;
+  }
+
+  get(): Promise<FakeQuerySnapshot | FakeQuerySnapshotWithCount> {
     const collection = this.store.get(this.collectionName) ?? new Map<string, DocumentData>();
     let docs = Array.from(collection.entries()).map(
       ([id, data]: [string, DocumentData | undefined]) =>
@@ -334,10 +423,38 @@ class FakeQuery {
           const aVal: unknown = aData?.[order.field];
           const bVal: unknown = bData?.[order.field];
           if (aVal === bVal) continue;
-          // Compare values as numbers or strings
-          const aNum = typeof aVal === 'number' ? aVal : 0;
-          const bNum = typeof bVal === 'number' ? bVal : 0;
-          const cmp = aNum < bNum ? -1 : 1;
+          // Compare values as numbers or strings (for dates)
+          let cmp: number;
+          if (typeof aVal === 'number' && typeof bVal === 'number') {
+            cmp = aVal < bVal ? -1 : 1;
+          } else if (typeof aVal === 'string' && typeof bVal === 'string') {
+            // String comparison (works for ISO dates like '2025-01-01')
+            cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+          } else {
+            // Check for Timestamp/Date objects first
+            const aTime = getTimestampValue(aVal);
+            const bTime = getTimestampValue(bVal);
+            if (aTime !== undefined && bTime !== undefined) {
+              // Both are timestamps - compare numerically
+              cmp = aTime < bTime ? -1 : 1;
+              return order.direction === 'desc' ? -cmp : cmp;
+            }
+
+            // Fallback: convert primitives to string, objects to JSON
+            const aStr =
+              aVal === null || aVal === undefined
+                ? ''
+                : typeof aVal === 'object'
+                  ? JSON.stringify(aVal)
+                  : String(aVal as boolean | bigint | symbol);
+            const bStr =
+              bVal === null || bVal === undefined
+                ? ''
+                : typeof bVal === 'object'
+                  ? JSON.stringify(bVal)
+                  : String(bVal as boolean | bigint | symbol);
+            cmp = aStr < bStr ? -1 : aStr > bStr ? 1 : 0;
+          }
           return order.direction === 'desc' ? -cmp : cmp;
         }
         return 0;
@@ -363,6 +480,12 @@ class FakeQuery {
       docs = docs.slice(0, this.limitCount);
     }
 
+    // Return appropriate snapshot type based on countRequested
+    if (this.countRequested) {
+      return Promise.resolve(
+        new FakeQuerySnapshotWithCount(docs, this.collectionName, this.store, this.filters)
+      );
+    }
     return Promise.resolve(new FakeQuerySnapshot(docs));
   }
 
@@ -372,6 +495,7 @@ class FakeQuery {
     query.ordering = [...this.ordering];
     query.limitCount = this.limitCount;
     query.startAfterValue = this.startAfterValue;
+    query.countRequested = this.countRequested;
     return query;
   }
 }
@@ -430,6 +554,23 @@ class FakeDocumentReference {
 
     const existing = collection.get(this.docId);
     const newData = { ...data } as Record<string, unknown>;
+
+    // Auto-generate unique timestamps for createdAt/updatedAt on new documents
+    // This ensures orderBy('createdAt') works correctly even when documents are created rapidly
+    if (existing === undefined) {
+      const now = generateUniqueTimestamp();
+      if (newData['createdAt'] === undefined) {
+        newData['createdAt'] = now;
+      } else if (isTimestamp(newData['createdAt'])) {
+        // Convert Timestamp to ISO string for consistent comparison
+        newData['createdAt'] = newData['createdAt'].toDate().toISOString();
+      }
+      if (newData['updatedAt'] === undefined) {
+        newData['updatedAt'] = now;
+      } else if (isTimestamp(newData['updatedAt'])) {
+        newData['updatedAt'] = newData['updatedAt'].toDate().toISOString();
+      }
+    }
 
     if (options?.merge === true && existing !== undefined) {
       // Deep merge with existing, then process FieldValues
