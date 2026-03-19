@@ -100,3 +100,4 @@ export {
   type WebhookPayload,
   type ProcessWebhookResult,
 } from './useCases/processWebhook.js';
+export { parseExtractionResponse } from './extractionParser.js';
