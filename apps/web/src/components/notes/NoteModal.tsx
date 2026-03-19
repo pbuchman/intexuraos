@@ -19,11 +19,13 @@ export function NoteModal({ note, onClose, onUpdate, onDelete }: NoteModalProps)
   const [content, setContent] = useState(note.content);
   const [tags, setTags] = useState(note.tags.join(', '));
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const handleSave = async (): Promise<void> => {
     setSaving(true);
+    setSaveError(null);
     try {
       await onUpdate({
         title,
@@ -34,6 +36,8 @@ export function NoteModal({ note, onClose, onUpdate, onDelete }: NoteModalProps)
           .filter((t) => t !== ''),
       });
       setIsEditing(false);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
       setSaving(false);
     }
@@ -113,6 +117,9 @@ export function NoteModal({ note, onClose, onUpdate, onDelete }: NoteModalProps)
                 }}
                 placeholder="e.g., work, important, ideas"
               />
+              {saveError !== null ? (
+                <p className="text-sm text-red-600 dark:text-red-400">{saveError}</p>
+              ) : null}
             </div>
           ) : (
             <div className="space-y-4">
