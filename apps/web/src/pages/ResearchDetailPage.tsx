@@ -29,6 +29,7 @@ import { ResearchActions } from '@/components/research/ResearchActions.js';
 import { ResearchResults } from '@/components/research/ResearchResults.js';
 import { ProcessingStatus, CollapsibleInputContext } from '@/components/research/ProcessingStatus.js';
 import { EnhanceModal } from '@/components/research/EnhanceModal.js';
+import { isProcessingStatus } from '@/components/research/shared.js';
 
 export function ResearchDetailPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
@@ -280,11 +281,7 @@ export function ResearchDetailPage(): React.JSX.Element {
     );
   }
 
-  const isProcessing =
-    research.status === 'pending' ||
-    research.status === 'processing' ||
-    research.status === 'retrying' ||
-    research.status === 'synthesizing';
+  const isProcessing = isProcessingStatus(research.status);
   const showLlmStatus =
     isProcessing || research.status === 'failed' || research.status === 'awaiting_confirmation';
 

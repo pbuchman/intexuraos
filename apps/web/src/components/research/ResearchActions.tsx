@@ -11,13 +11,12 @@ import {
   Trash2,
   XCircle,
 } from 'lucide-react';
-import { Button, ErrorBanner } from '@/components';
+import { Button, Card, ErrorBanner } from '@/components';
 import type {
   PartialFailure,
   PartialFailureDecision,
   Research,
 } from '@/services/researchAgentApi.types';
-import { Card } from '@/components';
 
 interface ResearchActionsProps {
   research: Research;
