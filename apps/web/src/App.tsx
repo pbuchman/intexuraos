@@ -28,6 +28,7 @@ import {
   CronSchedulesPage,
   CronScheduleViewPage,
   DispatchQueuePage,
+  MergeQueuePage,
   CompositeFeedFormPage,
   CompositeFeedsListPage,
   DataInsightsPage,
@@ -285,6 +286,15 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <GitHubEventLogPage />
+          </ProtectedRoute>
+        }
+      />
+      {/* Merge Queue route */}
+      <Route
+        path="/merge-queue"
+        element={
+          <ProtectedRoute>
+            <MergeQueuePage />
           </ProtectedRoute>
         }
       />

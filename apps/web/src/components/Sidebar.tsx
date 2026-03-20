@@ -19,6 +19,7 @@ import {
   FileText,
   Filter,
   GitBranch,
+  GitMerge,
   RadioTower,
   Inbox,
   Key,
@@ -75,6 +76,7 @@ const codeTasksItems: NavItem[] = [
   { to: '/code-tasks/new', label: 'New Task', icon: Plus },
   { to: '/code-tasks/dispatch-queue', label: 'Dispatch Queue', icon: Clock },
   { to: '/code-tasks/pr-events', label: 'GitHub Event Log', icon: RadioTower },
+  { to: '/merge-queue', label: 'Merge Queue', icon: GitMerge },
 ];
 
 const cronAgentItems: NavItem[] = [
@@ -142,7 +144,7 @@ export function Sidebar(): React.JSX.Element {
     window.location.hash.includes('/data-insights')
   );
   const [isCodeTasksOpen, setIsCodeTasksOpen] = useState(() =>
-    window.location.hash.includes('/code-tasks')
+    window.location.hash.includes('/code-tasks') || window.location.hash.includes('/merge-queue')
   );
   const [isCronAgentOpen, setIsCronAgentOpen] = useState(() =>
     window.location.hash.includes('/cron-agent')
@@ -204,9 +206,9 @@ export function Sidebar(): React.JSX.Element {
     }
   }, [location.pathname]);
 
-  // Auto-expand code tasks when on code-tasks page
+  // Auto-expand code tasks when on code-tasks or merge-queue page
   useEffect(() => {
-    if (location.pathname.startsWith('/code-tasks')) {
+    if (location.pathname.startsWith('/code-tasks') || location.pathname.startsWith('/merge-queue')) {
       setIsCodeTasksOpen(true);
     }
   }, [location.pathname]);
@@ -344,7 +346,7 @@ export function Sidebar(): React.JSX.Element {
                 setIsCodeTasksOpen(!isCodeTasksOpen);
               }}
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                location.pathname.startsWith('/code-tasks')
+                location.pathname.startsWith('/code-tasks') || location.pathname.startsWith('/merge-queue')
                   ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
               }`}
