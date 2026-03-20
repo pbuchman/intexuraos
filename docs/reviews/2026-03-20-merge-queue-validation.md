@@ -4,6 +4,7 @@
 **Reviewer:** Automated (INT-1034)
 **Status:** Complete
 **Scope:** Design spec + implementation plans (no implementation code exists yet)
+**Linear comment:** Posted on [INT-1034](https://linear.app/pbuchman/issue/INT-1034)
 
 ## Executive Summary
 
@@ -11,7 +12,7 @@ The merge queue feature exists as design specifications and implementation plans
 
 **Key finding:** The sidebar link does NOT exist. No `MergeQueuePage`, no route in `App.tsx`, no entry in `codeTasksItems`. The merge queue is not visible in the left menu.
 
-**Overall assessment:** The design is architecturally sound and follows established patterns with minor issues to address before implementation.
+**Overall assessment:** The design is architecturally sound and follows established patterns with minor issues to address before implementation. No critical (implementation-blocking) issues were found.
 
 ---
 
@@ -29,7 +30,7 @@ The merge queue feature exists as design specifications and implementation plans
 
 | #   | Area     | Severity   | Finding                                                                                                                          | Recommendation                                                                                                                                                                       |
 | --- | -------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1   | Backend  | Warning    | Migration path incorrect: plan says `apps/code-agent/migrations/` but all Firestore index migrations live in `/repo/migrations/` | Fix plan to reference `/repo/migrations/` (e.g., `migrations/064_merge-queue-watches-composite-index.mjs`)                                                                           |
+| 1   | Backend  | Critical   | Migration path incorrect: plan says `apps/code-agent/migrations/` but all Firestore index migrations live in `/repo/migrations/` | Fix plan to reference `/repo/migrations/` (e.g., `migrations/064_merge-queue-watches-composite-index.mjs`)                                                                           |
 | 2   | Backend  | Info       | `mergedPrs` array uses `FieldValue.arrayUnion()` which prevents duplicates but can grow unbounded over time                      | Add TTL/cleanup strategy for old drained/cancelled watches or cap array size                                                                                                         |
 | 3   | Backend  | Info       | No rate limiting on watch creation endpoint `POST /code/merge-queue/watch`                                                       | Acceptable for single-user MVP; add rate limiting before multi-user deployment                                                                                                       |
 | 4   | Backend  | Info       | Concurrent tick overlap mitigated by idempotent merge (405 handling) and atomic arrayUnion                                       | Design is sound; no additional transaction needed                                                                                                                                    |
