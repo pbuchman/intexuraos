@@ -19,7 +19,7 @@ export interface ReconcileResult {
 }
 
 /** Zero-valued result for early returns where no PRs were processed. */
-export const EMPTY_RECONCILE_RESULT: ReconcileResult = {
+export const EMPTY_RECONCILE_RESULT: ReconcileResult = Object.freeze({
   processed: 0,
   closed: 0,
   conflicting: 0,
@@ -27,7 +27,7 @@ export const EMPTY_RECONCILE_RESULT: ReconcileResult = {
   unknown: 0,
   skipped: 0,
   error: 0,
-};
+});
 
 export interface MergeConflictDetector {
   detectOnPush(event: GitHubPREvent, logger: Logger): Promise<void>;
