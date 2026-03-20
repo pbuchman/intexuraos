@@ -72,9 +72,13 @@ function createFakeGitHubPRClient(): GitHubPRClient {
       headBranch: 'feature/test',
       mergeable: true,
       mergeableState: 'clean',
+      headSha: 'sha123',
     })),
     getIssueComment: vi.fn().mockResolvedValue(ok({ body: '' })),
     updateIssueComment: vi.fn().mockResolvedValue(ok({ commentId: 1 })),
+    mergePullRequest: vi.fn().mockResolvedValue(ok({ sha: 'abc123', merged: true })),
+    getCombinedCheckStatus: vi.fn().mockResolvedValue(ok({ state: 'success' })),
+    listAllOpenPullRequests: vi.fn().mockResolvedValue(ok([])),
   };
 }
 
