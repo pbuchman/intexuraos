@@ -47,9 +47,9 @@ export function MergeQueuePage(): React.JSX.Element {
   }, [prs]);
 
   // Find active watch for selected branch
-  const currentWatch = selectedBranch !== null
+  const currentWatch = useMemo(() => selectedBranch !== null
     ? watches.find((w) => w.baseBranch === selectedBranch && (w.status === 'active' || w.status === 'drained')) ?? null
-    : null;
+    : null, [watches, selectedBranch]);
 
   // Merged PRs for timeline (from active/drained watch)
   const mergedPrs = currentWatch !== null ? currentWatch.mergedPrs : [];

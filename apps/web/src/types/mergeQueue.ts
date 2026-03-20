@@ -9,6 +9,7 @@ export interface MergeQueuePr {
   author: string;
   authorIsEligible: boolean;
   mergeable: boolean | null;
+  /** Reserved for future merge-conflict detail display */
   mergeableState: string | null;
   checksStatus: 'success' | 'failure' | 'pending';
   createdAt: string;
