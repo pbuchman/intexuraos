@@ -1454,7 +1454,7 @@ module "code_agent" {
   env_vars = merge(local.common_service_env_vars, {
     INTEXURAOS_SERVICE_URL                = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
-    INTEXURAOS_QUEUE_MAX_SIZE             = "10"
+    INTEXURAOS_QUEUE_MAX_SIZE             = "50"
     INTEXURAOS_QUEUE_TTL_MINUTES          = "30"
     INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS   = "3"
     INTEXURAOS_RETRY_QUEUE_TTL_MINUTES    = "10"
@@ -1888,6 +1888,36 @@ resource "google_cloud_scheduler_job" "drain_task_queue" {
 
   depends_on = [
     google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
+    module.code_agent,
+  ]
+}
+
+resource "google_cloud_scheduler_job" "merge_conflict_reconcile" {
+  name        = "intexuraos-merge-conflict-reconcile-${var.environment}"
+  description = "Check mergeability of all open PRs and dispatch conflict resolution tasks"
+  schedule    = "*/1 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.code_agent.service_url}/internal/merge-conflicts/reconcile"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.code_agent.service_url
+    }
+  }
+
+  retry_config {
+    retry_count = 0
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    # Reuses the existing IAM binding that grants the scheduler SA Cloud Run invoker
+    # rights on code-agent — no separate IAM member resource is needed.
     google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
     module.code_agent,
   ]

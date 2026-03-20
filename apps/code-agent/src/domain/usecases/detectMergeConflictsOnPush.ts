@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { err, ok, type Logger, type Result } from '@intexuraos/common-core';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { MERGE_CONFLICT_SYSTEM_PROMPT_HASH, type CodeTask } from '../models/codeTask.js';
@@ -11,7 +12,7 @@ import type { GitHubPREventRepository } from '../repositories/gitHubPREventRepos
 import type { GitHubPRSummaryRepository } from '../repositories/gitHubPRSummaryRepository.js';
 import type { LogLineRepository } from '../repositories/logLineRepository.js';
 import type { LinearIssueService } from '../services/linearIssueService.js';
-import type { MergeConflictDetector } from '../services/mergeConflictDetector.js';
+import type { MergeConflictDetector, ReconcileResult } from '../services/mergeConflictDetector.js';
 import type { StatusMirrorService } from '../services/statusMirrorService.js';
 import type { TaskDispatcherService } from '../services/taskDispatcher.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
@@ -91,7 +92,8 @@ interface ConflictWorkflowParams {
 }
 
 interface SummaryUpdateParams {
-  event: GitHubPREvent;
+  repository: string;
+  lastActivityAt: Date;
   existingSummary: GitHubPRSummary;
   details: GitHubPullRequestDetails;
   status: MergeConflictStatus;
@@ -859,7 +861,7 @@ function buildSummaryUpdateInput(params: SummaryUpdateParams): UpsertGitHubPRSum
   const now = new Date();
 
   return {
-    repository: params.event.repository,
+    repository: params.repository,
     pullRequestNumber: params.existingSummary.pullRequestNumber,
     title: params.details.title,
     state: 'open',
@@ -891,14 +893,20 @@ function buildSummaryUpdateInput(params: SummaryUpdateParams): UpsertGitHubPRSum
       params.status === 'conflicting' || params.status === 'unknown'
         ? params.workflowResult.ownerUserId
         : null,
-    lastActivityAt: params.event.createdAt,
+    lastActivityAt: params.lastActivityAt,
     firstSeenAt: params.existingSummary.firstSeenAt,
   };
 }
 
+interface ProcessingTrigger {
+  eventId: string;
+  repository: string;
+  lastActivityAt: Date;
+}
+
 async function processOpenSummaryOnPush(
   deps: DetectMergeConflictsOnPushDeps,
-  event: GitHubPREvent,
+  trigger: ProcessingTrigger,
   logger: Logger,
   parsedRepository: ParsedRepository,
   existingSummary: GitHubPRSummary
@@ -949,7 +957,7 @@ async function processOpenSummaryOnPush(
     const resolutionResult = await resolveExistingConflictTask(
       deps.codeTaskRepo,
       existingSummary,
-      event.repository,
+      trigger.repository,
       existingSummary.pullRequestNumber,
       logger
     );
@@ -962,9 +970,9 @@ async function processOpenSummaryOnPush(
   const workflowParams: ConflictWorkflowParams = {
     deps,
     logger,
-    repository: event.repository,
+    repository: trigger.repository,
     parsedRepository,
-    eventId: event.id,
+    eventId: trigger.eventId,
     existingSummary,
     details,
     accessContext,
@@ -985,7 +993,8 @@ async function processOpenSummaryOnPush(
   await upsertSummary(
     deps.gitHubPRSummaryRepo,
     buildSummaryUpdateInput({
-      event,
+      repository: trigger.repository,
+      lastActivityAt: trigger.lastActivityAt,
       existingSummary,
       details,
       status,
@@ -1026,15 +1035,65 @@ export function createDetectMergeConflictsOnPush(
         return;
       }
 
+      const trigger: ProcessingTrigger = {
+        eventId: event.id,
+        repository: event.repository,
+        lastActivityAt: event.createdAt,
+      };
       for (const existingSummary of openSummariesResult.value) {
         await processOpenSummaryOnPush(
           deps,
-          event,
+          trigger,
           logger,
           parsedRepository,
           existingSummary
         );
       }
+    },
+
+    async reconcile(logger: Logger): Promise<ReconcileResult> {
+      const openResult = await deps.gitHubPRSummaryRepo.findAllOpen();
+      if (!openResult.ok) {
+        logger.warn({ error: openResult.error }, 'Failed to load open PR summaries for merge-conflict reconciliation');
+        return { processed: 0 };
+      }
+
+      const summaries = openResult.value;
+      if (summaries.length === 0) {
+        logger.debug({}, 'No open PR summaries to reconcile for merge conflicts');
+        return { processed: 0 };
+      }
+
+      logger.info({ count: summaries.length }, 'Reconciling merge conflicts for open PRs');
+
+      const reconcileId = randomUUID();
+      let processed = 0;
+
+      for (const existingSummary of summaries) {
+        const parsedRepository = parseOwnerRepo(existingSummary.repository);
+        if (parsedRepository === null) {
+          logger.warn({ repository: existingSummary.repository }, 'Skipping reconcile for PR with invalid repository');
+          continue;
+        }
+
+        const trigger: ProcessingTrigger = {
+          eventId: `${reconcileId}-${existingSummary.repository}-${String(existingSummary.pullRequestNumber)}`,
+          repository: existingSummary.repository,
+          lastActivityAt: existingSummary.lastActivityAt,
+        };
+
+        try {
+          await processOpenSummaryOnPush(deps, trigger, logger, parsedRepository, existingSummary);
+        } catch (err: unknown) {
+          logger.error(
+            { error: err, repository: existingSummary.repository, prNumber: existingSummary.pullRequestNumber },
+            'Unhandled error processing PR in merge-conflict reconcile; continuing'
+          );
+        }
+        processed++;
+      }
+
+      return { processed };
     },
   };
 }

@@ -173,6 +173,10 @@ describe('Worker Settings Routes', () => {
       unifiedEvaluator: {} as never,
       automationLog: {} as never,
       taskEnqueueService: {} as never,
+      mergeConflictDetector: {
+        detectOnPush: vi.fn().mockResolvedValue(undefined),
+        reconcile: vi.fn().mockResolvedValue({ processed: 0 }),
+      },
     } as ServiceContainer);
 
     app = await buildServer();
