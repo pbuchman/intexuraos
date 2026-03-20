@@ -1,5 +1,5 @@
 import type { Result } from '@intexuraos/common-core';
-import type { MergeQueueWatch, MergedPr, SkippedPr } from '../models/mergeQueueWatch.js';
+import type { MergeQueueWatch, SkippedPr } from '../models/mergeQueueWatch.js';
 
 export interface MergeQueueWatchRepositoryError {
   code: 'FIRESTORE_ERROR' | 'NOT_FOUND' | 'CONFLICT';
@@ -40,5 +40,12 @@ export interface MergeQueueWatchRepository {
     repo: string
   ): Promise<Result<MergeQueueWatch[], MergeQueueWatchRepositoryError>>;
   update(id: string, input: UpdateWatchInput): Promise<Result<void, MergeQueueWatchRepositoryError>>;
-  appendMergedPr(id: string, mergedPr: MergedPr): Promise<Result<void, MergeQueueWatchRepositoryError>>;
+  appendMergedPr(id: string, mergedPr: AppendMergedPrInput): Promise<Result<void, MergeQueueWatchRepositoryError>>;
+}
+
+/** Input for appendMergedPr — uses Date instead of Timestamp so the domain stays infra-agnostic. */
+export interface AppendMergedPrInput {
+  prNumber: number;
+  title: string;
+  author: string;
 }
