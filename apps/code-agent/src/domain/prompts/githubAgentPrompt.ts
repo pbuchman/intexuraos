@@ -29,7 +29,7 @@ export interface GitHubAgentPromptInput {
 export const githubAgentPrompt: PromptBuilder<GitHubAgentPromptInput> = {
   name: 'github-agent',
   description: 'System prompt for GitHub Agent that evaluates PR and comment events',
-  version: '5.0.0',
+  version: '5.1.0',
   build(input: GitHubAgentPromptInput): string {
     const sections: string[] = [
       'You are a GitHub webhook evaluation agent for the IntexuraOS project.',
@@ -80,13 +80,14 @@ function buildPRSection(input: GitHubAgentPromptInput): string[] {
     '1. Analyze the PR context: title, description, and changed files.',
     '2. Determine what type of review is appropriate based on the files changed.',
     '3. Use the `request_review` tool to dispatch a review for each relevant review type.',
-    '4. If the PR is trivial (e.g., only docs, config, or auto-generated), use `skip` instead.',
+    '4. If the PR is trivial (e.g., only non-plan docs, config, or auto-generated), use `skip` instead.',
     '',
     '## Review Type Guidelines',
     '',
     '- **code_quality**: General code quality review. Request for any PR with code changes.',
     '- **security**: Security-focused review. Request when changes touch auth, tokens, secrets, API endpoints, or user input handling.',
     '- **architecture**: Architecture review. Request when changes span multiple packages/services or introduce new patterns.',
+    '- **plan_review**: Plan document review. Automatically dispatched for plan-only PRs. Do NOT request this type manually — it is handled by deterministic detection.',
     '',
     'You may request multiple review types for a single PR if appropriate.',
     '',

@@ -545,6 +545,63 @@ describe('evaluateEvent', () => {
     });
   });
 
+  describe('plan-only PR detection', () => {
+    it('short-circuits to plan_review for plan-only PRs', async () => {
+      const planFiles = [
+        { filename: 'docs/plans/2026-03-20-my-plan.md', status: 'added', additions: 50, deletions: 0 },
+      ];
+      const prClient = createFakeGitHubPRClient();
+      (prClient.getPullRequestFiles as ReturnType<typeof vi.fn>).mockResolvedValue(ok(planFiles));
+
+      const deps: GitHubAgentDeps = {
+        logger: createFakeLogger(),
+        gitHubPRClient: prClient,
+        toolCallingClient: createFakeToolCallingClient({ callTools: false }),
+        userServiceClient: createFakeUserServiceClient(),
+        allowedBots: new Set(['bot1']),
+      };
+
+      const event = createFakePREvent();
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.triage).toEqual({
+          action: 'request_review',
+          reviewTypes: ['plan_review'],
+        });
+        expect(result.value.usage.costUsd).toBe(0);
+        expect(result.value.reasoning).toContain('Plan-only PR');
+      }
+    });
+
+    it('does not short-circuit for plan+code PRs', async () => {
+      const mixedFiles = [
+        { filename: 'docs/plans/2026-03-20-my-plan.md', status: 'added', additions: 50, deletions: 0 },
+        { filename: 'src/index.ts', status: 'modified', additions: 10, deletions: 5 },
+      ];
+      const prClient = createFakeGitHubPRClient();
+      (prClient.getPullRequestFiles as ReturnType<typeof vi.fn>).mockResolvedValue(ok(mixedFiles));
+
+      const deps: GitHubAgentDeps = {
+        logger: createFakeLogger(),
+        gitHubPRClient: prClient,
+        toolCallingClient: createFakeToolCallingClient(),
+        userServiceClient: createFakeUserServiceClient(),
+        allowedBots: new Set(['bot1']),
+      };
+
+      const event = createFakePREvent();
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Should go through normal LLM triage, not short-circuit
+        expect(result.value.triage.action).not.toBe('skip');
+      }
+    });
+  });
+
   describe('issue_comment events', () => {
     it('evaluates @review comment and returns request_review triage with normalized worker type', async () => {
       const toolClient: ToolCallingClient = {

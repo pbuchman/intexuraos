@@ -7,7 +7,7 @@ import { githubAgentPrompt } from '../../../domain/prompts/githubAgentPrompt.js'
 
 describe('githubAgentPrompt', () => {
   it('has version 5.0.0', () => {
-    expect(githubAgentPrompt.version).toBe('5.0.0');
+    expect(githubAgentPrompt.version).toBe('5.1.0');
   });
 
   describe('PR section', () => {
@@ -120,6 +120,37 @@ describe('githubAgentPrompt', () => {
       });
 
       expect(result).toContain('(no files)');
+    });
+
+    it('includes plan_review in review type guidelines', () => {
+      const result = githubAgentPrompt.build({
+        repository: 'owner/repo',
+        prNumber: 1,
+        prTitle: 'test PR',
+        prBody: 'body',
+        action: 'opened',
+        senderLogin: 'user',
+        eventType: 'pull_request',
+        files: [],
+      });
+
+      expect(result).toContain('plan_review');
+      expect(result).toContain('Plan document review');
+    });
+
+    it('skip instruction excludes plan docs', () => {
+      const result = githubAgentPrompt.build({
+        repository: 'owner/repo',
+        prNumber: 1,
+        prTitle: 'test PR',
+        prBody: 'body',
+        action: 'opened',
+        senderLogin: 'user',
+        eventType: 'pull_request',
+        files: [],
+      });
+
+      expect(result).toContain('non-plan docs');
     });
   });
 
