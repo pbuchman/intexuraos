@@ -1426,6 +1426,18 @@ export interface GitHubEventLogResponse {
   nextCursor?: string;
 }
 
+// Merge Queue types
+export type {
+  MergeQueueBranch,
+  MergeQueuePr,
+  PrFilterStatus,
+  MergedPrEntry,
+  SkipReason,
+  SkippedPrEntry,
+  WatchStatus,
+  MergeQueueWatch,
+} from './mergeQueue.js';
+
 // Cron Agent types
 export type {
   CronSchedule,
