@@ -4,6 +4,7 @@ import type { HellscriptRepository } from '../ports/hellscriptRepository.js';
 import type { IntentInterpreter } from '../ports/intentInterpreter.js';
 import type { DraftGenerator } from '../ports/draftGenerator.js';
 import type { HellscriptBuffer } from '../models/hellscriptBuffer.js';
+import type { MaterializedBufferState } from '../models/materializedBufferState.js';
 import { emptyState } from '../models/materializedBufferState.js';
 import { applyIntentToState } from '../services/applyIntentToState.js';
 
@@ -33,32 +34,31 @@ export async function imposeOnBuffer(
   const { repository, interpreter, draftGenerator, logger } = deps;
 
   let bufferId = input.bufferId;
-  let buffer: HellscriptBuffer | null = null;
+  let buffer: HellscriptBuffer;
+  let currentState: MaterializedBufferState;
 
   if (bufferId === undefined) {
+    // New buffer — state is empty by definition, no need to read it
     const createResult = await repository.createBuffer(input.userId, 'Untitled buffer');
     if (!createResult.ok) {
       return createResult;
     }
     buffer = createResult.value;
     bufferId = buffer.id;
+    currentState = emptyState();
     logger.info({ bufferId }, 'Created new buffer');
   } else {
-    const bufferResult = await repository.getBuffer(bufferId, input.userId);
-    if (!bufferResult.ok) {
-      return bufferResult;
+    // Existing buffer — read buffer + state in a single Firestore doc read
+    const bufferWithStateResult = await repository.getBufferWithState(bufferId, input.userId);
+    if (!bufferWithStateResult.ok) {
+      return bufferWithStateResult;
     }
-    if (bufferResult.value === null) {
+    if (bufferWithStateResult.value === null) {
       return { ok: false, error: new Error('Buffer not found') };
     }
-    buffer = bufferResult.value;
+    buffer = bufferWithStateResult.value.buffer;
+    currentState = bufferWithStateResult.value.state ?? emptyState();
   }
-
-  const currentStateResult = await repository.getBufferState(bufferId);
-  if (!currentStateResult.ok) {
-    return currentStateResult;
-  }
-  const currentState = currentStateResult.value ?? emptyState();
 
   const intent = await interpreter.interpret(input.utterance, currentState, logger);
 

@@ -27,7 +27,7 @@ const bufferParamsSchema = {
   type: 'object',
   required: ['id'],
   properties: {
-    id: { type: 'string' },
+    id: { type: 'string', maxLength: 128 },
   },
 } as const;
 
