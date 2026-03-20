@@ -40,7 +40,7 @@ export const generateDraftPrompt: PromptBuilder<GenerateDraftPromptInput> = {
 
     const priorDraftSection =
       input.priorDraft !== null
-        ? `\nPRIOR DRAFT (improve upon this):\n${input.priorDraft}`
+        ? `\n<prior_draft>\n${input.priorDraft}\n</prior_draft>`
         : '';
 
     return `You are a skilled writer. Generate a well-structured markdown document based on the following inputs.

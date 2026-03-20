@@ -133,7 +133,7 @@ describe('generateDraftPrompt', () => {
     });
 
     expect(result).toContain('# Old Draft');
-    expect(result).toContain('PRIOR DRAFT');
+    expect(result).toContain('prior_draft');
   });
 
   it('does not include prior draft section when null', () => {
@@ -143,7 +143,7 @@ describe('generateDraftPrompt', () => {
       requestText: 'Write',
     });
 
-    expect(result).not.toContain('PRIOR DRAFT');
+    expect(result).not.toContain('prior_draft');
   });
 
   it('includes writing samples', () => {
