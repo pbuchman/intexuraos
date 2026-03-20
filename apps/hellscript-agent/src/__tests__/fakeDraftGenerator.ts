@@ -1,9 +1,10 @@
+import type { Result, Logger } from '@intexuraos/common-core';
 import type { DraftGenerator } from '../domain/ports/draftGenerator.js';
 import type { MaterializedBufferState } from '../domain/models/materializedBufferState.js';
-import type { Logger } from '@intexuraos/common-core';
 
 export class FakeDraftGenerator implements DraftGenerator {
   private nextMarkdown = '# Generated Draft\n\nDefault content.';
+  private nextError: Error | null = null;
   private callLog: {
     state: MaterializedBufferState;
     priorDraft: string | null;
@@ -12,6 +13,10 @@ export class FakeDraftGenerator implements DraftGenerator {
 
   setNextMarkdown(markdown: string): void {
     this.nextMarkdown = markdown;
+  }
+
+  simulateError(error: Error): void {
+    this.nextError = error;
   }
 
   getCalls(): {
@@ -27,8 +32,15 @@ export class FakeDraftGenerator implements DraftGenerator {
     priorDraft: string | null,
     requestText: string,
     _logger: Logger
-  ): Promise<string> {
+  ): Promise<Result<string>> {
     this.callLog.push({ state, priorDraft, requestText });
-    return this.nextMarkdown;
+
+    if (this.nextError !== null) {
+      const error = this.nextError;
+      this.nextError = null;
+      return { ok: false, error };
+    }
+
+    return { ok: true, value: this.nextMarkdown };
   }
 }

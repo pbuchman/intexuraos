@@ -1,5 +1,5 @@
 import type { GeminiClient } from '@intexuraos/infra-gemini';
-import type { Logger } from '@intexuraos/common-core';
+import type { Result, Logger } from '@intexuraos/common-core';
 import type { DraftGenerator } from '../../domain/ports/draftGenerator.js';
 import type { MaterializedBufferState } from '../../domain/models/materializedBufferState.js';
 import { generateDraftPrompt } from '../../prompts/generate-draft-prompt.js';
@@ -16,16 +16,16 @@ export class GeminiDraftGenerator implements DraftGenerator {
     priorDraft: string | null,
     requestText: string,
     logger: Logger
-  ): Promise<string> {
+  ): Promise<Result<string>> {
     const prompt = generateDraftPrompt.build({ state, priorDraft, requestText });
 
     const result = await this.client.generate(prompt);
 
     if (!result.ok) {
       logger.error({ error: result.error }, 'Draft generation failed');
-      return priorDraft ?? '# Draft\n\n(Generation failed. Please try again.)';
+      return { ok: false, error: new Error('Draft generation failed') };
     }
 
-    return result.value.content;
+    return { ok: true, value: result.value.content };
   }
 }
