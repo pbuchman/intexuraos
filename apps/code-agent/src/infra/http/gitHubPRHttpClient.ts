@@ -529,24 +529,74 @@ export function createGitHubPRHttpClient(
       ref: string
     ): Promise<Result<{ state: 'success' | 'failure' | 'pending' }, GitHubPRClientError>> {
       try {
-        const response = await fetch(
-          `${GITHUB_API}/repos/${owner}/${repo}/commits/${encodeURIComponent(ref)}/status`,
-          {
-            method: 'GET',
-            headers: githubHeaders(token),
-            signal: AbortSignal.timeout(config.timeoutMs),
-          }
-        );
+        const encodedRef = encodeURIComponent(ref);
+        const headers = githubHeaders(token);
+        const signal = AbortSignal.timeout(config.timeoutMs);
 
-        if (response.ok) {
-          const data = (await response.json()) as { state: string };
-          const state: 'success' | 'failure' | 'pending' = data.state === 'success' ? 'success'
-            : data.state === 'failure' || data.state === 'error' ? 'failure'
-            : 'pending';
-          return ok({ state });
+        // Query both legacy Commit Status API and modern Check Runs API in parallel
+        const [statusResponse, checkRunsResponse] = await Promise.all([
+          fetch(`${GITHUB_API}/repos/${owner}/${repo}/commits/${encodedRef}/status`, {
+            method: 'GET', headers, signal,
+          }),
+          fetch(`${GITHUB_API}/repos/${owner}/${repo}/commits/${encodedRef}/check-runs`, {
+            method: 'GET', headers, signal,
+          }),
+        ]);
+
+        if (!statusResponse.ok) {
+          return err(mapErrorStatus(statusResponse.status, `Failed to get commit status for ${ref} in ${owner}/${repo}`));
         }
 
-        return err(mapErrorStatus(response.status, `Failed to get check status for ${ref} in ${owner}/${repo}`));
+        if (!checkRunsResponse.ok) {
+          return err(mapErrorStatus(checkRunsResponse.status, `Failed to get check runs for ${ref} in ${owner}/${repo}`));
+        }
+
+        const statusData = (await statusResponse.json()) as { state: string; total_count: number };
+        const checkRunsData = (await checkRunsResponse.json()) as {
+          total_count: number;
+          check_runs: { conclusion: string | null; status: string }[];
+        };
+
+        // Derive state from legacy commit statuses
+        const hasStatuses = statusData.total_count > 0;
+        const statusState: 'success' | 'failure' | 'pending' = statusData.state === 'success' ? 'success'
+          : statusData.state === 'failure' || statusData.state === 'error' ? 'failure'
+          : 'pending';
+
+        // Derive state from check runs (GitHub Actions)
+        const hasCheckRuns = checkRunsData.total_count > 0;
+        let checkRunsState: 'success' | 'failure' | 'pending' = 'success';
+        if (hasCheckRuns) {
+          const anyFailed = checkRunsData.check_runs.some(
+            (cr) => cr.conclusion === 'failure' || cr.conclusion === 'timed_out' || cr.conclusion === 'cancelled'
+          );
+          const anyPending = checkRunsData.check_runs.some(
+            (cr) => cr.status !== 'completed'
+          );
+          if (anyFailed) {
+            checkRunsState = 'failure';
+          } else if (anyPending) {
+            checkRunsState = 'pending';
+          }
+        }
+
+        // Combine: if neither API has results, return pending
+        if (!hasStatuses && !hasCheckRuns) {
+          return ok({ state: 'pending' });
+        }
+
+        // If any source reports failure, overall is failure
+        if ((hasStatuses && statusState === 'failure') || (hasCheckRuns && checkRunsState === 'failure')) {
+          return ok({ state: 'failure' });
+        }
+
+        // If any source reports pending, overall is pending
+        if ((hasStatuses && statusState === 'pending') || (hasCheckRuns && checkRunsState === 'pending')) {
+          return ok({ state: 'pending' });
+        }
+
+        // All reported sources are success
+        return ok({ state: 'success' });
       } catch (error) {
         return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
       }
