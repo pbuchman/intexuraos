@@ -6,8 +6,15 @@ import { useCronExecutions, useCronSchedule, useCronServices, useScheduleActions
 import { formatDateTime } from '@/utils/dateFormat';
 import { AvailableToolsPanel } from './AvailableToolsPanel.js';
 import { InlineEditText } from './InlineEditText.js';
+import { PreferredToolChips } from './PreferredToolChips.js';
 import { RecentExecutionsTable } from './RecentExecutionsTable.js';
 import { ScheduleStatusBadge } from './ScheduleStatusBadge.js';
+import {
+  addPreferredTool,
+  injectToolInstructionBlock,
+  removePreferredTool,
+  type ServiceTool,
+} from './toolPromptTemplates.js';
 
 // ---------------------------------------------------------------------------
 // Page component
@@ -66,6 +73,7 @@ export function CronScheduleViewPage(): React.JSX.Element {
     handleTrigger,
     handleDelete,
     handleNameSave,
+    handleActionSave,
     handleInstructionSave,
     setShowDeleteConfirm,
   } = useScheduleActions(schedule, actionHooks);
@@ -141,6 +149,23 @@ export function CronScheduleViewPage(): React.JSX.Element {
     );
   }
 
+  const resolvedSchedule = schedule;
+
+  const handleUseTool = useCallback((tool: ServiceTool): void => {
+    handleActionSave({
+      ...resolvedSchedule.action,
+      instruction: injectToolInstructionBlock(resolvedSchedule.action.instruction, tool),
+      preferredTools: addPreferredTool(resolvedSchedule.action.preferredTools, tool.name),
+    });
+  }, [handleActionSave, resolvedSchedule]);
+
+  const handleRemovePreferredTool = useCallback((toolName: string): void => {
+    handleActionSave({
+      ...resolvedSchedule.action,
+      preferredTools: removePreferredTool(resolvedSchedule.action.preferredTools, toolName),
+    });
+  }, [handleActionSave, resolvedSchedule]);
+
   // ---------------------------------------------------------------------------
   // Render: schedule details
   // ---------------------------------------------------------------------------
@@ -172,31 +197,31 @@ export function CronScheduleViewPage(): React.JSX.Element {
           <div className="min-w-0 flex-1">
             {/* Name (editable) */}
             <div className="mb-1 text-lg font-semibold text-slate-900 dark:text-slate-100">
-              <InlineEditText value={schedule.name} onSave={handleNameSave} label="name" />
+              <InlineEditText value={resolvedSchedule.name} onSave={handleNameSave} label="name" />
             </div>
 
             {/* Description */}
-            {schedule.description !== '' ? (
+            {resolvedSchedule.description !== '' ? (
               <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
-                {schedule.description}
+                {resolvedSchedule.description}
               </p>
             ) : null}
 
             {/* Cron expression and timezone */}
             <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600 dark:text-slate-300">
               <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs dark:bg-slate-700">
-                {schedule.cronExpression}
+                {resolvedSchedule.cronExpression}
               </span>
-              <span className="text-xs text-slate-500 dark:text-slate-400">{schedule.timezone}</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">{resolvedSchedule.timezone}</span>
             </div>
 
             {/* Status badge */}
-            <ScheduleStatusBadge status={schedule.status} />
+            <ScheduleStatusBadge status={resolvedSchedule.status} />
 
             {/* Timestamps */}
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400 dark:text-slate-500">
-              <span>Created: {formatDateTime(schedule.createdAt)}</span>
-              <span>Updated: {formatDateTime(schedule.updatedAt)}</span>
+              <span>Created: {formatDateTime(resolvedSchedule.createdAt)}</span>
+              <span>Updated: {formatDateTime(resolvedSchedule.updatedAt)}</span>
             </div>
           </div>
 
@@ -207,15 +232,15 @@ export function CronScheduleViewPage(): React.JSX.Element {
               onClick={handlePauseResume}
               disabled={updating}
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-800 disabled:opacity-50 dark:border-slate-600 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-200"
-              title={schedule.status === 'active' ? 'Pause schedule' : 'Resume schedule'}
+              title={resolvedSchedule.status === 'active' ? 'Pause schedule' : 'Resume schedule'}
             >
-              {schedule.status === 'active' ? (
+              {resolvedSchedule.status === 'active' ? (
                 <Pause className="h-4 w-4" />
               ) : (
                 <Play className="h-4 w-4" />
               )}
               <span className="hidden sm:inline">
-                {schedule.status === 'active' ? 'Pause' : 'Resume'}
+                {resolvedSchedule.status === 'active' ? 'Pause' : 'Resume'}
               </span>
             </button>
             <button
@@ -287,7 +312,7 @@ export function CronScheduleViewPage(): React.JSX.Element {
             Services
           </span>
           <div className="flex flex-wrap gap-1.5">
-            {schedule.action.services.map((service) => (
+            {resolvedSchedule.action.services.map((service) => (
               <span
                 key={service}
                 className="inline-flex rounded-md bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
@@ -295,10 +320,20 @@ export function CronScheduleViewPage(): React.JSX.Element {
                 {service}
               </span>
             ))}
-            {schedule.action.services.length === 0 ? (
+            {resolvedSchedule.action.services.length === 0 ? (
               <span className="text-xs text-slate-400 dark:text-slate-500">No services configured</span>
             ) : null}
           </div>
+        </div>
+
+        <div className="mb-4">
+          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Preferred Tools
+          </span>
+          <PreferredToolChips
+            preferredTools={resolvedSchedule.action.preferredTools}
+            className="flex flex-wrap gap-1.5"
+          />
         </div>
 
         {/* Instruction (editable) */}
@@ -308,7 +343,7 @@ export function CronScheduleViewPage(): React.JSX.Element {
           </span>
           <div className="text-sm text-slate-700 dark:text-slate-300">
             <InlineEditText
-              value={schedule.action.instruction}
+              value={resolvedSchedule.action.instruction}
               onSave={handleInstructionSave}
               label="instruction"
               multiline
@@ -318,7 +353,13 @@ export function CronScheduleViewPage(): React.JSX.Element {
       </Card>
 
       {/* Available tools panel (expandable) */}
-      <AvailableToolsPanel services={selectedServiceTools} />
+      <AvailableToolsPanel
+        services={selectedServiceTools}
+        preferredTools={resolvedSchedule.action.preferredTools}
+        onUseTool={handleUseTool}
+        onRemovePreferredTool={handleRemovePreferredTool}
+        disabled={updating}
+      />
 
       {/* Recent executions */}
       <RecentExecutionsTable

@@ -26,6 +26,7 @@ export function useScheduleActions(
   handleTrigger: () => Promise<void>;
   handleDelete: () => Promise<void>;
   handleNameSave: (newName: string) => void;
+  handleActionSave: (newAction: CronSchedule['action']) => void;
   handleInstructionSave: (newInstruction: string) => void;
   setShowDeleteConfirm: (show: boolean) => void;
 } {
@@ -112,14 +113,19 @@ export function useScheduleActions(
     [handleUpdate],
   );
 
+  const handleActionSave = useCallback(
+    (newAction: CronSchedule['action']): void => {
+      void handleUpdate({ action: newAction });
+    },
+    [handleUpdate],
+  );
+
   const handleInstructionSave = useCallback(
     (newInstruction: string): void => {
       if (schedule === null) return;
-      void handleUpdate({
-        action: { ...schedule.action, instruction: newInstruction },
-      });
+      handleActionSave({ ...schedule.action, instruction: newInstruction });
     },
-    [schedule, handleUpdate],
+    [schedule, handleActionSave],
   );
 
   return {
@@ -132,6 +138,7 @@ export function useScheduleActions(
     handleTrigger,
     handleDelete,
     handleNameSave,
+    handleActionSave,
     handleInstructionSave,
     setShowDeleteConfirm,
   };

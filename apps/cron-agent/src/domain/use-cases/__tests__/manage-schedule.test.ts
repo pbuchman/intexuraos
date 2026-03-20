@@ -21,7 +21,7 @@ const testSchedule: CronSchedule = {
   description: 'Every minute',
   cronExpression: '* * * * *',
   timezone: 'UTC',
-  action: { services: ['code-agent'], instruction: 'do something' },
+  action: { services: ['code-agent'], instruction: 'do something', preferredTools: [] },
   status: 'active',
   lastExecutedAt: null,
   nextExecutionAt: new Date().toISOString(),
@@ -68,14 +68,32 @@ function createFakeParseDeps(): never {
 function createFakeToolRegistry(): {
   getToolsForService: () => Promise<never[]>;
   getToolsForServices: () => Promise<never[]>;
-  listServiceTools: () => Promise<{ key: string; name: string; tools: never[] }[]>;
+  listServiceTools: () => Promise<{
+    key: string;
+    name: string;
+    tools: { name: string; description: string; parameters: Record<string, unknown> }[];
+  }[]>;
   refreshAll: () => Promise<void>;
 } {
   return {
     getToolsForService: async (): Promise<never[]> => [],
     getToolsForServices: async (): Promise<never[]> => [],
-    listServiceTools: async (): Promise<{ key: string; name: string; tools: never[] }[]> => [
-      { key: 'code-agent', name: 'Code Agent', tools: [] },
+    listServiceTools: async (): Promise<{
+      key: string;
+      name: string;
+      tools: { name: string; description: string; parameters: Record<string, unknown> }[];
+    }[]> => [
+      {
+        key: 'code-agent',
+        name: 'Code Agent',
+        tools: [
+          {
+            name: 'code_agent__runCode',
+            description: 'Run code',
+            parameters: { type: 'object', properties: {} },
+          },
+        ],
+      },
     ],
     refreshAll: async (): Promise<void> => { /* noop */ },
   };
@@ -94,7 +112,7 @@ describe('createScheduleManager', () => {
     const result = await manager.create('user-1', {
       name: 'Test',
       description: 'Every minute',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       timezone: 'UTC',
     });
     expect(result.ok).toBe(true);
@@ -121,7 +139,7 @@ describe('createScheduleManager', () => {
     const result = await manager.create('user-1', {
       name: 'One too many',
       description: 'Every hour',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       timezone: 'UTC',
     });
     expect(result.ok).toBe(false);
@@ -147,12 +165,76 @@ describe('createScheduleManager', () => {
     const result = await manager.create('user-1', {
       name: 'Test',
       description: 'Every minute',
-      action: { services: ['unknown-service'], instruction: 'test' },
+      action: { services: ['unknown-service'], instruction: 'test', preferredTools: [] },
       timezone: 'UTC',
     });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('persists preferred tools on create', async () => {
+    const repo: ScheduleRepository = {
+      ...createFakeScheduleRepo(),
+      create: async (
+        userId: string,
+        input,
+      ): Promise<Result<CronSchedule, ScheduleRepositoryError>> =>
+        ok({
+          ...testSchedule,
+          userId,
+          action: input.action,
+        }),
+    };
+
+    const manager = createScheduleManager({
+      logger: createTestLogger(),
+      scheduleRepo: repo,
+      parseDeps: createFakeParseDeps(),
+      toolRegistry: createFakeToolRegistry(),
+      executeDeps: {} as never,
+    });
+
+    const result = await manager.create('user-1', {
+      name: 'Test',
+      description: 'Every minute',
+      action: {
+        services: ['code-agent'],
+        instruction: 'test',
+        preferredTools: ['code_agent__runCode'],
+      },
+      timezone: 'UTC',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.action.preferredTools).toEqual(['code_agent__runCode']);
+  });
+
+  it('rejects preferred tools that are not available on selected services', async () => {
+    const manager = createScheduleManager({
+      logger: createTestLogger(),
+      scheduleRepo: createFakeScheduleRepo(),
+      parseDeps: createFakeParseDeps(),
+      toolRegistry: createFakeToolRegistry(),
+      executeDeps: {} as never,
+    });
+
+    const result = await manager.create('user-1', {
+      name: 'Test',
+      description: 'Every minute',
+      action: {
+        services: ['code-agent'],
+        instruction: 'test',
+        preferredTools: ['code_agent__missingTool'],
+      },
+      timezone: 'UTC',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('VALIDATION_ERROR');
+    expect(result.error.message).toContain('Unknown preferred tool');
   });
 
   it('gets schedule by id with ownership check', async () => {
@@ -309,7 +391,7 @@ describe('createScheduleManager', () => {
     const result = await manager.create('user-1', {
       name: 'Test',
       description: 'invalid schedule description',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       timezone: 'UTC',
     });
     expect(result.ok).toBe(false);
@@ -337,7 +419,7 @@ describe('createScheduleManager', () => {
     const result = await manager.create('user-1', {
       name: 'Test',
       description: 'every minute',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       timezone: 'UTC',
     });
     expect(result.ok).toBe(false);
@@ -494,11 +576,66 @@ describe('createScheduleManager', () => {
     });
 
     const result = await manager.update('user-1', 'schedule-1', {
-      action: { services: ['code-agent'], instruction: 'updated instruction' },
+      action: {
+        services: ['code-agent'],
+        instruction: 'updated instruction',
+        preferredTools: [],
+      },
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.action.instruction).toBe('updated instruction');
+  });
+
+  it('rejects preferred tools that belong to an unselected service during update', async () => {
+    const manager = createScheduleManager({
+      logger: createTestLogger(),
+      scheduleRepo: createFakeScheduleRepo(),
+      parseDeps: createFakeParseDeps(),
+      toolRegistry: {
+        getToolsForService: async (): Promise<never[]> => [],
+        getToolsForServices: async (): Promise<never[]> => [],
+        listServiceTools: async () => [
+          {
+            key: 'code-agent',
+            name: 'Code Agent',
+            tools: [
+              {
+                name: 'code_agent__runCode',
+                description: 'Run code',
+                parameters: { type: 'object', properties: {} },
+              },
+            ],
+          },
+          {
+            key: 'notes-agent',
+            name: 'Notes Agent',
+            tools: [
+              {
+                name: 'notes_agent__syncNotes',
+                description: 'Sync notes',
+                parameters: { type: 'object', properties: {} },
+              },
+            ],
+          },
+        ],
+        refreshAll: async (): Promise<void> => { /* noop */ },
+      },
+      executeDeps: {} as never,
+    });
+
+    const result = await manager.update('user-1', 'schedule-1', {
+      action: {
+        services: ['code-agent'],
+        instruction: 'updated instruction',
+        preferredTools: ['notes_agent__syncNotes'],
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('VALIDATION_ERROR');
+    expect(result.error.message).toContain('selected services');
   });
 
   it('returns VALIDATION_ERROR when updating action with unknown service', async () => {
@@ -516,7 +653,7 @@ describe('createScheduleManager', () => {
     });
 
     const result = await manager.update('user-1', 'schedule-1', {
-      action: { services: ['unknown-service'], instruction: 'test' },
+      action: { services: ['unknown-service'], instruction: 'test', preferredTools: [] },
     });
     expect(result.ok).toBe(false);
     if (result.ok) return;

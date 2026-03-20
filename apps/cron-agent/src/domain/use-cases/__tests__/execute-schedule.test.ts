@@ -21,7 +21,7 @@ const testSchedule: CronSchedule = {
   description: 'Every minute',
   cronExpression: '* * * * *',
   timezone: 'UTC',
-  action: { services: ['code-agent'], instruction: 'do something' },
+  action: { services: ['code-agent'], instruction: 'do something', preferredTools: [] },
   status: 'active',
   lastExecutedAt: null,
   nextExecutionAt: new Date().toISOString(),
@@ -60,7 +60,11 @@ function createSuccessActionDeps(): ExecuteScheduleDeps['actionDeps'] {
         run: async () => '{"ok": true}',
       }],
       listServiceTools: async () => [
-        { key: 'code-agent', name: 'Code Agent', tools: [{ name: 'test-tool', description: 'A test tool' }] },
+        {
+          key: 'code-agent',
+          name: 'Code Agent',
+          tools: [{ name: 'test-tool', description: 'A test tool', parameters: { type: 'object', properties: {} } }],
+        },
       ],
       refreshAll: async (): Promise<void> => { /* noop */ },
     },
@@ -88,7 +92,11 @@ function createFailingActionDeps(): ExecuteScheduleDeps['actionDeps'] {
         run: async () => '{"ok": true}',
       }],
       listServiceTools: async () => [
-        { key: 'code-agent', name: 'Code Agent', tools: [{ name: 'test-tool', description: 'A test tool' }] },
+        {
+          key: 'code-agent',
+          name: 'Code Agent',
+          tools: [{ name: 'test-tool', description: 'A test tool', parameters: { type: 'object', properties: {} } }],
+        },
       ],
       refreshAll: async (): Promise<void> => { /* noop */ },
     },
@@ -110,7 +118,11 @@ function createThrowingActionDeps(): ExecuteScheduleDeps['actionDeps'] {
         run: async () => '{"ok": true}',
       }],
       listServiceTools: async () => [
-        { key: 'code-agent', name: 'Code Agent', tools: [{ name: 'test-tool', description: 'A test tool' }] },
+        {
+          key: 'code-agent',
+          name: 'Code Agent',
+          tools: [{ name: 'test-tool', description: 'A test tool', parameters: { type: 'object', properties: {} } }],
+        },
       ],
       refreshAll: async (): Promise<void> => { /* noop */ },
     },
