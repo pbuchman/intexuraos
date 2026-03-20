@@ -349,6 +349,7 @@ export async function createReviewTask(
       if (descResult.ok) {
         issueDescription = descResult.value;
         if (issueDescription !== undefined) {
+          // v1: description-only — comment-based plan refs deferred
           planDocumentPath = resolvePlanDocumentPathFromLinearContext({
             description: issueDescription,
             comments: [],
