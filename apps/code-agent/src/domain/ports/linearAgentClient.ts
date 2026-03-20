@@ -155,4 +155,10 @@ export interface LinearAgentClient {
     userId: string;
     identifiers: string[];
   }): Promise<Result<LinearIssueForDisplay[], LinearAgentError>>;
+
+  /**
+   * Fetch the description of a Linear issue.
+   * Used by review task creation to embed requirements context in the prompt.
+   */
+  getIssueDescription(request: ValidateIssueRequest): Promise<Result<string | undefined, LinearAgentError>>;
 }

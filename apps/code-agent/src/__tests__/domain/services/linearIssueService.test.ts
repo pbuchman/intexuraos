@@ -41,6 +41,7 @@ describe('linearIssueService', () => {
     updateIssueMetadata: (...args: Parameters<LinearAgentClient['updateIssueMetadata']>) => mockUpdateIssueMetadata(...args),
     fetchIssueForDisplay: vi.fn(),
     fetchIssuesForDisplay: vi.fn(),
+    getIssueDescription: vi.fn(),
   };
 
   const testUserId = 'test-user-123';

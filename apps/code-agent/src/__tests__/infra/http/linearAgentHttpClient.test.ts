@@ -1349,6 +1349,127 @@ describe('linearAgentHttpClient', () => {
     });
   });
 
+  describe('getIssueDescription', () => {
+    it('should return description when issue has one', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-123')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(200, {
+          success: true,
+          data: { description: 'Implement feature X.\n\nPlan document: docs/plans/feature-x.md' },
+        });
+
+      const result = await client.getIssueDescription({
+        userId: 'test-user-123',
+        identifier: 'INT-123',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBe('Implement feature X.\n\nPlan document: docs/plans/feature-x.md');
+      }
+    });
+
+    it('should return undefined when description is null', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-456')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(200, {
+          success: true,
+          data: { description: null },
+        });
+
+      const result = await client.getIssueDescription({
+        userId: 'test-user-123',
+        identifier: 'INT-456',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeUndefined();
+      }
+    });
+
+    it('should return UNAVAILABLE on non-200 response', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-789')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(500, 'Internal Server Error');
+
+      const result = await client.getIssueDescription({
+        userId: 'test-user-123',
+        identifier: 'INT-789',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNAVAILABLE');
+        expect(result.error.message).toBe('Internal Server Error');
+      }
+    });
+
+    it('should return UNKNOWN on invalid response with success false', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-123')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(200, { success: false });
+
+      const result = await client.getIssueDescription({
+        userId: 'test-user-123',
+        identifier: 'INT-123',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toBe('Invalid response from linear-agent');
+      }
+    });
+
+    it('should return UNAVAILABLE on request timeout', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-123')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .delay(6000)
+        .reply(200, {});
+
+      const result = await client.getIssueDescription({
+        userId: 'test-user-123',
+        identifier: 'INT-123',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNAVAILABLE');
+        expect(result.error.message).toBe('Request timed out');
+      }
+    });
+
+    it('should return UNKNOWN on network error', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-123')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .replyWithError('ECONNREFUSED');
+
+      const result = await client.getIssueDescription({
+        userId: 'test-user-123',
+        identifier: 'INT-123',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toContain('ECONNREFUSED');
+      }
+    });
+  });
+
   describe('fetchIssuesForDisplay', () => {
     it('should fetch multiple issues for display successfully', async () => {
       const mockResponse = {
