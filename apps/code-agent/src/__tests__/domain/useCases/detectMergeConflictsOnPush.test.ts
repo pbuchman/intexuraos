@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import type { GitHubPRSummary } from '../../../domain/models/gitHubPRSummary.js';
+import { EMPTY_RECONCILE_RESULT } from '../../../domain/services/mergeConflictDetector.js';
 import { createDetectMergeConflictsOnPush } from '../../../domain/usecases/detectMergeConflictsOnPush.js';
 
 interface TestDeps {
@@ -1427,7 +1428,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       const detector = createDetectMergeConflictsOnPush(deps as never);
       const result = await detector.reconcile(logger);
 
-      expect(result).toEqual({ processed: 0, closed: 0, conflicting: 0, clean: 0, unknown: 0, skipped: 0, error: 0 });
+      expect(result).toEqual(EMPTY_RECONCILE_RESULT);
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ error: expect.anything() }),
         expect.stringContaining('Failed to load open PR summaries')
@@ -1443,7 +1444,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       const detector = createDetectMergeConflictsOnPush(deps as never);
       const result = await detector.reconcile(logger);
 
-      expect(result).toEqual({ processed: 0, closed: 0, conflicting: 0, clean: 0, unknown: 0, skipped: 0, error: 0 });
+      expect(result).toEqual(EMPTY_RECONCILE_RESULT);
       expect(deps.gitHubPRClient.getPullRequestDetails).not.toHaveBeenCalled();
     });
 
