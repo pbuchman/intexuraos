@@ -334,6 +334,20 @@ describe('Merge queue JWT routes', () => {
       expect(body.data.id).toBe('watch-123');
     });
 
+    it('should return error when body fields are missing', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/merge-queue/watch',
+        headers: { authorization: 'Bearer fake-token' },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.message).toBe('owner, repo, and baseBranch are required');
+    });
+
     it('should return 409 on duplicate watch', async () => {
       nock('https://api.github.com')
         .get('/user')

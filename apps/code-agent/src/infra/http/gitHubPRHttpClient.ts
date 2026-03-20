@@ -575,21 +575,40 @@ export function createGitHubPRHttpClient(
           }
 
           const data = (await response.json()) as {
-            number: number;
-            title: string;
-            user: { login: string };
-            base: { ref: string };
-            head: { ref: string };
-            created_at: string;
+            number?: number;
+            title?: string;
+            user?: { login?: string };
+            base?: { ref?: string };
+            head?: { ref?: string };
+            created_at?: string;
           }[];
           for (const pr of data) {
+            if (typeof pr.number !== 'number') {
+              return err({ code: 'API_ERROR', message: 'GitHub API response missing number' });
+            }
+
+            const titleResult = ensureString(pr.title, 'title');
+            if (!titleResult.ok) return titleResult;
+
+            const authorResult = ensureString(pr.user?.login, 'user.login');
+            if (!authorResult.ok) return authorResult;
+
+            const baseResult = ensureString(pr.base?.ref, 'base.ref');
+            if (!baseResult.ok) return baseResult;
+
+            const headResult = ensureString(pr.head?.ref, 'head.ref');
+            if (!headResult.ok) return headResult;
+
+            const createdAtResult = ensureString(pr.created_at, 'created_at');
+            if (!createdAtResult.ok) return createdAtResult;
+
             items.push({
               number: pr.number,
-              title: pr.title,
-              authorLogin: pr.user.login,
-              baseBranch: pr.base.ref,
-              headBranch: pr.head.ref,
-              createdAt: pr.created_at,
+              title: titleResult.value,
+              authorLogin: authorResult.value,
+              baseBranch: baseResult.value,
+              headBranch: headResult.value,
+              createdAt: createdAtResult.value,
             });
           }
 

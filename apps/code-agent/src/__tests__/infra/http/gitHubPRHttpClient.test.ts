@@ -1014,6 +1014,32 @@ describe('GitHubPRHttpClient', () => {
         expect(result.error.code).toBe('NETWORK_ERROR');
       }
     });
+
+    it('returns API_ERROR when response is missing required fields', async () => {
+      const cases = [
+        [{ title: 'PR', user: { login: 'a' }, base: { ref: 'main' }, head: { ref: 'f' }, created_at: '2026-01-01T00:00:00Z' }, 'number'],
+        [{ number: 1, user: { login: 'a' }, base: { ref: 'main' }, head: { ref: 'f' }, created_at: '2026-01-01T00:00:00Z' }, 'title'],
+        [{ number: 1, title: 'PR', base: { ref: 'main' }, head: { ref: 'f' }, created_at: '2026-01-01T00:00:00Z' }, 'user.login'],
+        [{ number: 1, title: 'PR', user: { login: 'a' }, head: { ref: 'f' }, created_at: '2026-01-01T00:00:00Z' }, 'base.ref'],
+        [{ number: 1, title: 'PR', user: { login: 'a' }, base: { ref: 'main' }, created_at: '2026-01-01T00:00:00Z' }, 'head.ref'],
+        [{ number: 1, title: 'PR', user: { login: 'a' }, base: { ref: 'main' }, head: { ref: 'f' } }, 'created_at'],
+      ] as const;
+
+      for (const [payload, expectedField] of cases) {
+        nock.cleanAll();
+        nock('https://api.github.com')
+          .get('/repos/owner/repo/pulls?state=open&per_page=100&sort=created&direction=asc')
+          .reply(200, [payload]);
+
+        const result = await client.listAllOpenPullRequests('test-token', 'owner', 'repo');
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe('API_ERROR');
+          expect(result.error.message).toContain(expectedField);
+        }
+      }
+    });
   });
 
   describe('getIssueComment', () => {

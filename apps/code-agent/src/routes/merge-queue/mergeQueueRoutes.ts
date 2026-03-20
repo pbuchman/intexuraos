@@ -51,8 +51,14 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
         });
 
         const userId = getUserId(request);
-        const body = request.body as { owner: string; repo: string; baseBranch: string };
-        const { owner, repo, baseBranch } = body;
+        const body = request.body as { owner?: string; repo?: string; baseBranch?: string } | undefined;
+        const owner = body?.owner ?? '';
+        const repo = body?.repo ?? '';
+        const baseBranch = body?.baseBranch ?? '';
+
+        if (owner === '' || repo === '' || baseBranch === '') {
+          return await reply.fail('INVALID_REQUEST', 'owner, repo, and baseBranch are required');
+        }
 
         const { userServiceClient, mergeQueueWatchRepo } = getServices();
 
