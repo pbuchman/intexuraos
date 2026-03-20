@@ -111,76 +111,76 @@ export function MergeQueuePage(): React.JSX.Element {
   return (
     <Layout>
       <div className="mx-auto max-w-5xl px-4 py-6">
-      {/* PageHeader */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Merge Queue</h2>
-        {selectedBranch !== null && !prsLoading ? (
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            {String(prs.length)} open &middot; {String(filterCounts.mergeable)} mergeable &middot; {String(filterCounts.blocked)} blocked &middot; {String(filterCounts.pending)} pending
-          </p>
-        ) : null}
-      </div>
+        {/* PageHeader */}
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Merge Queue</h2>
+          {selectedBranch !== null && !prsLoading ? (
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              {String(prs.length)} open &middot; {String(filterCounts.mergeable)} mergeable &middot; {String(filterCounts.blocked)} blocked &middot; {String(filterCounts.pending)} pending
+            </p>
+          ) : null}
+        </div>
 
-      {/* BranchSelector */}
-      <div className="mb-4">
-        <BranchSelector
-          branches={branches}
-          selected={selectedBranch}
-          onSelect={setSelectedBranch}
-        />
-      </div>
-
-      {/* WatchStatusCard */}
-      <div className="mb-4">
-        <WatchStatusCard
-          watch={currentWatch}
-          onToggle={handleToggleWatch}
-          isToggling={isToggling}
-        />
-        {toggleError !== null ? (
-          <p className="mt-1 text-xs text-red-600 dark:text-red-400">{toggleError}</p>
-        ) : null}
-      </div>
-
-      {/* PrStatusPipeline */}
-      {selectedBranch !== null ? (
+        {/* BranchSelector */}
         <div className="mb-4">
-          <PrStatusPipeline
-            counts={filterCounts}
-            activeFilters={activeFilters}
-            onToggle={handleToggleFilter}
+          <BranchSelector
+            branches={branches}
+            selected={selectedBranch}
+            onSelect={setSelectedBranch}
           />
         </div>
-      ) : null}
 
-      {/* PrList */}
-      {selectedBranch !== null ? (
+        {/* WatchStatusCard */}
         <div className="mb-4">
-          {prsError !== null && !prsLoading ? (
-            <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-900/30">
-              <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-              <p className="text-sm text-red-700 dark:text-red-400">{prsError}</p>
-            </div>
-          ) : prs.length === 0 && !prsLoading ? (
-            <p className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">
-              No open PRs targeting {selectedBranch}
-            </p>
-          ) : (
-            <PrList
-              prs={prs}
-              activeFilters={activeFilters}
-              isLoading={prsLoading}
-            />
-          )}
+          <WatchStatusCard
+            watch={currentWatch}
+            onToggle={handleToggleWatch}
+            isToggling={isToggling}
+          />
+          {toggleError !== null ? (
+            <p className="mt-1 text-xs text-red-600 dark:text-red-400">{toggleError}</p>
+          ) : null}
         </div>
-      ) : null}
 
-      {/* MergeHistoryTimeline */}
-      {mergedPrs.length > 0 ? (
-        <div className="rounded-lg">
-          <MergeHistoryTimeline mergedPrs={mergedPrs} owner={DEFAULT_OWNER} repo={DEFAULT_REPO} />
-        </div>
-      ) : null}
+        {/* PrStatusPipeline */}
+        {selectedBranch !== null ? (
+          <div className="mb-4">
+            <PrStatusPipeline
+              counts={filterCounts}
+              activeFilters={activeFilters}
+              onToggle={handleToggleFilter}
+            />
+          </div>
+        ) : null}
+
+        {/* PrList */}
+        {selectedBranch !== null ? (
+          <div className="mb-4">
+            {prsError !== null && !prsLoading ? (
+              <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-900/30">
+                <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                <p className="text-sm text-red-700 dark:text-red-400">{prsError}</p>
+              </div>
+            ) : prs.length === 0 && !prsLoading ? (
+              <p className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                No open PRs targeting {selectedBranch}
+              </p>
+            ) : (
+              <PrList
+                prs={prs}
+                activeFilters={activeFilters}
+                isLoading={prsLoading}
+              />
+            )}
+          </div>
+        ) : null}
+
+        {/* MergeHistoryTimeline */}
+        {mergedPrs.length > 0 ? (
+          <div className="rounded-lg">
+            <MergeHistoryTimeline mergedPrs={mergedPrs} owner={DEFAULT_OWNER} repo={DEFAULT_REPO} />
+          </div>
+        ) : null}
       </div>
     </Layout>
   );
