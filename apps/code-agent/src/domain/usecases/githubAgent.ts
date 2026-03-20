@@ -23,9 +23,10 @@ import { buildTriageRepairMessage } from '../validation/buildTriageRepairMessage
 import { evaluatePlanFiles } from '../services/gitHubWebhookRules.js';
 import type { ZodError } from 'zod';
 
-// plan_review is intentionally excluded from the LLM tool enum — plan-only PRs
-// are deterministically routed by evaluatePlanFiles() before LLM triage runs.
-const VALID_REVIEW_TYPES = ['code_quality', 'security', 'architecture'] as const;
+// plan_review is intentionally excluded — plan-only PRs are deterministically
+// routed by evaluatePlanFiles() before LLM triage runs. See triageSchema.ts
+// for the full set including plan_review.
+const LLM_TOOL_REVIEW_TYPES = ['code_quality', 'security', 'architecture'] as const;
 const VALID_DISPATCH_TEMPLATES = ['pr_comment', 'bot_review_edit'] as const;
 
 function formatZodErrors(error: ZodError): string {
@@ -255,7 +256,7 @@ async function evaluatePREventInternal(
         properties: {
           review_type: {
             type: 'string',
-            enum: [...VALID_REVIEW_TYPES],
+            enum: [...LLM_TOOL_REVIEW_TYPES],
             description: 'The type of review to request',
           },
         },
@@ -267,7 +268,7 @@ async function evaluatePREventInternal(
         /* v8 ignore start -- schema: type guard for unknown tool arg @preserve */
         const reviewType = typeof rawReviewType === 'string' ? rawReviewType : '';
         /* v8 ignore stop @preserve */
-        if (!(VALID_REVIEW_TYPES as readonly string[]).includes(reviewType)) {
+        if (!(LLM_TOOL_REVIEW_TYPES as readonly string[]).includes(reviewType)) {
           logger.warn({ reviewType }, 'GitHub Agent requested unknown review type');
           return Promise.resolve(JSON.stringify({ error: `Unknown review type: ${reviewType}` }));
         }
@@ -278,7 +279,7 @@ async function evaluatePREventInternal(
     },
     {
       name: 'skip',
-      description: 'Skip this event. Use when the PR is trivial (docs-only, config, auto-generated).',
+      description: 'Skip this event. Use when the PR is trivial (non-plan docs, config, auto-generated).',
       parameters: {
         type: 'object',
         properties: {
@@ -395,7 +396,7 @@ async function evaluateCommentEventInternal(
         properties: {
           review_type: {
             type: 'string',
-            enum: [...VALID_REVIEW_TYPES],
+            enum: [...LLM_TOOL_REVIEW_TYPES],
             description: 'The review scope to request',
           },
           worker_type: {
@@ -412,7 +413,7 @@ async function evaluateCommentEventInternal(
         const rawWorkerType = args['worker_type'];
         const reviewType = typeof rawReviewType === 'string' ? rawReviewType : '';
 
-        if (!(VALID_REVIEW_TYPES as readonly string[]).includes(reviewType)) {
+        if (!(LLM_TOOL_REVIEW_TYPES as readonly string[]).includes(reviewType)) {
           logger.warn({ reviewType }, 'GitHub Agent requested unknown review type');
           return Promise.resolve(JSON.stringify({ error: `Unknown review type: ${reviewType}` }));
         }
