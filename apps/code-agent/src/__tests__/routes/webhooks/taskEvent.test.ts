@@ -133,6 +133,15 @@ describe('POST /internal/webhooks/task-event', () => {
         detectOnPush: vi.fn().mockResolvedValue(undefined),
         reconcile: vi.fn().mockResolvedValue({ processed: 0 }),
       },
+      mergeQueueWatchRepo: {
+        create: vi.fn(),
+        findById: vi.fn(),
+        findActiveByUserAndBranch: vi.fn(),
+        findAllActive: vi.fn(),
+        findByUserAndRepo: vi.fn(),
+        update: vi.fn(),
+        appendMergedPr: vi.fn(),
+      },
     } as ServiceContainer);
 
     app = await buildServer();
