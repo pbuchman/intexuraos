@@ -537,6 +537,18 @@ describe('system-prompt', () => {
     expect(result).not.toContain('[PR REVIEW MODE');
   });
 
+  it('review agent prompt includes plan_review scope definition', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+    });
+
+    expect(result).toContain('plan_review');
+    expect(result).toContain('Plan document validation');
+    expect(result).toContain('task decomposition');
+    expect(result).toContain('Do NOT review for code_quality/security/architecture');
+  });
+
   it('review agent prompt includes PR analysis instructions', () => {
     const result = buildSystemPrompt({
       ...baseParams,
