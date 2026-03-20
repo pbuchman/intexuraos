@@ -1,5 +1,5 @@
 /**
- * Migration 065: Composite indexes for hellscript-agent service
+ * Migration 064: Composite indexes for hellscript-agent service
  *
  * Required for:
  * - listBuffers: userId + updatedAt desc
@@ -8,7 +8,7 @@
  */
 
 export const metadata = {
-  id: '065',
+  id: '064',
   name: 'hellscript-agent-composite-indexes',
   description: 'Composite indexes for hellscript_buffers collection',
   createdAt: '2026-03-20',
