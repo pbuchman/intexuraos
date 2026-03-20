@@ -3,7 +3,6 @@ import { getErrorMessage } from '@intexuraos/common-core';
 import type { ScheduleRepository, ScheduleRepositoryError } from '../domain/ports/schedule-repository.js';
 import {
   normalizeCronSchedule,
-  normalizeScheduleAction,
   type CronSchedule,
   type CreateScheduleInput,
   type ListOptions,
@@ -30,7 +29,7 @@ export class FirestoreScheduleRepository implements ScheduleRepository {
         description: input.description,
         cronExpression: input.cronExpression,
         timezone: input.timezone,
-        action: normalizeScheduleAction(input.action),
+        action: input.action,
         status: 'active',
         lastExecutedAt: null,
         nextExecutionAt: input.nextExecutionAt,
