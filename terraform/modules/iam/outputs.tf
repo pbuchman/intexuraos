@@ -21,6 +21,7 @@ output "service_accounts" {
     chat_agent                   = google_service_account.chat_agent.email
     code_agent                   = google_service_account.code_agent.email
     cron_agent                   = google_service_account.cron_agent.email
+    hellscript_agent             = google_service_account.hellscript_agent.email
   }
 }
 
@@ -122,4 +123,9 @@ output "code_agent_sa" {
 output "cron_agent_sa" {
   description = "Cron Agent service account email"
   value       = google_service_account.cron_agent.email
+}
+
+output "hellscript_agent_sa" {
+  description = "Hellscript Agent service account email"
+  value       = google_service_account.hellscript_agent.email
 }

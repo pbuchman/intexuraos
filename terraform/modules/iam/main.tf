@@ -610,3 +610,29 @@ resource "google_project_iam_member" "cron_agent_logging" {
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.cron_agent.email}"
 }
+
+# Hellscript Agent
+resource "google_service_account" "hellscript_agent" {
+  account_id   = "intexuraos-hellscript-${var.environment}"
+  display_name = "IntexuraOS Hellscript Agent (${var.environment})"
+  description  = "Service account for hellscript-agent Cloud Run deployment"
+}
+
+resource "google_secret_manager_secret_iam_member" "hellscript_agent_secrets" {
+  for_each  = var.secret_ids
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.hellscript_agent.email}"
+}
+
+resource "google_project_iam_member" "hellscript_agent_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.hellscript_agent.email}"
+}
+
+resource "google_project_iam_member" "hellscript_agent_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.hellscript_agent.email}"
+}

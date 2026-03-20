@@ -180,6 +180,7 @@ export interface AppConfig {
   codeAgentUrl: string;
   chatAgentUrl: string;
   cronAgentUrl: string;
+  hellscriptAgentUrl: string;
   appSettingsServiceUrl: string;
   firebaseProjectId: string;
   firebaseApiKey: string;
@@ -1425,6 +1426,19 @@ export interface GitHubEventLogResponse {
   rows: GitHubEventLogRow[];
   nextCursor?: string;
 }
+
+// Hellscript types
+export type {
+  HellscriptBufferSummary,
+  HellscriptEvent,
+  HellscriptDraftVersion,
+  HellscriptWorkspaceResponse,
+  HellscriptMaterializedState,
+  HellscriptImposeRequest,
+  HellscriptImposeResponse,
+  HellscriptIntentKind,
+  HellscriptInterpretedIntent,
+} from './hellscript.js';
 
 // Cron Agent types
 export type {

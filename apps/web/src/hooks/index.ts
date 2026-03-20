@@ -39,3 +39,5 @@ export { useCronSchedules } from './useCronSchedules.js';
 export { useCronExecutions } from './useCronExecutions.js';
 export { useCronServices } from './useCronServices.js';
 export { useScheduleActions } from './useScheduleActions.js';
+export { useHellscriptBuffers } from './useHellscriptBuffers.js';
+export { useHellscriptWorkspace } from './useHellscriptWorkspace.js';
