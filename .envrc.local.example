@@ -49,6 +49,7 @@ export INTEXURAOS_BOOKMARKS_AGENT_URL=http://localhost:8124
 export INTEXURAOS_CALENDAR_AGENT_URL=http://localhost:8125
 export INTEXURAOS_LINEAR_AGENT_URL=http://localhost:8126
 export INTEXURAOS_CRON_AGENT_URL=http://localhost:8130
+export INTEXURAOS_HELLSCRIPT_AGENT_URL=http://localhost:8131
 
 # =============================================================================
 # GCS BUCKETS

@@ -41,6 +41,7 @@ import { createFirestoreDispatchRetryRepository } from '../../infra/firestore/di
 import { createUnifiedEvaluator } from '../../domain/services/unifiedEvaluator.js';
 import type { AutomationLog } from '../../domain/ports/automationLog.js';
 import { createTaskEnqueueService } from '../../infra/services/taskEnqueueServiceImpl.js';
+import { createFirestoreMergeQueueWatchRepository } from '../../infra/firestore/mergeQueueWatchRepository.js';
 
 /**
  * Mock UserServiceClient that returns empty results.
@@ -284,6 +285,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       async detectOnPush() { /* no-op for tests */ },
       async reconcile() { return { processed: 0 }; },
     },
+    mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
   };
 
   setServices(container);

@@ -36,6 +36,7 @@ export function getConfig(): AppConfig {
     codeAgentUrl: getServiceUrl('INTEXURAOS_CODE_AGENT_URL', '/api/code'),
     chatAgentUrl: getServiceUrl('INTEXURAOS_CHAT_AGENT_URL', '/api/chat'),
     cronAgentUrl: getServiceUrl('INTEXURAOS_CRON_AGENT_URL', '/api/cron-agent'),
+    hellscriptAgentUrl: getServiceUrl('INTEXURAOS_HELLSCRIPT_AGENT_URL', '/api/hellscript-agent'),
     appSettingsServiceUrl: getServiceUrl('INTEXURAOS_APP_SETTINGS_SERVICE_URL', '/api/settings'),
     firebaseProjectId: getEnvVar('INTEXURAOS_FIREBASE_PROJECT_ID'),
     firebaseApiKey: getEnvVar('INTEXURAOS_FIREBASE_API_KEY'),

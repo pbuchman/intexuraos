@@ -36,3 +36,5 @@ export { CodeTaskNewPage } from './CodeTaskNewPage.js';
 export { VisualizationsListPage } from './VisualizationsListPage.js';
 export { WorkerSettingsPage } from './WorkerSettingsPage.js';
 export { CronSchedulesPage, CronScheduleViewPage, CronScheduleNewPage, CronExecutionsPage } from './cron-agent/index.js';
+export { HellscriptBuffersPage } from './HellscriptBuffersPage.js';
+export { HellscriptConversationPage } from './HellscriptConversationPage.js';

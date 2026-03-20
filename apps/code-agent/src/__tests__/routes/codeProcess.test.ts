@@ -198,6 +198,15 @@ describe('POST /internal/code/process', () => {
         detectOnPush: vi.fn().mockResolvedValue(undefined),
         reconcile: vi.fn().mockResolvedValue({ processed: 0 }),
       },
+      mergeQueueWatchRepo: {
+        create: vi.fn(),
+        findById: vi.fn(),
+        findActiveByUserAndBranch: vi.fn(),
+        findAllActive: vi.fn(),
+        findByUserAndRepo: vi.fn(),
+        update: vi.fn(),
+        appendMergedPr: vi.fn(),
+      },
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -231,6 +240,7 @@ describe('POST /internal/code/process', () => {
       automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
+      mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
     });
 
     // Set up worker settings for the test user
