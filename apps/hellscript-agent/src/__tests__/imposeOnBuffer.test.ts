@@ -91,12 +91,12 @@ describe('imposeOnBuffer', () => {
       expect(result.ok).toBe(false);
     });
 
-    it('returns error when getBuffer fails for existing bufferId', async () => {
+    it('returns error when getBufferWithState fails for existing bufferId', async () => {
       const createResult = await repository.createBuffer('user-1', 'Buffer');
       expect(createResult.ok).toBe(true);
       if (!createResult.ok) return;
 
-      repository.simulateMethodError('getBuffer', new Error('DB read failed'));
+      repository.simulateMethodError('getBufferWithState', new Error('DB read failed'));
 
       const result = await imposeOnBuffer(deps(), {
         userId: 'user-1',
@@ -191,20 +191,9 @@ describe('imposeOnBuffer', () => {
       }
     });
 
-    it('returns error when getBufferState fails', async () => {
-      repository.simulateMethodError('getBufferState', new Error('Read failed'));
-      interpreter.setNextIntent({
-        kind: 'append_thought',
-        payload: { text: 'thought' },
-      });
-
-      const result = await imposeOnBuffer(deps(), {
-        userId: 'user-1',
-        utterance: 'thought',
-      });
-
-      expect(result.ok).toBe(false);
-    });
+    // Note: getBufferState is no longer called separately in imposeOnBuffer.
+    // For new buffers, state is emptyState() by definition.
+    // For existing buffers, state comes from getBufferWithState().
 
     it('returns error when updateBufferState fails', async () => {
       repository.simulateMethodError('updateBufferState', new Error('Write failed'));
