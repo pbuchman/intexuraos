@@ -78,7 +78,10 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
         }
         const repoData = (await repoResponse.json()) as { permissions?: { push?: boolean } };
         if (repoData.permissions?.push !== true) {
-          return await reply.fail('UNAUTHORIZED', 'You do not have push access to this repository');
+          return await reply.code(403).send({
+            success: false,
+            error: { code: 'FORBIDDEN', message: 'You do not have push access to this repository' },
+          });
         }
 
         // Create the watch
@@ -120,11 +123,20 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
 
         const findResult = await mergeQueueWatchRepo.findById(watchId);
         if (!findResult.ok) {
+          if (findResult.error.code === 'NOT_FOUND') {
+            return await reply.code(404).send({
+              success: false,
+              error: { code: 'NOT_FOUND', message: findResult.error.message },
+            });
+          }
           return await reply.fail('INTERNAL_ERROR', findResult.error.message);
         }
 
         if (findResult.value.userId !== userId) {
-          return await reply.fail('UNAUTHORIZED', 'Not authorized to cancel this watch');
+          return await reply.code(403).send({
+            success: false,
+            error: { code: 'FORBIDDEN', message: 'Not authorized to cancel this watch' },
+          });
         }
 
         const updateResult = await mergeQueueWatchRepo.update(watchId, {
