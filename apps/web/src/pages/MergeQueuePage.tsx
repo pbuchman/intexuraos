@@ -126,9 +126,10 @@ export function MergeQueuePage(): React.JSX.Element {
         const res = await listPrs(token, DEFAULT_OWNER, DEFAULT_REPO, branch);
         if (selectedBranchRef.current === branch) {
           setPrs(res.pullRequests);
+          setPrsError(null);
         }
       } catch {
-        // Silently fail polling
+        // Silently fail polling — initial fetchPrs error banner clears on next successful poll
       }
     };
 
