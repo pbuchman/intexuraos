@@ -1622,6 +1622,33 @@ describe('createReviewTask', () => {
       }
     });
 
+    it('truncates long issue descriptions in review prompt', async () => {
+      const linearAgentClient = createFakeLinearAgentClient();
+      const longDescription = 'A'.repeat(5000);
+      vi.mocked(linearAgentClient.getIssueDescription).mockResolvedValue(
+        ok(longDescription)
+      );
+      const deps = createFakeDeps({ linearAgentClient });
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-desc-trunc',
+        prTitle: '[INT-300] Big issue',
+      });
+
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].prompt).toContain('### Issue Requirements');
+        expect(createCall[0].prompt).not.toContain(longDescription);
+        expect(createCall[0].prompt).toContain('Truncated');
+        expect(createCall[0].prompt).toContain('full description available in the Linear issue');
+      }
+    });
+
     it('creates prompt without requirements when getIssueDescription fails', async () => {
       const linearAgentClient = createFakeLinearAgentClient();
       vi.mocked(linearAgentClient.getIssueDescription).mockResolvedValue(

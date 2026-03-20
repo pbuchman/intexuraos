@@ -122,6 +122,7 @@ async function resolveLinearIssueId(
 }
 
 const PR_BODY_MAX_LENGTH = 500;
+const ISSUE_DESCRIPTION_MAX_LENGTH = 4000;
 
 function buildLinearIssueDescription(request: CreateReviewTaskRequest): string {
   const { repository, prNumber, prBody, reviewTypes, reviewComment } = request;
@@ -188,7 +189,9 @@ function buildReviewPrompt(request: CreateReviewTaskRequest & {
       '',
       'The following is the Linear issue description. This defines what the implementation must achieve.',
       '',
-      request.issueDescription,
+      request.issueDescription.length > ISSUE_DESCRIPTION_MAX_LENGTH
+        ? `${request.issueDescription.slice(0, ISSUE_DESCRIPTION_MAX_LENGTH)}...\n\n(Truncated — full description available in the Linear issue)`
+        : request.issueDescription,
     );
 
     if (request.planDocumentPath !== undefined) {
