@@ -1,12 +1,12 @@
 /**
- * Migration 064: Composite index for merge_queue_watches collection
+ * Migration 065: Composite index for merge_queue_watches collection
  *
  * Required for:
  * - findActiveByUserAndBranch: userId + owner + repo + baseBranch + status
  */
 
 export const metadata = {
-  id: '064',
+  id: '065',
   name: 'merge-queue-watches-composite-index',
   description: 'Composite index for merge_queue_watches findActiveByUserAndBranch query',
   createdAt: '2026-03-20',
