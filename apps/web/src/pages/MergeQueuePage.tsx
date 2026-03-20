@@ -7,7 +7,7 @@ import { WatchStatusCard } from '@/components/merge-queue/WatchStatusCard';
 import { PrStatusPipeline } from '@/components/merge-queue/PrStatusPipeline';
 import { PrList } from '@/components/merge-queue/PrList';
 import { MergeHistoryTimeline } from '@/components/merge-queue/MergeHistoryTimeline';
-import { getPrStatus } from '@/components/merge-queue/PrRow';
+import { getPrStatus } from '@/utils/mergeQueueStatus';
 import type { MergeQueueBranch, MergeQueuePr, MergeQueueWatch, PrFilterStatus } from '@/types';
 
 const DEFAULT_OWNER = 'pbuchman';
@@ -32,6 +32,9 @@ export function MergeQueuePage(): React.JSX.Element {
 
   const selectedBranchRef = useRef(selectedBranch);
   selectedBranchRef.current = selectedBranch;
+
+  const watchesRef = useRef(watches);
+  watchesRef.current = watches;
 
   // Fetch branches and watches on mount
   const fetchInitialData = useCallback(async (): Promise<void> => {
@@ -131,20 +134,21 @@ export function MergeQueuePage(): React.JSX.Element {
     };
   }, [getAccessToken]);
 
-  // Toggle watch handler
+  // Toggle watch handler — reads watches via ref to avoid re-creation on every poll
   const handleToggleWatch = useCallback(async (): Promise<void> => {
-    if (selectedBranch === null) return;
+    const branch = selectedBranchRef.current;
+    if (branch === null) return;
     setIsToggling(true);
     try {
       const token = await getAccessToken();
-      const activeWatch = watches.find(
-        (w) => w.baseBranch === selectedBranch && w.status === 'active'
+      const activeWatch = watchesRef.current.find(
+        (w) => w.baseBranch === branch && w.status === 'active'
       );
 
       if (activeWatch !== undefined) {
         await cancelWatch(token, activeWatch.watchId);
       } else {
-        await createWatch(token, DEFAULT_OWNER, DEFAULT_REPO, selectedBranch);
+        await createWatch(token, DEFAULT_OWNER, DEFAULT_REPO, branch);
       }
 
       // Refetch watches immediately
@@ -155,7 +159,11 @@ export function MergeQueuePage(): React.JSX.Element {
     } finally {
       setIsToggling(false);
     }
-  }, [selectedBranch, watches, getAccessToken]);
+  }, [getAccessToken]);
+
+  const stableOnToggle = useCallback((): void => {
+    void handleToggleWatch();
+  }, [handleToggleWatch]);
 
   const handleToggleFilter = useCallback((status: PrFilterStatus): void => {
     setActiveFilters((prev) => {
@@ -169,17 +177,12 @@ export function MergeQueuePage(): React.JSX.Element {
     });
   }, []);
 
-  // Compute subtitle stats
-  const open = prs.length;
-  const mergeable = prs.filter((p) => p.mergeable === true && p.checksStatus === 'success').length;
-  const blocked = prs.filter((p) => p.mergeable === false || p.checksStatus === 'failure').length;
-  const pending = open - mergeable - blocked;
-
-  // Compute filter counts
+  // Compute filter counts (single source of truth for stats)
   const filterCounts: Record<PrFilterStatus, number> = { mergeable: 0, pending: 0, blocked: 0 };
   for (const pr of prs) {
     filterCounts[getPrStatus(pr)] += 1;
   }
+  const open = prs.length;
 
   // Find active watch for selected branch
   const currentWatch = selectedBranch !== null
@@ -243,7 +246,7 @@ export function MergeQueuePage(): React.JSX.Element {
         <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Merge Queue</h2>
         {selectedBranch !== null && !prsLoading ? (
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            {String(open)} open &middot; {String(mergeable)} mergeable &middot; {String(blocked)} blocked &middot; {String(pending)} pending
+            {String(open)} open &middot; {String(filterCounts.mergeable)} mergeable &middot; {String(filterCounts.blocked)} blocked &middot; {String(filterCounts.pending)} pending
           </p>
         ) : null}
       </div>
@@ -261,7 +264,7 @@ export function MergeQueuePage(): React.JSX.Element {
       <div className="mb-4">
         <WatchStatusCard
           watch={currentWatch}
-          onToggle={(): void => { void handleToggleWatch(); }}
+          onToggle={stableOnToggle}
           isToggling={isToggling}
         />
       </div>

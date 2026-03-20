@@ -1,15 +1,10 @@
 import { formatRelative } from '@/utils/dateFormat';
+import { getPrStatus } from '@/utils/mergeQueueStatus';
 import type { MergeQueuePr, PrFilterStatus } from '@/types';
 
 interface PrRowProps {
   pr: MergeQueuePr;
   isNextToMerge: boolean;
-}
-
-export function getPrStatus(pr: MergeQueuePr): PrFilterStatus {
-  if (pr.mergeable === true && pr.checksStatus === 'success') return 'mergeable';
-  if (pr.checksStatus === 'pending' || pr.mergeable === null) return 'pending';
-  return 'blocked';
 }
 
 const ACCENT_SHADOW: Record<PrFilterStatus, string> = {
@@ -24,7 +19,7 @@ const STATUS_BADGE: Record<PrFilterStatus, string> = {
   blocked: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400',
 };
 
-const CHECKS_BADGE: Record<string, string> = {
+const CHECKS_BADGE: Record<MergeQueuePr['checksStatus'], string> = {
   success: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400',
   pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400',
   failure: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400',
@@ -65,7 +60,7 @@ export function PrRow({ pr, isNextToMerge }: PrRowProps): React.JSX.Element {
         <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_BADGE[status]}`}>
           {status}
         </span>
-        <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-medium ${CHECKS_BADGE[pr.checksStatus] ?? ''}`}>
+        <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-medium ${CHECKS_BADGE[pr.checksStatus]}`}>
           {pr.checksStatus}
         </span>
       </div>
@@ -95,7 +90,7 @@ export function PrRow({ pr, isNextToMerge }: PrRowProps): React.JSX.Element {
           <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_BADGE[status]}`}>
             {status}
           </span>
-          <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${CHECKS_BADGE[pr.checksStatus] ?? ''}`}>
+          <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${CHECKS_BADGE[pr.checksStatus]}`}>
             {pr.checksStatus}
           </span>
         </div>
