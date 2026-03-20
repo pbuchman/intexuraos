@@ -866,6 +866,11 @@ describe('GitHubWebhookRules', () => {
         expect(isPlanFile('docs/readme.md')).toBe(false);
         expect(isPlanFile('src/feature.md')).toBe(false);
       });
+
+      it('does not match files with plan as a substring', () => {
+        expect(isPlanFile('docs/explanation.md')).toBe(false);
+        expect(isPlanFile('docs/airplane-mode.md')).toBe(false);
+      });
     });
   });
 
