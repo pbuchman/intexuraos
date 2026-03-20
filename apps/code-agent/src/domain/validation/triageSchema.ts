@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const VALID_REVIEW_TYPES = ['code_quality', 'security', 'architecture'] as const;
+const VALID_REVIEW_TYPES = ['code_quality', 'security', 'architecture', 'plan_review'] as const;
 
 export const TriageSkipSchema = z.object({
   action: z.literal('skip'),

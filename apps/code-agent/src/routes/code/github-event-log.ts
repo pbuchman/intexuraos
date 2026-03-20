@@ -27,7 +27,7 @@ interface GitHubEventLogRow {
   decidedBy: 'hard_rules' | 'github_agent' | 'webhook_route' | null;
   reason: string | null;
   dispatchAction: 'create_task' | 'send_message' | 'create_review_task' | null;
-  reviewTypes: ('code_quality' | 'security' | 'architecture')[];
+  reviewTypes: ('code_quality' | 'security' | 'architecture' | 'plan_review')[];
   taskId: string | null;
   workerType: string | null;
   decisionLatencyMs: number | null;
@@ -79,7 +79,7 @@ const rowSchema = {
     dispatchAction: { type: ['string', 'null'], enum: ['create_task', 'send_message', 'create_review_task', null] },
     reviewTypes: {
       type: 'array',
-      items: { type: 'string', enum: ['code_quality', 'security', 'architecture'] },
+      items: { type: 'string', enum: ['code_quality', 'security', 'architecture', 'plan_review'] },
     },
     taskId: { type: ['string', 'null'] },
     workerType: { type: ['string', 'null'] },
