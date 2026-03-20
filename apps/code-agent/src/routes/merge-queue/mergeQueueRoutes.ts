@@ -27,9 +27,12 @@ function getUserId(request: FastifyRequest): string {
   /* v8 ignore stop @preserve */
 }
 
+const GITHUB_FETCH_TIMEOUT_MS = 10_000;
+
 async function resolveGitHubUsername(token: string): Promise<string | null> {
   const response = await fetch(`${GITHUB_API}/user`, {
     headers: githubHeaders(token),
+    signal: AbortSignal.timeout(GITHUB_FETCH_TIMEOUT_MS),
   });
   if (!response.ok) return null;
   const data = (await response.json()) as { login?: string };
@@ -78,6 +81,7 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
         // Verify push access
         const repoResponse = await fetch(`${GITHUB_API}/repos/${owner}/${repo}`, {
           headers: githubHeaders(token),
+          signal: AbortSignal.timeout(GITHUB_FETCH_TIMEOUT_MS),
         });
         if (!repoResponse.ok) {
           return await reply.fail('INTERNAL_ERROR', 'Failed to verify repository access');
