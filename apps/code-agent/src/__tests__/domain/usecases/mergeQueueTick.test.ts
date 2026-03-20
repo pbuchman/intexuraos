@@ -60,6 +60,7 @@ function makePrDetails(overrides: Partial<GitHubPullRequestDetails> = {}): GitHu
     number: 1,
     title: 'Test PR',
     body: null,
+    state: 'open',
     authorLogin: 'testuser',
     baseBranch: 'main',
     headBranch: 'feature',

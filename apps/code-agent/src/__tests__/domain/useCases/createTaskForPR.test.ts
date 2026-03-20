@@ -182,6 +182,7 @@ function createMockGitHubPRClient(): GitHubPRClient {
         number: 1,
         title: 'Test PR',
         body: null,
+        state: 'open',
         authorLogin: 'alice',
         baseBranch: 'main',
         headBranch: 'feature/test',

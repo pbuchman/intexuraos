@@ -12,6 +12,7 @@ vi.mock('jose', () => ({
   }),
 }));
 
+import { EMPTY_RECONCILE_RESULT } from '../domain/services/mergeConflictDetector.js';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
@@ -166,7 +167,7 @@ describe('server configuration', () => {
       taskEnqueueService: {} as never,
       mergeConflictDetector: {
         async detectOnPush() { /* no-op */ },
-        async reconcile() { return { processed: 0 }; },
+        async reconcile() { return EMPTY_RECONCILE_RESULT; },
       },
       mergeQueueWatchRepo: {
         create: vi.fn(),
