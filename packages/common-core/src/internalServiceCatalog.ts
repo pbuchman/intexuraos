@@ -153,6 +153,13 @@ export const INTERNAL_API_SERVICE_CATALOG: InternalApiServiceCatalogEntry[] = [
     baseUrlEnvVar: 'INTEXURAOS_CRON_AGENT_URL',
     openApiUrlEnvVar: 'INTEXURAOS_CRON_AGENT_OPENAPI_URL',
   },
+  {
+    key: 'hellscript-agent',
+    name: 'Hellscript Agent',
+    apiDocsName: 'Hellscript Agent API',
+    baseUrlEnvVar: 'INTEXURAOS_HELLSCRIPT_AGENT_URL',
+    openApiUrlEnvVar: 'INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL',
+  },
 ];
 
 export const INTERNAL_API_BASE_URL_ENV_VARS = INTERNAL_API_SERVICE_CATALOG.map(
