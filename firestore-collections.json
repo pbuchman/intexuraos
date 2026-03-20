@@ -214,6 +214,11 @@
     "cron_executions": {
       "owner": "cron-agent",
       "description": "Execution log entries for cron schedule runs"
+    },
+    "hellscript_buffers": {
+      "owner": "hellscript-agent",
+      "description": "Hellscript thought buffers with materialized state",
+      "subcollections": ["events", "draft_versions"]
     }
   }
 }

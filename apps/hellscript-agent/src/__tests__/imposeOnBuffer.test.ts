@@ -1,0 +1,422 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import pino from 'pino';
+import { FakeHellscriptRepository } from './fakeHellscriptRepository.js';
+import { FakeIntentInterpreter } from './fakeIntentInterpreter.js';
+import { FakeDraftGenerator } from './fakeDraftGenerator.js';
+import { imposeOnBuffer } from '../domain/usecases/imposeOnBuffer.js';
+const logger = pino({ level: 'silent' });
+
+describe('imposeOnBuffer', () => {
+  let repository: FakeHellscriptRepository;
+  let interpreter: FakeIntentInterpreter;
+  let draftGenerator: FakeDraftGenerator;
+
+  beforeEach(() => {
+    repository = new FakeHellscriptRepository();
+    interpreter = new FakeIntentInterpreter();
+    draftGenerator = new FakeDraftGenerator();
+  });
+
+  function deps(): { repository: FakeHellscriptRepository; interpreter: FakeIntentInterpreter; draftGenerator: FakeDraftGenerator; logger: typeof logger } {
+    return { repository, interpreter, draftGenerator, logger };
+  }
+
+  describe('buffer creation', () => {
+    it('creates new buffer when bufferId is omitted', async () => {
+      interpreter.setNextIntent({
+        kind: 'append_thought',
+        payload: { text: 'My thought' },
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'My thought',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.bufferId).toBeDefined();
+        expect(result.value.action).toBe('append_thought');
+      }
+    });
+
+    it('uses existing buffer when bufferId is provided', async () => {
+      const createResult = await repository.createBuffer('user-1', 'My buffer');
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      interpreter.setNextIntent({
+        kind: 'append_thought',
+        payload: { text: 'New thought' },
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        bufferId: createResult.value.id,
+        utterance: 'New thought',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.bufferId).toBe(createResult.value.id);
+      }
+    });
+
+    it('returns error when buffer not found', async () => {
+      interpreter.setNextIntent({
+        kind: 'append_thought',
+        payload: { text: 'thought' },
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        bufferId: 'nonexistent',
+        utterance: 'thought',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Buffer not found');
+      }
+    });
+
+    it('returns error when createBuffer fails', async () => {
+      repository.simulateMethodError('createBuffer', new Error('DB down'));
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'thought',
+      });
+
+      expect(result.ok).toBe(false);
+    });
+
+    it('returns error when getBuffer fails for existing bufferId', async () => {
+      const createResult = await repository.createBuffer('user-1', 'Buffer');
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      repository.simulateMethodError('getBuffer', new Error('DB read failed'));
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        bufferId: createResult.value.id,
+        utterance: 'thought',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('DB read failed');
+      }
+    });
+  });
+
+  describe('event storage', () => {
+    it('stores raw utterance as event', async () => {
+      interpreter.setNextIntent({
+        kind: 'append_thought',
+        payload: { text: 'My thought' },
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'My thought',
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const events = await repository.getEvents(result.value.bufferId);
+      expect(events.ok).toBe(true);
+      if (events.ok) {
+        expect(events.value).toHaveLength(1);
+        expect(events.value[0]?.rawUtterance).toBe('My thought');
+      }
+    });
+
+    it('returns error when saveEvent fails', async () => {
+      repository.simulateMethodError('saveEvent', new Error('Write failed'));
+      interpreter.setNextIntent({
+        kind: 'append_thought',
+        payload: { text: 'thought' },
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'thought',
+      });
+
+      expect(result.ok).toBe(false);
+    });
+  });
+
+  describe('state transitions', () => {
+    it('applies append_thought intent', async () => {
+      interpreter.setNextIntent({
+        kind: 'append_thought',
+        payload: { text: 'First idea' },
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'First idea',
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const stateResult = await repository.getBufferState(result.value.bufferId);
+      expect(stateResult.ok).toBe(true);
+      if (stateResult.ok && stateResult.value !== null) {
+        expect(stateResult.value.thoughts).toHaveLength(1);
+        expect(stateResult.value.thoughts[0]?.text).toBe('First idea');
+      }
+    });
+
+    it('applies fallback_append intent', async () => {
+      interpreter.setNextIntent({
+        kind: 'fallback_append',
+        payload: { text: 'Unclear thing' },
+        fallbackReason: 'Could not classify',
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'Unclear thing',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('fallback_append');
+      }
+    });
+
+    it('returns error when getBufferState fails', async () => {
+      repository.simulateMethodError('getBufferState', new Error('Read failed'));
+      interpreter.setNextIntent({
+        kind: 'append_thought',
+        payload: { text: 'thought' },
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'thought',
+      });
+
+      expect(result.ok).toBe(false);
+    });
+
+    it('returns error when updateBufferState fails', async () => {
+      repository.simulateMethodError('updateBufferState', new Error('Write failed'));
+      interpreter.setNextIntent({
+        kind: 'append_thought',
+        payload: { text: 'thought' },
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'thought',
+      });
+
+      expect(result.ok).toBe(false);
+    });
+  });
+
+  describe('draft generation', () => {
+    it('generates draft for update_draft intent', async () => {
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'Write a blog post' },
+      });
+      draftGenerator.setNextMarkdown('# My Blog Post\n\nGreat content.');
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'Write a blog post',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('update_draft');
+        expect(result.value.latestDraftVersionId).toBeDefined();
+      }
+    });
+
+    it('does not generate draft for non-update_draft intents', async () => {
+      interpreter.setNextIntent({
+        kind: 'append_thought',
+        payload: { text: 'Just a thought' },
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'Just a thought',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.latestDraftVersionId).toBeUndefined();
+      }
+      expect(draftGenerator.getCalls()).toHaveLength(0);
+    });
+
+    it('increments version numbers', async () => {
+      const createResult = await repository.createBuffer('user-1', 'Buffer');
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const bufferId = createResult.value.id;
+
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'First draft' },
+      });
+      draftGenerator.setNextMarkdown('# V1');
+
+      await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        bufferId,
+        utterance: 'First draft',
+      });
+
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'Second draft' },
+      });
+      draftGenerator.setNextMarkdown('# V2');
+
+      await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        bufferId,
+        utterance: 'Second draft',
+      });
+
+      const draftsResult = await repository.getDraftVersions(bufferId);
+      expect(draftsResult.ok).toBe(true);
+      if (draftsResult.ok) {
+        expect(draftsResult.value).toHaveLength(2);
+        expect(draftsResult.value[0]?.versionNumber).toBe(1);
+        expect(draftsResult.value[1]?.versionNumber).toBe(2);
+      }
+    });
+
+    it('passes prior draft to generator', async () => {
+      const createResult = await repository.createBuffer('user-1', 'Buffer');
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const bufferId = createResult.value.id;
+
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'First draft' },
+      });
+      draftGenerator.setNextMarkdown('# V1');
+
+      await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        bufferId,
+        utterance: 'First draft',
+      });
+
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'Improve it' },
+      });
+      draftGenerator.setNextMarkdown('# V2');
+
+      await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        bufferId,
+        utterance: 'Improve it',
+      });
+
+      const calls = draftGenerator.getCalls();
+      expect(calls).toHaveLength(2);
+      expect(calls[0]?.priorDraft).toBeNull();
+      expect(calls[1]?.priorDraft).toBe('# V1');
+    });
+
+    it('returns error when getDraftVersions fails', async () => {
+      repository.simulateMethodError('getDraftVersions', new Error('Read failed'));
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'draft' },
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'draft',
+      });
+
+      expect(result.ok).toBe(false);
+    });
+
+    it('returns error when saveDraftVersion fails', async () => {
+      repository.simulateMethodError('saveDraftVersion', new Error('Write failed'));
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'draft' },
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'draft',
+      });
+
+      expect(result.ok).toBe(false);
+    });
+
+    it('returns error when updateBufferDraftInfo fails', async () => {
+      repository.simulateMethodError('updateBufferDraftInfo', new Error('Write failed'));
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'draft' },
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'draft',
+      });
+
+      expect(result.ok).toBe(false);
+    });
+
+    it('uses utterance as requestText when payload text missing', async () => {
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: {},
+      });
+      draftGenerator.setNextMarkdown('# Draft');
+
+      await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'Generate my draft now',
+      });
+
+      const calls = draftGenerator.getCalls();
+      expect(calls[0]?.requestText).toBe('Generate my draft now');
+    });
+  });
+
+  describe('return value', () => {
+    it('returns bufferId and action for non-draft intents', async () => {
+      interpreter.setNextIntent({
+        kind: 'set_style_instructions',
+        payload: { instructions: 'Be concise' },
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'Be concise',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.bufferId).toBeDefined();
+        expect(result.value.action).toBe('set_style_instructions');
+        expect(result.value.latestDraftVersionId).toBeUndefined();
+      }
+    });
+  });
+});
