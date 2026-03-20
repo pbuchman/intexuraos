@@ -20,10 +20,10 @@ import { resolveLoginForTaskCreation } from '../services/gitHubDispatchService.j
 import { isReviewCommandComment, normalizeReviewWorkerType, SUPPORTED_REVIEW_WORKER_TYPES } from '../utils/reviewTriage.js';
 import { TriageSkipSchema, TriageReviewSchema } from '../validation/triageSchema.js';
 import { buildTriageRepairMessage } from '../validation/buildTriageRepairMessage.js';
-import { PlanDocumentRule } from '../services/gitHubWebhookRules.js';
+import { evaluatePlanFiles } from '../services/gitHubWebhookRules.js';
 import type { ZodError } from 'zod';
 
-const VALID_REVIEW_TYPES = ['code_quality', 'security', 'architecture', 'plan_review'] as const;
+const VALID_REVIEW_TYPES = ['code_quality', 'security', 'architecture'] as const;
 const VALID_DISPATCH_TEMPLATES = ['pr_comment', 'bot_review_edit'] as const;
 
 function formatZodErrors(error: ZodError): string {
@@ -222,9 +222,8 @@ async function evaluatePREventInternal(
   const files = filesResult.value; // @allow-result-access -- narrowed by !filesResult.ok
 
   // Deterministic plan-only PR detection — no LLM triage needed
-  const planRule = new PlanDocumentRule();
-  const planResult = planRule.evaluate(files);
-  if (planResult.action === 'dispatch' && planResult.reason === 'PLAN_ONLY_PR') {
+  const planResult = evaluatePlanFiles(files);
+  if (planResult.action === 'dispatch') {
     logger.info(
       { repository: event.repository, prNumber: event.pullRequestNumber, fileCount: files.length },
       'Plan-only PR detected — dispatching plan_review without LLM triage'

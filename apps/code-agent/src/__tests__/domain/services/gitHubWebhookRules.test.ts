@@ -8,7 +8,8 @@ import {
   BotReviewEditRule,
   CodeWorkerOutputRule,
   GitHubWebhookRules,
-  PlanDocumentRule,
+  isPlanFile,
+  evaluatePlanFiles,
 } from '../../../domain/services/gitHubWebhookRules.js';
 
 import { describe, it, expect } from 'vitest';
@@ -791,16 +792,14 @@ describe('GitHubWebhookRules', () => {
     });
   });
 
-  describe('PlanDocumentRule', () => {
-    const rule = new PlanDocumentRule();
-
-    describe('evaluate', () => {
+  describe('plan document detection', () => {
+    describe('evaluatePlanFiles', () => {
       it('returns dispatch with plan_review for plan-only PR', () => {
         const files = [
           { filename: 'docs/plans/2026-03-20-my-plan.md' },
           { filename: 'docs/superpowers/plans/feature-plan.md' },
         ];
-        const result = rule.evaluate(files);
+        const result = evaluatePlanFiles(files);
 
         expect(result).toEqual({
           action: 'dispatch',
@@ -814,7 +813,7 @@ describe('GitHubWebhookRules', () => {
           { filename: 'docs/plans/2026-03-20-my-plan.md' },
           { filename: 'src/index.ts' },
         ];
-        const result = rule.evaluate(files);
+        const result = evaluatePlanFiles(files);
 
         expect(result).toEqual({
           action: 'needs_triage',
@@ -827,7 +826,7 @@ describe('GitHubWebhookRules', () => {
           { filename: 'src/index.ts' },
           { filename: 'src/utils.ts' },
         ];
-        const result = rule.evaluate(files);
+        const result = evaluatePlanFiles(files);
 
         expect(result).toEqual({
           action: 'needs_triage',
@@ -836,7 +835,7 @@ describe('GitHubWebhookRules', () => {
       });
 
       it('returns needs_triage for empty files array', () => {
-        const result = rule.evaluate([]);
+        const result = evaluatePlanFiles([]);
 
         expect(result).toEqual({
           action: 'needs_triage',
@@ -847,25 +846,25 @@ describe('GitHubWebhookRules', () => {
 
     describe('isPlanFile', () => {
       it('matches plan file in plans directory', () => {
-        expect(PlanDocumentRule.isPlanFile('docs/superpowers/plans/2026-03-20-foo.md')).toBe(true);
+        expect(isPlanFile('docs/superpowers/plans/2026-03-20-foo.md')).toBe(true);
       });
 
       it('matches plan file with plan in filename', () => {
-        expect(PlanDocumentRule.isPlanFile('some/path/my-plan-v2.md')).toBe(true);
+        expect(isPlanFile('some/path/my-plan-v2.md')).toBe(true);
       });
 
       it('does not match non-md file with plan in name', () => {
-        expect(PlanDocumentRule.isPlanFile('src/planner.ts')).toBe(false);
+        expect(isPlanFile('src/planner.ts')).toBe(false);
       });
 
       it('matches case-insensitively', () => {
-        expect(PlanDocumentRule.isPlanFile('docs/PLAN.md')).toBe(true);
-        expect(PlanDocumentRule.isPlanFile('docs/My-Plan.MD')).toBe(true);
+        expect(isPlanFile('docs/PLAN.md')).toBe(true);
+        expect(isPlanFile('docs/My-Plan.MD')).toBe(true);
       });
 
       it('does not match md files without plan in path', () => {
-        expect(PlanDocumentRule.isPlanFile('docs/readme.md')).toBe(false);
-        expect(PlanDocumentRule.isPlanFile('src/feature.md')).toBe(false);
+        expect(isPlanFile('docs/readme.md')).toBe(false);
+        expect(isPlanFile('src/feature.md')).toBe(false);
       });
     });
   });

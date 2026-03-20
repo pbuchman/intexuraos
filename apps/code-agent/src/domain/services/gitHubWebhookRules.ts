@@ -307,44 +307,42 @@ export class BotReviewEditRule implements WebhookRule {
 }
 
 /**
- * Rule that detects plan-only PRs and short-circuits to plan_review.
- * Uses file path pattern matching — not in the standard webhook rule chain
+ * Plan document detection — not in the standard webhook rule chain
  * because it requires file data that isn't available on GitHubPREvent.
  */
-export class PlanDocumentRule {
-  /**
-   * Check if a filename matches the plan document pattern.
-   * Matches any path containing "plan" (case-insensitive) that ends with ".md".
-   */
-  static isPlanFile(filename: string): boolean {
-    const lower = filename.toLowerCase();
-    return lower.includes('plan') && lower.endsWith('.md');
+
+/**
+ * Check if a filename matches the plan document pattern.
+ * Matches any path containing "plan" (case-insensitive) that ends with ".md".
+ */
+export function isPlanFile(filename: string): boolean {
+  const lower = filename.toLowerCase();
+  return lower.includes('plan') && lower.endsWith('.md');
+}
+
+/**
+ * Evaluate a set of PR files for plan document detection.
+ *
+ * - All files are plan docs → dispatch (plan_review)
+ * - Mix of plan and code files → needs_triage (LLM handles code review)
+ * - No plan files → needs_triage (standard triage)
+ */
+export function evaluatePlanFiles(files: { filename: string }[]): RuleOutcome {
+  if (files.length === 0) {
+    return { action: 'needs_triage', reason: 'NO_FILES_TO_EVALUATE' };
   }
 
-  /**
-   * Evaluate a set of PR files for plan document detection.
-   *
-   * - All files are plan docs → dispatch (plan_review)
-   * - Mix of plan and code files → needs_triage (LLM handles code review)
-   * - No plan files → needs_triage (standard triage)
-   */
-  evaluate(files: { filename: string }[]): RuleOutcome {
-    if (files.length === 0) {
-      return { action: 'needs_triage', reason: 'NO_FILES_TO_EVALUATE' };
-    }
+  const allPlan = files.every((f) => isPlanFile(f.filename));
 
-    const allPlan = files.every((f) => PlanDocumentRule.isPlanFile(f.filename));
-
-    if (allPlan) {
-      return {
-        action: 'dispatch',
-        reason: 'PLAN_ONLY_PR',
-        context: { reviewType: 'plan_review' },
-      };
-    }
-
-    return { action: 'needs_triage', reason: 'NOT_PLAN_ONLY_PR' };
+  if (allPlan) {
+    return {
+      action: 'dispatch',
+      reason: 'PLAN_ONLY_PR',
+      context: { reviewType: 'plan_review' },
+    };
   }
+
+  return { action: 'needs_triage', reason: 'NOT_PLAN_ONLY_PR' };
 }
 
 export interface WebhookRulesService {

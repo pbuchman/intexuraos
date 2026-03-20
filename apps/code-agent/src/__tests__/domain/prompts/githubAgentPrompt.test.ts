@@ -122,7 +122,7 @@ describe('githubAgentPrompt', () => {
       expect(result).toContain('(no files)');
     });
 
-    it('includes plan_review in review type guidelines', () => {
+    it('mentions plan_review routing in review type guidelines', () => {
       const result = githubAgentPrompt.build({
         repository: 'owner/repo',
         prNumber: 1,
@@ -135,7 +135,7 @@ describe('githubAgentPrompt', () => {
       });
 
       expect(result).toContain('plan_review');
-      expect(result).toContain('Plan document review');
+      expect(result).toContain('automatically routed');
     });
 
     it('skip instruction excludes plan docs', () => {
