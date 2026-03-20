@@ -17,8 +17,12 @@ export function HellscriptComposer({
     const trimmed = text.trim();
     if (trimmed === '' || disabled) return;
 
-    setText('');
-    await onSubmit(trimmed);
+    try {
+      await onSubmit(trimmed);
+      setText('');
+    } catch {
+      // Text preserved for retry; error display handled by useHellscriptWorkspace
+    }
     textareaRef.current?.focus();
   };
 
@@ -40,6 +44,7 @@ export function HellscriptComposer({
         onKeyDown={handleKeyDown}
         placeholder="Type a thought... (Enter to send, Shift+Enter for newline)"
         disabled={disabled}
+        maxLength={10000}
         rows={3}
         className="flex-1 resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:border-blue-400"
       />
