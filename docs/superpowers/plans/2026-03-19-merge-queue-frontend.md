@@ -306,6 +306,8 @@ Five states:
 
 Toggle switch: CSS-only implementation matching the mockup v2. When `isToggling` is true, disable the toggle and show a small spinner.
 
+**Responsive layout:** On desktop, the toggle is positioned inline to the right of the status label. On mobile (below `lg` breakpoint), the toggle must stack below the label to avoid horizontal overflow. Use `flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2` for the card header row containing the label and toggle.
+
 Import `formatRelative` from `@/utils/dateFormat` for timestamps.
 
 Toggling ON → calls `createWatch`. Toggling OFF → calls `cancelWatch`.
@@ -344,6 +346,7 @@ Card row matching `IssueGroupRow` pattern:
 - `isNextToMerge`: show blue indicator dot
 - Non-eligible: `opacity-50` + title tooltip
 - PR number as blue monospace link to `htmlUrl`
+- PR title column: use `min-w-0 overflow-hidden text-ellipsis whitespace-nowrap` to truncate long titles in the grid layout
 - Show "Created {date}" in subtitle
 - Status + Checks as rounded-full badges
 
@@ -452,7 +455,7 @@ const DEFAULT_REPO = 'intexuraos';
 - **API error on initial load**: Show error banner (red card with retry button), no other components
 - **Empty branches** (no open PRs in repo): Show empty state: "No open pull requests found in {owner}/{repo}"
 - **Empty PRs for branch**: Show empty state: "No open PRs targeting {branch}"
-- **PR list loading**: Show skeleton/spinner in the PR list area while `prsLoading` is true
+- **PR list loading**: Show a loading skeleton in the PR list area while `prsLoading` is true. Use 3 placeholder card rows with `animate-pulse` background (`bg-slate-200 dark:bg-slate-700 rounded-lg h-14`) to indicate content is loading. This avoids layout shift when PRs load in.
 
 **PageHeader subtitle:**
 
