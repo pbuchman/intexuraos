@@ -55,17 +55,42 @@ function getDecisionFilter(
   return 'completed';
 }
 
-function getLocalStorageItem<T>(key: string, defaultValue: T): T {
+function getLocalStorageItem<T>(
+  key: string,
+  defaultValue: T,
+  validate?: (v: unknown) => v is T,
+): T {
   try {
     const stored = localStorage.getItem(key);
     if (stored === null) {
       return defaultValue;
     }
-    return JSON.parse(stored) as T;
+    const parsed: unknown = JSON.parse(stored);
+    if (validate !== undefined && !validate(parsed)) {
+      return defaultValue;
+    }
+    return parsed as T;
   } catch {
     return defaultValue;
   }
 }
+
+// Validators for localStorage data shape
+const isValidDecisionFilterRecord = (
+  v: unknown,
+): v is Record<DecisionFilter, boolean> => {
+  if (typeof v !== 'object' || v === null) return false;
+  const obj = v as Record<string, unknown>;
+  return (
+    typeof obj['all'] === 'boolean' &&
+    typeof obj['pending'] === 'boolean' &&
+    typeof obj['completed'] === 'boolean'
+  );
+};
+
+const isValidSortOption = (v: unknown): v is SortOption => {
+  return v === 'newest' || v === 'oldest';
+};
 
 function setLocalStorageItem(key: string, value: unknown): void {
   try {
@@ -79,6 +104,7 @@ function setLocalStorageItem(key: string, value: unknown): void {
 
 interface PageHeaderProps {
   totalCount: number;
+  filteredCount: number;
   listenerHealthy: boolean;
   refreshing: boolean;
   onRefresh: () => void;
@@ -86,10 +112,12 @@ interface PageHeaderProps {
 
 function PageHeader({
   totalCount,
+  filteredCount,
   listenerHealthy,
   refreshing,
   onRefresh,
 }: PageHeaderProps): React.JSX.Element {
+  const showFiltered = filteredCount !== totalCount;
   return (
     <div className="mb-6 flex items-center justify-between">
       <div>
@@ -109,7 +137,7 @@ function PageHeader({
           </span>
         </div>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          {String(totalCount)} events
+          {showFiltered ? `${String(filteredCount)} of ${String(totalCount)} events` : `${String(totalCount)} events`}
         </p>
       </div>
       <Button variant="ghost" size="sm" onClick={onRefresh} disabled={refreshing}>
@@ -224,12 +252,16 @@ export function GitHubEventLogPage(): React.JSX.Element {
 
   // Filter state - using object instead of Set for proper JSON serialization
   const [activeFilters, setActiveFilters] = useState<Record<DecisionFilter, boolean>>(() => {
-    return getLocalStorageItem<Record<DecisionFilter, boolean>>('pr-events-decision-filter', { all: true, pending: false, completed: false });
+    return getLocalStorageItem<Record<DecisionFilter, boolean>>(
+      'pr-events-decision-filter',
+      { all: true, pending: false, completed: false },
+      isValidDecisionFilterRecord,
+    );
   });
 
   // Sort state
   const [activeSort, setActiveSort] = useState<SortOption>(() => {
-    return getLocalStorageItem<SortOption>('pr-events-sort', 'newest');
+    return getLocalStorageItem<SortOption>('pr-events-sort', 'newest', isValidSortOption);
   });
 
   const toggleFilter = (filter: DecisionFilter): void => {
@@ -322,7 +354,8 @@ export function GitHubEventLogPage(): React.JSX.Element {
   return (
     <Layout>
       <PageHeader
-        totalCount={filteredAndSortedRows.length}
+        totalCount={rows.length}
+        filteredCount={filteredAndSortedRows.length}
         listenerHealthy={listenerHealthy}
         refreshing={refreshing}
         onRefresh={(): void => {
