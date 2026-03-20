@@ -12,7 +12,7 @@ import type { GitHubPREventRepository } from '../repositories/gitHubPREventRepos
 import type { GitHubPRSummaryRepository } from '../repositories/gitHubPRSummaryRepository.js';
 import type { LogLineRepository } from '../repositories/logLineRepository.js';
 import type { LinearIssueService } from '../services/linearIssueService.js';
-import type { MergeConflictDetector, ReconcileResult } from '../services/mergeConflictDetector.js';
+import { EMPTY_RECONCILE_RESULT, type MergeConflictDetector, type ReconcileResult } from '../services/mergeConflictDetector.js';
 import type { StatusMirrorService } from '../services/statusMirrorService.js';
 import type { TaskDispatcherService } from '../services/taskDispatcher.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
@@ -39,6 +39,7 @@ const TERMINAL_OR_PLANNED_TASK_STATUSES = new Set<CodeTask['status']>([
 ]);
 
 type MergeConflictStatus = GitHubPRSummary['mergeConflictStatus'];
+type ClassifiedMergeConflictStatus = NonNullable<MergeConflictStatus>;
 
 interface ConflictWorkflowResult {
   commentId: number | null;
@@ -143,7 +144,7 @@ function extractPushedBranch(payload: unknown): string | null {
   return ref.slice(BRANCH_REF_PREFIX.length);
 }
 
-function classifyMergeConflictStatus(mergeable: boolean | null): MergeConflictStatus {
+function classifyMergeConflictStatus(mergeable: boolean | null): ClassifiedMergeConflictStatus {
   if (mergeable === false) {
     return 'conflicting';
   }
@@ -904,13 +905,15 @@ interface ProcessingTrigger {
   lastActivityAt: Date;
 }
 
+type ProcessingOutcome = 'closed' | 'clean' | 'conflicting' | 'unknown' | 'skipped' | 'error';
+
 async function processOpenSummaryOnPush(
   deps: DetectMergeConflictsOnPushDeps,
   trigger: ProcessingTrigger,
   logger: Logger,
   parsedRepository: ParsedRepository,
   existingSummary: GitHubPRSummary
-): Promise<void> {
+): Promise<ProcessingOutcome> {
   const accessContext = await resolveGitHubAccessContext(
     {
       userServiceClient: deps.userServiceClient,
@@ -925,7 +928,7 @@ async function processOpenSummaryOnPush(
       { repository: existingSummary.repository, prNumber: existingSummary.pullRequestNumber },
       'Skipping conflict detection for PR without an OAuth-backed user'
     );
-    return;
+    return 'skipped';
   }
 
   const detailsResult = await loadPullRequestDetails(
@@ -942,10 +945,30 @@ async function processOpenSummaryOnPush(
       { error: detailsResult.error, prNumber: existingSummary.pullRequestNumber },
       'Failed to load PR details for conflict detection'
     );
-    return;
+    return 'skipped';
   }
 
   const details = detailsResult.value;
+
+  if (details.state !== 'open') {
+    logger.info(
+      { prNumber: existingSummary.pullRequestNumber, state: details.state },
+      'Closing stale PR summary — PR is no longer open on GitHub'
+    );
+    await upsertSummary(
+      deps.gitHubPRSummaryRepo,
+      {
+        repository: trigger.repository,
+        pullRequestNumber: existingSummary.pullRequestNumber,
+        lastActivityAt: trigger.lastActivityAt,
+        firstSeenAt: existingSummary.firstSeenAt,
+        state: details.state,
+      },
+      logger
+    );
+    return 'closed';
+  }
+
   const status = classifyMergeConflictStatus(details.mergeable);
   let taskResolution: ExistingConflictTaskResolution = {
     latestTask: null,
@@ -962,7 +985,7 @@ async function processOpenSummaryOnPush(
       logger
     );
     if (!resolutionResult.ok) {
-      return;
+      return 'skipped';
     }
     taskResolution = resolutionResult.value;
   }
@@ -990,6 +1013,11 @@ async function processOpenSummaryOnPush(
     workflowResult = await resolveConflictWorkflow(workflowParams);
   }
 
+  logger.info(
+    { prNumber: existingSummary.pullRequestNumber, mergeConflictStatus: status },
+    'PR mergeability checked'
+  );
+
   await upsertSummary(
     deps.gitHubPRSummaryRepo,
     buildSummaryUpdateInput({
@@ -1002,6 +1030,8 @@ async function processOpenSummaryOnPush(
     }),
     logger
   );
+
+  return status;
 }
 
 export function createDetectMergeConflictsOnPush(
@@ -1055,19 +1085,25 @@ export function createDetectMergeConflictsOnPush(
       const openResult = await deps.gitHubPRSummaryRepo.findAllOpen();
       if (!openResult.ok) {
         logger.warn({ error: openResult.error }, 'Failed to load open PR summaries for merge-conflict reconciliation');
-        return { processed: 0 };
+        return EMPTY_RECONCILE_RESULT;
       }
 
       const summaries = openResult.value;
       if (summaries.length === 0) {
         logger.debug({}, 'No open PR summaries to reconcile for merge conflicts');
-        return { processed: 0 };
+        return EMPTY_RECONCILE_RESULT;
       }
 
       logger.info({ count: summaries.length }, 'Reconciling merge conflicts for open PRs');
 
       const reconcileId = randomUUID();
       let processed = 0;
+      let closed = 0;
+      let conflicting = 0;
+      let clean = 0;
+      let unknown = 0;
+      let skipped = 0;
+      let error = 0;
 
       for (const existingSummary of summaries) {
         const parsedRepository = parseOwnerRepo(existingSummary.repository);
@@ -1082,18 +1118,34 @@ export function createDetectMergeConflictsOnPush(
           lastActivityAt: existingSummary.lastActivityAt,
         };
 
+        let outcome: ProcessingOutcome = 'skipped';
         try {
-          await processOpenSummaryOnPush(deps, trigger, logger, parsedRepository, existingSummary);
+          outcome = await processOpenSummaryOnPush(deps, trigger, logger, parsedRepository, existingSummary);
         } catch (err: unknown) {
+          outcome = 'error';
           logger.error(
             { error: err, repository: existingSummary.repository, prNumber: existingSummary.pullRequestNumber },
             'Unhandled error processing PR in merge-conflict reconcile; continuing'
           );
         }
         processed++;
+
+        switch (outcome) {
+          case 'closed': closed++; break;
+          case 'conflicting': conflicting++; break;
+          case 'clean': clean++; break;
+          case 'unknown': unknown++; break;
+          case 'skipped': skipped++; break;
+          case 'error': error++; break;
+        }
       }
 
-      return { processed };
+      logger.info(
+        { processed, closed, conflicting, clean, unknown, skipped, error },
+        'Merge conflict reconciliation complete'
+      );
+
+      return { processed, closed, conflicting, clean, unknown, skipped, error };
     },
   };
 }
