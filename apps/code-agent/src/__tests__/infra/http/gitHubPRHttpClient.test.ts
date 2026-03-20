@@ -452,7 +452,7 @@ describe('GitHubPRHttpClient', () => {
   describe('listOpenPullRequestsByBaseBranch', () => {
     it('returns open PRs targeting the requested base branch', async () => {
       nock('https://api.github.com')
-        .get('/repos/owner/repo/pulls?state=open&base=development&per_page=100')
+        .get('/repos/owner/repo/pulls?state=open&base=development&per_page=100&sort=created&direction=asc')
         .matchHeader('Authorization', 'Bearer test-token')
         .reply(200, [
           {
@@ -505,7 +505,7 @@ describe('GitHubPRHttpClient', () => {
 
     it('paginates open PR listing when GitHub returns a next-page link', async () => {
       nock('https://api.github.com')
-        .get('/repos/owner/repo/pulls?state=open&base=development&per_page=100')
+        .get('/repos/owner/repo/pulls?state=open&base=development&per_page=100&sort=created&direction=asc')
         .reply(200, [
           {
             number: 42,
@@ -516,10 +516,10 @@ describe('GitHubPRHttpClient', () => {
             created_at: '2026-03-14T00:00:00Z',
           },
         ], {
-          link: '<https://api.github.com/repos/owner/repo/pulls?state=open&base=development&per_page=100&page=2>; rel="next"',
+          link: '<https://api.github.com/repos/owner/repo/pulls?state=open&base=development&per_page=100&sort=created&direction=asc&page=2>; rel="next"',
         });
       nock('https://api.github.com')
-        .get('/repos/owner/repo/pulls?state=open&base=development&per_page=100&page=2')
+        .get('/repos/owner/repo/pulls?state=open&base=development&per_page=100&sort=created&direction=asc&page=2')
         .reply(200, [
           {
             number: 43,
@@ -563,7 +563,7 @@ describe('GitHubPRHttpClient', () => {
 
     it('returns API_ERROR when PR list is missing author login', async () => {
       nock('https://api.github.com')
-        .get('/repos/owner/repo/pulls?state=open&base=development&per_page=100')
+        .get('/repos/owner/repo/pulls?state=open&base=development&per_page=100&sort=created&direction=asc')
         .reply(200, [
           {
             number: 42,
@@ -600,7 +600,7 @@ describe('GitHubPRHttpClient', () => {
       for (const [payload, expectedField] of cases) {
         nock.cleanAll();
         nock('https://api.github.com')
-          .get('/repos/owner/repo/pulls?state=open&base=development&per_page=100')
+          .get('/repos/owner/repo/pulls?state=open&base=development&per_page=100&sort=created&direction=asc')
           .reply(200, [payload]);
 
         const result = await client.listOpenPullRequestsByBaseBranch(
@@ -620,7 +620,7 @@ describe('GitHubPRHttpClient', () => {
 
     it('returns NOT_FOUND when GitHub rejects the PR list request', async () => {
       nock('https://api.github.com')
-        .get('/repos/owner/repo/pulls?state=open&base=development&per_page=100')
+        .get('/repos/owner/repo/pulls?state=open&base=development&per_page=100&sort=created&direction=asc')
         .reply(404, { message: 'Not Found' });
 
       const result = await client.listOpenPullRequestsByBaseBranch(
