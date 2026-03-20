@@ -5,9 +5,11 @@ import type { MergedPrEntry } from '@/types';
 
 interface MergeHistoryTimelineProps {
   mergedPrs: MergedPrEntry[];
+  owner: string;
+  repo: string;
 }
 
-export function MergeHistoryTimeline({ mergedPrs }: MergeHistoryTimelineProps): React.JSX.Element | null {
+export function MergeHistoryTimeline({ mergedPrs, owner, repo }: MergeHistoryTimelineProps): React.JSX.Element | null {
   const [isExpanded, setIsExpanded] = useState(true);
 
   if (mergedPrs.length === 0) {
@@ -37,9 +39,14 @@ export function MergeHistoryTimeline({ mergedPrs }: MergeHistoryTimelineProps): 
             <div key={pr.prNumber} className="relative mb-3 last:mb-0">
               <span className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full bg-emerald-500" />
               <div className="text-sm">
-                <span className="font-mono text-blue-600 dark:text-blue-400">
+                <a
+                  href={`https://github.com/${owner}/${repo}/pull/${String(pr.prNumber)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-blue-600 hover:underline dark:text-blue-400"
+                >
                   #{String(pr.prNumber)}
-                </span>
+                </a>
                 <span className="mx-1 text-slate-400">&mdash;</span>
                 <span className="text-slate-900 dark:text-slate-100">{pr.title}</span>
               </div>

@@ -29,6 +29,7 @@ export function MergeQueuePage(): React.JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [prsLoading, setPrsLoading] = useState(false);
+  const [prsError, setPrsError] = useState<string | null>(null);
 
   const selectedBranchRef = useRef(selectedBranch);
   selectedBranchRef.current = selectedBranch;
@@ -72,14 +73,17 @@ export function MergeQueuePage(): React.JSX.Element {
   const fetchPrs = useCallback(async (branch: string): Promise<void> => {
     try {
       setPrsLoading(true);
+      setPrsError(null);
       const token = await getAccessToken();
       const res = await listPrs(token, DEFAULT_OWNER, DEFAULT_REPO, branch);
       // Only update if this is still the selected branch
       if (selectedBranchRef.current === branch) {
         setPrs(res.pullRequests);
       }
-    } catch {
-      // Silently fail PR fetch — user can see stale data
+    } catch (err) {
+      if (selectedBranchRef.current === branch) {
+        setPrsError(err instanceof Error ? err.message : 'Failed to load PRs');
+      }
     } finally {
       setPrsLoading(false);
     }
@@ -283,7 +287,12 @@ export function MergeQueuePage(): React.JSX.Element {
       {/* PrList */}
       {selectedBranch !== null ? (
         <div className="mb-4">
-          {prs.length === 0 && !prsLoading ? (
+          {prsError !== null && !prsLoading ? (
+            <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-900/30">
+              <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+              <p className="text-sm text-red-700 dark:text-red-400">{prsError}</p>
+            </div>
+          ) : prs.length === 0 && !prsLoading ? (
             <p className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">
               No open PRs targeting {selectedBranch}
             </p>
@@ -300,7 +309,7 @@ export function MergeQueuePage(): React.JSX.Element {
       {/* MergeHistoryTimeline */}
       {mergedPrs.length > 0 ? (
         <div className="rounded-lg">
-          <MergeHistoryTimeline mergedPrs={mergedPrs} />
+          <MergeHistoryTimeline mergedPrs={mergedPrs} owner={DEFAULT_OWNER} repo={DEFAULT_REPO} />
         </div>
       ) : null}
     </div>
