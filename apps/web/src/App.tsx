@@ -289,9 +289,8 @@ function AppRoutes(): React.JSX.Element {
           </ProtectedRoute>
         }
       />
-      {/* Merge Queue route */}
       <Route
-        path="/merge-queue"
+        path="/code-tasks/merge-queue"
         element={
           <ProtectedRoute>
             <MergeQueuePage />
