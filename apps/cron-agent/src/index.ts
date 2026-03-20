@@ -23,7 +23,6 @@ const PRODUCTION_ONLY_ENV = [
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_JWKS_URL',
-  'INTEXURAOS_CODE_AGENT_URL',
 ];
 
 /* v8 ignore start -- module-init: entry point bootstrapping not unit-testable @preserve */

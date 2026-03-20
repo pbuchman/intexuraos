@@ -20,7 +20,7 @@ describe('FirestoreScheduleRepository', () => {
       description: 'Every minute',
       cronExpression: '* * * * *',
       timezone: 'UTC',
-      action: { services: ['code-agent'], instruction: 'do something' },
+      action: { services: ['code-agent'], instruction: 'do something', preferredTools: [] },
       nextExecutionAt: '2026-01-01T00:01:00.000Z',
     });
     expect(result.ok).toBe(true);
@@ -45,7 +45,7 @@ describe('FirestoreScheduleRepository', () => {
       description: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       nextExecutionAt: null,
     });
     expect(createResult.ok).toBe(true);
@@ -72,7 +72,7 @@ describe('FirestoreScheduleRepository', () => {
       description: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       nextExecutionAt: null,
     });
 
@@ -90,7 +90,7 @@ describe('FirestoreScheduleRepository', () => {
       description: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       nextExecutionAt: past,
     });
 
@@ -108,7 +108,7 @@ describe('FirestoreScheduleRepository', () => {
       description: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       nextExecutionAt: future,
     });
 
@@ -124,7 +124,7 @@ describe('FirestoreScheduleRepository', () => {
       description: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       nextExecutionAt: null,
     });
     expect(createResult.ok).toBe(true);
@@ -149,7 +149,7 @@ describe('FirestoreScheduleRepository', () => {
       description: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       nextExecutionAt: null,
     });
 
@@ -165,7 +165,7 @@ describe('FirestoreScheduleRepository', () => {
       description: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       nextExecutionAt: null,
     });
 
@@ -181,7 +181,7 @@ describe('FirestoreScheduleRepository', () => {
       description: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       nextExecutionAt: null,
     });
 
@@ -190,7 +190,7 @@ describe('FirestoreScheduleRepository', () => {
       description: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       nextExecutionAt: null,
     });
 
@@ -208,7 +208,7 @@ describe('FirestoreScheduleRepository', () => {
       description: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       nextExecutionAt: past,
     });
     expect(createResult.ok).toBe(true);
@@ -228,7 +228,7 @@ describe('FirestoreScheduleRepository', () => {
       description: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       nextExecutionAt: null,
     });
     expect(createResult.ok).toBe(true);
@@ -247,7 +247,7 @@ describe('FirestoreScheduleRepository', () => {
       description: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       nextExecutionAt: null,
     });
 
@@ -263,7 +263,7 @@ describe('FirestoreScheduleRepository', () => {
       description: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       nextExecutionAt: null,
     });
 
@@ -272,7 +272,7 @@ describe('FirestoreScheduleRepository', () => {
       description: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       nextExecutionAt: null,
     });
 
@@ -288,7 +288,7 @@ describe('FirestoreScheduleRepository', () => {
       description: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       nextExecutionAt: null,
     });
 
@@ -304,7 +304,7 @@ describe('FirestoreScheduleRepository', () => {
       description: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       nextExecutionAt: null,
     });
     expect(first.ok).toBe(true);
@@ -315,7 +315,7 @@ describe('FirestoreScheduleRepository', () => {
       description: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       nextExecutionAt: null,
     });
 
@@ -341,7 +341,7 @@ describe('FirestoreScheduleRepository', () => {
       description: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       nextExecutionAt: null,
     });
     expect(result.ok).toBe(false);
@@ -405,7 +405,7 @@ describe('FirestoreScheduleRepository', () => {
       description: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       nextExecutionAt: null,
     });
     expect(createResult.ok).toBe(true);
@@ -425,7 +425,7 @@ describe('FirestoreScheduleRepository', () => {
       description: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       nextExecutionAt: null,
     });
     expect(createResult.ok).toBe(true);
@@ -461,7 +461,7 @@ describe('FirestoreScheduleRepository', () => {
       description: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
-      action: { services: ['code-agent'], instruction: 'test' },
+      action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       nextExecutionAt: null,
     });
 

@@ -17,6 +17,7 @@
   "dependencies": {
     "@fastify/swagger": "^9.4.2",
     "@fastify/swagger-ui": "^5.2.1",
+    "@intexuraos/common-core": "workspace:*",
     "@intexuraos/common-http": "workspace:*",
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-otel": "workspace:*",

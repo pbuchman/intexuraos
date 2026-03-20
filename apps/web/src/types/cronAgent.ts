@@ -12,6 +12,7 @@ export interface CronSchedule {
   action: {
     services: string[];
     instruction: string;
+    preferredTools: string[];
   };
   status: 'active' | 'paused' | 'deleted';
   lastExecutedAt: string | null;
@@ -53,7 +54,7 @@ export type CronExecutionStatus = CronExecution['status'];
 export interface ServiceInfo {
   key: string;
   name: string;
-  tools: { name: string; description: string }[];
+  tools: { name: string; description: string; parameters: Record<string, unknown> }[];
 }
 
 export interface ListSchedulesResponse {

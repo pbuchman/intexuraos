@@ -21,7 +21,7 @@ function createTestSchedule(overrides: Partial<CronSchedule> = {}): CronSchedule
     description: 'Every minute',
     cronExpression: '* * * * *',
     timezone: 'UTC',
-    action: { services: ['code-agent'], instruction: 'do something' },
+    action: { services: ['code-agent'], instruction: 'do something', preferredTools: [] },
     status: 'active',
     lastExecutedAt: null,
     nextExecutionAt: new Date(Date.now() - 60000).toISOString(),

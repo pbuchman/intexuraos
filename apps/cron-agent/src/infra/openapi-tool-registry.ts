@@ -47,7 +47,11 @@ export class OpenApiToolRegistry implements ToolRegistry {
         return {
           key: service.key,
           name: service.name,
-          tools: tools.map((t) => ({ name: t.name, description: t.description })),
+          tools: tools.map((t) => ({
+            name: t.name,
+            description: t.description,
+            parameters: t.parameters,
+          })),
         };
       }),
     );
