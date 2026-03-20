@@ -1427,6 +1427,18 @@ export interface GitHubEventLogResponse {
   nextCursor?: string;
 }
 
+// Merge Queue types
+export type {
+  MergeQueueBranch,
+  MergeQueuePr,
+  PrFilterStatus,
+  MergedPrEntry,
+  SkipReason,
+  SkippedPrEntry,
+  WatchStatus,
+  MergeQueueWatch,
+} from './mergeQueue.js';
+
 // Hellscript types
 export type {
   HellscriptBufferSummary,
