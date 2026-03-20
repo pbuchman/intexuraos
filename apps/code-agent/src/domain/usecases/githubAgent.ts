@@ -23,6 +23,8 @@ import { buildTriageRepairMessage } from '../validation/buildTriageRepairMessage
 import { evaluatePlanFiles } from '../services/gitHubWebhookRules.js';
 import type { ZodError } from 'zod';
 
+// plan_review is intentionally excluded from the LLM tool enum — plan-only PRs
+// are deterministically routed by evaluatePlanFiles() before LLM triage runs.
 const VALID_REVIEW_TYPES = ['code_quality', 'security', 'architecture'] as const;
 const VALID_DISPATCH_TEMPLATES = ['pr_comment', 'bot_review_edit'] as const;
 

@@ -14,7 +14,7 @@ import type { WorkerType } from './codeTask.js';
 export type EventDecisionMaker = 'hard_rules' | 'github_agent' | 'webhook_route';
 export type EventDecisionOutcome = 'dispatch' | 'skip' | 'request_review';
 export type EventDecisionDispatchAction = 'create_task' | 'send_message' | 'create_review_task';
-export type EventDecisionReviewType = 'code_quality' | 'security' | 'architecture';
+export type EventDecisionReviewType = 'code_quality' | 'security' | 'architecture' | 'plan_review';
 
 export interface EventDecision {
   id: string;
