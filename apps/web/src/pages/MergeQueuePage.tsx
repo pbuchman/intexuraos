@@ -1,174 +1,29 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
-import { useAuth } from '@/context';
-import { listBranches, listPrs, listWatches, createWatch, cancelWatch } from '@/services/mergeQueueApi';
+import { useMergeQueue } from '@/hooks/useMergeQueue';
 import { BranchSelector } from '@/components/merge-queue/BranchSelector';
 import { WatchStatusCard } from '@/components/merge-queue/WatchStatusCard';
 import { PrStatusPipeline } from '@/components/merge-queue/PrStatusPipeline';
 import { PrList } from '@/components/merge-queue/PrList';
 import { MergeHistoryTimeline } from '@/components/merge-queue/MergeHistoryTimeline';
 import { getPrStatus } from '@/utils/mergeQueueStatus';
-import type { MergeQueueBranch, MergeQueuePr, MergeQueueWatch, PrFilterStatus } from '@/types';
+import type { PrFilterStatus } from '@/types';
 
 const DEFAULT_OWNER = 'pbuchman';
 const DEFAULT_REPO = 'intexuraos';
 
 const ALL_FILTERS = new Set<PrFilterStatus>(['mergeable', 'pending', 'blocked']);
-const WATCH_POLL_MS = 30000;
-const PRS_POLL_MS = 60000;
 
 export function MergeQueuePage(): React.JSX.Element {
-  const { getAccessToken } = useAuth();
+  const {
+    branches, selectedBranch, setSelectedBranch,
+    prs, watches,
+    loading, error, prsLoading, prsError,
+    isToggling, toggleError,
+    fetchInitialData, handleToggleWatch,
+  } = useMergeQueue(DEFAULT_OWNER, DEFAULT_REPO);
 
-  const [branches, setBranches] = useState<MergeQueueBranch[]>([]);
-  const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
-  const [prs, setPrs] = useState<MergeQueuePr[]>([]);
-  const [watches, setWatches] = useState<MergeQueueWatch[]>([]);
   const [activeFilters, setActiveFilters] = useState<Set<PrFilterStatus>>(new Set(ALL_FILTERS));
-  const [isToggling, setIsToggling] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [prsLoading, setPrsLoading] = useState(false);
-  const [prsError, setPrsError] = useState<string | null>(null);
-
-  const selectedBranchRef = useRef(selectedBranch);
-  selectedBranchRef.current = selectedBranch;
-
-  const watchesRef = useRef(watches);
-  watchesRef.current = watches;
-
-  // Fetch branches and watches on mount
-  const fetchInitialData = useCallback(async (): Promise<void> => {
-    try {
-      setLoading(true);
-      setError(null);
-      const token = await getAccessToken();
-      const [branchesRes, watchesRes] = await Promise.all([
-        listBranches(token, DEFAULT_OWNER, DEFAULT_REPO),
-        listWatches(token, DEFAULT_OWNER, DEFAULT_REPO),
-      ]);
-      setBranches(branchesRes.branches);
-      setWatches(watchesRes.watches);
-
-      // Auto-select branch with most PRs
-      if (branchesRes.branches.length > 0) {
-        const sorted = [...branchesRes.branches].sort((a, b) => b.openPrCount - a.openPrCount);
-        const best = sorted[0];
-        if (best !== undefined) {
-          setSelectedBranch(best.name);
-        }
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load merge queue data');
-    } finally {
-      setLoading(false);
-    }
-  }, [getAccessToken]);
-
-  useEffect(() => {
-    void fetchInitialData();
-  }, [fetchInitialData]);
-
-  // Fetch PRs when branch changes
-  const fetchPrs = useCallback(async (branch: string): Promise<void> => {
-    try {
-      setPrsLoading(true);
-      setPrsError(null);
-      const token = await getAccessToken();
-      const res = await listPrs(token, DEFAULT_OWNER, DEFAULT_REPO, branch);
-      // Only update if this is still the selected branch
-      if (selectedBranchRef.current === branch) {
-        setPrs(res.pullRequests);
-      }
-    } catch (err) {
-      if (selectedBranchRef.current === branch) {
-        setPrsError(err instanceof Error ? err.message : 'Failed to load PRs');
-      }
-    } finally {
-      setPrsLoading(false);
-    }
-  }, [getAccessToken]);
-
-  useEffect(() => {
-    if (selectedBranch !== null) {
-      setPrs([]);
-      void fetchPrs(selectedBranch);
-    }
-  }, [selectedBranch, fetchPrs]);
-
-  // Poll watches every 30s (pause when tab hidden)
-  useEffect(() => {
-    const poll = async (): Promise<void> => {
-      if (document.visibilityState === 'hidden') return;
-      try {
-        const token = await getAccessToken();
-        const res = await listWatches(token, DEFAULT_OWNER, DEFAULT_REPO);
-        setWatches(res.watches);
-      } catch {
-        // Silently fail polling
-      }
-    };
-
-    const intervalId = setInterval(() => { void poll(); }, WATCH_POLL_MS);
-    return (): void => {
-      clearInterval(intervalId);
-    };
-  }, [getAccessToken]);
-
-  // Poll PRs every 60s (pause when tab hidden)
-  useEffect(() => {
-    const poll = async (): Promise<void> => {
-      if (document.visibilityState === 'hidden') return;
-      const branch = selectedBranchRef.current;
-      if (branch === null) return;
-      try {
-        const token = await getAccessToken();
-        const res = await listPrs(token, DEFAULT_OWNER, DEFAULT_REPO, branch);
-        if (selectedBranchRef.current === branch) {
-          setPrs(res.pullRequests);
-          setPrsError(null);
-        }
-      } catch {
-        // Silently fail polling — initial fetchPrs error banner clears on next successful poll
-      }
-    };
-
-    const intervalId = setInterval(() => { void poll(); }, PRS_POLL_MS);
-    return (): void => {
-      clearInterval(intervalId);
-    };
-  }, [getAccessToken]);
-
-  // Toggle watch handler — reads watches via ref to avoid re-creation on every poll
-  const handleToggleWatch = useCallback(async (): Promise<void> => {
-    const branch = selectedBranchRef.current;
-    if (branch === null) return;
-    setIsToggling(true);
-    try {
-      const token = await getAccessToken();
-      const activeWatch = watchesRef.current.find(
-        (w) => w.baseBranch === branch && w.status === 'active'
-      );
-
-      if (activeWatch !== undefined) {
-        await cancelWatch(token, activeWatch.watchId);
-      } else {
-        await createWatch(token, DEFAULT_OWNER, DEFAULT_REPO, branch);
-      }
-
-      // Refetch watches immediately
-      const res = await listWatches(token, DEFAULT_OWNER, DEFAULT_REPO);
-      setWatches(res.watches);
-    } catch {
-      // Toggle failed — watches will be stale until next poll
-    } finally {
-      setIsToggling(false);
-    }
-  }, [getAccessToken]);
-
-  const stableOnToggle = useCallback((): void => {
-    void handleToggleWatch();
-  }, [handleToggleWatch]);
 
   const handleToggleFilter = useCallback((status: PrFilterStatus): void => {
     setActiveFilters((prev) => {
@@ -183,11 +38,13 @@ export function MergeQueuePage(): React.JSX.Element {
   }, []);
 
   // Compute filter counts (single source of truth for stats)
-  const filterCounts: Record<PrFilterStatus, number> = { mergeable: 0, pending: 0, blocked: 0 };
-  for (const pr of prs) {
-    filterCounts[getPrStatus(pr)] += 1;
-  }
-  const open = prs.length;
+  const filterCounts = useMemo(() => {
+    const counts: Record<PrFilterStatus, number> = { mergeable: 0, pending: 0, blocked: 0 };
+    for (const pr of prs) {
+      counts[getPrStatus(pr)] += 1;
+    }
+    return counts;
+  }, [prs]);
 
   // Find active watch for selected branch
   const currentWatch = selectedBranch !== null
@@ -251,7 +108,7 @@ export function MergeQueuePage(): React.JSX.Element {
         <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Merge Queue</h2>
         {selectedBranch !== null && !prsLoading ? (
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            {String(open)} open &middot; {String(filterCounts.mergeable)} mergeable &middot; {String(filterCounts.blocked)} blocked &middot; {String(filterCounts.pending)} pending
+            {String(prs.length)} open &middot; {String(filterCounts.mergeable)} mergeable &middot; {String(filterCounts.blocked)} blocked &middot; {String(filterCounts.pending)} pending
           </p>
         ) : null}
       </div>
@@ -269,9 +126,12 @@ export function MergeQueuePage(): React.JSX.Element {
       <div className="mb-4">
         <WatchStatusCard
           watch={currentWatch}
-          onToggle={stableOnToggle}
+          onToggle={handleToggleWatch}
           isToggling={isToggling}
         />
+        {toggleError !== null ? (
+          <p className="mt-1 text-xs text-red-600 dark:text-red-400">{toggleError}</p>
+        ) : null}
       </div>
 
       {/* PrStatusPipeline */}
