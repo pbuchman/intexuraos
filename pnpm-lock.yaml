@@ -180,6 +180,9 @@ importers:
       '@fastify/swagger-ui':
         specifier: ^5.2.1
         version: 5.2.4
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../../packages/common-core
       '@intexuraos/common-http':
         specifier: workspace:*
         version: link:../../packages/common-http

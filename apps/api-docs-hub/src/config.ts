@@ -6,7 +6,7 @@
 import {
   INTERNAL_API_OPENAPI_URL_ENV_VARS,
   buildInternalApiOpenApiSources,
-} from '../../../packages/common-core/src/internalServiceCatalog.js';
+} from '@intexuraos/common-core';
 
 export interface OpenApiSource {
   name: string;
