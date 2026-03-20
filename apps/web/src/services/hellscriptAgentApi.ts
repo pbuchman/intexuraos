@@ -23,7 +23,7 @@ export async function getHellscriptWorkspace(
 ): Promise<HellscriptWorkspaceResponse> {
   return await apiRequest<HellscriptWorkspaceResponse>(
     config.hellscriptAgentUrl,
-    `/hellscript/buffers/${bufferId}`,
+    `/hellscript/buffers/${encodeURIComponent(bufferId)}`,
     accessToken
   );
 }
