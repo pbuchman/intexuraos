@@ -5,7 +5,7 @@ import type { HellscriptBuffer } from '../../domain/models/hellscriptBuffer.js';
 import type { HellscriptEvent } from '../../domain/models/hellscriptEvent.js';
 import type { HellscriptDraftVersion } from '../../domain/models/hellscriptDraftVersion.js';
 import type { MaterializedBufferState } from '../../domain/models/materializedBufferState.js';
-import type { HellscriptRepository } from '../../domain/ports/hellscriptRepository.js';
+import type { HellscriptRepository, BufferWithState } from '../../domain/ports/hellscriptRepository.js';
 
 const COLLECTION = 'hellscript_buffers';
 
@@ -148,6 +148,40 @@ export class FirestoreHellscriptRepository implements HellscriptRepository {
       return {
         ok: false,
         error: new Error(getErrorMessage(error, 'Failed to get buffer')),
+      };
+    }
+  }
+
+  async getBufferWithState(
+    bufferId: string,
+    userId: string
+  ): Promise<Result<BufferWithState | null>> {
+    try {
+      const db = getFirestore();
+      const doc = await db.collection(COLLECTION).doc(bufferId).get();
+
+      if (!doc.exists) {
+        return { ok: true, value: null };
+      }
+
+      const data = doc.data() as BufferDocument & {
+        materializedState?: MaterializedBufferState;
+      };
+      if (data.userId !== userId) {
+        return { ok: true, value: null };
+      }
+
+      return {
+        ok: true,
+        value: {
+          buffer: toBuffer(doc.id, data),
+          state: data.materializedState ?? null,
+        },
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: new Error(getErrorMessage(error, 'Failed to get buffer with state')),
       };
     }
   }
@@ -308,6 +342,30 @@ export class FirestoreHellscriptRepository implements HellscriptRepository {
       return {
         ok: false,
         error: new Error(getErrorMessage(error, 'Failed to get draft versions')),
+      };
+    }
+  }
+
+  async getDraftVersion(
+    draftVersionId: string,
+    bufferId: string
+  ): Promise<Result<HellscriptDraftVersion | null>> {
+    try {
+      const db = getFirestore();
+      const doc = await db
+        .collection(draftsPath(bufferId))
+        .doc(draftVersionId)
+        .get();
+
+      if (!doc.exists) {
+        return { ok: true, value: null };
+      }
+
+      return { ok: true, value: toDraft(doc.id, doc.data() as DraftDocument) };
+    } catch (error) {
+      return {
+        ok: false,
+        error: new Error(getErrorMessage(error, 'Failed to get draft version')),
       };
     }
   }

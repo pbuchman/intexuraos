@@ -25,20 +25,21 @@ export async function getBufferWorkspace(
 ): Promise<Result<BufferWorkspace>> {
   deps.logger.info({ bufferId, userId }, 'Getting buffer workspace');
 
-  // Verify buffer exists and belongs to user first
-  const bufferResult = await deps.repository.getBuffer(bufferId, userId);
-  if (!bufferResult.ok) {
-    return bufferResult;
+  // Single read returns both buffer and state from one Firestore document
+  const bufferWithStateResult = await deps.repository.getBufferWithState(bufferId, userId);
+  if (!bufferWithStateResult.ok) {
+    return bufferWithStateResult;
   }
-  if (bufferResult.value === null) {
+  if (bufferWithStateResult.value === null) {
     return { ok: false, error: new Error('Buffer not found') };
   }
 
-  // Parallelize independent reads for lower latency
-  const [eventsResult, draftsResult, stateResult] = await Promise.all([
+  const { buffer, state } = bufferWithStateResult.value;
+
+  // Parallelize independent subcollection reads
+  const [eventsResult, draftsResult] = await Promise.all([
     deps.repository.getEvents(bufferId),
     deps.repository.getDraftVersions(bufferId),
-    deps.repository.getBufferState(bufferId),
   ]);
 
   if (!eventsResult.ok) {
@@ -47,17 +48,14 @@ export async function getBufferWorkspace(
   if (!draftsResult.ok) {
     return draftsResult;
   }
-  if (!stateResult.ok) {
-    return stateResult;
-  }
 
   return {
     ok: true,
     value: {
-      buffer: bufferResult.value,
+      buffer,
       events: eventsResult.value,
       draftVersions: draftsResult.value,
-      state: stateResult.value,
+      state,
     },
   };
 }

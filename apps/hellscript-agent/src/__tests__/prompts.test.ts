@@ -93,7 +93,7 @@ describe('interpretImposePrompt', () => {
 describe('generateDraftPrompt', () => {
   it('has correct metadata', () => {
     expect(generateDraftPrompt.name).toBe('generate-draft');
-    expect(generateDraftPrompt.version).toBe('1.0.0');
+    expect(generateDraftPrompt.version).toBe('1.1.0');
     expect(generateDraftPrompt.description).toBeDefined();
   });
 
@@ -159,7 +159,7 @@ describe('generateDraftPrompt', () => {
     });
 
     expect(result).toContain('My writing style example');
-    expect(result).toContain('WRITING SAMPLES');
+    expect(result).toContain('user_writing_samples');
   });
 
   it('includes style instructions', () => {
@@ -174,7 +174,7 @@ describe('generateDraftPrompt', () => {
       requestText: 'Write',
     });
 
-    expect(result).toContain('STYLE INSTRUCTIONS');
+    expect(result).toContain('user_style_instructions');
     expect(result).toContain('Be formal');
   });
 
@@ -190,7 +190,7 @@ describe('generateDraftPrompt', () => {
       requestText: 'Write',
     });
 
-    expect(result).toContain('TARGET AUDIENCE');
+    expect(result).toContain('user_audience');
     expect(result).toContain('Executives');
   });
 
@@ -206,7 +206,7 @@ describe('generateDraftPrompt', () => {
       requestText: 'Write',
     });
 
-    expect(result).toContain('CONTENT GOAL');
+    expect(result).toContain('user_content_goal');
     expect(result).toContain('Whitepaper');
   });
 });

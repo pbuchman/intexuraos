@@ -4,9 +4,18 @@ import type { HellscriptEvent } from '../models/hellscriptEvent.js';
 import type { HellscriptDraftVersion } from '../models/hellscriptDraftVersion.js';
 import type { MaterializedBufferState } from '../models/materializedBufferState.js';
 
+export interface BufferWithState {
+  buffer: HellscriptBuffer;
+  state: MaterializedBufferState | null;
+}
+
 export interface HellscriptRepository {
   createBuffer(userId: string, title: string): Promise<Result<HellscriptBuffer>>;
   getBuffer(bufferId: string, userId: string): Promise<Result<HellscriptBuffer | null>>;
+  getBufferWithState(
+    bufferId: string,
+    userId: string
+  ): Promise<Result<BufferWithState | null>>;
   listBuffers(userId: string): Promise<Result<HellscriptBuffer[]>>;
   saveEvent(event: Omit<HellscriptEvent, 'id'>): Promise<Result<HellscriptEvent>>;
   getEvents(bufferId: string): Promise<Result<HellscriptEvent[]>>;
@@ -20,6 +29,7 @@ export interface HellscriptRepository {
     draft: Omit<HellscriptDraftVersion, 'id'>
   ): Promise<Result<HellscriptDraftVersion>>;
   getDraftVersions(bufferId: string): Promise<Result<HellscriptDraftVersion[]>>;
+  getDraftVersion(draftVersionId: string, bufferId: string): Promise<Result<HellscriptDraftVersion | null>>;
   updateBufferDraftInfo(
     bufferId: string,
     versionNumber: number,

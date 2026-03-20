@@ -102,6 +102,62 @@ describe('FirestoreHellscriptRepository', () => {
     });
   });
 
+  describe('getBufferWithState', () => {
+    it('returns buffer with null state for new buffer', async () => {
+      const created = await repository.createBuffer('user-1', 'Test');
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const result = await repository.getBufferWithState(created.value.id, 'user-1');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).not.toBeNull();
+        expect(result.value?.buffer.title).toBe('Test');
+        expect(result.value?.state).toBeNull();
+      }
+    });
+
+    it('returns buffer with materialized state after update', async () => {
+      const created = await repository.createBuffer('user-1', 'Test');
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const state = { ...emptyState(), thoughts: [{ id: 't1', text: 'thought', addedAt: '2024-01-01T00:00:00.000Z' }] };
+      await repository.updateBufferState(created.value.id, state, 1);
+
+      const result = await repository.getBufferWithState(created.value.id, 'user-1');
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.state).not.toBeNull();
+        expect(result.value.state?.thoughts).toHaveLength(1);
+      }
+    });
+
+    it('returns null for non-existent buffer', async () => {
+      const result = await repository.getBufferWithState('nonexistent', 'user-1');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('returns null for buffer owned by another user', async () => {
+      const created = await repository.createBuffer('user-2', 'Other');
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const result = await repository.getBufferWithState(created.value.id, 'user-1');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+  });
+
   describe('listBuffers', () => {
     it('returns empty array for user with no buffers', async () => {
       const result = await repository.listBuffers('user-1');
@@ -395,6 +451,45 @@ describe('FirestoreHellscriptRepository', () => {
 
       const result = await repository.getDraftVersions(buffer.value.id);
       expect(result.ok).toBe(false);
+    });
+  });
+
+  describe('getDraftVersion', () => {
+    it('returns a specific draft version by id', async () => {
+      const buffer = await repository.createBuffer('user-1', 'Buffer');
+      expect(buffer.ok).toBe(true);
+      if (!buffer.ok) return;
+
+      const saved = await repository.saveDraftVersion({
+        bufferId: buffer.value.id,
+        versionNumber: 1,
+        markdown: '# Draft',
+        requestText: 'generate',
+        createdAt: '2024-01-01T00:00:00.000Z',
+      });
+      expect(saved.ok).toBe(true);
+      if (!saved.ok) return;
+
+      const result = await repository.getDraftVersion(saved.value.id, buffer.value.id);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).not.toBeNull();
+        expect(result.value?.markdown).toBe('# Draft');
+      }
+    });
+
+    it('returns null for non-existent draft version', async () => {
+      const buffer = await repository.createBuffer('user-1', 'Buffer');
+      expect(buffer.ok).toBe(true);
+      if (!buffer.ok) return;
+
+      const result = await repository.getDraftVersion('nonexistent', buffer.value.id);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
     });
   });
 

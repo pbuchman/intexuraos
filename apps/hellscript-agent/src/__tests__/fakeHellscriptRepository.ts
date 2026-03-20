@@ -4,11 +4,12 @@ import type { HellscriptBuffer } from '../domain/models/hellscriptBuffer.js';
 import type { HellscriptEvent } from '../domain/models/hellscriptEvent.js';
 import type { HellscriptDraftVersion } from '../domain/models/hellscriptDraftVersion.js';
 import type { MaterializedBufferState } from '../domain/models/materializedBufferState.js';
-import type { HellscriptRepository } from '../domain/ports/hellscriptRepository.js';
+import type { HellscriptRepository, BufferWithState } from '../domain/ports/hellscriptRepository.js';
 
 type MethodName =
   | 'createBuffer'
   | 'getBuffer'
+  | 'getBufferWithState'
   | 'listBuffers'
   | 'saveEvent'
   | 'getEvents'
@@ -16,6 +17,7 @@ type MethodName =
   | 'getBufferState'
   | 'saveDraftVersion'
   | 'getDraftVersions'
+  | 'getDraftVersion'
   | 'updateBufferDraftInfo';
 
 export class FakeHellscriptRepository implements HellscriptRepository {
@@ -84,6 +86,29 @@ export class FakeHellscriptRepository implements HellscriptRepository {
       return { ok: true, value: null };
     }
     return { ok: true, value: buffer };
+  }
+
+  async getBufferWithState(
+    bufferId: string,
+    userId: string
+  ): Promise<Result<BufferWithState | null>> {
+    const error = this.checkError('getBufferWithState');
+    if (error !== null) {
+      return { ok: false, error };
+    }
+
+    const buffer = this.buffers.get(bufferId);
+    if (buffer === undefined || buffer.userId !== userId) {
+      return { ok: true, value: null };
+    }
+
+    return {
+      ok: true,
+      value: {
+        buffer,
+        state: this.states.get(bufferId) ?? null,
+      },
+    };
   }
 
   async listBuffers(userId: string): Promise<Result<HellscriptBuffer[], Error>> {
@@ -198,6 +223,20 @@ export class FakeHellscriptRepository implements HellscriptRepository {
       ok: true,
       value: [...drafts].sort((a, b) => a.versionNumber - b.versionNumber),
     };
+  }
+
+  async getDraftVersion(
+    draftVersionId: string,
+    bufferId: string
+  ): Promise<Result<HellscriptDraftVersion | null>> {
+    const error = this.checkError('getDraftVersion');
+    if (error !== null) {
+      return { ok: false, error };
+    }
+
+    const drafts = this.drafts.get(bufferId) ?? [];
+    const found = drafts.find((d) => d.id === draftVersionId);
+    return { ok: true, value: found ?? null };
   }
 
   async updateBufferDraftInfo(

@@ -117,8 +117,8 @@ describe('getBufferWorkspace', () => {
     }
   });
 
-  it('returns error when getBuffer fails', async () => {
-    repository.simulateMethodError('getBuffer', new Error('DB error'));
+  it('returns error when getBufferWithState fails', async () => {
+    repository.simulateMethodError('getBufferWithState', new Error('DB error'));
 
     const result = await getBufferWorkspace(
       { repository, logger },
@@ -151,22 +151,6 @@ describe('getBufferWorkspace', () => {
     if (!created.ok) return;
 
     repository.simulateMethodError('getDraftVersions', new Error('Read failed'));
-
-    const result = await getBufferWorkspace(
-      { repository, logger },
-      created.value.id,
-      'user-1'
-    );
-
-    expect(result.ok).toBe(false);
-  });
-
-  it('returns error when getBufferState fails', async () => {
-    const created = await repository.createBuffer('user-1', 'Buffer');
-    expect(created.ok).toBe(true);
-    if (!created.ok) return;
-
-    repository.simulateMethodError('getBufferState', new Error('Read failed'));
 
     const result = await getBufferWorkspace(
       { repository, logger },
