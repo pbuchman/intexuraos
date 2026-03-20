@@ -1,6 +1,7 @@
 import { ArrowDown } from 'lucide-react';
 import type { MergeQueuePr, PrFilterStatus } from '@/types';
-import { PrRow, getPrStatus } from './PrRow.js';
+import { getPrStatus } from '@/utils/mergeQueueStatus';
+import { PrRow } from './PrRow.js';
 
 interface PrListProps {
   prs: MergeQueuePr[];
