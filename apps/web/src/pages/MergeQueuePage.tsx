@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
+import { Layout } from '@/components';
 import { useMergeQueue } from '@/hooks/useMergeQueue';
 import { BranchSelector } from '@/components/merge-queue/BranchSelector';
 import { WatchStatusCard } from '@/components/merge-queue/WatchStatusCard';
@@ -57,52 +58,59 @@ export function MergeQueuePage(): React.JSX.Element {
   // Error state
   if (error !== null && !loading) {
     return (
-      <div className="mx-auto max-w-5xl px-4 py-6">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Merge Queue</h2>
-        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
-            <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+      <Layout>
+        <div className="mx-auto max-w-5xl px-4 py-6">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Merge Queue</h2>
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+              <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+            </div>
+            <button
+              onClick={(): void => { void fetchInitialData(); }}
+              className="mt-3 inline-flex items-center gap-2 rounded-md bg-red-100 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-200 dark:bg-red-900/50 dark:text-red-400 dark:hover:bg-red-900/70"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Retry
+            </button>
           </div>
-          <button
-            onClick={(): void => { void fetchInitialData(); }}
-            className="mt-3 inline-flex items-center gap-2 rounded-md bg-red-100 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-200 dark:bg-red-900/50 dark:text-red-400 dark:hover:bg-red-900/70"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Retry
-          </button>
         </div>
-      </div>
+      </Layout>
     );
   }
 
   // Loading state
   if (loading) {
     return (
-      <div className="mx-auto max-w-5xl px-4 py-6">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Merge Queue</h2>
-        <div className="mt-6 flex items-center gap-3 text-slate-500">
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
-          <span className="text-sm">Loading merge queue...</span>
+      <Layout>
+        <div className="mx-auto max-w-5xl px-4 py-6">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Merge Queue</h2>
+          <div className="mt-6 flex items-center gap-3 text-slate-500">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+            <span className="text-sm">Loading merge queue...</span>
+          </div>
         </div>
-      </div>
+      </Layout>
     );
   }
 
   // Empty branches (no open PRs in repo)
   if (branches.length === 0) {
     return (
-      <div className="mx-auto max-w-5xl px-4 py-6">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Merge Queue</h2>
-        <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
-          No open pull requests found in {DEFAULT_OWNER}/{DEFAULT_REPO}
-        </p>
-      </div>
+      <Layout>
+        <div className="mx-auto max-w-5xl px-4 py-6">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Merge Queue</h2>
+          <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
+            No open pull requests found in {DEFAULT_OWNER}/{DEFAULT_REPO}
+          </p>
+        </div>
+      </Layout>
     );
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6">
+    <Layout>
+      <div className="mx-auto max-w-5xl px-4 py-6">
       {/* PageHeader */}
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Merge Queue</h2>
@@ -173,6 +181,7 @@ export function MergeQueuePage(): React.JSX.Element {
           <MergeHistoryTimeline mergedPrs={mergedPrs} owner={DEFAULT_OWNER} repo={DEFAULT_REPO} />
         </div>
       ) : null}
-    </div>
+      </div>
+    </Layout>
   );
 }
