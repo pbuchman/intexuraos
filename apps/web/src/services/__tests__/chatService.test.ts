@@ -45,6 +45,7 @@ vi.mock('../../config', () => {
     linearAgentUrl: 'http://localhost:8126',
     codeAgentUrl: 'http://localhost:8128',
     chatAgentUrl: 'http://localhost:8129',
+    hellscriptAgentUrl: 'http://localhost:8130',
     appSettingsServiceUrl: 'http://localhost:8122',
     firebaseProjectId: 'test-project',
     firebaseApiKey: 'test-key',

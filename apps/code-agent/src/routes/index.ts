@@ -6,6 +6,7 @@ import { workerSettingsRoutes } from './workerSettingsRoutes.js';
 import { webhooksRoutes } from './webhooks/index.js';
 import { githubEventLogRoute, githubPREventsRoute, githubPRSummariesRoute } from './code/index.js';
 import { internalRoutes } from './internalRoutes.js';
+import { mergeQueueRoutes, mergeQueueTickRoute } from './merge-queue/index.js';
 
 export interface RoutesDeps {
   jwtValidator: JwtValidator;
@@ -20,4 +21,6 @@ export async function registerRoutes(app: FastifyInstance, deps: RoutesDeps): Pr
   await app.register(githubPRSummariesRoute, deps);
   await app.register(githubEventLogRoute, deps);
   await app.register(internalRoutes);
+  await app.register(mergeQueueRoutes, deps);
+  await app.register(mergeQueueTickRoute);
 }

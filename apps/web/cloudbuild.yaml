@@ -31,6 +31,7 @@ steps:
           "web-agent:WEB_AGENT"
           "app-settings-service:APP_SETTINGS_SERVICE"
           "cron-agent:CRON_AGENT"
+          "hellscript-agent:HELLSCRIPT_AGENT"
         )
 
         # Fetch service URLs from Cloud Run API (not secrets)
