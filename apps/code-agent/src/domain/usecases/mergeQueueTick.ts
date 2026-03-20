@@ -63,6 +63,40 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
     return ok(results);
   };
 
+  /** Record an error on the watch document and return an error TickResult. */
+  async function recordErrorAndReturn(
+    watchId: string,
+    owner: string,
+    repo: string,
+    baseBranch: string,
+    errorMessage: string
+  ): Promise<TickResult> {
+    const now = new Date();
+    logger.error({ watchId }, errorMessage);
+    await mergeQueueWatchRepo.update(watchId, {
+      lastTickAt: now,
+      lastError: errorMessage,
+      lastErrorAt: now,
+    });
+    return { watchId, owner, repo, baseBranch, action: 'error', remainingPrs: 0, skipped: [] };
+  }
+
+  /** Update the watch with a successful tick (clears lastError). */
+  async function recordSuccessfulTick(
+    watchId: string,
+    skippedPrs: SkippedPr[],
+    extra?: { status?: 'drained'; drainedAt?: Date }
+  ): Promise<void> {
+    const now = new Date();
+    await mergeQueueWatchRepo.update(watchId, {
+      lastTickAt: now,
+      skippedPrs,
+      lastError: null,
+      lastErrorAt: null,
+      ...extra,
+    });
+  }
+
   async function processWatch(
     watch: { id: string; userId: string; gitHubUsername: string; owner: string; repo: string; baseBranch: string }
   ): Promise<TickResult> {
@@ -71,22 +105,10 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
     // Step 3a: Resolve GitHub token
     const tokenResult = await userServiceClient.getOAuthToken(userId, 'github');
     if (!tokenResult.ok) {
-      const errorMessage = `Token resolution failed: ${tokenResult.error.message}`;
-      logger.error({ watchId, error: tokenResult.error }, errorMessage);
-      await mergeQueueWatchRepo.update(watchId, {
-        lastTickAt: new Date(),
-        lastError: errorMessage,
-        lastErrorAt: new Date(),
-      });
-      return {
-        watchId,
-        owner,
-        repo,
-        baseBranch,
-        action: 'error',
-        remainingPrs: 0,
-        skipped: [],
-      };
+      return await recordErrorAndReturn(
+        watchId, owner, repo, baseBranch,
+        `Token resolution failed: ${tokenResult.error.message}`
+      );
     }
 
     const token = tokenResult.value.accessToken;
@@ -94,22 +116,10 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
     // Step 3c: List open PRs
     const listResult = await gitHubPRClient.listOpenPullRequestsByBaseBranch(token, owner, repo, baseBranch);
     if (!listResult.ok) {
-      const errorMessage = `Failed to list PRs: ${listResult.error.message}`;
-      logger.error({ watchId, error: listResult.error }, errorMessage);
-      await mergeQueueWatchRepo.update(watchId, {
-        lastTickAt: new Date(),
-        lastError: errorMessage,
-        lastErrorAt: new Date(),
-      });
-      return {
-        watchId,
-        owner,
-        repo,
-        baseBranch,
-        action: 'error',
-        remainingPrs: 0,
-        skipped: [],
-      };
+      return await recordErrorAndReturn(
+        watchId, owner, repo, baseBranch,
+        `Failed to list PRs: ${listResult.error.message}`
+      );
     }
 
     const allPrs = listResult.value;
@@ -128,23 +138,9 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
 
     // Step 3g: If zero eligible PRs, drain
     if (eligiblePrs.length === 0) {
-      await mergeQueueWatchRepo.update(watchId, {
-        status: 'drained',
-        drainedAt: new Date(),
-        skippedPrs: [],
-        lastTickAt: new Date(),
-        lastError: null,
-        lastErrorAt: null,
-      });
-      return {
-        watchId,
-        owner,
-        repo,
-        baseBranch,
-        action: 'drained',
-        remainingPrs: 0,
-        skipped: [],
-      };
+      const now = new Date();
+      await recordSuccessfulTick(watchId, [], { status: 'drained', drainedAt: now });
+      return { watchId, owner, repo, baseBranch, action: 'drained', remainingPrs: 0, skipped: [] };
     }
 
     // Step 3h: Iterate eligible PRs
@@ -220,18 +216,10 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
         mergedAt: Timestamp.now(),
       });
 
-      await mergeQueueWatchRepo.update(watchId, {
-        lastTickAt: new Date(),
-        skippedPrs: skippedList,
-        lastError: null,
-        lastErrorAt: null,
-      });
+      await recordSuccessfulTick(watchId, skippedList);
 
       return {
-        watchId,
-        owner,
-        repo,
-        baseBranch,
+        watchId, owner, repo, baseBranch,
         action: 'merged',
         mergedPrNumber: pr.number,
         remainingPrs: allPrs.length - mergedCount,
@@ -243,28 +231,14 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
     const action: TickAction = skippedList.length > 0 ? 'skipped_all' : 'drained';
 
     if (action === 'drained') {
-      await mergeQueueWatchRepo.update(watchId, {
-        status: 'drained',
-        drainedAt: new Date(),
-        skippedPrs: [],
-        lastTickAt: new Date(),
-        lastError: null,
-        lastErrorAt: null,
-      });
+      const now = new Date();
+      await recordSuccessfulTick(watchId, [], { status: 'drained', drainedAt: now });
     } else {
-      await mergeQueueWatchRepo.update(watchId, {
-        lastTickAt: new Date(),
-        skippedPrs: skippedList,
-        lastError: null,
-        lastErrorAt: null,
-      });
+      await recordSuccessfulTick(watchId, skippedList);
     }
 
     return {
-      watchId,
-      owner,
-      repo,
-      baseBranch,
+      watchId, owner, repo, baseBranch,
       action,
       remainingPrs: allPrs.length - mergedCount,
       skipped: skippedList,
