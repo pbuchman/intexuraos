@@ -76,6 +76,8 @@ import { createGitHubPRAutomationLog } from './infra/services/gitHubPRAutomation
 import { createFirestorePRAutomationCommentRepository } from './infra/firestore/prAutomationCommentRepository.js';
 import type { TaskEnqueueService } from './domain/services/taskEnqueueService.js';
 import { createTaskEnqueueService } from './infra/services/taskEnqueueServiceImpl.js';
+import type { MergeQueueWatchRepository } from './domain/repositories/mergeQueueWatchRepository.js';
+import { createFirestoreMergeQueueWatchRepository } from './infra/firestore/mergeQueueWatchRepository.js';
 
 const GEMINI_TOOL_CALLING_MODEL = LlmModels.Gemini25Flash;
 const GEMINI_TOOL_CALLING_PRICING = TOOL_CALLING_PRICING[LlmModels.Gemini25Flash];
@@ -118,6 +120,7 @@ export interface ServiceContainer {
   mergeConflictDetector: MergeConflictDetector;
   automationLog: AutomationLog;
   taskEnqueueService: TaskEnqueueService;
+  mergeQueueWatchRepo: MergeQueueWatchRepository;
 }
 
 // Configuration required to initialize services
@@ -424,6 +427,7 @@ export function initServices(config: ServiceConfig): void {
     automationLog,
   });
 
+  const mergeQueueWatchRepo = createFirestoreMergeQueueWatchRepository({ logger });
   const eventDecisionRepo = createFirestoreEventDecisionRepository({ logger });
 
   const unifiedEvaluator = createUnifiedEvaluator({
@@ -513,6 +517,7 @@ export function initServices(config: ServiceConfig): void {
     mergeConflictDetector,
     automationLog,
     taskEnqueueService,
+    mergeQueueWatchRepo,
   };
 }
 

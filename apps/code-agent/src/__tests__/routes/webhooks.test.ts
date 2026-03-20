@@ -227,6 +227,15 @@ describe('POST /internal/webhooks/task-complete', () => {
         detectOnPush: vi.fn().mockResolvedValue(undefined),
         reconcile: vi.fn().mockResolvedValue({ processed: 0 }),
       },
+      mergeQueueWatchRepo: {
+        create: vi.fn(),
+        findById: vi.fn(),
+        findActiveByUserAndBranch: vi.fn(),
+        findAllActive: vi.fn(),
+        findByUserAndRepo: vi.fn(),
+        update: vi.fn(),
+        appendMergedPr: vi.fn(),
+      },
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -260,6 +269,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
+      mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
     });
 
     app = await buildServer();
@@ -293,6 +303,11 @@ describe('POST /internal/webhooks/task-complete', () => {
       getPullRequestStatus: vi.fn().mockResolvedValue(
         ok({ state: 'open', mergedAt: null, headRef: 'task_existing_pr_branch' })
       ),
+      listOpenPullRequestsByBaseBranch: vi.fn().mockResolvedValue(ok([])),
+      getPullRequestDetails: vi.fn().mockResolvedValue(ok(null)),
+      mergePullRequest: vi.fn().mockResolvedValue(ok({ sha: 'abc123', merged: true })),
+      getCombinedCheckStatus: vi.fn().mockResolvedValue(ok({ state: 'success' })),
+      listAllOpenPullRequests: vi.fn().mockResolvedValue(ok([])),
     } as unknown as GitHubPRClient;
     const userServiceClient = {
       ...mockUserServiceClient,
@@ -4550,6 +4565,15 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
         detectOnPush: vi.fn().mockResolvedValue(undefined),
         reconcile: vi.fn().mockResolvedValue({ processed: 0 }),
       },
+      mergeQueueWatchRepo: {
+        create: vi.fn(),
+        findById: vi.fn(),
+        findActiveByUserAndBranch: vi.fn(),
+        findAllActive: vi.fn(),
+        findByUserAndRepo: vi.fn(),
+        update: vi.fn(),
+        appendMergedPr: vi.fn(),
+      },
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -4583,6 +4607,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
+      mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
     });
 
     app = await buildServer();
@@ -4913,6 +4938,15 @@ describe('POST /internal/logs', () => {
         detectOnPush: vi.fn().mockResolvedValue(undefined),
         reconcile: vi.fn().mockResolvedValue({ processed: 0 }),
       },
+      mergeQueueWatchRepo: {
+        create: vi.fn(),
+        findById: vi.fn(),
+        findActiveByUserAndBranch: vi.fn(),
+        findAllActive: vi.fn(),
+        findByUserAndRepo: vi.fn(),
+        update: vi.fn(),
+        appendMergedPr: vi.fn(),
+      },
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -4946,6 +4980,7 @@ describe('POST /internal/logs', () => {
       automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
+      mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
     });
 
     app = await buildServer();
@@ -5499,6 +5534,15 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
         detectOnPush: vi.fn().mockResolvedValue(undefined),
         reconcile: vi.fn().mockResolvedValue({ processed: 0 }),
       },
+      mergeQueueWatchRepo: {
+        create: vi.fn(),
+        findById: vi.fn(),
+        findActiveByUserAndBranch: vi.fn(),
+        findAllActive: vi.fn(),
+        findByUserAndRepo: vi.fn(),
+        update: vi.fn(),
+        appendMergedPr: vi.fn(),
+      },
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -5532,6 +5576,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
+      mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
     });
 
     app = await buildServer();

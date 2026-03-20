@@ -187,6 +187,7 @@ function createMockGitHubPRClient(): GitHubPRClient {
         headBranch: 'feature/test',
         mergeable: true,
         mergeableState: 'clean',
+        headSha: 'sha123',
       });
     },
     async getIssueComment(): ReturnType<GitHubPRClient['getIssueComment']> {
@@ -194,6 +195,15 @@ function createMockGitHubPRClient(): GitHubPRClient {
     },
     async updateIssueComment(): ReturnType<GitHubPRClient['updateIssueComment']> {
       return ok({ commentId: 1 });
+    },
+    async mergePullRequest(): ReturnType<GitHubPRClient['mergePullRequest']> {
+      return ok({ sha: 'abc123', merged: true });
+    },
+    async getCombinedCheckStatus(): ReturnType<GitHubPRClient['getCombinedCheckStatus']> {
+      return ok({ state: 'success' });
+    },
+    async listAllOpenPullRequests(): ReturnType<GitHubPRClient['listAllOpenPullRequests']> {
+      return ok([]);
     },
   };
 }

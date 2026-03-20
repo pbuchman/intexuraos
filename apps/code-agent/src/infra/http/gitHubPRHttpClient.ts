@@ -310,6 +310,7 @@ export function createGitHubPRHttpClient(
             user?: { login?: string };
             base?: { ref?: string };
             head?: { ref?: string };
+            created_at?: string;
           }[];
           for (const pr of data) {
             if (typeof pr.number !== 'number') {
@@ -328,12 +329,16 @@ export function createGitHubPRHttpClient(
             const headResult = ensureString(pr.head?.ref, 'head.ref');
             if (!headResult.ok) return headResult;
 
+            const createdAtResult = ensureString(pr.created_at, 'created_at');
+            if (!createdAtResult.ok) return createdAtResult;
+
             items.push({
               number: pr.number,
               title: titleResult.value,
               authorLogin: authorResult.value,
               baseBranch: baseResult.value,
               headBranch: headResult.value,
+              createdAt: createdAtResult.value,
             });
           }
 
@@ -374,7 +379,7 @@ export function createGitHubPRHttpClient(
           mergeable_state?: string | null;
           user?: { login?: string };
           base?: { ref?: string };
-          head?: { ref?: string };
+          head?: { ref?: string; sha?: string };
         };
 
         if (typeof data.number !== 'number') {
@@ -393,6 +398,9 @@ export function createGitHubPRHttpClient(
         const headResult = ensureString(data.head?.ref, 'head.ref');
         if (!headResult.ok) return headResult;
 
+        const headShaResult = ensureString(data.head?.sha, 'head.sha');
+        if (!headShaResult.ok) return headShaResult;
+
         return ok({
           number: data.number,
           title: titleResult.value,
@@ -402,6 +410,7 @@ export function createGitHubPRHttpClient(
           headBranch: headResult.value,
           mergeable: data.mergeable ?? null,
           mergeableState: data.mergeable_state ?? null,
+          headSha: headShaResult.value,
         });
       } catch (error) {
         return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
@@ -463,6 +472,131 @@ export function createGitHubPRHttpClient(
         }
 
         return ok({ commentId: data.id });
+      } catch (error) {
+        return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
+      }
+    },
+
+    async mergePullRequest(
+      token: string,
+      owner: string,
+      repo: string,
+      pullNumber: number,
+      mergeMethod: 'merge',
+      commitTitle?: string
+    ): Promise<Result<{ sha: string; merged: boolean }, GitHubPRClientError>> {
+      try {
+        const body: Record<string, string> = { merge_method: mergeMethod };
+        if (commitTitle !== undefined) {
+          body['commit_title'] = commitTitle;
+        }
+
+        const response = await fetch(
+          `${GITHUB_API}/repos/${owner}/${repo}/pulls/${String(pullNumber)}/merge`,
+          {
+            method: 'PUT',
+            headers: githubHeaders(token),
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(config.timeoutMs),
+          }
+        );
+
+        if (response.ok) {
+          const data = (await response.json()) as { sha: string; merged: boolean };
+          return ok({ sha: data.sha, merged: data.merged });
+        }
+
+        // 405 = already merged (idempotent)
+        if (response.status === 405) {
+          return ok({ sha: '', merged: true });
+        }
+
+        // 409 = merge conflict at merge time
+        if (response.status === 409) {
+          return err({ code: 'API_ERROR', message: `PR #${String(pullNumber)} has a merge conflict` });
+        }
+
+        return err(mapErrorStatus(response.status, `Failed to merge PR #${String(pullNumber)} in ${owner}/${repo}`));
+      } catch (error) {
+        return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
+      }
+    },
+
+    async getCombinedCheckStatus(
+      token: string,
+      owner: string,
+      repo: string,
+      ref: string
+    ): Promise<Result<{ state: 'success' | 'failure' | 'pending' }, GitHubPRClientError>> {
+      try {
+        const response = await fetch(
+          `${GITHUB_API}/repos/${owner}/${repo}/commits/${encodeURIComponent(ref)}/status`,
+          {
+            method: 'GET',
+            headers: githubHeaders(token),
+            signal: AbortSignal.timeout(config.timeoutMs),
+          }
+        );
+
+        if (response.ok) {
+          const data = (await response.json()) as { state: string };
+          const state: 'success' | 'failure' | 'pending' = data.state === 'success' ? 'success'
+            : data.state === 'failure' || data.state === 'error' ? 'failure'
+            : 'pending';
+          return ok({ state });
+        }
+
+        return err(mapErrorStatus(response.status, `Failed to get check status for ${ref} in ${owner}/${repo}`));
+      } catch (error) {
+        return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
+      }
+    },
+
+    async listAllOpenPullRequests(
+      token: string,
+      owner: string,
+      repo: string
+    ): Promise<Result<GitHubPullRequestListItem[], GitHubPRClientError>> {
+      try {
+        const items: GitHubPullRequestListItem[] = [];
+        let url: string | null =
+          `${GITHUB_API}/repos/${owner}/${repo}/pulls?state=open&per_page=100&sort=created&direction=asc`;
+        const MAX_PAGES = 10;
+
+        for (let page = 0; page < MAX_PAGES && url !== null; page++) {
+          const response = await fetch(url, {
+            method: 'GET',
+            headers: githubHeaders(token),
+            signal: AbortSignal.timeout(config.timeoutMs),
+          });
+
+          if (!response.ok) {
+            return err(mapErrorStatus(response.status, `Failed to list PRs for ${owner}/${repo}`));
+          }
+
+          const data = (await response.json()) as {
+            number: number;
+            title: string;
+            user: { login: string };
+            base: { ref: string };
+            head: { ref: string };
+            created_at: string;
+          }[];
+          for (const pr of data) {
+            items.push({
+              number: pr.number,
+              title: pr.title,
+              authorLogin: pr.user.login,
+              baseBranch: pr.base.ref,
+              headBranch: pr.head.ref,
+              createdAt: pr.created_at,
+            });
+          }
+
+          url = parseNextPageUrl(response.headers.get('link'));
+        }
+
+        return ok(items);
       } catch (error) {
         return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
       }

@@ -461,6 +461,7 @@ describe('GitHubPRHttpClient', () => {
             user: { login: 'alice' },
             base: { ref: 'development' },
             head: { ref: 'feature/alice' },
+            created_at: '2026-03-14T00:00:00Z',
           },
           {
             number: 43,
@@ -468,6 +469,7 @@ describe('GitHubPRHttpClient', () => {
             user: { login: 'bob' },
             base: { ref: 'development' },
             head: { ref: 'feature/bob' },
+            created_at: '2026-03-15T00:00:00Z',
           },
         ]);
 
@@ -487,6 +489,7 @@ describe('GitHubPRHttpClient', () => {
             authorLogin: 'alice',
             baseBranch: 'development',
             headBranch: 'feature/alice',
+            createdAt: '2026-03-14T00:00:00Z',
           },
           {
             number: 43,
@@ -494,6 +497,7 @@ describe('GitHubPRHttpClient', () => {
             authorLogin: 'bob',
             baseBranch: 'development',
             headBranch: 'feature/bob',
+            createdAt: '2026-03-15T00:00:00Z',
           },
         ]);
       }
@@ -509,6 +513,7 @@ describe('GitHubPRHttpClient', () => {
             user: { login: 'alice' },
             base: { ref: 'development' },
             head: { ref: 'feature/alice' },
+            created_at: '2026-03-14T00:00:00Z',
           },
         ], {
           link: '<https://api.github.com/repos/owner/repo/pulls?state=open&base=development&per_page=100&page=2>; rel="next"',
@@ -522,6 +527,7 @@ describe('GitHubPRHttpClient', () => {
             user: { login: 'bob' },
             base: { ref: 'development' },
             head: { ref: 'feature/bob' },
+            created_at: '2026-03-15T00:00:00Z',
           },
         ]);
 
@@ -541,6 +547,7 @@ describe('GitHubPRHttpClient', () => {
             authorLogin: 'alice',
             baseBranch: 'development',
             headBranch: 'feature/alice',
+            createdAt: '2026-03-14T00:00:00Z',
           },
           {
             number: 43,
@@ -548,6 +555,7 @@ describe('GitHubPRHttpClient', () => {
             authorLogin: 'bob',
             baseBranch: 'development',
             headBranch: 'feature/bob',
+            createdAt: '2026-03-15T00:00:00Z',
           },
         ]);
       }
@@ -580,12 +588,13 @@ describe('GitHubPRHttpClient', () => {
       }
     });
 
-    it('returns API_ERROR when PR list is missing number, title, base, or head data', async () => {
+    it('returns API_ERROR when PR list is missing number, title, base, head, or created_at data', async () => {
       const cases = [
-        [{ title: 'Fix conflict', user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice' } }, 'number'],
-        [{ number: 42, user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice' } }, 'title'],
-        [{ number: 42, title: 'Fix conflict', user: { login: 'alice' }, base: {}, head: { ref: 'feature/alice' } }, 'base.ref'],
-        [{ number: 42, title: 'Fix conflict', user: { login: 'alice' }, base: { ref: 'development' }, head: {} }, 'head.ref'],
+        [{ title: 'Fix conflict', user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice' }, created_at: '2026-01-01T00:00:00Z' }, 'number'],
+        [{ number: 42, user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice' }, created_at: '2026-01-01T00:00:00Z' }, 'title'],
+        [{ number: 42, title: 'Fix conflict', user: { login: 'alice' }, base: {}, head: { ref: 'feature/alice' }, created_at: '2026-01-01T00:00:00Z' }, 'base.ref'],
+        [{ number: 42, title: 'Fix conflict', user: { login: 'alice' }, base: { ref: 'development' }, head: {}, created_at: '2026-01-01T00:00:00Z' }, 'head.ref'],
+        [{ number: 42, title: 'Fix conflict', user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice' } }, 'created_at'],
       ] as const;
 
       for (const [payload, expectedField] of cases) {
@@ -641,7 +650,7 @@ describe('GitHubPRHttpClient', () => {
           mergeable_state: 'dirty',
           user: { login: 'alice' },
           base: { ref: 'development' },
-          head: { ref: 'feature/alice' },
+          head: { ref: 'feature/alice', sha: 'abc123' },
         });
 
       const result = await client.getPullRequestDetails('test-token', 'owner', 'repo', 42);
@@ -657,6 +666,7 @@ describe('GitHubPRHttpClient', () => {
           headBranch: 'feature/alice',
           mergeable: false,
           mergeableState: 'dirty',
+          headSha: 'abc123',
         });
       }
     });
@@ -672,7 +682,7 @@ describe('GitHubPRHttpClient', () => {
           mergeable_state: 'unknown',
           user: { login: 'alice' },
           base: { ref: 'development' },
-          head: { ref: 'feature/alice' },
+          head: { ref: 'feature/alice', sha: 'def456' },
         });
 
       const result = await client.getPullRequestDetails('test-token', 'owner', 'repo', 42);
@@ -694,7 +704,7 @@ describe('GitHubPRHttpClient', () => {
           mergeable: false,
           user: { login: 'alice' },
           base: { ref: 'development' },
-          head: { ref: 'feature/alice' },
+          head: { ref: 'feature/alice', sha: 'ghi789' },
         });
 
       const result = await client.getPullRequestDetails('test-token', 'owner', 'repo', 42);
@@ -707,11 +717,12 @@ describe('GitHubPRHttpClient', () => {
 
     it('returns API_ERROR when PR details are missing required fields', async () => {
       const cases = [
-        [{ title: 'Fix conflict', user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice' } }, 'number'],
-        [{ number: 42, user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice' } }, 'title'],
-        [{ number: 42, title: 'Fix conflict', user: {}, base: { ref: 'development' }, head: { ref: 'feature/alice' } }, 'user.login'],
-        [{ number: 42, title: 'Fix conflict', user: { login: 'alice' }, base: {}, head: { ref: 'feature/alice' } }, 'base.ref'],
+        [{ title: 'Fix conflict', user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice', sha: 'abc' } }, 'number'],
+        [{ number: 42, user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice', sha: 'abc' } }, 'title'],
+        [{ number: 42, title: 'Fix conflict', user: {}, base: { ref: 'development' }, head: { ref: 'feature/alice', sha: 'abc' } }, 'user.login'],
+        [{ number: 42, title: 'Fix conflict', user: { login: 'alice' }, base: {}, head: { ref: 'feature/alice', sha: 'abc' } }, 'base.ref'],
         [{ number: 42, title: 'Fix conflict', user: { login: 'alice' }, base: { ref: 'development' }, head: {} }, 'head.ref'],
+        [{ number: 42, title: 'Fix conflict', user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice' } }, 'head.sha'],
       ] as const;
 
       for (const [payload, expectedField] of cases) {
@@ -740,6 +751,267 @@ describe('GitHubPRHttpClient', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('NOT_FOUND');
+      }
+    });
+  });
+
+  describe('mergePullRequest', () => {
+    it('returns sha and merged flag on success', async () => {
+      nock('https://api.github.com')
+        .put('/repos/owner/repo/pulls/42/merge', { merge_method: 'merge' })
+        .matchHeader('Authorization', 'Bearer test-token')
+        .reply(200, { sha: 'abc123', merged: true });
+
+      const result = await client.mergePullRequest('test-token', 'owner', 'repo', 42, 'merge');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ sha: 'abc123', merged: true });
+      }
+    });
+
+    it('sends commit_title when provided', async () => {
+      nock('https://api.github.com')
+        .put('/repos/owner/repo/pulls/42/merge', { merge_method: 'merge', commit_title: 'My title' })
+        .matchHeader('Authorization', 'Bearer test-token')
+        .reply(200, { sha: 'def456', merged: true });
+
+      const result = await client.mergePullRequest('test-token', 'owner', 'repo', 42, 'merge', 'My title');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ sha: 'def456', merged: true });
+      }
+    });
+
+    it('returns ok with empty sha when PR is already merged (405)', async () => {
+      nock('https://api.github.com')
+        .put('/repos/owner/repo/pulls/42/merge')
+        .reply(405, { message: 'Pull Request is not mergeable' });
+
+      const result = await client.mergePullRequest('test-token', 'owner', 'repo', 42, 'merge');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ sha: '', merged: true });
+      }
+    });
+
+    it('returns API_ERROR on merge conflict (409)', async () => {
+      nock('https://api.github.com')
+        .put('/repos/owner/repo/pulls/42/merge')
+        .reply(409, { message: 'Merge conflict' });
+
+      const result = await client.mergePullRequest('test-token', 'owner', 'repo', 42, 'merge');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+        expect(result.error.message).toContain('merge conflict');
+      }
+    });
+
+    it('returns mapped error on other status codes', async () => {
+      nock('https://api.github.com')
+        .put('/repos/owner/repo/pulls/42/merge')
+        .reply(404, { message: 'Not Found' });
+
+      const result = await client.mergePullRequest('test-token', 'owner', 'repo', 42, 'merge');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NOT_FOUND');
+      }
+    });
+
+    it('returns NETWORK_ERROR on fetch failure', async () => {
+      nock('https://api.github.com')
+        .put('/repos/owner/repo/pulls/42/merge')
+        .replyWithError('connection refused');
+
+      const result = await client.mergePullRequest('test-token', 'owner', 'repo', 42, 'merge');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NETWORK_ERROR');
+      }
+    });
+  });
+
+  describe('getCombinedCheckStatus', () => {
+    it('returns success state', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/commits/abc123/status')
+        .matchHeader('Authorization', 'Bearer test-token')
+        .reply(200, { state: 'success' });
+
+      const result = await client.getCombinedCheckStatus('test-token', 'owner', 'repo', 'abc123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.state).toBe('success');
+      }
+    });
+
+    it('maps failure state', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/commits/abc123/status')
+        .reply(200, { state: 'failure' });
+
+      const result = await client.getCombinedCheckStatus('test-token', 'owner', 'repo', 'abc123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.state).toBe('failure');
+      }
+    });
+
+    it('maps error state to failure', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/commits/abc123/status')
+        .reply(200, { state: 'error' });
+
+      const result = await client.getCombinedCheckStatus('test-token', 'owner', 'repo', 'abc123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.state).toBe('failure');
+      }
+    });
+
+    it('maps unknown state to pending', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/commits/abc123/status')
+        .reply(200, { state: 'pending' });
+
+      const result = await client.getCombinedCheckStatus('test-token', 'owner', 'repo', 'abc123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.state).toBe('pending');
+      }
+    });
+
+    it('returns error on non-ok response', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/commits/abc123/status')
+        .reply(404, { message: 'Not Found' });
+
+      const result = await client.getCombinedCheckStatus('test-token', 'owner', 'repo', 'abc123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NOT_FOUND');
+      }
+    });
+
+    it('returns NETWORK_ERROR on fetch failure', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/commits/abc123/status')
+        .replyWithError('connection refused');
+
+      const result = await client.getCombinedCheckStatus('test-token', 'owner', 'repo', 'abc123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NETWORK_ERROR');
+      }
+    });
+
+    it('encodes ref with special characters', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/commits/refs%2Fheads%2Fmain/status')
+        .reply(200, { state: 'success' });
+
+      const result = await client.getCombinedCheckStatus('test-token', 'owner', 'repo', 'refs/heads/main');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.state).toBe('success');
+      }
+    });
+  });
+
+  describe('listAllOpenPullRequests', () => {
+    it('returns open PRs on success', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls?state=open&per_page=100&sort=created&direction=asc')
+        .matchHeader('Authorization', 'Bearer test-token')
+        .reply(200, [
+          {
+            number: 1,
+            title: 'PR 1',
+            user: { login: 'alice' },
+            base: { ref: 'main' },
+            head: { ref: 'feat-1' },
+            created_at: '2026-01-01T00:00:00Z',
+          },
+        ]);
+
+      const result = await client.listAllOpenPullRequests('test-token', 'owner', 'repo');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual([
+          {
+            number: 1,
+            title: 'PR 1',
+            authorLogin: 'alice',
+            baseBranch: 'main',
+            headBranch: 'feat-1',
+            createdAt: '2026-01-01T00:00:00Z',
+          },
+        ]);
+      }
+    });
+
+    it('paginates when Link header has next page', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls?state=open&per_page=100&sort=created&direction=asc')
+        .reply(200, [
+          { number: 1, title: 'PR 1', user: { login: 'alice' }, base: { ref: 'main' }, head: { ref: 'feat-1' }, created_at: '2026-01-01T00:00:00Z' },
+        ], {
+          link: '<https://api.github.com/repos/owner/repo/pulls?state=open&per_page=100&sort=created&direction=asc&page=2>; rel="next"',
+        });
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls?state=open&per_page=100&sort=created&direction=asc&page=2')
+        .reply(200, [
+          { number: 2, title: 'PR 2', user: { login: 'bob' }, base: { ref: 'main' }, head: { ref: 'feat-2' }, created_at: '2026-01-02T00:00:00Z' },
+        ]);
+
+      const result = await client.listAllOpenPullRequests('test-token', 'owner', 'repo');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(2);
+        expect(result.value[0]?.number).toBe(1);
+        expect(result.value[1]?.number).toBe(2);
+      }
+    });
+
+    it('returns error on non-ok response', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls?state=open&per_page=100&sort=created&direction=asc')
+        .reply(404, { message: 'Not Found' });
+
+      const result = await client.listAllOpenPullRequests('test-token', 'owner', 'repo');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NOT_FOUND');
+      }
+    });
+
+    it('returns NETWORK_ERROR on fetch failure', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls?state=open&per_page=100&sort=created&direction=asc')
+        .replyWithError('connection refused');
+
+      const result = await client.listAllOpenPullRequests('test-token', 'owner', 'repo');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NETWORK_ERROR');
       }
     });
   });
