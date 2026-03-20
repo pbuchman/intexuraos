@@ -504,7 +504,7 @@ Follow the `eventDecisionRepository.ts` pattern:
 - Use `crypto.randomUUID()` prefixed with `watch_` for IDs
 - `create`: Check for existing active watch first (query by userId+owner+repo+baseBranch+status=active), return `CONFLICT` if found. Set status to `active`, empty arrays, null timestamps.
 - `findAllActive`: Query `where('status', '==', 'active')` — single-field query, no composite index needed
-- `findActiveByUserAndBranch`: Query `where('userId') + where('owner') + where('repo') + where('baseBranch') + where('status', '==', 'active')` — needs a composite index on fields `(userId, owner, repo, baseBranch, status)`. Create migration in `apps/code-agent/migrations/` following existing patterns. **Prerequisite:** The composite index must be deployed to Firestore before the repository tests can pass in CI — the migration must be run (or the index created manually in the emulator) as a setup step before Task 5 tests.
+- `findActiveByUserAndBranch`: Query `where('userId') + where('owner') + where('repo') + where('baseBranch') + where('status', '==', 'active')` — needs a composite index on fields `(userId, owner, repo, baseBranch, status)`. Create migration in `migrations/` at repo root following existing patterns (e.g., `migrations/064_merge-queue-watches-composite-index.mjs`). **Prerequisite:** The composite index must be deployed to Firestore before the repository tests can pass in CI — the migration must be run (or the index created manually in the emulator) as a setup step before Task 5 tests.
 - `appendMergedPr`: Use `FieldValue.arrayUnion()` for atomic append (safe for concurrent ticks)
 - `update`: Use `docRef.update()` with only the provided fields
 
