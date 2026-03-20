@@ -596,8 +596,12 @@ describe('evaluateEvent', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        // Should go through normal LLM triage, not short-circuit
-        expect(result.value.triage.action).not.toBe('skip');
+        // Should go through normal LLM triage, not the plan short-circuit
+        expect(result.value.triage).not.toEqual(
+          expect.objectContaining({ reviewTypes: ['plan_review'] })
+        );
+        // Verify LLM was invoked (non-zero cost indicates LLM triage ran)
+        expect(result.value.usage.costUsd).toBeGreaterThan(0);
       }
     });
   });
