@@ -1433,6 +1433,7 @@ export type {
   HellscriptEvent,
   HellscriptDraftVersion,
   HellscriptWorkspaceResponse,
+  HellscriptMaterializedState,
   HellscriptImposeRequest,
   HellscriptImposeResponse,
   HellscriptIntentKind,

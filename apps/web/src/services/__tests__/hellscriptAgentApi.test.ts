@@ -73,6 +73,7 @@ describe('hellscriptAgentApi', () => {
         buffer: mockBuffer,
         events: [],
         draftVersions: [],
+        state: null,
       };
       vi.mocked(apiRequest).mockResolvedValue(mockWorkspace);
 

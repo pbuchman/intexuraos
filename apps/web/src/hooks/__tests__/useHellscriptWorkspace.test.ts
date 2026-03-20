@@ -53,6 +53,7 @@ const mockWorkspace: HellscriptWorkspaceResponse = {
     },
   ],
   draftVersions: [],
+  state: null,
 };
 
 describe('useHellscriptWorkspace', () => {
