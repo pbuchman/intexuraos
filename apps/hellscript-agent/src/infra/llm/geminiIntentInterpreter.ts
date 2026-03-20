@@ -43,8 +43,14 @@ export class GeminiIntentInterpreter implements IntentInterpreter {
 
     try {
       const content = result.value.content;
-      const jsonMatch = /\{[\s\S]*\}/.exec(content);
-      const jsonStr = jsonMatch?.[0] ?? content;
+      let jsonStr: string;
+      try {
+        JSON.parse(content);
+        jsonStr = content;
+      } catch {
+        const jsonMatch = /\{[\s\S]*\}/.exec(content);
+        jsonStr = jsonMatch?.[0] ?? content;
+      }
       const parsed = JSON.parse(jsonStr) as {
         kind?: string;
         payload?: Record<string, unknown>;
