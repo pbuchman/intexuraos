@@ -145,7 +145,6 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
 
     // Step 3h: Iterate eligible PRs
     const skippedList: SkippedPr[] = [];
-    let mergedCount = 0;
 
     for (const pr of eligiblePrs) {
       // Get PR details
@@ -207,8 +206,6 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
       }
 
       // Successfully merged
-      mergedCount = 1;
-
       await mergeQueueWatchRepo.appendMergedPr(watchId, {
         prNumber: pr.number,
         title: details.title,
@@ -222,7 +219,7 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
         watchId, owner, repo, baseBranch,
         action: 'merged',
         mergedPrNumber: pr.number,
-        remainingPrs: allPrs.length - mergedCount,
+        remainingPrs: allPrs.length - 1,
         skipped: skippedList,
       };
     }
@@ -240,7 +237,7 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
     return {
       watchId, owner, repo, baseBranch,
       action,
-      remainingPrs: allPrs.length - mergedCount,
+      remainingPrs: allPrs.length,
       skipped: skippedList,
     };
   }
