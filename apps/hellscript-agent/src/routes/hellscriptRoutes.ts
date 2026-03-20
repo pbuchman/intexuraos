@@ -18,8 +18,8 @@ const imposeBodySchema = {
   type: 'object',
   required: ['utterance'],
   properties: {
-    bufferId: { type: 'string' },
-    utterance: { type: 'string', minLength: 1 },
+    bufferId: { type: 'string', maxLength: 128 },
+    utterance: { type: 'string', minLength: 1, maxLength: 10000 },
   },
 } as const;
 
@@ -88,7 +88,8 @@ export const hellscriptRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
         if (result.error.message === 'Buffer not found') {
           return await reply.fail('NOT_FOUND', result.error.message);
         }
-        return await reply.fail('INTERNAL_ERROR', result.error.message);
+        request.log.error({ err: result.error }, 'Impose failed');
+        return await reply.fail('INTERNAL_ERROR', 'An internal error occurred');
       }
 
       return await reply.ok(result.value);
@@ -145,7 +146,8 @@ export const hellscriptRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
       );
 
       if (!result.ok) {
-        return await reply.fail('INTERNAL_ERROR', result.error.message);
+        request.log.error({ err: result.error }, 'List buffers failed');
+        return await reply.fail('INTERNAL_ERROR', 'An internal error occurred');
       }
 
       return await reply.ok(result.value);
@@ -210,7 +212,8 @@ export const hellscriptRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
         if (result.error.message === 'Buffer not found') {
           return await reply.fail('NOT_FOUND', result.error.message);
         }
-        return await reply.fail('INTERNAL_ERROR', result.error.message);
+        request.log.error({ err: result.error }, 'Get workspace failed');
+        return await reply.fail('INTERNAL_ERROR', 'An internal error occurred');
       }
 
       return await reply.ok(result.value);
