@@ -150,13 +150,13 @@ All planned Tailwind classes have been audited against existing codebase pattern
 
 ## Recommendations
 
-### Before Implementation (Critical)
-1. Fix migration path in backend plan: use `/repo/migrations/` not `apps/code-agent/migrations/`
+### Before Implementation (Critical) — APPLIED
+1. ~~Fix migration path in backend plan: use `/repo/migrations/` not `apps/code-agent/migrations/`~~ — Fixed in backend plan
 
-### During Implementation (Warning)
-2. Add explicit mobile layout for WatchStatusCard toggle positioning
-3. Add text truncation utilities to PR title column in PrRow
-4. Consider adding a brief loading skeleton for the PR list area
+### During Implementation (Warning) — APPLIED TO PLANS
+2. ~~Add explicit mobile layout for WatchStatusCard toggle positioning~~ — Added to frontend plan Task 5
+3. ~~Add text truncation utilities to PR title column in PrRow~~ — Added to frontend plan Task 6
+4. ~~Consider adding a brief loading skeleton for the PR list area~~ — Added to frontend plan Task 8
 
 ### Post-MVP (Info)
 5. Add rate limiting on watch creation endpoint
