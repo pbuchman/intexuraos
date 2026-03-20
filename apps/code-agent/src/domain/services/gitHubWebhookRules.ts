@@ -313,11 +313,17 @@ export class BotReviewEditRule implements WebhookRule {
 
 /**
  * Check if a filename matches the plan document pattern.
- * Matches any path containing "plan" (case-insensitive) that ends with ".md".
+ * Matches .md files in a /plans/ directory OR with "plan" as a word boundary
+ * in the filename (e.g., my-plan.md, plan-v2.md) but NOT substrings
+ * like "explanation.md" or "airplane.md".
  */
 export function isPlanFile(filename: string): boolean {
   const lower = filename.toLowerCase();
-  return lower.includes('plan') && lower.endsWith('.md');
+  if (!lower.endsWith('.md')) return false;
+  // Files inside a plans/ directory (e.g., docs/plans/2026-03-20-foo.md)
+  if (lower.includes('/plans/')) return true;
+  // Files with "plan" as a word boundary in the name (e.g., my-plan-v2.md)
+  return /\bplan\b/.test(lower);
 }
 
 /**
