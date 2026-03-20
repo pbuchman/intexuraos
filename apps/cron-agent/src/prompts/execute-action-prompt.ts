@@ -13,8 +13,7 @@ export const executeActionPrompt: PromptBuilder<ExecuteActionInput> = {
 
   build(input: ExecuteActionInput): string {
     const preferredToolsSection = input.preferredTools.length > 0
-      ? `
-Preferred tools:
+      ? `\nPreferred tools:
 ${input.preferredTools.map((toolName) => `- ${toolName}`).join('\n')}
 
 Try the preferred tools first when they fit the task. You may use other available tools if they are more appropriate or if the preferred tools are insufficient.
@@ -25,7 +24,6 @@ Try the preferred tools first when they fit the task. You may use other availabl
 
 You have access to tools from the following services: ${input.serviceNames.join(', ')}.
 ${preferredToolsSection}
-
 Execute the user-provided instruction step by step.
 
 Guidelines:

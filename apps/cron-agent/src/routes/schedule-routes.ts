@@ -3,7 +3,7 @@ import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { createScheduleManager } from '../domain/use-cases/manage-schedule.js';
 import type { ScheduleError } from '../domain/use-cases/manage-schedule.js';
-import { normalizeScheduleAction, type ScheduleStatus } from '../domain/types.js';
+import type { ScheduleStatus } from '../domain/types.js';
 import { executionResponseSchema } from './schemas.js';
 
 interface CreateScheduleBody {
@@ -314,7 +314,10 @@ export const scheduleRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const result = await manager.create(auth.userId, {
         name: request.body.name,
         description: request.body.description,
-        action: normalizeScheduleAction(request.body.action),
+        action: {
+          ...request.body.action,
+          preferredTools: request.body.action.preferredTools ?? [],
+        },
         timezone: request.body.timezone ?? 'UTC',
       });
 
@@ -408,7 +411,7 @@ export const scheduleRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         description: request.body.description,
         status: request.body.status,
         action: request.body.action !== undefined
-          ? normalizeScheduleAction(request.body.action)
+          ? { ...request.body.action, preferredTools: request.body.action.preferredTools ?? [] }
           : undefined,
         timezone: request.body.timezone,
       });

@@ -406,6 +406,23 @@ describe('Schedule Routes', () => {
       expect(response.statusCode).toBe(400);
     });
 
+    it('defaults preferredTools to empty array when omitted from create', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/cron/schedules',
+        headers: { authorization: AUTH_HEADER },
+        payload: {
+          name: 'No tools',
+          description: 'Every minute',
+          action: { services: ['code-agent'], instruction: 'do something' },
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: CronSchedule };
+      expect(body.data.action.preferredTools).toEqual([]);
+    });
+
     it('round-trips preferredTools on create', async () => {
       const fakeRepo = {
         ...createFakeServices().scheduleRepo,
@@ -721,6 +738,19 @@ describe('Schedule Routes', () => {
             instruction: 'new task',
             preferredTools: ['code_agent__run_code'],
           },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('defaults preferredTools to empty array when omitted from update action', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/cron/schedules/schedule-1',
+        headers: { authorization: AUTH_HEADER },
+        payload: {
+          action: { services: ['code-agent'], instruction: 'new task' },
         },
       });
 
