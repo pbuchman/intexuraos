@@ -283,7 +283,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     taskEnqueueService,
     mergeConflictDetector: {
       async detectOnPush() { /* no-op for tests */ },
-      async reconcile() { return { processed: 0 }; },
+      async reconcile() { return { processed: 0, closed: 0, conflicting: 0, clean: 0, unknown: 0, skipped: 0, error: 0 }; },
     },
     mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
   };

@@ -1427,7 +1427,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       const detector = createDetectMergeConflictsOnPush(deps as never);
       const result = await detector.reconcile(logger);
 
-      expect(result).toEqual({ processed: 0 });
+      expect(result).toEqual({ processed: 0, closed: 0, conflicting: 0, clean: 0, unknown: 0, skipped: 0, error: 0 });
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ error: expect.anything() }),
         expect.stringContaining('Failed to load open PR summaries')
@@ -1443,7 +1443,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       const detector = createDetectMergeConflictsOnPush(deps as never);
       const result = await detector.reconcile(logger);
 
-      expect(result).toEqual({ processed: 0 });
+      expect(result).toEqual({ processed: 0, closed: 0, conflicting: 0, clean: 0, unknown: 0, skipped: 0, error: 0 });
       expect(deps.gitHubPRClient.getPullRequestDetails).not.toHaveBeenCalled();
     });
 
@@ -1622,6 +1622,34 @@ describe('createDetectMergeConflictsOnPush', () => {
       const result = await detector.reconcile(logger);
 
       expect(result).toEqual(expect.objectContaining({ processed: 1, unknown: 1 }));
+    });
+
+    it('counts skipped outcome when no OAuth user is found', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+      deps.gitHubPRSummaryRepo.findAllOpen.mockResolvedValue(ok([
+        createSummary({ pullRequestNumber: 10, authorLogin: null, managedConflictTaskOwnerUserId: null }),
+      ]));
+      deps.gitHubPREventRepo.findByPullRequest.mockResolvedValue(ok([]));
+
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      const result = await detector.reconcile(logger);
+
+      expect(result).toEqual(expect.objectContaining({ processed: 1, skipped: 1 }));
+    });
+
+    it('counts error outcome when processOpenSummaryOnPush throws', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+      deps.gitHubPRSummaryRepo.findAllOpen.mockResolvedValue(ok([
+        createSummary({ pullRequestNumber: 10 }),
+      ]));
+      deps.gitHubPRClient.getPullRequestDetails.mockRejectedValue(new Error('unexpected crash'));
+
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      const result = await detector.reconcile(logger);
+
+      expect(result).toEqual(expect.objectContaining({ processed: 1, error: 1, skipped: 0 }));
     });
   });
 });
