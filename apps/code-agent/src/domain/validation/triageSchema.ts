@@ -1,6 +1,5 @@
 import { z } from 'zod';
-
-const VALID_REVIEW_TYPES = ['code_quality', 'security', 'architecture', 'plan_review'] as const;
+import { ALL_REVIEW_TYPES } from '../constants/reviewTypes.js';
 
 export const TriageSkipSchema = z.object({
   action: z.literal('skip'),
@@ -9,7 +8,7 @@ export const TriageSkipSchema = z.object({
 
 export const TriageReviewSchema = z.object({
   action: z.literal('request_review'),
-  reviewTypes: z.array(z.enum(VALID_REVIEW_TYPES)).min(1, 'At least one review type required'),
+  reviewTypes: z.array(z.enum(ALL_REVIEW_TYPES)).min(1, 'At least one review type required'),
 });
 
 export const TriageResultSchema = z.discriminatedUnion('action', [

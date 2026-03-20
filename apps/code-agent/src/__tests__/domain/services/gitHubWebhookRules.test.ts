@@ -8,9 +8,8 @@ import {
   BotReviewEditRule,
   CodeWorkerOutputRule,
   GitHubWebhookRules,
-  isPlanFile,
-  evaluatePlanFiles,
 } from '../../../domain/services/gitHubWebhookRules.js';
+import { isPlanFile, evaluatePlanFiles } from '../../../domain/utils/planDetection.js';
 
 import { describe, it, expect } from 'vitest';
 

@@ -20,13 +20,10 @@ import { resolveLoginForTaskCreation } from '../services/gitHubDispatchService.j
 import { isReviewCommandComment, normalizeReviewWorkerType, SUPPORTED_REVIEW_WORKER_TYPES } from '../utils/reviewTriage.js';
 import { TriageSkipSchema, TriageReviewSchema } from '../validation/triageSchema.js';
 import { buildTriageRepairMessage } from '../validation/buildTriageRepairMessage.js';
-import { evaluatePlanFiles } from '../services/gitHubWebhookRules.js';
+import { evaluatePlanFiles } from '../utils/planDetection.js';
 import type { ZodError } from 'zod';
 
-// plan_review is intentionally excluded — plan-only PRs are deterministically
-// routed by evaluatePlanFiles() before LLM triage runs. See triageSchema.ts
-// for the full set including plan_review.
-const LLM_TOOL_REVIEW_TYPES = ['code_quality', 'security', 'architecture'] as const;
+import { LLM_TOOL_REVIEW_TYPES } from '../constants/reviewTypes.js';
 const VALID_DISPATCH_TEMPLATES = ['pr_comment', 'bot_review_edit'] as const;
 
 function formatZodErrors(error: ZodError): string {
