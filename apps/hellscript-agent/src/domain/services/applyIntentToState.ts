@@ -2,6 +2,12 @@ import { randomUUID } from 'node:crypto';
 import type { InterpretedIntent } from '../models/hellscriptEvent.js';
 import type { MaterializedBufferState, ThoughtEntry } from '../models/materializedBufferState.js';
 
+function extractStringArray(payload: Record<string, unknown>, key: string): string[] | undefined {
+  const raw = payload[key];
+  if (!Array.isArray(raw)) return undefined;
+  return raw.every((x): x is string => typeof x === 'string') ? raw : undefined;
+}
+
 function extractString(payload: Record<string, unknown>, key: string): string {
   const val = payload[key];
   if (typeof val === 'string') return val;
@@ -25,7 +31,7 @@ export function applyIntentToState(
     case 'delete_thought':
       return deleteThought(state, extractString(intent.payload, 'thoughtId'));
     case 'reorder_thoughts':
-      return reorderThoughts(state, intent.payload['thoughtIds'] as string[] | undefined);
+      return reorderThoughts(state, extractStringArray(intent.payload, 'thoughtIds'));
     case 'update_draft':
       return state;
     case 'fallback_append':

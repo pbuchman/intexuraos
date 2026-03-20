@@ -337,16 +337,32 @@ describe('imposeOnBuffer', () => {
       expect(calls[1]?.priorDraft).toBe('# V1');
     });
 
-    it('returns error when getDraftVersions fails', async () => {
-      repository.simulateMethodError('getDraftVersions', new Error('Read failed'));
+    it('returns error when getDraftVersion fails on second draft', async () => {
+      // First impose creates buffer + first draft
       interpreter.setNextIntent({
         kind: 'update_draft',
         payload: { text: 'draft' },
       });
+      draftGenerator.setNextMarkdown('# V1');
+
+      const first = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'generate',
+      });
+      expect(first.ok).toBe(true);
+      if (!first.ok) return;
+
+      // Second impose triggers getDraftVersion which fails
+      repository.simulateMethodError('getDraftVersion', new Error('Read failed'));
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'improve' },
+      });
 
       const result = await imposeOnBuffer(deps(), {
         userId: 'user-1',
-        utterance: 'draft',
+        bufferId: first.value.bufferId,
+        utterance: 'improve',
       });
 
       expect(result.ok).toBe(false);

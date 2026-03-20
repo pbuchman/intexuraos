@@ -94,18 +94,20 @@ export async function imposeOnBuffer(
     const currentVersionNumber = buffer.latestDraftVersionNumber ?? 0;
     const nextVersion = currentVersionNumber + 1;
 
-    // Only need prior draft for generation - read drafts only when needed
-    const draftsResult = await repository.getDraftVersions(bufferId);
-    if (!draftsResult.ok) {
-      return draftsResult;
+    // Fetch only the latest draft by ID instead of loading all draft versions
+    let priorDraft: string | null = null;
+    if (buffer.latestDraftVersionId !== null) {
+      const latestDraftResult = await repository.getDraftVersion(
+        buffer.latestDraftVersionId,
+        bufferId
+      );
+      if (!latestDraftResult.ok) {
+        return latestDraftResult;
+      }
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess style fallback for optional chaining on Result value @preserve */
+      priorDraft = latestDraftResult.value?.markdown ?? null;
+      /* v8 ignore stop @preserve */
     }
-
-    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess fallback after length guard @preserve */
-    const priorDraft =
-      draftsResult.value.length > 0
-        ? (draftsResult.value[draftsResult.value.length - 1]?.markdown ?? null)
-        : null;
-    /* v8 ignore stop @preserve */
 
     const markdown = await draftGenerator.generate(newState, priorDraft, requestText, logger);
 

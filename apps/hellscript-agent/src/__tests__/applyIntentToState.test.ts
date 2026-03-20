@@ -273,6 +273,18 @@ describe('applyIntentToState', () => {
       expect(result).toBe(state);
     });
 
+    it('returns state unchanged when thoughtIds contains non-strings', () => {
+      const state = stateWithThoughts([{ id: 'a', text: 'First' }]);
+      const intent: InterpretedIntent = {
+        kind: 'reorder_thoughts',
+        payload: { thoughtIds: [1, 2] as unknown as string[] },
+      };
+
+      const result = applyIntentToState(state, intent);
+
+      expect(result).toBe(state);
+    });
+
     it('returns state unchanged when thoughtIds is undefined', () => {
       const state = stateWithThoughts([{ id: 'a', text: 'First' }]);
       const intent: InterpretedIntent = {

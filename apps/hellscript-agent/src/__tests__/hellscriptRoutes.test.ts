@@ -241,7 +241,7 @@ describe('hellscriptRoutes', () => {
 
     it('returns 500 when repository fails', async () => {
       ctx.hellscriptRepository.simulateMethodError(
-        'getBuffer',
+        'getBufferWithState',
         new Error('DB error')
       );
 
