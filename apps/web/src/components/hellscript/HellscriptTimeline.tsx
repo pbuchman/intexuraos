@@ -1,5 +1,6 @@
 import { AlertTriangle } from 'lucide-react';
 import type { HellscriptEvent, HellscriptIntentKind } from '@/types';
+import { formatDateTime } from '@/utils/dateFormat';
 
 interface HellscriptTimelineProps {
   events: HellscriptEvent[];
@@ -28,13 +29,6 @@ function formatIntentLabel(kind: HellscriptIntentKind): string {
   return kind.replace(/_/g, ' ');
 }
 
-function formatTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleTimeString(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 export function HellscriptTimeline({ events }: HellscriptTimelineProps): React.JSX.Element {
   if (events.length === 0) {
@@ -69,7 +63,7 @@ export function HellscriptTimeline({ events }: HellscriptTimelineProps): React.J
                 {formatIntentLabel(event.intent.kind)}
               </span>
               <span className="text-xs text-slate-400 dark:text-slate-500">
-                {formatTime(event.createdAt)}
+                {formatDateTime(event.createdAt)}
               </span>
             </div>
             <p className="text-sm text-slate-700 dark:text-slate-300">

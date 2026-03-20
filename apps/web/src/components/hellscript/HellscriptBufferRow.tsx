@@ -1,19 +1,10 @@
 import { Link } from 'react-router-dom';
 import { FileText, MessageSquare } from 'lucide-react';
 import type { HellscriptBufferSummary } from '@/types';
+import { formatDateTime } from '@/utils/dateFormat';
 
 interface HellscriptBufferRowProps {
   buffer: HellscriptBufferSummary;
-}
-
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 export function HellscriptBufferRow({ buffer }: HellscriptBufferRowProps): React.JSX.Element {
@@ -40,7 +31,7 @@ export function HellscriptBufferRow({ buffer }: HellscriptBufferRowProps): React
         </div>
       </div>
       <div className="ml-4 shrink-0 text-right text-xs text-slate-400 dark:text-slate-500">
-        <div>{formatDate(buffer.updatedAt)}</div>
+        <div>{formatDateTime(buffer.updatedAt)}</div>
       </div>
     </Link>
   );

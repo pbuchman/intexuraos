@@ -1,19 +1,10 @@
 import type { HellscriptDraftVersion } from '@/types';
+import { formatDateTime } from '@/utils/dateFormat';
 
 interface HellscriptVersionSelectorProps {
   versions: HellscriptDraftVersion[];
   selectedVersionId: string | null;
   onSelect: (versionId: string) => void;
-}
-
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 export function HellscriptVersionSelector({
@@ -43,7 +34,7 @@ export function HellscriptVersionSelector({
       >
         {versions.map((v) => (
           <option key={v.id} value={v.id}>
-            v{String(v.versionNumber)} - {formatDate(v.createdAt)}
+            v{String(v.versionNumber)} - {formatDateTime(v.createdAt)}
           </option>
         ))}
       </select>

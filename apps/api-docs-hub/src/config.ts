@@ -87,11 +87,10 @@ const REQUIRED_ENV_VARS: EnvVar[] = [
     key: 'INTEXURAOS_CRON_AGENT_OPENAPI_URL',
     displayName: 'Cron Agent API',
   },
-  // TODO: Add after first hellscript-agent deploy (INT-1032)
-  // {
-  //   key: 'INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL',
-  //   displayName: 'Hellscript Agent API',
-  // },
+  {
+    key: 'INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL',
+    displayName: 'Hellscript Agent API',
+  },
 ];
 
 /**

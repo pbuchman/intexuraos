@@ -1036,6 +1036,7 @@ module "api_docs_hub" {
     INTEXURAOS_LINEAR_AGENT_OPENAPI_URL                 = "${module.linear_agent.service_url}/openapi.json"
     INTEXURAOS_WEB_AGENT_OPENAPI_URL                    = "${module.web_agent.service_url}/openapi.json"
     INTEXURAOS_CRON_AGENT_OPENAPI_URL                   = "${module.cron_agent.service_url}/openapi.json"
+    INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL             = "${module.hellscript_agent.service_url}/openapi.json"
   })
 
   depends_on = [
@@ -1057,6 +1058,7 @@ module "api_docs_hub" {
     module.calendar_agent,
     module.chat_agent,
     module.cron_agent,
+    module.hellscript_agent,
   ]
 }
 

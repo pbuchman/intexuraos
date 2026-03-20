@@ -159,6 +159,7 @@ jobs:
           bash cloudbuild/scripts/build-push-monitored.sh web-agent apps/web-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh code-agent apps/code-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh chat-agent apps/chat-agent/Dockerfile &
+          bash cloudbuild/scripts/build-push-monitored.sh hellscript-agent apps/hellscript-agent/Dockerfile &
           wait
 
       - name: Build workers
@@ -171,7 +172,7 @@ jobs:
             app-settings-service mobile-notifications-service research-agent
             commands-agent actions-agent data-insights-agent notes-agent
             todos-agent bookmarks-agent calendar-agent linear-agent
-            web-agent code-agent chat-agent cron-agent
+            web-agent code-agent chat-agent cron-agent hellscript-agent
           )
           for svc in "${SERVICES[@]}"; do
             bash "cloudbuild/scripts/deploy-${svc}.sh" &
@@ -200,6 +201,7 @@ jobs:
             "linear-agent:LINEAR_AGENT"
             "code-agent:CODE_AGENT"
             "cron-agent:CRON_AGENT"
+            "hellscript-agent:HELLSCRIPT_AGENT"
           )
 
           declare -A SERVICE_URLS
@@ -383,6 +385,7 @@ jobs:
                 "linear-agent:LINEAR_AGENT"
                 "code-agent:CODE_AGENT"
                 "cron-agent:CRON_AGENT"
+                "hellscript-agent:HELLSCRIPT_AGENT"
               )
 
               declare -A SERVICE_URLS
