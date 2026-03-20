@@ -487,9 +487,10 @@ describe('Merge queue JWT routes', () => {
         payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'main' },
       });
 
-      expect(response.statusCode).toBe(401);
+      expect(response.statusCode).toBe(403);
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
       expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
       expect(body.error.message).toBe('You do not have push access to this repository');
     });
   });
@@ -547,10 +548,28 @@ describe('Merge queue JWT routes', () => {
         headers: { authorization: 'Bearer fake-token' },
       });
 
-      expect(response.statusCode).toBe(500);
+      expect(response.statusCode).toBe(404);
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
       expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
       expect(body.error.message).toBe('Watch not found');
+    });
+
+    it('should return 500 when findById returns a non-NOT_FOUND error', async () => {
+      vi.mocked(mockMergeQueueWatchRepo.findById).mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR' as const, message: 'Connection lost' })
+      );
+
+      const response = await server.inject({
+        method: 'DELETE',
+        url: '/code/merge-queue/watch/watch-broken',
+        headers: { authorization: 'Bearer fake-token' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.message).toBe('Connection lost');
     });
 
     it('should return error when update fails', async () => {
@@ -617,7 +636,7 @@ describe('Merge queue JWT routes', () => {
         headers: { authorization: 'Bearer fake-token' },
       });
 
-      expect(response.statusCode).toBe(401);
+      expect(response.statusCode).toBe(403);
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
       expect(body.success).toBe(false);
       expect(body.error.message).toBe('Not authorized to cancel this watch');
