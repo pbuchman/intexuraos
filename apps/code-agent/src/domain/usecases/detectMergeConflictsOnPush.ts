@@ -905,7 +905,7 @@ interface ProcessingTrigger {
   lastActivityAt: Date;
 }
 
-type ProcessingOutcome = 'closed' | 'clean' | 'conflicting' | 'unknown' | 'skipped';
+type ProcessingOutcome = 'closed' | 'clean' | 'conflicting' | 'unknown' | 'skipped' | 'error';
 
 async function processOpenSummaryOnPush(
   deps: DetectMergeConflictsOnPushDeps,
@@ -1085,13 +1085,13 @@ export function createDetectMergeConflictsOnPush(
       const openResult = await deps.gitHubPRSummaryRepo.findAllOpen();
       if (!openResult.ok) {
         logger.warn({ error: openResult.error }, 'Failed to load open PR summaries for merge-conflict reconciliation');
-        return { processed: 0 };
+        return { processed: 0, closed: 0, conflicting: 0, clean: 0, unknown: 0, skipped: 0, error: 0 };
       }
 
       const summaries = openResult.value;
       if (summaries.length === 0) {
         logger.debug({}, 'No open PR summaries to reconcile for merge conflicts');
-        return { processed: 0 };
+        return { processed: 0, closed: 0, conflicting: 0, clean: 0, unknown: 0, skipped: 0, error: 0 };
       }
 
       logger.info({ count: summaries.length }, 'Reconciling merge conflicts for open PRs');
@@ -1103,6 +1103,7 @@ export function createDetectMergeConflictsOnPush(
       let clean = 0;
       let unknown = 0;
       let skipped = 0;
+      let error = 0;
 
       for (const existingSummary of summaries) {
         const parsedRepository = parseOwnerRepo(existingSummary.repository);
@@ -1121,6 +1122,7 @@ export function createDetectMergeConflictsOnPush(
         try {
           outcome = await processOpenSummaryOnPush(deps, trigger, logger, parsedRepository, existingSummary);
         } catch (err: unknown) {
+          outcome = 'error';
           logger.error(
             { error: err, repository: existingSummary.repository, prNumber: existingSummary.pullRequestNumber },
             'Unhandled error processing PR in merge-conflict reconcile; continuing'
@@ -1134,15 +1136,16 @@ export function createDetectMergeConflictsOnPush(
           case 'clean': clean++; break;
           case 'unknown': unknown++; break;
           case 'skipped': skipped++; break;
+          case 'error': error++; break;
         }
       }
 
       logger.info(
-        { processed, closed, conflicting, clean, unknown, skipped },
+        { processed, closed, conflicting, clean, unknown, skipped, error },
         'Merge conflict reconciliation complete'
       );
 
-      return { processed, closed, conflicting, clean, unknown, skipped };
+      return { processed, closed, conflicting, clean, unknown, skipped, error };
     },
   };
 }

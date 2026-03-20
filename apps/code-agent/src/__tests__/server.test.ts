@@ -166,7 +166,7 @@ describe('server configuration', () => {
       taskEnqueueService: {} as never,
       mergeConflictDetector: {
         async detectOnPush() { /* no-op */ },
-        async reconcile() { return { processed: 0 }; },
+        async reconcile() { return { processed: 0, closed: 0, conflicting: 0, clean: 0, unknown: 0, skipped: 0, error: 0 }; },
       },
       mergeQueueWatchRepo: {
         create: vi.fn(),
