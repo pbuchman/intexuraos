@@ -1,7 +1,13 @@
 import { ok, err, type Result } from '@intexuraos/common-core';
 import { getErrorMessage } from '@intexuraos/common-core';
 import type { ScheduleRepository, ScheduleRepositoryError } from '../domain/ports/schedule-repository.js';
-import type { CronSchedule, CreateScheduleInput, ListOptions, ListSchedulesResponse } from '../domain/types.js';
+import {
+  normalizeCronSchedule,
+  type CronSchedule,
+  type CreateScheduleInput,
+  type ListOptions,
+  type ListSchedulesResponse,
+} from '../domain/types.js';
 import { getFirestore, FieldValue } from '@intexuraos/infra-firestore';
 
 const COLLECTION = 'cron_schedules';
@@ -47,7 +53,7 @@ export class FirestoreScheduleRepository implements ScheduleRepository {
       if (!doc.exists) {
         return ok(null);
       }
-      return ok({ id: doc.id, ...doc.data() } as CronSchedule);
+      return ok(normalizeCronSchedule({ id: doc.id, ...doc.data() } as CronSchedule));
     } catch (error: unknown) {
       return err({ code: 'INTERNAL_ERROR', message: `Failed to find schedule: ${getErrorMessage(error, 'Unknown error')}` });
     }
@@ -79,7 +85,7 @@ export class FirestoreScheduleRepository implements ScheduleRepository {
 
       const schedules: CronSchedule[] = [];
       snapshot.docs.slice(0, options.limit).forEach((doc) => {
-        schedules.push({ id: doc.id, ...doc.data() } as CronSchedule);
+        schedules.push(normalizeCronSchedule({ id: doc.id, ...doc.data() } as CronSchedule));
       });
 
       const hasMore = snapshot.docs.length > options.limit;
@@ -105,7 +111,7 @@ export class FirestoreScheduleRepository implements ScheduleRepository {
         .get();
 
       const schedules: CronSchedule[] = snapshot.docs.map(
-        (doc) => ({ id: doc.id, ...doc.data() } as CronSchedule),
+        (doc) => normalizeCronSchedule({ id: doc.id, ...doc.data() } as CronSchedule),
       );
 
       return ok(schedules);
@@ -129,7 +135,7 @@ export class FirestoreScheduleRepository implements ScheduleRepository {
       const updatedData = { ...updates, updatedAt: new Date().toISOString() };
       await docRef.update(updatedData);
       const updated = await docRef.get();
-      return ok({ id: updated.id, ...updated.data() } as CronSchedule);
+      return ok(normalizeCronSchedule({ id: updated.id, ...updated.data() } as CronSchedule));
     } catch (error: unknown) {
       return err({ code: 'INTERNAL_ERROR', message: `Failed to update schedule: ${getErrorMessage(error, 'Unknown error')}` });
     }

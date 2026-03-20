@@ -50,7 +50,7 @@ const testSchedule: CronSchedule = {
   description: 'Every minute',
   cronExpression: '* * * * *',
   timezone: 'UTC',
-  action: { services: ['code-agent'], instruction: 'do something' },
+  action: { services: ['code-agent'], instruction: 'do something', preferredTools: [] },
   status: 'active',
   lastExecutedAt: null,
   nextExecutionAt: '2026-01-01T00:01:00.000Z',
