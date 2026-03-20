@@ -3,7 +3,7 @@ import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { createScheduleManager } from '../domain/use-cases/manage-schedule.js';
 import type { ScheduleError } from '../domain/use-cases/manage-schedule.js';
-import type { ScheduleStatus } from '../domain/types.js';
+import { normalizeScheduleAction, type ScheduleStatus } from '../domain/types.js';
 import { executionResponseSchema } from './schemas.js';
 
 interface CreateScheduleBody {
@@ -12,6 +12,7 @@ interface CreateScheduleBody {
   action: {
     services: string[];
     instruction: string;
+    preferredTools?: string[];
   };
   timezone?: string;
 }
@@ -23,6 +24,7 @@ interface UpdateScheduleBody {
   action?: {
     services: string[];
     instruction: string;
+    preferredTools?: string[];
   };
   timezone?: string;
 }
@@ -57,6 +59,10 @@ const createScheduleBodySchema = {
       properties: {
         services: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1 },
         instruction: { type: 'string', minLength: 1 },
+        preferredTools: {
+          type: 'array',
+          items: { type: 'string', minLength: 1 },
+        },
       },
     },
     timezone: { type: 'string' },
@@ -75,6 +81,10 @@ const updateScheduleBodySchema = {
       properties: {
         services: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1 },
         instruction: { type: 'string', minLength: 1 },
+        preferredTools: {
+          type: 'array',
+          items: { type: 'string', minLength: 1 },
+        },
       },
     },
     timezone: { type: 'string' },
@@ -95,6 +105,7 @@ const scheduleActionSchema = {
   properties: {
     services: { type: 'array', items: { type: 'string' } },
     instruction: { type: 'string' },
+    preferredTools: { type: 'array', items: { type: 'string' } },
   },
 } as const;
 
@@ -130,6 +141,7 @@ const serviceToolInfoSchema = {
         properties: {
           name: { type: 'string' },
           description: { type: 'string' },
+          parameters: { type: 'object', additionalProperties: true },
         },
       },
     },
@@ -302,7 +314,7 @@ export const scheduleRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const result = await manager.create(auth.userId, {
         name: request.body.name,
         description: request.body.description,
-        action: request.body.action,
+        action: normalizeScheduleAction(request.body.action),
         timezone: request.body.timezone ?? 'UTC',
       });
 
@@ -395,7 +407,9 @@ export const scheduleRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         name: request.body.name,
         description: request.body.description,
         status: request.body.status,
-        action: request.body.action,
+        action: request.body.action !== undefined
+          ? normalizeScheduleAction(request.body.action)
+          : undefined,
         timezone: request.body.timezone,
       });
 

@@ -1,20 +1,28 @@
 import { useState } from 'react';
 import { AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import type { ServiceInfo } from '@/types';
+import { PreferredToolChips } from './PreferredToolChips.js';
+import type { ServiceTool } from './toolPromptTemplates.js';
 
 export function ServiceSelector({
   services,
   servicesLoading,
   servicesError,
   selectedKeys,
+  preferredTools,
   onToggle,
+  onSelectTool,
+  onRemovePreferredTool,
   disabled,
 }: {
   services: ServiceInfo[];
   servicesLoading: boolean;
   servicesError: string | null;
   selectedKeys: Set<string>;
+  preferredTools: string[];
   onToggle: (key: string) => void;
+  onSelectTool: (tool: ServiceTool) => void;
+  onRemovePreferredTool: (toolName: string) => void;
   disabled: boolean;
 }): React.JSX.Element {
   const [showTools, setShowTools] = useState(false);
@@ -114,6 +122,21 @@ export function ServiceSelector({
           </button>
           {showTools && (
             <div className="border-t border-slate-200 px-4 py-3 dark:border-slate-700">
+              {preferredTools.length > 0 && (
+                <div className="mb-4">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Preferred Tools
+                  </div>
+                  <PreferredToolChips
+                    preferredTools={preferredTools}
+                    onRemove={onRemovePreferredTool}
+                    disabled={disabled}
+                  />
+                </div>
+              )}
+              <div className="mb-4 rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
+                Click a tool name to add it to the instruction with a ready-to-edit argument template.
+              </div>
               <div className="space-y-4">
                 {selectedServices.map((service) => (
                   <div key={service.key}>
@@ -126,14 +149,34 @@ export function ServiceSelector({
                           key={`${service.key}-${tool.name}`}
                           className="text-sm"
                         >
-                          <span className="font-mono text-xs font-medium text-slate-800 dark:text-slate-200">
-                            {tool.name}
-                          </span>
-                          {tool.description !== '' && (
-                            <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">
-                              {tool.description}
-                            </span>
-                          )}
+                          <button
+                            type="button"
+                            onClick={(): void => {
+                              onSelectTool(tool);
+                            }}
+                            disabled={disabled}
+                            className={`w-full rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-50 ${
+                              preferredTools.includes(tool.name)
+                                ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/40'
+                                : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800/70'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="font-mono text-xs font-medium text-slate-800 dark:text-slate-200">
+                                {tool.name}
+                              </span>
+                              {preferredTools.includes(tool.name) && (
+                                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300">
+                                  Preferred
+                                </span>
+                              )}
+                            </div>
+                            {tool.description !== '' && (
+                              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                {tool.description}
+                              </div>
+                            )}
+                          </button>
                         </li>
                       ))}
                     </ul>

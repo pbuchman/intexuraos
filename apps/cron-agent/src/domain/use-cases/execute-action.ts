@@ -22,6 +22,7 @@ export async function executeAction(
   action: ScheduleAction,
 ): Promise<Result<ActionResult, ActionError>> {
   const { logger, toolRegistry, toolCallingClient } = deps;
+  const preferredToolNames = new Set(action.preferredTools);
 
   // Get tools for the specified services
   const tools = await toolRegistry.getToolsForServices(action.services);
@@ -42,11 +43,17 @@ export async function executeAction(
   const systemPrompt = executeActionPrompt.build({
     instruction: action.instruction,
     serviceNames,
+    preferredTools: action.preferredTools,
   });
+
+  const orderedTools = [
+    ...tools.filter((tool) => preferredToolNames.has(tool.name)),
+    ...tools.filter((tool) => !preferredToolNames.has(tool.name)),
+  ];
 
   // Wrap tools to track call logs
   const toolCallLogs: ToolCallLog[] = [];
-  const instrumentedTools: ToolDefinition[] = tools.map((tool) => ({
+  const instrumentedTools: ToolDefinition[] = orderedTools.map((tool) => ({
     ...tool,
     run: async (args: Record<string, unknown>): Promise<string> => {
       const start = Date.now();

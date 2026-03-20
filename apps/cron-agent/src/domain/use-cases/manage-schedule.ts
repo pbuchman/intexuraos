@@ -10,11 +10,14 @@ import type {
   ListOptions,
   ListSchedulesResponse,
   CronExecution,
+  ScheduleAction,
 } from '../types.js';
 import type { ExecuteScheduleDeps } from './execute-schedule.js';
 import { executeSchedule } from './execute-schedule.js';
 import { computeNextExecution } from '../cron-utils.js';
 import { parseSchedule, type ParseScheduleDeps } from './parse-schedule.js';
+import { normalizeScheduleAction } from '../types.js';
+import type { ServiceToolInfo } from '../ports/tool-registry.js';
 
 export interface ScheduleError {
   code: 'NOT_FOUND' | 'VALIDATION_ERROR' | 'PARSE_FAILED' | 'INTERNAL_ERROR' | 'CONFLICT';
@@ -41,6 +44,48 @@ export interface ScheduleManager {
 export function createScheduleManager(deps: ManageScheduleDeps): ScheduleManager {
   const { logger: _logger, scheduleRepo, parseDeps, toolRegistry, executeDeps } = deps;
 
+  function validateAction(
+    action: ScheduleAction,
+    availableServices: ServiceToolInfo[],
+  ): Result<ScheduleAction, ScheduleError> {
+    const availableKeys = new Set(availableServices.map((service) => service.key));
+
+    for (const serviceKey of action.services) {
+      if (!availableKeys.has(serviceKey)) {
+        return err({
+          code: 'VALIDATION_ERROR',
+          message: `Unknown service: ${serviceKey}`,
+        });
+      }
+    }
+
+    const selectedServices = new Set(action.services);
+    const toolToService = new Map<string, string>();
+    for (const service of availableServices) {
+      for (const tool of service.tools) {
+        toolToService.set(tool.name, service.key);
+      }
+    }
+
+    for (const toolName of action.preferredTools) {
+      const serviceKey = toolToService.get(toolName);
+      if (serviceKey === undefined) {
+        return err({
+          code: 'VALIDATION_ERROR',
+          message: `Unknown preferred tool: ${toolName}`,
+        });
+      }
+      if (!selectedServices.has(serviceKey)) {
+        return err({
+          code: 'VALIDATION_ERROR',
+          message: `Preferred tool ${toolName} must belong to one of the selected services`,
+        });
+      }
+    }
+
+    return ok(action);
+  }
+
   return {
     async create(
       userId: string,
@@ -56,17 +101,11 @@ export function createScheduleManager(deps: ManageScheduleDeps): ScheduleManager
         });
       }
 
-      // Validate service keys
       const availableServices = await toolRegistry.listServiceTools();
-      const availableKeys = new Set(availableServices.map((s) => s.key));
-
-      for (const serviceKey of input.action.services) {
-        if (!availableKeys.has(serviceKey)) {
-          return err({
-            code: 'VALIDATION_ERROR',
-            message: `Unknown service: ${serviceKey}`,
-          });
-        }
+      const normalizedAction = normalizeScheduleAction(input.action);
+      const actionValidation = validateAction(normalizedAction, availableServices);
+      if (!actionValidation.ok) {
+        return actionValidation;
       }
 
       // Parse schedule description into cron expression
@@ -83,6 +122,7 @@ export function createScheduleManager(deps: ManageScheduleDeps): ScheduleManager
 
       const result = await scheduleRepo.create(userId, {
         ...input,
+        action: normalizedAction,
         cronExpression,
         nextExecutionAt,
       });
@@ -144,19 +184,13 @@ export function createScheduleManager(deps: ManageScheduleDeps): ScheduleManager
       }
 
       if (input.action !== undefined) {
-        // Validate service keys
         const availableServices = await toolRegistry.listServiceTools();
-        const availableKeys = new Set(availableServices.map((s) => s.key));
-
-        for (const serviceKey of input.action.services) {
-          if (!availableKeys.has(serviceKey)) {
-            return err({
-              code: 'VALIDATION_ERROR',
-              message: `Unknown service: ${serviceKey}`,
-            });
-          }
+        const normalizedAction = normalizeScheduleAction(input.action);
+        const actionValidation = validateAction(normalizedAction, availableServices);
+        if (!actionValidation.ok) {
+          return actionValidation;
         }
-        updates.action = input.action;
+        updates.action = normalizedAction;
       }
 
       if (input.timezone !== undefined) {

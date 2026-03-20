@@ -1,6 +1,7 @@
 import { initSentry } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
+import { INTERNAL_API_BASE_URL_ENV_VARS } from '@intexuraos/common-core';
 import { buildServer } from './server.js';
 import { initServices } from './services.js';
 import { loadConfig } from './config.js';
@@ -23,7 +24,7 @@ const PRODUCTION_ONLY_ENV = [
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_JWKS_URL',
-  'INTEXURAOS_CODE_AGENT_URL',
+  ...INTERNAL_API_BASE_URL_ENV_VARS,
 ];
 
 /* v8 ignore start -- module-init: entry point bootstrapping not unit-testable @preserve */

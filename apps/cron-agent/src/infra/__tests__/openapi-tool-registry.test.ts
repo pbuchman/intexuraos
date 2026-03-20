@@ -129,7 +129,7 @@ describe('OpenApiToolRegistry', () => {
     expect(tools).toEqual([]);
   });
 
-  it('listServiceTools returns service info with tool names', async () => {
+  it('listServiceTools returns service info with tool parameters', async () => {
     nock('http://code-agent:8128')
       .get('/openapi.json')
       .reply(200, TEST_OPENAPI_SPEC);
@@ -140,6 +140,13 @@ describe('OpenApiToolRegistry', () => {
     expect(services[0]?.name).toBe('Code Agent');
     expect(services[0]?.tools.length).toBe(2);
     expect(services[0]?.tools[0]?.name).toBe('code_agent__getRunningTasks');
+    expect(services[0]?.tools[0]?.parameters).toEqual({
+      type: 'object',
+      properties: {
+        status: { type: 'string' },
+      },
+      required: undefined,
+    });
   });
 
   it('refreshAll clears cache and re-fetches', async () => {
