@@ -3,7 +3,7 @@ import type { ToolDefinition } from '@intexuraos/llm-contract';
 export interface ServiceToolInfo {
   key: string;
   name: string;
-  tools: { name: string; description: string }[];
+  tools: { name: string; description: string; parameters: Record<string, unknown> }[];
 }
 
 export interface ToolRegistry {

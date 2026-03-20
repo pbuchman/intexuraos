@@ -12,6 +12,7 @@ export type TriggerType = 'scheduled' | 'manual';
 export interface ScheduleAction {
   services: string[];
   instruction: string;
+  preferredTools: string[];
 }
 
 export interface CronSchedule {
@@ -113,4 +114,27 @@ export interface ActionResult {
   agentResponse: string;
   toolCalls: ToolCallLog[];
   tokenUsage: TokenUsage;
+}
+
+type ScheduleActionLike = Omit<ScheduleAction, 'preferredTools'> & {
+  preferredTools?: string[] | undefined;
+};
+
+function uniqueOrderedStrings(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+export function normalizeScheduleAction(action: ScheduleActionLike): ScheduleAction {
+  return {
+    services: uniqueOrderedStrings(action.services),
+    instruction: action.instruction,
+    preferredTools: uniqueOrderedStrings(action.preferredTools ?? []),
+  };
+}
+
+export function normalizeCronSchedule(schedule: CronSchedule): CronSchedule {
+  return {
+    ...schedule,
+    action: normalizeScheduleAction(schedule.action),
+  };
 }

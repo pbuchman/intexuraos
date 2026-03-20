@@ -18,11 +18,19 @@ function createFakeToolRegistry(tools: ToolDefinition[]): ToolRegistry {
   return {
     getToolsForService: async (): Promise<ToolDefinition[]> => tools,
     getToolsForServices: async (): Promise<ToolDefinition[]> => tools,
-    listServiceTools: async (): Promise<{ key: string; name: string; tools: { name: string; description: string }[] }[]> => [
+    listServiceTools: async (): Promise<{
+      key: string;
+      name: string;
+      tools: { name: string; description: string; parameters: Record<string, unknown> }[];
+    }[]> => [
       {
         key: 'code-agent',
         name: 'Code Agent',
-        tools: tools.map((t) => ({ name: t.name, description: t.description })),
+        tools: tools.map((t) => ({
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        })),
       },
     ],
     refreshAll: async (): Promise<void> => { /* noop */ },
@@ -62,7 +70,7 @@ describe('executeAction', () => {
         toolRegistry: createFakeToolRegistry([testTool]),
         toolCallingClient: createFakeToolCallingClient('Task completed successfully'),
       },
-      { services: ['code-agent'], instruction: 'check running tasks' },
+      { services: ['code-agent'], instruction: 'check running tasks', preferredTools: [] },
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -78,7 +86,7 @@ describe('executeAction', () => {
         toolRegistry: createFakeToolRegistry([]),
         toolCallingClient: createFakeToolCallingClient('done'),
       },
-      { services: ['unknown-service'], instruction: 'do something' },
+      { services: ['unknown-service'], instruction: 'do something', preferredTools: [] },
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -92,7 +100,7 @@ describe('executeAction', () => {
         toolRegistry: createFakeToolRegistry([testTool]),
         toolCallingClient: createFailingToolCallingClient(),
       },
-      { services: ['code-agent'], instruction: 'check tasks' },
+      { services: ['code-agent'], instruction: 'check tasks', preferredTools: [] },
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -130,7 +138,7 @@ describe('executeAction', () => {
         toolRegistry: createFakeToolRegistry([trackedTool]),
         toolCallingClient,
       },
-      { services: ['code-agent'], instruction: 'list tasks' },
+      { services: ['code-agent'], instruction: 'list tasks', preferredTools: [] },
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -177,7 +185,7 @@ describe('executeAction', () => {
         toolRegistry: createFakeToolRegistry([failingTool]),
         toolCallingClient,
       },
-      { services: ['code-agent'], instruction: 'do something' },
+      { services: ['code-agent'], instruction: 'do something', preferredTools: [] },
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -211,7 +219,7 @@ describe('executeAction', () => {
         toolRegistry: createFakeToolRegistry([testTool]),
         toolCallingClient,
       },
-      { services: ['code-agent'], instruction: 'exhaust iterations' },
+      { services: ['code-agent'], instruction: 'exhaust iterations', preferredTools: [] },
     );
     expect(result.ok).toBe(true);
     expect(onExhaustedCalled).toBe(true);
@@ -222,7 +230,15 @@ describe('executeAction', () => {
       getToolsForService: async () => [testTool],
       getToolsForServices: async () => [testTool],
       listServiceTools: async () => [
-        { key: 'code-agent', name: 'My Code Agent', tools: [{ name: testTool.name, description: testTool.description }] },
+        {
+          key: 'code-agent',
+          name: 'My Code Agent',
+          tools: [{
+            name: testTool.name,
+            description: testTool.description,
+            parameters: testTool.parameters,
+          }],
+        },
       ],
       refreshAll: async () => { /* noop */ },
     };
@@ -246,9 +262,60 @@ describe('executeAction', () => {
         toolRegistry: registry,
         toolCallingClient,
       },
-      { services: ['code-agent'], instruction: 'test' },
+      { services: ['code-agent'], instruction: 'test', preferredTools: [] },
     );
     expect(capturedPrompt).toContain('My Code Agent');
+  });
+
+  it('biases preferred tools in prompt and tool order', async () => {
+    const preferredTool: ToolDefinition = {
+      name: 'code_agent__preferredTool',
+      description: 'Preferred tool',
+      parameters: { type: 'object', properties: {} },
+      run: async () => 'preferred',
+    };
+    const fallbackTool: ToolDefinition = {
+      name: 'code_agent__fallbackTool',
+      description: 'Fallback tool',
+      parameters: { type: 'object', properties: {} },
+      run: async () => 'fallback',
+    };
+
+    let capturedPrompt = '';
+    let orderedToolNames: string[] = [];
+    const toolCallingClient: ToolCallingClient = {
+      run: async (opts) => {
+        capturedPrompt = opts.systemPrompt;
+        orderedToolNames = opts.tools.map((tool) => tool.name);
+        return ok({
+          content: 'Done',
+          toolCallsMade: 0,
+          iterationCount: 1,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costUsd: 0.0001 },
+        });
+      },
+    };
+
+    const result = await executeAction(
+      {
+        logger: createTestLogger(),
+        toolRegistry: createFakeToolRegistry([fallbackTool, preferredTool]),
+        toolCallingClient,
+      },
+      {
+        services: ['code-agent'],
+        instruction: 'test',
+        preferredTools: ['code_agent__preferredTool'],
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(orderedToolNames).toEqual([
+      'code_agent__preferredTool',
+      'code_agent__fallbackTool',
+    ]);
+    expect(capturedPrompt).toContain('Preferred tools');
+    expect(capturedPrompt).toContain('code_agent__preferredTool');
   });
 
   it('falls back to service key when no matching service info found', async () => {
@@ -278,7 +345,7 @@ describe('executeAction', () => {
         toolRegistry: registry,
         toolCallingClient,
       },
-      { services: ['code-agent'], instruction: 'test' },
+      { services: ['code-agent'], instruction: 'test', preferredTools: [] },
     );
     expect(capturedPrompt).toContain('code-agent');
   });
