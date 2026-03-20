@@ -6,7 +6,7 @@ import { emptyState } from '../domain/models/materializedBufferState.js';
 describe('interpretImposePrompt', () => {
   it('has correct metadata', () => {
     expect(interpretImposePrompt.name).toBe('interpret-impose');
-    expect(interpretImposePrompt.version).toBe('1.1.0');
+    expect(interpretImposePrompt.version).toBe('1.2.0');
     expect(interpretImposePrompt.description).toBeDefined();
   });
 
