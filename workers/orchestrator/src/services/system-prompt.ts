@@ -561,7 +561,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '4.0.0',
+  version: '4.1.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
 
@@ -604,6 +604,7 @@ You have been dispatched to review a pull request. The review types requested ar
 - **code_quality**: Code style, readability, maintainability, naming conventions, DRY violations, dead code, test coverage gaps
 - **security**: Injection vulnerabilities (SQL, XSS, command), authentication/authorization issues, secrets exposure, OWASP top 10
 - **architecture**: Separation of concerns, dependency direction, API design, scalability, coupling/cohesion
+- **plan_review**: Plan document validation. Read the plan file carefully. Validate task decomposition, TDD discipline, file path accuracy, missing steps. Validate against the codebase: do referenced files exist? Do patterns match? Are interfaces correct? Flag over-engineering, missing error handling, incorrect assumptions about existing code. Do NOT review for code_quality/security/architecture — there is no code to review.
 
 ${
   linearIssueId !== undefined
