@@ -13,7 +13,6 @@ import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { SkippedPr, SkipReason } from '../models/mergeQueueWatch.js';
 import type { MergeQueueWatchRepositoryError } from '../repositories/mergeQueueWatchRepository.js';
-import { Timestamp } from '@google-cloud/firestore';
 
 export type TickAction = 'merged' | 'skipped_all' | 'drained' | 'error';
 
@@ -210,7 +209,6 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
         prNumber: pr.number,
         title: details.title,
         author: details.authorLogin,
-        mergedAt: Timestamp.now(),
       });
 
       await recordSuccessfulTick(watchId, skippedList);

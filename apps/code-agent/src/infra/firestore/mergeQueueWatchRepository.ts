@@ -6,12 +6,13 @@ import { randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
 import type { Result } from '@intexuraos/common-core';
 import { err, ok, getErrorMessage } from '@intexuraos/common-core';
-import type { MergeQueueWatch, MergedPr } from '../../domain/models/mergeQueueWatch.js';
+import type { MergeQueueWatch } from '../../domain/models/mergeQueueWatch.js';
 import type {
   MergeQueueWatchRepository,
   MergeQueueWatchRepositoryError,
   CreateWatchInput,
   UpdateWatchInput,
+  AppendMergedPrInput,
 } from '../../domain/repositories/mergeQueueWatchRepository.js';
 import { getFirestore, FieldValue } from '@intexuraos/infra-firestore';
 
@@ -248,12 +249,12 @@ export function createFirestoreMergeQueueWatchRepository(deps: {
 
     async appendMergedPr(
       id: string,
-      mergedPr: MergedPr
+      mergedPr: AppendMergedPrInput
     ): Promise<Result<void, MergeQueueWatchRepositoryError>> {
       try {
         const docRef = collection.doc(id);
         await docRef.update({
-          mergedPrs: FieldValue.arrayUnion(mergedPr),
+          mergedPrs: FieldValue.arrayUnion({ ...mergedPr, mergedAt: new Date() }),
         });
         return ok(undefined);
       } catch (error) {

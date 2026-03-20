@@ -5,7 +5,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Logger } from 'pino';
 import type { CreateWatchInput } from '../../../domain/repositories/mergeQueueWatchRepository.js';
-import type { MergedPr } from '../../../domain/models/mergeQueueWatch.js';
+import type { AppendMergedPrInput } from '../../../domain/repositories/mergeQueueWatchRepository.js';
 
 // Mock getFirestore BEFORE importing the repository
 vi.mock('@intexuraos/infra-firestore', async () => {
@@ -650,11 +650,10 @@ describe('createFirestoreMergeQueueWatchRepository', () => {
         collection: vi.fn().mockReturnValue(mockCollection),
       } as never);
 
-      const mergedPr: MergedPr = {
+      const mergedPr: AppendMergedPrInput = {
         prNumber: 42,
         title: 'Fix bug',
         author: 'testuser',
-        mergedAt: { toDate: () => new Date('2026-03-20T10:00:00.000Z') } as unknown as import('@google-cloud/firestore').Timestamp,
       };
 
       const repo = createFirestoreMergeQueueWatchRepository({ logger: mockLogger });
@@ -681,11 +680,10 @@ describe('createFirestoreMergeQueueWatchRepository', () => {
         collection: vi.fn().mockReturnValue(mockCollection),
       } as never);
 
-      const mergedPr: MergedPr = {
+      const mergedPr: AppendMergedPrInput = {
         prNumber: 42,
         title: 'Fix bug',
         author: 'testuser',
-        mergedAt: { toDate: () => new Date('2026-03-20T10:00:00.000Z') } as unknown as import('@google-cloud/firestore').Timestamp,
       };
 
       const repo = createFirestoreMergeQueueWatchRepository({ logger: mockLogger });
