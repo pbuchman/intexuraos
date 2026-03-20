@@ -61,6 +61,12 @@ export {
   type CodeTaskWorkerType,
 } from './codeTaskWorkerTypes.js';
 
+// Plan document path resolution
+export {
+  resolvePlanDocumentPathFromLinearContext,
+  type PlanResolutionContext,
+} from './planPathResolver.js';
+
 // Shared internal API service catalog
 export {
   INTERNAL_API_SERVICE_CATALOG,

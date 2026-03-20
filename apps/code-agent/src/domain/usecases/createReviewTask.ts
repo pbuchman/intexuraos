@@ -10,7 +10,7 @@
  * - systemPromptHash: 'review-auto'
  */
 
-import { err, ok, getErrorMessage, type Result, type Logger } from '@intexuraos/common-core';
+import { err, ok, getErrorMessage, resolvePlanDocumentPathFromLinearContext, type Result, type Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository, CreateTaskInput } from '../repositories/codeTaskRepository.js';
 import type { WorkerType } from '../models/codeTask.js';
 import type { UserLookupService } from '../ports/userLookupService.js';
@@ -146,7 +146,11 @@ function buildLinearIssueDescription(request: CreateReviewTaskRequest): string {
   return lines.join('\n');
 }
 
-function buildReviewPrompt(request: CreateReviewTaskRequest & { workerType: WorkerType }): string {
+function buildReviewPrompt(request: CreateReviewTaskRequest & {
+  workerType: WorkerType;
+  issueDescription?: string;
+  planDocumentPath?: string;
+}): string {
   const { repository, prNumber, reviewTypes, workerType, reviewComment } = request;
   const lines = [
     `[Review Task] Automated PR review for PR #${String(prNumber)} in ${repository}`,
@@ -176,6 +180,26 @@ function buildReviewPrompt(request: CreateReviewTaskRequest & { workerType: Work
     `4. Post review comments via gh api /repos/${repository}/pulls/${String(prNumber)}/reviews`,
     '5. Output REVIEW_AGENT_FINAL block when done',
   );
+
+  if (request.issueDescription !== undefined) {
+    lines.push(
+      '',
+      '### Issue Requirements',
+      '',
+      'The following is the Linear issue description. This defines what the implementation must achieve.',
+      '',
+      request.issueDescription,
+    );
+
+    if (request.planDocumentPath !== undefined) {
+      lines.push(
+        '',
+        '### Plan Document',
+        '',
+        `Plan file path: ${request.planDocumentPath}`,
+      );
+    }
+  }
 
   return lines.join('\n');
 }
@@ -313,8 +337,36 @@ export async function createReviewTask(
     }
   }
 
+  // Best-effort: fetch issue description for review requirements context
+  let issueDescription: string | undefined;
+  let planDocumentPath: string | undefined;
+  if (linearIssueId !== undefined && linearAgentClient !== undefined) {
+    try {
+      const descResult = await linearAgentClient.getIssueDescription({
+        userId,
+        identifier: linearIssueId,
+      });
+      if (descResult.ok) {
+        issueDescription = descResult.value;
+        if (issueDescription !== undefined) {
+          planDocumentPath = resolvePlanDocumentPathFromLinearContext({
+            description: issueDescription,
+            comments: [],
+          });
+        }
+      }
+    } catch (error: unknown) {
+      logger.warn({ error, linearIssueId }, 'Failed to fetch issue description for review context');
+    }
+  }
+
   // Create task
-  const prompt = buildReviewPrompt({ ...request, workerType: effectiveWorkerType });
+  const prompt = buildReviewPrompt({
+    ...request,
+    workerType: effectiveWorkerType,
+    ...(issueDescription !== undefined && { issueDescription }),
+    ...(planDocumentPath !== undefined && { planDocumentPath }),
+  });
   const webhookSecret = createHmac('sha256', orchestratorSecret).update(eventId).digest('hex');
 
   const [owner] = repository.split('/');

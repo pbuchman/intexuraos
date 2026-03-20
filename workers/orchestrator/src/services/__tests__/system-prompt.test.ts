@@ -703,6 +703,45 @@ describe('system-prompt', () => {
     expect(reviewStartedIdx).toBeLessThan(gatheringIdx);
   });
 
+  it('review agent prompt includes requirements validation instructions', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+    });
+
+    expect(result).toContain('### Requirements Validation (MANDATORY');
+    expect(result).toContain('Issue Requirements');
+    expect(result).toContain('Requirements Coverage');
+  });
+
+  it('review agent prompt includes plan compliance hard gate instructions', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+    });
+
+    expect(result).toContain('### Plan Compliance (MANDATORY HARD GATE');
+    expect(result).toContain('HARD GATE');
+    expect(result).toContain('Plan Document');
+  });
+
+  it('review agent prompt has requirements validation before gathering PR context', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+    });
+
+    const reqIdx = result.indexOf('### Requirements Validation');
+    const planIdx = result.indexOf('### Plan Compliance');
+    const gatherIdx = result.indexOf('### Gathering PR Context');
+
+    expect(reqIdx).toBeGreaterThan(-1);
+    expect(planIdx).toBeGreaterThan(-1);
+    expect(gatherIdx).toBeGreaterThan(-1);
+    expect(reqIdx).toBeLessThan(planIdx);
+    expect(planIdx).toBeLessThan(gatherIdx);
+  });
+
   it('review agent prompt includes Linear section when linearIssueId is provided', () => {
     const result = buildSystemPrompt({
       ...baseParams,
