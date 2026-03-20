@@ -2,8 +2,8 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
-    "rootDir": "../.."
+    "rootDir": "src"
   },
-  "include": ["src/**/*.ts", "../../packages/common-core/src/internalServiceCatalog.ts"],
+  "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist", "src/__tests__"]
 }

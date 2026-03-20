@@ -171,12 +171,13 @@ export function buildInternalApiServiceDefinitions(
     if (url === '') {
       return [];
     }
+    const explicitOpenApiUrl = env[entry.openApiUrlEnvVar]?.trim() ?? '';
     return [
       {
         key: entry.key,
         name: entry.name,
         url,
-        openapiUrl: `${url}/openapi.json`,
+        openapiUrl: explicitOpenApiUrl !== '' ? explicitOpenApiUrl : `${url}/openapi.json`,
       },
     ];
   });
