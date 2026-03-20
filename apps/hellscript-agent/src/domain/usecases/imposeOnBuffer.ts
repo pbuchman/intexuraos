@@ -109,12 +109,22 @@ export async function imposeOnBuffer(
       /* v8 ignore stop @preserve */
     }
 
-    const markdown = await draftGenerator.generate(newState, priorDraft, requestText, logger);
+    const generateResult = await draftGenerator.generate(newState, priorDraft, requestText, logger);
+    if (!generateResult.ok) {
+      logger.error({ bufferId, err: generateResult.error }, 'Draft generation failed');
+      return {
+        ok: true,
+        value: {
+          bufferId,
+          action: 'update_draft_failed',
+        },
+      };
+    }
 
     const draftResult = await repository.saveDraftVersion({
       bufferId,
       versionNumber: nextVersion,
-      markdown,
+      markdown: generateResult.value,
       requestText,
       createdAt: new Date().toISOString(),
     });

@@ -1,3 +1,4 @@
+import type { Result } from '@intexuraos/common-core';
 import type { MaterializedBufferState } from '../models/materializedBufferState.js';
 import type { Logger } from '@intexuraos/common-core';
 
@@ -7,5 +8,5 @@ export interface DraftGenerator {
     priorDraft: string | null,
     requestText: string,
     logger: Logger
-  ): Promise<string>;
+  ): Promise<Result<string>>;
 }

@@ -357,6 +357,25 @@ describe('imposeOnBuffer', () => {
       expect(result.ok).toBe(false);
     });
 
+    it('returns update_draft_failed when draft generation fails', async () => {
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'draft' },
+      });
+      draftGenerator.simulateError(new Error('LLM failed'));
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'generate draft',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('update_draft_failed');
+        expect(result.value.latestDraftVersionId).toBeUndefined();
+      }
+    });
+
     it('returns error when saveDraftVersion fails', async () => {
       repository.simulateMethodError('saveDraftVersion', new Error('Write failed'));
       interpreter.setNextIntent({
