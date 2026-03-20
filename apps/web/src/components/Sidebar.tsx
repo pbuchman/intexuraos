@@ -19,6 +19,7 @@ import {
   FileText,
   Filter,
   GitBranch,
+  GitMerge,
   RadioTower,
   Inbox,
   Key,
@@ -81,6 +82,7 @@ const codeTasksItems: NavItem[] = [
   { to: '/code-tasks/new', label: 'New Task', icon: Plus },
   { to: '/code-tasks/dispatch-queue', label: 'Dispatch Queue', icon: Clock },
   { to: '/code-tasks/pr-events', label: 'GitHub Event Log', icon: RadioTower },
+  { to: '/code-tasks/merge-queue', label: 'Merge Queue', icon: GitMerge },
 ];
 
 const cronAgentItems: NavItem[] = [
@@ -220,7 +222,7 @@ export function Sidebar(): React.JSX.Element {
     }
   }, [location.pathname]);
 
-  // Auto-expand code tasks when on code-tasks page
+  // Auto-expand code tasks when on code-tasks or merge-queue page
   useEffect(() => {
     if (location.pathname.startsWith('/code-tasks')) {
       setIsCodeTasksOpen(true);
