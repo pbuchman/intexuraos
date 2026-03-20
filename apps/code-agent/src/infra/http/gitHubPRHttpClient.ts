@@ -375,6 +375,7 @@ export function createGitHubPRHttpClient(
           number?: number;
           title?: string;
           body?: string | null;
+          state?: string;
           mergeable?: boolean | null;
           mergeable_state?: string | null;
           user?: { login?: string };
@@ -388,6 +389,13 @@ export function createGitHubPRHttpClient(
 
         const titleResult = ensureString(data.title, 'title');
         if (!titleResult.ok) return titleResult;
+
+        const stateResult = ensureString(data.state, 'state');
+        if (!stateResult.ok) return stateResult;
+        if (stateResult.value !== 'open' && stateResult.value !== 'closed') {
+          return err({ code: 'API_ERROR', message: `GitHub API response has unexpected state: ${stateResult.value}` });
+        }
+        const state = stateResult.value;
 
         const authorResult = ensureString(data.user?.login, 'user.login');
         if (!authorResult.ok) return authorResult;
@@ -405,6 +413,7 @@ export function createGitHubPRHttpClient(
           number: data.number,
           title: titleResult.value,
           body: data.body ?? null,
+          state,
           authorLogin: authorResult.value,
           baseBranch: baseResult.value,
           headBranch: headResult.value,

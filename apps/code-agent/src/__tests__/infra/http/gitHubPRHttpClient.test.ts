@@ -646,6 +646,7 @@ describe('GitHubPRHttpClient', () => {
           number: 42,
           title: 'Fix conflict',
           body: 'PR body',
+          state: 'open',
           mergeable: false,
           mergeable_state: 'dirty',
           user: { login: 'alice' },
@@ -661,6 +662,7 @@ describe('GitHubPRHttpClient', () => {
           number: 42,
           title: 'Fix conflict',
           body: 'PR body',
+          state: 'open',
           authorLogin: 'alice',
           baseBranch: 'development',
           headBranch: 'feature/alice',
@@ -678,6 +680,7 @@ describe('GitHubPRHttpClient', () => {
           number: 42,
           title: 'Fix conflict',
           body: null,
+          state: 'open',
           mergeable: null,
           mergeable_state: 'unknown',
           user: { login: 'alice' },
@@ -701,6 +704,7 @@ describe('GitHubPRHttpClient', () => {
           number: 42,
           title: 'Fix conflict',
           body: 'PR body',
+          state: 'open',
           mergeable: false,
           user: { login: 'alice' },
           base: { ref: 'development' },
@@ -715,14 +719,82 @@ describe('GitHubPRHttpClient', () => {
       }
     });
 
+    it('maps state: closed from API response', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/42')
+        .reply(200, {
+          number: 42,
+          title: 'Fix conflict',
+          body: 'PR body',
+          state: 'closed',
+          mergeable: null,
+          mergeable_state: null,
+          user: { login: 'alice' },
+          base: { ref: 'development' },
+          head: { ref: 'feature/alice', sha: 'abc123' },
+        });
+
+      const result = await client.getPullRequestDetails('test-token', 'owner', 'repo', 42);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.state).toBe('closed');
+      }
+    });
+
+    it('returns API_ERROR when state is missing', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/42')
+        .reply(200, {
+          number: 42,
+          title: 'Fix conflict',
+          body: 'PR body',
+          mergeable: false,
+          user: { login: 'alice' },
+          base: { ref: 'development' },
+          head: { ref: 'feature/alice', sha: 'abc123' },
+        });
+
+      const result = await client.getPullRequestDetails('test-token', 'owner', 'repo', 42);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+        expect(result.error.message).toContain('state');
+      }
+    });
+
+    it('returns API_ERROR when state has unexpected value', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/42')
+        .reply(200, {
+          number: 42,
+          title: 'Fix conflict',
+          body: 'PR body',
+          state: 'draft',
+          mergeable: false,
+          user: { login: 'alice' },
+          base: { ref: 'development' },
+          head: { ref: 'feature/alice', sha: 'abc123' },
+        });
+
+      const result = await client.getPullRequestDetails('test-token', 'owner', 'repo', 42);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+        expect(result.error.message).toContain('unexpected state');
+      }
+    });
+
     it('returns API_ERROR when PR details are missing required fields', async () => {
       const cases = [
-        [{ title: 'Fix conflict', user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice', sha: 'abc' } }, 'number'],
-        [{ number: 42, user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice', sha: 'abc' } }, 'title'],
-        [{ number: 42, title: 'Fix conflict', user: {}, base: { ref: 'development' }, head: { ref: 'feature/alice', sha: 'abc' } }, 'user.login'],
-        [{ number: 42, title: 'Fix conflict', user: { login: 'alice' }, base: {}, head: { ref: 'feature/alice', sha: 'abc' } }, 'base.ref'],
-        [{ number: 42, title: 'Fix conflict', user: { login: 'alice' }, base: { ref: 'development' }, head: {} }, 'head.ref'],
-        [{ number: 42, title: 'Fix conflict', user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice' } }, 'head.sha'],
+        [{ title: 'Fix conflict', state: 'open', user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice', sha: 'abc' } }, 'number'],
+        [{ number: 42, state: 'open', user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice', sha: 'abc' } }, 'title'],
+        [{ number: 42, title: 'Fix conflict', state: 'open', user: {}, base: { ref: 'development' }, head: { ref: 'feature/alice', sha: 'abc' } }, 'user.login'],
+        [{ number: 42, title: 'Fix conflict', state: 'open', user: { login: 'alice' }, base: {}, head: { ref: 'feature/alice', sha: 'abc' } }, 'base.ref'],
+        [{ number: 42, title: 'Fix conflict', state: 'open', user: { login: 'alice' }, base: { ref: 'development' }, head: {} }, 'head.ref'],
+        [{ number: 42, title: 'Fix conflict', state: 'open', user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice' } }, 'head.sha'],
       ] as const;
 
       for (const [payload, expectedField] of cases) {
