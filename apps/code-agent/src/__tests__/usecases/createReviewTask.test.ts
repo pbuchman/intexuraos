@@ -37,6 +37,7 @@ function createFakeLinearAgentClient(): LinearAgentClient {
     addComment: vi.fn().mockResolvedValue(ok({ commentId: 'c-1' })),
     getIssueTree: vi.fn().mockResolvedValue(ok({ root: { id: '1', identifier: 'INT-1', url: '', parentId: null, labels: [], assigneeId: null, state: 'backlog' }, descendants: [] })),
     getIssueForDisplay: vi.fn().mockResolvedValue(ok(null)),
+    getIssueDescription: vi.fn().mockResolvedValue(ok(undefined)),
   } as unknown as LinearAgentClient;
 }
 
@@ -1566,6 +1567,109 @@ describe('createReviewTask', () => {
       }
 
       // TaskEnqueueService handles task failure marking — usecase only returns error
+    });
+  });
+
+  describe('issue description and plan path in review prompt', () => {
+    it('embeds issue description and plan path in review prompt', async () => {
+      const linearAgentClient = createFakeLinearAgentClient();
+      vi.mocked(linearAgentClient.getIssueDescription).mockResolvedValue(
+        ok('Implement feature X.\n\nPlan document: docs/plans/2026-03-20-feature-x.md')
+      );
+      const deps = createFakeDeps({ linearAgentClient });
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-desc-1',
+        prTitle: '[INT-300] Implement feature X',
+      });
+
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].prompt).toContain('### Issue Requirements');
+        expect(createCall[0].prompt).toContain('Implement feature X.');
+        expect(createCall[0].prompt).toContain('### Plan Document');
+        expect(createCall[0].prompt).toContain('docs/plans/2026-03-20-feature-x.md');
+      }
+    });
+
+    it('embeds issue description without plan section when no plan reference', async () => {
+      const linearAgentClient = createFakeLinearAgentClient();
+      vi.mocked(linearAgentClient.getIssueDescription).mockResolvedValue(
+        ok('Fix the login bug on mobile.')
+      );
+      const deps = createFakeDeps({ linearAgentClient });
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-desc-2',
+        prTitle: '[INT-300] Fix login bug',
+      });
+
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].prompt).toContain('### Issue Requirements');
+        expect(createCall[0].prompt).toContain('Fix the login bug on mobile.');
+        expect(createCall[0].prompt).not.toContain('### Plan Document');
+      }
+    });
+
+    it('truncates long issue descriptions in review prompt', async () => {
+      const linearAgentClient = createFakeLinearAgentClient();
+      const longDescription = 'A'.repeat(5000);
+      vi.mocked(linearAgentClient.getIssueDescription).mockResolvedValue(
+        ok(longDescription)
+      );
+      const deps = createFakeDeps({ linearAgentClient });
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-desc-trunc',
+        prTitle: '[INT-300] Big issue',
+      });
+
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].prompt).toContain('### Issue Requirements');
+        expect(createCall[0].prompt).not.toContain(longDescription);
+        expect(createCall[0].prompt).toContain('Truncated');
+        expect(createCall[0].prompt).toContain('full description available in the Linear issue');
+      }
+    });
+
+    it('creates prompt without requirements when getIssueDescription fails', async () => {
+      const linearAgentClient = createFakeLinearAgentClient();
+      vi.mocked(linearAgentClient.getIssueDescription).mockResolvedValue(
+        err({ code: 'UNAVAILABLE' as const, message: 'Linear is down' })
+      );
+      const deps = createFakeDeps({ linearAgentClient });
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-desc-3',
+        prTitle: '[INT-300] Fix bug',
+      });
+
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].prompt).not.toContain('### Issue Requirements');
+      }
     });
   });
 });
