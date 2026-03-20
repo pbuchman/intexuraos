@@ -39,6 +39,7 @@ const TERMINAL_OR_PLANNED_TASK_STATUSES = new Set<CodeTask['status']>([
 ]);
 
 type MergeConflictStatus = GitHubPRSummary['mergeConflictStatus'];
+type ClassifiedMergeConflictStatus = NonNullable<MergeConflictStatus>;
 
 interface ConflictWorkflowResult {
   commentId: number | null;
@@ -143,7 +144,7 @@ function extractPushedBranch(payload: unknown): string | null {
   return ref.slice(BRANCH_REF_PREFIX.length);
 }
 
-function classifyMergeConflictStatus(mergeable: boolean | null): MergeConflictStatus {
+function classifyMergeConflictStatus(mergeable: boolean | null): ClassifiedMergeConflictStatus {
   if (mergeable === false) {
     return 'conflicting';
   }
@@ -904,13 +905,15 @@ interface ProcessingTrigger {
   lastActivityAt: Date;
 }
 
+type ProcessingOutcome = 'closed' | 'clean' | 'conflicting' | 'unknown' | 'skipped';
+
 async function processOpenSummaryOnPush(
   deps: DetectMergeConflictsOnPushDeps,
   trigger: ProcessingTrigger,
   logger: Logger,
   parsedRepository: ParsedRepository,
   existingSummary: GitHubPRSummary
-): Promise<void> {
+): Promise<ProcessingOutcome> {
   const accessContext = await resolveGitHubAccessContext(
     {
       userServiceClient: deps.userServiceClient,
@@ -925,7 +928,7 @@ async function processOpenSummaryOnPush(
       { repository: existingSummary.repository, prNumber: existingSummary.pullRequestNumber },
       'Skipping conflict detection for PR without an OAuth-backed user'
     );
-    return;
+    return 'skipped';
   }
 
   const detailsResult = await loadPullRequestDetails(
@@ -942,10 +945,30 @@ async function processOpenSummaryOnPush(
       { error: detailsResult.error, prNumber: existingSummary.pullRequestNumber },
       'Failed to load PR details for conflict detection'
     );
-    return;
+    return 'skipped';
   }
 
   const details = detailsResult.value;
+
+  if (details.state !== 'open') {
+    logger.info(
+      { prNumber: existingSummary.pullRequestNumber, state: details.state },
+      'Closing stale PR summary — PR is no longer open on GitHub'
+    );
+    await upsertSummary(
+      deps.gitHubPRSummaryRepo,
+      {
+        repository: trigger.repository,
+        pullRequestNumber: existingSummary.pullRequestNumber,
+        lastActivityAt: trigger.lastActivityAt,
+        firstSeenAt: existingSummary.firstSeenAt,
+        state: details.state,
+      },
+      logger
+    );
+    return 'closed';
+  }
+
   const status = classifyMergeConflictStatus(details.mergeable);
   let taskResolution: ExistingConflictTaskResolution = {
     latestTask: null,
@@ -962,7 +985,7 @@ async function processOpenSummaryOnPush(
       logger
     );
     if (!resolutionResult.ok) {
-      return;
+      return 'skipped';
     }
     taskResolution = resolutionResult.value;
   }
@@ -990,6 +1013,11 @@ async function processOpenSummaryOnPush(
     workflowResult = await resolveConflictWorkflow(workflowParams);
   }
 
+  logger.info(
+    { prNumber: existingSummary.pullRequestNumber, mergeConflictStatus: status },
+    'PR mergeability checked'
+  );
+
   await upsertSummary(
     deps.gitHubPRSummaryRepo,
     buildSummaryUpdateInput({
@@ -1002,6 +1030,8 @@ async function processOpenSummaryOnPush(
     }),
     logger
   );
+
+  return status;
 }
 
 export function createDetectMergeConflictsOnPush(
@@ -1068,6 +1098,11 @@ export function createDetectMergeConflictsOnPush(
 
       const reconcileId = randomUUID();
       let processed = 0;
+      let closed = 0;
+      let conflicting = 0;
+      let clean = 0;
+      let unknown = 0;
+      let skipped = 0;
 
       for (const existingSummary of summaries) {
         const parsedRepository = parseOwnerRepo(existingSummary.repository);
@@ -1082,8 +1117,9 @@ export function createDetectMergeConflictsOnPush(
           lastActivityAt: existingSummary.lastActivityAt,
         };
 
+        let outcome: ProcessingOutcome = 'skipped';
         try {
-          await processOpenSummaryOnPush(deps, trigger, logger, parsedRepository, existingSummary);
+          outcome = await processOpenSummaryOnPush(deps, trigger, logger, parsedRepository, existingSummary);
         } catch (err: unknown) {
           logger.error(
             { error: err, repository: existingSummary.repository, prNumber: existingSummary.pullRequestNumber },
@@ -1091,9 +1127,22 @@ export function createDetectMergeConflictsOnPush(
           );
         }
         processed++;
+
+        switch (outcome) {
+          case 'closed': closed++; break;
+          case 'conflicting': conflicting++; break;
+          case 'clean': clean++; break;
+          case 'unknown': unknown++; break;
+          case 'skipped': skipped++; break;
+        }
       }
 
-      return { processed };
+      logger.info(
+        { processed, closed, conflicting, clean, unknown, skipped },
+        'Merge conflict reconciliation complete'
+      );
+
+      return { processed, closed, conflicting, clean, unknown, skipped };
     },
   };
 }

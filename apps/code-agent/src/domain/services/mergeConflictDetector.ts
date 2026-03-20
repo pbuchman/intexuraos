@@ -4,6 +4,11 @@ import type { GitHubPREvent } from '../models/gitHubPREvent.js';
 export interface ReconcileResult {
   /** Number of PRs processed (includes both successes and per-PR errors; excludes skipped invalid repos). */
   processed: number;
+  closed?: number;
+  conflicting?: number;
+  clean?: number;
+  unknown?: number;
+  skipped?: number;
 }
 
 export interface MergeConflictDetector {

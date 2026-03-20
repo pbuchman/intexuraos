@@ -45,6 +45,7 @@ export interface GitHubPullRequestDetails {
   number: number;
   title: string;
   body: string | null;
+  state: 'open' | 'closed';
   authorLogin: string;
   baseBranch: string;
   headBranch: string;
