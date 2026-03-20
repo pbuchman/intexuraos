@@ -13,7 +13,25 @@ describe('loadConfig', () => {
     delete process.env['INTEXURAOS_AUTH_JWKS_URL'];
     delete process.env['INTEXURAOS_SENTRY_DSN'];
     delete process.env['INTEXURAOS_ENVIRONMENT'];
+    delete process.env['INTEXURAOS_USER_SERVICE_URL'];
+    delete process.env['INTEXURAOS_NOTION_SERVICE_URL'];
+    delete process.env['INTEXURAOS_WHATSAPP_SERVICE_URL'];
+    delete process.env['INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL'];
+    delete process.env['INTEXURAOS_RESEARCH_AGENT_URL'];
+    delete process.env['INTEXURAOS_COMMANDS_AGENT_URL'];
+    delete process.env['INTEXURAOS_ACTIONS_AGENT_URL'];
+    delete process.env['INTEXURAOS_DATA_INSIGHTS_AGENT_URL'];
+    delete process.env['INTEXURAOS_IMAGE_SERVICE_URL'];
+    delete process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'];
+    delete process.env['INTEXURAOS_NOTES_AGENT_URL'];
+    delete process.env['INTEXURAOS_TODOS_AGENT_URL'];
+    delete process.env['INTEXURAOS_BOOKMARKS_AGENT_URL'];
+    delete process.env['INTEXURAOS_CALENDAR_AGENT_URL'];
+    delete process.env['INTEXURAOS_CHAT_AGENT_URL'];
     delete process.env['INTEXURAOS_CODE_AGENT_URL'];
+    delete process.env['INTEXURAOS_LINEAR_AGENT_URL'];
+    delete process.env['INTEXURAOS_WEB_AGENT_URL'];
+    delete process.env['INTEXURAOS_CRON_AGENT_URL'];
     delete process.env['INTEXURAOS_GEMINI_APP_API_KEY'];
   });
 
@@ -70,6 +88,42 @@ describe('loadConfig', () => {
     expect(config.allowedServices[0]?.name).toBe('Code Agent');
     expect(config.allowedServices[0]?.url).toBe('https://code-agent.example.com');
     expect(config.allowedServices[0]?.openapiUrl).toBe('https://code-agent.example.com/openapi.json');
+  });
+
+  it('populates allowedServices for every configured internal service url', () => {
+    process.env['INTEXURAOS_USER_SERVICE_URL'] = 'https://user-service.example.com';
+    process.env['INTEXURAOS_CODE_AGENT_URL'] = 'https://code-agent.example.com';
+    process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
+    process.env['INTEXURAOS_CRON_AGENT_URL'] = 'https://cron-agent.example.com';
+
+    const config = loadConfig();
+
+    expect(config.allowedServices).toEqual([
+      {
+        key: 'user-service',
+        name: 'User Service',
+        url: 'https://user-service.example.com',
+        openapiUrl: 'https://user-service.example.com/openapi.json',
+      },
+      {
+        key: 'code-agent',
+        name: 'Code Agent',
+        url: 'https://code-agent.example.com',
+        openapiUrl: 'https://code-agent.example.com/openapi.json',
+      },
+      {
+        key: 'web-agent',
+        name: 'Web Agent',
+        url: 'https://web-agent.example.com',
+        openapiUrl: 'https://web-agent.example.com/openapi.json',
+      },
+      {
+        key: 'cron-agent',
+        name: 'Cron Agent',
+        url: 'https://cron-agent.example.com',
+        openapiUrl: 'https://cron-agent.example.com/openapi.json',
+      },
+    ]);
   });
 
   it('does not add code-agent to allowedServices when URL is empty string', () => {

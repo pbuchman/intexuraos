@@ -12,6 +12,7 @@ interface CreateScheduleBody {
   action: {
     services: string[];
     instruction: string;
+    preferredTools?: string[];
   };
   timezone?: string;
 }
@@ -23,6 +24,7 @@ interface UpdateScheduleBody {
   action?: {
     services: string[];
     instruction: string;
+    preferredTools?: string[];
   };
   timezone?: string;
 }
@@ -57,6 +59,10 @@ const createScheduleBodySchema = {
       properties: {
         services: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1 },
         instruction: { type: 'string', minLength: 1 },
+        preferredTools: {
+          type: 'array',
+          items: { type: 'string', minLength: 1 },
+        },
       },
     },
     timezone: { type: 'string' },
@@ -75,6 +81,10 @@ const updateScheduleBodySchema = {
       properties: {
         services: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1 },
         instruction: { type: 'string', minLength: 1 },
+        preferredTools: {
+          type: 'array',
+          items: { type: 'string', minLength: 1 },
+        },
       },
     },
     timezone: { type: 'string' },
@@ -95,6 +105,7 @@ const scheduleActionSchema = {
   properties: {
     services: { type: 'array', items: { type: 'string' } },
     instruction: { type: 'string' },
+    preferredTools: { type: 'array', items: { type: 'string' } },
   },
 } as const;
 
@@ -130,6 +141,7 @@ const serviceToolInfoSchema = {
         properties: {
           name: { type: 'string' },
           description: { type: 'string' },
+          parameters: { type: 'object', additionalProperties: true },
         },
       },
     },
@@ -302,7 +314,10 @@ export const scheduleRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const result = await manager.create(auth.userId, {
         name: request.body.name,
         description: request.body.description,
-        action: request.body.action,
+        action: {
+          ...request.body.action,
+          preferredTools: request.body.action.preferredTools ?? [],
+        },
         timezone: request.body.timezone ?? 'UTC',
       });
 
@@ -395,7 +410,9 @@ export const scheduleRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         name: request.body.name,
         description: request.body.description,
         status: request.body.status,
-        action: request.body.action,
+        action: request.body.action !== undefined
+          ? { ...request.body.action, preferredTools: request.body.action.preferredTools ?? [] }
+          : undefined,
         timezone: request.body.timezone,
       });
 

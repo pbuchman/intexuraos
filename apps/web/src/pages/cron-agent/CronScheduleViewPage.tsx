@@ -6,8 +6,15 @@ import { useCronExecutions, useCronSchedule, useCronServices, useScheduleActions
 import { formatDateTime } from '@/utils/dateFormat';
 import { AvailableToolsPanel } from './AvailableToolsPanel.js';
 import { InlineEditText } from './InlineEditText.js';
+import { PreferredToolChips } from './PreferredToolChips.js';
 import { RecentExecutionsTable } from './RecentExecutionsTable.js';
 import { ScheduleStatusBadge } from './ScheduleStatusBadge.js';
+import {
+  addPreferredTool,
+  injectToolInstructionBlock,
+  removePreferredTool,
+  type ServiceTool,
+} from './toolPromptTemplates.js';
 
 // ---------------------------------------------------------------------------
 // Page component
@@ -66,6 +73,7 @@ export function CronScheduleViewPage(): React.JSX.Element {
     handleTrigger,
     handleDelete,
     handleNameSave,
+    handleActionSave,
     handleInstructionSave,
     setShowDeleteConfirm,
   } = useScheduleActions(schedule, actionHooks);
@@ -140,6 +148,21 @@ export function CronScheduleViewPage(): React.JSX.Element {
       </Layout>
     );
   }
+
+  const handleUseTool = useCallback((tool: ServiceTool): void => {
+    handleActionSave({
+      ...schedule.action,
+      instruction: injectToolInstructionBlock(schedule.action.instruction, tool),
+      preferredTools: addPreferredTool(schedule.action.preferredTools, tool.name),
+    });
+  }, [handleActionSave, schedule]);
+
+  const handleRemovePreferredTool = useCallback((toolName: string): void => {
+    handleActionSave({
+      ...schedule.action,
+      preferredTools: removePreferredTool(schedule.action.preferredTools, toolName),
+    });
+  }, [handleActionSave, schedule]);
 
   // ---------------------------------------------------------------------------
   // Render: schedule details
@@ -301,6 +324,16 @@ export function CronScheduleViewPage(): React.JSX.Element {
           </div>
         </div>
 
+        <div className="mb-4">
+          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Preferred Tools
+          </span>
+          <PreferredToolChips
+            preferredTools={schedule.action.preferredTools}
+            className="flex flex-wrap gap-1.5"
+          />
+        </div>
+
         {/* Instruction (editable) */}
         <div>
           <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -318,7 +351,13 @@ export function CronScheduleViewPage(): React.JSX.Element {
       </Card>
 
       {/* Available tools panel (expandable) */}
-      <AvailableToolsPanel services={selectedServiceTools} />
+      <AvailableToolsPanel
+        services={selectedServiceTools}
+        preferredTools={schedule.action.preferredTools}
+        onUseTool={handleUseTool}
+        onRemovePreferredTool={handleRemovePreferredTool}
+        disabled={updating}
+      />
 
       {/* Recent executions */}
       <RecentExecutionsTable

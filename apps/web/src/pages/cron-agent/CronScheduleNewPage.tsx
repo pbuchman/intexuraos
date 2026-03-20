@@ -7,6 +7,13 @@ import { useAuth } from '@/context';
 import { useCronServices } from '@/hooks';
 import { createSchedule as createScheduleApi } from '@/services/cronAgentApi';
 import { ServiceSelector } from './ServiceSelector.js';
+import {
+  addPreferredTool,
+  filterPreferredToolsForServices,
+  injectToolInstructionBlock,
+  removePreferredTool,
+  type ServiceTool,
+} from './toolPromptTemplates.js';
 
 const TIMEZONES = [
   'UTC',
@@ -34,6 +41,7 @@ export function CronScheduleNewPage(): React.JSX.Element {
   const [description, setDescription] = useState('');
   const [selectedServiceKeys, setSelectedServiceKeys] = useState<Set<string>>(new Set());
   const [instruction, setInstruction] = useState('');
+  const [preferredTools, setPreferredTools] = useState<string[]>([]);
   const [timezone, setTimezone] = useState('UTC');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,8 +60,26 @@ export function CronScheduleNewPage(): React.JSX.Element {
       } else {
         next.add(key);
       }
+      setPreferredTools((currentPreferredTools) =>
+        filterPreferredToolsForServices(currentPreferredTools, next, services),
+      );
       return next;
     });
+  };
+
+  const handleSelectTool = (tool: ServiceTool): void => {
+    setPreferredTools((currentPreferredTools) =>
+      addPreferredTool(currentPreferredTools, tool.name),
+    );
+    setInstruction((currentInstruction) =>
+      injectToolInstructionBlock(currentInstruction, tool),
+    );
+  };
+
+  const handleRemovePreferredTool = (toolName: string): void => {
+    setPreferredTools((currentPreferredTools) =>
+      removePreferredTool(currentPreferredTools, toolName),
+    );
   };
 
   const handleSubmit = async (): Promise<void> => {
@@ -70,6 +96,7 @@ export function CronScheduleNewPage(): React.JSX.Element {
         action: {
           services: Array.from(selectedServiceKeys),
           instruction: instruction.trim(),
+          preferredTools,
         },
         timezone,
       });
@@ -141,7 +168,10 @@ export function CronScheduleNewPage(): React.JSX.Element {
             servicesLoading={servicesLoading}
             servicesError={servicesError}
             selectedKeys={selectedServiceKeys}
+            preferredTools={preferredTools}
             onToggle={handleToggleService}
+            onSelectTool={handleSelectTool}
+            onRemovePreferredTool={handleRemovePreferredTool}
             disabled={submitting}
           />
 

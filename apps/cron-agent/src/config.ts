@@ -1,3 +1,5 @@
+import { buildInternalApiServiceDefinitions } from '@intexuraos/common-core';
+
 export interface ServiceDefinition {
   key: string;
   name: string;
@@ -20,18 +22,7 @@ export interface CronAgentConfig {
 }
 
 export function loadConfig(): CronAgentConfig {
-  const codeAgentUrl = process.env['INTEXURAOS_CODE_AGENT_URL'] ?? '';
-
-  const allowedServices: ServiceDefinition[] = [];
-
-  if (codeAgentUrl !== '') {
-    allowedServices.push({
-      key: 'code-agent',
-      name: 'Code Agent',
-      url: codeAgentUrl,
-      openapiUrl: `${codeAgentUrl}/openapi.json`,
-    });
-  }
+  const allowedServices: ServiceDefinition[] = buildInternalApiServiceDefinitions(process.env);
 
   return {
     port: parseInt(process.env['PORT'] ?? '8080', 10),

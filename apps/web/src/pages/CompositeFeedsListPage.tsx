@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Database, FileText, Layers, Plus, Trash2 } from 'lucide-react';
-import { Button, Card, DataInsightsTabs, Layout } from '@/components';
+import { Database, Layers, Plus, Trash2 } from 'lucide-react';
+import { Button, Card, DataInsightsTabs, ErrorBanner, Layout } from '@/components';
 import { useCompositeFeeds, useDataSources } from '@/hooks';
-import { formatDate } from '@/utils/dateFormat';
+import { formatRelative } from '@/utils/dateFormat';
 import type { CompositeFeed } from '@/types';
 
-function truncatePurpose(purpose: string, maxLength = 150): string {
+function truncatePurpose(purpose: string, maxLength = 80): string {
   if (purpose.length <= maxLength) {
     return purpose;
   }
@@ -36,8 +36,8 @@ export function CompositeFeedsListPage(): React.JSX.Element {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Composite Feeds</h2>
-          <p className="text-slate-600 dark:text-slate-300">
-            Aggregate data sources and notifications into unified feeds for LLM consumption.
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {compositeFeeds.length} feed{compositeFeeds.length !== 1 ? 's' : ''}
           </p>
         </div>
         <Button
@@ -50,6 +50,8 @@ export function CompositeFeedsListPage(): React.JSX.Element {
           Create Feed
         </Button>
       </div>
+
+      <ErrorBanner message={error} className="mb-6" />
 
       {dataSources.length === 0 ? (
         <Card>
@@ -68,10 +70,6 @@ export function CompositeFeedsListPage(): React.JSX.Element {
             </Link>
           </div>
         </Card>
-      ) : error !== null && error !== '' ? (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
-          {error}
-        </div>
       ) : compositeFeeds.length === 0 ? (
         <Card>
           <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -92,7 +90,7 @@ export function CompositeFeedsListPage(): React.JSX.Element {
           </div>
         </Card>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-1">
           {compositeFeeds.map((feed) => (
             <CompositeFeedRow
               key={feed.id}
@@ -116,88 +114,87 @@ interface CompositeFeedRowProps {
 function CompositeFeedRow({ feed, onDelete }: CompositeFeedRowProps): React.JSX.Element {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const handleDelete = async (): Promise<void> => {
     setIsDeleting(true);
+    setDeleteError(null);
     try {
       await onDelete();
+      setShowDeleteConfirm(false);
+    } catch {
+      setDeleteError('Failed to delete. Please try again.');
     } finally {
       setIsDeleting(false);
-      setShowDeleteConfirm(false);
     }
   };
 
   const sourceCount = feed.staticSourceIds.length;
-  const filterCount = feed.notificationFilters.length;
 
   return (
-    <Card>
-      <div className="flex items-start justify-between gap-4">
-        <Link to={`/data-insights/${feed.id}`} className="flex-1 min-w-0">
-          <h3 className="font-medium text-slate-900 hover:text-blue-600 transition-colors dark:text-slate-100 dark:hover:text-blue-400">
-            {feed.name}
-          </h3>
-          <p className="mt-1 text-sm text-slate-500 line-clamp-2 dark:text-slate-400">
-            {truncatePurpose(feed.purpose)}
-          </p>
-          <div className="mt-2 flex items-center gap-4 text-xs text-slate-400 dark:text-slate-500">
-            <span className="flex items-center gap-1">
-              <FileText className="h-3 w-3" />
-              {sourceCount} source{sourceCount !== 1 ? 's' : ''}
-            </span>
-            <span className="flex items-center gap-1">
-              <Layers className="h-3 w-3" />
-              {filterCount} filter{filterCount !== 1 ? 's' : ''}
-            </span>
-            <span>Updated {formatDate(feed.updatedAt)}</span>
-          </div>
+    <div className="group relative cursor-pointer rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800">
+      <div className="grid grid-cols-[1fr_auto_140px_60px] items-center gap-2">
+        <Link to={`/data-insights/${feed.id}`} className="min-w-0">
+          <p className="truncate font-medium text-slate-900 dark:text-slate-100">{feed.name}</p>
+          <p className="truncate text-xs text-slate-500 dark:text-slate-400">{truncatePurpose(feed.purpose)}</p>
         </Link>
 
-        {!showDeleteConfirm ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={(): void => {
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+          {sourceCount} source{sourceCount !== 1 ? 's' : ''}
+        </span>
+
+        <span className="text-xs text-slate-400 dark:text-slate-500">{formatRelative(feed.updatedAt)}</span>
+
+        <div className="flex items-center justify-end">
+          <button
+            onClick={(e): void => {
+              e.stopPropagation();
+              setDeleteError(null);
               setShowDeleteConfirm(true);
             }}
-            className="text-slate-400 hover:text-red-600"
+            className="rounded p-1 text-slate-400 opacity-0 transition-opacity hover:bg-red-500/10 hover:text-red-500 group-hover:opacity-100"
+            title="Delete"
           >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        ) : null}
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
       {showDeleteConfirm ? (
-        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
-          <p className="mb-3 text-sm text-red-800 dark:text-red-300">Delete "{feed.name}"?</p>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="danger"
-              size="sm"
-              onClick={(): void => {
-                void handleDelete();
-              }}
-              disabled={isDeleting}
-              isLoading={isDeleting}
-            >
-              Delete
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={(): void => {
-                setShowDeleteConfirm(false);
-              }}
-              disabled={isDeleting}
-            >
-              Cancel
-            </Button>
+        <div
+          className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/80 backdrop-blur-sm dark:bg-slate-900/80"
+          onClick={(e): void => {
+            e.stopPropagation();
+          }}
+        >
+          <div className="flex flex-col items-center gap-3 rounded-lg bg-white px-4 py-3 shadow-lg dark:bg-slate-800">
+            <p className="text-sm text-slate-700 dark:text-slate-200">Delete this item?</p>
+            {deleteError !== null && (
+              <p className="text-xs text-red-600 dark:text-red-400">{deleteError}</p>
+            )}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={(): void => {
+                  setShowDeleteConfirm(false);
+                }}
+                className="rounded-md px-3 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isDeleting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={(): void => {
+                  void handleDelete();
+                }}
+                className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
-    </Card>
+    </div>
   );
 }

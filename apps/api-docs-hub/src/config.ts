@@ -3,6 +3,11 @@
  * Validates required environment variables and fails fast on startup if missing.
  */
 
+import {
+  INTERNAL_API_OPENAPI_URL_ENV_VARS,
+  buildInternalApiOpenApiSources,
+} from '@intexuraos/common-core';
+
 export interface OpenApiSource {
   name: string;
   url: string;
@@ -16,82 +21,9 @@ export interface Config {
 
 interface EnvVar {
   key: string;
-  displayName: string;
 }
 
-const REQUIRED_ENV_VARS: EnvVar[] = [
-  { key: 'INTEXURAOS_USER_SERVICE_OPENAPI_URL', displayName: 'User Service API' },
-  { key: 'INTEXURAOS_NOTION_SERVICE_OPENAPI_URL', displayName: 'Notion Service API' },
-  { key: 'INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL', displayName: 'WhatsApp Service API' },
-  {
-    key: 'INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL',
-    displayName: 'Mobile Notifications Service API',
-  },
-  {
-    key: 'INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL',
-    displayName: 'Research Agent API',
-  },
-  {
-    key: 'INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL',
-    displayName: 'Commands Agent API',
-  },
-  {
-    key: 'INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL',
-    displayName: 'Actions Agent API',
-  },
-  {
-    key: 'INTEXURAOS_DATA_INSIGHTS_AGENT_OPENAPI_URL',
-    displayName: 'Data Insights Agent API',
-  },
-  {
-    key: 'INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL',
-    displayName: 'Image Service API',
-  },
-  {
-    key: 'INTEXURAOS_NOTES_AGENT_OPENAPI_URL',
-    displayName: 'Notes Agent API',
-  },
-  {
-    key: 'INTEXURAOS_TODOS_AGENT_OPENAPI_URL',
-    displayName: 'Todos Agent API',
-  },
-  {
-    key: 'INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL',
-    displayName: 'Application Settings API',
-  },
-  {
-    key: 'INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL',
-    displayName: 'Bookmarks Agent API',
-  },
-  {
-    key: 'INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL',
-    displayName: 'Calendar Agent API',
-  },
-  {
-    key: 'INTEXURAOS_CHAT_AGENT_OPENAPI_URL',
-    displayName: 'Chat Agent API',
-  },
-  {
-    key: 'INTEXURAOS_CODE_AGENT_OPENAPI_URL',
-    displayName: 'Code Agent API',
-  },
-  {
-    key: 'INTEXURAOS_LINEAR_AGENT_OPENAPI_URL',
-    displayName: 'Linear Agent API',
-  },
-  {
-    key: 'INTEXURAOS_WEB_AGENT_OPENAPI_URL',
-    displayName: 'Web Agent API',
-  },
-  {
-    key: 'INTEXURAOS_CRON_AGENT_OPENAPI_URL',
-    displayName: 'Cron Agent API',
-  },
-  {
-    key: 'INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL',
-    displayName: 'Hellscript Agent API',
-  },
-];
+const REQUIRED_ENV_VARS: EnvVar[] = INTERNAL_API_OPENAPI_URL_ENV_VARS.map((key) => ({ key }));
 
 /**
  * Load and validate configuration from environment variables.
@@ -99,17 +31,11 @@ const REQUIRED_ENV_VARS: EnvVar[] = [
  */
 export function loadConfig(): Config {
   const missing: string[] = [];
-  const openApiSources: OpenApiSource[] = [];
 
   for (const envVar of REQUIRED_ENV_VARS) {
     const value = process.env[envVar.key];
     if (value === undefined || value === '') {
       missing.push(envVar.key);
-    } else {
-      openApiSources.push({
-        name: envVar.displayName,
-        url: value,
-      });
     }
   }
 
@@ -123,6 +49,6 @@ export function loadConfig(): Config {
   return {
     port: Number(process.env['PORT'] ?? 8080),
     host: process.env['HOST'] ?? '0.0.0.0',
-    openApiSources,
+    openApiSources: buildInternalApiOpenApiSources(process.env),
   };
 }

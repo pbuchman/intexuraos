@@ -50,7 +50,7 @@ const testSchedule: CronSchedule = {
   description: 'Every minute',
   cronExpression: '*/5 * * * *',
   timezone: 'UTC',
-  action: { services: ['code-agent'], instruction: 'do something' },
+  action: { services: ['code-agent'], instruction: 'do something', preferredTools: [] },
   status: 'active',
   lastExecutedAt: null,
   nextExecutionAt: '2026-01-01T00:01:00.000Z',
@@ -116,7 +116,17 @@ function createFakeServices(overrides: Partial<ServiceContainer> = {}): ServiceC
       getToolsForService: vi.fn(async () => []),
       getToolsForServices: vi.fn(async () => []),
       listServiceTools: vi.fn(async () => [
-        { key: 'code-agent', name: 'Code Agent', tools: [{ name: 'run_code', description: 'Run code' }] },
+        {
+          key: 'code-agent',
+          name: 'Code Agent',
+          tools: [
+            {
+              name: 'code_agent__run_code',
+              description: 'Run code',
+              parameters: { type: 'object', properties: {} },
+            },
+          ],
+        },
       ]),
       refreshAll: vi.fn(async () => { /* noop */ }),
     },
@@ -174,11 +184,21 @@ describe('Schedule Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { services: { key: string; name: string; tools: { name: string; description: string }[] }[] };
+        data: {
+          services: {
+            key: string;
+            name: string;
+            tools: { name: string; description: string; parameters: Record<string, unknown> }[];
+          }[];
+        };
       };
       expect(body.success).toBe(true);
       expect(body.data.services).toHaveLength(1);
       expect(body.data.services[0]?.key).toBe('code-agent');
+      expect(body.data.services[0]?.tools[0]?.parameters).toEqual({
+        type: 'object',
+        properties: {},
+      });
     });
 
     it('returns 401 when no auth header', async () => {
@@ -319,7 +339,11 @@ describe('Schedule Routes', () => {
     const validBody = {
       name: 'Test',
       description: 'Every minute',
-      action: { services: ['code-agent'], instruction: 'do something' },
+      action: {
+        services: ['code-agent'],
+        instruction: 'do something',
+        preferredTools: [],
+      },
     };
 
     it('returns 201 on success', async () => {
@@ -373,10 +397,71 @@ describe('Schedule Routes', () => {
         method: 'POST',
         url: '/cron/schedules',
         headers: { authorization: AUTH_HEADER },
-        payload: { ...validBody, action: { services: [], instruction: 'test' } },
+        payload: {
+          ...validBody,
+          action: { services: [], instruction: 'test', preferredTools: [] },
+        },
       });
 
       expect(response.statusCode).toBe(400);
+    });
+
+    it('defaults preferredTools to empty array when omitted from create', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/cron/schedules',
+        headers: { authorization: AUTH_HEADER },
+        payload: {
+          name: 'No tools',
+          description: 'Every minute',
+          action: { services: ['code-agent'], instruction: 'do something' },
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: CronSchedule };
+      expect(body.data.action.preferredTools).toEqual([]);
+    });
+
+    it('round-trips preferredTools on create', async () => {
+      const fakeRepo = {
+        ...createFakeServices().scheduleRepo,
+        create: vi.fn(async (_userId: string, input: {
+          name: string;
+          description: string;
+          action: CronSchedule['action'];
+          timezone: string;
+          cronExpression: string;
+          nextExecutionAt: string | null;
+        }) =>
+          ok({
+            ...testSchedule,
+            action: input.action,
+          })),
+      };
+
+      await app.close();
+      resetServices();
+      setServices(createFakeServices({ scheduleRepo: fakeRepo as never }));
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/cron/schedules',
+        headers: { authorization: AUTH_HEADER },
+        payload: {
+          ...validBody,
+          action: {
+            services: ['code-agent'],
+            instruction: 'do something',
+            preferredTools: ['code_agent__run_code'],
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: CronSchedule };
+      expect(body.data.action.preferredTools).toEqual(['code_agent__run_code']);
     });
 
     it('passes timezone when provided', async () => {
@@ -647,7 +732,26 @@ describe('Schedule Routes', () => {
         method: 'PATCH',
         url: '/cron/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
-        payload: { action: { services: ['code-agent'], instruction: 'new task' } },
+        payload: {
+          action: {
+            services: ['code-agent'],
+            instruction: 'new task',
+            preferredTools: ['code_agent__run_code'],
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('defaults preferredTools to empty array when omitted from update action', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/cron/schedules/schedule-1',
+        headers: { authorization: AUTH_HEADER },
+        payload: {
+          action: { services: ['code-agent'], instruction: 'new task' },
+        },
       });
 
       expect(response.statusCode).toBe(200);
@@ -716,7 +820,13 @@ describe('Schedule Routes', () => {
         method: 'PATCH',
         url: '/cron/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
-        payload: { action: { services: ['nonexistent-service'], instruction: 'test' } },
+        payload: {
+          action: {
+            services: ['nonexistent-service'],
+            instruction: 'test',
+            preferredTools: [],
+          },
+        },
       });
 
       expect(response.statusCode).toBe(400);
