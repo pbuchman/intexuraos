@@ -290,7 +290,7 @@ export function createGitHubPRHttpClient(
       try {
         const items: GitHubPullRequestListItem[] = [];
         let url: string | null =
-          `${GITHUB_API}/repos/${owner}/${repo}/pulls?state=open&base=${encodeURIComponent(baseBranch)}&per_page=100`;
+          `${GITHUB_API}/repos/${owner}/${repo}/pulls?state=open&base=${encodeURIComponent(baseBranch)}&per_page=100&sort=created&direction=asc`;
         const MAX_PAGES = 10;
 
         for (let page = 0; page < MAX_PAGES && url !== null; page++) {
