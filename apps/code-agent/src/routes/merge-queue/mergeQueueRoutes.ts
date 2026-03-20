@@ -44,6 +44,14 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
 
   fastify.register((fastify) => {
     fastify.addHook('onRequest', jwtValidator);
+    fastify.addHook('onRequest', async (request, reply) => {
+      const userId = getUserId(request);
+      /* v8 ignore start -- ts-type: getUserId fallback to empty string is unreachable when JWT hook sets user.userId @preserve */
+      if (userId === '') {
+        return await reply.fail('UNAUTHORIZED', 'Missing user identity');
+      }
+      /* v8 ignore stop @preserve */
+    });
 
     // POST /code/merge-queue/watch — create a new merge queue watch
     fastify.post(

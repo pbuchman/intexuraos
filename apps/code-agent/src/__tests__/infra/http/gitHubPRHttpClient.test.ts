@@ -839,96 +839,172 @@ describe('GitHubPRHttpClient', () => {
   });
 
   describe('getCombinedCheckStatus', () => {
-    it('returns success state', async () => {
+    function mockBothApis(
+      ref: string,
+      statusReply: { state: string; total_count: number },
+      checkRunsReply: { total_count: number; check_runs: { conclusion: string | null; status: string }[] }
+    ): void {
       nock('https://api.github.com')
-        .get('/repos/owner/repo/commits/abc123/status')
-        .matchHeader('Authorization', 'Bearer test-token')
-        .reply(200, { state: 'success' });
+        .get(`/repos/owner/repo/commits/${ref}/status`)
+        .reply(200, statusReply);
+      nock('https://api.github.com')
+        .get(`/repos/owner/repo/commits/${ref}/check-runs`)
+        .reply(200, checkRunsReply);
+    }
+
+    it('returns success when both APIs report success', async () => {
+      mockBothApis('abc123',
+        { state: 'success', total_count: 1 },
+        { total_count: 1, check_runs: [{ conclusion: 'success', status: 'completed' }] }
+      );
 
       const result = await client.getCombinedCheckStatus('test-token', 'owner', 'repo', 'abc123');
-
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.state).toBe('success');
-      }
+      if (result.ok) expect(result.value.state).toBe('success');
     });
 
-    it('maps failure state', async () => {
-      nock('https://api.github.com')
-        .get('/repos/owner/repo/commits/abc123/status')
-        .reply(200, { state: 'failure' });
+    it('returns success when only check runs exist and pass', async () => {
+      mockBothApis('abc123',
+        { state: 'pending', total_count: 0 },
+        { total_count: 2, check_runs: [
+          { conclusion: 'success', status: 'completed' },
+          { conclusion: 'success', status: 'completed' },
+        ] }
+      );
 
       const result = await client.getCombinedCheckStatus('test-token', 'owner', 'repo', 'abc123');
-
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.state).toBe('failure');
-      }
+      if (result.ok) expect(result.value.state).toBe('success');
     });
 
-    it('maps error state to failure', async () => {
-      nock('https://api.github.com')
-        .get('/repos/owner/repo/commits/abc123/status')
-        .reply(200, { state: 'error' });
+    it('returns success when only legacy statuses exist and pass', async () => {
+      mockBothApis('abc123',
+        { state: 'success', total_count: 1 },
+        { total_count: 0, check_runs: [] }
+      );
 
       const result = await client.getCombinedCheckStatus('test-token', 'owner', 'repo', 'abc123');
-
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.state).toBe('failure');
-      }
+      if (result.ok) expect(result.value.state).toBe('success');
     });
 
-    it('maps unknown state to pending', async () => {
-      nock('https://api.github.com')
-        .get('/repos/owner/repo/commits/abc123/status')
-        .reply(200, { state: 'pending' });
+    it('returns failure when legacy status fails', async () => {
+      mockBothApis('abc123',
+        { state: 'failure', total_count: 1 },
+        { total_count: 1, check_runs: [{ conclusion: 'success', status: 'completed' }] }
+      );
 
       const result = await client.getCombinedCheckStatus('test-token', 'owner', 'repo', 'abc123');
-
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.state).toBe('pending');
-      }
+      if (result.ok) expect(result.value.state).toBe('failure');
     });
 
-    it('returns error on non-ok response', async () => {
+    it('maps legacy error state to failure', async () => {
+      mockBothApis('abc123',
+        { state: 'error', total_count: 1 },
+        { total_count: 0, check_runs: [] }
+      );
+
+      const result = await client.getCombinedCheckStatus('test-token', 'owner', 'repo', 'abc123');
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.state).toBe('failure');
+    });
+
+    it('returns failure when a check run fails', async () => {
+      mockBothApis('abc123',
+        { state: 'pending', total_count: 0 },
+        { total_count: 2, check_runs: [
+          { conclusion: 'success', status: 'completed' },
+          { conclusion: 'failure', status: 'completed' },
+        ] }
+      );
+
+      const result = await client.getCombinedCheckStatus('test-token', 'owner', 'repo', 'abc123');
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.state).toBe('failure');
+    });
+
+    it('returns failure when a check run is timed_out', async () => {
+      mockBothApis('abc123',
+        { state: 'pending', total_count: 0 },
+        { total_count: 1, check_runs: [{ conclusion: 'timed_out', status: 'completed' }] }
+      );
+
+      const result = await client.getCombinedCheckStatus('test-token', 'owner', 'repo', 'abc123');
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.state).toBe('failure');
+    });
+
+    it('returns pending when check runs are in progress', async () => {
+      mockBothApis('abc123',
+        { state: 'pending', total_count: 0 },
+        { total_count: 1, check_runs: [{ conclusion: null, status: 'in_progress' }] }
+      );
+
+      const result = await client.getCombinedCheckStatus('test-token', 'owner', 'repo', 'abc123');
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.state).toBe('pending');
+    });
+
+    it('returns pending when neither API has results', async () => {
+      mockBothApis('abc123',
+        { state: 'pending', total_count: 0 },
+        { total_count: 0, check_runs: [] }
+      );
+
+      const result = await client.getCombinedCheckStatus('test-token', 'owner', 'repo', 'abc123');
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.state).toBe('pending');
+    });
+
+    it('returns error when status API returns non-ok', async () => {
       nock('https://api.github.com')
         .get('/repos/owner/repo/commits/abc123/status')
         .reply(404, { message: 'Not Found' });
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/commits/abc123/check-runs')
+        .reply(200, { total_count: 0, check_runs: [] });
 
       const result = await client.getCombinedCheckStatus('test-token', 'owner', 'repo', 'abc123');
-
       expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('NOT_FOUND');
-      }
+      if (!result.ok) expect(result.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns error when check-runs API returns non-ok', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/commits/abc123/status')
+        .reply(200, { state: 'pending', total_count: 0 });
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/commits/abc123/check-runs')
+        .reply(403, { message: 'Forbidden' });
+
+      const result = await client.getCombinedCheckStatus('test-token', 'owner', 'repo', 'abc123');
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.code).toBe('UNAUTHORIZED');
     });
 
     it('returns NETWORK_ERROR on fetch failure', async () => {
       nock('https://api.github.com')
         .get('/repos/owner/repo/commits/abc123/status')
         .replyWithError('connection refused');
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/commits/abc123/check-runs')
+        .replyWithError('connection refused');
 
       const result = await client.getCombinedCheckStatus('test-token', 'owner', 'repo', 'abc123');
-
       expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('NETWORK_ERROR');
-      }
+      if (!result.ok) expect(result.error.code).toBe('NETWORK_ERROR');
     });
 
     it('encodes ref with special characters', async () => {
-      nock('https://api.github.com')
-        .get('/repos/owner/repo/commits/refs%2Fheads%2Fmain/status')
-        .reply(200, { state: 'success' });
+      mockBothApis('refs%2Fheads%2Fmain',
+        { state: 'success', total_count: 1 },
+        { total_count: 0, check_runs: [] }
+      );
 
       const result = await client.getCombinedCheckStatus('test-token', 'owner', 'repo', 'refs/heads/main');
-
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.state).toBe('success');
-      }
+      if (result.ok) expect(result.value.state).toBe('success');
     });
   });
 
