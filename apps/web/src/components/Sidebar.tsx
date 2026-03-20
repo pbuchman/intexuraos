@@ -27,6 +27,7 @@ import {
   Menu,
   MessageCircle,
   MessageSquare,
+  PenTool,
   Plus,
   Server,
   Settings,
@@ -68,6 +69,11 @@ const dataInsightsItems: NavItem[] = [
   { to: '/data-insights', label: 'Data Sources', icon: List },
   { to: '/data-insights/new', label: 'Add Source', icon: Plus },
   { to: '/data-insights/visualizations', label: 'Visualizations', icon: BarChart2 },
+];
+
+const hellscriptItems: NavItem[] = [
+  { to: '/hellscript', label: 'Thoughts', icon: List },
+  { to: '/hellscript/new', label: 'New Conversation', icon: Plus },
 ];
 
 const codeTasksItems: NavItem[] = [
@@ -141,6 +147,9 @@ export function Sidebar(): React.JSX.Element {
   const [isDataInsightsOpen, setIsDataInsightsOpen] = useState(() =>
     window.location.hash.includes('/data-insights')
   );
+  const [isHellscriptOpen, setIsHellscriptOpen] = useState(() =>
+    window.location.hash.includes('/hellscript')
+  );
   const [isCodeTasksOpen, setIsCodeTasksOpen] = useState(() =>
     window.location.hash.includes('/code-tasks')
   );
@@ -201,6 +210,13 @@ export function Sidebar(): React.JSX.Element {
   useEffect(() => {
     if (location.pathname.startsWith('/data-insights')) {
       setIsDataInsightsOpen(true);
+    }
+  }, [location.pathname]);
+
+  // Auto-expand hellscript when on hellscript page
+  useEffect(() => {
+    if (location.pathname.startsWith('/hellscript')) {
+      setIsHellscriptOpen(true);
     }
   }, [location.pathname]);
 
@@ -333,6 +349,58 @@ export function Sidebar(): React.JSX.Element {
             <Inbox className="h-5 w-5 shrink-0" />
             {!isCollapsed ? <span>Inbox</span> : null}
           </NavLink>
+
+          {/* Hellscript section (collapsible) */}
+          <div className="pt-2">
+            <button
+              onClick={(): void => {
+                if (!isHellscriptOpen) {
+                  void navigate(hellscriptItems[0]?.to ?? '/hellscript');
+                }
+                setIsHellscriptOpen(!isHellscriptOpen);
+              }}
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                location.pathname.startsWith('/hellscript')
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
+              }`}
+            >
+              <PenTool className="h-5 w-5 shrink-0" />
+              {!isCollapsed ? (
+                <>
+                  <span className="flex-1 text-left">Hellscript</span>
+                  {isHellscriptOpen ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </>
+              ) : null}
+            </button>
+
+            {/* Hellscript sub-items */}
+            {isHellscriptOpen && !isCollapsed ? (
+              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3 dark:border-slate-600">
+                {hellscriptItems.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === '/hellscript'}
+                    className={({ isActive }): string =>
+                      `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                        isActive
+                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200'
+                      }`
+                    }
+                  >
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    <span>{item.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            ) : null}
+          </div>
 
           {/* Code Tasks section (collapsible) */}
           <div className="pt-2">

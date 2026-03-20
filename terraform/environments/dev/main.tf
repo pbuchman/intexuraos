@@ -255,6 +255,13 @@ locals {
       min_scale = 0
       max_scale = 1
     }
+    hellscript_agent = {
+      name      = "intexuraos-hellscript-agent"
+      app_path  = "apps/hellscript-agent"
+      port      = 8080
+      min_scale = 0
+      max_scale = 1
+    }
   }
 
   common_labels = {
@@ -291,6 +298,7 @@ locals {
     INTEXURAOS_CHAT_AGENT_URL                   = "https://${local.services.chat_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_API_DOCS_HUB_URL                 = "https://${local.services.api_docs_hub.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_CRON_AGENT_URL                   = "https://${local.services.cron_agent.name}-${local.cloud_run_url_suffix}"
+    INTEXURAOS_HELLSCRIPT_AGENT_URL             = "https://${local.services.hellscript_agent.name}-${local.cloud_run_url_suffix}"
   }
 }
 
@@ -1639,6 +1647,32 @@ module "cron_agent" {
   secrets = merge(local.common_service_secrets, {
     INTEXURAOS_GEMINI_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_GEMINI_APP_API_KEY"]
   })
+  env_vars = local.common_service_env_vars
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
+  ]
+}
+
+# Hellscript Agent - Thought buffers with materialized state
+module "hellscript_agent" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.hellscript_agent.name
+  service_account = module.iam.service_accounts["hellscript_agent"]
+  port            = local.services.hellscript_agent.port
+  min_scale       = local.services.hellscript_agent.min_scale
+  max_scale       = local.services.hellscript_agent.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/hellscript-agent:latest"
+
+  secrets  = local.common_service_secrets
   env_vars = local.common_service_env_vars
 
   depends_on = [

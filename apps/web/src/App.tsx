@@ -28,6 +28,8 @@ import {
   CronSchedulesPage,
   CronScheduleViewPage,
   DispatchQueuePage,
+  HellscriptBuffersPage,
+  HellscriptConversationPage,
   CompositeFeedFormPage,
   CompositeFeedsListPage,
   DataInsightsPage,
@@ -236,6 +238,31 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <ShareHistoryPage />
+          </ProtectedRoute>
+        }
+      />
+      {/* Hellscript routes */}
+      <Route
+        path="/hellscript"
+        element={
+          <ProtectedRoute>
+            <HellscriptBuffersPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/hellscript/new"
+        element={
+          <ProtectedRoute>
+            <HellscriptConversationPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/hellscript/:id"
+        element={
+          <ProtectedRoute>
+            <HellscriptConversationPage />
           </ProtectedRoute>
         }
       />
