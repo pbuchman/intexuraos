@@ -4,7 +4,7 @@
 
 **Goal:** Implement Firestore-backed task queueing when all workers are at capacity (503), with automatic drain via internal HTTP endpoint and Cloud Scheduler.
 
-**Architecture:** When dispatch fails with 503, tasks enter `queued` status instead of `failed`. A periodic drain mechanism (HTTP endpoint + Cloud Scheduler) fetches the oldest queued task, checks TTL, and dispatches via a dedicated dispatch-only path. Queue is bounded by max size (10) and TTL (30 min).
+**Architecture:** When dispatch fails with 503, tasks enter `queued` status instead of `failed`. A periodic drain mechanism (HTTP endpoint + Cloud Scheduler) fetches the oldest queued task, checks TTL, and dispatches via a dedicated dispatch-only path. Queue is bounded by max size (50) and TTL (30 min).
 
 **Tech Stack:** TypeScript, Fastify, Firestore, Cloud Scheduler (Terraform)
 

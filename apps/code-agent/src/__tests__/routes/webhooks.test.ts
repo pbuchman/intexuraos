@@ -223,6 +223,10 @@ describe('POST /internal/webhooks/task-complete', () => {
       unifiedEvaluator: {} as never,
       automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
       taskEnqueueService: {} as never,
+      mergeConflictDetector: {
+        detectOnPush: vi.fn().mockResolvedValue(undefined),
+        reconcile: vi.fn().mockResolvedValue({ processed: 0 }),
+      },
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -255,6 +259,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
       automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
+      mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
     });
 
     app = await buildServer();
@@ -4541,6 +4546,10 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       unifiedEvaluator: {} as never,
       automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
       taskEnqueueService: {} as never,
+      mergeConflictDetector: {
+        detectOnPush: vi.fn().mockResolvedValue(undefined),
+        reconcile: vi.fn().mockResolvedValue({ processed: 0 }),
+      },
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -4573,6 +4582,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
       automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
+      mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
     });
 
     app = await buildServer();
@@ -4899,6 +4909,10 @@ describe('POST /internal/logs', () => {
       unifiedEvaluator: {} as never,
       automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
       taskEnqueueService: {} as never,
+      mergeConflictDetector: {
+        detectOnPush: vi.fn().mockResolvedValue(undefined),
+        reconcile: vi.fn().mockResolvedValue({ processed: 0 }),
+      },
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -4931,6 +4945,7 @@ describe('POST /internal/logs', () => {
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
       automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
+      mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
     });
 
     app = await buildServer();
@@ -5480,6 +5495,10 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       unifiedEvaluator: {} as never,
       automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
       taskEnqueueService: {} as never,
+      mergeConflictDetector: {
+        detectOnPush: vi.fn().mockResolvedValue(undefined),
+        reconcile: vi.fn().mockResolvedValue({ processed: 0 }),
+      },
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -5512,6 +5531,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
       automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
+      mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
     });
 
     app = await buildServer();

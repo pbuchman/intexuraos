@@ -181,6 +181,10 @@ describe('GET /code/tasks endpoints', () => {
       unifiedEvaluator: {} as never,
       automationLog: {} as never,
       taskEnqueueService: {} as never,
+      mergeConflictDetector: {
+        detectOnPush: vi.fn().mockResolvedValue(undefined),
+        reconcile: vi.fn().mockResolvedValue({ processed: 0 }),
+      },
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -213,6 +217,7 @@ describe('GET /code/tasks endpoints', () => {
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
       automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
+      mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
     });
 
     app = await buildServer();

@@ -189,6 +189,10 @@ describe('POST /code/cancel', () => {
       unifiedEvaluator: {} as never,
       automationLog: {} as never,
       taskEnqueueService: {} as never,
+      mergeConflictDetector: {
+        detectOnPush: vi.fn().mockResolvedValue(undefined),
+        reconcile: vi.fn().mockResolvedValue({ processed: 0 }),
+      },
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -221,6 +225,7 @@ describe('POST /code/cancel', () => {
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
       automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
+      mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
     });
 
     // Set up worker settings for the test user so cancelOnWorker receives credentials
