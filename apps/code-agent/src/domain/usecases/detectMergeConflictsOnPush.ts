@@ -12,7 +12,7 @@ import type { GitHubPREventRepository } from '../repositories/gitHubPREventRepos
 import type { GitHubPRSummaryRepository } from '../repositories/gitHubPRSummaryRepository.js';
 import type { LogLineRepository } from '../repositories/logLineRepository.js';
 import type { LinearIssueService } from '../services/linearIssueService.js';
-import type { MergeConflictDetector, ReconcileResult } from '../services/mergeConflictDetector.js';
+import { EMPTY_RECONCILE_RESULT, type MergeConflictDetector, type ReconcileResult } from '../services/mergeConflictDetector.js';
 import type { StatusMirrorService } from '../services/statusMirrorService.js';
 import type { TaskDispatcherService } from '../services/taskDispatcher.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
@@ -1085,13 +1085,13 @@ export function createDetectMergeConflictsOnPush(
       const openResult = await deps.gitHubPRSummaryRepo.findAllOpen();
       if (!openResult.ok) {
         logger.warn({ error: openResult.error }, 'Failed to load open PR summaries for merge-conflict reconciliation');
-        return { processed: 0, closed: 0, conflicting: 0, clean: 0, unknown: 0, skipped: 0, error: 0 };
+        return EMPTY_RECONCILE_RESULT;
       }
 
       const summaries = openResult.value;
       if (summaries.length === 0) {
         logger.debug({}, 'No open PR summaries to reconcile for merge conflicts');
-        return { processed: 0, closed: 0, conflicting: 0, clean: 0, unknown: 0, skipped: 0, error: 0 };
+        return EMPTY_RECONCILE_RESULT;
       }
 
       logger.info({ count: summaries.length }, 'Reconciling merge conflicts for open PRs');

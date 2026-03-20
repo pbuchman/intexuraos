@@ -2,6 +2,7 @@
  * Test services mock for code-agent tests.
  */
 
+import { EMPTY_RECONCILE_RESULT } from '../../domain/services/mergeConflictDetector.js';
 import { setServices, type ServiceContainer } from '../../services.js';
 import { createFakeFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
@@ -283,7 +284,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     taskEnqueueService,
     mergeConflictDetector: {
       async detectOnPush() { /* no-op for tests */ },
-      async reconcile() { return { processed: 0, closed: 0, conflicting: 0, clean: 0, unknown: 0, skipped: 0, error: 0 }; },
+      async reconcile() { return EMPTY_RECONCILE_RESULT; },
     },
     mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
   };
