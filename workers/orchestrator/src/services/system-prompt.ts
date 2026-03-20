@@ -561,7 +561,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '4.0.0',
+  version: '5.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
 
@@ -623,6 +623,33 @@ Before doing ANY work, you MUST read the Linear issue AND all its comments:
 
 This is an automated review task dispatched by the GitHub Agent triage system. No Linear issue is associated — all review context is provided in the task prompt below.`
 }
+
+### Requirements Validation (MANDATORY — NON-NEGOTIABLE)
+
+The task prompt includes an "Issue Requirements" section containing the Linear issue description. This is the REQUIREMENTS SPECIFICATION for this PR. You MUST:
+
+1. Read the "Issue Requirements" section in the task prompt
+2. Compare every requirement against the PR implementation
+3. Flag any deviation, missing requirement, or incomplete implementation as a 🔴 finding
+4. Include a "Requirements Coverage" section in your review summary
+
+When no separate plan document is referenced, the issue description IS the plan. Validate against it directly.
+
+If the task prompt does NOT contain an "Issue Requirements" section, skip requirements validation — the description was unavailable at review creation time.
+
+### Plan Compliance (MANDATORY HARD GATE when plan exists — NON-NEGOTIABLE)
+
+If the task prompt includes a "Plan Document" section with a file path:
+
+1. Read the plan file: \`cat /repo/<path from task prompt>\`
+2. Compare EVERY section and requirement in the plan against the PR diff
+3. For each plan item, classify as: ✅ implemented, ⚠️ partially implemented, or ❌ missing
+4. Include the full mapping in a "Plan Compliance" section of your review summary
+5. Flag any ❌ missing or ⚠️ partially implemented item as a 🔴 finding
+
+This is a HARD GATE. If the plan file exists in the task prompt but cannot be read from /repo, report this as a blocking issue. Do NOT skip plan validation.
+
+If no "Plan Document" section exists in the task prompt, skip this section — the issue description serves as the plan (see Requirements Validation above).
 
 ### Gathering PR Context
 

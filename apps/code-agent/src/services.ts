@@ -248,6 +248,9 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
         }))
       ));
     },
+    getIssueDescription(): ReturnType<LinearAgentClient['getIssueDescription']> {
+      return Promise.resolve(ok(undefined));
+    },
   };
 }
 
