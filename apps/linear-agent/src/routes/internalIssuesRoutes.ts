@@ -900,9 +900,11 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
         return await handleLinearError(commentsResult.error, reply);
       }
 
-      // Sort comments newest first, cap at 100 to match the old Linear GraphQL first:100 limit
+      // Filter empty/whitespace bodies to match old fetchLinearIssueContext behavior,
+      // then sort newest first, cap at 100 to match the old Linear GraphQL first:100 limit.
       const COMMENT_LIMIT = 100;
       const sortedComments = [...commentsResult.value] // @allow-result-access -- guarded by if (!commentsResult.ok) above
+        .filter((c) => c.body.trim() !== '')
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
         .slice(0, COMMENT_LIMIT)
         .map((c) => ({ body: c.body, createdAt: c.createdAt }));
