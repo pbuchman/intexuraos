@@ -17,6 +17,7 @@ const mockGetFirestoreClient = vi.fn();
 const mockCollection = vi.fn();
 const mockQuery = vi.fn();
 const mockOrderBy = vi.fn();
+const mockWhere = vi.fn();
 const mockLimit = vi.fn();
 const mockOnSnapshot = vi.fn();
 
@@ -64,6 +65,7 @@ vi.mock('firebase/firestore', () => ({
   collection: (...args: unknown[]): unknown => mockCollection(...args),
   query: (...args: unknown[]): unknown => mockQuery(...args),
   orderBy: (...args: unknown[]): unknown => mockOrderBy(...args),
+  where: (...args: unknown[]): unknown => mockWhere(...args),
   limit: (...args: unknown[]): unknown => mockLimit(...args),
   onSnapshot: (...args: unknown[]): unknown => mockOnSnapshot(...args),
 }));
@@ -140,6 +142,7 @@ describe('useGitHubEventLog', () => {
     mockCollection.mockImplementation((...args: unknown[]): { kind: string; args: unknown[] } => ({ kind: 'collection', args }));
     mockQuery.mockImplementation((...args: unknown[]): { kind: string; args: unknown[] } => ({ kind: 'query', args }));
     mockOrderBy.mockImplementation((...args: unknown[]): { kind: string; args: unknown[] } => ({ kind: 'orderBy', args }));
+    mockWhere.mockImplementation((...args: unknown[]): { kind: string; args: unknown[] } => ({ kind: 'where', args }));
     mockLimit.mockImplementation((...args: unknown[]): { kind: string; args: unknown[] } => ({ kind: 'limit', args }));
     mockIsFirebaseAuthenticated.mockReturnValue(true);
   });

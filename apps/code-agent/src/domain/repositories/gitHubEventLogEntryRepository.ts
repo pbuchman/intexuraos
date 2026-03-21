@@ -4,6 +4,7 @@ import type {
   CreatePendingGitHubEventLogEntryInput,
   GitHubEventLogEntry,
 } from '../models/gitHubEventLogEntry.js';
+import type { GitHubWebhookEventType } from '../models/gitHubWebhookTypes.js';
 
 export interface GitHubEventLogEntryRepositoryError {
   code: 'FIRESTORE_ERROR';
@@ -20,6 +21,7 @@ export interface GitHubEventLogEntryRepository {
   listRecent(options: {
     limit: number;
     cursor?: string;
+    eventTypes?: readonly GitHubWebhookEventType[];
   }): Promise<
     Result<{
       entries: GitHubEventLogEntry[];

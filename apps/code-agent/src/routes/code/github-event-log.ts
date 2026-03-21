@@ -6,6 +6,7 @@ import type { GitHubEventLogEntry } from '../../domain/models/gitHubEventLogEntr
 import type { GitHubWebhookAuditEvent } from '../../domain/models/gitHubWebhookAuditEvent.js';
 import type { EventDecision, EventDecisionReviewType } from '../../domain/models/eventDecision.js';
 import { ALL_REVIEW_TYPES } from '../../domain/constants/reviewTypes.js';
+import { VISIBLE_EVENT_TYPES } from '../../domain/constants/visibleEventTypes.js';
 
 interface GitHubEventLogRow {
   id: string;
@@ -260,6 +261,7 @@ const githubEventLogRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
         const result = await gitHubEventLogEntryRepo.listRecent({
           limit,
           ...(cursor !== undefined && { cursor }),
+          eventTypes: VISIBLE_EVENT_TYPES,
         });
 
         if (!result.ok) {
