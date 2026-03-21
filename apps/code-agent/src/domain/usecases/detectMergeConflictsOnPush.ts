@@ -105,7 +105,7 @@ export interface DetectMergeConflictsOnPushDeps {
   logger: Logger;
   gitHubPRClient: Pick<
     GitHubPRClient,
-    'getPullRequestDetails' | 'postPRComment' | 'updateIssueComment'
+    'getPullRequestDetails' | 'postPRComment' | 'updateIssueComment' | 'listAllOpenPullRequests'
   >;
   gitHubPRSummaryRepo: GitHubPRSummaryRepository;
   codeTaskRepo: CodeTaskRepository;
@@ -1034,6 +1034,98 @@ async function processOpenSummaryOnPush(
   return status;
 }
 
+interface PreFilterResult {
+  open: GitHubPRSummary[];
+  preFilterClosed: number;
+}
+
+async function preFilterStaleSummaries(
+  deps: DetectMergeConflictsOnPushDeps,
+  summaries: GitHubPRSummary[],
+  logger: Logger
+): Promise<PreFilterResult> {
+  const byRepo = new Map<string, GitHubPRSummary[]>();
+  for (const summary of summaries) {
+    const existing = byRepo.get(summary.repository);
+    if (existing !== undefined) {
+      existing.push(summary);
+    } else {
+      byRepo.set(summary.repository, [summary]);
+    }
+  }
+
+  const remaining: GitHubPRSummary[] = [];
+  let preFilterClosed = 0;
+
+  for (const [repository, repoSummaries] of byRepo) {
+    const parsed = parseOwnerRepo(repository);
+    if (parsed === null) {
+      remaining.push(...repoSummaries);
+      continue;
+    }
+
+    const firstSummary = repoSummaries[0];
+    if (firstSummary === undefined) {
+      continue;
+    }
+
+    const accessContext = await resolveGitHubAccessContext(
+      {
+        userServiceClient: deps.userServiceClient,
+        gitHubPREventRepo: deps.gitHubPREventRepo,
+        allowedBots: deps.allowedBots,
+      },
+      firstSummary,
+      logger
+    );
+    if (accessContext === null) {
+      remaining.push(...repoSummaries);
+      continue;
+    }
+
+    const openPRsResult = await deps.gitHubPRClient.listAllOpenPullRequests(
+      accessContext.token,
+      parsed.owner,
+      parsed.repo
+    );
+    if (!openPRsResult.ok) {
+      logger.warn(
+        { repository, error: openPRsResult.error },
+        'Failed to list open PRs for pre-filter; falling back to per-PR processing'
+      );
+      remaining.push(...repoSummaries);
+      continue;
+    }
+
+    const openPRNumbers = new Set(openPRsResult.value.map((pr) => pr.number));
+
+    for (const summary of repoSummaries) {
+      if (openPRNumbers.has(summary.pullRequestNumber)) {
+        remaining.push(summary);
+      } else {
+        logger.info(
+          { prNumber: summary.pullRequestNumber, repository },
+          'Pre-filter: closing stale PR summary — PR is no longer open on GitHub'
+        );
+        await upsertSummary(
+          deps.gitHubPRSummaryRepo,
+          {
+            repository,
+            pullRequestNumber: summary.pullRequestNumber,
+            lastActivityAt: summary.lastActivityAt,
+            firstSeenAt: summary.firstSeenAt,
+            state: 'closed',
+          },
+          logger
+        );
+        preFilterClosed++;
+      }
+    }
+  }
+
+  return { open: remaining, preFilterClosed };
+}
+
 export function createDetectMergeConflictsOnPush(
   deps: DetectMergeConflictsOnPushDeps
 ): MergeConflictDetector {
@@ -1096,16 +1188,20 @@ export function createDetectMergeConflictsOnPush(
 
       logger.info({ count: summaries.length }, 'Reconciling merge conflicts for open PRs');
 
+      // Pre-filter: bulk-close stale summaries by comparing against GitHub's open PR list per repo.
+      // This avoids calling getPullRequestDetails for PRs that are already closed.
+      const remainingSummaries = await preFilterStaleSummaries(deps, summaries, logger);
+
       const reconcileId = randomUUID();
-      let processed = 0;
-      let closed = 0;
+      let processed = remainingSummaries.preFilterClosed;
+      let closed = remainingSummaries.preFilterClosed;
       let conflicting = 0;
       let clean = 0;
       let unknown = 0;
       let skipped = 0;
       let error = 0;
 
-      for (const existingSummary of summaries) {
+      for (const existingSummary of remainingSummaries.open) {
         const parsedRepository = parseOwnerRepo(existingSummary.repository);
         if (parsedRepository === null) {
           logger.warn({ repository: existingSummary.repository }, 'Skipping reconcile for PR with invalid repository');
