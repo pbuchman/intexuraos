@@ -15,9 +15,10 @@ import type {
   LinearConnectionRepository,
   FailedIssueRepository,
   LinearActionExtractionService,
-  ExtractedIssueData,
   ProcessedActionRepository,
 } from '../index.js';
+import { buildIssueDescription } from '../descriptionBuilder.js';
+import { checkProcessedAction } from './checkIdempotency.js';
 
 export interface ProcessLinearActionDeps {
   linearApiClient: LinearApiClient;
@@ -37,36 +38,6 @@ export interface ProcessLinearActionRequest {
 
 export type ProcessLinearActionResponse = ServiceFeedback;
 
-/**
- * Build structured markdown description from extracted data.
- * Always includes the original user instruction at the top.
- */
-function buildDescription(
-  extracted: ExtractedIssueData,
-  originalText: string,
-  summary?: string
-): string {
-  const sections: string[] = [];
-
-  sections.push(
-    `## Original User Instruction\n\n> ${originalText}\n\n_This is the original user instruction, transcribed verbatim. May include typos but preserves original observations._`
-  );
-
-  if (summary !== undefined) {
-    sections.push(`## Key Points\n\n${summary}`);
-  }
-
-  if (extracted.functionalRequirements !== null) {
-    sections.push(`## Functional Requirements\n\n${extracted.functionalRequirements}`);
-  }
-
-  if (extracted.technicalDetails !== null) {
-    sections.push(`## Technical Details\n\n${extracted.technicalDetails}`);
-  }
-
-  return sections.join('\n\n');
-}
-
 export async function processLinearAction(
   request: ProcessLinearActionRequest,
   deps: ProcessLinearActionDeps
@@ -81,38 +52,41 @@ export async function processLinearAction(
     logger,
   } = deps;
 
-  logger?.info({ userId, actionId, textLength: text.length }, 'processLinearAction: entry');
+  // Provide a noop logger if none is provided (logger is optional in ProcessLinearActionDeps)
+  const effectiveLogger =
+    logger ??
+    ({
+      info: () => undefined,
+      warn: () => undefined,
+      error: () => undefined,
+      debug: () => undefined,
+      // Safe: all Logger methods implemented as noops
+    } as Logger);
+
+  effectiveLogger.info({ userId, actionId, textLength: text.length }, 'processLinearAction: entry');
 
   // Idempotency check: return existing result if action was already processed
-  const existingResult = await processedActionRepository.getByActionId(actionId);
-  if (!existingResult.ok) {
-    logger?.error({ actionId, error: existingResult.error }, 'Failed to check processed action');
-    return err(existingResult.error);
+  const idempotencyResult = await checkProcessedAction(actionId, {
+    repository: processedActionRepository,
+    logger: effectiveLogger,
+  });
+  if (!idempotencyResult.ok) {
+    return err(idempotencyResult.error);
   }
-
-  if (existingResult.value !== null) {
-    const existing = existingResult.value;
-    logger?.info(
-      { actionId, issueIdentifier: existing.issueIdentifier },
-      'Action already processed, returning existing result'
-    );
-    return ok({
-      status: 'completed',
-      message: `Issue ${existing.issueIdentifier} created successfully`,
-      resourceUrl: existing.resourceUrl,
-    });
+  if (idempotencyResult.value !== null) {
+    return ok(idempotencyResult.value);
   }
 
   // Get user's connection
   const connectionResult = await connectionRepository.getFullConnection(userId);
   if (!connectionResult.ok) {
-    logger?.error({ userId, actionId, error: connectionResult.error }, 'Failed to get connection');
+    effectiveLogger.error({ userId, actionId, error: connectionResult.error }, 'Failed to get connection');
     return err(connectionResult.error);
   }
 
   const connection = connectionResult.value;
   if (connection === null) {
-    logger?.warn({ userId, actionId }, 'User not connected to Linear');
+    effectiveLogger.warn({ userId, actionId }, 'User not connected to Linear');
     return err({
       code: 'NOT_CONNECTED',
       message: 'Linear not connected. Please configure in settings.',
@@ -122,7 +96,7 @@ export async function processLinearAction(
   // Extract issue data using LLM
   const extractResult = await extractionService.extractIssue(userId, text);
   if (!extractResult.ok) {
-    logger?.error({ userId, actionId, error: extractResult.error }, 'Extraction failed');
+    effectiveLogger.error({ userId, actionId, error: extractResult.error }, 'Extraction failed');
 
     // Save as failed issue for review
     await failedIssueRepository.create({
@@ -151,7 +125,7 @@ export async function processLinearAction(
   // Handle invalid extraction
   if (!extracted.valid) {
     const errorMessage = extracted.error ?? 'Could not extract valid issue from message';
-    logger?.info({ userId, actionId, error: errorMessage }, 'Invalid extraction');
+    effectiveLogger.info({ userId, actionId, error: errorMessage }, 'Invalid extraction');
 
     await failedIssueRepository.create({
       userId,
@@ -171,7 +145,7 @@ export async function processLinearAction(
   }
 
   // Build description from extracted sections (with Key Points from summary if available)
-  const description = buildDescription(extracted, text, summary);
+  const description = buildIssueDescription(extracted, text, summary);
 
   // Create issue in Linear
   logger?.info({ userId, actionId, title: extracted.title }, 'Creating Linear issue');
@@ -184,7 +158,7 @@ export async function processLinearAction(
   });
 
   if (!createResult.ok) {
-    logger?.error({ userId, actionId, error: createResult.error }, 'Linear API creation failed');
+    effectiveLogger.error({ userId, actionId, error: createResult.error }, 'Linear API creation failed');
 
     await failedIssueRepository.create({
       userId,
@@ -219,7 +193,7 @@ export async function processLinearAction(
   });
 
   if (!saveResult.ok) {
-    logger?.warn(
+    effectiveLogger.warn(
       { actionId, error: saveResult.error },
       'Failed to save processed action (issue was created successfully)'
     );
