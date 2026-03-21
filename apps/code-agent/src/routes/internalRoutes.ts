@@ -12,7 +12,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         operationId: 'reconcileMergeConflicts',
         summary: 'Sync Firestore PR state from GitHub',
         description:
-          'Called by Cloud Scheduler every minute. Syncs open/closed state from GitHub into Firestore — no mergeability checking.',
+          'Called by Cloud Scheduler every minute. Syncs open/closed state and refreshes mergeConflictStatus for open PRs from GitHub into Firestore.',
         tags: ['internal'],
         response: {
           200: {
@@ -23,10 +23,11 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               processed: { type: 'number' },
               closed: { type: 'number' },
               reopened: { type: 'number' },
+              mergeConflictRefreshed: { type: 'number' },
               skipped: { type: 'number' },
               error: { type: 'number' },
             },
-            required: ['processed', 'closed', 'reopened', 'skipped', 'error'],
+            required: ['processed', 'closed', 'reopened', 'mergeConflictRefreshed', 'skipped', 'error'],
           },
           401: {
             description: 'Unauthorized',
