@@ -221,7 +221,7 @@ function GitHubEventLogTableRowComponent({ row }: GitHubEventLogTableRowProps): 
             <p className="text-sm text-red-600 dark:text-red-400">{payloadError}</p>
           ) : (
             <pre className="max-h-96 overflow-auto rounded bg-slate-100 p-3 text-xs text-slate-800 dark:bg-slate-800 dark:text-slate-200">
-              <code>{JSON.stringify(payload, null, 2)}</code>
+              <code>{JSON.stringify(payload ?? null, null, 2)}</code>
             </pre>
           )}
         </div>
