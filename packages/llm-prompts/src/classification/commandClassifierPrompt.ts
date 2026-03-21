@@ -31,7 +31,7 @@ export const commandClassifierPrompt: PromptBuilder<
 > = {
   name: 'command-classification',
   description: 'Classifies user messages into command categories (todo, research, note, etc.)',
-  version: '2.0.0',
+  version: '2.1.0',
 
   build(input: CommandClassifierPromptInput, _deps?: CommandClassifierPromptDeps): string {
     return `Classify the message into exactly one category. Follow this decision tree IN ORDER:
@@ -72,14 +72,14 @@ Code actions automatically create a Linear issue, so tracking is never lost.
 Only classify as "linear" when user EXPLICITLY asks to create/document an issue without wanting execution.
 
 **Explicit command phrases (confidence 0.90+):**
-- **link/bookmark**: "save bookmark", "save link", "bookmark this", "save this link", "zapisz link", "dodaj zakładkę", "zapisz zakładkę"
+- **link/bookmark**: "save bookmark", "save link", "bookmark this", "save this link", "create link", "create bookmark", "zapisz link", "dodaj zakładkę", "zapisz zakładkę"
 - **todo**: "create todo", "add todo", "add task", "make todo", "stwórz zadanie", "dodaj zadanie"
-- **research**: "perform research", "do research", "research this", "investigate", "zbadaj", "sprawdź", "przeprowadź research"
-- **note**: "create note", "save note", "make note", "write note", "stwórz notatkę", "zapisz notatkę"
-- **reminder**: "set reminder", "remind me", "przypomnij mi"
-- **calendar**: "schedule", "add to calendar", "book appointment", "zaplanuj", "dodaj do kalendarza"
+- **research**: "perform research", "do research", "research this", "investigate", "create research", "create research task", "zbadaj", "sprawdź", "przeprowadź research"
+- **note**: "create note", "save note", "make note", "write note", "create node", "stwórz notatkę", "zapisz notatkę"
+- **reminder**: "set reminder", "remind me", "create reminder", "przypomnij mi", "stwórz przypomnienie"
+- **calendar**: "schedule", "add to calendar", "book appointment", "create calendar event", "create event", "zaplanuj", "dodaj do kalendarza", "stwórz wydarzenie", "stwórz event"
 - **linear** (EXPLICIT tracking intent - user must mention "linear", "issue", "track", or "report"): "linear issue", "linear task", "create linear", "create linear issue", "create issue", "add issue", "report issue", "report bug", "track this", "document this", "log this bug", "zgłoś błąd", "stwórz issue", "dodaj do lineara", "do lineara", "zapisz jako issue"
-- **code** (DEFAULT for engineering tasks): "fix X", "implement X", "design X", "add X", "refactor X", "change X", "update X", "build X", "remove X", "improve X", "execute this", "start working on", "code this", "write the code", "make this change"
+- **code** (DEFAULT for engineering tasks): "fix X", "implement X", "design X", "add X", "refactor X", "change X", "update X", "build X", "remove X", "improve X", "execute this", "start working on", "code this", "write the code", "make this change", "create code task", "create coding task", "stwórz code task"
 
 **Linear vs Code disambiguation examples:**
 - "linear issue: fix the login bug" → linear (explicit "linear issue" prefix)
@@ -105,6 +105,8 @@ Examples:
 - "look into the performance issue" → research (investigation, NOT execution)
 - "refactor the auth module" → code (engineering task, no "linear"/"issue" keyword)
 - "implement the new feature" → code (engineering task)
+- "create code task to fix the login bug" → code (explicit "create code task")
+- "create calendar event for team standup" → calendar (explicit "create calendar event")
 
 ## STEP 3: Code Detection — Default for Engineering Tasks (if no explicit intent match)
 If the message describes engineering work but didn't match an explicit phrase in STEP 2, classify as "code".

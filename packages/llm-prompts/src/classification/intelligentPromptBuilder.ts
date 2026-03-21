@@ -155,7 +155,7 @@ export const intelligentClassifierPrompt: PromptBuilder<
 > = {
   name: 'intelligent-command-classification',
   description: 'Classifies user messages using historical examples and learned corrections',
-  version: '3.0.0',
+  version: '3.1.0',
 
   build(input: IntelligentClassifierPromptInput, deps?: IntelligentClassifierPromptDeps): string {
     const maxExamplesPerCategory = deps?.maxExamplesPerCategory ?? 5;
@@ -207,13 +207,13 @@ Look for explicit command phrases that clearly indicate what the user wants to d
 These phrases OVERRIDE category signals from URL content or incidental keywords.
 
 **Explicit command phrases (confidence 0.90+):**
-- **link/bookmark**: "save bookmark", "save link", "bookmark this", "save this link", "zapisz link", "dodaj zakładkę"
-- **code**: "implement", "build", "code", "write code", "develop", "create endpoint", "zaimplementuj", "napisz kod", "zbuduj"
+- **link/bookmark**: "save bookmark", "save link", "bookmark this", "save this link", "create link", "create bookmark", "zapisz link", "dodaj zakładkę"
+- **code**: "implement", "build", "code", "write code", "develop", "create endpoint", "create code task", "create coding task", "zaimplementuj", "napisz kod", "zbuduj", "stwórz code task"
 - **todo**: "create todo", "add todo", "add task", "make todo", "stwórz zadanie", "dodaj zadanie"
-- **research**: "perform research", "do research", "research this", "investigate", "zbadaj", "sprawdź"
-- **note**: "create note", "save note", "make note", "write note", "stwórz notatkę", "zapisz notatkę"
-- **reminder**: "set reminder", "remind me", "przypomnij mi"
-- **calendar**: "schedule", "add to calendar", "book appointment", "zaplanuj", "dodaj do kalendarza"
+- **research**: "perform research", "do research", "research this", "investigate", "create research", "create research task", "zbadaj", "sprawdź"
+- **note**: "create note", "save note", "make note", "write note", "create node", "stwórz notatkę", "zapisz notatkę"
+- **reminder**: "set reminder", "remind me", "create reminder", "przypomnij mi", "stwórz przypomnienie"
+- **calendar**: "schedule", "add to calendar", "book appointment", "create calendar event", "create event", "zaplanuj", "dodaj do kalendarza", "stwórz wydarzenie", "stwórz event"
 
 Examples:
 - "save bookmark https://research-world.com" → link (explicit "save bookmark" overrides "research" in URL)
