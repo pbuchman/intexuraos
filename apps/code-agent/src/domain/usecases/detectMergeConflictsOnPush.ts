@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { err, ok, type Logger, type Result } from '@intexuraos/common-core';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { MERGE_CONFLICT_SYSTEM_PROMPT_HASH, type CodeTask } from '../models/codeTask.js';
@@ -912,10 +911,9 @@ async function processOpenSummaryOnPush(
   trigger: ProcessingTrigger,
   logger: Logger,
   parsedRepository: ParsedRepository,
-  existingSummary: GitHubPRSummary,
-  preResolvedAccessContext?: GitHubAccessContext
+  existingSummary: GitHubPRSummary
 ): Promise<ProcessingOutcome> {
-  const accessContext = preResolvedAccessContext ?? await resolveGitHubAccessContext(
+  const accessContext = await resolveGitHubAccessContext(
     {
       userServiceClient: deps.userServiceClient,
       gitHubPREventRepo: deps.gitHubPREventRepo,
@@ -1083,26 +1081,25 @@ export function createDetectMergeConflictsOnPush(
     },
 
     async reconcile(logger: Logger): Promise<ReconcileResult> {
-      const openResult = await deps.gitHubPRSummaryRepo.findAllOpen();
-      if (!openResult.ok) {
-        logger.warn({ error: openResult.error }, 'Failed to load open PR summaries for merge-conflict reconciliation');
+      // Query all tracked summaries (any state) so we discover repos even when
+      // every summary has been closed.  30 days covers any PR with recent activity.
+      const trackedResult = await deps.gitHubPRSummaryRepo.findRecentlyActive(30);
+      if (!trackedResult.ok) {
+        logger.warn({ error: trackedResult.error }, 'Failed to load PR summaries for reconciliation');
         return EMPTY_RECONCILE_RESULT;
       }
 
-      const summaries = openResult.value;
+      const summaries = trackedResult.value;
       if (summaries.length === 0) {
-        logger.debug({}, 'No open PR summaries to reconcile for merge conflicts');
+        logger.debug({}, 'No tracked PR summaries to reconcile');
         return EMPTY_RECONCILE_RESULT;
       }
 
-      logger.info({ count: summaries.length }, 'Reconciling merge conflicts for open PRs');
+      logger.info({ count: summaries.length }, 'Reconciling PR state from GitHub');
 
-      const reconcileId = randomUUID();
       let processed = 0;
       let closed = 0;
-      let conflicting = 0;
-      let clean = 0;
-      let unknown = 0;
+      let reopened = 0;
       let skipped = 0;
       let error = 0;
 
@@ -1166,64 +1163,70 @@ export function createDetectMergeConflictsOnPush(
         const openPRNumbers = new Set(openPRsResult.value.map((pr) => pr.number));
 
         for (const existingSummary of repoSummaries) {
-          if (!openPRNumbers.has(existingSummary.pullRequestNumber)) {
-            // PR is no longer open on GitHub — close it in Firestore
-            logger.info(
-              { prNumber: existingSummary.pullRequestNumber, repository },
-              'Closing stale PR summary — PR is no longer open on GitHub'
-            );
-            await upsertSummary(
-              deps.gitHubPRSummaryRepo,
-              {
-                repository,
-                pullRequestNumber: existingSummary.pullRequestNumber,
-                lastActivityAt: existingSummary.lastActivityAt,
-                firstSeenAt: existingSummary.firstSeenAt,
-                state: 'closed',
-              },
-              logger
-            );
-            processed++;
-            closed++;
-            continue;
-          }
-
-          // PR is still open — check mergeability
-          const trigger: ProcessingTrigger = {
-            eventId: `${reconcileId}-${repository}-${String(existingSummary.pullRequestNumber)}`,
-            repository,
-            lastActivityAt: existingSummary.lastActivityAt,
-          };
-
-          let outcome: ProcessingOutcome = 'skipped';
           try {
-            outcome = await processOpenSummaryOnPush(deps, trigger, logger, parsedRepository, existingSummary, accessContext);
+            if (!openPRNumbers.has(existingSummary.pullRequestNumber)) {
+              // PR is not open on GitHub
+              if (existingSummary.state === 'open') {
+                logger.info(
+                  { prNumber: existingSummary.pullRequestNumber, repository },
+                  'Closing PR summary — PR is no longer open on GitHub'
+                );
+                await upsertSummary(
+                  deps.gitHubPRSummaryRepo,
+                  {
+                    repository,
+                    pullRequestNumber: existingSummary.pullRequestNumber,
+                    lastActivityAt: existingSummary.lastActivityAt,
+                    firstSeenAt: existingSummary.firstSeenAt,
+                    state: 'closed',
+                  },
+                  logger
+                );
+                processed++;
+                closed++;
+              }
+              // Already closed in Firestore — skip silently
+              continue;
+            }
+
+            // PR is open on GitHub
+            if (existingSummary.state !== 'open') {
+              logger.info(
+                { prNumber: existingSummary.pullRequestNumber, repository, previousState: existingSummary.state },
+                'Re-opening PR summary — PR is open on GitHub'
+              );
+              await upsertSummary(
+                deps.gitHubPRSummaryRepo,
+                {
+                  repository,
+                  pullRequestNumber: existingSummary.pullRequestNumber,
+                  lastActivityAt: existingSummary.lastActivityAt,
+                  firstSeenAt: existingSummary.firstSeenAt,
+                  state: 'open',
+                },
+                logger
+              );
+              processed++;
+              reopened++;
+            }
+            // Already open in Firestore — skip silently
           } catch (caughtError: unknown) {
-            outcome = 'error';
+            error++;
+            processed++;
             logger.error(
               { error: caughtError, repository: existingSummary.repository, prNumber: existingSummary.pullRequestNumber },
-              'Unhandled error processing PR in merge-conflict reconcile; continuing'
+              'Unhandled error processing PR summary in reconcile; continuing'
             );
-          }
-          processed++;
-
-          switch (outcome) {
-            case 'closed': closed++; break;
-            case 'conflicting': conflicting++; break;
-            case 'clean': clean++; break;
-            case 'unknown': unknown++; break;
-            case 'skipped': skipped++; break;
-            case 'error': error++; break;
           }
         }
       }
 
       logger.info(
-        { processed, closed, conflicting, clean, unknown, skipped, error },
-        'Merge conflict reconciliation complete'
+        { processed, closed, reopened, skipped, error },
+        'PR state reconciliation complete'
       );
 
-      return { processed, closed, conflicting, clean, unknown, skipped, error };
+      return { processed, closed, reopened, skipped, error };
     },
   };
 }

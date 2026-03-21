@@ -68,7 +68,7 @@ describe('POST /internal/merge-conflicts/reconcile', () => {
     expect(body.error.code).toBe('UNAUTHORIZED');
   });
 
-  it('returns 200 with accepted:true when x-internal-auth is valid', async () => {
+  it('returns 200 with reconcile stats when x-internal-auth is valid', async () => {
     const response = await app.inject({
       method: 'POST',
       url: '/internal/merge-conflicts/reconcile',
@@ -78,14 +78,16 @@ describe('POST /internal/merge-conflicts/reconcile', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body) as { accepted: boolean };
-    expect(body.accepted).toBe(true);
+    const body = JSON.parse(response.body) as { processed: number; closed: number; reopened: number; skipped: number; error: number };
+    expect(body.processed).toBe(0);
+    expect(body.closed).toBe(0);
+    expect(body.reopened).toBe(0);
   });
 
   // Application-level OIDC token validation is intentionally absent: Cloud Run
   // validates the OIDC token at the infrastructure layer before requests reach
   // this handler. See authenticateInternalScheduler for the full security note.
-  it('returns 200 with accepted:true when authenticated via OIDC Bearer token', async () => {
+  it('returns 200 with reconcile stats when authenticated via OIDC Bearer token', async () => {
     const response = await app.inject({
       method: 'POST',
       url: '/internal/merge-conflicts/reconcile',
@@ -95,21 +97,19 @@ describe('POST /internal/merge-conflicts/reconcile', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body) as { accepted: boolean };
-    expect(body.accepted).toBe(true);
+    const body = JSON.parse(response.body) as { processed: number };
+    expect(body.processed).toBe(0);
   });
 
-  it('calls mergeConflictDetector.reconcile asynchronously after responding', async () => {
+  it('awaits reconcile and returns its result', async () => {
     const services = getServices();
 
-    let resolveFn!: () => void;
-    const waitForReconcile = new Promise<void>((resolve) => {
-      resolveFn = resolve;
-    });
-
-    const reconcileSpy = vi.fn().mockImplementation(async () => {
-      resolveFn();
-      return { processed: 3 };
+    const reconcileSpy = vi.fn().mockResolvedValue({
+      processed: 3,
+      closed: 1,
+      reopened: 1,
+      skipped: 1,
+      error: 0,
     });
 
     setServices({
@@ -128,11 +128,11 @@ describe('POST /internal/merge-conflicts/reconcile', () => {
       },
     });
 
-    // Response is immediate (fire-and-forget)
     expect(response.statusCode).toBe(200);
-
-    // Wait for the async reconcile to complete before asserting
-    await waitForReconcile;
+    const body = JSON.parse(response.body) as { processed: number; closed: number; reopened: number };
+    expect(body.processed).toBe(3);
+    expect(body.closed).toBe(1);
+    expect(body.reopened).toBe(1);
     expect(reconcileSpy).toHaveBeenCalledOnce();
   });
 });

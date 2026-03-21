@@ -23,6 +23,7 @@ export const mergeQueueTickRoute: FastifyPluginCallback = (fastify, _opts, done)
       const tick = createMergeQueueTick({
         mergeQueueWatchRepo: services.mergeQueueWatchRepo,
         gitHubPRClient: services.gitHubPRClient,
+        gitHubPRSummaryRepo: services.gitHubPRSummaryRepo,
         userServiceClient: services.userServiceClient,
         allowedBots: ALLOWED_BOTS,
         logger: request.log,
