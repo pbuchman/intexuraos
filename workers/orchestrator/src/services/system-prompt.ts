@@ -33,6 +33,7 @@ export interface SystemPromptParams {
   trackingCommentId?: string;
   continuationPrNumber?: number;
   continuationPrBranch?: string;
+  reviewTypes?: string[];
 }
 
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
@@ -558,12 +559,65 @@ After this block, stop. Do not append any other checklist or schema payload.`;
   /* v8 ignore stop @preserve */
 };
 
+const REVIEW_TYPE_SECTIONS: Record<string, string> = {
+  code_quality: `### 🔍 Code Quality
+**Verdict:** Clean / Minor issues / Needs attention
+- Finding 1...
+- Finding 2...`,
+  security: `### 🔒 Security
+**Verdict:** No concerns / Advisory / Blocking
+- Finding 1...`,
+  architecture: `### 🏗️ Architecture
+**Verdict:** Sound / Minor concerns / Needs redesign
+- Finding 1...`,
+  plan_review: `### 📐 Plan Review
+**Verdict:** Ready / Gaps found / Needs rework
+- Finding 1...`,
+};
+
+function buildReviewStructureSection(reviewTypes: string[] | undefined): string {
+  const types = reviewTypes ?? Object.keys(REVIEW_TYPE_SECTIONS);
+  /* v8 ignore start -- ts-type: nullish coalescing fallback is unreachable after filter but required by noUncheckedIndexedAccess @preserve */
+  const typeSections = types
+    .filter((t) => REVIEW_TYPE_SECTIONS[t] !== undefined)
+    .map((t) => REVIEW_TYPE_SECTIONS[t] ?? '');
+
+  if (typeSections.length === 0) return '';
+  /* v8 ignore stop @preserve */
+
+  const typeLabel = types.join(', ');
+
+  return `### Per-Type Review Structure (MANDATORY)
+
+Each requested review type MUST get its own dedicated section in the review body. Use this exact structure:
+
+\`\`\`markdown
+## Automated Code Review — ${typeLabel}
+
+${typeSections.join('\n\n')}
+
+### 📋 Requirements Coverage
+| Requirement | Status |
+| --- | --- |
+| ... | ✅ / ⚠️ / ❌ |
+
+### Overall Assessment
+<synthesis across all types, 2-3 sentences>
+\`\`\`
+
+Rules:
+- Include ONLY the sections listed above. Do NOT add sections for review types that were not requested.
+- Every included type section MUST have a \`**Verdict:**\` line.
+- The \`### 📋 Requirements Coverage\` and \`### Overall Assessment\` sections are ALWAYS required.`;
+}
+
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '6.0.0',
+  version: '6.1.0',
   build(params: SystemPromptParams): string {
-    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
+    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
+      params;
 
     /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
     return `[SYSTEM CONTEXT]
@@ -699,43 +753,7 @@ When composing the review summary body:
 ${taskUrl !== undefined ? `- Append a final standalone markdown link line exactly as: \`[View in IntexuraOS](${taskUrl})\`` : ''}
 ${taskUrl !== undefined ? '- Include that line in the same `POST /reviews` body, not as a separate PR comment.' : ''}
 
-### Per-Type Review Structure (MANDATORY)
-
-Each requested review type MUST get its own dedicated section in the review body. Use this exact structure:
-
-\`\`\`markdown
-## Automated Code Review — <comma-separated review types>
-
-### 🔍 Code Quality
-**Verdict:** Clean / Minor issues / Needs attention
-- Finding 1...
-- Finding 2...
-
-### 🔒 Security
-**Verdict:** No concerns / Advisory / Blocking
-- Finding 1...
-
-### 🏗️ Architecture
-**Verdict:** Sound / Minor concerns / Needs redesign
-- Finding 1...
-
-### 📐 Plan Review (only for plan_review type)
-**Verdict:** Ready / Gaps found / Needs rework
-- Finding 1...
-
-### 📋 Requirements Coverage
-| Requirement | Status |
-| --- | --- |
-| ... | ✅ / ⚠️ / ❌ |
-
-### Overall Assessment
-<synthesis across all types, 2-3 sentences>
-\`\`\`
-
-Rules:
-- Include ONLY the sections matching the requested review types. If \`plan_review\` is the only type, omit Code Quality / Security / Architecture sections.
-- Every included type section MUST have a \`**Verdict:**\` line.
-- The \`### 📋 Requirements Coverage\` and \`### Overall Assessment\` sections are ALWAYS required.
+${buildReviewStructureSection(reviewTypes)}
 
 ### Requirements Tracker Comment
 

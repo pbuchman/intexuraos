@@ -762,13 +762,40 @@ describe('system-prompt', () => {
     expect(result).toContain('PATCH');
   });
 
-  it('includes per-type review section structure', () => {
+  it('includes all review type sections when reviewTypes is undefined', () => {
     const result = reviewPrompt.build(baseParams);
     expect(result).toContain('### Per-Type Review Structure (MANDATORY)');
     expect(result).toContain('🔍 Code Quality');
     expect(result).toContain('🔒 Security');
     expect(result).toContain('🏗️ Architecture');
+    expect(result).toContain('📐 Plan Review');
     expect(result).toContain('Verdict:');
+  });
+
+  it('includes only requested review type sections when reviewTypes is specified', () => {
+    const result = reviewPrompt.build({ ...baseParams, reviewTypes: ['code_quality', 'security'] });
+    expect(result).toContain('### Per-Type Review Structure (MANDATORY)');
+    expect(result).toContain('🔍 Code Quality');
+    expect(result).toContain('🔒 Security');
+    expect(result).not.toContain('🏗️ Architecture');
+    expect(result).not.toContain('📐 Plan Review');
+    expect(result).toContain('code_quality, security');
+  });
+
+  it('includes only architecture section when reviewTypes is ["architecture"]', () => {
+    const result = reviewPrompt.build({ ...baseParams, reviewTypes: ['architecture'] });
+    expect(result).toContain('🏗️ Architecture');
+    expect(result).not.toContain('🔍 Code Quality');
+    expect(result).not.toContain('🔒 Security');
+    expect(result).not.toContain('📐 Plan Review');
+  });
+
+  it('includes only plan_review section when reviewTypes is ["plan_review"]', () => {
+    const result = reviewPrompt.build({ ...baseParams, reviewTypes: ['plan_review'] });
+    expect(result).toContain('📐 Plan Review');
+    expect(result).not.toContain('🔍 Code Quality');
+    expect(result).not.toContain('🔒 Security');
+    expect(result).not.toContain('🏗️ Architecture');
   });
 
   it('REVIEW_AGENT_FINAL block includes requirements_tracker_updated field', () => {
