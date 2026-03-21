@@ -120,7 +120,7 @@ export function V2TaskActions({
             <StopCircle className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">Cancel Task</span>
           </Button>
-          {linkButtons}
+          {!linksInNextSteps ? linkButtons : null}
         </>
       ) : null}
       {isRetryable ? (
@@ -172,7 +172,7 @@ export function V2TaskActions({
                 </div>
               ) : null}
             </div>
-            {linkButtons}
+            {!linksInNextSteps ? linkButtons : null}
             {archiveDeleteButtons}
           </>
         )
@@ -180,7 +180,7 @@ export function V2TaskActions({
       {isArchivable && !isRetryable ? (
         showDeleteConfirm ? deleteConfirmBlock : (
           <>
-            {linkButtons}
+            {!linksInNextSteps ? linkButtons : null}
             {archiveDeleteButtons}
           </>
         )
