@@ -1514,8 +1514,8 @@ describe('createDetectMergeConflictsOnPush', () => {
       const detector = createDetectMergeConflictsOnPush(deps as never);
       const result = await detector.reconcile(logger);
 
-      // Already closed — no work, not counted as processed
-      expect(result).toEqual(expect.objectContaining({ processed: 0, closed: 0 }));
+      // Already closed — no state change, but still counted as examined
+      expect(result).toEqual(expect.objectContaining({ processed: 1, closed: 0 }));
       expect(deps.gitHubPRSummaryRepo.upsert).not.toHaveBeenCalled();
     });
 
@@ -1578,8 +1578,8 @@ describe('createDetectMergeConflictsOnPush', () => {
       const detector = createDetectMergeConflictsOnPush(deps as never);
       const result = await detector.reconcile(logger);
 
-      // 1 closed + 1 reopened; mergeability checked but no change (both already 'clean', GitHub says 'clean')
-      expect(result).toEqual(expect.objectContaining({ processed: 2, closed: 1, reopened: 1, mergeConflictRefreshed: 0 }));
+      // 3 examined: 1 closed + 1 reopened + 1 already-open no-op; mergeability checked but no change
+      expect(result).toEqual(expect.objectContaining({ processed: 3, closed: 1, reopened: 1, mergeConflictRefreshed: 0 }));
     });
 
     it('skips repo with invalid repository format', async () => {
