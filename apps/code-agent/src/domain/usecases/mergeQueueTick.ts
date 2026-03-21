@@ -10,6 +10,7 @@ import { ok, err } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { MergeQueueWatchRepository } from '../repositories/mergeQueueWatchRepository.js';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
+import type { GitHubPRSummaryRepository } from '../repositories/gitHubPRSummaryRepository.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { SkippedPr, SkipReason } from '../models/mergeQueueWatch.js';
 import type { MergeQueueWatchRepositoryError } from '../repositories/mergeQueueWatchRepository.js';
@@ -29,7 +30,8 @@ export interface TickResult {
 
 export interface MergeQueueTickDeps {
   mergeQueueWatchRepo: MergeQueueWatchRepository;
-  gitHubPRClient: GitHubPRClient;
+  gitHubPRClient: Pick<GitHubPRClient, 'getPullRequestDetails' | 'getCombinedCheckStatus' | 'mergePullRequest'>;
+  gitHubPRSummaryRepo: Pick<GitHubPRSummaryRepository, 'findOpenByBaseBranch'>;
   userServiceClient: UserServiceClient;
   allowedBots: ReadonlySet<string>;
   logger: Logger;
@@ -38,7 +40,7 @@ export interface MergeQueueTickDeps {
 export type MergeQueueTickUseCase = () => Promise<Result<TickResult[], MergeQueueWatchRepositoryError>>;
 
 export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUseCase {
-  const { mergeQueueWatchRepo, gitHubPRClient, userServiceClient, allowedBots, logger } = deps;
+  const { mergeQueueWatchRepo, gitHubPRClient, gitHubPRSummaryRepo, userServiceClient, allowedBots, logger } = deps;
 
   return async (): Promise<Result<TickResult[], MergeQueueWatchRepositoryError>> => {
     // Step 1: Query all active watches
@@ -112,8 +114,9 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
 
     const token = tokenResult.value.accessToken;
 
-    // Step 3c: List open PRs
-    const listResult = await gitHubPRClient.listOpenPullRequestsByBaseBranch(token, owner, repo, baseBranch);
+    // Step 3c: List open PRs from Firestore cache
+    const repository = `${owner}/${repo}`;
+    const listResult = await gitHubPRSummaryRepo.findOpenByBaseBranch(repository, baseBranch);
     if (!listResult.ok) {
       return await recordErrorAndReturn(
         watchId, owner, repo, baseBranch,
@@ -121,7 +124,14 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
       );
     }
 
-    const allPrs = listResult.value;
+    const allPrs = listResult.value.map((summary) => ({
+      number: summary.pullRequestNumber,
+      title: summary.title ?? '',
+      authorLogin: summary.authorLogin ?? '',
+      baseBranch: summary.baseBranch ?? baseBranch,
+      headBranch: summary.headBranch ?? '',
+      createdAt: summary.lastActivityAt.toISOString(),
+    }));
 
     // Step 3e: Filter to eligible authors
     const eligiblePrs = allPrs.filter(

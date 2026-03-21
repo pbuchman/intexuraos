@@ -9,7 +9,8 @@ import { err, ok } from '@intexuraos/common-core';
 import { Timestamp } from '@google-cloud/firestore';
 import { createMergeQueueTick, type MergeQueueTickDeps } from '../../../domain/usecases/mergeQueueTick.js';
 import type { MergeQueueWatchRepository } from '../../../domain/repositories/mergeQueueWatchRepository.js';
-import type { GitHubPRClient, GitHubPullRequestListItem, GitHubPullRequestDetails } from '../../../domain/ports/gitHubPRClient.js';
+import type { GitHubPullRequestDetails } from '../../../domain/ports/gitHubPRClient.js';
+import type { GitHubPRSummary } from '../../../domain/models/gitHubPRSummary.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { MergeQueueWatch } from '../../../domain/models/mergeQueueWatch.js';
 
@@ -43,14 +44,25 @@ function makeWatch(overrides: Partial<MergeQueueWatch> = {}): MergeQueueWatch {
   };
 }
 
-function makePrListItem(overrides: Partial<GitHubPullRequestListItem> = {}): GitHubPullRequestListItem {
+function makePrSummary(overrides: Partial<GitHubPRSummary> = {}): GitHubPRSummary {
   return {
-    number: 1,
+    repository: 'testorg/testrepo',
+    pullRequestNumber: 1,
     title: 'Test PR',
-    authorLogin: 'testuser',
+    state: 'open',
+    mergedAt: null,
     baseBranch: 'main',
+    authorLogin: 'testuser',
     headBranch: 'feature',
-    createdAt: '2026-03-14T00:00:00Z',
+    mergeConflictStatus: null,
+    lastConflictCheckedAt: null,
+    conflictEpisodeStartedAt: null,
+    conflictResolvedAt: null,
+    managedConflictCommentId: null,
+    managedConflictTaskId: null,
+    managedConflictTaskOwnerUserId: null,
+    lastActivityAt: new Date('2026-03-14T00:00:00Z'),
+    firstSeenAt: new Date('2026-03-14T00:00:00Z'),
     ...overrides,
   };
 }
@@ -83,19 +95,13 @@ describe('mergeQueueTick', () => {
   };
 
   let mockGitHubPRClient: {
-    listOpenPullRequestsByBaseBranch: ReturnType<typeof vi.fn>;
     getPullRequestDetails: ReturnType<typeof vi.fn>;
     getCombinedCheckStatus: ReturnType<typeof vi.fn>;
     mergePullRequest: ReturnType<typeof vi.fn>;
-    updatePRTitle: ReturnType<typeof vi.fn>;
-    getPullRequestFiles: ReturnType<typeof vi.fn>;
-    getPullRequestCommits: ReturnType<typeof vi.fn>;
-    getPullRequestBaseBranch: ReturnType<typeof vi.fn>;
-    getPullRequestStatus: ReturnType<typeof vi.fn>;
-    postPRComment: ReturnType<typeof vi.fn>;
-    getIssueComment: ReturnType<typeof vi.fn>;
-    updateIssueComment: ReturnType<typeof vi.fn>;
-    listAllOpenPullRequests: ReturnType<typeof vi.fn>;
+  };
+
+  let mockGitHubPRSummaryRepo: {
+    findOpenByBaseBranch: ReturnType<typeof vi.fn>;
   };
 
   let mockUserServiceClient: {
@@ -122,19 +128,13 @@ describe('mergeQueueTick', () => {
     };
 
     mockGitHubPRClient = {
-      listOpenPullRequestsByBaseBranch: vi.fn(),
       getPullRequestDetails: vi.fn(),
       getCombinedCheckStatus: vi.fn(),
       mergePullRequest: vi.fn(),
-      updatePRTitle: vi.fn(),
-      getPullRequestFiles: vi.fn(),
-      getPullRequestCommits: vi.fn(),
-      getPullRequestBaseBranch: vi.fn(),
-      getPullRequestStatus: vi.fn(),
-      postPRComment: vi.fn(),
-      getIssueComment: vi.fn(),
-      updateIssueComment: vi.fn(),
-      listAllOpenPullRequests: vi.fn(),
+    };
+
+    mockGitHubPRSummaryRepo = {
+      findOpenByBaseBranch: vi.fn(),
     };
 
     mockUserServiceClient = {
@@ -147,7 +147,8 @@ describe('mergeQueueTick', () => {
 
     deps = {
       mergeQueueWatchRepo: mockWatchRepo as unknown as MergeQueueWatchRepository,
-      gitHubPRClient: mockGitHubPRClient as unknown as GitHubPRClient,
+      gitHubPRClient: mockGitHubPRClient as unknown as MergeQueueTickDeps['gitHubPRClient'],
+      gitHubPRSummaryRepo: mockGitHubPRSummaryRepo as unknown as MergeQueueTickDeps['gitHubPRSummaryRepo'],
       userServiceClient: mockUserServiceClient as unknown as UserServiceClient,
       allowedBots: new Set(['renovate[bot]']),
       logger: mockLogger,
@@ -172,11 +173,11 @@ describe('mergeQueueTick', () => {
     mockUserServiceClient.getOAuthToken.mockResolvedValue(ok({ accessToken: 'tok-123', email: 'test@test.com' }));
 
     const prs = [
-      makePrListItem({ number: 10, title: 'PR 10', createdAt: '2026-03-14T00:00:00Z' }),
-      makePrListItem({ number: 20, title: 'PR 20', createdAt: '2026-03-16T00:00:00Z' }),
-      makePrListItem({ number: 30, title: 'PR 30', createdAt: '2026-03-18T00:00:00Z' }),
+      makePrSummary({ pullRequestNumber: 10, title: 'PR 10', lastActivityAt: new Date('2026-03-14T00:00:00Z') }),
+      makePrSummary({ pullRequestNumber: 20, title: 'PR 20', lastActivityAt: new Date('2026-03-16T00:00:00Z') }),
+      makePrSummary({ pullRequestNumber: 30, title: 'PR 30', lastActivityAt: new Date('2026-03-18T00:00:00Z') }),
     ];
-    mockGitHubPRClient.listOpenPullRequestsByBaseBranch.mockResolvedValue(ok(prs));
+    mockGitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok(prs));
 
     mockGitHubPRClient.getPullRequestDetails.mockResolvedValue(
       ok(makePrDetails({ number: 10, title: 'PR 10', headSha: 'sha-10' }))
@@ -212,9 +213,9 @@ describe('mergeQueueTick', () => {
 
     // Only a PR from dependabot[bot] which is not in allowedBots
     const prs = [
-      makePrListItem({ number: 5, authorLogin: 'dependabot[bot]' }),
+      makePrSummary({ pullRequestNumber: 5, authorLogin: 'dependabot[bot]' }),
     ];
-    mockGitHubPRClient.listOpenPullRequestsByBaseBranch.mockResolvedValue(ok(prs));
+    mockGitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok(prs));
 
     const tick = createMergeQueueTick(deps);
     const result = await tick();
@@ -236,10 +237,10 @@ describe('mergeQueueTick', () => {
     mockUserServiceClient.getOAuthToken.mockResolvedValue(ok({ accessToken: 'tok-123', email: 'test@test.com' }));
 
     const prs = [
-      makePrListItem({ number: 1, createdAt: '2026-03-14T00:00:00Z' }),
-      makePrListItem({ number: 2, createdAt: '2026-03-16T00:00:00Z' }),
+      makePrSummary({ pullRequestNumber: 1, lastActivityAt: new Date('2026-03-14T00:00:00Z') }),
+      makePrSummary({ pullRequestNumber: 2, lastActivityAt: new Date('2026-03-16T00:00:00Z') }),
     ];
-    mockGitHubPRClient.listOpenPullRequestsByBaseBranch.mockResolvedValue(ok(prs));
+    mockGitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok(prs));
 
     // First PR has merge conflict
     mockGitHubPRClient.getPullRequestDetails
@@ -266,8 +267,8 @@ describe('mergeQueueTick', () => {
     mockWatchRepo.findAllActive.mockResolvedValue(ok([watch]));
     mockUserServiceClient.getOAuthToken.mockResolvedValue(ok({ accessToken: 'tok-123', email: 'test@test.com' }));
 
-    const prs = [makePrListItem({ number: 1 })];
-    mockGitHubPRClient.listOpenPullRequestsByBaseBranch.mockResolvedValue(ok(prs));
+    const prs = [makePrSummary({ pullRequestNumber: 1 })];
+    mockGitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok(prs));
     mockGitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(makePrDetails({ number: 1 })));
     mockGitHubPRClient.getCombinedCheckStatus.mockResolvedValue(ok({ state: 'failure' }));
 
@@ -289,8 +290,8 @@ describe('mergeQueueTick', () => {
     mockWatchRepo.findAllActive.mockResolvedValue(ok([watch]));
     mockUserServiceClient.getOAuthToken.mockResolvedValue(ok({ accessToken: 'tok-123', email: 'test@test.com' }));
 
-    const prs = [makePrListItem({ number: 1 })];
-    mockGitHubPRClient.listOpenPullRequestsByBaseBranch.mockResolvedValue(ok(prs));
+    const prs = [makePrSummary({ pullRequestNumber: 1 })];
+    mockGitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok(prs));
     mockGitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(makePrDetails({ number: 1 })));
     mockGitHubPRClient.getCombinedCheckStatus.mockResolvedValue(ok({ state: 'pending' }));
 
@@ -310,8 +311,8 @@ describe('mergeQueueTick', () => {
     mockWatchRepo.findAllActive.mockResolvedValue(ok([watch]));
     mockUserServiceClient.getOAuthToken.mockResolvedValue(ok({ accessToken: 'tok-123', email: 'test@test.com' }));
 
-    const prs = [makePrListItem({ number: 1 })];
-    mockGitHubPRClient.listOpenPullRequestsByBaseBranch.mockResolvedValue(ok(prs));
+    const prs = [makePrSummary({ pullRequestNumber: 1 })];
+    mockGitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok(prs));
     mockGitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(makePrDetails({ number: 1, mergeable: null })));
 
     const tick = createMergeQueueTick(deps);
@@ -333,7 +334,7 @@ describe('mergeQueueTick', () => {
     mockUserServiceClient.getOAuthToken.mockResolvedValue(ok({ accessToken: 'tok-123', email: 'test@test.com' }));
 
     // Empty list — no open PRs
-    mockGitHubPRClient.listOpenPullRequestsByBaseBranch.mockResolvedValue(ok([]));
+    mockGitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok([]));
 
     const tick = createMergeQueueTick(deps);
     const result = await tick();
@@ -357,10 +358,10 @@ describe('mergeQueueTick', () => {
     mockUserServiceClient.getOAuthToken.mockResolvedValue(ok({ accessToken: 'tok-123', email: 'test@test.com' }));
 
     const prs = [
-      makePrListItem({ number: 1, createdAt: '2026-03-14T00:00:00Z' }),
-      makePrListItem({ number: 2, createdAt: '2026-03-16T00:00:00Z' }),
+      makePrSummary({ pullRequestNumber: 1, lastActivityAt: new Date('2026-03-14T00:00:00Z') }),
+      makePrSummary({ pullRequestNumber: 2, lastActivityAt: new Date('2026-03-16T00:00:00Z') }),
     ];
-    mockGitHubPRClient.listOpenPullRequestsByBaseBranch.mockResolvedValue(ok(prs));
+    mockGitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok(prs));
 
     // Both have merge conflicts
     mockGitHubPRClient.getPullRequestDetails
@@ -411,10 +412,10 @@ describe('mergeQueueTick', () => {
     mockUserServiceClient.getOAuthToken.mockResolvedValue(ok({ accessToken: 'tok-123', email: 'test@test.com' }));
 
     const prs = [
-      makePrListItem({ number: 1, createdAt: '2026-03-14T00:00:00Z' }),
-      makePrListItem({ number: 2, createdAt: '2026-03-16T00:00:00Z' }),
+      makePrSummary({ pullRequestNumber: 1, lastActivityAt: new Date('2026-03-14T00:00:00Z') }),
+      makePrSummary({ pullRequestNumber: 2, lastActivityAt: new Date('2026-03-16T00:00:00Z') }),
     ];
-    mockGitHubPRClient.listOpenPullRequestsByBaseBranch.mockResolvedValue(ok(prs));
+    mockGitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok(prs));
 
     // First PR: already merged (405)
     mockGitHubPRClient.getPullRequestDetails
@@ -451,10 +452,10 @@ describe('mergeQueueTick', () => {
     mockUserServiceClient.getOAuthToken.mockResolvedValue(ok({ accessToken: 'tok-123', email: 'test@test.com' }));
 
     const prs = [
-      makePrListItem({ number: 1, createdAt: '2026-03-14T00:00:00Z' }),
-      makePrListItem({ number: 2, createdAt: '2026-03-16T00:00:00Z' }),
+      makePrSummary({ pullRequestNumber: 1, lastActivityAt: new Date('2026-03-14T00:00:00Z') }),
+      makePrSummary({ pullRequestNumber: 2, lastActivityAt: new Date('2026-03-16T00:00:00Z') }),
     ];
-    mockGitHubPRClient.listOpenPullRequestsByBaseBranch.mockResolvedValue(ok(prs));
+    mockGitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok(prs));
 
     mockGitHubPRClient.getPullRequestDetails
       .mockResolvedValueOnce(ok(makePrDetails({ number: 1, headSha: 'sha-1' })))
@@ -483,7 +484,7 @@ describe('mergeQueueTick', () => {
     const watch = makeWatch();
     mockWatchRepo.findAllActive.mockResolvedValue(ok([watch]));
     mockUserServiceClient.getOAuthToken.mockResolvedValue(ok({ accessToken: 'tok-123', email: 'test@test.com' }));
-    mockGitHubPRClient.listOpenPullRequestsByBaseBranch.mockResolvedValue(
+    mockGitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(
       err({ code: 'API_ERROR' as const, message: 'Rate limited' })
     );
 
@@ -508,10 +509,10 @@ describe('mergeQueueTick', () => {
 
     // Two PRs with same createdAt — tiebreak by number
     const prs = [
-      makePrListItem({ number: 20, createdAt: '2026-03-14T00:00:00Z' }),
-      makePrListItem({ number: 10, createdAt: '2026-03-14T00:00:00Z' }),
+      makePrSummary({ pullRequestNumber: 20, lastActivityAt: new Date('2026-03-14T00:00:00Z') }),
+      makePrSummary({ pullRequestNumber: 10, lastActivityAt: new Date('2026-03-14T00:00:00Z') }),
     ];
-    mockGitHubPRClient.listOpenPullRequestsByBaseBranch.mockResolvedValue(ok(prs));
+    mockGitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok(prs));
 
     mockGitHubPRClient.getPullRequestDetails.mockResolvedValue(
       ok(makePrDetails({ number: 10, headSha: 'sha-10' }))
@@ -534,8 +535,8 @@ describe('mergeQueueTick', () => {
     mockWatchRepo.findAllActive.mockResolvedValue(ok([watch]));
     mockUserServiceClient.getOAuthToken.mockResolvedValue(ok({ accessToken: 'tok-123', email: 'test@test.com' }));
 
-    const prs = [makePrListItem({ number: 1 })];
-    mockGitHubPRClient.listOpenPullRequestsByBaseBranch.mockResolvedValue(ok(prs));
+    const prs = [makePrSummary({ pullRequestNumber: 1 })];
+    mockGitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok(prs));
     mockGitHubPRClient.getPullRequestDetails.mockResolvedValue(
       err({ code: 'API_ERROR' as const, message: 'Not found' })
     );
@@ -556,8 +557,8 @@ describe('mergeQueueTick', () => {
     mockWatchRepo.findAllActive.mockResolvedValue(ok([watch]));
     mockUserServiceClient.getOAuthToken.mockResolvedValue(ok({ accessToken: 'tok-123', email: 'test@test.com' }));
 
-    const prs = [makePrListItem({ number: 1 })];
-    mockGitHubPRClient.listOpenPullRequestsByBaseBranch.mockResolvedValue(ok(prs));
+    const prs = [makePrSummary({ pullRequestNumber: 1 })];
+    mockGitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok(prs));
     mockGitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(makePrDetails({ number: 1 })));
     mockGitHubPRClient.getCombinedCheckStatus.mockResolvedValue(
       err({ code: 'API_ERROR' as const, message: 'Failed' })
@@ -579,8 +580,8 @@ describe('mergeQueueTick', () => {
     mockWatchRepo.findAllActive.mockResolvedValue(ok([watch]));
     mockUserServiceClient.getOAuthToken.mockResolvedValue(ok({ accessToken: 'tok-123', email: 'test@test.com' }));
 
-    const prs = [makePrListItem({ number: 1 })];
-    mockGitHubPRClient.listOpenPullRequestsByBaseBranch.mockResolvedValue(ok(prs));
+    const prs = [makePrSummary({ pullRequestNumber: 1 })];
+    mockGitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok(prs));
     mockGitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(makePrDetails({ number: 1 })));
     mockGitHubPRClient.getCombinedCheckStatus.mockResolvedValue(ok({ state: 'success' }));
     // Already merged — sha is empty
@@ -609,8 +610,8 @@ describe('mergeQueueTick', () => {
     mockWatchRepo.findAllActive.mockResolvedValue(ok([watch]));
     mockUserServiceClient.getOAuthToken.mockResolvedValue(ok({ accessToken: 'tok-123', email: 'test@test.com' }));
 
-    const prs = [makePrListItem({ number: 1 })];
-    mockGitHubPRClient.listOpenPullRequestsByBaseBranch.mockResolvedValue(ok(prs));
+    const prs = [makePrSummary({ pullRequestNumber: 1 })];
+    mockGitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok(prs));
     mockGitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(makePrDetails({ number: 1 })));
     mockGitHubPRClient.getCombinedCheckStatus.mockResolvedValue(ok({ state: 'success' }));
     mockGitHubPRClient.mergePullRequest.mockResolvedValue(ok({ sha: 'merged-sha', merged: true }));
