@@ -632,5 +632,29 @@ describe('executeCodeAction usecase', () => {
       expect(submittedTasks).toHaveLength(1);
       expect(submittedTasks[0]?.payload.workerType).toBe('sonnet');
     });
+
+    it('detects worker type from action.title when prompt is missing', async () => {
+      const action = createAction({
+        status: 'pending',
+        title: 'use opus to refactor the auth module',
+        payload: {},
+      });
+      await fakeActionRepo.save(action);
+
+      const mockLogger = createMockLogger();
+      const usecase = createExecuteCodeActionUseCase({
+        actionRepository: fakeActionRepo,
+        codeAgentClient: fakeCodeClient,
+        whatsappPublisher: fakeWhatsappPublisher,
+        webAppUrl: 'https://app.intexuraos.com',
+        logger: mockLogger,
+      });
+
+      await usecase('action-123');
+
+      const submittedTasks = fakeCodeClient.getSubmittedTasks();
+      expect(submittedTasks).toHaveLength(1);
+      expect(submittedTasks[0]?.payload.workerType).toBe('opus');
+    });
   });
 });
