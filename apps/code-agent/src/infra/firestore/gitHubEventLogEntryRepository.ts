@@ -108,6 +108,7 @@ export function createFirestoreGitHubEventLogEntryRepository(deps: {
     async listRecent(options: {
       limit: number;
       cursor?: string;
+      eventTypes?: readonly string[];
     }): Promise<
       Result<{
         entries: GitHubEventLogEntry[];
@@ -116,6 +117,9 @@ export function createFirestoreGitHubEventLogEntryRepository(deps: {
     > {
       try {
         let query = collection.orderBy('authPassedAt', 'desc');
+        if (options.eventTypes !== undefined && options.eventTypes.length > 0) {
+          query = query.where('eventType', 'in', [...options.eventTypes]);
+        }
         if (options.cursor !== undefined) {
           const cursorDate = new Date(options.cursor);
           if (!Number.isNaN(cursorDate.getTime())) {
