@@ -42,6 +42,7 @@ describe('linearIssueService', () => {
     fetchIssueForDisplay: vi.fn(),
     fetchIssuesForDisplay: vi.fn(),
     getIssueDescription: vi.fn(),
+    getIssueContext: vi.fn(),
   };
 
   const testUserId = 'test-user-123';

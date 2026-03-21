@@ -92,6 +92,16 @@ export interface LinearIssueForDisplay {
   lastCommentAt: string | null;
 }
 
+export interface IssueContextComment {
+  body: string;
+  createdAt: string;
+}
+
+export interface IssueContext {
+  description: string | null;
+  comments: IssueContextComment[];
+}
+
 export interface LinearAgentError {
   code: 'UNAVAILABLE' | 'RATE_LIMITED' | 'INVALID_REQUEST' | 'NOT_FOUND' | 'UNKNOWN';
   message: string;
@@ -161,4 +171,10 @@ export interface LinearAgentClient {
    * Used by review task creation to embed requirements context in the prompt.
    */
   getIssueDescription(request: ValidateIssueRequest): Promise<Result<string | undefined, LinearAgentError>>;
+
+  /**
+   * Fetch issue context (description + comments) for deep validation.
+   * Used by the issue-context proxy endpoint to avoid direct Linear API calls from orchestrator.
+   */
+  getIssueContext(request: { identifier: string }): Promise<Result<IssueContext, LinearAgentError>>;
 }

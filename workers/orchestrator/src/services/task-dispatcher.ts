@@ -36,8 +36,8 @@ import { readSessionTranscript } from './transcript-reader.js';
 import { formatTranscript } from './transcript-formatter.js';
 import {
   extractPrNumber,
-  fetchLinearIssueContext,
-  readPlanReferencedInLinearIssue,
+  fetchLinearIssueContextViaCodeAgent,
+  readPlanFile,
 } from './deep-validator-helpers.js';
 
 const execAsync = promisify(exec);
@@ -2265,11 +2265,21 @@ export class TaskDispatcher {
 
       this.appendOrchestratorTaskLog(task.taskId, 'Starting deep validation');
 
-      const entries = await readSessionTranscript(
-        this.config.secretsBasePath,
-        task.taskId,
-        this.logger
-      );
+      // Parallelize independent I/O: transcript reading and code-agent context fetch
+      const [entries, codeAgentContext] = await Promise.all([
+        readSessionTranscript(this.config.secretsBasePath, task.taskId, this.logger),
+        task.linearIssueId !== undefined
+          ? fetchLinearIssueContextViaCodeAgent(
+              task.linearIssueId,
+              {
+                codeAgentUrl: this.config.codeAgentUrl,
+                internalAuthToken: this.config.internalAuthToken,
+              },
+              this.logger
+            )
+          : Promise.resolve(undefined),
+      ]);
+
       if (entries.length === 0) {
         this.logger.warn({ taskId: task.taskId }, 'Deep validation skipped: no transcript entries');
         return undefined;
@@ -2279,21 +2289,15 @@ export class TaskDispatcher {
 
       let linearIssueBody = this.buildLinearIssueSummary(task);
       let planContent: string | undefined;
-      if (task.linearIssueId !== undefined) {
-        const issueContext = await fetchLinearIssueContext(
-          task.linearIssueId,
-          this.isolation.getSecrets().LINEAR_API_KEY,
-          this.logger
-        );
-        const description = issueContext?.description;
-        if (description !== undefined) {
-          linearIssueBody = `${linearIssueBody}\n\nDescription:\n${description}`;
+      if (codeAgentContext !== undefined) {
+        if (codeAgentContext.description !== null) {
+          linearIssueBody = `${linearIssueBody}\n\nDescription:\n${codeAgentContext.description}`;
         }
 
-        if (issueContext !== undefined) {
-          planContent = await readPlanReferencedInLinearIssue(
+        if (codeAgentContext.planDocumentPath !== null) {
+          planContent = await readPlanFile(
             task.worktreePath,
-            issueContext,
+            codeAgentContext.planDocumentPath,
             this.logger
           );
         }

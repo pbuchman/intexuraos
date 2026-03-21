@@ -792,6 +792,128 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
     }
   );
 
+  // GET /internal/linear/issues/:identifier/context - Return issue description + comments
+  fastify.get<{ Params: { identifier: string } }>(
+    '/internal/linear/issues/:identifier/context',
+    {
+      schema: {
+        operationId: 'getLinearIssueContextInternal',
+        summary: 'Get Linear issue context (description + comments) (internal)',
+        description: 'Fetches a Linear issue description and comments for context. Used by code-agent.',
+        tags: ['internal'],
+        params: {
+          type: 'object',
+          required: ['identifier'],
+          properties: {
+            identifier: { type: 'string', description: 'Issue identifier (e.g., INT-123)' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Success',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  description: { type: ['string', 'null'] },
+                  comments: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        body: { type: 'string' },
+                        createdAt: { type: 'string' },
+                      },
+                    },
+                  },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          404: {
+            description: 'Issue not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          500: {
+            description: 'Internal Server Error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { identifier: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request);
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      const { identifier } = request.params;
+      const services = getServices();
+      const logger = request.log as unknown as Logger;
+
+      logger.info({ identifier }, 'internal/getLinearIssueContext: fetching issue context');
+
+      // Find issue by identifier (no userId scoping — service-to-service call)
+      const issueResult = await services.issueRepository.findByIdentifier(identifier);
+      if (!issueResult.ok) {
+        logger.error({ error: issueResult.error, identifier }, 'Failed to fetch issue');
+        reply.status(500);
+        return await handleLinearError(issueResult.error, reply);
+      }
+
+      const issue = issueResult.value;
+      if (issue === null) {
+        reply.status(404);
+        return await reply.fail('NOT_FOUND', `Issue ${identifier} not found`);
+      }
+
+      // Get comments for the issue
+      const commentsResult = await services.commentRepository.listByIssueId(issue.id);
+      if (!commentsResult.ok) {
+        logger.error({ error: commentsResult.error, issueId: issue.id, identifier }, 'Failed to fetch comments');
+        reply.status(500);
+        return await handleLinearError(commentsResult.error, reply);
+      }
+
+      // Sort comments newest first, cap at 100 to match the old Linear GraphQL first:100 limit
+      const COMMENT_LIMIT = 100;
+      const sortedComments = [...commentsResult.value] // @allow-result-access -- guarded by if (!commentsResult.ok) above
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, COMMENT_LIMIT)
+        .map((c) => ({ body: c.body, createdAt: c.createdAt }));
+
+      return await reply.ok({
+        description: issue.description,
+        comments: sortedComments,
+      });
+    }
+  );
+
   // GET /internal/issues/:issueId/tree - Return issue + recursive descendants from local sync
   fastify.get<{ Params: IssueIdParams }>(
     '/internal/issues/:issueId/tree',

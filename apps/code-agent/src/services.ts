@@ -31,7 +31,7 @@ import { createUserUsageFirestoreRepository } from './infra/firestore/userUsageF
 import { createRateLimitService } from './domain/services/rateLimitService.js';
 import { createLinearAgentHttpClient } from './infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService, type LinearIssueService } from './domain/services/linearIssueService.js';
-import type { LinearAgentClient } from './domain/ports/linearAgentClient.js';
+import type { LinearAgentClient, IssueContext, LinearAgentError } from './domain/ports/linearAgentClient.js';
 import { createStatusMirrorService, type StatusMirrorService } from './infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase, type ProcessHeartbeatUseCase } from './domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase, type DetectZombieTasksUseCase } from './domain/usecases/detectZombieTasks.js';
@@ -253,6 +253,10 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
     },
     getIssueDescription(): ReturnType<LinearAgentClient['getIssueDescription']> {
       return Promise.resolve(ok(undefined));
+    },
+    getIssueContext(_request: { identifier: string }): Promise<Result<IssueContext, LinearAgentError>> {
+      logger.info({}, '[E2E] getIssueContext → returning empty context');
+      return Promise.resolve(ok({ description: null, comments: [] }));
     },
   };
 }

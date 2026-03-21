@@ -59,6 +59,7 @@ describe('main.ts', () => {
     githubInstallationId: 'test-installation-id',
     orchestratorSecret: 'test-secret',
     secretsBasePath: '/tmp/secrets',
+    internalAuthToken: 'test-internal-auth-token',
   };
 
   const mockLogger: Logger = {
