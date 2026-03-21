@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Database, Plus, Trash2 } from 'lucide-react';
-import { Button, Card, DataInsightsTabs, Layout } from '@/components';
+import { Button, Card, DataInsightsTabs, ErrorBanner, Layout } from '@/components';
 import { useDataSources } from '@/hooks';
 import { formatDate } from '@/utils/dateFormat';
 import type { DataSource } from '@/types';
 
-function truncateContent(content: string, maxLength = 150): string {
+function truncateContent(content: string, maxLength = 120): string {
   if (content.length <= maxLength) {
     return content;
   }
@@ -34,7 +34,9 @@ export function DataSourcesListPage(): React.JSX.Element {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Data Sources</h2>
-          <p className="text-slate-600 dark:text-slate-300">Manage your custom data sources for analysis.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {dataSources.length} data source{dataSources.length !== 1 ? 's' : ''}
+          </p>
         </div>
         <Link to="/data-insights/static-sources/new">
           <Button type="button" variant="primary">
@@ -44,11 +46,7 @@ export function DataSourcesListPage(): React.JSX.Element {
         </Link>
       </div>
 
-      {error !== null && error !== '' ? (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
-          {error}
-        </div>
-      ) : null}
+      <ErrorBanner message={error} className="mb-6" />
 
       {dataSources.length === 0 ? (
         <Card>
@@ -67,7 +65,7 @@ export function DataSourcesListPage(): React.JSX.Element {
           </div>
         </Card>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-1">
           {dataSources.map((dataSource) => (
             <DataSourceRow
               key={dataSource.id}
@@ -90,76 +88,80 @@ interface DataSourceRowProps {
 
 function DataSourceRow({ dataSource, onDelete }: DataSourceRowProps): React.JSX.Element {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const navigate = useNavigate();
 
   const handleDelete = async (): Promise<void> => {
-    setIsDeleting(true);
-    try {
-      await onDelete();
-    } finally {
-      setIsDeleting(false);
-      setShowDeleteConfirm(false);
-    }
+    await onDelete();
+    setShowDeleteConfirm(false);
   };
 
   return (
-    <Card>
-      <div className="flex items-start justify-between gap-4">
-        <Link to={`/data-insights/static-sources/${dataSource.id}`} className="flex-1 min-w-0">
-          <h3 className="font-medium text-slate-900 hover:text-blue-600 transition-colors dark:text-slate-100 dark:hover:text-blue-400">
+    <div
+      className="group relative cursor-pointer rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800"
+      onClick={(): void => {
+        void navigate(`/data-insights/static-sources/${dataSource.id}`);
+      }}
+    >
+      <div className="grid grid-cols-[1fr_140px_60px] items-center gap-2">
+        {/* Title + content preview */}
+        <div className="min-w-0">
+          <h3 className="font-medium text-slate-900 truncate dark:text-slate-100">
             {dataSource.title}
           </h3>
-          <p className="mt-1 text-sm text-slate-500 line-clamp-2 dark:text-slate-400">
+          <p className="text-xs text-slate-500 line-clamp-1 dark:text-slate-400">
             {truncateContent(dataSource.content)}
           </p>
-          <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">Updated {formatDate(dataSource.updatedAt)}</p>
-        </Link>
-
-        {!showDeleteConfirm ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={(): void => {
+        </div>
+        {/* Updated time */}
+        <span className="text-xs text-slate-400 dark:text-slate-500">
+          {formatDate(dataSource.updatedAt)}
+        </span>
+        {/* Actions — R8 hover-reveal trash */}
+        <div className="flex items-center justify-end">
+          <button
+            onClick={(e): void => {
+              e.stopPropagation();
               setShowDeleteConfirm(true);
             }}
-            className="text-slate-400 hover:text-red-600"
+            className="rounded p-1 text-slate-400 opacity-0 transition-opacity hover:bg-red-500/10 hover:text-red-500 group-hover:opacity-100"
+            title="Delete"
           >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        ) : null}
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
+      {/* R5 overlay delete */}
       {showDeleteConfirm ? (
-        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
-          <p className="mb-3 text-sm text-red-800 dark:text-red-300">Delete "{dataSource.title}"?</p>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="danger"
-              size="sm"
-              onClick={(): void => {
-                void handleDelete();
-              }}
-              disabled={isDeleting}
-              isLoading={isDeleting}
-            >
-              Delete
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={(): void => {
+        <div
+          className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/80 backdrop-blur-sm dark:bg-slate-900/80"
+          onClick={(e): void => {
+            e.stopPropagation();
+          }}
+        >
+          <div className="flex items-center gap-3 rounded-lg bg-white px-4 py-3 shadow-lg dark:bg-slate-800">
+            <p className="text-sm text-slate-700 dark:text-slate-200">Delete this item?</p>
+            <button
+              onClick={(e): void => {
+                e.stopPropagation();
                 setShowDeleteConfirm(false);
               }}
-              disabled={isDeleting}
+              className="rounded-md px-3 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
             >
               Cancel
-            </Button>
+            </button>
+            <button
+              onClick={(e): void => {
+                e.stopPropagation();
+                void handleDelete();
+              }}
+              className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-500"
+            >
+              Delete
+            </button>
           </div>
         </div>
       ) : null}
-    </Card>
+    </div>
   );
 }
