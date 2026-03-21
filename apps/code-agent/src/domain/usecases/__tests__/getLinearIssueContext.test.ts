@@ -42,9 +42,12 @@ describe('getLinearIssueContext', () => {
     });
 
     expect(result).toEqual({
-      description: 'Plan document: docs/plans/2026-03-20-my-plan.md',
-      comments: [{ body: 'looks good', createdAt: '2026-03-20T10:00:00Z' }],
-      planDocumentPath: 'docs/plans/2026-03-20-my-plan.md',
+      status: 'ok',
+      data: {
+        description: 'Plan document: docs/plans/2026-03-20-my-plan.md',
+        comments: [{ body: 'looks good', createdAt: '2026-03-20T10:00:00Z' }],
+        planDocumentPath: 'docs/plans/2026-03-20-my-plan.md',
+      },
     });
   });
 
@@ -64,13 +67,16 @@ describe('getLinearIssueContext', () => {
     });
 
     expect(result).toEqual({
-      description: 'A normal description without any plan link',
-      comments: [],
-      planDocumentPath: null,
+      status: 'ok',
+      data: {
+        description: 'A normal description without any plan link',
+        comments: [],
+        planDocumentPath: null,
+      },
     });
   });
 
-  it('returns undefined when issue is not found (NOT_FOUND error)', async () => {
+  it('returns not_found when issue is not found (NOT_FOUND error)', async () => {
     const client = createFakeClient({
       getIssueContext(): ReturnType<LinearAgentClient['getIssueContext']> {
         return Promise.resolve(err({ code: 'NOT_FOUND' as const, message: 'Issue not found' }));
@@ -82,10 +88,10 @@ describe('getLinearIssueContext', () => {
       logger: mockLogger,
     });
 
-    expect(result).toBeUndefined();
+    expect(result).toEqual({ status: 'not_found' });
   });
 
-  it('returns undefined on linear-agent error and logs warning', async () => {
+  it('returns error status on linear-agent error and logs warning', async () => {
     const warnFn = vi.fn();
     const logger: Logger = { info: vi.fn(), warn: warnFn, error: vi.fn(), debug: vi.fn() };
 
@@ -100,7 +106,7 @@ describe('getLinearIssueContext', () => {
       logger,
     });
 
-    expect(result).toBeUndefined();
+    expect(result).toEqual({ status: 'error', code: 'UNAVAILABLE' });
     expect(warnFn).toHaveBeenCalledWith(
       expect.objectContaining({ identifier: 'INT-300' }),
       'Failed to fetch issue context from linear-agent'
@@ -125,11 +131,14 @@ describe('getLinearIssueContext', () => {
     });
 
     expect(result).toEqual({
-      description: null,
-      comments: [
-        { body: 'Plan document: docs/plans/2026-03-20-from-comment.md', createdAt: '2026-03-20T12:00:00Z' },
-      ],
-      planDocumentPath: 'docs/plans/2026-03-20-from-comment.md',
+      status: 'ok',
+      data: {
+        description: null,
+        comments: [
+          { body: 'Plan document: docs/plans/2026-03-20-from-comment.md', createdAt: '2026-03-20T12:00:00Z' },
+        ],
+        planDocumentPath: 'docs/plans/2026-03-20-from-comment.md',
+      },
     });
   });
 });

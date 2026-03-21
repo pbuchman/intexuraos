@@ -143,6 +143,22 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             },
             required: ['success', 'error'],
           },
+          502: {
+            description: 'Upstream service error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['DOWNSTREAM_ERROR'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
         },
       },
     },
@@ -165,12 +181,17 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         logger,
       });
 
-      if (result === undefined) {
+      if (result.status === 'not_found') {
         return await reply.fail('NOT_FOUND', `Issue ${identifier} not found`);
       }
 
+      if (result.status === 'error') {
+        reply.status(502);
+        return await reply.fail('DOWNSTREAM_ERROR', `linear-agent error: ${result.code}`);
+      }
+
       // @allow-raw-send: internal endpoint returns structured context directly
-      return await reply.send(result);
+      return await reply.send(result.data);
     }
   );
 
