@@ -633,6 +633,14 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         });
       });
 
+      // INT-1049: Trigger merge-conflict detection on push events
+      if (parsedEvent.eventType === 'push') {
+        const { mergeConflictDetector } = getServices();
+        void mergeConflictDetector.detectOnPush(savedEvent, logger).catch((pushErr: unknown) => {
+          logger.error({ pushErr }, 'Unhandled error in detectOnPush');
+        });
+      }
+
       return await reply.ok({ message: 'processed' });
     }
   );
