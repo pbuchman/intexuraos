@@ -690,9 +690,13 @@ describe('Merge queue JWT routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: { watches: unknown[] } };
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { watches: { watchId: string }[] };
+      };
       expect(body.success).toBe(true);
       expect(body.data.watches).toHaveLength(1);
+      expect(body.data.watches[0]?.watchId).toBe('watch-1');
     });
 
     it('should return error when owner or repo query params are missing', async () => {
