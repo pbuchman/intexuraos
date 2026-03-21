@@ -212,6 +212,66 @@ describe('commandClassifierPrompt', () => {
       expect(prompt).toMatch(/[Bb]oard meeting.*→ calendar|[Mm]eeting.*Thursday.*→ calendar/i);
     });
 
+    it('includes "create code task" in code explicit phrases', () => {
+      const prompt = commandClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('"create code task"');
+      expect(prompt).toContain('"create coding task"');
+      expect(prompt).toContain('"stwórz code task"');
+    });
+
+    it('includes "create calendar event" in calendar explicit phrases', () => {
+      const prompt = commandClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('"create calendar event"');
+      expect(prompt).toContain('"create event"');
+      expect(prompt).toContain('"stwórz wydarzenie"');
+      expect(prompt).toContain('"stwórz event"');
+    });
+
+    it('includes "create reminder" in reminder explicit phrases', () => {
+      const prompt = commandClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('"create reminder"');
+      expect(prompt).toContain('"stwórz przypomnienie"');
+    });
+
+    it('includes "create research" in research explicit phrases', () => {
+      const prompt = commandClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('"create research"');
+      expect(prompt).toContain('"create research task"');
+    });
+
+    it('includes "create link" and "create bookmark" in link explicit phrases', () => {
+      const prompt = commandClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('"create link"');
+      expect(prompt).toContain('"create bookmark"');
+    });
+
+    it('includes "create node" as note alias', () => {
+      const prompt = commandClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('"create node"');
+    });
+
+    it('includes disambiguation example for "create code task"', () => {
+      const prompt = commandClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain(
+        '"create code task to fix the login bug" → code (explicit "create code task")'
+      );
+    });
+
+    it('includes disambiguation example for "create calendar event"', () => {
+      const prompt = commandClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain(
+        '"create calendar event for team standup" → calendar (explicit "create calendar event")'
+      );
+    });
+
     it('includes example: action + date = todo', () => {
       const prompt = commandClassifierPrompt.build({ message: 'test' });
 
@@ -230,8 +290,8 @@ describe('commandClassifierPrompt', () => {
       expect(commandClassifierPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
     });
 
-    it('has version 2.0.0', () => {
-      expect(commandClassifierPrompt.version).toBe('2.0.0');
+    it('has version 2.1.0', () => {
+      expect(commandClassifierPrompt.version).toBe('2.1.0');
     });
   });
 });
