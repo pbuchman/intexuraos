@@ -1571,6 +1571,54 @@ describe('createReviewTask', () => {
   });
 
   describe('issue description and plan path in review prompt', () => {
+    it('user prompt emphasizes requirements validation when issue description is present', async () => {
+      const linearAgentClient = createFakeLinearAgentClient();
+      vi.mocked(linearAgentClient.getIssueDescription).mockResolvedValue(
+        ok('Implement feature X.\n\nPlan document: docs/plans/2026-03-20-feature-x.md')
+      );
+      const deps = createFakeDeps({ linearAgentClient });
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-emphasis-1',
+        prTitle: '[INT-300] Implement feature X',
+      });
+
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].prompt).toContain('CRITICAL: Verify every requirement below');
+        expect(createCall[0].prompt).toContain('### Issue Requirements');
+        expect(createCall[0].prompt).toContain('Missing or partially implemented requirements are 🔴 findings.');
+      }
+    });
+
+    it('does not include requirements emphasis when issue description is absent', async () => {
+      const linearAgentClient = createFakeLinearAgentClient();
+      vi.mocked(linearAgentClient.getIssueDescription).mockResolvedValue(
+        err({ code: 'UNAVAILABLE' as const, message: 'Linear is down' })
+      );
+      const deps = createFakeDeps({ linearAgentClient });
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-emphasis-2',
+        prTitle: '[INT-300] Fix bug',
+      });
+
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].prompt).not.toContain('CRITICAL: Verify every requirement below');
+      }
+    });
+
     it('embeds issue description and plan path in review prompt', async () => {
       const linearAgentClient = createFakeLinearAgentClient();
       vi.mocked(linearAgentClient.getIssueDescription).mockResolvedValue(
