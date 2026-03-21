@@ -1,5 +1,5 @@
 import type { FastifyPluginCallback } from 'fastify';
-import { logIncomingRequest } from '@intexuraos/common-http';
+import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { authenticateInternalScheduler } from './helpers/internalAuth.js';
 import { getLinearIssueContext } from '../domain/usecases/getLinearIssueContext.js';
@@ -167,9 +167,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         message: 'Received request to GET /internal/linear/issue-context/:identifier',
       });
 
-      const authResult = authenticateInternalScheduler(request);
-      if (!authResult.authenticated) {
-        request.log.warn('Internal auth failed for linear issue-context');
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
 
