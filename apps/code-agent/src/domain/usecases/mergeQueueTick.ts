@@ -130,7 +130,6 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
       authorLogin: summary.authorLogin ?? '',
       baseBranch: summary.baseBranch ?? baseBranch,
       headBranch: summary.headBranch ?? '',
-      firstSeenAt: summary.firstSeenAt,
     }));
 
     // Step 3e: Filter to eligible authors
@@ -138,12 +137,8 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
       (pr) => pr.authorLogin === gitHubUsername || allowedBots.has(pr.authorLogin)
     );
 
-    // Step 3f: Sort by firstSeenAt ASC (oldest first), tiebreak by PR number ASC
-    eligiblePrs.sort((a, b) => {
-      const dateCompare = a.firstSeenAt.getTime() - b.firstSeenAt.getTime();
-      if (dateCompare !== 0) return dateCompare;
-      return a.number - b.number;
-    });
+    // Step 3f: Sort by PR number ASC (oldest first)
+    eligiblePrs.sort((a, b) => a.number - b.number);
 
     // Step 3g: If zero eligible PRs, drain
     if (eligiblePrs.length === 0) {

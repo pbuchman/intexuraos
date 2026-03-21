@@ -131,7 +131,8 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           return await reply.fail('INTERNAL_ERROR', createResult.error.message);
         }
 
-        return await reply.ok(createResult.value);
+        const { id: watchId, ...rest } = createResult.value;
+        return await reply.ok({ watchId, ...rest });
       }
     );
 
@@ -203,7 +204,8 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           return await reply.fail('INTERNAL_ERROR', result.error.message);
         }
 
-        return await reply.ok({ watches: result.value });
+        const watches = result.value.map(({ id: watchId, ...rest }) => ({ watchId, ...rest }));
+        return await reply.ok({ watches });
       }
     );
 
