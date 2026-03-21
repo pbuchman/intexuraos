@@ -105,7 +105,7 @@ export interface DetectMergeConflictsOnPushDeps {
   logger: Logger;
   gitHubPRClient: Pick<
     GitHubPRClient,
-    'getPullRequestDetails' | 'postPRComment' | 'updateIssueComment'
+    'getPullRequestDetails' | 'postPRComment' | 'updateIssueComment' | 'listAllOpenPullRequests'
   >;
   gitHubPRSummaryRepo: GitHubPRSummaryRepository;
   codeTaskRepo: CodeTaskRepository;
@@ -1105,38 +1105,110 @@ export function createDetectMergeConflictsOnPush(
       let skipped = 0;
       let error = 0;
 
-      for (const existingSummary of summaries) {
-        const parsedRepository = parseOwnerRepo(existingSummary.repository);
+      // Group summaries by repository, tracking first summary for token resolution
+      const byRepo = new Map<string, { first: GitHubPRSummary; all: GitHubPRSummary[] }>();
+      for (const summary of summaries) {
+        const existing = byRepo.get(summary.repository);
+        if (existing !== undefined) {
+          existing.all.push(summary);
+        } else {
+          byRepo.set(summary.repository, { first: summary, all: [summary] });
+        }
+      }
+
+      for (const [repository, { first: firstSummary, all: repoSummaries }] of byRepo) {
+        const parsedRepository = parseOwnerRepo(repository);
         if (parsedRepository === null) {
-          logger.warn({ repository: existingSummary.repository }, 'Skipping reconcile for PR with invalid repository');
+          logger.warn({ repository }, 'Skipping reconcile for repo with invalid repository format');
           continue;
         }
 
-        const trigger: ProcessingTrigger = {
-          eventId: `${reconcileId}-${existingSummary.repository}-${String(existingSummary.pullRequestNumber)}`,
-          repository: existingSummary.repository,
-          lastActivityAt: existingSummary.lastActivityAt,
-        };
-
-        let outcome: ProcessingOutcome = 'skipped';
-        try {
-          outcome = await processOpenSummaryOnPush(deps, trigger, logger, parsedRepository, existingSummary);
-        } catch (err: unknown) {
-          outcome = 'error';
-          logger.error(
-            { error: err, repository: existingSummary.repository, prNumber: existingSummary.pullRequestNumber },
-            'Unhandled error processing PR in merge-conflict reconcile; continuing'
+        const accessContext = await resolveGitHubAccessContext(
+          {
+            userServiceClient: deps.userServiceClient,
+            gitHubPREventRepo: deps.gitHubPREventRepo,
+            allowedBots: deps.allowedBots,
+          },
+          firstSummary,
+          logger
+        );
+        if (accessContext === null) {
+          logger.info(
+            { repository, count: repoSummaries.length },
+            'Skipping reconcile for repo — no OAuth-backed user found'
           );
+          skipped += repoSummaries.length;
+          processed += repoSummaries.length;
+          continue;
         }
-        processed++;
 
-        switch (outcome) {
-          case 'closed': closed++; break;
-          case 'conflicting': conflicting++; break;
-          case 'clean': clean++; break;
-          case 'unknown': unknown++; break;
-          case 'skipped': skipped++; break;
-          case 'error': error++; break;
+        const openPRsResult = await deps.gitHubPRClient.listAllOpenPullRequests(
+          accessContext.token,
+          parsedRepository.owner,
+          parsedRepository.repo
+        );
+        if (!openPRsResult.ok) {
+          logger.warn(
+            { error: openPRsResult.error, repository },
+            'Failed to list open PRs for repo during reconcile; skipping repo'
+          );
+          skipped += repoSummaries.length;
+          processed += repoSummaries.length;
+          continue;
+        }
+
+        const openPRNumbers = new Set(openPRsResult.value.map((pr) => pr.number));
+
+        for (const existingSummary of repoSummaries) {
+          if (!openPRNumbers.has(existingSummary.pullRequestNumber)) {
+            // PR is no longer open on GitHub — close it in Firestore
+            logger.info(
+              { prNumber: existingSummary.pullRequestNumber, repository },
+              'Closing stale PR summary — PR is no longer open on GitHub'
+            );
+            await upsertSummary(
+              deps.gitHubPRSummaryRepo,
+              {
+                repository,
+                pullRequestNumber: existingSummary.pullRequestNumber,
+                lastActivityAt: existingSummary.lastActivityAt,
+                firstSeenAt: existingSummary.firstSeenAt,
+                state: 'closed',
+              },
+              logger
+            );
+            processed++;
+            closed++;
+            continue;
+          }
+
+          // PR is still open — check mergeability
+          const trigger: ProcessingTrigger = {
+            eventId: `${reconcileId}-${repository}-${String(existingSummary.pullRequestNumber)}`,
+            repository,
+            lastActivityAt: existingSummary.lastActivityAt,
+          };
+
+          let outcome: ProcessingOutcome = 'skipped';
+          try {
+            outcome = await processOpenSummaryOnPush(deps, trigger, logger, parsedRepository, existingSummary);
+          } catch (caughtError: unknown) {
+            outcome = 'error';
+            logger.error(
+              { error: caughtError, repository: existingSummary.repository, prNumber: existingSummary.pullRequestNumber },
+              'Unhandled error processing PR in merge-conflict reconcile; continuing'
+            );
+          }
+          processed++;
+
+          switch (outcome) {
+            case 'closed': closed++; break;
+            case 'conflicting': conflicting++; break;
+            case 'clean': clean++; break;
+            case 'unknown': unknown++; break;
+            case 'skipped': skipped++; break;
+            case 'error': error++; break;
+          }
         }
       }
 
