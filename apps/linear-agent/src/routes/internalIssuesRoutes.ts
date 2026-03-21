@@ -853,8 +853,8 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
               diagnostics: { $ref: 'Diagnostics#' },
             },
           },
-          500: {
-            description: 'Internal Server Error',
+          502: {
+            description: 'Bad Gateway',
             type: 'object',
             properties: {
               success: { type: 'boolean', enum: [false] },

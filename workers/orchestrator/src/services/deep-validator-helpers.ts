@@ -42,6 +42,7 @@ export async function readPlanFile(
   }
 }
 
+/** @deprecated Use readPlanFile with planDocumentPath from code-agent instead (INT-1040) */
 export async function readPlanReferencedInLinearIssue(
   worktreePath: string,
   context: LinearIssueContext,
