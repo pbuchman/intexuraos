@@ -21,12 +21,12 @@ const fakeLogger: HttpLogger = {
   debug: vi.fn(),
 };
 
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type, no-restricted-syntax -- test helper with optional logger for testing default logger fallback
-function makeClient(logger?: HttpLogger) {
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- test helper
+function makeClient(logger: HttpLogger = fakeLogger) {
   return createCodeAgentHttpClient({
     baseUrl: BASE_URL,
     internalAuthToken: 'test-token',
-    ...(logger !== undefined && { logger }),
+    logger,
   });
 }
 

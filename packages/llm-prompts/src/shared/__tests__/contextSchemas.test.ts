@@ -20,6 +20,16 @@ describe('DomainSchema', () => {
     }
   });
 
+  it('accepts "fishing" as a valid domain', () => {
+    const result = DomainSchema.safeParse('fishing');
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts "outdoor_recreation" as a valid domain', () => {
+    const result = DomainSchema.safeParse('outdoor_recreation');
+    expect(result.success).toBe(true);
+  });
+
   it('rejects invalid domain values', () => {
     const result = DomainSchema.safeParse('invalid_domain');
     expect(result.success).toBe(false);
@@ -193,6 +203,29 @@ describe('SafetyInfoSchema', () => {
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.required_disclaimers).toHaveLength(3);
+      }
+    });
+
+    it('accepts user_exclusions field in SafetyInfo', () => {
+      const result = SafetyInfoSchema.safeParse({
+        high_stakes: false,
+        required_disclaimers: ['Be safe'],
+        user_exclusions: ['permits', 'regulations'],
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.user_exclusions).toEqual(['permits', 'regulations']);
+      }
+    });
+
+    it('defaults user_exclusions to empty array when not provided', () => {
+      const result = SafetyInfoSchema.safeParse({
+        high_stakes: false,
+        required_disclaimers: [],
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.user_exclusions).toEqual([]);
       }
     });
   });

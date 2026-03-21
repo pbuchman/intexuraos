@@ -1,4 +1,4 @@
-# notes-agent -- Agent Interface
+# notes-agent — Agent Interface
 
 > Machine-readable specification for AI agent integration
 
@@ -57,8 +57,8 @@ interface ListNotesResponse {
       "tags": ["work"],
       "source": "manual",
       "sourceId": "m-1",
-      "createdAt": "2026-02-22T10:00:00.000Z",
-      "updatedAt": "2026-02-22T10:05:00.000Z"
+      "createdAt": "2026-03-15T10:00:00.000Z",
+      "updatedAt": "2026-03-15T10:05:00.000Z"
     }
   ]
 }
@@ -116,8 +116,8 @@ interface CreateNoteResponse {
     "tags": ["research", "q4"],
     "source": "web",
     "sourceId": "web-session-123",
-    "createdAt": "2026-02-22T11:00:00.000Z",
-    "updatedAt": "2026-02-22T11:00:00.000Z"
+    "createdAt": "2026-03-15T11:00:00.000Z",
+    "updatedAt": "2026-03-15T11:00:00.000Z"
   }
 }
 ```
@@ -194,13 +194,13 @@ interface DeleteNoteResponse {
 
 ```typescript
 interface InternalCreateNoteInput {
-  userId: string;     // Required, min length 1
-  title: string;      // Required, min length 1
-  content: string;    // Required
-  tags: string[];     // Required
+  userId: string;              // Required, min length 1
+  title: string;               // Required, min length 1
+  content: string;             // Required
+  tags: string[];              // Required
   status?: 'draft' | 'active'; // Optional, defaults to 'active'
-  source: string;     // Required, min length 1
-  sourceId: string;   // Required, min length 1
+  source: string;              // Required, min length 1
+  sourceId: string;            // Required, min length 1
 }
 ```
 
@@ -250,7 +250,7 @@ interface ServiceFeedback {
 ## Types
 
 ```typescript
-// NoteStatus -- only two values exist
+// NoteStatus — only two values exist
 type NoteStatus = 'draft' | 'active';
 
 // API response shape (status field is NOT included in public responses)
@@ -271,23 +271,23 @@ interface Note {
 
 ## Constraints
 
-| Rule                 | Description                                                                      |
-| -------------------- | -------------------------------------------------------------------------------- |
-| **Ownership**        | Users can only access their own notes (enforced at use case layer)               |
-| **Title Required**   | Title must be non-empty string (min length 1)                                    |
-| **Content Required** | Content must be present (can be empty string)                                    |
-| **Source Required**  | Source and sourceId must be non-empty strings                                    |
-| **No Status Update** | Status cannot be changed after creation via any endpoint                         |
-| **No Tag Filtering** | List endpoint returns all user notes; no server-side filter support              |
-| **No Pagination**    | List endpoint returns all notes in a single response                             |
-| **List Order**       | Notes returned ordered by `updatedAt` descending (most recently updated first)   |
-| **Status Hidden**    | Public API responses do not include the `status` field                           |
+| Rule                 | Description                                                                    |
+| -------------------- | ------------------------------------------------------------------------------ |
+| **Ownership**        | Users can only access their own notes (enforced at use case layer)             |
+| **Title Required**   | Title must be non-empty string (min length 1)                                  |
+| **Content Required** | Content must be present (can be empty string)                                  |
+| **Source Required**  | Source and sourceId must be non-empty strings                                  |
+| **No Status Update** | Status cannot be changed after creation via any endpoint                       |
+| **No Tag Filtering** | List endpoint returns all user notes; no server-side filter support            |
+| **No Pagination**    | List endpoint returns all notes in a single response                           |
+| **List Order**       | Notes returned ordered by `updatedAt` descending (most recently updated first) |
+| **Status Hidden**    | Public API responses do not include the `status` field                         |
 
 **Do NOT:**
 
-- Assume the list endpoint supports filtering -- it returns all notes
-- Send `status` to the public `POST /notes` endpoint -- it is ignored
-- Expect a Note object from `/internal/notes` -- it returns ServiceFeedback
+- Assume the list endpoint supports filtering — it returns all notes
+- Send `status` to the public `POST /notes` endpoint — it is ignored
+- Expect a Note object from `/internal/notes` — it returns ServiceFeedback
 - Try to update `source`, `sourceId`, `status`, or `userId` via PATCH
 
 **Requires:**
@@ -300,13 +300,13 @@ interface Note {
 
 ## Error Handling
 
-| Error Code      | HTTP | Meaning                                | Recovery Action                      |
-| --------------- | ---- | -------------------------------------- | ------------------------------------ |
-| UNAUTHORIZED    | 401  | Missing or invalid auth token          | Refresh JWT or check internal token  |
-| FORBIDDEN       | 403  | Note belongs to a different user       | Verify you own the note              |
-| NOT_FOUND       | 404  | Note does not exist                    | Verify the note ID                   |
-| INVALID_REQUEST | 400  | Missing required fields or validation  | Check request body against schema    |
-| INTERNAL_ERROR  | 500  | Firestore or server failure            | Retry with backoff                   |
+| Error Code      | HTTP | Meaning                               | Recovery Action                     |
+| --------------- | ---- | ------------------------------------- | ----------------------------------- |
+| UNAUTHORIZED    | 401  | Missing or invalid auth token         | Refresh JWT or check internal token |
+| FORBIDDEN       | 403  | Note belongs to a different user      | Verify you own the note             |
+| NOT_FOUND       | 404  | Note does not exist                   | Verify the note ID                  |
+| INVALID_REQUEST | 400  | Missing required fields or validation | Check request body against schema   |
+| INTERNAL_ERROR  | 500  | Firestore or server failure           | Retry with backoff                  |
 
 ---
 
@@ -342,11 +342,11 @@ interface Note {
 
 ## Dependencies
 
-| Service       | Why Needed                     | Failure Behavior     |
-| ------------- | ------------------------------ | -------------------- |
-| Firestore     | Note persistence               | 500 STORAGE_ERROR    |
-| Auth0 (JWKS)  | JWT token validation           | 401 UNAUTHORIZED     |
+| Service      | Why Needed           | Failure Behavior  |
+| ------------ | -------------------- | ----------------- |
+| Firestore    | Note persistence     | 500 STORAGE_ERROR |
+| Auth0 (JWKS) | JWT token validation | 401 UNAUTHORIZED  |
 
 ---
 
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-15

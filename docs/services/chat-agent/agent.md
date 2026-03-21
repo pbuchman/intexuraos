@@ -112,7 +112,7 @@ interface DocSource {
 {
   "success": true,
   "data": {
-    "response": "I'll create a todo: 'buy groceries'. Say 'yes' to confirm.",
+    "response": "I'll create a todo: 'buy groceries'. Shall I create this for you?",
     "sources": [],
     "suggestedAction": {
       "type": "create_command",

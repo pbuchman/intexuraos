@@ -49,6 +49,9 @@ export function renderEvent(
     case 'task_dispatch_failed':
       return renderTaskDispatchFailed(ts, event);
 
+    case 'linear_issue_failed':
+      return `**${ts}** -- ⚠️ Linear issue creation failed | ${event.error}`;
+
     case 'task_started':
       return `**${ts}** -- Task started | attempt ${String(event.attempt)}`;
 

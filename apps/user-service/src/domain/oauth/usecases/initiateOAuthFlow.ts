@@ -5,7 +5,7 @@
  * Creates state token for CSRF protection.
  */
 
-import { ok, type Result, type Logger } from '@intexuraos/common-core';
+import type { Logger } from '@intexuraos/common-core';
 import { randomBytes } from 'node:crypto';
 import type { OAuthProvider } from '../models/OAuthConnection.js';
 import type { GoogleOAuthClient } from '../ports/GoogleOAuthClient.js';
@@ -29,7 +29,7 @@ export interface InitiateOAuthFlowDeps {
 export function initiateOAuthFlow(
   input: InitiateOAuthFlowInput,
   deps: InitiateOAuthFlowDeps
-): Result<InitiateOAuthFlowResult, never> {
+): InitiateOAuthFlowResult {
   const { userId, provider, redirectUri } = input;
   const { googleOAuthClient, logger } = deps;
 
@@ -48,10 +48,10 @@ export function initiateOAuthFlow(
 
   logger.info({ userId, provider, state }, 'OAuth state generated for CSRF protection');
 
-  return ok({
+  return {
     authorizationUrl,
     state,
-  });
+  };
 }
 
 /**
@@ -60,6 +60,6 @@ export function initiateOAuthFlow(
 export function createInitiateOAuthFlowUseCase(
   googleOAuthClient: GoogleOAuthClient,
   logger: Logger
-): (input: InitiateOAuthFlowInput) => Result<InitiateOAuthFlowResult, never> {
+): (input: InitiateOAuthFlowInput) => InitiateOAuthFlowResult {
   return (input) => initiateOAuthFlow(input, { googleOAuthClient, logger });
 }

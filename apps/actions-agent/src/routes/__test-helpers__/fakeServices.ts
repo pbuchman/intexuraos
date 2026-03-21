@@ -82,6 +82,7 @@ export function createFakeServices(overrides: Partial<Services> = {}): Services 
     executeCodeActionUseCase: vi.fn(),
     retryPendingActionsUseCase: { execute: vi.fn() },
     changeActionTypeUseCase: vi.fn(),
+    updateActionUseCase: vi.fn(),
     handleApprovalReplyUseCase: vi.fn(),
     research: { execute: vi.fn() },
     todo: { execute: vi.fn() },

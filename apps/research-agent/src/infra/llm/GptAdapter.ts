@@ -6,7 +6,7 @@
 import { createGptClient, type GptClient } from '@intexuraos/infra-gpt';
 import type { Logger, Result } from '@intexuraos/common-core';
 import type { ModelPricing } from '@intexuraos/llm-contract';
-import { buildSynthesisPrompt, titlePrompt, type SynthesisContext } from '@intexuraos/llm-prompts';
+import { buildResearchPrompt, buildSynthesisPrompt, titlePrompt, type ResearchContext, type SynthesisContext } from '@intexuraos/llm-prompts';
 import type {
   LlmError,
   LlmResearchProvider,
@@ -33,9 +33,10 @@ export class  GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
     this.logger = logger;
   }
 
-  async research(prompt: string): Promise<Result<LlmResearchResult, LlmError>> {
-    this.logger.info({ model: this.model, promptLength: prompt.length }, 'GPT research started');
-    const result = await this.client.research(prompt);
+  async research(prompt: string, ctx?: ResearchContext): Promise<Result<LlmResearchResult, LlmError>> {
+    const builtPrompt = buildResearchPrompt(prompt, ctx);
+    this.logger.info({ model: this.model, promptLength: builtPrompt.length }, 'GPT research started');
+    const result = await this.client.research(builtPrompt);
     if (!result.ok) {
       const error = mapToLlmError(result.error);
       this.logger.error(

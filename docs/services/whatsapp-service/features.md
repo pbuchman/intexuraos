@@ -27,13 +27,13 @@ Four interactions with four different agents. None required opening an app, logg
 
 Unlike Slack bots or Telegram integrations — where each workflow lives in a separate bot — this one handles an entire operating system through a single conversation. No new app and no behavior change. WhatsApp is already in your pocket.
 
-Every message you send — text, voice, or image — flows into IntexuraOS and reaches the right agent. The system reads your intent and routes it automatically: a research question reaches the research-agent, a task update reaches the code-agent, a scheduling request reaches the calendar-agent. You send the message. The system decides where it belongs. If it gets one wrong, sending a follow-up to clarify usually does the trick.
+Every message you send — text, voice, or image — flows into IntexuraOS and reaches the right agent. The system reads your intent and routes it automatically: a research question reaches the research-agent, a task update reaches the code-agent, a scheduling request reaches the calendar-agent. You send the message. The system decides where it belongs.
 
 The flow works in both directions. When an agent has something to report — a research result, a status update, a scheduling confirmation — it sends a notification to your phone. Every notification arrives in the same conversation thread, formatted for quick scanning on a small screen.
 
 ### Voice That Understands Context
 
-Record a voice note and the srt-service transcribes it asynchronously with event-driven processing. Audio files are stored in GCS and a Pub/Sub event triggers transcription. When complete, the transcript and an AI-generated summary arrive as a reply threaded beneath your original voice note. From there, the system routes it to the right agent — if it contains a research question, the research-agent picks it up; if it describes a task, the code-agent gets it.
+Record a voice note and srt-service transcribes it asynchronously with event-driven processing. Audio files are stored in GCS and a Pub/Sub event triggers transcription. When complete, the transcript and an AI-generated summary arrive as a reply threaded beneath your original voice note. From there, the system routes it to the right agent — if it contains a research question, the research-agent picks it up; if it describes a task, the code-agent gets it.
 
 **Example:** You record a voice note about a project update while walking. Within seconds, the transcript arrives as a reply threaded beneath your original voice note, along with an AI-generated summary of the key points. You just talked. The system figured out the rest.
 

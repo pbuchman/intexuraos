@@ -129,7 +129,7 @@ curl http://localhost:8128/code/tasks/<codeTaskId> \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
-The task progresses through statuses: `queued` -> `dispatched` -> `running` -> `planned` or `implemented` or `reviewed` (or `failed`). Tasks never reach a generic `completed` status — they finish as `planned` (planning agent), `implemented` (execution agent), or `reviewed` (review agent). If all workers are busy, the task enters `queued` status and dispatches automatically when capacity opens.
+The task progresses through statuses: `queued` → `dispatched` → `running` → `planned` or `implemented` or `reviewed` (or `failed`). Tasks never reach a generic `completed` status — they finish as `planned` (planning agent), `implemented` (execution agent), or `reviewed` (review agent). If all workers are busy, the task enters `queued` status and dispatches automatically when capacity opens.
 
 ### Step 3: List your tasks
 
@@ -250,6 +250,19 @@ curl "http://localhost:8128/code/github-event-log?limit=20" \
 
 Each entry shows the event type, action, repository, and the evaluation outcome (dispatch, skip, or request_review). For entries decided by the GitHub Agent (LLM triage), the associated `event_decisions` record includes the model's reasoning and tool calls.
 
+### Hydrate event log rows with full detail
+
+Fetch full audit and decision data for specific log entries:
+
+```bash
+curl -X POST http://localhost:8128/code/github-event-log/rows \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your-auth0-jwt>" \
+  -d '{ "ids": ["entry-uuid-1", "entry-uuid-2"] }'
+```
+
+The response includes the full GitHub webhook payload (`audit`) and the LLM decision record (`decision`) with reasoning, tool calls, and cost.
+
 ### Query GitHub PR summaries
 
 View the list of PRs with recent activity (30-day window):
@@ -290,19 +303,20 @@ curl -X POST http://localhost:8128/internal/code/process \
 
 ## Troubleshooting
 
-| Symptom                               | Cause                                             | Fix                                                                   |
-| ------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------- |
-| `worker_not_configured` on submit     | No workers configured or enabled for user         | Add a worker via `POST /code/worker-settings/workers` and enable it   |
-| `429` rate limit on submit            | Concurrent, hourly, or cost limit exceeded        | Wait for tasks to complete, or wait for the time window to reset      |
-| `409 CONFLICT` on submit              | Deduplication triggered (same prompt in 5 min)    | Wait 5 minutes or modify the prompt                                   |
-| `validation_error` on submit          | Prompt contains injection patterns                | Remove system override markers or base64 blobs from the prompt        |
-| Worker connectivity test fails        | CF Access credentials wrong or tunnel not running | Verify tunnel is running and credentials match CF dashboard           |
-| Task stuck in `dispatched` for >5 min | Worker did not start processing                   | Check orchestrator logs; task will be marked `interrupted` after 30m  |
-| `UNAUTHORIZED` on webhook             | HMAC signature mismatch                           | Verify `INTEXURAOS_ORCHESTRATOR_SECRET` matches on both sides         |
-| Logs not appearing in UI              | Log chunks failing HMAC validation                | Check `INTEXURAOS_WEBHOOK_VERIFY_SECRET` matches on worker and server |
-| `too_soon` error on retry             | Cool-off period not elapsed                       | Wait the specified number of minutes before retrying                  |
-| GitHub webhook returning 401          | GitHub webhook secret mismatch                    | Verify `INTEXURAOS_GITHUB_WEBHOOK_SECRET` matches GitHub app settings |
-| Task queued but never dispatched      | Workers remain busy past queue TTL                | Check worker status; task expires after 30 min in queue               |
+| Symptom                               | Cause                                             | Fix                                                                              |
+| ------------------------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `worker_not_configured` on submit     | No workers configured or enabled for user         | Add a worker via `POST /code/worker-settings/workers` and enable it              |
+| `429` rate limit on submit            | Concurrent, hourly, or cost limit exceeded        | Wait for tasks to complete, or wait for the time window to reset                 |
+| `409 CONFLICT` on submit              | Deduplication triggered (same prompt in window)   | Wait or modify the prompt                                                        |
+| `validation_error` on submit          | Prompt contains injection patterns                | Remove system override markers or base64 blobs from the prompt                   |
+| Worker connectivity test fails        | CF Access credentials wrong or tunnel not running | Verify tunnel is running and credentials match CF dashboard                      |
+| Task stuck in `dispatched` for >5 min | Worker did not start processing                   | Check orchestrator logs; task will be marked `interrupted` after 30m             |
+| `UNAUTHORIZED` on webhook             | HMAC signature mismatch                           | Verify `INTEXURAOS_ORCHESTRATOR_SECRET` matches on both sides                    |
+| Logs not appearing in UI              | Log chunks failing HMAC validation                | Check `INTEXURAOS_WEBHOOK_VERIFY_SECRET` matches on worker and server            |
+| `too_soon` error on retry             | Cool-off period not elapsed                       | Wait the specified number of minutes before retrying                             |
+| GitHub webhook returning 401          | GitHub webhook secret mismatch                    | Verify `INTEXURAOS_GITHUB_WEBHOOK_SECRET` matches GitHub app settings            |
+| Task queued but never dispatched      | Workers remain busy past queue TTL                | Check worker status; task expires after 30 min in queue                          |
+| Review task not dispatching           | Workers at capacity                               | Review tasks now queue like regular tasks — they dispatch when a worker frees up |
 
 ## Exercises
 
@@ -374,3 +388,16 @@ Look at the response:
 - Use the `POST /code/github-event-log/rows` endpoint with specific IDs to hydrate full row details including the audit event payload and the decision record with LLM reasoning.
 
 **Solution verification:** If a PR was recently opened, you should see an entry with `eventType: 'pull_request'`, `action: 'opened'`, and a decision outcome.
+
+### Exercise 5: Set the default review worker type
+
+Configure which model is used for automated code reviews when the GitHub Agent does not specify one:
+
+```bash
+curl -X PATCH http://localhost:8128/code/worker-settings/default-review-worker-type \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your-auth0-jwt>" \
+  -d '{ "workerType": "sonnet" }'
+```
+
+**Solution verification:** `GET /code/worker-settings` should show `defaultReviewWorkerType: "sonnet"`.

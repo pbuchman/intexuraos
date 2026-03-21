@@ -1,19 +1,11 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
+import { logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { enrichBookmark } from '../domain/usecases/enrichBookmark.js';
 import { summarizeBookmark } from '../domain/usecases/summarizeBookmark.js';
-import type { EnrichBookmarkEvent } from '../infra/pubsub/enrichPublisher.js';
-import type { SummarizeBookmarkEvent } from '../infra/pubsub/summarizePublisher.js';
-
-interface PubSubPushMessage {
-  message: {
-    data: string;
-    messageId: string;
-    publishTime: string;
-  };
-  subscription: string;
-}
+import type { EnrichBookmarkEvent } from '../domain/ports/enrichPublisher.js';
+import type { SummarizeBookmarkEvent } from '../domain/ports/summarizePublisher.js';
+import { authenticatePubSub, decodePubSubMessage } from './pubsubHelpers.js';
 
 export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.post(
@@ -59,45 +51,25 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         bodyPreviewLength: 200,
       });
 
-      const fromHeader = request.headers.from;
-      const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
+      const isAuthenticated = await authenticatePubSub(request, reply);
+      if (!isAuthenticated) return;
 
-      if (isPubSubPush) {
-        request.log.info(
-          { from: fromHeader, userAgent: request.headers['user-agent'] },
-          'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
-        );
-      } else {
-        const authResult = validateInternalAuth(request);
-        if (!authResult.valid) {
-          request.log.warn(
-            { reason: authResult.reason },
-            'Internal auth failed for pubsub/enrich endpoint'
-          );
-          return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/enrich endpoint');
-        }
-      }
-
-      const body = request.body as PubSubPushMessage;
-
-      let eventData: EnrichBookmarkEvent;
-      try {
-        const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
-        eventData = JSON.parse(decoded) as EnrichBookmarkEvent;
-      } catch {
-        request.log.error({ messageId: body.message.messageId }, 'Failed to decode PubSub message');
+      const decoded = decodePubSubMessage(request);
+      if (decoded === null) {
         return await reply.ok({});
       }
 
-      const parsedType = eventData.type as string;
+      const parsedType = decoded.data.type;
       if (parsedType !== 'bookmarks.enrich') {
         request.log.warn({ type: parsedType }, 'Unexpected event type');
         return await reply.ok({});
       }
 
+      const eventData = decoded.data as EnrichBookmarkEvent;
+
       request.log.info(
         {
-          pubsubMessageId: body.message.messageId,
+          pubsubMessageId: decoded.messageId,
           bookmarkId: eventData.bookmarkId,
           userId: eventData.userId,
         },
@@ -179,45 +151,25 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         bodyPreviewLength: 200,
       });
 
-      const fromHeader = request.headers.from;
-      const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
+      const isAuthenticated = await authenticatePubSub(request, reply);
+      if (!isAuthenticated) return;
 
-      if (isPubSubPush) {
-        request.log.info(
-          { from: fromHeader, userAgent: request.headers['user-agent'] },
-          'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
-        );
-      } else {
-        const authResult = validateInternalAuth(request);
-        if (!authResult.valid) {
-          request.log.warn(
-            { reason: authResult.reason },
-            'Internal auth failed for pubsub/summarize endpoint'
-          );
-          return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/summarize endpoint');
-        }
-      }
-
-      const body = request.body as PubSubPushMessage;
-
-      let eventData: SummarizeBookmarkEvent;
-      try {
-        const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
-        eventData = JSON.parse(decoded) as SummarizeBookmarkEvent;
-      } catch {
-        request.log.error({ messageId: body.message.messageId }, 'Failed to decode PubSub message');
+      const decoded = decodePubSubMessage(request);
+      if (decoded === null) {
         return await reply.ok({});
       }
 
-      const parsedType = eventData.type as string;
+      const parsedType = decoded.data.type;
       if (parsedType !== 'bookmarks.summarize') {
         request.log.warn({ type: parsedType }, 'Unexpected event type');
         return await reply.ok({});
       }
 
+      const eventData = decoded.data as SummarizeBookmarkEvent;
+
       request.log.info(
         {
-          pubsubMessageId: body.message.messageId,
+          pubsubMessageId: decoded.messageId,
           bookmarkId: eventData.bookmarkId,
           userId: eventData.userId,
         },

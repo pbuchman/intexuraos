@@ -484,4 +484,185 @@ describe('createFirestoreGitHubPRSummariesRepository', () => {
       }
     });
   });
+
+  describe('findOpenByRepository()', () => {
+    it('returns open PR summaries for a specific repository', async () => {
+      const summaryData = {
+        repository: 'intexuraos/test-repo',
+        pullRequestNumber: 42,
+        title: 'Open PR',
+        state: 'open',
+        mergedAt: null,
+        baseBranch: 'development',
+        authorLogin: 'alice',
+        headBranch: 'feature/alice',
+        mergeConflictStatus: null,
+        lastConflictCheckedAt: null,
+        conflictEpisodeStartedAt: null,
+        conflictResolvedAt: null,
+        managedConflictCommentId: null,
+        managedConflictTaskId: null,
+        managedConflictTaskOwnerUserId: null,
+        lastActivityAt: new Date('2024-01-10T12:00:00Z'),
+        firstSeenAt: new Date('2024-01-01T00:00:00Z'),
+      };
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(
+          createMockQuerySnapshot([createMockDocSnapshot(summaryData)])
+        ),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
+      const result = await repo.findOpenByRepository('intexuraos/test-repo');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(1);
+        expect(result.value[0]).toMatchObject({
+          repository: 'intexuraos/test-repo',
+          pullRequestNumber: 42,
+          state: 'open',
+        });
+      }
+
+      expect(mockQuery.where).toHaveBeenCalledWith('repository', '==', 'intexuraos/test-repo');
+      expect(mockQuery.where).toHaveBeenCalledWith('state', '==', 'open');
+      expect(mockQuery.where).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns empty array when no open PRs exist for repository', async () => {
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([])),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
+      const result = await repo.findOpenByRepository('intexuraos/test-repo');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual([]);
+      }
+    });
+
+    it('handles Firestore errors', async () => {
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        get: vi.fn().mockRejectedValue(new Error('Query failed')),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
+      const result = await repo.findOpenByRepository('intexuraos/test-repo');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('FIRESTORE_ERROR');
+        expect(mockLogger.error).toHaveBeenCalled();
+      }
+    });
+  });
+
+  describe('findAllOpen()', () => {
+    it('returns all open PR summaries across repositories', async () => {
+      const summaryData = {
+        repository: 'intexuraos/test-repo',
+        pullRequestNumber: 42,
+        title: 'Open PR',
+        state: 'open',
+        mergedAt: null,
+        baseBranch: 'development',
+        authorLogin: 'alice',
+        headBranch: 'feature/alice',
+        mergeConflictStatus: null,
+        lastConflictCheckedAt: null,
+        conflictEpisodeStartedAt: null,
+        conflictResolvedAt: null,
+        managedConflictCommentId: null,
+        managedConflictTaskId: null,
+        managedConflictTaskOwnerUserId: null,
+        lastActivityAt: new Date('2024-01-10T12:00:00Z'),
+        firstSeenAt: new Date('2024-01-01T00:00:00Z'),
+      };
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(
+          createMockQuerySnapshot([createMockDocSnapshot(summaryData)])
+        ),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
+      const result = await repo.findAllOpen();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(1);
+        expect(result.value[0]).toMatchObject({
+          repository: 'intexuraos/test-repo',
+          pullRequestNumber: 42,
+          state: 'open',
+        });
+      }
+
+      expect(mockQuery.where).toHaveBeenCalledWith('state', '==', 'open');
+      expect(mockQuery.where).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns empty array when no open PR summaries exist', async () => {
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([])),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
+      const result = await repo.findAllOpen();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual([]);
+      }
+    });
+
+    it('handles Firestore errors', async () => {
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        get: vi.fn().mockRejectedValue(new Error('Query failed')),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
+      const result = await repo.findAllOpen();
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('FIRESTORE_ERROR');
+        expect(mockLogger.error).toHaveBeenCalled();
+      }
+    });
+  });
 });

@@ -1,23 +1,23 @@
-# Notes Agent -- Technical Debt
+# Notes Agent — Technical Debt
 
-**Last Updated:** 2026-02-22
-**Analysis Run:** [2026-02-22 documentation-runs.md entry](../../documentation-runs.md)
+**Last Updated:** 2026-03-15
+**Analysis Run:** [2026-03-15 documentation-runs.md entry](../../documentation-runs.md)
 
 ---
 
 ## Summary
 
-| Category            | Count | Severity |
-| ------------------- | ----- | -------- |
-| Code Smells         | 1     | Low      |
-| Test Gaps           | 0     | --       |
-| Type Issues         | 0     | --       |
-| TODOs               | 0     | --       |
-| Feature Gaps        | 3     | Low      |
-| SRP Violations      | 0     | --       |
-| Code Duplicates     | 1     | Low      |
-| Deprecations        | 0     | --       |
-| **Total**           | **5** | --       |
+| Category        | Count | Severity |
+| --------------- | ----- | -------- |
+| Code Smells     | 1     | Low      |
+| Test Gaps       | 0     | —        |
+| Type Issues     | 0     | —        |
+| TODOs           | 0     | —        |
+| Feature Gaps    | 3     | Low      |
+| SRP Violations  | 0     | —        |
+| Code Duplicates | 1     | Low      |
+| Deprecations    | 0     | —        |
+| **Total**       | **5** | —        |
 
 ---
 
@@ -25,9 +25,9 @@
 
 ### Planned Features
 
-- **Tag filtering** -- Add server-side tag filtering to the `GET /notes` endpoint. Implement via Firestore `array-contains-any` query with optional `tags` query parameter. Requires a composite index on `(userId, tags)`.
-- **Full-text search** -- Search across note title and content fields. May require Firestore full-text search integration or a dedicated search index.
-- **Pagination** -- Add cursor-based pagination to `GET /notes` to handle users with large note collections efficiently.
+- **Tag filtering** — Add server-side tag filtering to the `GET /notes` endpoint. Implement via Firestore `array-contains-any` query with optional `tags` query parameter. Requires a composite index on `(userId, tags)`.
+- **Full-text search** — Search across note title and content fields. May require Firestore full-text search integration or a dedicated search index.
+- **Pagination** — Add cursor-based pagination to `GET /notes` to handle users with large note collections efficiently.
 
 ### Proposed Enhancements
 
@@ -51,7 +51,7 @@ The `listNotes` use case accepts only `userId` and returns all notes without any
 
 ### Status Not Returned in Public API
 
-The `formatNote()` serializer in `noteRoutes.ts` (line 73-85) omits the `status` field from all public responses, even though the field is stored in Firestore and part of the domain model. The draft/active distinction is invisible to public API consumers.
+The `formatNote()` serializer in `noteRoutes.ts` omits the `status` field from all public responses, even though the field is stored in Firestore and part of the domain model. The draft/active distinction is invisible to public API consumers.
 
 **Impact:** Clients cannot differentiate draft from active notes.
 **Fix:** Add `status: note.status` to the `formatNote()` return object and update the `noteResponseSchema` to include a `status` field.
@@ -69,9 +69,9 @@ The `findByUserId()` method returns all notes for a user in a single query with 
 
 ### Low Priority
 
-| File                                             | Issue                             | Impact                                                                          |
-| ------------------------------------------------ | --------------------------------- | ------------------------------------------------------------------------------- |
-| `src/infra/firestore/firestoreNoteRepository.ts` | Double-read on update and delete  | Two Firestore reads per mutation (use case + repository both read the document) |
+| File                                             | Issue                            | Impact                                                                          |
+| ------------------------------------------------ | -------------------------------- | ------------------------------------------------------------------------------- |
+| `src/infra/firestore/firestoreNoteRepository.ts` | Double-read on update and delete | Two Firestore reads per mutation (use case + repository both read the document) |
 
 ---
 
@@ -113,12 +113,12 @@ No `TODO:`, `FIXME:`, `HACK:`, or `XXX:` comments in the source code.
 
 All source files are within reasonable size limits:
 
-| File                               | Lines | Assessment               |
-| ---------------------------------- | ----- | ------------------------ |
-| `routes/noteRoutes.ts`             | 330   | Within limit (5 routes)  |
-| `server.ts`                        | 237   | Within limit (setup)     |
-| `infra/firestoreNoteRepository.ts` | 169   | Within limit (5 methods) |
-| All other files                    | <55   | Well within limits       |
+| File                               | Assessment               |
+| ---------------------------------- | ------------------------ |
+| `routes/noteRoutes.ts`             | Within limit (5 routes)  |
+| `server.ts`                        | Within limit (setup)     |
+| `infra/firestoreNoteRepository.ts` | Within limit (5 methods) |
+| All other files                    | Well within limits       |
 
 ---
 
@@ -126,11 +126,11 @@ All source files are within reasonable size limits:
 
 ### Ownership Check Pattern
 
-| Pattern                               | Locations                                                      | Suggestion                                                |
-| ------------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------- |
-| findById + null check + userId check  | `getNote.ts`, `updateNote.ts`, `deleteNote.ts` (3 files)       | Extract to a shared `verifyOwnership` helper function     |
+| Pattern                              | Locations                                                | Suggestion                                            |
+| ------------------------------------ | -------------------------------------------------------- | ----------------------------------------------------- |
+| findById + null check + userId check | `getNote.ts`, `updateNote.ts`, `deleteNote.ts` (3 files) | Extract to a shared `verifyOwnership` helper function |
 
-The three use cases (`getNote`, `updateNote`, `deleteNote`) all repeat the same pattern: call `findById`, check for null, check `userId` ownership, return FORBIDDEN if not the owner. This could be extracted to a shared utility, though the current duplication is minor (each file is under 45 lines).
+The three use cases (`getNote`, `updateNote`, `deleteNote`) all repeat the same pattern: call `findById`, check for null, check `userId` ownership, return FORBIDDEN if not the owner. This could be extracted to a shared utility, though the current duplication is minor (each file is self-contained and under 45 lines).
 
 ---
 
@@ -156,7 +156,7 @@ No deprecated APIs or dependencies in use.
 
 ## Related
 
-- [Features](features.md) -- User-facing documentation
-- [Technical](technical.md) -- Developer reference
-- [Agent Interface](agent.md) -- Machine-readable specification
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
+- [Agent Interface](agent.md) — Machine-readable specification
 - [Documentation Run Log](../../documentation-runs.md)

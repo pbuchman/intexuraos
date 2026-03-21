@@ -248,6 +248,20 @@ locals {
       min_scale = 0
       max_scale = 1
     }
+    cron_agent = {
+      name      = "intexuraos-cron-agent"
+      app_path  = "apps/cron-agent"
+      port      = 8080
+      min_scale = 0
+      max_scale = 1
+    }
+    hellscript_agent = {
+      name      = "intexuraos-hellscript-agent"
+      app_path  = "apps/hellscript-agent"
+      port      = 8080
+      min_scale = 0
+      max_scale = 1
+    }
   }
 
   common_labels = {
@@ -283,6 +297,8 @@ locals {
     INTEXURAOS_LINEAR_AGENT_URL                 = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_CHAT_AGENT_URL                   = "https://${local.services.chat_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_API_DOCS_HUB_URL                 = "https://${local.services.api_docs_hub.name}-${local.cloud_run_url_suffix}"
+    INTEXURAOS_CRON_AGENT_URL                   = "https://${local.services.cron_agent.name}-${local.cloud_run_url_suffix}"
+    INTEXURAOS_HELLSCRIPT_AGENT_URL             = "https://${local.services.hellscript_agent.name}-${local.cloud_run_url_suffix}"
   }
 }
 
@@ -1019,6 +1035,8 @@ module "api_docs_hub" {
     INTEXURAOS_CODE_AGENT_OPENAPI_URL                   = "${module.code_agent.service_url}/openapi.json"
     INTEXURAOS_LINEAR_AGENT_OPENAPI_URL                 = "${module.linear_agent.service_url}/openapi.json"
     INTEXURAOS_WEB_AGENT_OPENAPI_URL                    = "${module.web_agent.service_url}/openapi.json"
+    INTEXURAOS_CRON_AGENT_OPENAPI_URL                   = "${module.cron_agent.service_url}/openapi.json"
+    INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL             = "${module.hellscript_agent.service_url}/openapi.json"
   })
 
   depends_on = [
@@ -1039,6 +1057,8 @@ module "api_docs_hub" {
     module.bookmarks_agent,
     module.calendar_agent,
     module.chat_agent,
+    module.cron_agent,
+    module.hellscript_agent,
   ]
 }
 
@@ -1444,7 +1464,7 @@ module "code_agent" {
   env_vars = merge(local.common_service_env_vars, {
     INTEXURAOS_SERVICE_URL                = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
-    INTEXURAOS_QUEUE_MAX_SIZE             = "10"
+    INTEXURAOS_QUEUE_MAX_SIZE             = "50"
     INTEXURAOS_QUEUE_TTL_MINUTES          = "30"
     INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS   = "3"
     INTEXURAOS_RETRY_QUEUE_TTL_MINUTES    = "10"
@@ -1607,6 +1627,104 @@ module "web_agent" {
     module.artifact_registry,
     module.iam,
     module.secret_manager,
+  ]
+}
+
+# Cron Agent - LLM-driven recurring schedule execution
+module "cron_agent" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.cron_agent.name
+  service_account = module.iam.service_accounts["cron_agent"]
+  port            = local.services.cron_agent.port
+  min_scale       = local.services.cron_agent.min_scale
+  max_scale       = local.services.cron_agent.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/cron-agent:latest"
+
+  secrets = merge(local.common_service_secrets, {
+    INTEXURAOS_GEMINI_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_GEMINI_APP_API_KEY"]
+  })
+  env_vars = local.common_service_env_vars
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
+  ]
+}
+
+# Hellscript Agent - Thought buffers with materialized state
+module "hellscript_agent" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.hellscript_agent.name
+  service_account = module.iam.service_accounts["hellscript_agent"]
+  port            = local.services.hellscript_agent.port
+  min_scale       = local.services.hellscript_agent.min_scale
+  max_scale       = local.services.hellscript_agent.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/hellscript-agent:latest"
+
+  secrets  = local.common_service_secrets
+  env_vars = local.common_service_env_vars
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
+  ]
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Scheduler - Cron Agent Tick (Every Minute)
+# -----------------------------------------------------------------------------
+
+resource "google_cloud_run_service_iam_member" "scheduler_invokes_cron_agent" {
+  project  = var.project_id
+  location = var.region
+  service  = local.services.cron_agent.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.cloud_scheduler.email}"
+
+  depends_on = [module.cron_agent]
+}
+
+resource "google_cloud_scheduler_job" "cron_agent_tick" {
+  name        = "intexuraos-cron-agent-tick-${var.environment}"
+  description = "Trigger cron-agent tick every minute to evaluate due schedules"
+  schedule    = "*/1 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.cron_agent.service_url}/internal/cron/tick"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.cron_agent.service_url
+    }
+  }
+
+  retry_config {
+    retry_count          = 1
+    min_backoff_duration = "10s"
+    max_backoff_duration = "30s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_cron_agent,
+    module.cron_agent,
   ]
 }
 
@@ -1793,6 +1911,64 @@ resource "google_cloud_scheduler_job" "drain_task_queue" {
   http_target {
     http_method = "POST"
     uri         = "${module.code_agent.service_url}/internal/drain-queue"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.code_agent.service_url
+    }
+  }
+
+  retry_config {
+    retry_count = 0
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
+    module.code_agent,
+  ]
+}
+
+resource "google_cloud_scheduler_job" "merge_conflict_reconcile" {
+  name        = "intexuraos-merge-conflict-reconcile-${var.environment}"
+  description = "Check mergeability of all open PRs and dispatch conflict resolution tasks"
+  schedule    = "*/1 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.code_agent.service_url}/internal/merge-conflicts/reconcile"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.code_agent.service_url
+    }
+  }
+
+  retry_config {
+    retry_count = 0
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    # Reuses the existing IAM binding that grants the scheduler SA Cloud Run invoker
+    # rights on code-agent — no separate IAM member resource is needed.
+    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
+    module.code_agent,
+  ]
+}
+
+resource "google_cloud_scheduler_job" "merge_queue_tick" {
+  name        = "intexuraos-merge-queue-tick-${var.environment}"
+  description = "Process one merge cycle for all active merge queue watches"
+  schedule    = "*/1 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.code_agent.service_url}/internal/merge-queue/tick"
 
     oidc_token {
       service_account_email = google_service_account.cloud_scheduler.email

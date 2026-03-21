@@ -7,15 +7,8 @@ import type { ApprovalReplyEvent } from '../domain/models/approvalReplyEvent.js'
 import { getHandlerForType } from '../domain/usecases/actionHandlerRegistry.js';
 import { createAction } from '../domain/models/action.js';
 import type { ActionType } from '../domain/models/action.js';
-
-interface PubSubMessage {
-  message: {
-    data: string;
-    messageId: string;
-    publishTime: string;
-  };
-  subscription: string;
-}
+import { validatePubSubOrInternalAuth } from './pubsubAuth.js';
+import { decodePubSubMessage } from './decodePubSubMessage.js';
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.post(
@@ -267,44 +260,16 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         includeParams: true,
       });
 
-      // Pub/Sub push requests use OIDC tokens (validated by Cloud Run automatically)
-      // Direct service calls use x-internal-auth header
-      // Detection: Pub/Sub requests have from: noreply@google.com header
-      const fromHeader = request.headers.from;
-      const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
-
-      if (isPubSubPush) {
-        // Pub/Sub push: Cloud Run already validated OIDC token before request reached us
-        request.log.info(
-          {
-            from: fromHeader,
-            userAgent: request.headers['user-agent'],
-          },
-          'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
-        );
-      } else {
-        // Direct service call: validate x-internal-auth header
-        const authResult = validateInternalAuth(request);
-        if (!authResult.valid) {
-          request.log.warn(
-            { reason: authResult.reason },
-            'Internal auth failed for actions/research endpoint'
-          );
-          return await reply.fail('UNAUTHORIZED', 'Internal auth failed for actions/research endpoint');
-        }
+      if (!(await validatePubSubOrInternalAuth(request, reply, '/internal/actions/:actionType'))) {
+        return;
       }
 
-      const body = request.body as PubSubMessage;
-
-      let eventData: ActionCreatedEvent;
-      try {
-        const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
-        eventData = JSON.parse(decoded) as ActionCreatedEvent;
-      } catch {
-        request.log.error({ data: body.message.data }, 'Failed to decode PubSub message');
-        return await reply.fail('INVALID_REQUEST', 'Failed to decode PubSub message');
+      const eventData = decodePubSubMessage<ActionCreatedEvent>(request, reply);
+      if (eventData === null) {
+        return;
       }
 
+      const body = request.body as { message: { messageId: string } };
       const parsedType = eventData.type as string;
       if (parsedType !== 'action.created') {
         request.log.warn(
@@ -445,39 +410,16 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         bodyPreviewLength: 500,
       });
 
-      const fromHeader = request.headers.from;
-      const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
-
-      if (isPubSubPush) {
-        request.log.info(
-          {
-            from: fromHeader,
-            userAgent: request.headers['user-agent'],
-          },
-          'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
-        );
-      } else {
-        const authResult = validateInternalAuth(request);
-        if (!authResult.valid) {
-          request.log.warn(
-            { reason: authResult.reason },
-            'Internal auth failed for /internal/actions/process'
-          );
-          return await reply.fail('UNAUTHORIZED', 'Internal auth failed for /internal/actions/process');
-        }
+      if (!(await validatePubSubOrInternalAuth(request, reply, '/internal/actions/process'))) {
+        return;
       }
 
-      const body = request.body as PubSubMessage;
-
-      let eventData: ActionCreatedEvent;
-      try {
-        const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
-        eventData = JSON.parse(decoded) as ActionCreatedEvent;
-      } catch {
-        request.log.error({ data: body.message.data }, 'Failed to decode PubSub message');
-        return await reply.fail('INVALID_REQUEST', 'Failed to decode PubSub message');
+      const eventData = decodePubSubMessage<ActionCreatedEvent>(request, reply);
+      if (eventData === null) {
+        return;
       }
 
+      const body = request.body as { message: { messageId: string } };
       request.log.info(
         {
           actionId: eventData.actionId,
@@ -685,39 +627,16 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         bodyPreviewLength: 500,
       });
 
-      const fromHeader = request.headers.from;
-      const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
-
-      if (isPubSubPush) {
-        request.log.info(
-          {
-            from: fromHeader,
-            userAgent: request.headers['user-agent'],
-          },
-          'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
-        );
-      } else {
-        const authResult = validateInternalAuth(request);
-        if (!authResult.valid) {
-          request.log.warn(
-            { reason: authResult.reason },
-            'Internal auth failed for /internal/actions/approval-reply'
-          );
-          return await reply.fail('UNAUTHORIZED', 'Internal auth failed for /internal/actions/approval-reply');
-        }
+      if (!(await validatePubSubOrInternalAuth(request, reply, '/internal/actions/approval-reply'))) {
+        return;
       }
 
-      const body = request.body as PubSubMessage;
-
-      let eventData: ApprovalReplyEvent;
-      try {
-        const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
-        eventData = JSON.parse(decoded) as ApprovalReplyEvent;
-      } catch {
-        request.log.error({ data: body.message.data }, 'Failed to decode PubSub message');
-        return await reply.fail('INVALID_REQUEST', 'Failed to decode PubSub message');
+      const eventData = decodePubSubMessage<ApprovalReplyEvent>(request, reply);
+      if (eventData === null) {
+        return;
       }
 
+      const body = request.body as { message: { messageId: string } };
       const parsedType = eventData.type as string;
       if (parsedType !== 'action.approval.reply') {
         request.log.warn(

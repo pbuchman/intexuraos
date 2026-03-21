@@ -225,10 +225,30 @@ class FakeDocumentSnapshot {
 }
 
 /**
+ * Extract milliseconds since epoch from Timestamp or Date objects.
+ * Returns undefined if the value is not a timestamp-like object.
+ */
+function getTimestampValue(value: unknown): number | undefined {
+  if (value === null || typeof value !== 'object') return undefined;
+
+  // Firestore Timestamp has toMillis() method
+  if ('toMillis' in value && typeof (value as { toMillis: unknown }).toMillis === 'function') {
+    return (value as { toMillis: () => number }).toMillis();
+  }
+
+  // Date object has getTime() method
+  if ('getTime' in value && typeof (value as { getTime: unknown }).getTime === 'function') {
+    return (value as { getTime: () => number }).getTime();
+  }
+
+  return undefined;
+}
+
+/**
  * Fake QuerySnapshot implementation.
  */
 class FakeQuerySnapshot {
-  constructor(private readonly _docs: FakeDocumentSnapshot[]) {}
+  constructor(protected readonly _docs: FakeDocumentSnapshot[]) {}
 
   get docs(): FakeDocumentSnapshot[] {
     return this._docs;
@@ -241,6 +261,36 @@ class FakeQuerySnapshot {
   get size(): number {
     return this._docs.length;
   }
+
+  /**
+   * Get data from the first document in the snapshot.
+   * Returns undefined for empty snapshots or when used with aggregate queries.
+   */
+  data(): DocumentData | undefined {
+    return this._docs[0]?.data();
+  }
+}
+
+/**
+ * Fake QuerySnapshot with count() support.
+ * Represents an AggregateQuerySnapshot from Firestore's count() aggregation.
+ */
+class FakeQuerySnapshotWithCount extends FakeQuerySnapshot {
+  private readonly _count: number;
+
+  constructor(docs: FakeDocumentSnapshot[]) {
+    super(docs);
+    // Count is the number of filtered documents passed in
+    this._count = docs.length;
+  }
+
+  /**
+   * Get count data from the snapshot.
+   * Returns an object with the count property, matching Firestore's AggregateQuerySnapshot.
+   */
+  override data(): { count: number } {
+    return { count: this._count };
+  }
 }
 
 /**
@@ -251,6 +301,7 @@ class FakeQuery {
   private ordering: { field: string; direction: 'asc' | 'desc' }[] = [];
   private limitCount: number | null = null;
   private startAfterValue: unknown = null;
+  private countRequested = false;
 
   constructor(
     protected readonly collectionName: string,
@@ -282,18 +333,33 @@ class FakeQuery {
     return query;
   }
 
-  get(): Promise<FakeQuerySnapshot> {
-    const collection = this.store.get(this.collectionName) ?? new Map<string, DocumentData>();
+  /**
+   * Request count aggregation for this query.
+   */
+  count(): FakeQuery {
+    const query = this.clone();
+    query.countRequested = true;
+    return query;
+  }
+
+  /**
+   * Execute query against a specific store (used by FakeTransaction).
+   */
+  executeOnStore(store: DocumentStore): Promise<FakeQuerySnapshot | FakeQuerySnapshotWithCount> {
+    return this.executeGet(store);
+  }
+
+  get(): Promise<FakeQuerySnapshot | FakeQuerySnapshotWithCount> {
+    return this.executeGet(this.store);
+  }
+
+  private executeGet(
+    store: DocumentStore
+  ): Promise<FakeQuerySnapshot | FakeQuerySnapshotWithCount> {
+    const collection = store.get(this.collectionName) ?? new Map<string, DocumentData>();
     let docs = Array.from(collection.entries()).map(
       ([id, data]: [string, DocumentData | undefined]) =>
-        new FakeDocumentSnapshot(
-          id,
-          data,
-          true,
-          this.collectionName,
-          this.store,
-          this.docCounterRef
-        )
+        new FakeDocumentSnapshot(id, data, true, this.collectionName, store, this.docCounterRef)
     );
 
     // Apply filters
@@ -334,10 +400,38 @@ class FakeQuery {
           const aVal: unknown = aData?.[order.field];
           const bVal: unknown = bData?.[order.field];
           if (aVal === bVal) continue;
-          // Compare values as numbers or strings
-          const aNum = typeof aVal === 'number' ? aVal : 0;
-          const bNum = typeof bVal === 'number' ? bVal : 0;
-          const cmp = aNum < bNum ? -1 : 1;
+          // Compare values as numbers or strings (for dates)
+          let cmp: number;
+          if (typeof aVal === 'number' && typeof bVal === 'number') {
+            cmp = aVal < bVal ? -1 : 1;
+          } else if (typeof aVal === 'string' && typeof bVal === 'string') {
+            // String comparison (works for ISO dates like '2025-01-01')
+            cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+          } else {
+            // Check for Timestamp/Date objects first
+            const aTime = getTimestampValue(aVal);
+            const bTime = getTimestampValue(bVal);
+            if (aTime !== undefined && bTime !== undefined) {
+              // Both are timestamps - compare numerically
+              cmp = aTime < bTime ? -1 : 1;
+              return order.direction === 'desc' ? -cmp : cmp;
+            }
+
+            // Fallback: convert primitives to string, objects to JSON
+            const aStr =
+              aVal === null || aVal === undefined
+                ? ''
+                : typeof aVal === 'object'
+                  ? JSON.stringify(aVal)
+                  : String(aVal as boolean | bigint | symbol);
+            const bStr =
+              bVal === null || bVal === undefined
+                ? ''
+                : typeof bVal === 'object'
+                  ? JSON.stringify(bVal)
+                  : String(bVal as boolean | bigint | symbol);
+            cmp = aStr < bStr ? -1 : aStr > bStr ? 1 : 0;
+          }
           return order.direction === 'desc' ? -cmp : cmp;
         }
         return 0;
@@ -363,6 +457,10 @@ class FakeQuery {
       docs = docs.slice(0, this.limitCount);
     }
 
+    // Return appropriate snapshot type based on countRequested
+    if (this.countRequested) {
+      return Promise.resolve(new FakeQuerySnapshotWithCount(docs));
+    }
     return Promise.resolve(new FakeQuerySnapshot(docs));
   }
 
@@ -372,6 +470,7 @@ class FakeQuery {
     query.ordering = [...this.ordering];
     query.limitCount = this.limitCount;
     query.startAfterValue = this.startAfterValue;
+    query.countRequested = this.countRequested;
     return query;
   }
 }
@@ -538,10 +637,17 @@ class FakeTransaction {
   ) {}
 
   /**
-   * Get a document snapshot within the transaction.
-   * Returns pending writes if available, otherwise reads from store.
+   * Get a document snapshot or query results within the transaction.
+   * For document references: Returns pending writes if available, otherwise reads from store.
+   * For queries: Executes against store with pending writes applied.
    */
-  get(docRef: FakeDocumentReference): Promise<FakeDocumentSnapshot> {
+  get(arg: FakeDocumentReference | FakeQuery): Promise<FakeDocumentSnapshot | FakeQuerySnapshot> {
+    // Check if argument is a query (has collectionName property and get method that returns QuerySnapshot)
+    if (arg instanceof FakeQuery) {
+      return this.getQuery(arg);
+    }
+    // Otherwise it's a document reference
+    const docRef = arg;
     const key = `${docRef._collectionName}/${docRef.id}`;
     const pending = this.pendingWrites.get(key);
 
@@ -558,6 +664,41 @@ class FakeTransaction {
 
     // Read from underlying store
     return docRef.get();
+  }
+
+  /**
+   * Execute a query within the transaction.
+   * Applies pending writes to the store before executing the query.
+   */
+  private async getQuery(query: FakeQuery): Promise<FakeQuerySnapshot> {
+    // Create a temporary store that includes pending writes
+    const tempStore: DocumentStore = new Map();
+
+    // Copy base store
+    for (const [collName, collDocs] of this.store.entries()) {
+      tempStore.set(collName, new Map(collDocs));
+    }
+
+    // Apply pending writes to temp store
+    for (const [key, value] of this.pendingWrites.entries()) {
+      const [collectionName, docId] = key.split('/');
+      if (collectionName === undefined || docId === undefined) continue;
+
+      let collection = tempStore.get(collectionName);
+      if (collection === undefined) {
+        collection = new Map();
+        tempStore.set(collectionName, collection);
+      }
+
+      if (value.deleted) {
+        collection.delete(docId);
+      } else {
+        collection.set(docId, value.data);
+      }
+    }
+
+    // Execute query against temp store
+    return await query.executeOnStore(tempStore);
   }
 
   /**

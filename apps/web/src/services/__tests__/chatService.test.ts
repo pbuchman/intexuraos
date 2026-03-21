@@ -45,6 +45,7 @@ vi.mock('../../config', () => {
     linearAgentUrl: 'http://localhost:8126',
     codeAgentUrl: 'http://localhost:8128',
     chatAgentUrl: 'http://localhost:8129',
+    hellscriptAgentUrl: 'http://localhost:8130',
     appSettingsServiceUrl: 'http://localhost:8122',
     firebaseProjectId: 'test-project',
     firebaseApiKey: 'test-key',
@@ -57,8 +58,8 @@ vi.mock('../../config', () => {
   };
 });
 
-import { sendMessage, saveSession, loadSession, clearSession } from '../chatService';
-import type { ChatMessage, ChatResponse, ChatSession } from '../../types/chat';
+import { sendMessage, saveSession, loadSession, clearSession, CHAT_MESSAGE_TIMEOUT_MS } from '../chatService.js';
+import type { ChatMessage, ChatResponse, ChatSession } from '../../types/chat.js';
 
 const LOCAL_STORAGE_KEY = 'intex-chat-session';
 
@@ -145,6 +146,7 @@ describe('chatService', () => {
             message: 'Test message',
             conversationHistory: [],
           },
+          timeout: CHAT_MESSAGE_TIMEOUT_MS,
         }
       );
       expect(result).toEqual(mockResponse);
@@ -165,6 +167,7 @@ describe('chatService', () => {
             message: 'New message',
             conversationHistory: mockMessages,
           },
+          timeout: CHAT_MESSAGE_TIMEOUT_MS,
         }
       );
     });
@@ -191,6 +194,7 @@ describe('chatService', () => {
             conversationHistory: [],
             pendingAction,
           },
+          timeout: CHAT_MESSAGE_TIMEOUT_MS,
         }
       );
     });

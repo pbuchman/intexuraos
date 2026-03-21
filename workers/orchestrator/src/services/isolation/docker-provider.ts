@@ -639,7 +639,8 @@ export class DockerProvider implements IsolationProvider {
       /* v8 ignore stop @preserve */
       const taskForensicsPath = this.ensureTaskForensicsPath(taskId);
       const requestedImage = this.config.imageName;
-      const resolvedImage = await this.pullAndResolveImage(taskId, requestedImage);
+      const resolvedImage =
+        config.resolvedImage ?? (await this.pullAndResolveImage(taskId, requestedImage));
       this.logger.info({ taskId }, 'Container creation started');
       this.logger.info(
         {},
@@ -1225,6 +1226,10 @@ export class DockerProvider implements IsolationProvider {
     return { docker: this.dockerHealthy, disk: this.diskHealthy };
   }
 
+  async pullImage(taskId: string, onProgress?: (message: string) => void): Promise<string> {
+    return await this.pullAndResolveImage(taskId, this.config.imageName, onProgress);
+  }
+
   getImageInfo(): {
     configuredRef: string;
     lastResolvedDigest: string | null;
@@ -1239,7 +1244,11 @@ export class DockerProvider implements IsolationProvider {
     };
   }
 
-  private async pullAndResolveImage(taskId: string, imageName: string): Promise<string> {
+  private async pullAndResolveImage(
+    taskId: string,
+    imageName: string,
+    onProgress?: (message: string) => void
+  ): Promise<string> {
     if (this.config.imagePullPolicy !== 'always') {
       return imageName;
     }
@@ -1256,13 +1265,27 @@ export class DockerProvider implements IsolationProvider {
     }
 
     const pullStart = Date.now();
+    onProgress?.('Pulling image...');
     try {
       const pullStream = await this.docker.pull(imageName, pullOpts);
       await new Promise<void>((resolve, reject) => {
-        this.docker.modem.followProgress(pullStream, (err: Error | null) => {
-          if (err !== null) reject(err);
-          else resolve();
-        });
+        let lastProgressAt = 0;
+        const PROGRESS_THROTTLE_MS = 10_000;
+        this.docker.modem.followProgress(
+          pullStream,
+          (err: Error | null) => {
+            if (err !== null) reject(err);
+            else resolve();
+          },
+          () => {
+            const now = Date.now();
+            if (now - lastProgressAt >= PROGRESS_THROTTLE_MS) {
+              lastProgressAt = now;
+              const elapsedS = Math.round((now - pullStart) / 1000);
+              onProgress?.(`Image pull in progress (${String(elapsedS)}s)...`);
+            }
+          }
+        );
       });
     } catch (error) {
       throw new Error(
@@ -1270,6 +1293,7 @@ export class DockerProvider implements IsolationProvider {
       );
     }
     const pullDurationMs = Date.now() - pullStart;
+    onProgress?.(`Image pull completed in ${String(Math.round(pullDurationMs / 1000))}s`);
 
     try {
       const imageInfo = await this.docker.getImage(imageName).inspect();

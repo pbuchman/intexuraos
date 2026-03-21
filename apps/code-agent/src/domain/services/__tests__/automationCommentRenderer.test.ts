@@ -441,6 +441,19 @@ describe('renderEvent', () => {
     });
   });
 
+  describe('linear_issue_failed', () => {
+    it('renders warning emoji and error message', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'linear_issue_failed',
+        error: 'Usage limit exceeded',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe('**14:35** -- ⚠️ Linear issue creation failed | Usage limit exceeded');
+    });
+  });
+
   describe('review_replaced', () => {
     it('renders replaced task ID', () => {
       useFakeTime();

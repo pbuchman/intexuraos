@@ -1,5 +1,4 @@
 import Fastify, { type FastifyInstance } from 'fastify';
-import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
@@ -19,123 +18,10 @@ import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sent
 import { bookmarkRoutes } from './routes/bookmarkRoutes.js';
 import { internalRoutes } from './routes/internalRoutes.js';
 import { pubsubRoutes } from './routes/pubsubRoutes.js';
-
-const SERVICE_NAME = 'bookmarks-agent';
-const SERVICE_VERSION = '0.0.4';
+import { imageProxyRoutes } from './routes/imageProxyRoutes.js';
+import { buildOpenApiOptions, SERVICE_NAME, SERVICE_VERSION } from './openapi.config.js';
 
 const REQUIRED_SECRETS: string[] = [];
-
-function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
-  const servers = [
-    {
-      url: 'https://intexuraos-bookmarks-agent-cj44trunra-lm.a.run.app',
-      description: 'Cloud (Development)',
-    },
-    { url: 'http://localhost:8124', description: 'Local' },
-  ];
-
-  return {
-    openapi: {
-      openapi: '3.1.1',
-      info: {
-        title: SERVICE_NAME,
-        description: 'IntexuraOS Bookmarks Agent - User-scoped bookmarks CRUD',
-        version: SERVICE_VERSION,
-      },
-      servers,
-      components: {
-        securitySchemes: {
-          bearerAuth: {
-            type: 'http',
-            scheme: 'bearer',
-            bearerFormat: 'JWT',
-          },
-        },
-        schemas: {
-          ApiOk: {
-            type: 'object',
-            properties: {
-              success: { type: 'boolean', enum: [true] },
-              data: { type: 'object' },
-              diagnostics: { $ref: '#/components/schemas/Diagnostics' },
-            },
-            required: ['success', 'data'],
-          },
-          ApiError: {
-            type: 'object',
-            properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: { $ref: '#/components/schemas/ErrorBody' },
-              diagnostics: { $ref: '#/components/schemas/Diagnostics' },
-            },
-            required: ['success', 'error'],
-          },
-          ErrorBody: {
-            type: 'object',
-            required: ['code', 'message'],
-            properties: {
-              code: { $ref: '#/components/schemas/ErrorCode' },
-              message: { type: 'string' },
-              details: { type: 'object' },
-            },
-          },
-          ErrorCode: {
-            type: 'string',
-            enum: [
-              'INVALID_REQUEST',
-              'UNAUTHORIZED',
-              'FORBIDDEN',
-              'NOT_FOUND',
-              'CONFLICT',
-              'DOWNSTREAM_ERROR',
-              'INTERNAL_ERROR',
-              'MISCONFIGURED',
-            ],
-          },
-          Diagnostics: {
-            type: 'object',
-            properties: {
-              requestId: { type: 'string' },
-              durationMs: { type: 'number' },
-              downstreamStatus: { type: 'integer' },
-              downstreamRequestId: { type: 'string' },
-              endpointCalled: { type: 'string' },
-            },
-          },
-          HealthResponse: {
-            type: 'object',
-            required: ['status', 'serviceName', 'version', 'timestamp', 'checks'],
-            properties: {
-              status: { type: 'string', enum: ['ok', 'degraded', 'down'] },
-              serviceName: { type: 'string' },
-              version: { type: 'string' },
-              timestamp: { type: 'string', format: 'date-time' },
-              checks: {
-                type: 'array',
-                items: { $ref: '#/components/schemas/HealthCheck' },
-              },
-            },
-          },
-          HealthCheck: {
-            type: 'object',
-            required: ['name', 'status', 'latencyMs'],
-            properties: {
-              name: { type: 'string' },
-              status: { type: 'string', enum: ['ok', 'degraded', 'down'] },
-              latencyMs: { type: 'number' },
-              details: { type: 'object', nullable: true },
-            },
-          },
-        },
-      },
-      tags: [
-        { name: 'system', description: 'System endpoints (health, docs)' },
-        { name: 'bookmarks', description: 'Bookmarks CRUD operations' },
-        { name: 'internal', description: 'Internal service-to-service endpoints' },
-      ],
-    },
-  };
-}
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -171,6 +57,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(bookmarkRoutes);
   await app.register(internalRoutes);
   await app.register(pubsubRoutes);
+  await app.register(imageProxyRoutes);
 
   app.get(
     '/openapi.json',

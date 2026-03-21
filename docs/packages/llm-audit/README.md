@@ -1,8 +1,8 @@
 # @intexuraos/llm-audit
 
-LLM API audit logging to Firestore. Records every LLM request and response with full context -- prompts, responses, token usage, costs, timing, and user attribution -- for debugging, monitoring, and compliance.
+LLM API audit logging to Firestore. Records every LLM request and response with full context — prompts, responses, token usage, costs, timing, and user attribution — for debugging, monitoring, and compliance.
 
-**Version:** 2.1.0
+**Version:** 3.3.0
 **Node:** >=22.0.0
 **Type:** ESM
 **Dependencies:** `@intexuraos/common-core`, `@intexuraos/infra-firestore`, `@intexuraos/llm-contract`
@@ -15,7 +15,7 @@ When LLM calls fail or produce unexpected output, debugging requires the full re
 
 ### `isAuditEnabled(): boolean`
 
-Checks `INTEXURAOS_AUDIT_LLMS` env var. Defaults to `true`. Set to `false`, `0`, or `no` to disable.
+Checks the `INTEXURAOS_AUDIT_LLMS` env var. Defaults to `true`. Set to `false`, `0`, or `no` to disable.
 
 ```typescript
 import { isAuditEnabled } from '@intexuraos/llm-audit';
@@ -25,9 +25,9 @@ if (isAuditEnabled()) {
 }
 ```
 
-### `createAuditContext(params: CreateAuditLogParams): AuditContext`
+### `createAuditContext(params: CreateAuditLogParams, options?: AuditContextOptions): AuditContext`
 
-Creates an audit context that captures the start time. Complete it later with `.success()` or `.error()`.
+Creates an audit context that captures the start time at creation. Complete it later with `.success()` or `.error()`. Pass a custom sink via `options.sink` to override the default Firestore destination.
 
 ```typescript
 import { createAuditContext } from '@intexuraos/llm-audit';
@@ -45,7 +45,7 @@ const audit = createAuditContext({
 
 ### `AuditContext` class
 
-Tracks an LLM request/response cycle. Can only be completed once -- subsequent calls are silently ignored.
+Tracks an LLM request/response cycle. Can only be completed once — subsequent calls are silently ignored. This ensures timing accuracy even when callers hold a reference across async boundaries.
 
 #### `.success(result: CompleteAuditLogSuccessParams): Promise<void>`
 
@@ -112,7 +112,7 @@ interface AuditSink {
 }
 ```
 
-The `StructuredLogAuditSink` requires a `Logger` dependency:
+`StructuredLogAuditSink` requires a `Logger` dependency:
 
 ```typescript
 import { StructuredLogAuditSink, createAuditContext } from '@intexuraos/llm-audit';
@@ -128,7 +128,7 @@ All audit logs are stored in the `llm_api_logs` collection:
 ```
 llm_api_logs/{uuid}
   id: string
-  provider: 'google' | 'openai' | 'anthropic' | 'perplexity' | 'zai'
+  provider: 'google' | 'openai' | 'anthropic' | 'perplexity'
   model: string
   method: string
   prompt: string
@@ -139,7 +139,18 @@ llm_api_logs/{uuid}
   error?: string
   inputTokens?: number
   outputTokens?: number
+  cacheCreationTokens?: number
+  cacheReadTokens?: number
+  cachedTokens?: number
+  reasoningTokens?: number
+  webSearchCalls?: number
+  groundingEnabled?: boolean
+  providerCost?: number
   costUsd?: number
+  imageCount?: number
+  imageModel?: string
+  imageSize?: string
+  imageCostUsd?: number
   startedAt: string (ISO)
   completedAt: string (ISO)
   durationMs: number
@@ -148,7 +159,7 @@ llm_api_logs/{uuid}
   createdAt: string (ISO)
 ```
 
-### Types
+### Key Types
 
 ```typescript
 type LlmAuditStatus = 'success' | 'error';
@@ -195,38 +206,27 @@ interface CreateAuditLogParams {
   userId?: string;
   researchId?: string;
 }
-
-interface CompleteAuditLogSuccessParams {
-  /* see table above */
-}
-interface CompleteAuditLogErrorParams {
-  error: string;
-}
 ```
+
+## Configuration
+
+| Env Var                 | Default | Description                                                     |
+| ----------------------- | ------- | --------------------------------------------------------------- |
+| `INTEXURAOS_AUDIT_LLMS` | `true`  | Set to `false`, `0`, or `no` to disable audit logging globally  |
 
 ## Used By
 
-**Packages (6):** `infra-claude`, `infra-gemini`, `infra-glm`, `infra-gpt`, `infra-perplexity`, `llm-factory`
+**Packages (4):** `infra-claude`, `infra-gemini`, `infra-gpt`, `infra-perplexity`
 
-**Apps (1):** `image-service`
+**Apps (1):** `image-service` (direct usage)
 
-**Workers (1):** `orchestrator`
-
-## Recent Changes
-
-| Commit   | Description                                      | Age     |
-| -------- | ------------------------------------------------ | ------- |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner | 7 days  |
-| 21c1528a | Fix release skill to bump all package versions   | 12 days |
-| 4fa0fed3 | Release v2.0.0                                   | 2 weeks |
-| 911d9548 | Fix TypeScript errors in test file               | 4 weeks |
-| de709d33 | Add comprehensive JSDoc documentation            | 4 weeks |
+**Workers (1):** `orchestrator` (via `llm-factory`)
 
 ## Source Files
 
-| File           | Purpose                                                                        |
-| -------------- | ------------------------------------------------------------------------------ |
-| `src/index.ts` | Re-exports all types, AuditContext, and isAuditEnabled                         |
-| `src/types.ts` | LlmAuditLog, CreateAuditLogParams, completion params                           |
-| `src/audit.ts` | AuditContext class, createAuditContext, isAuditEnabled                         |
-| `src/sink.ts`  | AuditSink interface, FirestoreAuditSink, StructuredLogAuditSink, NoopAuditSink |
+| File           | Purpose                                                                                |
+| -------------- | -------------------------------------------------------------------------------------- |
+| `src/index.ts` | Re-exports all types, `AuditContext`, and `isAuditEnabled`                             |
+| `src/types.ts` | `LlmAuditLog`, `CreateAuditLogParams`, completion params                               |
+| `src/audit.ts` | `AuditContext` class, `createAuditContext`, `isAuditEnabled`                           |
+| `src/sink.ts`  | `AuditSink` interface, `FirestoreAuditSink`, `StructuredLogAuditSink`, `NoopAuditSink` |

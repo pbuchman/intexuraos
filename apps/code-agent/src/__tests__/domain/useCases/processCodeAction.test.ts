@@ -6,19 +6,21 @@ import { Timestamp } from '@google-cloud/firestore';
 import { err, ok } from '@intexuraos/common-core';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
-import type { TaskDispatcherService } from '../../../domain/services/taskDispatcher.js';
+import type { TaskEnqueueService } from '../../../domain/services/taskEnqueueService.js';
 import type { LinearIssueService } from '../../../domain/services/linearIssueService.js';
 import type { WhatsAppNotifier } from '../../../domain/services/whatsappNotifier.js';
 import type { Logger } from 'pino';
 import type { MetricsClient } from '../../../infra/metrics.js';
 import { processCodeAction } from '../../../domain/usecases/processCodeAction.js';
 import type { WorkerSettingsRepository } from '../../../domain/ports/workerSettingsRepository.js';
+import type { LinearAgentClient } from '../../../domain/ports/linearAgentClient.js';
 
 describe('processCodeAction', () => {
   let logger: Logger;
   let codeTaskRepo: CodeTaskRepository;
-  let taskDispatcher: TaskDispatcherService;
+  let taskEnqueueService: TaskEnqueueService;
   let linearIssueService: LinearIssueService;
+  let linearAgentClient: LinearAgentClient;
   let whatsappNotifier: WhatsAppNotifier;
   let metricsClient: MetricsClient;
   let workerSettingsRepo: WorkerSettingsRepository;
@@ -40,9 +42,9 @@ describe('processCodeAction', () => {
       findPlannedTaskByLinearIssue: vi.fn().mockResolvedValue(ok(null)),
     } as unknown as CodeTaskRepository;
 
-    taskDispatcher = {
-      dispatch: vi.fn(),
-    } as unknown as TaskDispatcherService;
+    taskEnqueueService = {
+      enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 0 })),
+    } as unknown as TaskEnqueueService;
 
     linearIssueService = {
       ensureIssueExists: vi.fn().mockResolvedValue({
@@ -53,6 +55,18 @@ describe('processCodeAction', () => {
         linearFallback: false,
       }),
     } as unknown as LinearIssueService;
+
+    linearAgentClient = {
+      validateIssue: vi.fn(),
+      fetchIssueTree: vi.fn(),
+      createIssue: vi.fn(),
+      updateIssueState: vi.fn(),
+      generateTitle: vi.fn(),
+      addComment: vi.fn(),
+      updateIssueMetadata: vi.fn(),
+      fetchIssueForDisplay: vi.fn(),
+      fetchIssuesForDisplay: vi.fn(),
+    } as unknown as LinearAgentClient;
 
     whatsappNotifier = {
       notifyTaskComplete: vi.fn().mockResolvedValue(ok(undefined)),
@@ -100,7 +114,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -127,7 +141,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -154,7 +168,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -181,7 +195,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -208,7 +222,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -226,7 +240,7 @@ describe('processCodeAction', () => {
     }
   });
 
-  it('successfully creates task and dispatches to worker', async () => {
+  it('successfully creates task and enqueues for dispatch', async () => {
     vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
       ok({
         id: 'new-task-123',
@@ -249,40 +263,8 @@ describe('processCodeAction', () => {
       })
     );
 
-    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
-      ok({
-        dispatched: true,
-        workerLocation: 'mac',
-      })
-    );
-
-    // Mock update for cancel nonce
-    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
-      ok({
-        id: 'new-task-123',
-        userId: 'user-789',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'hash-123',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace-123',
-        actionId: 'action-123',
-        approvalEventId: 'approval-456',
-        status: 'queued',
-        callbackReceived: false,
-        dedupKey: 'dedup-key-123',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        cancelNonce: 'abcd',
-        cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-      })
-    );
-
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -296,10 +278,10 @@ describe('processCodeAction', () => {
     if (result.ok) {
       expect(result.value.codeTaskId).toBe('new-task-123');
       expect(result.value.resourceUrl).toBe('/#/code-tasks/new-task-123');
-      expect(result.value.workerLocation).toBe('mac');
+      expect(result.value.workerLocation).toBe('queued');
     }
 
-    // Verify agentType is 'design' when linear issue has no 'code-task' label
+    // Verify agentType is 'planning' when linear issue has no 'code-task' label
     // (linearIssueService mock returns linearIssueLabels: [] — no code-task label)
     expect(codeTaskRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -308,20 +290,14 @@ describe('processCodeAction', () => {
       })
     );
 
-    // Verify worker location, status, and cancel nonce were set
-    expect(codeTaskRepo.update).toHaveBeenCalledWith('new-task-123', {
-      status: 'dispatched',
-      dispatchedAt: expect.any(Date),
-      workerLocation: 'mac',
-      cancelNonce: expect.any(String),
-      cancelNonceExpiresAt: expect.any(String),
+    // Verify enqueue was called
+    expect(taskEnqueueService.enqueue).toHaveBeenCalledWith({
+      taskId: 'new-task-123',
+      userId: 'user-789',
     });
-
-    // Verify notification was sent
-    expect(whatsappNotifier.notifyTaskStarted).toHaveBeenCalledWith('user-789', expect.any(Object));
   });
 
-  it('updates task error and returns worker_unavailable on dispatch failure', async () => {
+  it('returns internal_error when enqueue service returns internal_error', async () => {
     vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
       ok({
         id: 'new-task-123',
@@ -344,15 +320,15 @@ describe('processCodeAction', () => {
       })
     );
 
-    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
+    vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
       err({
-        code: 'worker_unavailable',
-        message: 'No workers available',
+        code: 'internal_error',
+        message: 'Failed to enqueue task',
       })
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -364,18 +340,9 @@ describe('processCodeAction', () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error.code).toBe('worker_unavailable');
-      expect(result.error.message).toBe('No workers available');
+      expect(result.error.code).toBe('internal_error');
+      expect(result.error.message).toBe('Failed to enqueue task');
     }
-
-    // Verify task was updated with error and failed status
-    expect(codeTaskRepo.update).toHaveBeenCalledWith('new-task-123', {
-      status: 'failed',
-      error: {
-        code: 'worker_unavailable',
-        message: 'No workers available',
-      },
-    });
   });
 
   it('successfully creates task with linearIssueId when provided', async () => {
@@ -402,41 +369,8 @@ describe('processCodeAction', () => {
       })
     );
 
-    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
-      ok({
-        dispatched: true,
-        workerLocation: 'vm',
-      })
-    );
-
-    // Mock update for cancel nonce
-    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
-      ok({
-        id: 'new-task-456',
-        userId: 'user-789',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'hash-123',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace-123',
-        actionId: 'action-123',
-        approvalEventId: 'approval-456',
-        status: 'queued',
-        callbackReceived: false,
-        dedupKey: 'dedup-key-123',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        linearIssueId: 'INT-305',
-        cancelNonce: 'ef01',
-        cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-      })
-    );
-
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -450,7 +384,7 @@ describe('processCodeAction', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.codeTaskId).toBe('new-task-456');
-      expect(result.value.workerLocation).toBe('vm');
+      expect(result.value.workerLocation).toBe('queued');
     }
   });
 
@@ -485,39 +419,9 @@ describe('processCodeAction', () => {
         linearIssueId: 'INT-305',
       })
     );
-    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
-      ok({
-        dispatched: true,
-        workerLocation: 'vm',
-      })
-    );
-    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
-      ok({
-        id: 'new-task-456',
-        userId: 'user-789',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'hash-123',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace-123',
-        actionId: 'action-123',
-        approvalEventId: 'approval-456',
-        status: 'queued',
-        callbackReceived: false,
-        dedupKey: 'dedup-key-123',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        linearIssueId: 'INT-305',
-        cancelNonce: 'ef01',
-        cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-      })
-    );
 
     await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -579,40 +483,8 @@ describe('processCodeAction', () => {
       })
     );
 
-    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
-      ok({
-        dispatched: true,
-        workerLocation: 'vm',
-      })
-    );
-
-    // Mock update for cancel nonce
-    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
-      ok({
-        id: 'new-task-789',
-        userId: 'user-789',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'hash-123',
-        workerType: 'auto',
-        workerLocation: 'vm',
-        repository: 'custom/repo',
-        baseBranch: 'development',
-        traceId: 'trace-123',
-        actionId: 'action-123',
-        approvalEventId: 'approval-456',
-        status: 'queued',
-        callbackReceived: false,
-        dedupKey: 'dedup-key-123',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        cancelNonce: '2345',
-        cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-      })
-    );
-
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -626,66 +498,8 @@ describe('processCodeAction', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.codeTaskId).toBe('new-task-789');
-      expect(result.value.workerLocation).toBe('vm');
+      expect(result.value.workerLocation).toBe('queued');
     }
-  });
-
-  it('succeeds even if nonce update fails (graceful degradation)', async () => {
-    vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
-      ok({
-        id: 'new-task-123',
-        userId: 'user-789',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'hash-123',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace-123',
-        actionId: 'action-123',
-        approvalEventId: 'approval-456',
-        status: 'queued',
-        callbackReceived: false,
-        dedupKey: 'dedup-key-123',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      })
-    );
-
-    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
-      ok({
-        dispatched: true,
-        workerLocation: 'mac',
-      })
-    );
-
-    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
-      err({ code: 'FIRESTORE_ERROR', message: 'Update failed' })
-    );
-
-    const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
-      {
-        actionId: 'action-123',
-        approvalEventId: 'approval-456',
-        userId: 'user-789',
-        prompt: 'Fix the bug',
-        workerType: 'auto',
-      }
-    );
-
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.codeTaskId).toBe('new-task-123');
-    }
-
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ taskId: 'new-task-123' }),
-      'Failed to update task with cancel nonce'
-    );
-
-    expect(whatsappNotifier.notifyTaskStarted).not.toHaveBeenCalled();
   });
 
   it('sets agentType to execution when linear issue has code-task label', async () => {
@@ -721,40 +535,8 @@ describe('processCodeAction', () => {
       })
     );
 
-    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
-      ok({
-        dispatched: true,
-        workerLocation: 'mac',
-      })
-    );
-
-    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
-      ok({
-        id: 'new-task-execution',
-        userId: 'user-789',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'hash-123',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace-123',
-        actionId: 'action-123',
-        approvalEventId: 'approval-456',
-        status: 'queued',
-        callbackReceived: false,
-        dedupKey: 'dedup-key-123',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        agentType: 'execution',
-        cancelNonce: 'abcd',
-        cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-      })
-    );
-
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -771,86 +553,6 @@ describe('processCodeAction', () => {
       expect.objectContaining({
         agentType: 'execution',
       })
-    );
-  });
-
-  it('succeeds even if notification fails (graceful degradation)', async () => {
-    vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
-      ok({
-        id: 'new-task-123',
-        userId: 'user-789',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'hash-123',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace-123',
-        actionId: 'action-123',
-        approvalEventId: 'approval-456',
-        status: 'queued',
-        callbackReceived: false,
-        dedupKey: 'dedup-key-123',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      })
-    );
-
-    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
-      ok({
-        dispatched: true,
-        workerLocation: 'mac',
-      })
-    );
-
-    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
-      ok({
-        id: 'new-task-123',
-        userId: 'user-789',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'hash-123',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace-123',
-        actionId: 'action-123',
-        approvalEventId: 'approval-456',
-        status: 'queued',
-        callbackReceived: false,
-        dedupKey: 'dedup-key-123',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        cancelNonce: 'abcd',
-        cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-      })
-    );
-
-    vi.mocked(whatsappNotifier.notifyTaskStarted).mockResolvedValueOnce(
-      err({ code: 'notification_failed', message: 'WhatsApp unreachable' })
-    );
-
-    const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
-      {
-        actionId: 'action-123',
-        approvalEventId: 'approval-456',
-        userId: 'user-789',
-        prompt: 'Fix the bug',
-        workerType: 'auto',
-      }
-    );
-
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.codeTaskId).toBe('new-task-123');
-    }
-
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ taskId: 'new-task-123' }),
-      'Failed to send task started notification'
     );
   });
 
@@ -877,36 +579,8 @@ describe('processCodeAction', () => {
       })
     );
 
-    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
-      ok({ dispatched: true, workerLocation: 'mac' })
-    );
-
-    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
-      ok({
-        id: 'new-task-sanitized',
-        userId: 'user-789',
-        prompt: 'Use AKIAIOSFODNN7EXAMPLE to access bucket',
-        sanitizedPrompt: 'Use [REDACTED_AWS_KEY] to access bucket',
-        systemPromptHash: 'hash-123',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace-123',
-        actionId: 'action-123',
-        approvalEventId: 'approval-456',
-        status: 'queued',
-        callbackReceived: false,
-        dedupKey: 'dedup-key-123',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        cancelNonce: 'abcd',
-        cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-      })
-    );
-
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -965,36 +639,8 @@ describe('processCodeAction', () => {
       })
     );
 
-    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
-      ok({ dispatched: true, workerLocation: 'mac' })
-    );
-
-    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
-      ok({
-        id: 'new-task-label',
-        userId: 'user-789',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'hash-123',
-        workerType: 'opus',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace-123',
-        actionId: 'action-123',
-        approvalEventId: 'approval-456',
-        status: 'queued',
-        callbackReceived: false,
-        dedupKey: 'dedup-key-123',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        cancelNonce: 'abcd',
-        cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-      })
-    );
-
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -1045,36 +691,8 @@ describe('processCodeAction', () => {
       })
     );
 
-    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
-      ok({ dispatched: true, workerLocation: 'mac' })
-    );
-
-    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
-      ok({
-        id: 'new-task-no-label',
-        userId: 'user-789',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'hash-123',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace-123',
-        actionId: 'action-123',
-        approvalEventId: 'approval-456',
-        status: 'queued',
-        callbackReceived: false,
-        dedupKey: 'dedup-key-123',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        cancelNonce: 'abcd',
-        cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-      })
-    );
-
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -1125,36 +743,8 @@ describe('processCodeAction', () => {
       })
     );
 
-    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
-      ok({ dispatched: true, workerLocation: 'mac' })
-    );
-
-    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
-      ok({
-        id: 'new-task-conflict',
-        userId: 'user-789',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'hash-123',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace-123',
-        actionId: 'action-123',
-        approvalEventId: 'approval-456',
-        status: 'queued',
-        callbackReceived: false,
-        dedupKey: 'dedup-key-123',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        cancelNonce: 'abcd',
-        cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-      })
-    );
-
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -1174,54 +764,7 @@ describe('processCodeAction', () => {
     );
   });
 
-  it('queues task when dispatch returns at_capacity and queue is not full', async () => {
-    vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
-      ok({
-        id: 'new-task-queued',
-        userId: 'user-789',
-        prompt: 'Queue test prompt',
-        sanitizedPrompt: 'Queue test prompt',
-        systemPromptHash: 'hash-123',
-        workerType: 'opus',
-        workerLocation: 'home-mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace-123',
-        actionId: 'action-1',
-        approvalEventId: 'approval-new-queue',
-        status: 'queued',
-        callbackReceived: false,
-        dedupKey: 'dedup-key-123',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      })
-    );
-
-    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
-      err({ code: 'at_capacity', message: 'All workers busy' })
-    );
-    vi.mocked(codeTaskRepo.countQueued).mockResolvedValueOnce(ok(5));
-    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(ok({} as unknown as CodeTask));
-
-    const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
-      {
-        actionId: 'action-1',
-        approvalEventId: 'approval-new-queue',
-        userId: 'user-789',
-        prompt: 'Queue test prompt',
-        workerType: 'opus',
-      }
-    );
-
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.codeTaskId).toBe('new-task-queued');
-    }
-    expect(whatsappNotifier.notifyTaskQueued).toHaveBeenCalled();
-  });
-
-  it('returns queue_full when dispatch returns at_capacity and queue is full', async () => {
+  it('returns queue_full when enqueue service returns queue_full', async () => {
     vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
       ok({
         id: 'new-task-full',
@@ -1244,13 +787,12 @@ describe('processCodeAction', () => {
       })
     );
 
-    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
-      err({ code: 'at_capacity', message: 'All workers busy' })
+    vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
+      err({ code: 'queue_full', message: 'Queue is full' })
     );
-    vi.mocked(codeTaskRepo.countQueued).mockResolvedValueOnce(ok(11));
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
       {
         actionId: 'action-2',
         approvalEventId: 'approval-new-full',
@@ -1263,56 +805,7 @@ describe('processCodeAction', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe('queue_full');
-    }
-  });
-
-  it('returns queue_full when countQueued fails (fail-closed)', async () => {
-    vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
-      ok({
-        id: 'new-task-count-err',
-        userId: 'user-789',
-        prompt: 'Count error test prompt',
-        sanitizedPrompt: 'Count error test prompt',
-        systemPromptHash: 'hash-123',
-        workerType: 'opus',
-        workerLocation: 'home-mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace-123',
-        actionId: 'action-count-err',
-        approvalEventId: 'approval-count-err',
-        status: 'queued',
-        callbackReceived: false,
-        dedupKey: 'dedup-key-123',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      })
-    );
-
-    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
-      err({ code: 'at_capacity', message: 'All workers busy' })
-    );
-    // countQueued fails — should fall back to maxSize (fail-closed), triggering queue_full
-    vi.mocked(codeTaskRepo.countQueued).mockResolvedValueOnce(
-      err({ code: 'FIRESTORE_ERROR', message: 'DB error' })
-    );
-    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(ok({} as unknown as CodeTask));
-
-    const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
-      {
-        actionId: 'action-count-err',
-        approvalEventId: 'approval-count-err',
-        userId: 'user-789',
-        prompt: 'Count error test prompt',
-        workerType: 'opus',
-      }
-    );
-
-    // Task should be rejected as queue_full (fallback to maxSize >= maxSize)
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe('queue_full');
+      expect(result.error.message).toBe('Queue is full');
     }
   });
 
@@ -1332,7 +825,7 @@ describe('processCodeAction', () => {
       } as unknown as WorkerSettingsRepository;
 
       const result = await processCodeAction(
-        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo: failingWorkerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo: failingWorkerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
         {
           actionId: 'action-123',
           approvalEventId: 'approval-456',
@@ -1365,7 +858,7 @@ describe('processCodeAction', () => {
       } as unknown as WorkerSettingsRepository;
 
       const result = await processCodeAction(
-        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo: nullSettingsWorkerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo: nullSettingsWorkerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
         {
           actionId: 'action-123',
           approvalEventId: 'approval-456',
@@ -1414,7 +907,7 @@ describe('processCodeAction', () => {
       } as unknown as WorkerSettingsRepository;
 
       const result = await processCodeAction(
-        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo: disabledWorkersRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo: disabledWorkersRepo, orchestratorSecret: 'test-orchestrator-secret' },
         {
           actionId: 'action-123',
           approvalEventId: 'approval-456',
@@ -1453,7 +946,7 @@ describe('processCodeAction', () => {
       } as unknown as WorkerSettingsRepository;
 
       const result = await processCodeAction(
-        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo: emptyWorkersRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo: emptyWorkersRepo, orchestratorSecret: 'test-orchestrator-secret' },
         {
           actionId: 'action-123',
           approvalEventId: 'approval-456',
@@ -1485,7 +978,7 @@ describe('processCodeAction', () => {
       } as unknown as LinearIssueService;
 
       const result = await processCodeAction(
-        { logger, codeTaskRepo, taskDispatcher, linearIssueService: failingLinearService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService: failingLinearService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
         {
           actionId: 'action-123',
           approvalEventId: 'approval-456',
@@ -1546,36 +1039,8 @@ describe('processCodeAction', () => {
         })
       );
 
-      vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
-        ok({ dispatched: true, workerLocation: 'mac' })
-      );
-
-      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
-        ok({
-          id: 'new-task-no-issue',
-          userId: 'user-789',
-          prompt: 'Fix the bug',
-          sanitizedPrompt: 'Fix the bug',
-          systemPromptHash: 'hash-123',
-          workerType: 'auto',
-          workerLocation: 'mac',
-          repository: 'pbuchman/intexuraos',
-          baseBranch: 'development',
-          traceId: 'trace-123',
-          actionId: 'action-123',
-          approvalEventId: 'approval-456',
-          status: 'queued',
-          callbackReceived: false,
-          dedupKey: 'dedup-key-123',
-          createdAt: Timestamp.now(),
-          updatedAt: Timestamp.now(),
-          cancelNonce: 'abcd',
-          cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-        })
-      );
-
       const result = await processCodeAction(
-        { logger, codeTaskRepo, taskDispatcher, linearIssueService: fallbackLinearService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService: fallbackLinearService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
         {
           actionId: 'action-123',
           approvalEventId: 'approval-456',
@@ -1600,7 +1065,7 @@ describe('processCodeAction', () => {
   // ─── Prompt injection sanitization (INT-413) ──────────────────────
   it('returns validation_error for empty prompt', async () => {
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -1619,7 +1084,7 @@ describe('processCodeAction', () => {
   it('returns validation_error for prompt containing a base64 blob', async () => {
     const base64Blob = 'A'.repeat(3500);
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -1641,7 +1106,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -1694,11 +1159,7 @@ describe('processCodeAction', () => {
         } as CodeTask)
       );
 
-      vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
-        ok({ dispatched: true, workerLocation: 'mac' })
-      );
-
-      // Update for cancel nonce
+      // Update for back-link (best-effort)
       vi.mocked(codeTaskRepo.update).mockResolvedValue(
         ok({
           id: 'new-exec-task',
@@ -1716,8 +1177,6 @@ describe('processCodeAction', () => {
           dedupKey: 'dedup-key-123',
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
-          cancelNonce: 'abcd',
-          cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
         } as CodeTask)
       );
     }
@@ -1736,7 +1195,7 @@ describe('processCodeAction', () => {
       );
 
       const result = await processCodeAction(
-        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
         {
           actionId: 'action-123',
           approvalEventId: 'approval-456',
@@ -1766,7 +1225,7 @@ describe('processCodeAction', () => {
       vi.mocked(codeTaskRepo.findPlannedTaskByLinearIssue).mockResolvedValueOnce(ok(null));
 
       const result = await processCodeAction(
-        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
         {
           actionId: 'action-123',
           approvalEventId: 'approval-456',
@@ -1796,7 +1255,7 @@ describe('processCodeAction', () => {
       );
 
       const result = await processCodeAction(
-        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
         {
           actionId: 'action-123',
           approvalEventId: 'approval-456',
@@ -1830,31 +1289,12 @@ describe('processCodeAction', () => {
         } as CodeTask)
       );
 
-      // Override update: first call (back-link) fails, second call (cancel nonce) succeeds
+      // Override update: back-link update fails
       vi.mocked(codeTaskRepo.update)
-        .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'Update failed' }))
-        .mockResolvedValueOnce(ok({
-          id: 'new-exec-task',
-          userId: 'user-789',
-          prompt: 'Fix the bug',
-          sanitizedPrompt: 'Fix the bug',
-          systemPromptHash: 'hash-123',
-          workerType: 'auto',
-          workerLocation: 'mac',
-          repository: 'pbuchman/intexuraos',
-          baseBranch: 'development',
-          traceId: 'trace-123',
-          status: 'queued',
-          callbackReceived: false,
-          dedupKey: 'dedup-key-123',
-          createdAt: Timestamp.now(),
-          updatedAt: Timestamp.now(),
-          cancelNonce: 'abcd',
-          cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-        } as CodeTask));
+        .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'Update failed' }));
 
       const result = await processCodeAction(
-        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
         {
           actionId: 'action-123',
           approvalEventId: 'approval-456',
@@ -1901,34 +1341,8 @@ describe('processCodeAction', () => {
         } as CodeTask)
       );
 
-      vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
-        ok({ dispatched: true, workerLocation: 'mac' })
-      );
-
-      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
-        ok({
-          id: 'new-planning-task',
-          userId: 'user-789',
-          prompt: 'Fix the bug',
-          sanitizedPrompt: 'Fix the bug',
-          systemPromptHash: 'hash-123',
-          workerType: 'auto',
-          workerLocation: 'mac',
-          repository: 'pbuchman/intexuraos',
-          baseBranch: 'development',
-          traceId: 'trace-123',
-          status: 'queued',
-          callbackReceived: false,
-          dedupKey: 'dedup-key-123',
-          createdAt: Timestamp.now(),
-          updatedAt: Timestamp.now(),
-          cancelNonce: 'abcd',
-          cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-        } as CodeTask)
-      );
-
       await processCodeAction(
-        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
         {
           actionId: 'action-123',
           approvalEventId: 'approval-456',
@@ -1952,7 +1366,7 @@ describe('processCodeAction', () => {
       );
 
       const result = await processCodeAction(
-        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
         {
           actionId: 'action-123',
           approvalEventId: 'approval-456',
@@ -1971,6 +1385,660 @@ describe('processCodeAction', () => {
         expect.objectContaining({ executionTaskId: 'new-exec-task' }),
         'Best-effort back-link to planning task failed'
       );
+    });
+  });
+
+  describe('fan-out for parent issues with code-task children (INT-962)', () => {
+    it('triggers fan-out when hasChildren=true and labels include code-task', async () => {
+      vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
+        linearIssueId: 'INT-956',
+        linearIssueTitle: 'Parent Issue',
+        linearIssueLabels: ['code-task'],
+        hasChildren: true,
+        linearFallback: false,
+      });
+
+      // Parent task creation succeeds
+      const parentTask = {
+        id: 'task-parent-123',
+        userId: 'user-789',
+        prompt: 'Implement all sub-tasks',
+        sanitizedPrompt: 'Implement all sub-tasks',
+        systemPromptHash: 'system-prompt-hash-v1',
+        workerType: 'auto' as const,
+        workerLocation: 'home-mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        status: 'queued' as const,
+        dedupKey: 'dedup-parent',
+        callbackReceived: false,
+        traceId: 'trace-123',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        linearIssueId: 'INT-956',
+        agentType: 'execution' as const,
+      };
+      vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(ok(parentTask));
+
+      // Mock linearAgentClient for fan-out
+      vi.mocked(linearAgentClient.validateIssue).mockResolvedValueOnce(
+        ok({
+          id: 'parent-uuid',
+          identifier: 'INT-956',
+          title: 'Parent',
+          url: 'https://linear.app',
+          labels: ['code-task'],
+          childCount: 2,
+          parentId: null,
+        })
+      );
+      vi.mocked(linearAgentClient.fetchIssueTree).mockResolvedValueOnce(
+        ok({
+          root: { id: 'parent-uuid', identifier: 'INT-956', url: '', parentId: null, labels: ['code-task'], assigneeId: null, state: 'Backlog' },
+          descendants: [
+            { id: 'child-uuid-1', identifier: 'INT-957', url: '', parentId: 'parent-uuid', labels: ['code-task'], assigneeId: null, state: 'Backlog' },
+          ],
+        })
+      );
+
+      // Child task creation
+      vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(ok({ ...parentTask, id: 'task-child-1', linearIssueId: 'INT-957' }));
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(ok({ ...parentTask, status: 'implemented' as const }));
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Implement all sub-tasks',
+          workerType: 'auto',
+          linearIssueId: 'INT-956',
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.codeTaskId).toBe('task-parent-123');
+        expect(result.value.workerLocation).toBe('queued');
+      }
+    });
+
+    it('falls back to normal dispatch when fan-out returns no_qualifying_children', async () => {
+      vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
+        linearIssueId: 'INT-956',
+        linearIssueTitle: 'Parent Issue',
+        linearIssueLabels: ['code-task'],
+        hasChildren: true,
+        linearFallback: false,
+      });
+
+      const parentTask = {
+        id: 'task-parent-123',
+        userId: 'user-789',
+        prompt: 'Implement all sub-tasks',
+        sanitizedPrompt: 'Implement all sub-tasks',
+        systemPromptHash: 'system-prompt-hash-v1',
+        workerType: 'auto' as const,
+        workerLocation: 'home-mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        status: 'queued' as const,
+        dedupKey: 'dedup-parent',
+        callbackReceived: false,
+        traceId: 'trace-123',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        linearIssueId: 'INT-956',
+        agentType: 'execution' as const,
+      };
+      vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(ok(parentTask));
+
+      // Fan-out returns no qualifying children
+      vi.mocked(linearAgentClient.validateIssue).mockResolvedValueOnce(
+        ok({
+          id: 'parent-uuid',
+          identifier: 'INT-956',
+          title: 'Parent',
+          url: 'https://linear.app',
+          labels: ['code-task'],
+          childCount: 1,
+          parentId: null,
+        })
+      );
+      vi.mocked(linearAgentClient.fetchIssueTree).mockResolvedValueOnce(
+        ok({
+          root: { id: 'parent-uuid', identifier: 'INT-956', url: '', parentId: null, labels: ['code-task'], assigneeId: null, state: 'Backlog' },
+          descendants: [
+            { id: 'child-uuid-1', identifier: 'INT-959', url: '', parentId: 'parent-uuid', labels: ['feature'], assigneeId: null, state: 'Backlog' },
+          ],
+        })
+      );
+
+      // findPlannedTaskByLinearIssue for backLinkPlanningTask
+      vi.mocked(codeTaskRepo.findPlannedTaskByLinearIssue).mockResolvedValueOnce(ok(null));
+
+      // INT-977: fallback resets parent status to 'queued' before enqueue
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(ok(parentTask));
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Implement all sub-tasks',
+          workerType: 'auto',
+          linearIssueId: 'INT-956',
+        }
+      );
+
+      // Falls back to normal dispatch (task enqueued)
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.codeTaskId).toBe('task-parent-123');
+        expect(result.value.workerLocation).toBe('queued');
+      }
+
+      // Verify parent status was reset to 'queued' before enqueue (INT-977)
+      expect(codeTaskRepo.update).toHaveBeenCalledWith('task-parent-123', { status: 'queued' });
+
+      // Verify enqueue was called (fallback to normal path)
+      expect(taskEnqueueService.enqueue).toHaveBeenCalledWith({
+        taskId: 'task-parent-123',
+        userId: 'user-789',
+      });
+    });
+
+    it('logs warning but continues when status reset to queued fails during fallback (INT-977)', async () => {
+      vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
+        linearIssueId: 'INT-956',
+        linearIssueTitle: 'Parent Issue',
+        linearIssueLabels: ['code-task'],
+        hasChildren: true,
+        linearFallback: false,
+      });
+
+      const parentTask = {
+        id: 'task-parent-123',
+        userId: 'user-789',
+        prompt: 'Implement all sub-tasks',
+        sanitizedPrompt: 'Implement all sub-tasks',
+        systemPromptHash: 'system-prompt-hash-v1',
+        workerType: 'auto' as const,
+        workerLocation: 'home-mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        status: 'queued' as const,
+        dedupKey: 'dedup-parent',
+        callbackReceived: false,
+        traceId: 'trace-123',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        linearIssueId: 'INT-956',
+        agentType: 'execution' as const,
+      };
+      vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(ok(parentTask));
+
+      // Fan-out returns no qualifying children
+      vi.mocked(linearAgentClient.validateIssue).mockResolvedValueOnce(
+        ok({
+          id: 'parent-uuid',
+          identifier: 'INT-956',
+          title: 'Parent',
+          url: 'https://linear.app',
+          labels: ['code-task'],
+          childCount: 1,
+          parentId: null,
+        })
+      );
+      vi.mocked(linearAgentClient.fetchIssueTree).mockResolvedValueOnce(
+        ok({
+          root: { id: 'parent-uuid', identifier: 'INT-956', url: '', parentId: null, labels: ['code-task'], assigneeId: null, state: 'Backlog' },
+          descendants: [
+            { id: 'child-uuid-1', identifier: 'INT-959', url: '', parentId: 'parent-uuid', labels: ['feature'], assigneeId: null, state: 'Backlog' },
+          ],
+        })
+      );
+
+      vi.mocked(codeTaskRepo.findPlannedTaskByLinearIssue).mockResolvedValueOnce(ok(null));
+
+      // INT-977: status reset fails
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
+        err({ code: 'FIRESTORE_ERROR', message: 'Write failed' })
+      );
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Implement all sub-tasks',
+          workerType: 'auto',
+          linearIssueId: 'INT-956',
+        }
+      );
+
+      // Still succeeds — status reset failure is best-effort
+      expect(result.ok).toBe(true);
+
+      // Warning was logged
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-parent-123' }),
+        expect.stringContaining('Failed to reset parent status'),
+      );
+
+      // Enqueue was still called
+      expect(taskEnqueueService.enqueue).toHaveBeenCalled();
+    });
+
+    it('returns queue_full when enqueue fails with queue_full during no_qualifying_children fallback', async () => {
+      vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
+        linearIssueId: 'INT-956',
+        linearIssueTitle: 'Parent Issue',
+        linearIssueLabels: ['code-task'],
+        hasChildren: true,
+        linearFallback: false,
+      });
+
+      const parentTask = {
+        id: 'task-parent-123',
+        userId: 'user-789',
+        prompt: 'Implement all sub-tasks',
+        sanitizedPrompt: 'Implement all sub-tasks',
+        systemPromptHash: 'system-prompt-hash-v1',
+        workerType: 'auto' as const,
+        workerLocation: 'home-mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        status: 'queued' as const,
+        dedupKey: 'dedup-parent',
+        callbackReceived: false,
+        traceId: 'trace-123',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        linearIssueId: 'INT-956',
+        agentType: 'execution' as const,
+      };
+      vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(ok(parentTask));
+
+      // Fan-out returns no qualifying children
+      vi.mocked(linearAgentClient.validateIssue).mockResolvedValueOnce(
+        ok({
+          id: 'parent-uuid',
+          identifier: 'INT-956',
+          title: 'Parent',
+          url: 'https://linear.app',
+          labels: ['code-task'],
+          childCount: 1,
+          parentId: null,
+        })
+      );
+      vi.mocked(linearAgentClient.fetchIssueTree).mockResolvedValueOnce(
+        ok({
+          root: { id: 'parent-uuid', identifier: 'INT-956', url: '', parentId: null, labels: ['code-task'], assigneeId: null, state: 'Backlog' },
+          descendants: [
+            { id: 'child-uuid-1', identifier: 'INT-959', url: '', parentId: 'parent-uuid', labels: ['feature'], assigneeId: null, state: 'Backlog' },
+          ],
+        })
+      );
+
+      vi.mocked(codeTaskRepo.findPlannedTaskByLinearIssue).mockResolvedValueOnce(ok(null));
+
+      // INT-977: fallback resets parent status to 'queued' before enqueue
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(ok(parentTask));
+
+      // Enqueue fails with queue_full
+      vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
+        err({ code: 'queue_full', message: 'Queue is full' })
+      );
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Implement all sub-tasks',
+          workerType: 'auto',
+          linearIssueId: 'INT-956',
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('queue_full');
+      }
+    });
+
+    it('returns internal_error when enqueue fails with internal_error during no_qualifying_children fallback', async () => {
+      vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
+        linearIssueId: 'INT-956',
+        linearIssueTitle: 'Parent Issue',
+        linearIssueLabels: ['code-task'],
+        hasChildren: true,
+        linearFallback: false,
+      });
+
+      const parentTask = {
+        id: 'task-parent-123',
+        userId: 'user-789',
+        prompt: 'Implement all sub-tasks',
+        sanitizedPrompt: 'Implement all sub-tasks',
+        systemPromptHash: 'system-prompt-hash-v1',
+        workerType: 'auto' as const,
+        workerLocation: 'home-mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        status: 'queued' as const,
+        dedupKey: 'dedup-parent',
+        callbackReceived: false,
+        traceId: 'trace-123',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        linearIssueId: 'INT-956',
+        agentType: 'execution' as const,
+      };
+      vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(ok(parentTask));
+
+      vi.mocked(linearAgentClient.validateIssue).mockResolvedValueOnce(
+        ok({
+          id: 'parent-uuid',
+          identifier: 'INT-956',
+          title: 'Parent',
+          url: 'https://linear.app',
+          labels: ['code-task'],
+          childCount: 1,
+          parentId: null,
+        })
+      );
+      vi.mocked(linearAgentClient.fetchIssueTree).mockResolvedValueOnce(
+        ok({
+          root: { id: 'parent-uuid', identifier: 'INT-956', url: '', parentId: null, labels: ['code-task'], assigneeId: null, state: 'Backlog' },
+          descendants: [
+            { id: 'child-uuid-1', identifier: 'INT-959', url: '', parentId: 'parent-uuid', labels: ['feature'], assigneeId: null, state: 'Backlog' },
+          ],
+        })
+      );
+
+      vi.mocked(codeTaskRepo.findPlannedTaskByLinearIssue).mockResolvedValueOnce(ok(null));
+
+      // INT-977: fallback resets parent status to 'queued' before enqueue
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(ok(parentTask));
+
+      vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
+        err({ code: 'internal_error', message: 'Enqueue internal failure' })
+      );
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Implement all sub-tasks',
+          workerType: 'auto',
+          linearIssueId: 'INT-956',
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+      }
+    });
+
+    it('falls back to normal dispatch when fan-out returns linear_unavailable', async () => {
+      vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
+        linearIssueId: 'INT-956',
+        linearIssueTitle: 'Parent Issue',
+        linearIssueLabels: ['code-task'],
+        hasChildren: true,
+        linearFallback: false,
+      });
+
+      const parentTask = {
+        id: 'task-parent-123',
+        userId: 'user-789',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'system-prompt-hash-v1',
+        workerType: 'auto' as const,
+        workerLocation: 'home-mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        status: 'queued' as const,
+        dedupKey: 'dedup-parent',
+        callbackReceived: false,
+        traceId: 'trace-123',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        linearIssueId: 'INT-956',
+        agentType: 'execution' as const,
+      };
+      vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(ok(parentTask));
+
+      // Fan-out fails (Linear unavailable)
+      vi.mocked(linearAgentClient.validateIssue).mockResolvedValueOnce(
+        err({ code: 'UNAVAILABLE' as const, message: 'Linear API is down' })
+      );
+
+      vi.mocked(codeTaskRepo.findPlannedTaskByLinearIssue).mockResolvedValueOnce(ok(null));
+
+      // INT-977: fallback resets parent status to 'queued' before enqueue
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(ok(parentTask));
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+          linearIssueId: 'INT-956',
+        }
+      );
+
+      // Falls back to normal dispatch
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.codeTaskId).toBe('task-parent-123');
+      }
+
+      // Verify parent status was reset to 'queued' before enqueue (INT-977)
+      expect(codeTaskRepo.update).toHaveBeenCalledWith('task-parent-123', { status: 'queued' });
+      expect(taskEnqueueService.enqueue).toHaveBeenCalled();
+    });
+
+    it('returns dedup error when parent task creation fails with DUPLICATE_ACTION', async () => {
+      vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
+        linearIssueId: 'INT-956',
+        linearIssueTitle: 'Parent Issue',
+        linearIssueLabels: ['code-task'],
+        hasChildren: true,
+        linearFallback: false,
+      });
+
+      vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
+        err({ code: 'DUPLICATE_ACTION', message: 'Already exists', existingTaskId: 'task-existing' })
+      );
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+          linearIssueId: 'INT-956',
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('duplicate_action');
+        expect(result.error.existingTaskId).toBe('task-existing');
+      }
+    });
+
+    it('returns internal_error when parent task creation fails with FIRESTORE_ERROR', async () => {
+      vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
+        linearIssueId: 'INT-956',
+        linearIssueTitle: 'Parent Issue',
+        linearIssueLabels: ['code-task'],
+        hasChildren: true,
+        linearFallback: false,
+      });
+
+      vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
+        err({ code: 'FIRESTORE_ERROR', message: 'Write failed' })
+      );
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+          linearIssueId: 'INT-956',
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+      }
+    });
+
+    it('returns queue_full when enqueue fails with queue_full during fan-out fallback', async () => {
+      vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
+        linearIssueId: 'INT-956',
+        linearIssueTitle: 'Parent Issue',
+        linearIssueLabels: ['code-task'],
+        hasChildren: true,
+        linearFallback: false,
+      });
+
+      const parentTask = {
+        id: 'task-parent-123',
+        userId: 'user-789',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'system-prompt-hash-v1',
+        workerType: 'auto' as const,
+        workerLocation: 'home-mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        status: 'queued' as const,
+        dedupKey: 'dedup-parent',
+        callbackReceived: false,
+        traceId: 'trace-123',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        linearIssueId: 'INT-956',
+        agentType: 'execution' as const,
+      };
+      vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(ok(parentTask));
+
+      // Fan-out fails
+      vi.mocked(linearAgentClient.validateIssue).mockResolvedValueOnce(
+        err({ code: 'UNAVAILABLE' as const, message: 'Linear down' })
+      );
+
+      vi.mocked(codeTaskRepo.findPlannedTaskByLinearIssue).mockResolvedValueOnce(ok(null));
+
+      // INT-977: fallback resets parent status to 'queued' before enqueue
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(ok(parentTask));
+
+      // Enqueue fails with queue_full
+      vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
+        err({ code: 'queue_full', message: 'Queue is full' })
+      );
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+          linearIssueId: 'INT-956',
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('queue_full');
+      }
+    });
+
+    it('returns internal_error when enqueue fails with internal_error during linear_unavailable fallback', async () => {
+      vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
+        linearIssueId: 'INT-956',
+        linearIssueTitle: 'Parent Issue',
+        linearIssueLabels: ['code-task'],
+        hasChildren: true,
+        linearFallback: false,
+      });
+
+      const parentTask = {
+        id: 'task-parent-123',
+        userId: 'user-789',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'system-prompt-hash-v1',
+        workerType: 'auto' as const,
+        workerLocation: 'home-mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        status: 'queued' as const,
+        dedupKey: 'dedup-parent',
+        callbackReceived: false,
+        traceId: 'trace-123',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        linearIssueId: 'INT-956',
+        agentType: 'execution' as const,
+      };
+      vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(ok(parentTask));
+
+      // Fan-out fails (Linear unavailable)
+      vi.mocked(linearAgentClient.validateIssue).mockResolvedValueOnce(
+        err({ code: 'UNAVAILABLE' as const, message: 'Linear API is down' })
+      );
+
+      vi.mocked(codeTaskRepo.findPlannedTaskByLinearIssue).mockResolvedValueOnce(ok(null));
+
+      // INT-977: fallback resets parent status to 'queued' before enqueue
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(ok(parentTask));
+
+      // Enqueue fails with internal_error
+      vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
+        err({ code: 'internal_error', message: 'Enqueue internal failure' })
+      );
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+          linearIssueId: 'INT-956',
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+      }
     });
   });
 });

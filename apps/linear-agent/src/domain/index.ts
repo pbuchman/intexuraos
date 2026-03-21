@@ -27,8 +27,14 @@ export {
   type ListIssuesDeps,
   type ListIssuesRequest,
   type ListIssuesResponse,
-  type GroupedIssues,
 } from './useCases/listIssues.js';
+export { syncedToLinearIssue } from './syncedIssueMapper.js';
+export { buildIssueHierarchy, type IssueHierarchy } from './issueTreeBuilder.js';
+export {
+  groupIssuesByDashboardColumn,
+  DONE_RECENT_DAYS,
+  type GroupIssuesOptions,
+} from './issueGrouper.js';
 export {
   generateIssueTitle,
   type GenerateIssueTitleDeps,
@@ -44,6 +50,8 @@ export {
   type ValidateIssueError,
 } from './useCases/validateIssue.js';
 export type { LinearWebhookEvent, LinearWebhookPayload, LinearWebhookUpdatedFrom, WebhookAction, LinearCommentWebhookEvent, LinearCommentWebhookPayload } from './webhookTypes.js';
+export type { IssueWebhookData, CommentWebhookData } from './webhookTypeGuards.js';
+export { isIssueWebhookData, isCommentWebhookData } from './webhookTypeGuards.js';
 export { mapWebhookToSyncedIssue, mapApiIssueToSyncedIssue } from './issueMapper.js';
 export {
   syncSingleIssue,
@@ -66,3 +74,38 @@ export {
   triggerCodeTaskFromAssignment,
   type TriggerCodeTaskDeps,
 } from './useCases/triggerCodeTaskFromAssignment.js';
+export { STATE_NAME_MAP, findStateId } from './stateUtils.js';
+export {
+  toCommentSummary,
+  buildIssueDisplayResponse,
+  type IssueDisplayResponse,
+} from './issueDisplayMapper.js';
+export { resolveDesiredLabelIds } from './useCases/resolveLabels.js';
+export { buildIssueTree } from './useCases/buildIssueTree.js';
+export {
+  retryFailedIssue,
+  type RetryFailedIssueDeps,
+  type RetryFailedIssueRequest,
+  type RetryFailedIssueResult,
+} from './useCases/retryFailedIssue.js';
+export {
+  getIssueComments,
+  type GetIssueCommentsDeps,
+  type GetIssueCommentsRequest,
+  type PaginatedComments,
+} from './useCases/getIssueComments.js';
+export {
+  getIssueDetail,
+  type GetIssueDetailDeps,
+  type GetIssueDetailRequest,
+  type IssueDetailResponse,
+} from './useCases/getIssueDetail.js';
+export {
+  processWebhook,
+  type ProcessWebhookDeps,
+  type WebhookPayload,
+  type ProcessWebhookResult,
+} from './useCases/processWebhook.js';
+export { parseExtractionResponse } from './extractionParser.js';
+export { buildIssueDescription } from './descriptionBuilder.js';
+export { checkProcessedAction, type CheckIdempotencyDeps } from './useCases/checkIdempotency.js';

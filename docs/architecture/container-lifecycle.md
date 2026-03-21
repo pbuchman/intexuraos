@@ -154,8 +154,8 @@ The container receives these environment variables:
 
 | Constant                          | Value            | File                   | Description                            |
 | --------------------------------- | ---------------- | ---------------------- | -------------------------------------- |
-| `TASK_TIMEOUT_WARNING_MS`         | 115 min (1h 55m) | `task-dispatcher.ts`   | Warning log before stop timeout        |
-| `TASK_TIMEOUT_KILL_MS`            | 120 min (2h)     | `task-dispatcher.ts`   | Graceful stop timeout                  |
+| `TASK_TIMEOUT_WARNING_MS`         | 175 min (2h 55m) | `task-dispatcher.ts`   | Warning log before stop timeout        |
+| `TASK_TIMEOUT_KILL_MS`            | 180 min (3h)     | `task-dispatcher.ts`   | Graceful stop timeout                  |
 | `COMPLETION_CHECK_INTERVAL_MS`    | 30s              | `task-dispatcher.ts`   | Poll interval for completion           |
 | `ACTIVITY_HEARTBEAT_THRESHOLD_MS` | 30s              | `task-dispatcher.ts`   | Heartbeat activity threshold           |
 | `workerReadyTimeoutMs`            | 600s (10 min)    | `docker-provider.ts`   | Container readiness timeout            |
@@ -173,12 +173,12 @@ Task Starts
 │ 0 min          │
 └────────┬────────┘
          │
-         ▼ (115 min)
+         ▼ (175 min)
 ┌─────────────────┐
 │ Warning Log    │ ◄── "Task approaching timeout"
 └────────┬────────┘
          │
-         ▼ (120 min)
+         ▼ (180 min)
 ┌─────────────────┐
 │ Graceful Stop  │ ◄── SIGTERM sent (10s grace), then container removed
 │ destroyWorker()│
@@ -252,9 +252,9 @@ private async teardownAttempt(taskId: string, keepSession: boolean): Promise<voi
 }
 ```
 
-Most internal call sites pass `keepSession=true` (between managed attempts). The actual container destruction happens in `finalizeTask()`, which calls `teardownAttempt(taskId, false)` — unless `preserveFailedContainers` is enabled, in which case it calls `preserveWorker()` instead.
+Most internal call sites pass `keepSession=true` (between managed attempts). The actual container destruction happens in `finalizeTask()`, which calls `teardownAttempt(taskId, false)` — unless `preserveWorkerContainers` is enabled, in which case it calls `preserveWorker()` instead.
 
-If `preserveFailedContainers` is `true`, containers are preserved on `failed`, `interrupted`, **and** `completed` statuses.
+If `preserveWorkerContainers` is `true`, containers are preserved on `failed`, `interrupted`, **and** `completed` statuses.
 
 ### 2. Cancellation
 
@@ -268,8 +268,8 @@ Graceful stop (`SIGTERM` with 10s timeout) is used for cancellation. The `forceK
 
 As described in [Timeout Flow](#timeout-flow):
 
-- Warning at 115 minutes
-- Graceful stop at 120 minutes (task marked `interrupted`)
+- Warning at 175 minutes
+- Graceful stop at 180 minutes (task marked `interrupted`)
 
 ### 4. Startup Cleanup
 
@@ -509,8 +509,8 @@ Tasks where the container died and no resume is requested are eventually caught 
 
 | Value                     | Location                                  | Default |
 | ------------------------- | ----------------------------------------- | ------- |
-| Task timeout (kill)       | `TASK_TIMEOUT_KILL_MS`                    | 120 min |
-| Task timeout (warning)    | `TASK_TIMEOUT_WARNING_MS`                 | 115 min |
+| Task timeout (kill)       | `TASK_TIMEOUT_KILL_MS`                    | 180 min |
+| Task timeout (warning)    | `TASK_TIMEOUT_WARNING_MS`                 | 175 min |
 | Completion check interval | `COMPLETION_CHECK_INTERVAL_MS`            | 30s     |
 | Activity heartbeat        | `ACTIVITY_HEARTBEAT_THRESHOLD_MS`         | 30s     |
 | Zombie threshold          | `ZOMBIE_THRESHOLD_MINUTES`                | 30 min  |

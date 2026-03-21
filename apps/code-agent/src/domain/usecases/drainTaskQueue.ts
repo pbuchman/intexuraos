@@ -9,6 +9,7 @@
 
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
+import type { CodeTask } from '../models/codeTask.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { TaskDispatcherService, DispatchWorkerCredentials } from '../services/taskDispatcher.js';
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
@@ -19,6 +20,11 @@ import { generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 import { buildLockCleanups, type LockCleanupInfo } from '../utils/prTaskLock.js';
 import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../utils/taskRouting.js';
 import { archiveRetriedTaskAfterDispatch } from '../utils/archiveRetriedTaskAfterDispatch.js';
+import { shouldFanOut, fanOutChildTasks } from './fanOutChildTasks.js';
+import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
+
+/** Max candidates fetched per drain cycle for the per-resource concurrency guard. */
+const DRAIN_CANDIDATE_BATCH_SIZE = 10;
 
 // In-memory guard for single-instance environments
 let isDraining = false;
@@ -46,6 +52,8 @@ export interface DrainTaskQueueDeps {
   linearAgentClient: LinearAgentClient;
   whatsappNotifier: WhatsAppNotifier;
   workerSettingsRepo: WorkerSettingsRepository;
+  taskEnqueueService: TaskEnqueueService;
+  orchestratorSecret: string;
 }
 
 export async function drainTaskQueue(
@@ -62,17 +70,118 @@ export async function drainTaskQueue(
 
   isDraining = true;
   try {
-    // Step 1: Find oldest queued task
-    const findResult = await codeTaskRepo.findOldestQueued();
-    if (!findResult.ok) {
-      logger.error({ error: findResult.error }, 'Failed to find oldest queued task');
-      return err({ code: 'internal_error', message: findResult.error.message });
+    // Step 1: Fetch queued candidates (INT-949: per-resource concurrency guard)
+    const candidatesResult = await codeTaskRepo.listQueuedByAge(DRAIN_CANDIDATE_BATCH_SIZE);
+    if (!candidatesResult.ok) {
+      logger.error({ error: candidatesResult.error }, 'Failed to list queued tasks');
+      return err({ code: 'internal_error', message: candidatesResult.error.message });
     }
 
-    const task = findResult.value;
-    if (task === null) {
+    const candidates = candidatesResult.value;
+    if (candidates.length === 0) {
       logger.info({ queue: 'empty' }, 'No queued tasks to drain');
       return ok({ action: 'empty' });
+    }
+
+    // Step 1b: Merge duplicate queued review tasks per PR (INT-1014)
+    // At most 1 queued review per PR is allowed — cancel all but the newest (by createdAt)
+    const reviewCandidates = candidates.filter(
+      (c) => c.agentType === 'review' && c.prNumber !== undefined
+    );
+
+    // Group by (repository, prNumber)
+    const reviewGroups = new Map<string, CodeTask[]>();
+    for (const task of reviewCandidates) {
+      const key = `${task.repository}:${String(task.prNumber)}`;
+      const group = reviewGroups.get(key) ?? [];
+      group.push(task);
+      reviewGroups.set(key, group);
+    }
+
+    // Remove cancelled reviews from candidates so they are not considered for dispatch
+    const cancelledReviewIds = new Set<string>();
+
+    for (const [, group] of reviewGroups) {
+      if (group.length <= 1) continue;
+
+      // Sort by createdAt descending (newest first), cancel older ones
+      group.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+      const newest = group[0];
+      /* v8 ignore start -- ts-type: newest is always defined after sort given group.length > 1 @preserve */
+      if (newest === undefined) continue;
+      /* v8 ignore stop @preserve */
+      const toCancel = group.slice(1);
+
+      for (const cancelled of toCancel) {
+        logger.info(
+          {
+            cancelledTaskId: cancelled.id,
+            survivingTaskId: newest.id,
+            repository: cancelled.repository,
+            prNumber: cancelled.prNumber,
+          },
+          'Cancelling duplicate queued review — superseded by newer queued review for same PR'
+        );
+
+        const updateResult = await codeTaskRepo.update(cancelled.id, {
+          status: 'cancelled',
+          completedAt: new Date(),
+          error: {
+            code: 'review_replaced',
+            message: 'Superseded by newer queued review for same PR',
+          },
+        });
+
+        if (!updateResult.ok) {
+          logger.warn(
+            { cancelledTaskId: cancelled.id, error: updateResult.error },
+            'Failed to cancel duplicate queued review — will remain eligible for future dispatch'
+          );
+          continue;
+        }
+        cancelledReviewIds.add(cancelled.id);
+      }
+    }
+
+    const activeCandidates = candidates.filter((c) => !cancelledReviewIds.has(c.id));
+
+    // Find first dispatchable candidate (no active task for same resource)
+    let task: CodeTask | null = null;
+    for (const candidate of activeCandidates) {
+      // Check Linear issue concurrency
+      if (candidate.linearIssueId !== undefined) {
+        const activeResult = await codeTaskRepo.hasActiveTaskForLinearIssue(candidate.linearIssueId);
+        if (activeResult.ok && activeResult.value.hasActive && activeResult.value.taskId !== candidate.id) {
+          logger.info({
+            taskId: candidate.id,
+            linearIssueId: candidate.linearIssueId,
+            activeTaskId: activeResult.value.taskId,
+          }, 'Skipping queued task — active task exists for same Linear issue');
+          continue;
+        }
+      }
+
+      // Check PR concurrency (for PR-scoped tasks like review/pull_request agents)
+      if (candidate.prNumber !== undefined) {
+        const prActiveResult = await codeTaskRepo.findActiveReviewForPR(candidate.repository, candidate.prNumber);
+        if (prActiveResult.ok && prActiveResult.value !== null && prActiveResult.value.id !== candidate.id) {
+          logger.info({
+            taskId: candidate.id,
+            repository: candidate.repository,
+            prNumber: candidate.prNumber,
+            activeTaskId: prActiveResult.value.id,
+          }, 'Skipping queued task — active task exists for same PR');
+          continue;
+        }
+      }
+
+      task = candidate;
+      break;
+    }
+
+    if (task === null) {
+      logger.info({ candidateCount: activeCandidates.length }, 'All queued tasks blocked by active resources');
+      return ok({ action: 'still_busy' });
     }
 
     logger.info({ taskId: task.id }, 'Processing queued task');
@@ -125,7 +234,10 @@ export async function drainTaskQueue(
     const enabledWorkers = settings.workers.filter((w) => w.enabled);
 
     if (enabledWorkers.length === 0) {
-      logger.warn({ userId: task.userId }, 'User has no enabled workers during drain');
+      logger.warn(
+        { userId: task.userId, taskId: task.id, reason: 'no_enabled_workers' },
+        'Drain blocked: user has no enabled workers — task stays queued until workers are configured or TTL expires',
+      );
       return ok({ action: 'still_busy', taskId: task.id });
     }
 
@@ -142,6 +254,7 @@ export async function drainTaskQueue(
     // Step 4: Fetch FRESH Linear issue metadata
     let linearIssueLabels: string[] = [];
     let hasChildren = false;
+    let linearIssueUuid: string | undefined;
 
     if (task.linearIssueId !== undefined) {
       const validateResult = await linearAgentClient.validateIssue({
@@ -152,10 +265,47 @@ export async function drainTaskQueue(
       if (validateResult.ok) {
         linearIssueLabels = validateResult.value.labels;
         hasChildren = validateResult.value.childCount > 0;
+        linearIssueUuid = validateResult.value.id;
       } else {
         logger.warn({ linearIssueId: task.linearIssueId }, 'Failed to refresh Linear labels during drain');
       }
     }
+    // Step 4b: Fan-out check (INT-962) — if parent issue has children with code-task labels,
+    // create separate child tasks instead of dispatching the parent.
+    if (shouldFanOut(hasChildren, linearIssueLabels) && task.linearIssueId !== undefined) {
+      logger.info({ taskId: task.id, linearIssueId: task.linearIssueId }, 'Drain fan-out triggered: parent issue has code-task children');
+
+      const fanOutResult = await fanOutChildTasks(
+        {
+          logger,
+          codeTaskRepo,
+          linearAgentClient,
+          taskEnqueueService: deps.taskEnqueueService,
+          orchestratorSecret: deps.orchestratorSecret,
+        },
+        {
+          parentTask: task,
+          userId: task.userId,
+          linearIssueId: task.linearIssueId,
+          ...(linearIssueUuid !== undefined && { parentIssueUuid: linearIssueUuid }),
+        },
+      );
+
+      if (fanOutResult.ok) {
+        logger.info(
+          { taskId: task.id, childTaskIds: fanOutResult.value.childTaskIds },
+          'Drain fan-out completed, parent task marked as implemented',
+        );
+        return ok({ action: 'dispatched', taskId: task.id });
+      }
+
+      // Fan-out failed — fall through to normal dispatch
+      logger.warn(
+        { taskId: task.id, error: fanOutResult.error },
+        'Drain fan-out failed, falling back to normal dispatch',
+      );
+    }
+
     const agentType = resolveTaskAgentType(task, linearIssueLabels);
     const dispatchLabels = ensureDispatchLabelsForAgentType(linearIssueLabels, agentType);
 
@@ -181,6 +331,11 @@ export async function drainTaskQueue(
         continuationPrBranch: task.prBranch,
       }),
       ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+      // INT-949: Dispatch metadata fields from task document
+      ...(task.planningPrBranch !== undefined && { planningPrBranch: task.planningPrBranch }),
+      ...(task.planningPrUrl !== undefined && { planningPrUrl: task.planningPrUrl }),
+      ...(task.trackingCommentId !== undefined && { trackingCommentId: task.trackingCommentId }),
+      ...(task.retriedFrom !== undefined && { retriedFrom: task.retriedFrom }),
     });
 
     if (!dispatchResult.ok) {

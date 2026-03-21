@@ -106,4 +106,5 @@ export interface InferSynthesisContextParams {
   asOfDate?: string;
   defaultJurisdiction?: string;
   defaultCurrency?: string;
+  languageOverride?: string;
 }

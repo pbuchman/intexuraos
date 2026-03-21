@@ -112,5 +112,10 @@ export {
   type ExtractLinkPreviewsLogger,
 } from './usecases/extractLinkPreviews.js';
 
+export {
+  ProcessWebhookEventUseCase,
+  type ProcessWebhookEventDeps,
+} from './usecases/processWebhookEventUseCase.js';
+
 // Utilities
 export { normalizePhoneNumber } from './utils/index.js';

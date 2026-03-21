@@ -7,8 +7,9 @@ import {
   SkipPrefixRule,
   BotReviewEditRule,
   CodeWorkerOutputRule,
-  GitHubWebhookRules
+  GitHubWebhookRules,
 } from '../../../domain/services/gitHubWebhookRules.js';
+import { isPlanFile, evaluatePlanFiles } from '../../../domain/utils/planDetection.js';
 
 import { describe, it, expect } from 'vitest';
 
@@ -535,12 +536,21 @@ describe('GitHubWebhookRules', () => {
       expect(result).toEqual({ action: 'skip', reason: 'CODE_WORKER_NON_PR_EVENT' });
     });
 
-    it('should skip pull_request_review.submitted by code worker', () => {
-      const event = { ...mockEvent, eventType: 'pull_request_review' as const, action: 'submitted' as const, senderLogin: 'intexuraos-code-worker[bot]' };
+    it('should dispatch pull_request_review.submitted by code worker unconditionally', () => {
+      const body = '## Code Quality Review\n\n### Suggestions\n\n1. **Hardcoded value** — Extract timeout to a constant.';
+      const event = { ...mockEvent, eventType: 'pull_request_review' as const, action: 'submitted' as const, senderLogin: 'intexuraos-code-worker[bot]', body };
       const rule = new CodeWorkerOutputRule(codeWorkerBots);
       const result = rule.evaluate(event);
 
-      expect(result).toEqual({ action: 'skip', reason: 'CODE_WORKER_NON_PR_EVENT' });
+      expect(result).toEqual({ action: 'dispatch', reason: 'CODE_WORKER_REVIEW' });
+    });
+
+    it('should dispatch pull_request_review.submitted by code worker with null body', () => {
+      const event = { ...mockEvent, eventType: 'pull_request_review' as const, action: 'submitted' as const, senderLogin: 'intexuraos-code-worker[bot]', body: null };
+      const rule = new CodeWorkerOutputRule(codeWorkerBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({ action: 'dispatch', reason: 'CODE_WORKER_REVIEW' });
     });
 
     it('should dispatch pull_request.opened by non-bot sender', () => {
@@ -777,6 +787,88 @@ describe('GitHubWebhookRules', () => {
       expect(result).toEqual({
         action: 'needs_triage',
         reason: 'TRIAGE_REQUIRED'
+      });
+    });
+  });
+
+  describe('plan document detection', () => {
+    describe('evaluatePlanFiles', () => {
+      it('returns dispatch with plan_review for plan-only PR', () => {
+        const files = [
+          { filename: 'docs/plans/2026-03-20-my-plan.md' },
+          { filename: 'docs/superpowers/plans/feature-plan.md' },
+        ];
+        const result = evaluatePlanFiles(files);
+
+        expect(result).toEqual({
+          action: 'dispatch',
+          reason: 'PLAN_ONLY_PR',
+          context: { reviewType: 'plan_review' },
+        });
+      });
+
+      it('returns needs_triage for mix of plan and code files', () => {
+        const files = [
+          { filename: 'docs/plans/2026-03-20-my-plan.md' },
+          { filename: 'src/index.ts' },
+        ];
+        const result = evaluatePlanFiles(files);
+
+        expect(result).toEqual({
+          action: 'needs_triage',
+          reason: 'NOT_PLAN_ONLY_PR',
+        });
+      });
+
+      it('returns needs_triage when no plan files are present', () => {
+        const files = [
+          { filename: 'src/index.ts' },
+          { filename: 'src/utils.ts' },
+        ];
+        const result = evaluatePlanFiles(files);
+
+        expect(result).toEqual({
+          action: 'needs_triage',
+          reason: 'NOT_PLAN_ONLY_PR',
+        });
+      });
+
+      it('returns needs_triage for empty files array', () => {
+        const result = evaluatePlanFiles([]);
+
+        expect(result).toEqual({
+          action: 'needs_triage',
+          reason: 'NO_FILES_TO_EVALUATE',
+        });
+      });
+    });
+
+    describe('isPlanFile', () => {
+      it('matches plan file in plans directory', () => {
+        expect(isPlanFile('docs/superpowers/plans/2026-03-20-foo.md')).toBe(true);
+      });
+
+      it('matches plan file with plan in filename', () => {
+        expect(isPlanFile('some/path/my-plan-v2.md')).toBe(true);
+      });
+
+      it('does not match non-md file with plan in name', () => {
+        expect(isPlanFile('src/planner.ts')).toBe(false);
+      });
+
+      it('matches case-insensitively', () => {
+        expect(isPlanFile('docs/PLAN.md')).toBe(true);
+        expect(isPlanFile('docs/My-Plan.MD')).toBe(true);
+      });
+
+      it('does not match md files without plan in path', () => {
+        expect(isPlanFile('docs/readme.md')).toBe(false);
+        expect(isPlanFile('src/feature.md')).toBe(false);
+      });
+
+      it('does not match files with plan as a substring', () => {
+        expect(isPlanFile('docs/explanation.md')).toBe(false);
+        expect(isPlanFile('docs/airplane-mode.md')).toBe(false);
       });
     });
   });

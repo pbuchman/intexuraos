@@ -28,59 +28,78 @@ export interface GitHubPRAutomationLogDeps {
 
 export function createGitHubPRAutomationLog(deps: GitHubPRAutomationLogDeps): AutomationLog {
   const { gitHubPRClient, prAutomationCommentRepo, resolveOAuthToken, logger } = deps;
+  const pending = new Map<string, Promise<void>>();
+
+  async function doRecord(prRef: PRRef, event: AutomationEvent, tokenUserId?: string): Promise<void> {
+    try {
+      // For existing comments, use stored tokenUserId; for new comments, require caller-provided tokenUserId
+      const existing = await prAutomationCommentRepo.get(prRef.repository, prRef.prNumber);
+      const effectiveUserId = existing?.tokenUserId ?? tokenUserId;
+
+      if (effectiveUserId === undefined || effectiveUserId === '') {
+        logger.warn(
+          { repository: prRef.repository, prNumber: prRef.prNumber },
+          'Automation log: no tokenUserId available, skipping PR comment'
+        );
+        return;
+      }
+
+      const token = await resolveOAuthToken(effectiveUserId);
+      if (token === null) {
+        logger.warn(
+          { repository: prRef.repository, prNumber: prRef.prNumber },
+          'Automation log: OAuth token unavailable, skipping PR comment'
+        );
+        return;
+      }
+
+      const parsed = parseOwnerRepo(prRef.repository);
+      if (parsed === null) {
+        logger.warn(
+          { repository: prRef.repository, prNumber: prRef.prNumber },
+          'Automation log: invalid repository format, skipping PR comment'
+        );
+        return;
+      }
+      const { owner, repo } = parsed;
+      const eventLine = renderEvent(event, { repository: prRef.repository });
+
+      // Filtered events (e.g., deterministic skips) return null — skip recording entirely
+      if (eventLine === null) {
+        return;
+      }
+
+      const now = new Date().toISOString();
+
+      if (existing === undefined) {
+        await createNewComment(token, owner, repo, prRef, eventLine, now, effectiveUserId);
+      } else {
+        await appendToExistingComment(token, owner, repo, existing.commentId, eventLine, prRef, existing.eventCount, now);
+      }
+    } catch (error: unknown) {
+      logger.warn(
+        { repository: prRef.repository, prNumber: prRef.prNumber, error },
+        'Automation log: unexpected error recording event'
+      );
+    }
+  }
 
   return {
     async record(prRef: PRRef, event: AutomationEvent, tokenUserId?: string): Promise<void> {
+      const key = `${prRef.repository}:${String(prRef.prNumber)}`;
+      const prev = pending.get(key) ?? Promise.resolve();
+      const next = prev.then(() => doRecord(prRef, event, tokenUserId));
+      // Swallow errors so next caller isn't blocked by a previous failure.
+      // doRecord already catches internally, but belt-and-suspenders.
+      const swallowed = next.catch(() => { /* swallow */ });
+      pending.set(key, swallowed);
       try {
-        // For existing comments, use stored tokenUserId; for new comments, require caller-provided tokenUserId
-        const existing = await prAutomationCommentRepo.get(prRef.repository, prRef.prNumber);
-        const effectiveUserId = existing?.tokenUserId ?? tokenUserId;
-
-        if (effectiveUserId === undefined || effectiveUserId === '') {
-          logger.warn(
-            { repository: prRef.repository, prNumber: prRef.prNumber },
-            'Automation log: no tokenUserId available, skipping PR comment'
-          );
-          return;
+        await next;
+      } finally {
+        // Only clean up if no subsequent call has replaced our chain entry.
+        if (pending.get(key) === swallowed) {
+          pending.delete(key);
         }
-
-        const token = await resolveOAuthToken(effectiveUserId);
-        if (token === null) {
-          logger.warn(
-            { repository: prRef.repository, prNumber: prRef.prNumber },
-            'Automation log: OAuth token unavailable, skipping PR comment'
-          );
-          return;
-        }
-
-        const parsed = parseOwnerRepo(prRef.repository);
-        if (parsed === null) {
-          logger.warn(
-            { repository: prRef.repository, prNumber: prRef.prNumber },
-            'Automation log: invalid repository format, skipping PR comment'
-          );
-          return;
-        }
-        const { owner, repo } = parsed;
-        const eventLine = renderEvent(event, { repository: prRef.repository });
-
-        // Filtered events (e.g., deterministic skips) return null — skip recording entirely
-        if (eventLine === null) {
-          return;
-        }
-
-        const now = new Date().toISOString();
-
-        if (existing === undefined) {
-          await createNewComment(token, owner, repo, prRef, eventLine, now, effectiveUserId);
-        } else {
-          await appendToExistingComment(token, owner, repo, existing.commentId, eventLine, prRef, existing.eventCount, now);
-        }
-      } catch (error: unknown) {
-        logger.warn(
-          { repository: prRef.repository, prNumber: prRef.prNumber, error },
-          'Automation log: unexpected error recording event'
-        );
       }
     },
   };

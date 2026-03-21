@@ -1,5 +1,5 @@
 import { RefreshCw, TrendingUp, DollarSign, Zap, BarChart3 } from 'lucide-react';
-import { Card, Layout } from '@/components';
+import { Button, Card, ErrorBanner, Layout } from '@/components';
 import { useUsageCosts } from '@/hooks/useUsageCosts';
 import { formatMonth } from '@/utils/dateFormat';
 import type { MonthlyCost, ModelCost, CallTypeCost } from '@/types';
@@ -69,9 +69,9 @@ function SummaryCard({ title, value, icon, subtitle }: SummaryCardProps): React.
         <div>
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{title}</p>
           <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{value}</p>
-          {subtitle !== undefined && subtitle !== '' ? (
+          {subtitle && (
             <p className="text-xs text-slate-400 dark:text-slate-500">{subtitle}</p>
-          ) : null}
+          )}
         </div>
       </div>
     </Card>
@@ -224,25 +224,26 @@ export function LlmCostsPage(): React.JSX.Element {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">LLM Usage Costs</h2>
-          <p className="text-slate-600 dark:text-slate-300">Your LLM usage costs for the last 90 days</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {costs !== null
+              ? `Last 90 days · ${formatCost(costs.totalCostUsd)}`
+              : 'Last 90 days · Loading...'}
+          </p>
         </div>
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={(): void => {
             void refresh();
           }}
           disabled={loading}
-          className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-slate-700 dark:hover:text-slate-300"
           title="Refresh"
         >
           <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+        </Button>
       </div>
 
-      {error !== null && error !== '' ? (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
-          {error}
-        </div>
-      ) : null}
+      <ErrorBanner message={error} className="mb-6" />
 
       {loading ? (
         <div className="flex items-center justify-center py-12">

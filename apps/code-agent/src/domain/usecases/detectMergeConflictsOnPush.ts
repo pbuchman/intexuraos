@@ -1,6 +1,6 @@
 import { err, ok, type Logger, type Result } from '@intexuraos/common-core';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
-import type { CodeTask } from '../models/codeTask.js';
+import { MERGE_CONFLICT_SYSTEM_PROMPT_HASH, type CodeTask } from '../models/codeTask.js';
 import type { GitHubPREvent } from '../models/gitHubPREvent.js';
 import type { GitHubPRSummary, UpsertGitHubPRSummaryInput } from '../models/gitHubPRSummary.js';
 import type { WorkerConfig } from '../models/workerSettings.js';
@@ -11,9 +11,10 @@ import type { GitHubPREventRepository } from '../repositories/gitHubPREventRepos
 import type { GitHubPRSummaryRepository } from '../repositories/gitHubPRSummaryRepository.js';
 import type { LogLineRepository } from '../repositories/logLineRepository.js';
 import type { LinearIssueService } from '../services/linearIssueService.js';
-import type { MergeConflictDetector } from '../services/mergeConflictDetector.js';
+import { EMPTY_RECONCILE_RESULT, type MergeConflictDetector, type ReconcileResult } from '../services/mergeConflictDetector.js';
 import type { StatusMirrorService } from '../services/statusMirrorService.js';
-import type { DispatchWorkerCredentials, TaskDispatcherService } from '../services/taskDispatcher.js';
+import type { TaskDispatcherService } from '../services/taskDispatcher.js';
+import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 import { resolveLoginForTaskCreation } from '../services/gitHubDispatchService.js';
 import { fetchGitHubToken } from '../utils/gitHubTokenResolver.js';
@@ -22,7 +23,7 @@ import { generateWebhookSecret } from '../utils/secrets.js';
 import { sendTaskMessage } from './sendTaskMessage.js';
 
 const BRANCH_REF_PREFIX = 'refs/heads/';
-const SYSTEM_PROMPT_HASH = 'pr-merge-conflict-auto';
+const SYSTEM_PROMPT_HASH = MERGE_CONFLICT_SYSTEM_PROMPT_HASH;
 const DEFAULT_WEB_URL = 'https://intexuraos.cloud';
 const DEFAULT_RETRY_DELAY_MS = 500;
 const DEFAULT_MERGEABILITY_RETRIES = 2;
@@ -37,6 +38,7 @@ const TERMINAL_OR_PLANNED_TASK_STATUSES = new Set<CodeTask['status']>([
 ]);
 
 type MergeConflictStatus = GitHubPRSummary['mergeConflictStatus'];
+type ClassifiedMergeConflictStatus = NonNullable<MergeConflictStatus>;
 
 interface ConflictWorkflowResult {
   commentId: number | null;
@@ -63,8 +65,7 @@ interface ParsedRepository {
 interface CreateTaskDeps {
   codeTaskRepo: CodeTaskRepository;
   linearIssueService: LinearIssueService;
-  taskDispatcher: TaskDispatcherService;
-  serviceUrl: string;
+  taskEnqueueService: TaskEnqueueService;
   orchestratorSecret: string;
 }
 
@@ -76,7 +77,6 @@ interface CreateTaskParams {
   commentId: number;
   existingTask: CodeTask | null;
   ownerUserId: string;
-  worker: WorkerConfig;
 }
 
 interface ConflictWorkflowParams {
@@ -92,7 +92,8 @@ interface ConflictWorkflowParams {
 }
 
 interface SummaryUpdateParams {
-  event: GitHubPREvent;
+  repository: string;
+  lastActivityAt: Date;
   existingSummary: GitHubPRSummary;
   details: GitHubPullRequestDetails;
   status: MergeConflictStatus;
@@ -103,7 +104,7 @@ export interface DetectMergeConflictsOnPushDeps {
   logger: Logger;
   gitHubPRClient: Pick<
     GitHubPRClient,
-    'getPullRequestDetails' | 'postPRComment' | 'updateIssueComment'
+    'getPullRequestDetails' | 'postPRComment' | 'updateIssueComment' | 'listAllOpenPullRequests'
   >;
   gitHubPRSummaryRepo: GitHubPRSummaryRepository;
   codeTaskRepo: CodeTaskRepository;
@@ -111,12 +112,12 @@ export interface DetectMergeConflictsOnPushDeps {
   gitHubPREventRepo: Pick<GitHubPREventRepository, 'findByPullRequest'>;
   linearIssueService: LinearIssueService;
   taskDispatcher: TaskDispatcherService;
+  taskEnqueueService: TaskEnqueueService;
   logLineRepo: LogLineRepository;
   workerSettingsRepo: WorkerSettingsRepository;
   statusMirrorService: StatusMirrorService;
   whatsappNotifier: WhatsAppNotifier;
   allowedBots: Set<string>;
-  serviceUrl: string;
   orchestratorSecret: string;
   sleep?: (ms: number) => Promise<void>;
   mergeabilityRetries?: number;
@@ -142,7 +143,7 @@ function extractPushedBranch(payload: unknown): string | null {
   return ref.slice(BRANCH_REF_PREFIX.length);
 }
 
-function classifyMergeConflictStatus(mergeable: boolean | null): MergeConflictStatus {
+function classifyMergeConflictStatus(mergeable: boolean | null): ClassifiedMergeConflictStatus {
   if (mergeable === false) {
     return 'conflicting';
   }
@@ -262,7 +263,6 @@ function buildCreateTaskInput(params: {
   baseBranch: string;
   prompt: string;
   eventId: string;
-  workerName: string;
   userId: string;
   webhookSecret: string;
   linearIssueId?: string;
@@ -274,7 +274,7 @@ function buildCreateTaskInput(params: {
     sanitizedPrompt: params.prompt,
     systemPromptHash: SYSTEM_PROMPT_HASH,
     workerType: 'auto',
-    workerLocation: params.workerName,
+    workerLocation: 'queued',
     repository: params.repository,
     baseBranch: params.baseBranch,
     traceId: params.eventId,
@@ -284,18 +284,6 @@ function buildCreateTaskInput(params: {
     webhookSecret: params.webhookSecret,
     agentType: 'pull_request',
     ...(params.linearIssueId !== undefined && { linearIssueId: params.linearIssueId }),
-  };
-}
-
-function buildWorkerCredentials(worker: WorkerConfig): DispatchWorkerCredentials {
-  return {
-    workers: [{
-      name: worker.name,
-      url: worker.url,
-      cfAccessClientId: worker.cfAccessClientId,
-      cfAccessClientSecret: worker.cfAccessClientSecret,
-      dispatchSigningSecret: worker.dispatchSigningSecret,
-    }],
   };
 }
 
@@ -568,83 +556,38 @@ async function createMergeConflictTask(
   const taskId = `task_${crypto.randomUUID()}`;
   const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, taskId);
 
-  let createResult = await deps.codeTaskRepo.create(buildCreateTaskInput({
+  const createResult = await deps.codeTaskRepo.create(buildCreateTaskInput({
     taskId,
     repository: params.repository,
     prNumber: params.details.number,
     baseBranch: params.details.baseBranch,
     prompt,
     eventId: params.eventId,
-    workerName: params.worker.name,
+
     userId: params.ownerUserId,
     webhookSecret,
     ...(linkedLinearIssueId !== undefined && !shouldOmitLinearIssueId && { linearIssueId: linkedLinearIssueId }),
   }));
 
-  if (
-    !createResult.ok &&
-    createResult.error.code === 'ACTIVE_TASK_EXISTS' &&
-    linkedLinearIssueId !== undefined &&
-    !shouldOmitLinearIssueId
-  ) {
-    createResult = await deps.codeTaskRepo.create(buildCreateTaskInput({
-      taskId,
-      repository: params.repository,
-      prNumber: params.details.number,
-      baseBranch: params.details.baseBranch,
-      prompt,
-      eventId: params.eventId,
-      workerName: params.worker.name,
-      userId: params.ownerUserId,
-      webhookSecret,
-    }));
-  }
-
   if (!createResult.ok) {
     return err({ code: createResult.error.code, message: createResult.error.message });
   }
 
-  const dispatchResult = await deps.taskDispatcher.dispatch({
+  const enqueueResult = await deps.taskEnqueueService.enqueue({
     taskId,
-    ...(linkedLinearIssueId !== undefined && !shouldOmitLinearIssueId && { linearIssueId: linkedLinearIssueId }),
-    linearIssueLabels:
-      linearResult.linearIssueLabels.includes('pr-comment')
-        ? linearResult.linearIssueLabels
-        : [...linearResult.linearIssueLabels, 'pr-comment'],
-    hasChildren: linearResult.hasChildren,
-    prompt,
-    systemPromptHash: SYSTEM_PROMPT_HASH,
-    repository: params.repository,
-    baseBranch: params.details.baseBranch,
-    workerType: 'auto',
-    webhookUrl: `${deps.serviceUrl}/internal/webhooks/task-complete`,
-    webhookSecret,
-    traceId: params.eventId,
-    workerCredentials: buildWorkerCredentials(params.worker),
-    agentType: 'pull_request',
-    trackingCommentId: String(params.commentId),
+    userId: params.ownerUserId,
   });
 
-  if (!dispatchResult.ok) {
-    if (dispatchResult.error.code === 'at_capacity') {
-      return ok({ taskId, ownerUserId: params.ownerUserId });
-    }
-
+  if (!enqueueResult.ok) {
     await deps.codeTaskRepo.update(taskId, {
       status: 'failed',
       error: {
-        code: dispatchResult.error.code,
-        message: dispatchResult.error.message,
+        code: enqueueResult.error.code,
+        message: enqueueResult.error.message,
       },
     });
-    return err({ code: dispatchResult.error.code, message: dispatchResult.error.message });
+    return err({ code: enqueueResult.error.code, message: enqueueResult.error.message });
   }
-
-  await deps.codeTaskRepo.update(taskId, {
-    status: 'dispatched',
-    dispatchedAt: new Date(),
-    workerLocation: dispatchResult.value.workerLocation,
-  });
 
   return ok({ taskId, ownerUserId: params.ownerUserId });
 }
@@ -766,8 +709,7 @@ async function createConflictTaskWorkflow(
     {
       codeTaskRepo: params.deps.codeTaskRepo,
       linearIssueService: params.deps.linearIssueService,
-      taskDispatcher: params.deps.taskDispatcher,
-      serviceUrl: params.deps.serviceUrl,
+      taskEnqueueService: params.deps.taskEnqueueService,
       orchestratorSecret: params.deps.orchestratorSecret,
     },
     {
@@ -778,7 +720,6 @@ async function createConflictTaskWorkflow(
       commentId: params.commentId,
       existingTask: params.taskResolution.latestTask,
       ownerUserId: params.accessContext.userId,
-      worker: workerResult.value,
     }
   );
 
@@ -920,7 +861,7 @@ function buildSummaryUpdateInput(params: SummaryUpdateParams): UpsertGitHubPRSum
   const now = new Date();
 
   return {
-    repository: params.event.repository,
+    repository: params.repository,
     pullRequestNumber: params.existingSummary.pullRequestNumber,
     title: params.details.title,
     state: 'open',
@@ -952,18 +893,26 @@ function buildSummaryUpdateInput(params: SummaryUpdateParams): UpsertGitHubPRSum
       params.status === 'conflicting' || params.status === 'unknown'
         ? params.workflowResult.ownerUserId
         : null,
-    lastActivityAt: params.event.createdAt,
+    lastActivityAt: params.lastActivityAt,
     firstSeenAt: params.existingSummary.firstSeenAt,
   };
 }
 
+interface ProcessingTrigger {
+  eventId: string;
+  repository: string;
+  lastActivityAt: Date;
+}
+
+type ProcessingOutcome = 'closed' | 'clean' | 'conflicting' | 'unknown' | 'skipped' | 'error';
+
 async function processOpenSummaryOnPush(
   deps: DetectMergeConflictsOnPushDeps,
-  event: GitHubPREvent,
+  trigger: ProcessingTrigger,
   logger: Logger,
   parsedRepository: ParsedRepository,
   existingSummary: GitHubPRSummary
-): Promise<void> {
+): Promise<ProcessingOutcome> {
   const accessContext = await resolveGitHubAccessContext(
     {
       userServiceClient: deps.userServiceClient,
@@ -978,7 +927,7 @@ async function processOpenSummaryOnPush(
       { repository: existingSummary.repository, prNumber: existingSummary.pullRequestNumber },
       'Skipping conflict detection for PR without an OAuth-backed user'
     );
-    return;
+    return 'skipped';
   }
 
   const detailsResult = await loadPullRequestDetails(
@@ -995,10 +944,30 @@ async function processOpenSummaryOnPush(
       { error: detailsResult.error, prNumber: existingSummary.pullRequestNumber },
       'Failed to load PR details for conflict detection'
     );
-    return;
+    return 'skipped';
   }
 
   const details = detailsResult.value;
+
+  if (details.state !== 'open') {
+    logger.info(
+      { prNumber: existingSummary.pullRequestNumber, state: details.state },
+      'Closing stale PR summary — PR is no longer open on GitHub'
+    );
+    await upsertSummary(
+      deps.gitHubPRSummaryRepo,
+      {
+        repository: trigger.repository,
+        pullRequestNumber: existingSummary.pullRequestNumber,
+        lastActivityAt: trigger.lastActivityAt,
+        firstSeenAt: existingSummary.firstSeenAt,
+        state: details.state,
+      },
+      logger
+    );
+    return 'closed';
+  }
+
   const status = classifyMergeConflictStatus(details.mergeable);
   let taskResolution: ExistingConflictTaskResolution = {
     latestTask: null,
@@ -1010,12 +979,12 @@ async function processOpenSummaryOnPush(
     const resolutionResult = await resolveExistingConflictTask(
       deps.codeTaskRepo,
       existingSummary,
-      event.repository,
+      trigger.repository,
       existingSummary.pullRequestNumber,
       logger
     );
     if (!resolutionResult.ok) {
-      return;
+      return 'skipped';
     }
     taskResolution = resolutionResult.value;
   }
@@ -1023,9 +992,9 @@ async function processOpenSummaryOnPush(
   const workflowParams: ConflictWorkflowParams = {
     deps,
     logger,
-    repository: event.repository,
+    repository: trigger.repository,
     parsedRepository,
-    eventId: event.id,
+    eventId: trigger.eventId,
     existingSummary,
     details,
     accessContext,
@@ -1043,10 +1012,16 @@ async function processOpenSummaryOnPush(
     workflowResult = await resolveConflictWorkflow(workflowParams);
   }
 
+  logger.info(
+    { prNumber: existingSummary.pullRequestNumber, mergeConflictStatus: status },
+    'PR mergeability checked'
+  );
+
   await upsertSummary(
     deps.gitHubPRSummaryRepo,
     buildSummaryUpdateInput({
-      event,
+      repository: trigger.repository,
+      lastActivityAt: trigger.lastActivityAt,
       existingSummary,
       details,
       status,
@@ -1054,6 +1029,8 @@ async function processOpenSummaryOnPush(
     }),
     logger
   );
+
+  return status;
 }
 
 export function createDetectMergeConflictsOnPush(
@@ -1087,15 +1064,169 @@ export function createDetectMergeConflictsOnPush(
         return;
       }
 
+      const trigger: ProcessingTrigger = {
+        eventId: event.id,
+        repository: event.repository,
+        lastActivityAt: event.createdAt,
+      };
       for (const existingSummary of openSummariesResult.value) {
         await processOpenSummaryOnPush(
           deps,
-          event,
+          trigger,
           logger,
           parsedRepository,
           existingSummary
         );
       }
+    },
+
+    async reconcile(logger: Logger): Promise<ReconcileResult> {
+      // Query all tracked summaries (any state) so we discover repos even when
+      // every summary has been closed.  30 days covers any PR with recent activity.
+      const trackedResult = await deps.gitHubPRSummaryRepo.findRecentlyActive(30);
+      if (!trackedResult.ok) {
+        logger.warn({ error: trackedResult.error }, 'Failed to load PR summaries for reconciliation');
+        return EMPTY_RECONCILE_RESULT;
+      }
+
+      const summaries = trackedResult.value;
+      if (summaries.length === 0) {
+        logger.debug({}, 'No tracked PR summaries to reconcile');
+        return EMPTY_RECONCILE_RESULT;
+      }
+
+      logger.info({ count: summaries.length }, 'Reconciling PR state from GitHub');
+
+      let processed = 0;
+      let closed = 0;
+      let reopened = 0;
+      let skipped = 0;
+      let error = 0;
+
+      // Group summaries by repository
+      const byRepo = new Map<string, GitHubPRSummary[]>();
+      for (const summary of summaries) {
+        const existing = byRepo.get(summary.repository);
+        if (existing !== undefined) {
+          existing.push(summary);
+        } else {
+          byRepo.set(summary.repository, [summary]);
+        }
+      }
+
+      for (const [repository, repoSummaries] of byRepo) {
+        const parsedRepository = parseOwnerRepo(repository);
+        if (parsedRepository === null) {
+          logger.warn({ repository }, 'Skipping reconcile for repo with invalid repository format');
+          continue;
+        }
+
+        // Iterate through summaries until one yields a valid access context
+        let accessContext: GitHubAccessContext | null = null;
+        for (const candidate of repoSummaries) {
+          accessContext = await resolveGitHubAccessContext(
+            {
+              userServiceClient: deps.userServiceClient,
+              gitHubPREventRepo: deps.gitHubPREventRepo,
+              allowedBots: deps.allowedBots,
+            },
+            candidate,
+            logger
+          );
+          if (accessContext !== null) break;
+        }
+        if (accessContext === null) {
+          logger.info(
+            { repository, count: repoSummaries.length },
+            'Skipping reconcile for repo — no OAuth-backed user found'
+          );
+          skipped += repoSummaries.length;
+          processed += repoSummaries.length;
+          continue;
+        }
+
+        const openPRsResult = await deps.gitHubPRClient.listAllOpenPullRequests(
+          accessContext.token,
+          parsedRepository.owner,
+          parsedRepository.repo
+        );
+        if (!openPRsResult.ok) {
+          logger.warn(
+            { error: openPRsResult.error, repository },
+            'Failed to list open PRs for repo during reconcile; skipping repo'
+          );
+          skipped += repoSummaries.length;
+          processed += repoSummaries.length;
+          continue;
+        }
+
+        const openPRNumbers = new Set(openPRsResult.value.map((pr) => pr.number));
+
+        for (const existingSummary of repoSummaries) {
+          try {
+            if (!openPRNumbers.has(existingSummary.pullRequestNumber)) {
+              // PR is not open on GitHub
+              if (existingSummary.state === 'open') {
+                logger.info(
+                  { prNumber: existingSummary.pullRequestNumber, repository },
+                  'Closing PR summary — PR is no longer open on GitHub'
+                );
+                await upsertSummary(
+                  deps.gitHubPRSummaryRepo,
+                  {
+                    repository,
+                    pullRequestNumber: existingSummary.pullRequestNumber,
+                    lastActivityAt: existingSummary.lastActivityAt,
+                    firstSeenAt: existingSummary.firstSeenAt,
+                    state: 'closed',
+                  },
+                  logger
+                );
+                processed++;
+                closed++;
+              }
+              // Already closed in Firestore — skip silently
+              continue;
+            }
+
+            // PR is open on GitHub
+            if (existingSummary.state !== 'open') {
+              logger.info(
+                { prNumber: existingSummary.pullRequestNumber, repository, previousState: existingSummary.state },
+                'Re-opening PR summary — PR is open on GitHub'
+              );
+              await upsertSummary(
+                deps.gitHubPRSummaryRepo,
+                {
+                  repository,
+                  pullRequestNumber: existingSummary.pullRequestNumber,
+                  lastActivityAt: existingSummary.lastActivityAt,
+                  firstSeenAt: existingSummary.firstSeenAt,
+                  state: 'open',
+                },
+                logger
+              );
+              processed++;
+              reopened++;
+            }
+            // Already open in Firestore — skip silently
+          } catch (caughtError: unknown) {
+            error++;
+            processed++;
+            logger.error(
+              { error: caughtError, repository: existingSummary.repository, prNumber: existingSummary.pullRequestNumber },
+              'Unhandled error processing PR summary in reconcile; continuing'
+            );
+          }
+        }
+      }
+
+      logger.info(
+        { processed, closed, reopened, skipped, error },
+        'PR state reconciliation complete'
+      );
+
+      return { processed, closed, reopened, skipped, error };
     },
   };
 }

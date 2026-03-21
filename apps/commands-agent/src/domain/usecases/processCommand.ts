@@ -3,11 +3,14 @@ import type { Logger } from 'pino';
 import type { Command, CommandSourceType } from '../models/command.js';
 import { createCommand, createCommandId } from '../models/command.js';
 import type { CommandRepository } from '../ports/commandRepository.js';
-import type { ClassifierFactory } from '../ports/classifier.js';
+import type { ClassifierFactory, ClassificationResult } from '../ports/classifier.js';
 import type { EventPublisherPort } from '../ports/eventPublisher.js';
 import type { ActionCreatedEvent } from '../events/actionCreatedEvent.js';
-import type { UserServiceClient } from '@intexuraos/internal-clients';
+import type { UserServicePort } from '../ports/userServicePort.js';
 import type { ActionsAgentClient } from '../ports/actionsAgentClient.js';
+import type { Action } from '../models/action.js';
+import type { Result } from '@intexuraos/common-core';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 
 export interface ProcessCommandInput {
   userId: string;
@@ -27,11 +30,118 @@ export interface ProcessCommandUseCase {
   execute(input: ProcessCommandInput): Promise<ProcessCommandResult>;
 }
 
+export async function classifyCommand(deps: {
+  classifierFactory: ClassifierFactory;
+  llmClient: LlmGenerateClient;
+  text: string;
+  sourceType?: CommandSourceType;
+  logger: Logger;
+}): Promise<ClassificationResult> {
+  const classifier = deps.classifierFactory(deps.llmClient, deps.logger);
+  const options = deps.sourceType !== undefined ? { sourceType: deps.sourceType } : undefined;
+  return await classifier.classify(deps.text, options);
+}
+
+export async function createActionFromClassification(deps: {
+  actionsAgentClient: ActionsAgentClient;
+  userId: string;
+  commandId: string;
+  classification: ClassificationResult;
+  text: string;
+  summary: string | undefined; // @allow-undefined-type -- CA-3 introduced this pattern, preserving for consistency
+  logger: Logger;
+}): Promise<Result<Action>> {
+  return await deps.actionsAgentClient.createAction({
+    userId: deps.userId,
+    commandId: deps.commandId,
+    type: deps.classification.type,
+    confidence: deps.classification.confidence,
+    title: deps.classification.title,
+    payload: {
+      prompt: deps.text,
+      ...(deps.summary !== undefined && { summary: deps.summary }),
+    },
+  });
+}
+
+export async function publishActionEvent(deps: {
+  eventPublisher: EventPublisherPort;
+  action: Action;
+  userId: string;
+  commandId: string;
+  classification: ClassificationResult;
+  text: string;
+  summary: string | undefined; // @allow-undefined-type -- CA-3 introduced this pattern, preserving for consistency
+  logger: Logger;
+}): Promise<void> {
+  const eventPayload: ActionCreatedEvent['payload'] = {
+    prompt: deps.text,
+    confidence: deps.classification.confidence,
+  };
+  if (deps.summary !== undefined) {
+    eventPayload.summary = deps.summary;
+  }
+
+  const event: ActionCreatedEvent = {
+    type: 'action.created',
+    actionId: deps.action.id,
+    userId: deps.userId,
+    commandId: deps.commandId,
+    actionType: deps.classification.type,
+    title: deps.classification.title,
+    payload: eventPayload,
+    timestamp: new Date().toISOString(),
+  };
+
+  deps.logger.info(
+    {
+      commandId: deps.commandId,
+      actionId: deps.action.id,
+      actionType: deps.classification.type,
+    },
+    'Publishing action.created event to PubSub'
+  );
+
+  const publishResult = await deps.eventPublisher.publishActionCreated(event);
+
+  if (!publishResult.ok) {
+    deps.logger.error(
+      {
+        commandId: deps.commandId,
+        actionId: deps.action.id,
+        error: publishResult.error.message,
+      },
+      'Failed to publish action.created event'
+    );
+  } else {
+    deps.logger.info(
+      { commandId: deps.commandId, actionId: deps.action.id },
+      'Action event published successfully'
+    );
+  }
+}
+
+export function finalizeClassifiedCommand(
+  command: Command,
+  classification: ClassificationResult,
+  actionId: string
+): void {
+  command.classification = {
+    type: classification.type,
+    confidence: classification.confidence,
+    reasoning: classification.reasoning,
+    promptVersion: classification.promptVersion,
+    classifiedAt: new Date().toISOString(),
+  };
+  command.actionId = actionId;
+  command.status = 'classified';
+}
+
 export function createProcessCommandUseCase(deps: {
   commandRepository: CommandRepository;
   actionsAgentClient: ActionsAgentClient;
   classifierFactory: ClassifierFactory;
-  userServiceClient: UserServiceClient;
+  userServiceClient: UserServicePort;
   eventPublisher: EventPublisherPort;
   logger: Logger;
 }): ProcessCommandUseCase {
@@ -114,8 +224,13 @@ export function createProcessCommandUseCase(deps: {
       );
 
       try {
-        const classifier = classifierFactory(llmClientResult.value, logger);
-        const classification = await classifier.classify(input.text, { sourceType: input.sourceType });
+        const classification = await classifyCommand({
+          classifierFactory,
+          llmClient: llmClientResult.value,
+          text: input.text,
+          sourceType: input.sourceType,
+          logger,
+        });
 
         logger.info(
           {
@@ -136,16 +251,14 @@ export function createProcessCommandUseCase(deps: {
           'Creating action via actions-agent'
         );
 
-        const actionResult = await actionsAgentClient.createAction({
+        const actionResult = await createActionFromClassification({
+          actionsAgentClient,
           userId: input.userId,
           commandId: command.id,
-          type: classification.type,
-          confidence: classification.confidence,
-          title: classification.title,
-          payload: {
-            prompt: input.text,
-            ...(input.summary !== undefined && { summary: input.summary }),
-          },
+          classification,
+          text: input.text,
+          summary: input.summary,
+          logger,
         });
 
         if (!actionResult.ok) {
@@ -169,61 +282,18 @@ export function createProcessCommandUseCase(deps: {
           'Action created via actions-agent successfully'
         );
 
-        const eventPayload: ActionCreatedEvent['payload'] = {
-          prompt: input.text,
-          confidence: classification.confidence,
-        };
-        if (input.summary !== undefined) {
-          eventPayload.summary = input.summary;
-        }
-
-        const event: ActionCreatedEvent = {
-          type: 'action.created',
-          actionId: action.id,
+        await publishActionEvent({
+          eventPublisher,
+          action,
           userId: input.userId,
           commandId: command.id,
-          actionType: classification.type,
-          title: classification.title,
-          payload: eventPayload,
-          timestamp: new Date().toISOString(),
-        };
+          classification,
+          text: input.text,
+          summary: input.summary,
+          logger,
+        });
 
-        logger.info(
-          {
-            commandId: command.id,
-            actionId: action.id,
-            actionType: classification.type,
-          },
-          'Publishing action.created event to PubSub'
-        );
-
-        const publishResult = await eventPublisher.publishActionCreated(event);
-
-        if (!publishResult.ok) {
-          logger.error(
-            {
-              commandId: command.id,
-              actionId: action.id,
-              error: publishResult.error.message,
-            },
-            'Failed to publish action.created event'
-          );
-        } else {
-          logger.info(
-            { commandId: command.id, actionId: action.id },
-            'Action event published successfully'
-          );
-        }
-
-        command.classification = {
-          type: classification.type,
-          confidence: classification.confidence,
-          reasoning: classification.reasoning,
-          promptVersion: classification.promptVersion,
-          classifiedAt: new Date().toISOString(),
-        };
-        command.actionId = action.id;
-        command.status = 'classified';
+        finalizeClassifiedCommand(command, classification, action.id);
 
         logger.info(
           { commandId: command.id, status: command.status },

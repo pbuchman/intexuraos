@@ -92,6 +92,7 @@ sequenceDiagram
 
 | Commit     | Description                                                       | Date       |
 | ---------- | ----------------------------------------------------------------- | ---------- |
+| `c4e3a13c` | Release v3.3.0                                                    | 2026-03-15 |
 | `93aeac4a` | Remove ZAI provider and GLM-4.7 models (INT-836)                  | 2026-03-12 |
 | `3ec78836` | Add tests for v8-ignore blocks in user-service routes (INT-797)   | 2026-03-10 |
 | `1e742bbc` | Fix: remove schema enum to make isTranscriptionProvider coverable | 2026-03-06 |

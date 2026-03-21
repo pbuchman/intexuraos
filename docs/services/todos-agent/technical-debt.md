@@ -1,7 +1,7 @@
 # Todos Agent — Technical Debt
 
 **Last Updated:** 2026-03-15
-**Analysis Run:** Autonomous documentation refresh (service-scribe)
+**Analysis Run:** Autonomous documentation refresh (service-scribe, v3.3.0 force refresh)
 
 ---
 
@@ -97,11 +97,19 @@ All files are within reasonable size limits. The largest file (`todoRoutes.ts`) 
 
 ### None Detected
 
-No deprecated APIs or dependencies in use.
+No deprecated APIs or dependencies in use. ZAI provider and GLM-4.7 model references removed in v3.3.0 (commit `93aeac4a`).
 
 ---
 
 ## Recent Improvements
+
+### Release v3.3.0 (2026-03-15)
+
+Removed ZAI provider and GLM-4.7 models from the LLM dependency chain (commit `93aeac4a`). The service now relies exclusively on Gemini 2.5 Flash with platform Gemini (`INTEXURAOS_GEMINI_APP_API_KEY`) as fallback.
+
+### v8 Ignore Cleanup (2026-03-11)
+
+Fixed v8 ignore comment category annotations for test-infra blocks (commit `4ab46156`). Added dedicated tests for remaining v8-ignore blocks (INT-796, commit `752fd017`).
 
 ### Release v3.2.0 (2026-03-07)
 
@@ -127,11 +135,11 @@ Added Dash0 as an OpenTelemetry observability backend (PR #803). Provides distri
 
 Standardized all LLM API key env vars to `APP` naming convention (PR #793):
 
-- `INTEXURAOS_GEMINI_APP_API_KEY` — platform Gemini key (ZAI key removed in v3.3.0)
+- `INTEXURAOS_GEMINI_APP_API_KEY` — platform Gemini key
 
 ### Default LLM Switch to Gemini 2.5 Flash (2026-02-15)
 
-Switched the default extraction model to Gemini 2.5 Flash (PR #792). Added platform Gemini as the fallback chain (ZAI fallback removed in v3.3.0). Increased title generation timeout to accommodate the new model's response characteristics.
+Switched the default extraction model to Gemini 2.5 Flash (PR #792). Added platform Gemini as the fallback chain. Increased title generation timeout to accommodate the new model's response characteristics.
 
 ### Dev-Mode Log Formatting (2026-02-16)
 
@@ -155,21 +163,22 @@ Achieved 100% branch coverage with proper v8 ignore annotations (INT-427).
 
 ### Historical Issues
 
-| Date       | Issue                              | Resolution                                   |
-| ---------- | ---------------------------------- | -------------------------------------------- |
-| 2026-03-07 | Version at 3.1.0                   | Released v3.2.0 (44ea683a)                   |
-| 2026-03-02 | UserServiceClient mock incomplete  | Added resolveGitHubUsername mock (99febe66)  |
-| 2026-02-22 | Version at 3.0.0                   | Bumped to v3.1.0                             |
-| 2026-02-16 | No distributed tracing             | Added Dash0 OpenTelemetry integration (#803) |
-| 2026-02-15 | Inconsistent API key naming        | Standardized to APP convention (#793)        |
-| 2026-02-15 | Gemini 2.5 Flash not default       | Switched default LLM + added fallback (#792) |
-| 2026-01-31 | Branch coverage below 100%         | v8 ignore annotations + new tests (INT-427)  |
-| 2026-01-30 | Direct pino() usage (no Sentry)    | Migrated to createAppLogger                  |
-| 2026-01-30 | Raw reply.send() in routes         | Migrated to reply.ok()/reply.fail()          |
-| 2026-01-26 | Local user client re-export barrel | Removed infra/user/index.ts (INT-301)        |
-| 2026-01-24 | Manual LLM validation              | Migrated to Zod schemas (INT-218)            |
-| 2026-01-24 | Inconsistent user-service clients  | Unified via internal-clients (INT-269)       |
-| 2026-01-20 | Gaps in test coverage              | Additional test cases (INT-155)              |
+| Date       | Issue                              | Resolution                                       |
+| ---------- | ---------------------------------- | ------------------------------------------------ |
+| 2026-03-12 | ZAI/GLM-4.7 still in LLM chain     | Removed ZAI provider and GLM-4.7 (93aeac4a)      |
+| 2026-03-07 | Version at 3.1.0                   | Released v3.2.0 (44ea683a)                       |
+| 2026-03-02 | UserServiceClient mock incomplete  | Added resolveGitHubUsername mock (99febe66)      |
+| 2026-02-22 | Version at 3.0.0                   | Bumped to v3.1.0                                 |
+| 2026-02-16 | No distributed tracing             | Added Dash0 OpenTelemetry integration (#803)     |
+| 2026-02-15 | Inconsistent API key naming        | Standardized to APP convention (#793)            |
+| 2026-02-15 | Gemini 2.5 Flash not default       | Switched default LLM + added fallback (#792)     |
+| 2026-01-31 | Branch coverage below 100%         | v8 ignore annotations + new tests (INT-427)      |
+| 2026-01-30 | Direct pino() usage (no Sentry)    | Migrated to createAppLogger                      |
+| 2026-01-30 | Raw reply.send() in routes         | Migrated to reply.ok()/reply.fail()              |
+| 2026-01-26 | Local user client re-export barrel | Removed infra/user/index.ts (INT-301)            |
+| 2026-01-24 | Manual LLM validation              | Migrated to Zod schemas (INT-218)                |
+| 2026-01-24 | Inconsistent user-service clients  | Unified via internal-clients (INT-269)           |
+| 2026-01-20 | Gaps in test coverage              | Additional test cases (INT-155)                  |
 
 ---
 

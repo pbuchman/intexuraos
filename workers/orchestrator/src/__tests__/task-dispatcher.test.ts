@@ -146,7 +146,7 @@ describe('TaskDispatcher', () => {
   const mockConfig: OrchestratorConfig = {
     port: 8100,
     capacity: 5,
-    taskTimeoutMs: 7200000,
+    taskTimeoutMs: 10800000,
     stateFilePath: '/tmp/state.json',
     worktreeBasePath: '/tmp/worktrees',
     logBasePath: '/tmp/logs',
@@ -212,6 +212,10 @@ describe('TaskDispatcher', () => {
     listWorkers: vi.fn(async () => []),
     cleanupTaskSession: vi.fn(async () => undefined),
     isHealthy: vi.fn(() => true),
+    pullImage: vi.fn(async (_taskId: string, onProgress?: (msg: string) => void) => {
+      onProgress?.('Image pull completed in 2s');
+      return 'resolved-image@sha256:test';
+    }),
   };
 
   // Mock TokenRefresher
@@ -920,13 +924,13 @@ describe('TaskDispatcher', () => {
       await timeoutDispatcher.submitTask(request);
       await vi.advanceTimersByTimeAsync(0);
 
-      // Advance to 1h 55m (115 minutes)
-      await vi.advanceTimersByTimeAsync(115 * 60 * 1000);
+      // Advance to 2h 55m (175 minutes)
+      await vi.advanceTimersByTimeAsync(175 * 60 * 1000);
 
       expect(timeoutDispatcher.getRunningCount()).toBe(1);
     });
 
-    it('should kill container at 2h timeout', async () => {
+    it('should kill container at 3h timeout', async () => {
       const request: CreateTaskRequest = {
         taskId: 'timeout-kill-test',
         workerType: 'auto',
@@ -941,8 +945,8 @@ describe('TaskDispatcher', () => {
       await vi.advanceTimersByTimeAsync(0);
       vi.clearAllMocks();
 
-      // Advance to 2h (120 minutes)
-      await vi.advanceTimersByTimeAsync(120 * 60 * 1000);
+      // Advance to 3h (180 minutes)
+      await vi.advanceTimersByTimeAsync(180 * 60 * 1000);
 
       expect(mockIsolationProvider.destroyWorker).toHaveBeenCalled();
     });
@@ -962,12 +966,12 @@ describe('TaskDispatcher', () => {
       await timeoutDispatcher.submitTask(request);
       await vi.advanceTimersByTimeAsync(0);
 
-      // Advance to 1h 55m (115 minutes) - warning timeout
-      await vi.advanceTimersByTimeAsync(115 * 60 * 1000);
+      // Advance to 2h 55m (175 minutes) - warning timeout
+      await vi.advanceTimersByTimeAsync(175 * 60 * 1000);
 
       expect(warnSpy).toHaveBeenCalledWith(
         { taskId: 'warning-test' },
-        'Task approaching 2-hour timeout'
+        'Task approaching 3-hour timeout'
       );
     });
 
@@ -986,8 +990,8 @@ describe('TaskDispatcher', () => {
       await vi.advanceTimersByTimeAsync(0);
       vi.clearAllMocks();
 
-      // Advance past 2h timeout
-      await vi.advanceTimersByTimeAsync(120 * 60 * 1000 + 1000);
+      // Advance past 3h timeout
+      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
 
       expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('kill-webhook-test');
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
@@ -1012,8 +1016,8 @@ describe('TaskDispatcher', () => {
       await timeoutDispatcher.submitTask(request);
       await vi.advanceTimersByTimeAsync(0);
 
-      // Advance past 2h timeout
-      await vi.advanceTimersByTimeAsync(120 * 60 * 1000 + 1000);
+      // Advance past 3h timeout
+      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
 
       const task = await timeoutDispatcher.getTask('interrupted-test');
       expect(task?.status).toBe('interrupted');
@@ -1044,8 +1048,8 @@ describe('TaskDispatcher', () => {
       // Clear mocks to see what gets called
       vi.clearAllMocks();
 
-      // Advance past 2h timeout - should NOT send interruption webhook since task is already completed
-      await vi.advanceTimersByTimeAsync(120 * 60 * 1000 + 1000);
+      // Advance past 3h timeout - should NOT send interruption webhook since task is already completed
+      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
 
       // Task should still be completed (not interrupted)
       const finalTask = await timeoutDispatcher.getTask('race-test');
@@ -1476,8 +1480,8 @@ describe('TaskDispatcher', () => {
       task.status = 'completed';
       await statePersistence.save(state);
 
-      // Advance past 2h timeout
-      await vi.advanceTimersByTimeAsync(120 * 60 * 1000 + 1000);
+      // Advance past 3h timeout
+      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
 
       // Task should still be completed (not interrupted)
       const finalTask = await dispatcher.getTask('no-timeout-kill-test');
@@ -1682,8 +1686,8 @@ describe('TaskDispatcher', () => {
 
       vi.clearAllMocks();
 
-      // Advance past the 2h kill timeout
-      await vi.advanceTimersByTimeAsync(120 * 60 * 1000 + 1000);
+      // Advance past the 3h kill timeout
+      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
 
       // Task should still be completed (not interrupted)
       const finalTask = await timeoutDispatcher.getTask('status-change-test');
@@ -2893,7 +2897,7 @@ describe('TaskDispatcher', () => {
       );
     });
 
-    it('preserves failed worker container when preserveFailedContainers is enabled', async () => {
+    it('preserves worker container when preserveWorkerContainers is enabled', async () => {
       vi.useFakeTimers();
       const preserveState = createStatePersistence();
       const localDestroyWorker = vi.fn(async () => undefined);
@@ -2926,7 +2930,7 @@ describe('TaskDispatcher', () => {
         localIsolation,
         {
           maxAttempts: 1,
-          preserveFailedContainers: true,
+          preserveWorkerContainers: true,
           verifier: {
             verify,
             describe: (): { enabled: boolean } => ({ enabled: true }),
@@ -2985,7 +2989,7 @@ describe('TaskDispatcher', () => {
         localIsolation,
         {
           maxAttempts: 1,
-          preserveFailedContainers: true,
+          preserveWorkerContainers: true,
           verifier: {
             verify: vi.fn().mockResolvedValue({
               passed: true,
@@ -3035,6 +3039,128 @@ describe('TaskDispatcher', () => {
         taskId,
         expect.stringContaining('Preserving worker container for debugging')
       );
+    });
+
+    function createPreserveTestFixture(): {
+      destroyWorker: ReturnType<typeof vi.fn>;
+      preserveWorker: ReturnType<typeof vi.fn>;
+      dispatcher: TaskDispatcher;
+    } {
+      const state = createStatePersistence();
+      const destroyWorker = vi.fn(async () => undefined);
+      const preserveWorker = vi.fn(async () => undefined);
+      const cleanupTaskSession = vi.fn(async () => undefined);
+      const isolationProvider: IsolationProvider = {
+        ...mockIsolationProvider,
+        destroyWorker,
+        preserveWorker,
+        cleanupTaskSession,
+      };
+      const isolation: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: isolationProvider,
+      };
+
+      const dispatcher = new TaskDispatcher(
+        mockConfig,
+        state,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        isolation,
+        {
+          maxAttempts: 1,
+          preserveWorkerContainers: true,
+          verifier: {
+            verify: vi.fn().mockResolvedValue({
+              passed: true,
+              missingFields: [],
+              verifierFailure: false,
+              trace: dummyTrace,
+            }),
+            describe: (): { enabled: boolean } => ({ enabled: true }),
+            extractResumeSummary: vi.fn().mockResolvedValue(undefined),
+          },
+        }
+      );
+
+      return { destroyWorker, preserveWorker, dispatcher };
+    }
+
+    it('does not preserve review agent containers when preserveWorkerContainers is enabled', async () => {
+      const { destroyWorker, preserveWorker, dispatcher } = createPreserveTestFixture();
+
+      const taskId = 'review-no-preserve';
+      await dispatcher.submitTask({
+        taskId,
+        workerType: 'auto',
+        prompt: 'Review task should not preserve',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'review',
+      });
+      await flushAsync();
+
+      const task = await dispatcher.getTask(taskId);
+      if (task === null) {
+        throw new Error('Task not found');
+      }
+
+      const internalDispatcher = dispatcher as unknown as {
+        finalizeTask: (
+          taskArg: Record<string, unknown>,
+          finalStatus: 'completed',
+          payload: { result?: unknown; error?: unknown }
+        ) => Promise<void>;
+      };
+      await internalDispatcher.finalizeTask(
+        task as unknown as Record<string, unknown>,
+        'completed',
+        {}
+      );
+
+      expect(preserveWorker).not.toHaveBeenCalled();
+      expect(destroyWorker).toHaveBeenCalledWith(taskId);
+    });
+
+    it('does not preserve pull_request agent containers when preserveWorkerContainers is enabled', async () => {
+      const { destroyWorker, preserveWorker, dispatcher } = createPreserveTestFixture();
+
+      const taskId = 'pr-no-preserve';
+      await dispatcher.submitTask({
+        taskId,
+        workerType: 'auto',
+        prompt: 'PR task should not preserve',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'pull_request',
+      });
+      await flushAsync();
+
+      const task = await dispatcher.getTask(taskId);
+      if (task === null) {
+        throw new Error('Task not found');
+      }
+
+      const internalDispatcher = dispatcher as unknown as {
+        finalizeTask: (
+          taskArg: Record<string, unknown>,
+          finalStatus: 'failed',
+          payload: { result?: unknown; error?: unknown }
+        ) => Promise<void>;
+      };
+      await internalDispatcher.finalizeTask(task as unknown as Record<string, unknown>, 'failed', {
+        error: { code: 'TEST', message: 'test', remediation: { action: 'retry' as const } },
+      });
+
+      expect(preserveWorker).not.toHaveBeenCalled();
+      expect(destroyWorker).toHaveBeenCalledWith(taskId);
     });
 
     it('uses fallback attempt metadata when persisted task is missing fields', async () => {
@@ -6412,6 +6538,109 @@ describe('TaskDispatcher', () => {
         expect(result.error.type).toBe('service_error');
         expect(result.error.message).toContain('Failed to start worker');
       }
+      vi.useRealTimers();
+    });
+
+    it('image pull timeout fails the task via submitTask', async () => {
+      vi.useFakeTimers();
+      const statePersistence = createStatePersistence();
+      const hangingPullProvider: IsolationProvider = {
+        ...mockIsolationProvider,
+        pullImage: vi.fn(
+          // eslint-disable-next-line @typescript-eslint/no-empty-function -- intentionally never resolves to simulate stuck pull
+          (): Promise<string> => new Promise(() => {})
+        ),
+        isHealthy: vi.fn(() => true),
+      };
+      const hangingPullIsolation: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: hangingPullProvider,
+      };
+      const pullTimeoutDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        hangingPullIsolation,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'pull-timeout-test',
+        prompt: 'Test prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        workerType: 'auto',
+        baseBranch: 'development',
+        linearIssueLabels: [],
+        hasChildren: false,
+        repository: 'pbuchman/intexuraos',
+      };
+
+      await pullTimeoutDispatcher.submitTask(request);
+      // Flush async chain so executeTaskSetup reaches pullImage
+      await vi.advanceTimersByTimeAsync(0);
+      // Trigger IMAGE_PULL_TIMEOUT_MS (15 minutes)
+      await vi.advanceTimersByTimeAsync(900_000);
+
+      // createWorker should NOT have been called since pull timed out
+      expect(hangingPullProvider.createWorker).not.toHaveBeenCalled();
+      vi.useRealTimers();
+    });
+
+    it('passes resolvedImage from pullImage to createWorker', async () => {
+      vi.useFakeTimers();
+
+      const request: CreateTaskRequest = {
+        taskId: 'resolved-image-test',
+        prompt: 'Test prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        workerType: 'auto',
+        baseBranch: 'development',
+        linearIssueLabels: [],
+        hasChildren: false,
+        repository: 'pbuchman/intexuraos',
+      };
+
+      await dispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const config = createWorkerCall?.[0];
+      expect(config?.resolvedImage).toBe('resolved-image@sha256:test');
+      vi.useRealTimers();
+    });
+
+    it('forwards pull progress callback to provider', async () => {
+      vi.useFakeTimers();
+
+      const request: CreateTaskRequest = {
+        taskId: 'progress-test',
+        prompt: 'Test prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        workerType: 'auto',
+        baseBranch: 'development',
+        linearIssueLabels: [],
+        hasChildren: false,
+        repository: 'pbuchman/intexuraos',
+      };
+
+      await dispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Verify pullImage was called with taskId and an onProgress callback
+      const pullImageFn = mockIsolationProvider.pullImage;
+      expect(pullImageFn).toBeDefined();
+      const pullImageMock = vi.mocked(pullImageFn as NonNullable<typeof pullImageFn>);
+      expect(pullImageMock).toHaveBeenCalled();
+      const pullImageCall = pullImageMock.mock.calls[0];
+      expect(pullImageCall?.[0]).toBe('progress-test');
+      expect(typeof pullImageCall?.[1]).toBe('function');
       vi.useRealTimers();
     });
   });

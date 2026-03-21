@@ -538,8 +538,8 @@ async function bootstrap(): Promise<void> {
       'Claude worker forensics mode enabled (core dumps, exec stream persistence, crash snapshots)'
     );
   }
-  const preserveFailedContainers =
-    getOptionalEnv('INTEXURAOS_PRESERVE_FAILED_WORKER_CONTAINERS', '1') !== '0';
+  const preserveWorkerContainers =
+    getOptionalEnv('INTEXURAOS_PRESERVE_WORKER_CONTAINERS', '1') !== '0';
   const sharedCredsPath = join(orchestratorDir, 'claude-creds');
   ensureDirectoryExists(sharedCredsPath);
 
@@ -655,13 +655,13 @@ async function bootstrap(): Promise<void> {
   const completionControl: CompletionControlConfig = {
     maxAttempts: completionMaxAttemptsRaw,
     verifier: completionVerifier,
-    preserveFailedContainers,
+    preserveWorkerContainers,
   };
 
   logger.info(
     {
       completionMaxAttempts: completionControl.maxAttempts,
-      preserveFailedContainers,
+      preserveWorkerContainers,
       workerImage,
       verifier: completionVerifier.describe(),
     },

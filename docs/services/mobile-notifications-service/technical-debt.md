@@ -1,7 +1,7 @@
-# Mobile Notifications Service -- Technical Debt
+# Mobile Notifications Service — Technical Debt
 
 **Last Updated:** 2026-03-15
-**Analysis Run:** v3.3.0 documentation refresh (v8 ignore test replacement)
+**Analysis Run:** [2026-03-15 documentation refresh](../../documentation-runs.md)
 
 ---
 
@@ -9,22 +9,22 @@
 
 | Category    | Count | Severity |
 | ----------- | ----- | -------- |
-| Code Smells | 0     | -        |
-| Test Gaps   | 0     | -        |
-| Type Issues | 0     | -        |
-| TODOs       | 0     | -        |
-| **Total**   | **0** | -        |
+| Code Smells | 0     | —        |
+| Test Gaps   | 0     | —        |
+| Type Issues | 0     | —        |
+| TODOs       | 0     | —        |
+| **Total**   | **0** | —        |
 
 ---
 
 ## Future Plans
 
-1. **Push provider integration** -- Direct FCM/APNs integration to push notifications back to devices (currently only stores for polling/internal queries)
-2. **iOS support** -- Expand beyond Android/Tasker to iOS Shortcuts or native companion app
-3. **Rich notifications** -- Support images, action buttons, and sound customization in webhook payloads
-4. **Scheduled delivery** -- Time-based push scheduling for notification reminders
-5. **Batch operations** -- Bulk notification management (bulk delete, bulk mark-as-read)
-6. **Notification categories** -- AI-powered automatic categorization of notifications by type (chat, alert, transaction, etc.)
+1. **Push provider integration** — Direct FCM/APNs integration to push notifications back to devices (currently only stores for polling/internal queries)
+2. **iOS support** — Expand beyond Android/Tasker to iOS Shortcuts or native companion app
+3. **Rich notifications** — Support images, action buttons, and sound customization in webhook payloads
+4. **Scheduled delivery** — Time-based push scheduling for notification reminders
+5. **Batch operations** — Bulk notification management (bulk delete, bulk mark-as-read)
+6. **Notification categories** — AI-powered automatic categorization of notifications by type (chat, alert, transaction, etc.)
 
 ---
 
@@ -64,7 +64,7 @@ _None found in codebase._
 
 ## SRP Violations
 
-_None identified. Largest file is filterRoutes.ts at 293 lines (under 300-line threshold)._
+_None identified. Largest file is `filterRoutes.ts` at 293 lines (under 300-line threshold)._
 
 ---
 
@@ -82,18 +82,18 @@ _None identified._
 
 ## Resolved Issues
 
-| Date       | Issue                                   | Resolution                                                                                  |
-| ---------- | --------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 2026-03-11 | v8 ignore blocks in repositories/routes | Replaced with real tests for Firestore error paths; reduced to 10 directives across 4 files |
-| 2026-02-01 | Response contract violations            | All routes migrated to standardized `reply.ok()` / `reply.fail()` contract                  |
-| 2026-02-01 | Direct pino() usage                     | Replaced with `createAppLogger()` from `@intexuraos/infra-sentry`                           |
-| 2026-02-01 | Inconsistent internal error format      | Internal routes now return `{ success, error: { code, message } }`                          |
-| 2026-02-02 | 100% branch coverage not enforced       | Added v8 ignore exemptions for TypeScript-only safety branches; strict enforcement on       |
+| Date       | Issue                                   | Resolution                                                                                    |
+| ---------- | --------------------------------------- | --------------------------------------------------------------------------------------------- |
+| 2026-03-11 | v8 ignore blocks in repositories/routes | Replaced with real tests for Firestore error paths; reduced to 10 directives across 4 files   |
+| 2026-02-01 | Response contract violations            | All routes migrated to standardized `reply.ok()` / `reply.fail()` contract                    |
+| 2026-02-01 | Direct pino() usage                     | Replaced with `createAppLogger()` from `@intexuraos/infra-sentry`                             |
+| 2026-02-01 | Inconsistent internal error format      | Internal routes now return `{ success, error: { code, message } }`                            |
+| 2026-02-02 | 100% branch coverage not enforced       | Added v8 ignore exemptions for TypeScript-only safety branches; strict enforcement now active |
 
 ---
 
 ## Related
 
-- [Features](features.md) -- User-facing documentation
-- [Technical](technical.md) -- Developer reference
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
 - [Documentation Run Log](../../documentation-runs.md)

@@ -26,7 +26,7 @@ When the user wants to create a command (todo, note, bookmark, etc.):
 1. Propose the command clearly in your response
 2. Include an action annotation at the END of your response in this format:
    [ACTION: create_command {"text": "exact text user said", "source": "pwa-shared"}]
-3. Ask for confirmation (e.g., "Shall I create this for you? Say 'yes' to confirm.")
+3. Ask for confirmation (e.g., "Shall I create this for you?")
 
 The action annotation format:
 - Must be at the very end of your response
@@ -35,7 +35,7 @@ The action annotation format:
 - The "source" field should always be "pwa-shared"
 
 Example response:
-"I'll create a todo: 'buy groceries'. Please say 'yes' to confirm.
+"I'll create a todo: 'buy groceries'. Shall I create this for you?
 [ACTION: create_command {"text": "buy groceries", "source": "pwa-shared"}]"
 
 Confirmation handling:

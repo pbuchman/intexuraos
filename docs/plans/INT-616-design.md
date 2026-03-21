@@ -4,9 +4,9 @@
 
 **Goal:** Add OpenRouter as a new LLM provider to the research studio, enabling users to access 200+ models from a single API key with multi-model selection support.
 
-**Key Insight:** OpenRouter provides an OpenAI-compatible API (`https://openrouter.ai/api/v1`) that proxies requests to multiple LLM providers. Unlike existing IntexuraOS providers (Google, Anthropic, OpenAI, Perplexity, Zai) which each support 2-3 static models, OpenRouter dynamically exposes 200+ models from dozens of providers.
+**Key Insight:** OpenRouter provides an OpenAI-compatible API (`https://openrouter.ai/api/v1`) that proxies requests to multiple LLM providers. Unlike existing IntexuraOS providers (Google, Anthropic, OpenAI, Perplexity) which each support 2-3 static models, OpenRouter dynamically exposes 200+ models from dozens of providers.
 
-**Approach:** Integrate OpenRouter as a 6th provider in the existing architecture, with a dynamic model catalog fetched from the OpenRouter API at runtime.
+**Approach:** Integrate OpenRouter as a 5th provider in the existing architecture, with a dynamic model catalog fetched from the OpenRouter API at runtime.
 
 ---
 
@@ -108,8 +108,8 @@ packages/llm-contract/src/supportedModels.ts
 All models and providers are **statically typed** as TypeScript literal types:
 
 ```typescript
-type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity' | 'zai';
-type LLMModel = 'gemini-2.5-pro' | 'claude-opus-4-5-20251101' | ... ; // 16 models
+type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity';
+type LLMModel = 'gemini-2.5-pro' | 'claude-opus-4-5-20251101' | ... ; // 15 models
 ```
 
 **Key constraint:** Adding a new static model requires changes to the type union, `ALL_LLM_MODELS` array, `MODEL_PROVIDER_MAP`, pricing migrations, and the UI.
@@ -126,7 +126,6 @@ interface DecryptedApiKeys {
   openai?: string;
   anthropic?: string;
   perplexity?: string;
-  zai?: string;
 }
 ```
 
@@ -142,10 +141,10 @@ apps/research-agent/src/infra/llm/LlmAdapterFactory.ts
 function createResearchProvider(model, apiKey, userId, pricing, logger): LlmResearchProvider {
   const provider = getProviderForModel(model);
   switch (provider) {
-    case 'google':    return new GeminiAdapter(...);
-    case 'anthropic': return new ClaudeAdapter(...);
-    case 'openai':    return new GptAdapter(...);
-    // ...
+    case 'google':     return new GeminiAdapter(...);
+    case 'anthropic':  return new ClaudeAdapter(...);
+    case 'openai':     return new GptAdapter(...);
+    case 'perplexity': return new PerplexityAdapter(...);
   }
 }
 ```
@@ -188,7 +187,7 @@ export type OpenRouter = 'openrouter';
 export type OpenRouterModelId = string & { readonly __brand: 'OpenRouterModelId' };
 
 // Extend the provider union
-export type LlmProvider = Google | OpenAI | Anthropic | Perplexity | Zai | OpenRouter;
+export type LlmProvider = Google | OpenAI | Anthropic | Perplexity | OpenRouter;
 
 // ResearchModel now includes OpenRouter models
 export type ResearchModel =
@@ -406,7 +405,6 @@ export function createResearchProvider(
     case 'anthropic':  return new ClaudeAdapter(...);
     case 'openai':     return new GptAdapter(...);
     case 'perplexity': return new PerplexityAdapter(...);
-    case 'zai':        return new GlmAdapter(...);
     case 'openrouter': return new OpenRouterAdapter(apiKey, model, userId, pricing, logger);
   }
 }
@@ -422,7 +420,6 @@ interface DecryptedApiKeys {
   openai?: string;
   anthropic?: string;
   perplexity?: string;
-  zai?: string;
   openrouter?: string;  // NEW
 }
 ```
@@ -597,7 +594,7 @@ User opens research page
 
 **Rationale:** Prevents collision with existing model IDs. The `getProviderForModel()` function can check for `or:` prefix to route to OpenRouter.
 
-**Alternative considered:** Use raw OpenRouter IDs. Rejected because `openai/gpt-4o` could collide with our static `gpt-5.2` provider mapping.
+**Alternative considered:** Use raw OpenRouter IDs. Rejected because `openai/gpt-4o` could collide with our static GPT provider mapping.
 
 ### Decision 2: No Web Search for OpenRouter Models
 

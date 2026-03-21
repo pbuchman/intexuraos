@@ -179,6 +179,8 @@ export interface AppConfig {
   linearAgentUrl: string;
   codeAgentUrl: string;
   chatAgentUrl: string;
+  cronAgentUrl: string;
+  hellscriptAgentUrl: string;
   appSettingsServiceUrl: string;
   firebaseProjectId: string;
   firebaseApiKey: string;
@@ -1424,3 +1426,41 @@ export interface GitHubEventLogResponse {
   rows: GitHubEventLogRow[];
   nextCursor?: string;
 }
+
+// Merge Queue types
+export type {
+  MergeQueueBranch,
+  MergeQueuePr,
+  PrFilterStatus,
+  MergedPrEntry,
+  SkipReason,
+  SkippedPrEntry,
+  WatchStatus,
+  MergeQueueWatch,
+} from './mergeQueue.js';
+
+// Hellscript types
+export type {
+  HellscriptBufferSummary,
+  HellscriptEvent,
+  HellscriptDraftVersion,
+  HellscriptWorkspaceResponse,
+  HellscriptMaterializedState,
+  HellscriptImposeRequest,
+  HellscriptImposeResponse,
+  HellscriptIntentKind,
+  HellscriptInterpretedIntent,
+} from './hellscript.js';
+
+// Cron Agent types
+export type {
+  CronSchedule,
+  CronScheduleStatus,
+  CronExecution,
+  CronExecutionStatus,
+  ToolCallLog,
+  ServiceInfo,
+  ListSchedulesResponse,
+  ListExecutionsResponse,
+  CreateScheduleRequest,
+} from './cronAgent.js';

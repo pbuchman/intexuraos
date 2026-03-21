@@ -28,7 +28,7 @@ When you unshare a piece of research, the associated cover image is deleted from
 
 ### Works Without Your Own API Keys
 
-If you have configured your own provider API keys, the service uses them — keeping costs under your control. If you have not, the platform provides fallback keys automatically, so image generation works from day one with no setup required.
+If you have configured your own provider API keys, the service uses them — keeping costs under your control. If you have not, the platform provides a Gemini fallback key automatically, so image generation works from day one with no setup required.
 
 ### Human-Readable File Paths
 
@@ -40,13 +40,13 @@ When a title is provided, the generated image receives a readable file name deri
 - **Invisible prompt engineering** — The two-step pipeline handles the hard part so you do not have to
 - **Thumbnail included** — Every image ships with a 256px preview, ready for cards and social sharing
 - **Automatic cleanup** — Unsharing removes both storage and database records, preventing orphans
-- **Zero-configuration start** — Platform fallback keys mean image generation works before users add their own API keys
+- **Zero-configuration start** — Platform Gemini fallback key means image generation works before users add their own API keys
 - **User-controlled costs** — When users bring their own keys, their keys are used
 
 ## Limitations
 
 - **Works behind the scenes** — End users never interact with this service directly; it runs in the background, called by other agents like research-agent
-- **Fallback model limits** — Platform-provided keys work for all users, but may use different models or have lower rate limits than your own provider keys
+- **Fallback model limits** — Platform-provided Gemini key works for all users, but personal keys may support more models or higher rate limits
 - **No image editing** — Generates new images only; cannot crop, filter, or modify an existing image
 - **No style selection** — You cannot choose artistic styles, color palettes, or visual themes; the service decides what fits the content
 - **Generation takes a few seconds** — The two-step pipeline (prompt creation then image generation) adds processing time

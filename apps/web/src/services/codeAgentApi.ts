@@ -15,6 +15,23 @@ import type {
   WorkersStatusResponse,
 } from '@/types';
 
+export interface QueuedTask {
+  id: string;
+  prompt: string;
+  linearIssueId?: string;
+  workerType: string;
+  agentType?: string;
+  queuedAt: string;
+  createdAt: string;
+  position: number;
+}
+
+export interface QueueResponse {
+  tasks: QueuedTask[];
+  totalQueued: number;
+  maxQueueSize: number;
+}
+
 /**
  * List code tasks for the current user
  */
@@ -68,6 +85,15 @@ export async function submitCodeTask(
 export async function deleteCodeTask(accessToken: string, taskId: string): Promise<void> {
   await apiRequest<{ deleted: boolean }>(config.codeAgentUrl, `/code/tasks/${taskId}`, accessToken, {
     method: 'DELETE',
+  });
+}
+
+/**
+ * Archive a code task by ID
+ */
+export async function archiveCodeTask(accessToken: string, taskId: string): Promise<void> {
+  await apiRequest<{ archived: boolean }>(config.codeAgentUrl, `/code/tasks/${taskId}/archive`, accessToken, {
+    method: 'POST',
   });
 }
 
@@ -128,7 +154,10 @@ export async function sendTaskMessage(
 }
 
 /**
- * Start execution-agent implementation from a completed planning task
+ * Start execution-agent implementation from a completed planning task.
+ * @param accessToken - Auth0 access token for authorization.
+ * @param taskId - ID of the planning task to implement.
+ * @param workerType - Optional worker type override. When omitted, the server uses its default.
  */
 export async function startImplementation(
   accessToken: string,
@@ -141,7 +170,7 @@ export async function startImplementation(
     accessToken,
     {
       method: 'POST',
-      body: workerType !== undefined ? { workerType } : undefined,
+      body: workerType !== undefined ? { workerType } : {},
     }
   );
 }
@@ -211,5 +240,16 @@ export async function hydrateGitHubEventLogRows(
       method: 'POST',
       body: { ids },
     }
+  );
+}
+
+/**
+ * Get the current dispatch queue status
+ */
+export async function getDispatchQueue(accessToken: string): Promise<QueueResponse> {
+  return await apiRequest<QueueResponse>(
+    config.codeAgentUrl,
+    '/code/queue',
+    accessToken,
   );
 }

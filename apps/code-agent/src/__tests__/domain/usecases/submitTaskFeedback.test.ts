@@ -14,8 +14,7 @@ import { err, ok } from '@intexuraos/common-core';
 import { submitTaskFeedback, type SubmitTaskFeedbackDeps, type SubmitTaskFeedbackRequest } from '../../../domain/usecases/submitTaskFeedback.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
 import type { LinearAgentClient } from '../../../domain/ports/linearAgentClient.js';
-import type { TaskDispatcherService } from '../../../domain/services/taskDispatcher.js';
-import type { WhatsAppNotifier } from '../../../domain/services/whatsappNotifier.js';
+import type { TaskEnqueueService } from '../../../domain/services/taskEnqueueService.js';
 import type { MetricsClient } from '../../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../../domain/ports/workerSettingsRepository.js';
 import type { GitHubPRClient } from '../../../domain/ports/gitHubPRClient.js';
@@ -85,8 +84,7 @@ function createMockWorkerSettings(overrides?: Partial<UserWorkerSettings>): User
 describe('submitTaskFeedback', () => {
   let mockCodeTaskRepo: Partial<CodeTaskRepository>;
   let mockLinearAgentClient: Partial<LinearAgentClient>;
-  let mockTaskDispatcher: Partial<TaskDispatcherService>;
-  let mockWhatsappNotifier: Partial<WhatsAppNotifier>;
+  let mockTaskEnqueueService: Partial<TaskEnqueueService>;
   let mockMetricsClient: Partial<MetricsClient>;
   let mockWorkerSettingsRepo: Partial<WorkerSettingsRepository>;
   let mockGitHubPRClient: Partial<GitHubPRClient>;
@@ -126,12 +124,8 @@ describe('submitTaskFeedback', () => {
       addComment: vi.fn().mockResolvedValue(ok({ commentId: 'comment-123' })),
     };
 
-    mockTaskDispatcher = {
-      dispatch: vi.fn().mockResolvedValue(ok({ dispatched: true, workerLocation: 'home-mac' })),
-    };
-
-    mockWhatsappNotifier = {
-      notifyTaskStarted: vi.fn().mockResolvedValue(ok(undefined)),
+    mockTaskEnqueueService = {
+      enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'task_followup-456', queuePosition: 1 })),
     };
 
     mockMetricsClient = {
@@ -159,8 +153,7 @@ describe('submitTaskFeedback', () => {
       logger: mockLogger,
       codeTaskRepo: mockCodeTaskRepo as CodeTaskRepository,
       linearAgentClient: mockLinearAgentClient as LinearAgentClient,
-      taskDispatcher: mockTaskDispatcher as TaskDispatcherService,
-      whatsappNotifier: mockWhatsappNotifier as WhatsAppNotifier,
+      taskEnqueueService: mockTaskEnqueueService as TaskEnqueueService,
       metricsClient: mockMetricsClient as MetricsClient,
       workerSettingsRepo: mockWorkerSettingsRepo as WorkerSettingsRepository,
       gitHubPRClient: mockGitHubPRClient as GitHubPRClient,
@@ -195,11 +188,8 @@ describe('submitTaskFeedback', () => {
         })
       );
 
-      // Verify dispatch was called
-      expect(mockTaskDispatcher.dispatch).toHaveBeenCalled();
-
-      // Verify WhatsApp notification was sent
-      expect(mockWhatsappNotifier.notifyTaskStarted).toHaveBeenCalled();
+      // Verify enqueue was called
+      expect(mockTaskEnqueueService.enqueue).toHaveBeenCalled();
     });
 
     it('reuses the existing execution PR when feedback continues an open PR', async () => {
@@ -236,12 +226,7 @@ describe('submitTaskFeedback', () => {
         1139,
         expect.stringContaining('Execution Follow-up Task Created')
       );
-      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          continuationPrNumber: 1139,
-          continuationPrBranch: 'task_existing_pr_branch',
-        })
-      );
+      expect(mockTaskEnqueueService.enqueue).toHaveBeenCalled();
     });
 
     it('reuses the existing PR for legacy execution tasks identified only by PR URL', async () => {
@@ -284,13 +269,7 @@ describe('submitTaskFeedback', () => {
           prBranch: 'task_existing_pr_branch',
         })
       );
-      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          agentType: 'execution',
-          continuationPrNumber: 1144,
-          continuationPrBranch: 'task_existing_pr_branch',
-        })
-      );
+      expect(mockTaskEnqueueService.enqueue).toHaveBeenCalled();
     });
 
     it('fails before creating follow-up work when continuation PR verification cannot fetch a GitHub token', async () => {
@@ -320,7 +299,7 @@ describe('submitTaskFeedback', () => {
         'Failed to resolve continuation PR for feedback task'
       );
       expect(mockCodeTaskRepo.create).not.toHaveBeenCalled();
-      expect(mockTaskDispatcher.dispatch).not.toHaveBeenCalled();
+      expect(mockTaskEnqueueService.enqueue).not.toHaveBeenCalled();
     });
   });
 
@@ -397,8 +376,7 @@ describe('submitTaskFeedback', () => {
         'Failed to create follow-up task'
       );
 
-      // Verify WhatsApp notification was NOT sent
-      expect(mockWhatsappNotifier.notifyTaskStarted).not.toHaveBeenCalled();
+      // WhatsApp notification is now handled by TaskEnqueueService, not this use case
     });
   });
 
@@ -438,44 +416,14 @@ describe('submitTaskFeedback', () => {
     });
   });
 
-  describe('v8 ignore block 5: update error branch', () => {
-    it('logs warning but still returns success when update fails after dispatch', async () => {
-      // Mock update to return err (this is the update that sets cancelNonce)
-      mockCodeTaskRepo.update = vi.fn().mockResolvedValue(
-        err({ code: 'FIRESTORE_ERROR', message: 'Firestore write failed' })
-      );
-
-      const result = await submitTaskFeedback(deps, mockRequest);
-
-      // The function should still return success because dispatch succeeded
-      // The update failure only affects the cancel_nonce and notification
-      expect(result.ok).toBe(true);
-
-      // Verify error was logged for the update failure
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({
-          taskId: expect.any(String),
-          error: expect.anything(),
-        }),
-        'Failed to update task with cancel nonce'
-      );
-
-      // Verify WhatsApp notification was NOT sent (because update failed)
-      expect(mockWhatsappNotifier.notifyTaskStarted).not.toHaveBeenCalled();
-    });
-
-    it('sends WhatsApp notification when update succeeds', async () => {
-      // Ensure update succeeds
-      mockCodeTaskRepo.update = vi.fn().mockResolvedValue(
-        ok(createMockCompletedTask({ id: 'task_followup-456' }))
-      );
-
+  describe('enqueue integration', () => {
+    it('returns success when enqueue succeeds', async () => {
       const result = await submitTaskFeedback(deps, mockRequest);
 
       expect(result.ok).toBe(true);
-
-      // Verify WhatsApp notification WAS sent
-      expect(mockWhatsappNotifier.notifyTaskStarted).toHaveBeenCalled();
+      if (result.ok) {
+        expect(result.value.workerLocation).toBe('queued');
+      }
     });
   });
 
@@ -542,9 +490,9 @@ describe('submitTaskFeedback', () => {
       }
     });
 
-    it('handles dispatch failure by updating task and returning error', async () => {
-      mockTaskDispatcher.dispatch = vi.fn().mockResolvedValue(
-        err({ code: 'worker_unavailable', message: 'Worker is not responding' })
+    it('handles enqueue failure by returning error', async () => {
+      mockTaskEnqueueService.enqueue = vi.fn().mockResolvedValue(
+        err({ code: 'queue_full', message: 'Queue is full' })
       );
 
       const result = await submitTaskFeedback(deps, mockRequest);
@@ -552,20 +500,8 @@ describe('submitTaskFeedback', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('internal_error');
-        expect(result.error.message).toBe('Worker is not responding');
+        expect(result.error.message).toBe('Queue is full');
       }
-
-      // Verify task was updated to failed status
-      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          status: 'failed',
-          error: {
-            code: 'worker_unavailable',
-            message: 'Worker is not responding',
-          },
-        })
-      );
     });
 
     it('fails before dispatch when continuation bootstrap comment cannot be posted', async () => {
@@ -605,7 +541,7 @@ describe('submitTaskFeedback', () => {
           },
         })
       );
-      expect(mockTaskDispatcher.dispatch).not.toHaveBeenCalled();
+      expect(mockTaskEnqueueService.enqueue).not.toHaveBeenCalled();
     });
   });
 });

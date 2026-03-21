@@ -14,9 +14,17 @@ import {
   STATUS_MAP,
   WORKER_STATUS_STYLES,
   isActiveStatus,
+  type StatusConfig,
 } from './shared.js';
 
 const ICON_MAP = { Clock, Loader2, CheckCircle2, XCircle, AlertCircle, Archive } as const;
+
+const FALLBACK_STATUS: StatusConfig = {
+  bg: 'bg-slate-100 dark:bg-slate-700',
+  text: 'text-slate-600 dark:text-slate-400',
+  label: 'Unknown',
+  icon: 'AlertCircle',
+};
 
 interface V2TaskHeaderProps {
   task: CodeTask;
@@ -24,7 +32,8 @@ interface V2TaskHeaderProps {
 }
 
 export function V2TaskHeader({ task, workerStatusTag }: V2TaskHeaderProps): React.JSX.Element {
-  const status = STATUS_MAP[task.status];
+  // Runtime guard: Firestore data may contain status values outside the CodeTaskStatus union
+  const status = (STATUS_MAP[task.status] as StatusConfig | undefined) ?? { ...FALLBACK_STATUS, label: task.status };
   const StatusIcon = ICON_MAP[status.icon];
 
   return (
@@ -49,10 +58,12 @@ export function V2TaskHeader({ task, workerStatusTag }: V2TaskHeaderProps): Reac
         <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
           {task.linearIssue?.title ?? 'Code Task'}
         </h2>
-        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium ${status.bg} ${status.text}`}>
-          <StatusIcon className={`h-4 w-4 ${task.status === 'running' ? 'animate-spin' : ''}`} />
-          {status.label}
-        </span>
+        {task.status !== 'queued' ? (
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium ${status.bg} ${status.text}`}>
+            <StatusIcon className={`h-4 w-4 ${task.status === 'running' ? 'animate-spin' : ''}`} />
+            {status.label}
+          </span>
+        ) : null}
       </div>
 
       <div className="min-h-[1.75rem] mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
@@ -123,13 +134,6 @@ export function V2TaskHeader({ task, workerStatusTag }: V2TaskHeaderProps): Reac
             PR #{/\/pull\/(\d+)/.exec(task.result.prUrl)?.[1] ?? ''}
           </a>
         ) : null}
-
-        <a
-          href={`/#/code-tasks/${task.id}`}
-          className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-        >
-          Classic view
-        </a>
       </div>
     </div>
   );

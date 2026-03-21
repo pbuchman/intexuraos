@@ -9,6 +9,7 @@ import { FakeEnrichPublisher } from './fakeEnrichPublisher.js';
 import { FakeSummarizePublisher } from './fakeSummarizePublisher.js';
 import { FakeWhatsAppSendPublisher } from './fakeWhatsAppSendPublisher.js';
 import { FakeBookmarkSummaryService } from './fakeBookmarkSummaryService.js';
+import { FakeImageProxy } from './fakeImageProxy.js';
 import { resetServices, setServices } from '../services.js';
 
 export const issuer = 'https://test-issuer.example.com/';
@@ -76,6 +77,7 @@ export interface TestContext {
   summarizePublisher: FakeSummarizePublisher;
   whatsAppSendPublisher: FakeWhatsAppSendPublisher;
   bookmarkSummaryService: FakeBookmarkSummaryService;
+  imageProxy: FakeImageProxy;
 }
 
 export function setupTestContext(): TestContext {
@@ -87,6 +89,7 @@ export function setupTestContext(): TestContext {
     summarizePublisher: null as unknown as FakeSummarizePublisher,
     whatsAppSendPublisher: null as unknown as FakeWhatsAppSendPublisher,
     bookmarkSummaryService: null as unknown as FakeBookmarkSummaryService,
+    imageProxy: null as unknown as FakeImageProxy,
   };
 
   beforeAll(async () => {
@@ -105,6 +108,7 @@ export function setupTestContext(): TestContext {
     context.summarizePublisher = new FakeSummarizePublisher();
     context.whatsAppSendPublisher = new FakeWhatsAppSendPublisher();
     context.bookmarkSummaryService = new FakeBookmarkSummaryService();
+    context.imageProxy = new FakeImageProxy();
     setServices({
       bookmarkRepository: context.bookmarkRepository,
       linkPreviewFetcher: context.linkPreviewFetcher,
@@ -112,6 +116,7 @@ export function setupTestContext(): TestContext {
       summarizePublisher: context.summarizePublisher,
       whatsAppSendPublisher: context.whatsAppSendPublisher,
       bookmarkSummaryService: context.bookmarkSummaryService,
+      imageProxy: context.imageProxy,
     });
     clearJwksCache();
     context.app = await buildServer();

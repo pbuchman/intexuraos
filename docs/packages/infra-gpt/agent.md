@@ -5,7 +5,7 @@
 | Attribute | Value                                           |
 | --------- | ----------------------------------------------- |
 | Package   | `@intexuraos/infra-gpt`                         |
-| Version   | 2.1.0                                           |
+| Version   | 3.3.0                                           |
 | Purpose   | OpenAI GPT API wrapper implementing `LLMClient` |
 | Provider  | `LlmProviders.OpenAI`                           |
 | SDK       | `openai` ^6.15.0                                |
@@ -88,10 +88,10 @@ if (result.ok) {
 ### Image generation
 
 ```ts
-const result = await client.generateImage?.('A sunset over mountains', { size: '1024x1024' });
-if (result?.ok) {
-  // result.data: { imageData: Buffer, model: 'gpt-image-1', usage: NormalizedUsage }
-  // imageData: decoded from b64_json (primary) or fetched from URL (fallback)
+const result = await client.generateImage('A sunset over mountains', { size: '1024x1024' });
+if (result.ok) {
+  // result.data: { imageData: Buffer, model: LlmModels.GPTImage1, usage: NormalizedUsage }
+  // imageData: decoded from b64_json (primary) or fetched from URL (fallback — no timeout)
 }
 ```
 
@@ -100,11 +100,11 @@ if (result?.ok) {
 ```ts
 if (!result.ok) {
   switch (result.error.code) {
-    case 'RATE_LIMITED': // 429 — retry with backoff
-    case 'INVALID_KEY': // 401 — do not retry
-    case 'CONTEXT_LENGTH': // context_length_exceeded — reduce prompt
-    case 'TIMEOUT': // retry
-    case 'API_ERROR': // log and handle
+    case 'RATE_LIMITED':    // 429 — retry with backoff
+    case 'INVALID_KEY':     // 401 — do not retry
+    case 'CONTEXT_LENGTH':  // context_length_exceeded — reduce prompt
+    case 'TIMEOUT':         // retry
+    case 'API_ERROR':       // log and handle
   }
 }
 ```
@@ -132,7 +132,7 @@ if (!result.ok) {
 **Do NOT:**
 
 - Inject custom `auditSink` or `usageSink` — not supported (uses Firestore defaults)
-- Rely on `generateImage` having a timeout on URL fetches — it currently has none
+- Rely on `generateImage` having a timeout on URL fetches — there is none; can hang if OpenAI CDN is unresponsive
 
 **Requires:**
 
@@ -143,5 +143,5 @@ if (!result.ok) {
 ## Implementation Detail
 
 - `research()` uses `client.responses.create` (Responses API) with `{ type: 'web_search_preview', search_context_size: 'medium' }` tool. Returns `response.output_text` as content.
-- `generate()` uses `client.chat.completions.create` (Chat Completions API). Both APIs require separate usage extraction since their response shapes differ.
-- `generateImage()` uses `client.images.generate` with `IMAGE_MODEL`. Prefers `b64_json`; falls back to fetching from `url` when only URL is returned.
+- `generate()` uses `client.chat.completions.create` (Chat Completions API). Both APIs require separate usage extraction since their response shapes differ (`ResponseUsage` vs `CompletionUsage`).
+- `generateImage()` uses `client.images.generate` with `IMAGE_MODEL`. Prefers `b64_json`; falls back to fetching from `url` when only a URL is returned.
