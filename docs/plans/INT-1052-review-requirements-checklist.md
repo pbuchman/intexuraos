@@ -120,7 +120,7 @@ This is a prompt-only change with no endpoint modifications.
 | `workers/orchestrator/src/services/completion-verifier.ts`                | Modify   | Add `requirements_tracker_updated` to REVIEW_SCHEMA + verifier prompt       |
 | `workers/orchestrator/src/services/__tests__/completion-verifier.test.ts` | Modify   | Tests for updated schema                                                    |
 | `workers/orchestrator/src/services/task-dispatcher.ts`                    | Modify   | Map new field from verified data to TaskResult + enrichResultForResumedTask |
-| `workers/orchestrator/src/types/task.ts`                                  | Modify   | Add `requirementsTrackerUpdated` to TaskResult interface                    |
+| `workers/orchestrator/src/types/task.ts`                                  | Modify   | Add `requirements_tracker_updated` to TaskResult interface                  |
 | `apps/code-agent/src/domain/usecases/createReviewTask.ts`                 | Modify   | Enhance user prompt to emphasize requirements validation                    |
 | `apps/code-agent/src/__tests__/usecases/createReviewTask.test.ts`         | Modify   | Tests for enhanced user prompt                                              |
 
@@ -255,12 +255,14 @@ export const REVIEW_SCHEMA = z.object({
     .string()
     .regex(/^\d+$/, 'review_comments_posted must be a numeric string'),
   review_types: z.string().trim().min(1, 'review_types must not be empty'),
-  requirements_tracker_updated: z.string(), // 'yes', 'no', or '' if no requirements
+  requirements_tracker_updated: z.string().optional().default(''), // 'yes', 'no', or '' if no requirements
   summary: z.string(),
 });
 ```
 
-Update `ReviewAgentData` interface to include `requirements_tracker_updated: string`.
+Update `ReviewAgentData` interface to include `requirements_tracker_updated?: string`.
+
+**Important:** The field MUST be optional (with `.optional().default('')`) to avoid breaking the 7 existing `REVIEW_SCHEMA.safeParse()` tests in `completion-verifier.test.ts` (lines 229-295) that don't include this field. The `.default('')` ensures the field is always present in the parsed output.
 
 Update `buildReviewPrompt()` in `completion-verifier.ts` (lines 229-248). Specifically:
 - Add to the `Fields:` list: `- requirements_tracker_updated: "yes" if tracker comment was created/updated, "no" if skipped, empty string if no requirements available`
@@ -283,23 +285,23 @@ REVIEW_AGENT_FINAL:
 
 - [ ] **Step 14: Write failing test for task-dispatcher result mapping**
 
-Write a test that verifies when `verifiedData` contains `requirements_tracker_updated`, the resulting `TaskResult` includes `requirementsTrackerUpdated`. Follow the pattern of existing review result mapping tests in `task-dispatcher.test.ts`.
+Write a test that verifies when `verifiedData` contains `requirements_tracker_updated`, the resulting `TaskResult` includes `requirements_tracker_updated`. Follow the pattern of existing review result mapping tests in `task-dispatcher.test.ts`.
 
 - [ ] **Step 15: Run test — expect FAIL**
 
 - [ ] **Step 16: Update TaskResult interface and task-dispatcher.ts result mapping**
 
-In `workers/orchestrator/src/types/task.ts`, add `requirementsTrackerUpdated?: string` to the `TaskResult` interface.
+In `workers/orchestrator/src/types/task.ts`, add `requirements_tracker_updated?: string` to the `TaskResult` interface.
 
 In `task-dispatcher.ts`, in the review result mapping section (~lines 1211-1244), add:
 
 ```typescript
 if (verifiedData.requirements_tracker_updated !== undefined) {
-  result.requirementsTrackerUpdated = verifiedData.requirements_tracker_updated;
+  result.requirements_tracker_updated = verifiedData.requirements_tracker_updated;
 }
 ```
 
-Also update `enrichResultForResumedTask` to preserve `requirementsTrackerUpdated` from `lastSuccessResult` for resumed review tasks, matching the existing pattern for `review_comments_posted` and `review_types`.
+Also update `enrichResultForResumedTask` to preserve `requirements_tracker_updated` from `lastSuccessResult` for resumed review tasks, matching the existing pattern for `review_comments_posted` and `review_types`.
 
 - [ ] **Step 17: Run test — expect PASS**
 
