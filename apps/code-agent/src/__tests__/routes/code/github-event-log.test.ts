@@ -49,6 +49,7 @@ describe('GitHub event log routes', () => {
   let logger: Logger;
   let server: Awaited<ReturnType<typeof buildServer>>;
   let baseServices: import('../../../services.js').ServiceContainer;
+  let seededAuditEventId: string;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -243,7 +244,7 @@ describe('GitHub event log routes', () => {
 
     setServices(baseServices);
 
-    await gitHubWebhookAuditEventRepo.save({
+    const auditSaveResult = await gitHubWebhookAuditEventRepo.save({
       deliveryId: 'delivery-1',
       githubEventName: 'pull_request',
       eventType: 'pull_request',
@@ -260,6 +261,10 @@ describe('GitHub event log routes', () => {
       normalizationStatus: 'normalized',
       payload: { action: 'opened' },
     });
+    if (!auditSaveResult.ok) {
+      throw new Error('Failed to save seeded audit event');
+    }
+    seededAuditEventId = auditSaveResult.value.id;
     await gitHubEventLogEntryRepo.createPending({
       id: 'delivery-1',
       githubEventName: 'pull_request',
@@ -600,19 +605,9 @@ describe('GitHub event log routes', () => {
 
   describe('GET /code/github-event-log/:id/payload', () => {
     it('returns 200 with payload for valid audit event ID', async () => {
-      const { gitHubWebhookAuditEventRepo } = baseServices;
-      if (gitHubWebhookAuditEventRepo === undefined) {
-        throw new Error('Audit event repo not configured in test');
-      }
-
-      const findResult = await gitHubWebhookAuditEventRepo.findByIds(['auto-1']);
-      if (!findResult.ok || findResult.value[0] === undefined) {
-        throw new Error('Expected seeded audit event with auto-1 ID');
-      }
-
       const response = await server.inject({
         method: 'GET',
-        url: '/code/github-event-log/auto-1/payload',
+        url: `/code/github-event-log/${seededAuditEventId}/payload`,
         headers: { authorization: 'Bearer fake-token' },
       });
 
