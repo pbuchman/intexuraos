@@ -45,7 +45,7 @@ export function PrList({ prs, activeFilters, isLoading }: PrListProps): React.JS
         <span>Title</span>
         <span>Author</span>
         <span>Status</span>
-        <span>Checks</span>
+        <span>Conflicts</span>
       </div>
 
       {/* PR rows */}

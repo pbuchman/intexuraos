@@ -19,14 +19,17 @@ const STATUS_BADGE: Record<PrFilterStatus, string> = {
   blocked: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400',
 };
 
-const CHECKS_BADGE: Record<MergeQueuePr['checksStatus'], string> = {
-  success: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400',
-  pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400',
-  failure: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400',
+const CONFLICT_LABEL: Record<string, string> = {
+  clean: 'No conflicts',
+  conflicting: 'Conflicts',
+  unknown: 'Checking…',
 };
 
 export function PrRow({ pr, isNextToMerge }: PrRowProps): React.JSX.Element {
   const status = getPrStatus(pr);
+  const conflictLabel = pr.mergeConflictStatus !== null
+    ? CONFLICT_LABEL[pr.mergeConflictStatus] ?? 'Unknown'
+    : 'Unknown';
 
   return (
     <div
@@ -50,18 +53,18 @@ export function PrRow({ pr, isNextToMerge }: PrRowProps): React.JSX.Element {
         <div className="min-w-0">
           <p
             className="overflow-hidden text-ellipsis whitespace-nowrap text-slate-900 dark:text-slate-100"
-            title={!pr.authorIsEligible ? `Not eligible \u2014 authored by ${pr.author}` : pr.title}
+            title={!pr.authorIsEligible ? `Not eligible \u2014 authored by ${pr.author ?? 'unknown'}` : pr.title}
           >
             {pr.title}
           </p>
           <p className="text-xs text-slate-500 dark:text-slate-400">Created {formatRelative(pr.createdAt)}</p>
         </div>
-        <span className="text-xs text-slate-600 dark:text-slate-400">{pr.author}</span>
+        <span className="text-xs text-slate-600 dark:text-slate-400">{pr.author ?? 'unknown'}</span>
         <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_BADGE[status]}`}>
           {status}
         </span>
-        <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-medium ${CHECKS_BADGE[pr.checksStatus]}`}>
-          {pr.checksStatus}
+        <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_BADGE[status]}`}>
+          {conflictLabel}
         </span>
       </div>
 
@@ -82,7 +85,7 @@ export function PrRow({ pr, isNextToMerge }: PrRowProps): React.JSX.Element {
           </span>
         </div>
         <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-          <span>{pr.author}</span>
+          <span>{pr.author ?? 'unknown'}</span>
           <span>&middot;</span>
           <span>Created {formatRelative(pr.createdAt)}</span>
         </div>
@@ -90,8 +93,8 @@ export function PrRow({ pr, isNextToMerge }: PrRowProps): React.JSX.Element {
           <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_BADGE[status]}`}>
             {status}
           </span>
-          <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${CHECKS_BADGE[pr.checksStatus]}`}>
-            {pr.checksStatus}
+          <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_BADGE[status]}`}>
+            {conflictLabel}
           </span>
         </div>
       </div>

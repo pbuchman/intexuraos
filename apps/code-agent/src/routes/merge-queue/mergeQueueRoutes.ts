@@ -297,7 +297,7 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
             author: summary.authorLogin,
             authorIsEligible,
             mergeConflictStatus: summary.mergeConflictStatus,
-            createdAt: summary.lastActivityAt.toISOString(),
+            createdAt: summary.firstSeenAt.toISOString(),
             htmlUrl: `https://github.com/${owner}/${repo}/pull/${String(summary.pullRequestNumber)}`,
           };
         });

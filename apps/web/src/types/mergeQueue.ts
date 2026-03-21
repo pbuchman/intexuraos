@@ -6,12 +6,9 @@ export interface MergeQueueBranch {
 export interface MergeQueuePr {
   number: number;
   title: string;
-  author: string;
+  author: string | null;
   authorIsEligible: boolean;
-  mergeable: boolean | null;
-  /** Reserved for future merge-conflict detail display */
-  mergeableState: string | null;
-  checksStatus: 'success' | 'failure' | 'pending';
+  mergeConflictStatus: 'clean' | 'conflicting' | 'unknown' | null;
   createdAt: string;
   htmlUrl: string;
 }
