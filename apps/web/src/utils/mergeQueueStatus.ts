@@ -1,15 +1,14 @@
 import type { MergeQueuePr, PrFilterStatus } from '../types/mergeQueue.js';
 
 /**
- * Derive a PR's filter status from its mergeability and check status.
+ * Derive a PR's filter status from its merge conflict status.
  *
- * Priority: a PR is "pending" if ANY signal is still unknown (checks pending
- * or mergeable not yet computed by GitHub). Only once all signals are resolved
- * and at least one is negative does the PR become "blocked". This avoids
- * prematurely labelling a PR as blocked while GitHub is still computing.
+ * - 'clean' → mergeable (no conflicts detected)
+ * - 'conflicting' → blocked (merge conflicts present)
+ * - 'unknown' or null → pending (conflict status not yet determined)
  */
 export function getPrStatus(pr: MergeQueuePr): PrFilterStatus {
-  if (pr.mergeable === true && pr.checksStatus === 'success') return 'mergeable';
-  if (pr.checksStatus === 'pending' || pr.mergeable === null) return 'pending';
-  return 'blocked';
+  if (pr.mergeConflictStatus === 'clean') return 'mergeable';
+  if (pr.mergeConflictStatus === 'conflicting') return 'blocked';
+  return 'pending';
 }
