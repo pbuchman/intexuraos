@@ -8,6 +8,8 @@ export interface ReconcileResult {
   closed: number;
   /** Summaries transitioned from non-open → open (PR reappeared on GitHub). */
   reopened: number;
+  /** Open summaries whose mergeConflictStatus was refreshed from GitHub. */
+  mergeConflictRefreshed: number;
   /** Summaries intentionally skipped (e.g. no OAuth user found, API error). */
   skipped: number;
   /** Summaries that threw an unhandled exception during processing. */
@@ -19,6 +21,7 @@ export const EMPTY_RECONCILE_RESULT: ReconcileResult = Object.freeze({
   processed: 0,
   closed: 0,
   reopened: 0,
+  mergeConflictRefreshed: 0,
   skipped: 0,
   error: 0,
 });

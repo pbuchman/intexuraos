@@ -1499,7 +1499,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ state: 'closed', pullRequestNumber: 10 }),
       );
-      // No mergeability checks in reconcile
+      // Closed PRs don't get mergeability checks
       expect(deps.gitHubPRClient.getPullRequestDetails).not.toHaveBeenCalled();
     });
 
@@ -1523,37 +1523,40 @@ describe('createDetectMergeConflictsOnPush', () => {
       const logger = createLogger();
       const deps = createDeps(logger);
       deps.gitHubPRSummaryRepo.findRecentlyActive.mockResolvedValue(ok([
-        createSummary({ pullRequestNumber: 10, state: 'closed' }),
+        createSummary({ pullRequestNumber: 10, state: 'closed', mergeConflictStatus: 'conflicting' }),
       ]));
       deps.gitHubPRClient.listAllOpenPullRequests.mockResolvedValue(ok([
         createOpenPRListItem(10),
       ]));
-
+      // mergeable: false → 'conflicting' matches existing, so no mergeConflictRefresh
       const detector = createDetectMergeConflictsOnPush(deps as never);
       const result = await detector.reconcile(logger);
 
-      expect(result).toEqual(expect.objectContaining({ processed: 1, reopened: 1, closed: 0 }));
+      expect(result).toEqual(expect.objectContaining({ processed: 1, reopened: 1, closed: 0, mergeConflictRefreshed: 0 }));
       expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ state: 'open', pullRequestNumber: 10 }),
       );
     });
 
-    it('skips already-open summary when PR is in GitHub open list', async () => {
+    it('skips state upsert for already-open summary but refreshes mergeability', async () => {
       const logger = createLogger();
       const deps = createDeps(logger);
       deps.gitHubPRSummaryRepo.findRecentlyActive.mockResolvedValue(ok([
-        createSummary({ pullRequestNumber: 10, state: 'open' }),
+        createSummary({ pullRequestNumber: 10, state: 'open', mergeConflictStatus: 'clean' }),
       ]));
       deps.gitHubPRClient.listAllOpenPullRequests.mockResolvedValue(ok([
         createOpenPRListItem(10),
       ]));
-
+      // Default mock returns mergeable: false → 'conflicting', different from 'clean'
       const detector = createDetectMergeConflictsOnPush(deps as never);
       const result = await detector.reconcile(logger);
 
-      // Already open — no work, not counted as processed
-      expect(result).toEqual(expect.objectContaining({ processed: 0, reopened: 0, closed: 0 }));
-      expect(deps.gitHubPRSummaryRepo.upsert).not.toHaveBeenCalled();
+      // State didn't change (already open), but mergeConflictStatus was refreshed
+      expect(result).toEqual(expect.objectContaining({ processed: 1, reopened: 0, closed: 0, mergeConflictRefreshed: 1 }));
+      expect(deps.gitHubPRClient.getPullRequestDetails).toHaveBeenCalledTimes(1);
+      expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ mergeConflictStatus: 'conflicting', pullRequestNumber: 10 }),
+      );
     });
 
     it('handles mixed state transitions across summaries', async () => {
@@ -1569,11 +1572,14 @@ describe('createDetectMergeConflictsOnPush', () => {
         createOpenPRListItem(11),
         createOpenPRListItem(12),
       ]));
+      // Return mergeable: true so mergeConflictStatus stays 'clean' (no refresh needed)
+      deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails({ mergeable: true })));
 
       const detector = createDetectMergeConflictsOnPush(deps as never);
       const result = await detector.reconcile(logger);
 
-      expect(result).toEqual(expect.objectContaining({ processed: 2, closed: 1, reopened: 1 }));
+      // 1 closed + 1 reopened; mergeability checked but no change (both already 'clean', GitHub says 'clean')
+      expect(result).toEqual(expect.objectContaining({ processed: 2, closed: 1, reopened: 1, mergeConflictRefreshed: 0 }));
     });
 
     it('skips repo with invalid repository format', async () => {
@@ -1734,6 +1740,137 @@ describe('createDetectMergeConflictsOnPush', () => {
         expect.objectContaining({ prNumber: 10 }),
         expect.stringContaining('Unhandled error processing PR summary in reconcile')
       );
+    });
+
+    it('refreshes mergeConflictStatus from clean to conflicting for open PRs', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+      deps.gitHubPRSummaryRepo.findRecentlyActive.mockResolvedValue(ok([
+        createSummary({ pullRequestNumber: 10, state: 'open', mergeConflictStatus: 'clean' }),
+      ]));
+      deps.gitHubPRClient.listAllOpenPullRequests.mockResolvedValue(ok([
+        createOpenPRListItem(10),
+      ]));
+      deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails({ mergeable: false })));
+
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      const result = await detector.reconcile(logger);
+
+      expect(result).toEqual(expect.objectContaining({ mergeConflictRefreshed: 1 }));
+      expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pullRequestNumber: 10,
+          mergeConflictStatus: 'conflicting',
+          lastConflictCheckedAt: expect.any(Date),
+        }),
+      );
+    });
+
+    it('refreshes mergeConflictStatus from conflicting to clean for open PRs', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+      deps.gitHubPRSummaryRepo.findRecentlyActive.mockResolvedValue(ok([
+        createSummary({ pullRequestNumber: 10, state: 'open', mergeConflictStatus: 'conflicting' }),
+      ]));
+      deps.gitHubPRClient.listAllOpenPullRequests.mockResolvedValue(ok([
+        createOpenPRListItem(10),
+      ]));
+      deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails({ mergeable: true })));
+
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      const result = await detector.reconcile(logger);
+
+      expect(result).toEqual(expect.objectContaining({ mergeConflictRefreshed: 1 }));
+      expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pullRequestNumber: 10,
+          mergeConflictStatus: 'clean',
+        }),
+      );
+    });
+
+    it('skips mergeability refresh when status is already correct', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+      deps.gitHubPRSummaryRepo.findRecentlyActive.mockResolvedValue(ok([
+        createSummary({ pullRequestNumber: 10, state: 'open', mergeConflictStatus: 'conflicting' }),
+      ]));
+      deps.gitHubPRClient.listAllOpenPullRequests.mockResolvedValue(ok([
+        createOpenPRListItem(10),
+      ]));
+      deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails({ mergeable: false })));
+
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      const result = await detector.reconcile(logger);
+
+      expect(result).toEqual(expect.objectContaining({ mergeConflictRefreshed: 0 }));
+      expect(deps.gitHubPRSummaryRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('skips mergeability refresh when GitHub returns unknown (mergeable: null)', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+      deps.gitHubPRSummaryRepo.findRecentlyActive.mockResolvedValue(ok([
+        createSummary({ pullRequestNumber: 10, state: 'open', mergeConflictStatus: 'clean' }),
+      ]));
+      deps.gitHubPRClient.listAllOpenPullRequests.mockResolvedValue(ok([
+        createOpenPRListItem(10),
+      ]));
+      deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails({ mergeable: null })));
+
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      const result = await detector.reconcile(logger);
+
+      // unknown status is not written — we preserve the existing value
+      expect(result).toEqual(expect.objectContaining({ mergeConflictRefreshed: 0 }));
+      expect(deps.gitHubPRSummaryRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('warns and skips mergeability refresh when getPullRequestDetails fails', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+      deps.gitHubPRSummaryRepo.findRecentlyActive.mockResolvedValue(ok([
+        createSummary({ pullRequestNumber: 10, state: 'open', mergeConflictStatus: 'clean' }),
+      ]));
+      deps.gitHubPRClient.listAllOpenPullRequests.mockResolvedValue(ok([
+        createOpenPRListItem(10),
+      ]));
+      deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(err({
+        code: 'API_ERROR' as const,
+        message: 'rate limited',
+      }));
+
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      const result = await detector.reconcile(logger);
+
+      expect(result).toEqual(expect.objectContaining({ mergeConflictRefreshed: 0 }));
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ prNumber: 10 }),
+        expect.stringContaining('Failed to fetch PR details for mergeability refresh')
+      );
+      expect(deps.gitHubPRSummaryRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('refreshes mergeability for reopened PRs', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+      deps.gitHubPRSummaryRepo.findRecentlyActive.mockResolvedValue(ok([
+        createSummary({ pullRequestNumber: 10, state: 'closed', mergeConflictStatus: 'clean' }),
+      ]));
+      deps.gitHubPRClient.listAllOpenPullRequests.mockResolvedValue(ok([
+        createOpenPRListItem(10),
+      ]));
+      deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails({ mergeable: false })));
+
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      const result = await detector.reconcile(logger);
+
+      expect(result).toEqual(expect.objectContaining({
+        reopened: 1,
+        mergeConflictRefreshed: 1,
+      }));
+      // First upsert for state reopen, second for mergeability refresh
+      expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledTimes(2);
     });
   });
 });
