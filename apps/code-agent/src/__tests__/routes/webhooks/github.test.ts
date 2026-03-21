@@ -123,6 +123,7 @@ describe('POST /webhooks/github', () => {
       findRecentlyActive: vi.fn().mockResolvedValue(ok([])),
       findByPullRequest: vi.fn().mockResolvedValue(ok(null)),
       findOpenByBaseBranch: vi.fn().mockResolvedValue(ok([])),
+      findOpenByRepository: vi.fn().mockResolvedValue(ok([])),
       findAllOpen: vi.fn().mockResolvedValue(ok([])),
     };
 

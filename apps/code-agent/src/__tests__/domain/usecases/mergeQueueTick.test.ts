@@ -173,9 +173,9 @@ describe('mergeQueueTick', () => {
     mockUserServiceClient.getOAuthToken.mockResolvedValue(ok({ accessToken: 'tok-123', email: 'test@test.com' }));
 
     const prs = [
-      makePrSummary({ pullRequestNumber: 10, title: 'PR 10', lastActivityAt: new Date('2026-03-14T00:00:00Z') }),
-      makePrSummary({ pullRequestNumber: 20, title: 'PR 20', lastActivityAt: new Date('2026-03-16T00:00:00Z') }),
-      makePrSummary({ pullRequestNumber: 30, title: 'PR 30', lastActivityAt: new Date('2026-03-18T00:00:00Z') }),
+      makePrSummary({ pullRequestNumber: 10, title: 'PR 10', firstSeenAt: new Date('2026-03-14T00:00:00Z') }),
+      makePrSummary({ pullRequestNumber: 20, title: 'PR 20', firstSeenAt: new Date('2026-03-16T00:00:00Z') }),
+      makePrSummary({ pullRequestNumber: 30, title: 'PR 30', firstSeenAt: new Date('2026-03-18T00:00:00Z') }),
     ];
     mockGitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok(prs));
 
@@ -502,15 +502,15 @@ describe('mergeQueueTick', () => {
     }));
   });
 
-  it('sorts PRs by createdAt and uses number as tiebreaker', async () => {
+  it('sorts PRs by firstSeenAt (oldest first) and uses number as tiebreaker', async () => {
     const watch = makeWatch();
     mockWatchRepo.findAllActive.mockResolvedValue(ok([watch]));
     mockUserServiceClient.getOAuthToken.mockResolvedValue(ok({ accessToken: 'tok-123', email: 'test@test.com' }));
 
-    // Two PRs with same createdAt — tiebreak by number
+    // Two PRs with same firstSeenAt — tiebreak by number
     const prs = [
-      makePrSummary({ pullRequestNumber: 20, lastActivityAt: new Date('2026-03-14T00:00:00Z') }),
-      makePrSummary({ pullRequestNumber: 10, lastActivityAt: new Date('2026-03-14T00:00:00Z') }),
+      makePrSummary({ pullRequestNumber: 20, firstSeenAt: new Date('2026-03-14T00:00:00Z') }),
+      makePrSummary({ pullRequestNumber: 10, firstSeenAt: new Date('2026-03-14T00:00:00Z') }),
     ];
     mockGitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok(prs));
 
