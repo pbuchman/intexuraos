@@ -1217,9 +1217,7 @@ export class TaskDispatcher {
       }
       base.review_comments_posted = agentData.review_comments_posted;
       base.review_types = agentData.review_types;
-      if (agentData.requirements_tracker_updated !== undefined) {
-        base.requirements_tracker_updated = agentData.requirements_tracker_updated;
-      }
+      base.requirements_tracker_updated = agentData.requirements_tracker_updated;
     } else {
       if (agentData.gh_pr_url !== '') {
         base.prUrl = agentData.gh_pr_url;
