@@ -293,6 +293,41 @@ describe('REVIEW_SCHEMA', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('accepts requirements_tracker_updated field', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/901',
+      review_comments_posted: '3',
+      review_types: 'code_quality,security',
+      requirements_tracker_updated: 'yes',
+      summary: 'Review summary.',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts empty requirements_tracker_updated', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/901',
+      review_comments_posted: '3',
+      review_types: 'code_quality,security',
+      requirements_tracker_updated: '',
+      summary: 'Review summary.',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('defaults requirements_tracker_updated to empty string when omitted', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/901',
+      review_comments_posted: '3',
+      review_types: 'code_quality,security',
+      summary: 'Review summary.',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.requirements_tracker_updated).toBe('');
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -370,6 +405,7 @@ describe('buildReviewPrompt', () => {
     expect(prompt).toContain('gh_pr_url');
     expect(prompt).toContain('review_comments_posted');
     expect(prompt).toContain('review_types');
+    expect(prompt).toContain('requirements_tracker_updated');
     expect(prompt).toContain('review-log');
   });
 
@@ -651,6 +687,7 @@ describe('OrchestratorCompletionVerifier', () => {
         gh_pr_url: 'https://github.com/org/repo/pull/42',
         review_comments_posted: '3',
         review_types: 'code_quality,security',
+        requirements_tracker_updated: '',
         summary: 'Reviewed and posted 3 comments.',
       });
     });

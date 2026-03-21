@@ -65,6 +65,7 @@ export interface ReviewAgentData {
   gh_pr_url: string;
   review_comments_posted: string;
   review_types: string;
+  requirements_tracker_updated?: string;
   summary: string;
 }
 
@@ -112,6 +113,7 @@ export const REVIEW_SCHEMA = z.object({
     .string()
     .regex(/^\d+$/, 'review_comments_posted must be a numeric string'),
   review_types: z.string().trim().min(1, 'review_types must not be empty'),
+  requirements_tracker_updated: z.string().optional().default(''),
   summary: z.string(),
 });
 
@@ -237,10 +239,11 @@ export function buildReviewPrompt(transcript: string): string {
     '- gh_pr_url: the GitHub Pull Request URL (string, empty string if not found)',
     '- review_comments_posted: number of review comments posted as a string (e.g., "3")',
     '- review_types: comma-separated list of review types performed (e.g., "code_quality,security")',
+    '- requirements_tracker_updated: "yes" if tracker comment was created/updated, "no" if skipped, empty string if no requirements available',
     '- summary: 3-5 sentence summary of the review findings — the LLM agent typically states this clearly as a summary block in its final output',
     '',
     'Example valid response:',
-    '{"gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","review_comments_posted":"3","review_types":"code_quality,security","summary":"The review agent analyzed PR #901 for code quality and security issues. Found 3 issues: a missing null check, an unused import, and a potential XSS vulnerability. All findings were posted as inline review comments."}',
+    '{"gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","review_comments_posted":"3","review_types":"code_quality,security","requirements_tracker_updated":"yes","summary":"The review agent analyzed PR #901 for code quality and security issues. Found 3 issues: a missing null check, an unused import, and a potential XSS vulnerability. All findings were posted as inline review comments."}',
     '',
     'Transcript (last 50 lines):',
     transcript,

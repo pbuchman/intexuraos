@@ -561,7 +561,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '5.1.0',
+  version: '6.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
 
@@ -699,6 +699,78 @@ When composing the review summary body:
 ${taskUrl !== undefined ? `- Append a final standalone markdown link line exactly as: \`[View in IntexuraOS](${taskUrl})\`` : ''}
 ${taskUrl !== undefined ? '- Include that line in the same `POST /reviews` body, not as a separate PR comment.' : ''}
 
+### Per-Type Review Structure (MANDATORY)
+
+Each requested review type MUST get its own dedicated section in the review body. Use this exact structure:
+
+\`\`\`markdown
+## Automated Code Review — <comma-separated review types>
+
+### 🔍 Code Quality
+**Verdict:** Clean / Minor issues / Needs attention
+- Finding 1...
+- Finding 2...
+
+### 🔒 Security
+**Verdict:** No concerns / Advisory / Blocking
+- Finding 1...
+
+### 🏗️ Architecture
+**Verdict:** Sound / Minor concerns / Needs redesign
+- Finding 1...
+
+### 📐 Plan Review (only for plan_review type)
+**Verdict:** Ready / Gaps found / Needs rework
+- Finding 1...
+
+### 📋 Requirements Coverage
+| Requirement | Status |
+| --- | --- |
+| ... | ✅ / ⚠️ / ❌ |
+
+### Overall Assessment
+<synthesis across all types, 2-3 sentences>
+\`\`\`
+
+Rules:
+- Include ONLY the sections matching the requested review types. If \`plan_review\` is the only type, omit Code Quality / Security / Architecture sections.
+- Every included type section MUST have a \`**Verdict:**\` line.
+- The \`### 📋 Requirements Coverage\` and \`### Overall Assessment\` sections are ALWAYS required.
+
+### Requirements Tracker Comment
+
+After posting the review, create or update a persistent PR issue comment that tracks requirements across consecutive reviews.
+
+**Finding the tracker comment:**
+Search PR issue comments for a comment body containing \`### Requirements Tracker\`. If multiple matches, use the first (oldest by creation date) and log a warning.
+
+**First review (no existing tracker):**
+POST a new PR issue comment:
+
+\`\`\`bash
+gh api /repos/{owner}/{repo}/issues/{pr_number}/comments -f body="@ignore
+### Requirements Tracker
+
+> Auto-maintained by review agent. Updated on each review pass.
+
+| #   | Requirement | Status | Evidence | Last Reviewed |
+| --- | --- | --- | --- | --- |
+| 1   | <requirement> | <status> | <evidence> | Review 1 |
+
+**Summary:** X/Y original requirements met. Z new requirements identified."
+\`\`\`
+
+**Consecutive reviews (tracker exists):**
+GET the existing comment body, update status values and add new rows, then PATCH:
+
+\`\`\`bash
+gh api -X PATCH /repos/{owner}/{repo}/issues/comments/{comment_id} -f body="<updated body>"
+\`\`\`
+
+**Valid status values:** \`✅ Met\`, \`⚠️ Partial\`, \`❌ Missing\`, \`🔍 Not yet verified\`
+
+**New requirements discovered during review:** Add with \`🆕\` prefix in the Requirement column. Explain in the Evidence column where the requirement was discovered (e.g., "Found during code_quality review").
+
 ### Rules
 
 - This is a **read-only** review. Do NOT push commits, modify code, or create branches.
@@ -723,6 +795,7 @@ REVIEW_AGENT_FINAL:
 - PR: <full GitHub PR URL>
 - review_comments_posted: <number of review comments posted>
 - review_types: <comma-separated list of review types performed>
+- requirements_tracker_updated: <yes|no — whether the requirements tracker comment was created/updated>
 - Summary: <3-5 sentences on one line: what you reviewed, key findings, overall quality assessment>
 \`\`\`
 

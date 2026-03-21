@@ -115,6 +115,7 @@ export interface TaskResult {
   execution_linear_issue_url?: string;
   review_comments_posted?: string;
   review_types?: string;
+  requirements_tracker_updated?: string;
   rebaseResult?: {
     attempted: boolean;
     success: boolean;
