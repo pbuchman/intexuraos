@@ -77,6 +77,12 @@ Analysis of review comments on PRs #1392–#1402 reveals:
 **Verdict:** Sound / Minor concerns / Needs redesign
 - Finding 1...
 
+### 📐 Plan Review (only for plan_review type)
+**Verdict:** Ready / Gaps found / Needs rework
+- Finding 1...
+
+> **Note:** `plan_review` is a distinct review type used for plan-only PRs (no implementation code). When `plan_review` is the only requested type, the Code Quality / Security / Architecture sections are omitted entirely — only the Plan Review section and Requirements Coverage appear.
+
 ### 📋 Requirements Coverage
 | Requirement | Status     |
 | ----------- | ---------- |
@@ -361,7 +367,6 @@ if (request.issueDescription !== undefined) {
     '### Issue Requirements',
     '',
     '**CRITICAL: Verify every requirement below against the PR implementation.**',
-    'Each requirement must appear in the Requirements Tracker with a status.',
     'Missing or partially implemented requirements are 🔴 findings.',
     '',
     request.issueDescription.length > ISSUE_DESCRIPTION_MAX_LENGTH
