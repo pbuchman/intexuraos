@@ -237,6 +237,66 @@ describe('intelligentClassifierPrompt', () => {
       expect(todoPos).toBeLessThan(calendarPos);
     });
 
+    it('includes "create code task" in code explicit phrases', () => {
+      const prompt = intelligentClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('"create code task"');
+      expect(prompt).toContain('"create coding task"');
+      expect(prompt).toContain('"stwórz code task"');
+    });
+
+    it('includes "create calendar event" in calendar explicit phrases', () => {
+      const prompt = intelligentClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('"create calendar event"');
+      expect(prompt).toContain('"create event"');
+      expect(prompt).toContain('"stwórz wydarzenie"');
+      expect(prompt).toContain('"stwórz event"');
+    });
+
+    it('includes "create reminder" in reminder explicit phrases', () => {
+      const prompt = intelligentClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('"create reminder"');
+      expect(prompt).toContain('"stwórz przypomnienie"');
+    });
+
+    it('includes "create research" in research explicit phrases', () => {
+      const prompt = intelligentClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('"create research"');
+      expect(prompt).toContain('"create research task"');
+    });
+
+    it('includes "create link" and "create bookmark" in link explicit phrases', () => {
+      const prompt = intelligentClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('"create link"');
+      expect(prompt).toContain('"create bookmark"');
+    });
+
+    it('includes "create node" as note alias', () => {
+      const prompt = intelligentClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('"create node"');
+    });
+
+    it('includes disambiguation example for "create code task"', () => {
+      const prompt = intelligentClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain(
+        '"create code task to fix the login bug" → code (explicit "create code task")'
+      );
+    });
+
+    it('includes disambiguation example for "create calendar event"', () => {
+      const prompt = intelligentClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain(
+        '"create calendar event for team standup" → calendar (explicit "create calendar event")'
+      );
+    });
+
     it('includes calendar vs todo tiebreaker guidance', () => {
       const prompt = intelligentClassifierPrompt.build({ message: 'test' });
 
