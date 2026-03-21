@@ -912,9 +912,10 @@ async function processOpenSummaryOnPush(
   trigger: ProcessingTrigger,
   logger: Logger,
   parsedRepository: ParsedRepository,
-  existingSummary: GitHubPRSummary
+  existingSummary: GitHubPRSummary,
+  preResolvedAccessContext?: GitHubAccessContext
 ): Promise<ProcessingOutcome> {
-  const accessContext = await resolveGitHubAccessContext(
+  const accessContext = preResolvedAccessContext ?? await resolveGitHubAccessContext(
     {
       userServiceClient: deps.userServiceClient,
       gitHubPREventRepo: deps.gitHubPREventRepo,
@@ -1105,33 +1106,38 @@ export function createDetectMergeConflictsOnPush(
       let skipped = 0;
       let error = 0;
 
-      // Group summaries by repository, tracking first summary for token resolution
-      const byRepo = new Map<string, { first: GitHubPRSummary; all: GitHubPRSummary[] }>();
+      // Group summaries by repository
+      const byRepo = new Map<string, GitHubPRSummary[]>();
       for (const summary of summaries) {
         const existing = byRepo.get(summary.repository);
         if (existing !== undefined) {
-          existing.all.push(summary);
+          existing.push(summary);
         } else {
-          byRepo.set(summary.repository, { first: summary, all: [summary] });
+          byRepo.set(summary.repository, [summary]);
         }
       }
 
-      for (const [repository, { first: firstSummary, all: repoSummaries }] of byRepo) {
+      for (const [repository, repoSummaries] of byRepo) {
         const parsedRepository = parseOwnerRepo(repository);
         if (parsedRepository === null) {
           logger.warn({ repository }, 'Skipping reconcile for repo with invalid repository format');
           continue;
         }
 
-        const accessContext = await resolveGitHubAccessContext(
-          {
-            userServiceClient: deps.userServiceClient,
-            gitHubPREventRepo: deps.gitHubPREventRepo,
-            allowedBots: deps.allowedBots,
-          },
-          firstSummary,
-          logger
-        );
+        // Iterate through summaries until one yields a valid access context
+        let accessContext: GitHubAccessContext | null = null;
+        for (const candidate of repoSummaries) {
+          accessContext = await resolveGitHubAccessContext(
+            {
+              userServiceClient: deps.userServiceClient,
+              gitHubPREventRepo: deps.gitHubPREventRepo,
+              allowedBots: deps.allowedBots,
+            },
+            candidate,
+            logger
+          );
+          if (accessContext !== null) break;
+        }
         if (accessContext === null) {
           logger.info(
             { repository, count: repoSummaries.length },
@@ -1191,7 +1197,7 @@ export function createDetectMergeConflictsOnPush(
 
           let outcome: ProcessingOutcome = 'skipped';
           try {
-            outcome = await processOpenSummaryOnPush(deps, trigger, logger, parsedRepository, existingSummary);
+            outcome = await processOpenSummaryOnPush(deps, trigger, logger, parsedRepository, existingSummary, accessContext);
           } catch (caughtError: unknown) {
             outcome = 'error';
             logger.error(
