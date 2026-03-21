@@ -12,6 +12,7 @@ import { logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../../services.js';
 import { verifyGitHubSignature } from '../../infra/github-webhook-auth.js';
 import { loadConfig } from '../../config.js';
+import { resolveLoginForTaskCreation } from '../../domain/services/gitHubDispatchService.js';
 import {
   parseGitHubWebhookEvent,
 } from '../../infra/github-event-parser.js';
@@ -311,6 +312,7 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         gitHubWebhookAuditEventRepo,
         gitHubEventLogEntryRepo,
         automationLog,
+        userServiceClient,
         logger,
       } = getServices();
 
@@ -396,19 +398,41 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         const resolvedEventType = typeof eventType === 'string' ? eventType : 'unknown';
         const eventUrl = extractEventUrl(resolvedEventType, request.body);
         const eventSummary = extractEventSummary(resolvedEventType, request.body);
-        void automationLog.record(
-          { repository: repositoryDetails.repository, prNumber: pullRequestDetails.pullRequestNumber },
-          {
-            type: 'webhook_received',
-            eventType: resolvedEventType,
-            action: request.body.action ?? 'unknown',
-            sender: senderDetails.senderLogin ?? 'unknown',
-            deliveryId: resolvedDeliveryId,
-            ...(eventUrl !== null ? { eventUrl } : {}),
-            ...(eventSummary !== null ? { summary: eventSummary } : {}),
-          },
+        const webhookReceivedRepo = repositoryDetails.repository;
+        const webhookReceivedPrNumber = pullRequestDetails.pullRequestNumber;
+        void (async (): Promise<void> => {
+          // Resolve sender login → platform userId so the automation log can post PR comments
+          let tokenUserId: string | undefined;
+          if (senderDetails.senderLogin !== null) {
+            try {
+              const login = resolveLoginForTaskCreation(senderDetails.senderLogin, webhookReceivedRepo, ALLOWED_BOTS);
+              const userResult = await userServiceClient.resolveGitHubUsername(login);
+              if (userResult.ok) {
+                const resolvedUser = userResult.value; // @allow-result-access -- narrowed by userResult.ok
+                if (resolvedUser !== null) {
+                  tokenUserId = resolvedUser.userId;
+                }
+              }
+            } catch {
+              // Best-effort — userId resolution failure must not block automation logging
+            }
+          }
+          await automationLog.record(
+            { repository: webhookReceivedRepo, prNumber: webhookReceivedPrNumber },
+            {
+              type: 'webhook_received',
+              eventType: resolvedEventType,
+              action: request.body.action ?? 'unknown',
+              sender: senderDetails.senderLogin ?? 'unknown',
+              deliveryId: resolvedDeliveryId,
+              ...(eventUrl !== null ? { eventUrl } : {}),
+              ...(eventSummary !== null ? { summary: eventSummary } : {}),
+            },
+            tokenUserId,
+          );
+        })()
         /* v8 ignore stop @preserve */
-        ).catch((recordErr: unknown) => {
+        .catch((recordErr: unknown) => {
           logger.warn({ error: getErrorMessage(recordErr) }, 'Failed to record webhook_received in automation log');
         });
       }
@@ -596,12 +620,7 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         'GitHub PR event saved'
       );
 
-      const { unifiedEvaluator, mergeConflictDetector } = getServices();
-      if (parsedEvent.eventType === 'push' && mergeConflictDetector !== undefined) {
-        void mergeConflictDetector.detectOnPush(savedEvent, logger).catch((detectErr: unknown) => {
-          logger.error({ error: getErrorMessage(detectErr) }, 'Unhandled error in merge conflict detector');
-        });
-      }
+      const { unifiedEvaluator } = getServices();
 
       // INT-744: Unified evaluation — hard rules + optional LLM triage
       void unifiedEvaluator.evaluate(savedEvent, logger).catch((evalErr: unknown) => {

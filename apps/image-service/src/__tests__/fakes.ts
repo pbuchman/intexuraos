@@ -1,5 +1,6 @@
-import { err, ok, type Result } from '@intexuraos/common-core';
+import { err, ok, type Result, type Logger } from '@intexuraos/common-core';
 import { LlmModels } from '@intexuraos/llm-contract';
+import { vi } from 'vitest';
 import type {
   GeneratedImage,
   ImageStorage,
@@ -38,7 +39,7 @@ export class FakeImageStorage implements ImageStorage {
     });
   }
 
-  async delete(id: string): Promise<Result<void, StorageError>> {
+  async delete(id: string, _slug?: string): Promise<Result<void, StorageError>> {
     if (this.shouldFailDelete) {
       this.shouldFailDelete = false;
       return err({ code: 'STORAGE_ERROR', message: 'Simulated delete failure' });
@@ -264,4 +265,16 @@ export class FakeImageGenerator implements ImageGenerator {
   setGeneratedId(id: string): void {
     this.generatedId = id;
   }
+}
+
+export function createFakeLogger(): Logger {
+  return {
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+    fatal: vi.fn(),
+    trace: vi.fn(),
+    child: vi.fn(),
+  } as unknown as Logger;
 }

@@ -48,6 +48,10 @@ import {
   createChangeActionTypeUseCase,
   type ChangeActionTypeUseCase,
 } from '../domain/usecases/changeActionType.js';
+import {
+  createUpdateActionUseCase,
+  type UpdateActionUseCase,
+} from '../domain/usecases/updateAction.js';
 import type {
   HandleApprovalReplyUseCase,
   ApprovalReplyInput,
@@ -909,12 +913,9 @@ export class FakeCodeAgentClient implements CodeAgentClient {
   }
 }
 
-import type { ExecuteResearchActionResult } from '../domain/usecases/executeResearchAction.js';
-import type { ExecuteTodoActionResult } from '../domain/usecases/executeTodoAction.js';
-import type { ExecuteNoteActionResult } from '../domain/usecases/executeNoteAction.js';
+import type { ExecuteActionResult } from '../domain/usecases/executeActionTemplate.js';
 import type { ExecuteLinkActionResult } from '../domain/usecases/executeLinkAction.js';
 import type { ExecuteCalendarActionResult } from '../domain/usecases/executeCalendarAction.js';
-import type { ExecuteLinearActionResult } from '../domain/usecases/executeLinearAction.js';
 import type { ExecuteCodeActionResult } from '../domain/usecases/executeCodeAction.js';
 import type {
   RetryResult,
@@ -923,13 +924,13 @@ import type {
 
 export type FakeExecuteResearchActionUseCase = (
   actionId: string
-) => Promise<Result<ExecuteResearchActionResult, Error>>;
+) => Promise<Result<ExecuteActionResult, Error>>;
 
 export function createFakeExecuteResearchActionUseCase(config?: {
   failWithError?: Error;
-  returnResult?: ExecuteResearchActionResult;
+  returnResult?: ExecuteActionResult;
 }): FakeExecuteResearchActionUseCase {
-  return async (_actionId: string): Promise<Result<ExecuteResearchActionResult, Error>> => {
+  return async (_actionId: string): Promise<Result<ExecuteActionResult, Error>> => {
     if (config?.failWithError !== undefined) {
       return err(config.failWithError);
     }
@@ -945,13 +946,13 @@ export function createFakeExecuteResearchActionUseCase(config?: {
 
 export type FakeExecuteTodoActionUseCase = (
   actionId: string
-) => Promise<Result<ExecuteTodoActionResult, Error>>;
+) => Promise<Result<ExecuteActionResult, Error>>;
 
 export function createFakeExecuteTodoActionUseCase(config?: {
   failWithError?: Error;
-  returnResult?: ExecuteTodoActionResult;
+  returnResult?: ExecuteActionResult;
 }): FakeExecuteTodoActionUseCase {
-  return async (_actionId: string): Promise<Result<ExecuteTodoActionResult, Error>> => {
+  return async (_actionId: string): Promise<Result<ExecuteActionResult, Error>> => {
     if (config?.failWithError !== undefined) {
       return err(config.failWithError);
     }
@@ -967,13 +968,13 @@ export function createFakeExecuteTodoActionUseCase(config?: {
 
 export type FakeExecuteNoteActionUseCase = (
   actionId: string
-) => Promise<Result<ExecuteNoteActionResult, Error>>;
+) => Promise<Result<ExecuteActionResult, Error>>;
 
 export function createFakeExecuteNoteActionUseCase(config?: {
   failWithError?: Error;
-  returnResult?: ExecuteNoteActionResult;
+  returnResult?: ExecuteActionResult;
 }): FakeExecuteNoteActionUseCase {
-  return async (_actionId: string): Promise<Result<ExecuteNoteActionResult, Error>> => {
+  return async (_actionId: string): Promise<Result<ExecuteActionResult, Error>> => {
     if (config?.failWithError !== undefined) {
       return err(config.failWithError);
     }
@@ -1033,13 +1034,13 @@ export function createFakeExecuteCalendarActionUseCase(config?: {
 
 export type FakeExecuteLinearActionUseCase = (
   actionId: string
-) => Promise<Result<ExecuteLinearActionResult, Error>>;
+) => Promise<Result<ExecuteActionResult, Error>>;
 
 export function createFakeExecuteLinearActionUseCase(config?: {
   failWithError?: Error;
-  returnResult?: ExecuteLinearActionResult;
+  returnResult?: ExecuteActionResult;
 }): FakeExecuteLinearActionUseCase {
-  return async (_actionId: string): Promise<Result<ExecuteLinearActionResult, Error>> => {
+  return async (_actionId: string): Promise<Result<ExecuteActionResult, Error>> => {
     if (config?.failWithError !== undefined) {
       return err(config.failWithError);
     }
@@ -1335,6 +1336,7 @@ export function createFakeServices(deps: {
   executeCodeActionUseCase?: FakeExecuteCodeActionUseCase;
   retryPendingActionsUseCase?: RetryPendingActionsUseCase;
   changeActionTypeUseCase?: ChangeActionTypeUseCase;
+  updateActionUseCase?: UpdateActionUseCase;
   approvalMessageRepository?: FakeApprovalMessageRepository;
   userServiceClient?: FakeUserServiceClient;
   handleApprovalReplyUseCase?: HandleApprovalReplyUseCase;
@@ -1471,6 +1473,13 @@ export function createFakeServices(deps: {
     retryPendingActionsUseCase:
       deps.retryPendingActionsUseCase ?? createFakeRetryPendingActionsUseCase(),
     changeActionTypeUseCase,
+    updateActionUseCase:
+      deps.updateActionUseCase ??
+      createUpdateActionUseCase({
+        actionRepository,
+        changeActionTypeUseCase,
+        logger: createMockLogger(),
+      }),
     approvalMessageRepository,
     userServiceClient,
     handleApprovalReplyUseCase:

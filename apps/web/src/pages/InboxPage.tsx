@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionDetailModal,
   ActionItem,
-  CommandDetailModal,
+  Button,
   Card,
+  CommandDetailModal,
+  ErrorBanner,
   Layout,
 } from '@/components';
+import { CommandItem } from '@/components/inbox/CommandItem.js';
+import { InboxFilters } from '@/components/inbox/InboxFilters.js';
 import { useAuth } from '@/context';
 import {
   ApiError,
@@ -15,209 +19,92 @@ import {
   getActions,
   getCommands,
 } from '@/services';
-import type { Action, ActionStatus, Command, CommandType } from '@/types';
+import type { Action, ActionStatus, Command } from '@/types';
 import type { ResolvedActionButton } from '@/types/actionConfig';
 import { useActionChanges } from '@/hooks/useActionChanges';
 import { useCommandChanges } from '@/hooks/useCommandChanges';
-import { formatDate } from '@/utils/dateFormat';
 import {
-  Archive,
-  Bell,
-  Calendar,
-  CheckCircle,
-  ChevronDown,
-  ChevronUp,
-  Clock,
-  Cog,
-  FileText,
-  Filter,
-  HelpCircle,
+  ArrowUpDown,
   Inbox,
-  Link,
   ListTodo,
   Loader2,
   MessageSquare,
-  Mic,
   RefreshCw,
-  Search,
-  Trash2,
-  XCircle,
 } from 'lucide-react';
 
 type TabId = 'commands' | 'actions';
 
-const ALL_ACTION_STATUSES: ActionStatus[] = [
-  'pending',
-  'awaiting_approval',
-  'processing',
-  'completed',
-  'failed',
-  'rejected',
-  'archived',
+type ActionSortKey = 'created' | 'status';
+type CommandSortKey = 'created' | 'type';
+
+const ACTION_SORT_OPTIONS: { key: ActionSortKey; label: string }[] = [
+  { key: 'created', label: 'Newest' },
+  { key: 'status', label: 'Status' },
 ];
 
-const STATUS_LABELS: Record<ActionStatus, string> = {
-  pending: 'Pending',
-  awaiting_approval: 'Awaiting Approval',
-  processing: 'Processing',
-  completed: 'Completed',
-  failed: 'Failed',
-  rejected: 'Rejected',
-  archived: 'Archived',
-};
-
-function getTypeIcon(type: CommandType): React.JSX.Element {
-  const iconClass = 'h-4 w-4';
-  switch (type) {
-    case 'todo':
-      return <ListTodo className={iconClass} />;
-    case 'research':
-      return <Search className={iconClass} />;
-    case 'note':
-      return <FileText className={iconClass} />;
-    case 'link':
-      return <Link className={iconClass} />;
-    case 'calendar':
-      return <Calendar className={iconClass} />;
-    case 'reminder':
-      return <Bell className={iconClass} />;
-    default:
-      return <HelpCircle className={iconClass} />;
-  }
-}
-
-function getTypeLabel(type: CommandType): string {
-  return type.charAt(0).toUpperCase() + type.slice(1);
-}
-
-function getStatusIcon(status: string): React.JSX.Element {
-  const iconClass = 'h-4 w-4';
-  switch (status) {
-    case 'completed':
-    case 'classified':
-      return <CheckCircle className={`${iconClass} text-green-500`} />;
-    case 'pending':
-    case 'received':
-    case 'pending_classification':
-      return <Clock className={`${iconClass} text-amber-500`} />;
-    case 'processing':
-      return <Cog className={`${iconClass} text-blue-500`} />;
-    case 'failed':
-    case 'rejected':
-      return <XCircle className={`${iconClass} text-red-500`} />;
-    case 'archived':
-      return <Archive className={`${iconClass} text-slate-400`} />;
-    default:
-      return <HelpCircle className={`${iconClass} text-slate-400`} />;
-  }
-}
-
-interface CommandItemProps {
-  command: Command;
-  onClick: () => void;
-  onDelete: (id: string) => void;
-  onArchive: (id: string) => void;
-  isDeleting: boolean;
-  isArchiving: boolean;
-}
-
-function CommandItem({
-  command,
-  onClick,
-  onDelete,
-  onArchive,
-  isDeleting,
-  isArchiving,
-}: CommandItemProps): React.JSX.Element {
-  const isVoice = command.sourceType === 'whatsapp_voice';
-  const deletableStatuses = ['received', 'pending_classification', 'failed'];
-  const canDelete = deletableStatuses.includes(command.status);
-  const canArchive = command.status === 'classified';
-
-  return (
-    <div
-      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:hover:border-slate-600"
-      onClick={onClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e): void => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          onClick();
-        }
-      }}
-    >
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 shrink-0">
-          {isVoice ? (
-            <Mic className="h-5 w-5 text-purple-500" />
-          ) : (
-            <MessageSquare className="h-5 w-5 text-blue-500" />
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="line-clamp-3 break-words text-sm text-slate-800 dark:text-slate-200">{command.text}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-            {command.classification !== undefined && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-300">
-                {getTypeIcon(command.classification.type)}
-                {getTypeLabel(command.classification.type)}
-              </span>
-            )}
-            <span className="inline-flex items-center gap-1">
-              {getStatusIcon(command.status)}
-              {command.status}
-            </span>
-            <span>{formatDate(command.createdAt)}</span>
-          </div>
-        </div>
-        <div
-          className="flex shrink-0 gap-2"
-          onClick={(e): void => {
-            e.stopPropagation();
-          }}
-        >
-          {canDelete && (
-            <button
-              onClick={(): void => {
-                onDelete(command.id);
-              }}
-              disabled={isDeleting}
-              className="rounded p-2.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-900/30"
-              title="Delete command"
-            >
-              {isDeleting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
-            </button>
-          )}
-          {canArchive && (
-            <button
-              onClick={(): void => {
-                onArchive(command.id);
-              }}
-              disabled={isArchiving}
-              className="rounded p-2.5 text-slate-400 transition-colors hover:bg-amber-50 hover:text-amber-600 disabled:opacity-50 dark:hover:bg-amber-900/30"
-              title="Archive command"
-            >
-              {isArchiving ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Archive className="h-4 w-4" />
-              )}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+const COMMAND_SORT_OPTIONS: { key: CommandSortKey; label: string }[] = [
+  { key: 'created', label: 'Newest' },
+  { key: 'type', label: 'Type' },
+];
 
 // 💰 CostGuard: Debounce delay for batch fetching changed actions
 const DEBOUNCE_DELAY_MS = 500;
 // 💰 CostGuard: Max IDs per batch request (must match backend maxItems)
 const BATCH_SIZE_LIMIT = 50;
+
+const STATUS_ORDER: Record<ActionStatus, number> = {
+  pending: 0,
+  awaiting_approval: 1,
+  processing: 2,
+  completed: 3,
+  failed: 4,
+  rejected: 5,
+  archived: 6,
+};
+
+function getActionsCountByStatus(actions: Action[]): Record<ActionStatus, number> {
+  const counts: Record<ActionStatus, number> = {
+    pending: 0,
+    awaiting_approval: 0,
+    processing: 0,
+    completed: 0,
+    failed: 0,
+    rejected: 0,
+    archived: 0,
+  };
+  for (const action of actions) {
+    if (action.status in counts) {
+      counts[action.status]++;
+    }
+  }
+  return counts;
+}
+
+function sortActions(actions: Action[], sortKey: ActionSortKey): Action[] {
+  const sorted = [...actions];
+  if (sortKey === 'created') {
+    sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+  if (sortKey === 'status') {
+    sorted.sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
+  }
+  return sorted;
+}
+
+function sortCommands(commands: Command[], sortKey: CommandSortKey): Command[] {
+  const sorted = [...commands];
+  if (sortKey === 'created') {
+    sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+  if (sortKey === 'type') {
+    sorted.sort((a, b) => {
+      const typeA = a.classification?.type ?? 'unknown';
+      const typeB = b.classification?.type ?? 'unknown';
+      return typeA.localeCompare(typeB);
+    });
+  }
+  return sorted;
+}
 
 export function InboxPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
@@ -263,6 +150,14 @@ export function InboxPage(): React.JSX.Element {
   const [isFilterExpanded, setIsFilterExpanded] = useState(
     () => localStorage.getItem('inbox-filter-expanded') === 'true'
   );
+  const [actionSort, setActionSort] = useState<ActionSortKey>(() => {
+    const stored = localStorage.getItem('inbox-sort-actions');
+    return stored === 'status' ? 'status' : 'created';
+  });
+  const [commandSort, setCommandSort] = useState<CommandSortKey>(() => {
+    const stored = localStorage.getItem('inbox-sort-commands');
+    return stored === 'type' ? 'type' : 'created';
+  });
 
   // 💰 CostGuard: Real-time action listener - only enabled when Actions tab is active
   const {
@@ -289,8 +184,6 @@ export function InboxPage(): React.JSX.Element {
   isLoadingRef.current = isLoading;
 
   // 💰 CostGuard: Debounced batch fetch for changed actions
-  // Waits 500ms for additional changes before making API call
-  // Chunks IDs into batches of BATCH_SIZE_LIMIT to respect backend limits
   const fetchChangedActions = useCallback(
     async (ids: string[]): Promise<void> => {
       if (ids.length === 0) return;
@@ -298,7 +191,6 @@ export function InboxPage(): React.JSX.Element {
       try {
         const token = await getAccessToken();
 
-        // Chunk IDs into batches of BATCH_SIZE_LIMIT
         const allFetchedActions: Action[] = [];
         for (let i = 0; i < ids.length; i += BATCH_SIZE_LIMIT) {
           const chunk = ids.slice(i, i + BATCH_SIZE_LIMIT);
@@ -315,12 +207,8 @@ export function InboxPage(): React.JSX.Element {
               statusFilter.length === 0 || statusFilter.includes(changedAction.status);
 
             if (index >= 0) {
-              // Manual acknowledgment model: always update the action in place
-              // even if it no longer matches the filter. User must explicitly
-              // dismiss (archive) to remove from list.
               updated[index] = changedAction;
             } else if (matchesFilter) {
-              // Only add new actions that match the current filter
               updated.unshift(changedAction);
             }
           }
@@ -336,7 +224,6 @@ export function InboxPage(): React.JSX.Element {
     [getAccessToken, clearActionChangedIds, statusFilter]
   );
 
-  // 💰 CostGuard: Fetch changed commands by refreshing the list
   const fetchChangedCommands = useCallback(async (): Promise<void> => {
     try {
       const token = await getAccessToken();
@@ -492,7 +379,6 @@ export function InboxPage(): React.JSX.Element {
   useEffect(() => {
     localStorage.setItem('inbox-active-tab', activeTab);
 
-    // Refresh data when switching tabs (but not on initial load)
     if (previousTabRef.current !== activeTab && !isLoadingRef.current) {
       void fetchData(true);
     }
@@ -502,10 +388,8 @@ export function InboxPage(): React.JSX.Element {
   // Handle status filter changes: save to localStorage and refresh data
   const statusFilterRef = useRef<ActionStatus[]>(statusFilter);
   useEffect(() => {
-    // Always persist filter state to localStorage
     localStorage.setItem('inbox-status-filter', JSON.stringify(statusFilter));
 
-    // Skip refetch if filter hasn't changed (prevents double fetch on mount)
     if (
       statusFilterRef.current.length === statusFilter.length &&
       statusFilterRef.current.every((s, i) => s === statusFilter[i])
@@ -519,14 +403,34 @@ export function InboxPage(): React.JSX.Element {
     }
   }, [statusFilter, fetchData]);
 
-  const handleToggleStatus = (status: ActionStatus): void => {
+  // Persist action sort to localStorage
+  useEffect(() => {
+    localStorage.setItem('inbox-sort-actions', actionSort);
+  }, [actionSort]);
+
+  // Persist command sort to localStorage
+  useEffect(() => {
+    localStorage.setItem('inbox-sort-commands', commandSort);
+  }, [commandSort]);
+
+  const handleToggleStatus = useCallback((status: ActionStatus): void => {
     setStatusFilter((prev) =>
       prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
     );
-  };
+  }, []);
+
+  const handleClearAllStatuses = useCallback((): void => {
+    setStatusFilter([]);
+  }, []);
+
+  const handleToggleFilterExpanded = useCallback((): void => {
+    setIsFilterExpanded((prev) => {
+      localStorage.setItem('inbox-filter-expanded', String(!prev));
+      return !prev;
+    });
+  }, []);
 
   // Deep linking: open action modal from URL query parameter
-  // When filters are active, the action may not be in the displayed list, so fetch it directly
   useEffect(() => {
     const hash = window.location.hash;
     const queryString = hash.includes('?') ? hash.split('?')[1] : '';
@@ -541,26 +445,21 @@ export function InboxPage(): React.JSX.Element {
       return;
     }
 
-    // Clean up URL immediately to prevent modal reappearing on refresh
     const cleanHash = hash.split('?')[0] ?? '';
     window.history.replaceState(null, '', cleanHash !== '' ? cleanHash : window.location.pathname);
 
-    // First check if action is in current list (fast path)
     const actionInList = actions.find((a) => a.id === actionId);
     if (actionInList !== undefined) {
       setSelectedAction(actionInList);
       return;
     }
 
-    // If not found and we haven't tried fetching yet, fetch directly
-    // Use sessionStorage to track attempted fetches to avoid loops
     const fetchKey = `fetched-action-${actionId}`;
     if (sessionStorage.getItem(fetchKey) === 'true') {
       return;
     }
     sessionStorage.setItem(fetchKey, 'true');
 
-    // Fetch the specific action even if it doesn't match current filters
     void (async (): Promise<void> => {
       try {
         const token = await getAccessToken();
@@ -607,6 +506,22 @@ export function InboxPage(): React.JSX.Element {
     };
   }, [currentCursor, isLoadingMore, handleLoadMore]);
 
+  // Compute sorted and filtered actions
+  const pendingCount = useMemo(() => actions.filter((a) => a.status === 'pending').length, [actions]);
+  const sortedActions = useMemo(() => sortActions(actions, actionSort), [actions, actionSort]);
+
+  // Compute sorted commands
+  const sortedCommands = useMemo(() => sortCommands(commands, commandSort), [commands, commandSort]);
+
+  // Compute counts by status for filter pills
+  const actionsCountByStatus = useMemo(() => getActionsCountByStatus(actions), [actions]);
+
+  // Header subtitle
+  const headerSubtitle =
+    activeTab === 'actions'
+      ? `${String(actions.length)} actions · ${String(pendingCount)} pending`
+      : `${String(commands.length)} commands`;
+
   if (isLoading) {
     return (
       <Layout>
@@ -619,19 +534,17 @@ export function InboxPage(): React.JSX.Element {
 
   return (
     <Layout>
+      {/* Page Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Inbox</h2>
-          <p className="text-slate-600 dark:text-slate-400">Your commands and pending actions</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{headerSubtitle}</p>
         </div>
-        <button
-          onClick={handleRefresh}
-          disabled={isRefreshing}
-          className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-slate-700 dark:hover:text-slate-300"
-          title="Refresh"
-        >
-          <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={isRefreshing}>
+            <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
       </div>
 
       {/* Real-time listener error warning */}
@@ -641,11 +554,8 @@ export function InboxPage(): React.JSX.Element {
         </div>
       ) : null}
 
-      {error !== null && error !== '' ? (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
-          {error}
-        </div>
-      ) : null}
+      {/* Error Banner */}
+      <ErrorBanner message={error} className="mb-6" />
 
       {/* Tabs */}
       <div className="mb-4 flex border-b border-slate-200 dark:border-slate-700">
@@ -679,65 +589,62 @@ export function InboxPage(): React.JSX.Element {
 
       {/* Status Filter for Actions */}
       {activeTab === 'actions' && (
-        <div className="mb-4">
-          <button
-            onClick={(): void => {
-              setIsFilterExpanded((prev) => {
-                localStorage.setItem('inbox-filter-expanded', String(!prev));
-                return !prev;
-              });
-            }}
-            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
-          >
-            <Filter className="h-4 w-4" />
-            Filter by status
-            {statusFilter.length > 0 && (
-              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700 dark:bg-blue-900/50 dark:text-blue-400">
-                {String(statusFilter.length)}
-              </span>
-            )}
-            {isFilterExpanded ? (
-              <ChevronUp className="h-4 w-4" />
-            ) : (
-              <ChevronDown className="h-4 w-4" />
-            )}
-          </button>
+        <InboxFilters
+          statusFilter={statusFilter}
+          isFilterExpanded={isFilterExpanded}
+          onToggleStatus={handleToggleStatus}
+          onToggleExpanded={handleToggleFilterExpanded}
+          onClearAll={handleClearAllStatuses}
+          actionsCountByStatus={actionsCountByStatus}
+        />
+      )}
 
-          {isFilterExpanded && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {ALL_ACTION_STATUSES.map((status) => (
-                <label
-                  key={status}
-                  className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                    statusFilter.includes(status)
-                      ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/30 dark:text-blue-400'
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={statusFilter.includes(status)}
-                    onChange={(): void => {
-                      handleToggleStatus(status);
-                    }}
-                    className="sr-only"
-                  />
-                  {getStatusIcon(status)}
-                  {STATUS_LABELS[status]}
-                </label>
-              ))}
-              {statusFilter.length > 0 && (
-                <button
-                  onClick={(): void => {
-                    setStatusFilter([]);
-                  }}
-                  className="text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                >
-                  Clear all
-                </button>
-              )}
-            </div>
-          )}
+      {/* Sort Selector */}
+      {activeTab === 'actions' && (
+        <div className="mb-4 flex items-center gap-2">
+          <ArrowUpDown className="h-3.5 w-3.5 text-slate-400" />
+          <span className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500">Sort</span>
+          <div className="flex gap-1.5">
+            {ACTION_SORT_OPTIONS.map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={(): void => {
+                  setActionSort(key);
+                }}
+                className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                  actionSort === key
+                    ? 'border-slate-400 bg-slate-100 font-medium text-slate-700 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200'
+                    : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'commands' && (
+        <div className="mb-4 flex items-center gap-2">
+          <ArrowUpDown className="h-3.5 w-3.5 text-slate-400" />
+          <span className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500">Sort</span>
+          <div className="flex gap-1.5">
+            {COMMAND_SORT_OPTIONS.map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={(): void => {
+                  setCommandSort(key);
+                }}
+                className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                  commandSort === key
+                    ? 'border-slate-400 bg-slate-100 font-medium text-slate-700 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200'
+                    : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -745,7 +652,7 @@ export function InboxPage(): React.JSX.Element {
       <div className="space-y-3">
         {activeTab === 'actions' && (
           <>
-            {actions.length === 0 ? (
+            {sortedActions.length === 0 ? (
               <Card title="">
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <ListTodo className="mb-4 h-12 w-12 text-slate-300 dark:text-slate-600" />
@@ -760,7 +667,7 @@ export function InboxPage(): React.JSX.Element {
                 </div>
               </Card>
             ) : (
-              actions.map((action) => (
+              sortedActions.map((action) => (
                 <ActionItem
                   key={action.id}
                   action={action}
@@ -768,14 +675,12 @@ export function InboxPage(): React.JSX.Element {
                     setSelectedAction(action);
                   }}
                   onActionSuccess={(button): void => {
-                    // If action is DELETE, remove from local state
                     if (button.endpoint.method === 'DELETE') {
                       setActions((prev) => prev.filter((a) => a.id !== button.action.id));
                     } else if (
                       button.endpoint.method === 'PATCH' ||
                       button.endpoint.method === 'POST'
                     ) {
-                      // If PATCH (archive, reject) or POST (approve, retry), refresh to get updated status
                       void fetchData(true);
                     }
                   }}
@@ -792,7 +697,7 @@ export function InboxPage(): React.JSX.Element {
 
         {activeTab === 'commands' && (
           <>
-            {commands.length === 0 ? (
+            {sortedCommands.length === 0 ? (
               <Card title="">
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <Inbox className="mb-4 h-12 w-12 text-slate-300 dark:text-slate-600" />
@@ -803,7 +708,7 @@ export function InboxPage(): React.JSX.Element {
                 </div>
               </Card>
             ) : (
-              commands.map((command) => (
+              sortedCommands.map((command) => (
                 <CommandItem
                   key={command.id}
                   command={command}
@@ -841,17 +746,13 @@ export function InboxPage(): React.JSX.Element {
             setSelectedAction(null);
           }}
           onActionSuccess={(button: ResolvedActionButton): void => {
-            // If action is DELETE, remove from local state
             if (button.endpoint.method === 'DELETE') {
               setActions((prev) => prev.filter((a) => a.id !== button.action.id));
             }
-            // Close modal after action completes
             setSelectedAction(null);
           }}
           onActionUpdated={(updatedAction: Action): void => {
-            // Update action in local state
             setActions((prev) => prev.map((a) => (a.id === updatedAction.id ? updatedAction : a)));
-            // Update selected action to reflect changes
             setSelectedAction(updatedAction);
           }}
         />

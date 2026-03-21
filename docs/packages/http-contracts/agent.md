@@ -1,4 +1,4 @@
-# @intexuraos/http-contracts - Agent Reference
+# @intexuraos/http-contracts — Agent Reference
 
 Machine-readable export map and interface definitions for automated tooling.
 
@@ -6,7 +6,6 @@ Machine-readable export map and interface definitions for automated tooling.
 
 ```
 name: @intexuraos/http-contracts
-version: 2.1.0
 type: module
 leaf: true
 dependencies: none
@@ -109,6 +108,7 @@ Fastify:  { $ref: 'ErrorCode#' }
 ```
 http-contracts (leaf)
   <- all apps (18)
+  <- http-server (transitively)
 ```
 
 ## Typical Usage Pattern

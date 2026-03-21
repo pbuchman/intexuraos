@@ -6,6 +6,7 @@ import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/i
 import type { Firestore } from '@google-cloud/firestore';
 import type { Logger } from '@intexuraos/common-core';
 import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
+import { MERGE_CONFLICT_SYSTEM_PROMPT_HASH } from '../../../domain/models/codeTask.js';
 import type { CreateTaskInput } from '../../../domain/repositories/codeTaskRepository.js';
 
 describe('firestoreCodeTaskRepository', () => {
@@ -248,6 +249,92 @@ describe('firestoreCodeTaskRepository', () => {
       expect(second.ok).toBe(true);
     });
 
+    it('Layer 2: allows same prompt when previous task was cancelled', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput();
+      const first = await repo.create(input);
+      expect(first.ok).toBe(true);
+      if (!first.ok) return;
+
+      // Cancel the first task (simulates review_replaced flow)
+      await repo.update(first.value.id, {
+        status: 'cancelled',
+        completedAt: new Date(),
+        error: { code: 'review_replaced', message: 'Replaced by fresh review' },
+      });
+
+      // Same prompt within 5 minutes — should succeed because first is cancelled
+      const second = await repo.create(input);
+      expect(second.ok).toBe(true);
+    });
+
+    it('Layer 2: allows same prompt when previous task failed', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput();
+      const first = await repo.create(input);
+      expect(first.ok).toBe(true);
+      if (!first.ok) return;
+
+      // Fail the first task
+      await repo.update(first.value.id, {
+        status: 'failed',
+        completedAt: new Date(),
+        error: { code: 'worker_error', message: 'Container crashed' },
+      });
+
+      // Same prompt within 5 minutes — should succeed because first failed
+      const second = await repo.create(input);
+      expect(second.ok).toBe(true);
+    });
+
+    it('Layer 2: allows same prompt when previous task was interrupted', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput();
+      const first = await repo.create(input);
+      expect(first.ok).toBe(true);
+      if (!first.ok) return;
+
+      await repo.update(first.value.id, {
+        status: 'interrupted',
+        completedAt: new Date(),
+      });
+
+      const second = await repo.create(input);
+      expect(second.ok).toBe(true);
+    });
+
+    it('Layer 2: still blocks same prompt when previous task is active (dispatched)', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput();
+      const first = await repo.create(input);
+      expect(first.ok).toBe(true);
+      if (!first.ok) return;
+
+      // Task is dispatched (active) — should still block
+      await repo.update(first.value.id, { status: 'dispatched' });
+
+      const second = await repo.create(input);
+      expect(second.ok).toBe(false);
+      if (second.ok) return;
+      expect(second.error.code).toBe('DUPLICATE_PROMPT');
+    });
+
     it('Layer 3: rejects when active task exists for Linear issue with ACTIVE_TASK_EXISTS', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -330,6 +417,58 @@ describe('firestoreCodeTaskRepository', () => {
         sanitizedPrompt: 'review pr #42',
       }));
       expect(reviewTask.ok).toBe(true);
+
+      const executionTask = await repo.create(createTaskInput({
+        userId: 'user-456',
+        linearIssueId: 'LIN-123',
+        agentType: 'execution',
+        prompt: 'Implement issue',
+        sanitizedPrompt: 'implement issue',
+      }));
+
+      expect(executionTask.ok).toBe(true);
+    });
+
+    it('allows merge-conflict task when an execution task is active for the same Linear issue', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const executionTask = await repo.create(createTaskInput({
+        linearIssueId: 'LIN-123',
+        agentType: 'execution',
+      }));
+      expect(executionTask.ok).toBe(true);
+
+      const mergeConflictTask = await repo.create(createTaskInput({
+        userId: 'user-456',
+        prompt: 'Resolve merge conflicts',
+        sanitizedPrompt: 'resolve merge conflicts',
+        linearIssueId: 'LIN-123',
+        systemPromptHash: MERGE_CONFLICT_SYSTEM_PROMPT_HASH,
+        agentType: 'pull_request',
+      }));
+
+      expect(mergeConflictTask.ok).toBe(true);
+      if (!mergeConflictTask.ok) return;
+      expect(mergeConflictTask.value.agentType).toBe('pull_request');
+    });
+
+    it('allows non-merge-conflict task when only an active merge-conflict task exists for the same Linear issue', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const mergeConflictTask = await repo.create(createTaskInput({
+        linearIssueId: 'LIN-123',
+        systemPromptHash: MERGE_CONFLICT_SYSTEM_PROMPT_HASH,
+        agentType: 'pull_request',
+        prompt: 'Resolve merge conflicts',
+        sanitizedPrompt: 'resolve merge conflicts',
+      }));
+      expect(mergeConflictTask.ok).toBe(true);
 
       const executionTask = await repo.create(createTaskInput({
         userId: 'user-456',
@@ -2031,46 +2170,6 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error.code).toBe('NOT_FOUND');
-    });
-  });
-
-  describe('findOldestQueued', () => {
-    it('returns null when no queued tasks exist', async () => {
-      const repo = createFirestoreCodeTaskRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      const result = await repo.findOldestQueued();
-
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
-      expect(result.value).toBeNull();
-    });
-
-    it('returns the oldest queued task when one exists', async () => {
-      const repo = createFirestoreCodeTaskRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      // Create a task and set it to queued
-      const created = await repo.create(createTaskInput());
-      expect(created.ok).toBe(true);
-      if (!created.ok) return;
-
-      await repo.update(created.value.id, {
-        status: 'queued',
-        queuedAt: new Date(),
-      });
-
-      const result = await repo.findOldestQueued();
-
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
-      expect(result.value).not.toBeNull();
-      expect(result.value?.id).toBe(created.value.id);
-      expect(result.value?.status).toBe('queued');
     });
   });
 

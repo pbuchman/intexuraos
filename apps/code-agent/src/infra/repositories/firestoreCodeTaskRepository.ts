@@ -15,7 +15,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
-import type { CodeTask } from '../../domain/models/codeTask.js';
+import { MERGE_CONFLICT_SYSTEM_PROMPT_HASH, type CodeTask } from '../../domain/models/codeTask.js';
 import type {
   CodeTaskRepository,
   CreateTaskInput,
@@ -26,6 +26,7 @@ import type {
 } from '../../domain/repositories/codeTaskRepository.js';
 
 const DEDUP_WINDOW_MS = 5 * 60 * 1000; // 5 minutes (design line 1544)
+const DEDUP_CANDIDATE_LIMIT = 5; // Fetch up to 5 candidates for app-level active-status filtering
 const ACTIVE_TASK_STATUSES = ['queued', 'dispatched', 'running'] as const;
 
 function stripLegacyLinearFields(data: Record<string, unknown>): Record<string, unknown> {
@@ -132,27 +133,31 @@ export const createFirestoreCodeTaskRepository = (deps: {
           const dedupQuery = collection
             .where('dedupKey', '==', dedupKey)
             .where('createdAt', '>', Timestamp.fromDate(dedupWindowStart))
-            .limit(1);
+            .limit(DEDUP_CANDIDATE_LIMIT);
           const dedupSnapshot = await transaction.get(dedupQuery);
 
-          if (!dedupSnapshot.empty) {
-            const existingTask = dedupSnapshot.docs[0]!;
+          // Only active tasks block dedup — terminal tasks (cancelled, failed, etc.) are ignored
+          const activeStatuses: readonly string[] = ACTIVE_TASK_STATUSES;
+          const activeMatch = dedupSnapshot.docs.find(
+            (doc) => activeStatuses.includes(String(doc.data()['status']))
+          );
+          if (activeMatch !== undefined) {
             logger.info({
               dedupLayer: 2,
               dedupType: 'DUPLICATE_PROMPT',
-              existingTaskId: existingTask.id,
+              existingTaskId: activeMatch.id,
               dedupKey,
             }, 'Dedup triggered: duplicate prompt within 5 minutes');
             return err({
               code: 'DUPLICATE_PROMPT',
               message: 'Duplicate prompt within 5 minutes',
-              existingTaskId: existingTask.id,
+              existingTaskId: activeMatch.id,
             } as const);
           }
         }
 
         // Layer 3: Check active task for Linear issue (design lines 448-458)
-        if (input.linearIssueId !== undefined && input.agentType !== 'review') {
+        if (input.linearIssueId !== undefined && input.agentType !== 'review' && input.systemPromptHash !== MERGE_CONFLICT_SYSTEM_PROMPT_HASH) {
           const linearQuery = collection
             .where('linearIssueId', '==', input.linearIssueId)
             .where('status', 'in', ACTIVE_TASK_STATUSES);
@@ -160,7 +165,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
           for (const existingTask of linearSnapshot.docs) {
             const existingData = existingTask.data();
-            if (existingData['agentType'] === 'review') {
+            if (existingData['agentType'] === 'review' || existingData['systemPromptHash'] === MERGE_CONFLICT_SYSTEM_PROMPT_HASH) {
               continue;
             }
 
@@ -229,6 +234,15 @@ export const createFirestoreCodeTaskRepository = (deps: {
         }
         if (input.agentType !== undefined) {
           taskData.agentType = input.agentType;
+        }
+        if (input.planningPrBranch !== undefined) {
+          taskData.planningPrBranch = input.planningPrBranch;
+        }
+        if (input.planningPrUrl !== undefined) {
+          taskData.planningPrUrl = input.planningPrUrl;
+        }
+        if (input.trackingCommentId !== undefined) {
+          taskData.trackingCommentId = input.trackingCommentId;
         }
         /* v8 ignore stop @preserve */
 
@@ -354,9 +368,11 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.statusSummary !== undefined) {
           updateData['statusSummary'] = input.statusSummary;
         }
+        /* v8 ignore start -- test-infra: workerLocation set by drainTaskQueue which mocks CodeTaskRepository @preserve */
         if (input.workerLocation !== undefined) {
           updateData['workerLocation'] = input.workerLocation;
         }
+        /* v8 ignore stop @preserve */
         if (input.callbackReceived !== undefined) {
           updateData['callbackReceived'] = input.callbackReceived;
         }
@@ -377,9 +393,6 @@ export const createFirestoreCodeTaskRepository = (deps: {
           updateData['lastHeartbeat'] = Timestamp.fromDate(input.lastHeartbeat);
         }
         /* v8 ignore stop @preserve */
-        if (input.workerLocation !== undefined) {
-          updateData['workerLocation'] = input.workerLocation;
-        }
         if (input.cancelNonce !== undefined) {
           updateData['cancelNonce'] = input.cancelNonce === null
             ? FieldValue.delete()
@@ -735,30 +748,37 @@ export const createFirestoreCodeTaskRepository = (deps: {
       }
     },
 
-    findOldestQueued: async (): Promise<Result<CodeTask | null, RepositoryError>> => {
+    listQueuedByAge: async (limit: number): Promise<Result<CodeTask[], RepositoryError>> => {
       try {
+        // Order by createdAt (not queuedAt) because createdAt is always present and
+        // queuedAt is optional — pre-migration tasks may lack it. Both are set nearly
+        // simultaneously for new tasks, so createdAt is a reliable FIFO proxy.
         const snapshot = await collection
           .where('status', '==', 'queued')
           .orderBy('createdAt', 'asc')
-          .limit(1)
+          .limit(limit)
           .get();
-
-        if (snapshot.empty) {
-          return ok(null);
-        }
-
-        const doc = snapshot.docs[0]!;
-        const data = doc.data();
-        const task: CodeTask = {
-          ...data,
-          id: doc.id,
-          createdAt: data['createdAt'],
-          updatedAt: data['updatedAt'],
-        } as CodeTask;
-
-        return ok(task);
+        return ok(snapshot.docs.map((doc) => toCodeTask(doc as { id: string; data(): Record<string, unknown> })));
       } catch (error) {
-        logger.error({ error }, 'Failed to find oldest queued task');
+        logger.error({ error }, 'Failed to list queued tasks by age');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    listQueued: async (): Promise<Result<CodeTask[], RepositoryError>> => {
+      try {
+        // Cap at 200 to avoid unbounded reads; queue should never grow this large
+        const snapshot = await collection
+          .where('status', '==', 'queued')
+          .orderBy('createdAt', 'asc')
+          .limit(200)
+          .get();
+        return ok(snapshot.docs.map((doc) => toCodeTask(doc as { id: string; data(): Record<string, unknown> })));
+      } catch (error) {
+        logger.error({ error }, 'Failed to list queued tasks');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,

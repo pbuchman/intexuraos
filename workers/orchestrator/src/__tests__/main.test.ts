@@ -49,7 +49,7 @@ describe('main.ts', () => {
   const mockConfig: OrchestratorConfig = {
     port: 8100,
     capacity: 5,
-    taskTimeoutMs: 7200000,
+    taskTimeoutMs: 10800000,
     stateFilePath: '/tmp/state.json',
     worktreeBasePath: '/tmp/worktrees',
     logBasePath: '/tmp/logs',

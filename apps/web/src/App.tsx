@@ -20,10 +20,17 @@ import {
   ApiKeysSettingsPage,
   BookmarksListPage,
   CalendarPage,
-  CodeTaskViewPage,
   CodeTaskViewPageV2,
   CodeTaskNewPage,
   CodeTasksPage,
+  CronExecutionsPage,
+  CronScheduleNewPage,
+  CronSchedulesPage,
+  CronScheduleViewPage,
+  DispatchQueuePage,
+  MergeQueuePage,
+  HellscriptBuffersPage,
+  HellscriptConversationPage,
   CompositeFeedFormPage,
   CompositeFeedsListPage,
   DataInsightsPage,
@@ -43,7 +50,7 @@ import {
   MobileNotificationsListPage,
   NotesListPage,
   NotionConnectionPage,
-  PREventsPage,
+  GitHubEventLogPage,
   ResearchDetailPage,
   ResearchListPage,
   ShareHistoryPage,
@@ -124,14 +131,14 @@ function BookmarkDetailRedirect(): React.JSX.Element {
   return <Navigate to={`/my-bookmarks?id=${id ?? ''}`} replace />;
 }
 
-function CodeTaskViewPageKeyed(): React.JSX.Element {
-  const { id } = useParams<{ id: string }>();
-  return <CodeTaskViewPage key={id} />;
-}
-
 function CodeTaskViewPageV2Keyed(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
   return <CodeTaskViewPageV2 key={id} />;
+}
+
+function CodeTaskViewRedirect(): React.JSX.Element {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/code-tasks/${id ?? ''}`} replace />;
 }
 
 function AppRoutes(): React.JSX.Element {
@@ -235,6 +242,31 @@ function AppRoutes(): React.JSX.Element {
           </ProtectedRoute>
         }
       />
+      {/* Hellscript routes */}
+      <Route
+        path="/hellscript"
+        element={
+          <ProtectedRoute>
+            <HellscriptBuffersPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/hellscript/new"
+        element={
+          <ProtectedRoute>
+            <HellscriptConversationPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/hellscript/:id"
+        element={
+          <ProtectedRoute>
+            <HellscriptConversationPage />
+          </ProtectedRoute>
+        }
+      />
       {/* Code Tasks routes */}
       <Route
         path="/code-tasks"
@@ -253,10 +285,18 @@ function AppRoutes(): React.JSX.Element {
         }
       />
       <Route
+        path="/code-tasks/dispatch-queue"
+        element={
+          <ProtectedRoute>
+            <DispatchQueuePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/code-tasks/:id/view"
         element={
           <ProtectedRoute>
-            <CodeTaskViewPageV2Keyed />
+            <CodeTaskViewRedirect />
           </ProtectedRoute>
         }
       />
@@ -264,7 +304,7 @@ function AppRoutes(): React.JSX.Element {
         path="/code-tasks/:id"
         element={
           <ProtectedRoute>
-            <CodeTaskViewPageKeyed />
+            <CodeTaskViewPageV2Keyed />
           </ProtectedRoute>
         }
       />
@@ -272,7 +312,48 @@ function AppRoutes(): React.JSX.Element {
         path="/code-tasks/pr-events"
         element={
           <ProtectedRoute>
-            <PREventsPage />
+            <GitHubEventLogPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/code-tasks/merge-queue"
+        element={
+          <ProtectedRoute>
+            <MergeQueuePage />
+          </ProtectedRoute>
+        }
+      />
+      {/* Cron Agent routes */}
+      <Route
+        path="/cron-agent"
+        element={
+          <ProtectedRoute>
+            <CronSchedulesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/cron-agent/new"
+        element={
+          <ProtectedRoute>
+            <CronScheduleNewPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/cron-agent/executions"
+        element={
+          <ProtectedRoute>
+            <CronExecutionsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/cron-agent/:id"
+        element={
+          <ProtectedRoute>
+            <CronScheduleViewPage />
           </ProtectedRoute>
         }
       />

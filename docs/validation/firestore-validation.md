@@ -1,165 +1,128 @@
 # Firestore Collection Ownership Validation Report
 
-**Generated:** 2026-02-19 (ENHANCED run, updated from previous 2026-02-19 standard run)
-**Methodology:** Documentation-first cross-validation against `firestore-collections.json` registry, actual source code in `apps/*/src/infra/`, and `firestore.indexes.json` composite index definitions.
-**ENHANCED checks added:** Composite index coverage vs. registry, orphaned index entries (stale collection names), subcollection registry completeness, and `user_spend` orphan investigation.
+**Generated:** 2026-03-16
+**Previous run:** 2026-02-19 (ENHANCED)
+**Methodology:** Cross-validation of `firestore-collections.json` registry against actual source code in `apps/*/src/infra/firestore/**/*.ts`, `packages/*/src/**/*.ts`, and `workers/*/src/**/*.ts`. Includes delta analysis of all registry changes since the previous report.
 
 ---
 
 ## 1. Master Collection Inventory
 
-| #   | Collection                       | Registry Owner               | Code Location (Service)      | Readers (via HTTP)                     | Status |
-| --- | -------------------------------- | ---------------------------- | ---------------------------- | -------------------------------------- | ------ |
-| 1   | `_migrations`                    | system                       | `scripts/migrate.mjs`        | None                                   | OK     |
-| 2   | `actions`                        | actions-agent                | actions-agent                | None (Pub/Sub routing)                 | OK     |
-| 3   | `actions_transitions`            | actions-agent                | actions-agent                | None                                   | OK     |
-| 4   | `approval_messages`              | actions-agent                | actions-agent                | None                                   | OK     |
-| 5   | `auth_tokens`                    | user-service                 | user-service                 | None                                   | OK     |
-| 6   | `bookmarks`                      | bookmarks-agent              | bookmarks-agent              | None                                   | OK     |
-| 7   | `calendar_failed_events`         | calendar-agent               | calendar-agent               | None                                   | OK     |
-| 8   | `calendar_previews`              | calendar-agent               | calendar-agent               | actions-agent (HTTP)                   | OK     |
-| 9   | `calendar_processed_actions`     | calendar-agent               | calendar-agent               | None                                   | OK     |
-| 10  | `code_tasks`                     | code-agent                   | code-agent                   | None                                   | OK     |
-| 11  | `code_worker_settings`           | code-agent                   | code-agent                   | None                                   | OK     |
-| 12  | `commands`                       | commands-agent               | commands-agent               | None                                   | OK     |
-| 13  | `composite_feed_snapshots`       | data-insights-agent          | data-insights-agent          | None                                   | OK     |
-| 14  | `composite_feeds`                | data-insights-agent          | data-insights-agent          | None                                   | OK     |
-| 15  | `custom_data_sources`            | data-insights-agent          | data-insights-agent          | None                                   | OK     |
-| 16  | `doc_embeddings`                 | chat-agent                   | chat-agent                   | None                                   | OK     |
-| 17  | `generated_images`               | image-service                | image-service                | None                                   | OK     |
-| 18  | `github-pr-events`               | code-agent                   | code-agent                   | None                                   | OK     |
-| 18b | `github-pr-summaries`            | code-agent                   | code-agent                   | None                                   | OK     |
-| 19  | `linear_connections`             | linear-agent                 | linear-agent                 | None                                   | OK     |
-| 20  | `linear_failed_issues`           | linear-agent                 | linear-agent                 | None                                   | OK     |
-| 20b | `linear_issue_comments`          | linear-agent                 | linear-agent                 | None                                   | OK     |
-| 21  | `linear_issues`                  | linear-agent                 | linear-agent                 | None                                   | OK     |
-| 22  | `linear_processed_actions`       | linear-agent                 | linear-agent                 | None                                   | OK     |
-| 23  | `llm_api_logs`                   | research-agent               | `packages/llm-audit`         | None                                   | OK     |
-| 24  | `llm_usage_stats`                | llm-pricing                  | `packages/llm-pricing`       | app-settings-service (collectionGroup) | OK     |
-| 25  | `mobile_notification_signatures` | mobile-notifications-service | mobile-notifications-service | None                                   | OK     |
-| 26  | `mobile_notifications`           | mobile-notifications-service | mobile-notifications-service | None                                   | OK     |
-| 27  | `mobile_notifications_filters`   | mobile-notifications-service | mobile-notifications-service | None                                   | OK     |
-| 28  | `notes`                          | notes-agent                  | notes-agent                  | None                                   | OK     |
-| 29  | `notion_connections`             | notion-service               | notion-service               | None                                   | OK     |
-| 30  | `oauth_connections`              | user-service                 | user-service                 | None                                   | OK     |
-| 31  | `pr_task_locks`                  | code-agent                   | code-agent                   | None                                   | OK     |
-| 33  | `research_export_settings`       | research-agent               | research-agent               | None                                   | OK     |
-| 34  | `researches`                     | research-agent               | research-agent               | None                                   | OK     |
-| 35  | `settings`                       | app-settings-service         | app-settings-service         | research-agent (HTTP), others (HTTP)   | OK     |
-| 36  | `todos`                          | todos-agent                  | todos-agent                  | None                                   | OK     |
-| 37  | `user_settings`                  | user-service                 | user-service                 | research-agent (HTTP), others (HTTP)   | OK     |
-| 38  | `user_spend`                     | code-agent                   | Not found in code            | None                                   | WARN   |
-| 39  | `user_usage`                     | code-agent                   | code-agent                   | None                                   | OK     |
-| 40  | `visualizations`                 | data-insights-agent          | data-insights-agent          | None                                   | OK     |
-| 41  | `whatsapp_messages`              | whatsapp-service             | whatsapp-service             | None                                   | OK     |
-| 42  | `whatsapp_outbound_messages`     | whatsapp-service             | whatsapp-service             | None                                   | OK     |
-| 43  | `whatsapp_phone_verifications`   | whatsapp-service             | whatsapp-service             | None                                   | OK     |
-| 44  | `whatsapp_user_mappings`         | whatsapp-service             | whatsapp-service             | None                                   | OK     |
-| 45  | `whatsapp_webhook_events`        | whatsapp-service             | whatsapp-service             | None                                   | OK     |
+| #   | Collection                       | Registry Owner               | Code Location                                    | Status |
+| --- | -------------------------------- | ---------------------------- | ------------------------------------------------ | ------ |
+| 1   | `_migrations`                    | system                       | `scripts/migrate.mjs`                            | OK     |
+| 2   | `actions`                        | actions-agent                | `apps/actions-agent/src/infra/firestore/`        | OK     |
+| 3   | `actions_transitions`            | actions-agent                | `apps/actions-agent/src/infra/firestore/`        | OK     |
+| 4   | `approval_messages`              | actions-agent                | `apps/actions-agent/src/infra/firestore/`        | OK     |
+| 5   | `auth_tokens`                    | user-service                 | `apps/user-service/src/infra/firestore/`         | OK     |
+| 6   | `bookmarks`                      | bookmarks-agent              | `apps/bookmarks-agent/src/infra/firestore/`      | OK     |
+| 7   | `calendar_failed_events`         | calendar-agent               | `apps/calendar-agent/src/infra/firestore/`       | OK     |
+| 8   | `calendar_previews`              | calendar-agent               | `apps/calendar-agent/src/infra/firestore/`       | OK     |
+| 9   | `calendar_processed_actions`     | calendar-agent               | `apps/calendar-agent/src/infra/firestore/`       | OK     |
+| 10  | `code_tasks`                     | code-agent                   | `apps/code-agent/src/infra/repositories/`        | OK     |
+| 11  | `code_worker_settings`           | code-agent                   | `apps/code-agent/src/infra/firestore/`           | OK     |
+| 12  | `commands`                       | commands-agent               | `apps/commands-agent/src/infra/firestore/`       | OK     |
+| 13  | `composite_feed_snapshots`       | data-insights-agent          | `apps/data-insights-agent/src/infra/firestore/`  | OK     |
+| 14  | `composite_feeds`                | data-insights-agent          | `apps/data-insights-agent/src/infra/firestore/`  | OK     |
+| 15  | `custom_data_sources`            | data-insights-agent          | `apps/data-insights-agent/src/infra/firestore/`  | OK     |
+| 16  | `dispatch_retries`               | code-agent                   | `apps/code-agent/src/infra/firestore/`           | OK     |
+| 17  | `doc_embeddings`                 | chat-agent                   | `apps/chat-agent/src/infra/firestore/`           | OK     |
+| 18  | `event_decisions`                | code-agent                   | `apps/code-agent/src/infra/firestore/`           | OK     |
+| 19  | `generated_images`               | image-service                | `apps/image-service/src/infra/firestore/`        | OK     |
+| 20  | `github-event-log-entries`       | code-agent                   | `apps/code-agent/src/infra/firestore/`           | OK     |
+| 21  | `github-pr-events`               | code-agent                   | `apps/code-agent/src/infra/firestore/`           | OK     |
+| 22  | `github-pr-summaries`            | code-agent                   | `apps/code-agent/src/infra/firestore/`           | OK     |
+| 23  | `github-webhook-audit-events`    | code-agent                   | `apps/code-agent/src/infra/firestore/`           | OK     |
+| 24  | `linear_connections`             | linear-agent                 | `apps/linear-agent/src/infra/firestore/`         | OK     |
+| 25  | `linear_failed_issues`           | linear-agent                 | `apps/linear-agent/src/infra/firestore/`         | OK     |
+| 26  | `linear_issue_comments`          | linear-agent                 | `apps/linear-agent/src/infra/firestore/`         | OK     |
+| 27  | `linear_issues`                  | linear-agent                 | `apps/linear-agent/src/infra/firestore/`         | OK     |
+| 28  | `linear_processed_actions`       | linear-agent                 | `apps/linear-agent/src/infra/firestore/`         | OK     |
+| 29  | `llm_api_logs`                   | research-agent               | `packages/llm-audit/src/`                        | NOTE   |
+| 30  | `llm_usage_stats`                | llm-pricing                  | `packages/llm-pricing/src/`                      | NOTE   |
+| 31  | `mobile_notification_signatures` | mobile-notifications-service | `apps/mobile-notifications-service/src/infra/`   | OK     |
+| 32  | `mobile_notifications`           | mobile-notifications-service | `apps/mobile-notifications-service/src/infra/`   | OK     |
+| 33  | `mobile_notifications_filters`   | mobile-notifications-service | `apps/mobile-notifications-service/src/infra/`   | OK     |
+| 34  | `notes`                          | notes-agent                  | `apps/notes-agent/src/infra/firestore/`          | OK     |
+| 35  | `notion_connections`             | notion-service               | `apps/notion-service/src/infra/firestore/`       | OK     |
+| 36  | `oauth_connections`              | user-service                 | `apps/user-service/src/infra/firestore/`         | OK     |
+| 37  | `pr_automation_comments`         | code-agent                   | `apps/code-agent/src/infra/firestore/`           | OK     |
+| 38  | `pr_task_locks`                  | code-agent                   | `apps/code-agent/src/domain/utils/prTaskLock.ts` | NOTE   |
+| 39  | `research_export_settings`       | research-agent               | `apps/research-agent/src/infra/firestore/`       | OK     |
+| 40  | `researches`                     | research-agent               | `apps/research-agent/src/infra/research/`        | OK     |
+| 41  | `settings`                       | app-settings-service         | `apps/app-settings-service/src/infra/firestore/` | OK     |
+| 42  | `todos`                          | todos-agent                  | `apps/todos-agent/src/infra/firestore/`          | OK     |
+| 43  | `user_settings`                  | user-service                 | `apps/user-service/src/infra/firestore/`         | OK     |
+| 44  | `user_spend`                     | code-agent                   | No repository found                              | WARN   |
+| 45  | `user_usage`                     | code-agent                   | `apps/code-agent/src/infra/firestore/`           | OK     |
+| 46  | `visualizations`                 | data-insights-agent          | `apps/data-insights-agent/src/infra/firestore/`  | OK     |
+| 47  | `whatsapp_messages`              | whatsapp-service             | `apps/whatsapp-service/src/infra/firestore/`     | OK     |
+| 48  | `whatsapp_outbound_messages`     | whatsapp-service             | `apps/whatsapp-service/src/infra/firestore/`     | OK     |
+| 49  | `whatsapp_phone_verifications`   | whatsapp-service             | `apps/whatsapp-service/src/infra/firestore/`     | OK     |
+| 50  | `whatsapp_user_mappings`         | whatsapp-service             | `apps/whatsapp-service/src/infra/firestore/`     | OK     |
+| 51  | `whatsapp_webhook_events`        | whatsapp-service             | `apps/whatsapp-service/src/infra/firestore/`     | OK     |
+
+**Total: 51 collections** (46 in registry + `_migrations` system entry = 47 registry entries; 4 have notes, 1 has a warning).
 
 ---
 
-## 2. Ownership Conflict Analysis
+## 2. Delta Since Previous Report (2026-02-19)
+
+Five new collections were added to `firestore-collections.json` after the previous report, all owned by `code-agent` and all confirmed implemented in code:
+
+| Collection                    | Commit      | Linear Issue | Repository File                                                            |
+| ----------------------------- | ----------- | ------------ | -------------------------------------------------------------------------- |
+| `dispatch_retries`            | `269c7b29`  | —            | `apps/code-agent/src/infra/firestore/dispatchRetryRepository.ts`           |
+| `event_decisions`             | `04cdefccf` | INT-744      | `apps/code-agent/src/infra/firestore/eventDecisionRepository.ts`           |
+| `github-webhook-audit-events` | `2284f068f` | INT-831      | `apps/code-agent/src/infra/firestore/gitHubWebhookAuditEventRepository.ts` |
+| `github-event-log-entries`    | `2284f068f` | INT-831      | `apps/code-agent/src/infra/firestore/gitHubEventLogEntryRepository.ts`     |
+| `pr_automation_comments`      | `84e8d051a` | INT-852      | `apps/code-agent/src/infra/firestore/prAutomationCommentRepository.ts`     |
+
+Additionally, commit `be0eaa8be` added `subcollections: ["logs", "log_lines", "turn_metrics"]` to the `code_tasks` registry entry.
+
+**All new entries are properly registered and implemented. No gaps.**
+
+---
+
+## 3. Ownership Conflict Analysis
 
 **Result: No ownership conflicts found.**
 
-Each collection in `firestore-collections.json` has exactly one owner. No two services claim ownership of the same collection.
+Each collection in `firestore-collections.json` has exactly one owner. No two services access the same Firestore collection directly.
 
 ---
 
-## 3. Cross-Service Direct Firestore Access Violations
+## 4. Cross-Service Direct Firestore Access
 
-**Result: No cross-service direct Firestore access violations found.**
+**Result: No violations found.**
 
-All Firestore collection access in source code is within the owning service's `apps/<service>/src/infra/` directory. Cross-service data access follows the HTTP pattern:
+All production Firestore collection access is within the owning service's `src/infra/` directory. Cross-service data access follows the HTTP pattern (`/internal/{service}/{resource}` with `X-Internal-Auth`).
 
-| Consumer Service     | Data Needed                         | Provider Service         | Access Method              |
-| -------------------- | ----------------------------------- | ------------------------ | -------------------------- |
-| research-agent       | User API keys, LLM client           | user-service             | HTTP (`internal-clients`)  |
-| research-agent       | LLM pricing data                    | app-settings-service     | HTTP                       |
-| research-agent       | Notion OAuth tokens                 | notion-service           | HTTP                       |
-| actions-agent        | User API keys                       | user-service             | HTTP (`internal-clients`)  |
-| actions-agent        | Calendar preview                    | calendar-agent           | HTTP                       |
-| commands-agent       | User LLM client                     | user-service             | HTTP (`internal-clients`)  |
-| calendar-agent       | Google OAuth token                  | user-service             | HTTP                       |
-| data-insights-agent  | Filtered notifications              | mobile-notifications-svc | HTTP                       |
-| data-insights-agent  | User LLM client                     | user-service             | HTTP (`internal-clients`)  |
-| image-service        | User API keys                       | user-service             | HTTP (`internal-clients`)  |
-| chat-agent           | User LLM client                     | user-service             | HTTP (`internal-clients`)  |
-| code-agent           | Linear issue management             | linear-agent             | HTTP                       |
-| app-settings-service | LLM usage stats (`collectionGroup`) | llm-pricing (package)    | Direct Firestore (see #4a) |
-
-**Note on `llm_usage_stats`:** The `app-settings-service` reads from the `llm_usage_stats` collection via `collectionGroup('by_user')`. The registry lists `llm-pricing` as the owner. The `llm-pricing` package (which writes to this collection) is used by multiple services. The `app-settings-service` reads it for cost aggregation. This is a borderline case -- the data is written by the `llm-pricing` package (not a service) and read by `app-settings-service`. Since `llm-pricing` is a shared package, not a standalone service, this is architecturally acceptable but worth noting.
+The one apparent exception is `app-settings-service` reading `llm_usage_stats` via `collectionGroup('by_user')` — this is addressed in section 7.
 
 ---
 
-## 4. Discrepancies Between Registry and Documentation
+## 5. Collections in Registry But Not Found in Production Code
 
-### 4a. research-agent/technical.md: References `app_settings` collection
+### 5a. `user_spend` — Orphaned Domain Model
 
-**Location:** `docs/services/research-agent/technical.md`, line 435
+**Registry:** `user_spend` (owner: `code-agent`, description: "User cost tracking for rate limiting")
 
-The Infrastructure section lists:
+**Code investigation:**
 
-> `Firestore (app_settings collection) | LLM pricing configuration`
+| Location                                         | Finding                                                                   |
+| ------------------------------------------------ | ------------------------------------------------------------------------- |
+| `apps/code-agent/src/domain/models/userSpend.ts` | Domain model interface defined; doc comment says `Collection: user_spend` |
+| `apps/code-agent/src/infra/`                     | No repository file (`*spend*` files: none found)                          |
+| `apps/code-agent/src/`                           | No use cases reference `UserSpend` or `user_spend` collection name        |
 
-**Issue:** The registry names this collection `settings`, not `app_settings`. The actual code in `app-settings-service` uses the path `settings/llm_pricing/providers`. The research-agent itself does NOT directly access this collection -- it retrieves pricing via HTTP from `app-settings-service`. This is a documentation error in the research-agent's technical.md.
+**Interpretation:** The repository was never implemented. The `user_usage` collection (fully implemented at `apps/code-agent/src/infra/firestore/userUsageFirestoreRepository.ts`) supersedes it for rate-limiting purposes. `user_spend` is a deprecated design artifact — the domain model exists with a design reference note ("Lines 2616-2671") but no actual data is being written to this collection.
 
-**Severity:** LOW (documentation-only, no code violation)
+**Status: OPEN — unchanged from previous report.**
 
-### 4b. whatsapp-service/technical.md: Inconsistent collection names
+**Recommended action:** Remove `user_spend` from `firestore-collections.json` and delete `apps/code-agent/src/domain/models/userSpend.ts`.
 
-**Location:** `docs/services/whatsapp-service/technical.md`, lines 280-286
-
-The Firestore Collections table uses shortened names:
-
-| In technical.md  | In Registry / Code        |
-| ---------------- | ------------------------- |
-| `webhook_events` | `whatsapp_webhook_events` |
-| `user_mappings`  | `whatsapp_user_mappings`  |
-
-**Issue:** The documentation drops the `whatsapp_` prefix for two collections. The code uses `whatsapp_webhook_events` and `whatsapp_user_mappings` (matching the registry).
-
-**Severity:** LOW (documentation-only, code is correct)
-
-### 4c. linear-agent/technical.md: CamelCase collection names
-
-**Location:** `docs/services/linear-agent/technical.md`, lines 512-517
-
-The Firestore Collections table uses camelCase names:
-
-| In technical.md          | In Registry / Code         |
-| ------------------------ | -------------------------- |
-| `linearConnections`      | `linear_connections`       |
-| `failedLinearIssues`     | `linear_failed_issues`     |
-| `processedLinearActions` | `linear_processed_actions` |
-| `syncedLinearIssues`     | `linear_issues`            |
-
-**Issue:** Documentation uses camelCase names while the actual code and registry use snake_case. Additionally, the documentation calls the synced issues collection `syncedLinearIssues` but the code uses `linear_issues`.
-
-**Severity:** MEDIUM (naming inconsistency can cause confusion for developers)
-
-### 4d. user-service/technical.md: References `users` collection
-
-**Location:** `docs/services/user-service/technical.md`, line 271
-
-The Infrastructure section lists:
-
-> `Firestore (users collection) | User settings storage`
-
-**Issue:** The registry and code use `user_settings` as the collection name, not `users`.
-
-**Severity:** LOW (documentation-only)
-
----
-
-## 5. Collections in Registry But Not Found in Code
-
-| Collection   | Registry Owner | Status                                                                                                                                                               |
-| ------------ | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `user_spend` | code-agent     | Not found in any production `.ts` source file. Model exists (`domain/models/userSpend.ts`) but no repository accessing this collection was found. May be deprecated. |
-
-**Resolved from previous run:** `visualizations` is now confirmed in code at `apps/data-insights-agent/src/infra/firestore/visualizationRepository.ts`.
+**Severity:** MEDIUM
 
 ---
 
@@ -167,219 +130,111 @@ The Infrastructure section lists:
 
 ### 6a. `log_entries` subcollection in `code_tasks`
 
-**File:** `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts:606`
+**File:** `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts:645`
 
 ```typescript
 const logEntriesRef = taskRef.collection('log_entries');
 ```
 
-The registry defines `code_tasks.subcollections` as `["logs", "log_lines", "turn_metrics"]`. The subcollection `log_entries` is accessed in production code but is absent from the registry.
+The registry defines `code_tasks.subcollections` as `["logs", "log_lines", "turn_metrics"]`. The subcollection `log_entries` is accessed in the `deleteTask` cleanup path but is absent from the registry subcollection list.
 
-This appears to be a legacy read path (possibly the original name before `log_lines` was introduced). Investigation needed:
+**Context:** This is a legacy cleanup-only read path. No write code creating `log_entries` documents exists anywhere in the codebase. The code reads and deletes any existing `log_entries` documents for backward compatibility during task deletion. No active writes produce this subcollection.
 
-- Is `log_entries` still actively written to, or is this read-only for backward compat?
-- Should the registry subcollections array be updated to include `log_entries`?
+**Status: OPEN — unchanged from previous report.**
 
-**Severity:** MEDIUM — the registry is incomplete; any Firestore rules or indexes that rely on the registry subcollection list may miss this.
+**Recommended action:** Either add `"log_entries"` to `code_tasks.subcollections` in the registry for documentation completeness, or add a code comment explaining this is a one-off legacy cleanup path.
 
----
-
-## 6b. Inventory Completeness: Previously Missing Entries
-
-Two collections present in `firestore-collections.json` were absent from the previous report's inventory table. Both are now confirmed:
-
-| Collection              | Owner        | Verified in Code                                                     |
-| ----------------------- | ------------ | -------------------------------------------------------------------- |
-| `github-pr-summaries`   | code-agent   | `apps/code-agent/src/infra/firestore/gitHubPRSummariesRepository.ts` |
-| `linear_issue_comments` | linear-agent | `apps/linear-agent/src/infra/firestore/linearCommentRepository.ts`   |
+**Severity:** LOW
 
 ---
 
-## 7. Architecture Doc vs Registry Alignment
+## 7. Architectural Notes (Package-Owned Collections)
 
-The architecture document (`docs/architecture/firestore-ownership.md`) describes the registry schema, validation algorithm, and patterns but does not list individual collections. It references `firestore-collections.json` as the authoritative registry. This is correct by design -- the architecture doc is structural, not an enumeration.
+Two registry entries assign ownership to packages rather than apps. This is architecturally coherent but deviates from the registry schema constraint that "Owner must match an existing service directory: `apps/<owner>/`".
 
-**Result: Aligned. No conflicts.**
+### 7a. `llm_api_logs` — Owned by `research-agent`, written by `packages/llm-audit`
+
+**Registry owner:** `research-agent`
+
+**Actual writer:** `packages/llm-audit/src/sink.ts` (`FirestoreAuditSink` class, `COLLECTION_NAME = 'llm_api_logs'`).
+
+**Services using `llm-audit`:** `packages/llm-factory`, `packages/infra-perplexity`, `packages/infra-gemini`, `packages/infra-claude`, `packages/infra-gpt`, `workers/orchestrator`, `apps/image-service` — meaning any service using these packages may write to `llm_api_logs`, not just `research-agent`.
+
+**Issue:** The registry attributes ownership to `research-agent`, but `llm_api_logs` is written by a shared infrastructure package used across many services. The `research-agent` attribution is a legacy simplification.
+
+**Severity:** LOW (no runtime violation; data integrity is maintained)
+
+### 7b. `llm_usage_stats` — Owned by `llm-pricing` (a package, not an app)
+
+**Registry owner:** `llm-pricing`
+
+**Writer:** `packages/llm-pricing/src/usageLogger.ts` (`COLLECTION_NAME = 'llm_usage_stats'`). Used by 12 apps (all that depend on `@intexuraos/llm-pricing`).
+
+**Reader:** `apps/app-settings-service/src/infra/firestore/usageStatsRepository.ts` — reads via `db.collectionGroup('by_user')`. This is a direct Firestore read from a collection not owned by `app-settings-service` per the registry.
+
+**Assessment:** The `app-settings-service` cross-collection-group read is the only case in the codebase where a service reads a collection it doesn't own via direct Firestore access (rather than HTTP). It is read-only and uses a collection group query, not direct document writes. This is an intentional architectural trade-off documented in the previous report.
+
+**Severity:** LOW (intentional, read-only, well-documented)
 
 ---
 
-## 8. Package-Owned Collections
+## 8. `pr_task_locks` — Non-Standard Access Pattern
 
-Two collections are owned by packages rather than apps:
+**Registry:** `pr_task_locks` (owner: `code-agent`)
 
-| Collection        | Owner (Registry) | Package Location       | Used By                                                     |
-| ----------------- | ---------------- | ---------------------- | ----------------------------------------------------------- |
-| `llm_api_logs`    | research-agent   | `packages/llm-audit`   | Any service using llm-audit package                         |
-| `llm_usage_stats` | llm-pricing      | `packages/llm-pricing` | Any service using llm-pricing; read by app-settings-service |
+**Code location:** `apps/code-agent/src/domain/utils/prTaskLock.ts` — uses `firestore.doc(lockDocPath).delete()` (direct document reference, not via a repository class in `src/infra/firestore/`).
 
-**Observation:** The registry lists `llm-pricing` as the owner of `llm_usage_stats`, but `llm-pricing` is a shared package (`packages/llm-pricing`), not an app (`apps/llm-pricing`). The ownership validation script checks `apps/<owner>/` directory existence. This would fail the registry schema constraint: "Owner must match an existing service directory: `apps/<owner>/`".
+**Issue:** The collection is accessed from the domain layer (`src/domain/utils/`) rather than the infra layer (`src/infra/firestore/`). The validation script scans `src/infra/firestore/**/*.ts` and would not detect this collection reference, making the automated ownership check blind to it.
 
-Similarly, `llm_api_logs` is owned by `research-agent` in the registry, but the actual write code is in `packages/llm-audit`. Since multiple services can use this package, the ownership attribution to `research-agent` is a pragmatic choice.
+**Ownership is correct** (code-agent accesses its own collection). The deviation is structural, not a data integrity issue.
 
-**Severity:** LOW (the validation script may need awareness of package-based ownership)
+**Severity:** LOW (structural deviation; validation script coverage gap)
 
 ---
 
-## 9. Summary of Findings (Updated 2026-02-19)
+## 9. Legacy Migration Collection Names
 
-### No Issues (Pass)
+Migrations reference several collection names not in the current registry. These are expected for historical migrations operating on data that predates or was renamed before the current registry:
+
+| Migration Collection Name        | Status                                                                                                                  |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `app_settings`                   | Deprecated — replaced by `settings`. Migration `027_delete_app_settings.mjs` deletes it.                                |
+| `users`                          | Never in registry — migrations reference for data backfills (e.g., `025_default_llm_model.mjs`).                        |
+| `worker_settings`                | Old name — renamed to `code_worker_settings`. Migration `053_remove-github-username-from-worker-settings.mjs` reads it. |
+| `settings/llm_pricing/providers` | Subcollection path of `settings` — architecturally correct (owned by `app-settings-service`).                           |
+
+No action needed. Migrations are immutable by policy and these names reflect the historical state at migration time.
+
+---
+
+## 10. Summary of Findings
+
+### Passing
 
 - No ownership conflicts (each collection has exactly one owner)
-- No cross-service direct Firestore access violations
-- Architecture documentation aligned with registry
+- No cross-service direct Firestore write violations
+- All 5 collections added since the previous report are properly registered and implemented
+- All collections in the registry with non-NOTE/non-WARN status have confirmed repository implementations
 
-### Documentation Discrepancies (4 findings — all resolved 2026-02-19)
+### Open Warnings
 
-| #   | Location                      | Issue                                                                 | Severity | Status               |
-| --- | ----------------------------- | --------------------------------------------------------------------- | -------- | -------------------- |
-| 4a  | research-agent/technical.md   | References `app_settings` instead of `settings`                       | LOW      | **Fixed 2026-02-19** |
-| 4b  | whatsapp-service/technical.md | Missing `whatsapp_` prefix on 2 collection names                      | LOW      | **Fixed 2026-02-19** |
-| 4c  | linear-agent/technical.md     | CamelCase names instead of snake_case; wrong name for `linear_issues` | MEDIUM   | **Fixed 2026-02-19** |
-| 4d  | user-service/technical.md     | References `users` instead of `user_settings`                         | LOW      | **Fixed 2026-02-19** |
+| #   | Collection / Issue                                                            | Severity | Status                            |
+| --- | ----------------------------------------------------------------------------- | -------- | --------------------------------- |
+| 5a  | `user_spend` in registry with no repository implementation                    | MEDIUM   | Open (unchanged since 2026-02-19) |
+| 6a  | `log_entries` subcollection accessed in cleanup code but absent from registry | LOW      | Open (unchanged since 2026-02-19) |
 
-### Registry Warnings
+### Architectural Notes (No Action Required)
 
-| #   | Collection       | Issue                                                                | Status                                          |
-| --- | ---------------- | -------------------------------------------------------------------- | ----------------------------------------------- |
-| 5a  | `user_spend`     | In registry (owner: code-agent) but no repository accessing it found | Open                                            |
-| 5b  | `visualizations` | Previously reported as not found                                     | **Resolved** — confirmed in data-insights-agent |
+| #   | Issue                                                                                                      | Severity |
+| --- | ---------------------------------------------------------------------------------------------------------- | -------- |
+| 7a  | `llm_api_logs` registry owner (`research-agent`) does not match actual writer (`packages/llm-audit`)       | LOW      |
+| 7b  | `llm_usage_stats` owner is `llm-pricing` (a package, not an app); `app-settings-service` reads it directly | LOW      |
+| 8   | `pr_task_locks` accessed from domain layer, outside `src/infra/firestore/` — validation script blind spot  | LOW      |
 
-### New Findings (2026-02-19 standard run)
+### Previously Reported Items (Resolved)
 
-| #   | Issue                                                                                                | Severity | Status                                                                                                                                                |
-| --- | ---------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 6a  | `log_entries` subcollection accessed in code but absent from `code_tasks.subcollections` in registry | LOW      | Resolved context: ENHANCED run confirmed this is a legacy cleanup-only path (v8 ignore comment in code). No active writes. Registry need not list it. |
-| 6b  | `github-pr-summaries` and `linear_issue_comments` were missing from previous inventory               | LOW      | Fixed in this report                                                                                                                                  |
-
-### Architectural Observations (1 pre-existing finding)
-
-| #   | Issue                                                                                                  |
-| --- | ------------------------------------------------------------------------------------------------------ |
-| 8   | `llm_usage_stats` owner is `llm-pricing` (a package, not an app). May fail registry schema validation. |
-
-### ENHANCED Findings (2026-02-19 run)
-
-| #   | Issue                                                                                              | Severity               |
-| --- | -------------------------------------------------------------------------------------------------- | ---------------------- |
-| 10a | `dataSource` and `compositeFeeds` are stale index entries (camelCase renamed to snake_case)        | MEDIUM                 |
-| 10b | `user_spend` has a domain model but no repository implementation — likely deprecated feature       | MEDIUM                 |
-| 10c | `log_entries` subcollection is a legacy cleanup-only path (confirmed by v8 ignore comment in code) | LOW (resolved context) |
-| 10d | No Firestore security rules file found in project                                                  | LOW (noted)            |
-
----
-
-## 10. Composite Index Coverage (ENHANCED)
-
-### 10a. Stale Index Entries
-
-**File:** `firestore.indexes.json`, lines 344-370
-
-Two index entries reference collection names that do not exist in the registry or code:
-
-| Stale `collectionGroup` | Correct Collection Name | Fields Indexed                 | Status             |
-| ----------------------- | ----------------------- | ------------------------------ | ------------------ |
-| `dataSource`            | `custom_data_sources`   | `userId` ASC, `updatedAt` DESC | Stale / dead index |
-| `compositeFeeds`        | `composite_feeds`       | `userId` ASC, `updatedAt` DESC | Stale / dead index |
-
-**Root cause:** These entries appear to have been written when the collections used camelCase names. The collections were later renamed to snake_case (`custom_data_sources`, `composite_feeds`) but the old index entries were not removed from `firestore.indexes.json`.
-
-**Impact:** Stale index definitions in `firestore.indexes.json` are not deployed to Firestore unless explicitly applied — if `firebase deploy --only firestore:indexes` is run, Firestore will attempt to create indexes on non-existent collections (which succeeds silently but wastes configuration space). The correct `custom_data_sources` and `composite_feeds` indexes are also present with the same fields (lines 192-222 and 372-416), so coverage is not missing.
-
-**Action required:** Remove the two stale entries (`dataSource` and `compositeFeeds`) from `firestore.indexes.json`.
-
-**Severity:** MEDIUM
-
-### 10b. Collections with Composite Indexes
-
-The following registered collections have at least one composite index defined:
-
-| Collection                     | Index Count | Index Fields (summary)                                                                                                                           |
-| ------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `actions`                      | 6           | `userId+createdAt`, `userId+updatedAt`, `status+createdAt`, `status+userId+updatedAt`, `status+userId+createdAt`, `userId+status+createdAt`      |
-| `bookmarks`                    | 2           | `userId+createdAt`, `userId+updatedAt`                                                                                                           |
-| `calendar_failed_events`       | 1           | `userId+createdAt`                                                                                                                               |
-| `code_tasks`                   | 7           | `status+updatedAt`, `linearIssueId+status`, `userId+status+createdAt`, `dedupKey+createdAt` (x2), `userId+createdAt`, `logsArchived+completedAt` |
-| `commands`                     | 2           | `status+createdAt`, `userId+createdAt`                                                                                                           |
-| `composite_feed_snapshots`     | 1           | `userId+generatedAt+__name__`                                                                                                                    |
-| `composite_feeds`              | 2           | `userId+createdAt+__name__`, `userId+updatedAt+__name__`                                                                                         |
-| `custom_data_sources`          | 2           | `userId+createdAt`, `userId+updatedAt`                                                                                                           |
-| `doc_embeddings`               | 1           | `embedding` vector (1536-dim flat index)                                                                                                         |
-| `github-pr-events`             | 3           | `repo+prNumber+createdAt`, `repo+createdAt`, `githubEventId`                                                                                     |
-| `linear_failed_issues`         | 1           | `userId+createdAt`                                                                                                                               |
-| `logs` (subcollection)         | 1           | `sequence ASC`                                                                                                                                   |
-| `mobile_notifications`         | 5           | `app+userId+receivedAt`, `source+userId+receivedAt`, `userId+source+app+receivedAt`, `userId+receivedAt`, `userId+updatedAt`                     |
-| `notes`                        | 2           | `userId+createdAt`, `userId+updatedAt`                                                                                                           |
-| `researches`                   | 3           | `userId+startedAt`, `userId+status+createdAt`, `userId+favourite+startedAt`                                                                      |
-| `todos`                        | 2           | `userId+createdAt`, `userId+updatedAt`                                                                                                           |
-| `whatsapp_messages`            | 1           | `userId+receivedAt`                                                                                                                              |
-| `whatsapp_phone_verifications` | 2           | `userId+phoneNumber+status+expiresAt`, `phoneNumber+createdAt`                                                                                   |
-
-### 10c. Registered Collections WITHOUT Composite Indexes
-
-These collections from the registry have no composite index entries (relying on single-field auto-indexes or document-ID lookups only):
-
-| Collection                       | Owner                        | Access Pattern Notes                                     |
-| -------------------------------- | ---------------------------- | -------------------------------------------------------- |
-| `_migrations`                    | system                       | Document-ID access only — no index needed                |
-| `approval_messages`              | actions-agent                | Single-field lookups (correlationId, phoneNumber)        |
-| `actions_transitions`            | actions-agent                | Append-only training data, no complex queries documented |
-| `auth_tokens`                    | user-service                 | Document-ID access (userId) only                         |
-| `calendar_previews`              | calendar-agent               | Document-ID access only                                  |
-| `calendar_processed_actions`     | calendar-agent               | Document-ID access only (idempotency key)                |
-| `code_worker_settings`           | code-agent                   | Document-ID access (userId) only                         |
-| `generated_images`               | image-service                | Document-ID access only                                  |
-| `github-pr-summaries`            | code-agent                   | Single-field or document-ID access                       |
-| `linear_connections`             | linear-agent                 | Document-ID access (userId) only                         |
-| `linear_issue_comments`          | linear-agent                 | Single-field (issueId) access                            |
-| `linear_issues`                  | linear-agent                 | Single-field access                                      |
-| `linear_processed_actions`       | linear-agent                 | Document-ID access (idempotency)                         |
-| `llm_api_logs`                   | research-agent               | Write-only audit log, no queries documented              |
-| `llm_usage_stats`                | llm-pricing                  | CollectionGroup query by user — may need index           |
-| `mobile_notification_signatures` | mobile-notifications-service | Document-ID access (deviceId) only                       |
-| `mobile_notifications_filters`   | mobile-notifications-service | Document-ID access (userId) only                         |
-| `notion_connections`             | notion-service               | Document-ID access (userId) only                         |
-| `oauth_connections`              | user-service                 | Document-ID access (userId) only                         |
-| `pr_task_locks`                  | code-agent                   | Document-ID access only (lock key)                       |
-| `research_export_settings`       | research-agent               | Document-ID access (userId) only                         |
-| `settings`                       | app-settings-service         | Subcollection path access (no complex queries)           |
-| `user_settings`                  | user-service                 | Document-ID access (userId) only                         |
-| `user_spend`                     | code-agent                   | Document-ID access (userId) only — see §10d              |
-| `user_usage`                     | code-agent                   | Document-ID access (userId) only                         |
-| `visualizations`                 | data-insights-agent          | Document-ID access only                                  |
-| `whatsapp_outbound_messages`     | whatsapp-service             | Single-field (correlationId, wamid) lookups              |
-| `whatsapp_user_mappings`         | whatsapp-service             | Document-ID access (phoneNumber) only                    |
-| `whatsapp_webhook_events`        | whatsapp-service             | Write-only audit trail, no queries documented            |
-
-All of these are consistent with their documented access patterns — no missing indexes identified.
-
----
-
-## 11. `user_spend` Orphan Investigation (ENHANCED)
-
-**Registry entry:** `user_spend` (owner: code-agent) — "User cost tracking for rate limiting"
-
-**Investigation findings:**
-
-| Location                                         | Finding                                                                               |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| `apps/code-agent/src/domain/models/userSpend.ts` | Domain model interface defined — references `user_spend` collection                   |
-| `apps/code-agent/src/infra/`                     | No repository file found (no `*[Ss]pend*` files, no `COLLECTION_NAME = 'user_spend'`) |
-| `apps/code-agent/src/`                           | No use cases reference `UserSpend` type or `user_spend` collection                    |
-
-**Interpretation:** `user_spend` was planned (domain model exists with design reference to "Lines 2616-2671") but the repository implementation was never built. The `user_usage` collection (which IS implemented) serves the same rate-limiting purpose. `user_spend` appears to be a superseded design artifact.
-
-**Action required:** Either implement the repository or remove the `user_spend` domain model and its registry entry.
-
-**Severity:** MEDIUM (registry entry for unimplemented feature creates false impression of active data)
-
----
-
-## 12. Firestore Security Rules (ENHANCED)
-
-**Finding:** No Firestore security rules file (`firestore.rules`) exists at the project root or in any `apps/` directory. Only template `.rules` files were found inside `node_modules/`.
-
-**Implication:** The project relies entirely on server-side enforcement (services authenticate before accessing Firestore) rather than Firestore native rules. All Firestore access is through backend services using a service account — there is no direct client-side Firestore access from web or mobile clients.
-
-**Assessment:** This is architecturally consistent with the project's design — all data access is mediated through Cloud Run services (never directly from client SDKs). Security rules would be redundant here, but their absence means any service account compromise grants full Firestore access.
-
-**Severity:** LOW (by design, no action required unless client-side SDK access is added in future)
+| #     | Issue                                                                             | Resolution       |
+| ----- | --------------------------------------------------------------------------------- | ---------------- |
+| 4a–4d | Documentation naming errors in 4 service docs                                     | Fixed 2026-02-19 |
+| 10a   | Stale `dataSource` / `compositeFeeds` entries in `firestore.indexes.json`         | Fixed 2026-02-19 |
+| 6b    | `github-pr-summaries` and `linear_issue_comments` missing from previous inventory | Fixed 2026-02-19 |

@@ -537,6 +537,18 @@ describe('system-prompt', () => {
     expect(result).not.toContain('[PR REVIEW MODE');
   });
 
+  it('review agent prompt includes plan_review scope definition', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+    });
+
+    expect(result).toContain('plan_review');
+    expect(result).toContain('Plan document validation');
+    expect(result).toContain('task decomposition');
+    expect(result).toContain('Do NOT review for code_quality/security/architecture');
+  });
+
   it('review agent prompt includes PR analysis instructions', () => {
     const result = buildSystemPrompt({
       ...baseParams,
@@ -585,6 +597,85 @@ describe('system-prompt', () => {
     expect(result).toContain('[AGENT:REVIEW]');
   });
 
+  describe('worker instruction sections (gh CLI, GCP credentials, code task debugging)', () => {
+    function buildForLabel(label: string): string {
+      switch (label) {
+        case 'planning':
+          return buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+        case 'execution':
+          return buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+        case 'pull_request':
+          return buildSystemPrompt({
+            ...baseParams,
+            linearIssueLabels: ['code-task', 'pr-comment'],
+          });
+        case 'review':
+          return buildSystemPrompt({
+            ...baseParams,
+            linearIssueLabels: [],
+            agentType: 'review',
+          });
+        default:
+          throw new Error(`Unknown label: ${label}`);
+      }
+    }
+
+    it.each(['planning', 'execution', 'pull_request', 'review'])(
+      '%s prompt contains gh CLI preference section',
+      (label) => {
+        const result = buildForLabel(label);
+
+        expect(result).toContain('### Git CLI (MANDATORY — NON-NEGOTIABLE)');
+        expect(result).toContain('`gh` CLI instead of raw `git` commands');
+      }
+    );
+
+    it.each(['planning', 'execution', 'pull_request', 'review'])(
+      '%s prompt contains GCP service account credentials section',
+      (label) => {
+        const result = buildForLabel(label);
+
+        expect(result).toContain('### GCP Service Account Credentials');
+        expect(result).toContain('/secrets/gcp-sa.json');
+      }
+    );
+
+    it.each(['planning', 'execution', 'pull_request', 'review'])(
+      '%s prompt contains code task debugging rejection section',
+      (label) => {
+        const result = buildForLabel(label);
+
+        expect(result).toContain('### Code Task Debugging (MANDATORY — NON-NEGOTIABLE)');
+        expect(result).toContain('dev.intexuraos.cloud');
+        expect(result).toContain('.claude/skills/debug-code-task/SKILL.md');
+      }
+    );
+
+    it('does not duplicate worker instruction sections in overlay (planning+overlay)', () => {
+      const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+      const ghCliCount = result.split('### Git CLI (MANDATORY').length - 1;
+      const gcpCount = result.split('### GCP Service Account Credentials').length - 1;
+      const debugCount = result.split('### Code Task Debugging (MANDATORY').length - 1;
+
+      expect(ghCliCount).toBe(1);
+      expect(gcpCount).toBe(1);
+      expect(debugCount).toBe(1);
+    });
+
+    it('does not duplicate worker instruction sections in overlay (execution+overlay)', () => {
+      const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+
+      const ghCliCount = result.split('### Git CLI (MANDATORY').length - 1;
+      const gcpCount = result.split('### GCP Service Account Credentials').length - 1;
+      const debugCount = result.split('### Code Task Debugging (MANDATORY').length - 1;
+
+      expect(ghCliCount).toBe(1);
+      expect(gcpCount).toBe(1);
+      expect(debugCount).toBe(1);
+    });
+  });
+
   it('review agent prompt omits View in IntexuraOS review-body instruction when taskUrl is undefined', () => {
     const result = buildSystemPrompt({
       ...baseParams,
@@ -622,6 +713,45 @@ describe('system-prompt', () => {
     expect(reviewStartedIdx).toBeLessThan(reviewScopeIdx);
     expect(reviewStartedIdx).toBeLessThan(linearIdx);
     expect(reviewStartedIdx).toBeLessThan(gatheringIdx);
+  });
+
+  it('review agent prompt includes requirements validation instructions', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+    });
+
+    expect(result).toContain('### Requirements Validation (MANDATORY');
+    expect(result).toContain('Issue Requirements');
+    expect(result).toContain('Requirements Coverage');
+  });
+
+  it('review agent prompt includes plan compliance hard gate instructions', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+    });
+
+    expect(result).toContain('### Plan Compliance (MANDATORY HARD GATE');
+    expect(result).toContain('HARD GATE');
+    expect(result).toContain('Plan Document');
+  });
+
+  it('review agent prompt has requirements validation before gathering PR context', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+    });
+
+    const reqIdx = result.indexOf('### Requirements Validation');
+    const planIdx = result.indexOf('### Plan Compliance');
+    const gatherIdx = result.indexOf('### Gathering PR Context');
+
+    expect(reqIdx).toBeGreaterThan(-1);
+    expect(planIdx).toBeGreaterThan(-1);
+    expect(gatherIdx).toBeGreaterThan(-1);
+    expect(reqIdx).toBeLessThan(planIdx);
+    expect(planIdx).toBeLessThan(gatherIdx);
   });
 
   it('review agent prompt includes Linear section when linearIssueId is provided', () => {

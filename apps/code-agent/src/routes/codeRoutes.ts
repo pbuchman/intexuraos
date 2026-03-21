@@ -3,6 +3,7 @@ import { Timestamp } from '@google-cloud/firestore';
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
+import { authenticateInternalScheduler } from './helpers/internalAuth.js';
 import {
   CODE_TASK_WORKER_TYPES,
   extractOrGenerateTraceId,
@@ -30,6 +31,12 @@ import { loadConfig } from '../config.js';
 import { backLinkPlanningTask } from '../domain/usecases/backLinkPlanningTask.js';
 
 const logger = createAppLogger({ name: 'code-routes' });
+
+/** Terminal task statuses eligible for archival, rate-limit recording, etc. */
+const TERMINAL_STATUSES: readonly TaskStatus[] = ['planned', 'implemented', 'reviewed', 'failed', 'cancelled', 'interrupted'];
+
+/** Max characters of sanitized prompt to include in queue listing responses. */
+const QUEUE_PROMPT_PREVIEW_LENGTH = 200;
 
 /**
  * Track in-flight health probe requests per user for deduplication.
@@ -554,13 +561,13 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         {
           logger: services.logger,
           codeTaskRepo: services.codeTaskRepo,
-          taskDispatcher: services.taskDispatcher,
+          taskEnqueueService: services.taskEnqueueService,
           linearIssueService: services.linearIssueService,
+          linearAgentClient: services.linearAgentClient,
           whatsappNotifier: services.whatsappNotifier,
           metricsClient: services.metricsClient,
           workerSettingsRepo: services.workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
-          serviceUrl: loadConfig().serviceUrl,
         },
         processRequest
       );
@@ -605,10 +612,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         if (error.code === 'worker_not_configured') {
         /* v8 ignore stop @preserve */
           return await reply.fail('WORKER_NOT_CONFIGURED', error.message);
-        }
-
-        if (error.code === 'worker_unavailable') {
-          return await reply.fail('MISCONFIGURED', 'Worker unavailable');
         }
 
         /* v8 ignore start -- ts-type: string literal comparison creates type narrowing branch @preserve */
@@ -869,10 +872,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       // Record task completion for rate limiting (decrement concurrent, update cost)
       // Do this for terminal states: completed, failed, cancelled, interrupted
       /* v8 ignore start -- ts-type: optional chaining and array includes create type narrowing branches @preserve */
-      const terminalStatuses = ['planned', 'implemented', 'reviewed', 'failed', 'cancelled', 'interrupted'] as const;
-      /* v8 ignore stop @preserve */
-      /* v8 ignore start -- ts-type: terminal status includes check @preserve */
-      if (body.status !== undefined && terminalStatuses.includes(body.status)) {
+      if (body.status !== undefined && TERMINAL_STATUSES.includes(body.status)) {
       /* v8 ignore stop @preserve */
         const userId = result.value.userId; // @allow-result-access -- .ok checked at line 736
         // Fire and forget - don't await to avoid delaying response
@@ -1193,7 +1193,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                 type: 'object',
                 required: ['code', 'message'],
                 properties: {
-                  code: { type: 'string', enum: ['MISCONFIGURED'] },
+                  code: { type: 'string', enum: ['MISCONFIGURED', 'QUEUE_FULL'] },
                   message: { type: 'string' },
                 },
               },
@@ -1224,7 +1224,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         includeParams: true,
       });
 
-      const { codeTaskRepo, taskDispatcher, rateLimitService, linearIssueService, workerSettingsRepo } = getServices();
+      const { codeTaskRepo, rateLimitService, linearIssueService, workerSettingsRepo, taskEnqueueService } = getServices();
       const body = request.body as {
         prompt: string;
         workerType?: WorkerType;
@@ -1266,8 +1266,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const issueResult = await linearIssueService.ensureIssueExists(ensureParams);
 
       // Pre-generate task ID and derive deterministic webhook secret
+      const config = loadConfig();
       const taskId = `task_${randomUUID()}`;
-      const webhookSecret = generateWebhookSecret(loadConfig().orchestratorSecret, taskId);
+      const webhookSecret = generateWebhookSecret(config.orchestratorSecret, taskId);
 
       // Create task with prompt deduplication (Layer 2 only - no actionId/approvalEventId)
       const createInput: {
@@ -1334,7 +1335,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       // Back-link planning task to this execution task (INT-725, best-effort)
       await backLinkPlanningTask(codeTaskRepo, request.log, task);
 
-      // Fetch user's worker settings
+      // Fetch user's worker settings to validate workers are configured
       const settingsResult = await workerSettingsRepo.getSettings(userId);
       if (!settingsResult.ok) {
         request.log.error({ userId, error: settingsResult.error }, 'Failed to fetch worker settings');
@@ -1355,8 +1356,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('WORKER_NOT_CONFIGURED', 'Please configure your workers in Settings before submitting code tasks');
       }
 
-      // Validate workerLocation and compute worker ordering if provided
-      let orderedWorkers = enabledWorkers;
+      // Validate workerLocation if provided
       if (body.workerLocation !== undefined) {
         const requestedWorker = enabledWorkers.find((w) => w.name === body.workerLocation);
 
@@ -1364,101 +1364,135 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           request.log.warn({ userId, workerLocation: body.workerLocation }, 'Requested worker not found');
           return await reply.fail('INVALID_WORKER', `Worker '${body.workerLocation}' is not configured or enabled`);
         }
-
-        // Move the requested worker to the front of the list
-        orderedWorkers = [
-          requestedWorker,
-          ...enabledWorkers.filter((w) => w.name !== body.workerLocation),
-        ];
-
-        // Health is checked live via WorkerHealthProbe at dispatch time (capacity-aware dispatch, INT-741).
-        // No cached health check needed here — the dispatcher probes all workers and excludes unhealthy ones.
       }
 
-      const workerCredentials = {
-        workers: orderedWorkers.map((w) => ({
-          name: w.name,
-          url: w.url,
-          cfAccessClientId: w.cfAccessClientId,
-          cfAccessClientSecret: w.cfAccessClientSecret,
-          dispatchSigningSecret: w.dispatchSigningSecret,
-        })),
-      };
-
-      // Dispatch to worker (use stored webhook secret from task)
-      const dispatchInput: {
-        taskId: string;
-        linearIssueId?: string;
-        prompt: string;
-        systemPromptHash: string;
-        repository: string;
-        baseBranch: string;
-        workerType: WorkerType;
-        webhookUrl: string;
-        webhookSecret: string;
-        linearIssueLabels: string[];
-        hasChildren: boolean;
-        agentType: 'planning' | 'execution' | 'pull_request' | 'review';
-        workerCredentials: { workers: Array<{ name: string; url: string; cfAccessClientId: string; cfAccessClientSecret: string; dispatchSigningSecret: string }> };
-      } = {
+      // Enqueue task for dispatch (INT-949)
+      const enqueueResult = await taskEnqueueService.enqueue({
         taskId: task.id,
-        prompt: task.sanitizedPrompt,
-        systemPromptHash: task.systemPromptHash,
-        repository: task.repository,
-        baseBranch: task.baseBranch,
-        workerType: task.workerType,
-        webhookUrl: `${process.env['INTEXURAOS_SERVICE_URL']}/internal/webhooks/task-complete`,
-        webhookSecret,
-        linearIssueLabels: issueResult.linearIssueLabels,
-        hasChildren: issueResult.hasChildren,
-        /* v8 ignore start -- ts-type: nullish coalescing on optional agentType with label fallback @preserve */
-        agentType: task.agentType ?? (hasCodeTaskLabel(issueResult.linearIssueLabels) ? 'execution' : 'planning'),
-        /* v8 ignore stop @preserve */
-        workerCredentials,
-      };
-
-      if (task.linearIssueId !== undefined) {
-        dispatchInput.linearIssueId = task.linearIssueId;
-      }
-
-      const dispatchResult = await taskDispatcher.dispatch(dispatchInput);
-
-      if (!dispatchResult.ok) {
-        request.log.error({ error: dispatchResult.error, taskId: task.id }, 'Failed to dispatch code task');
-
-        // Update task with error and failed status
-        await codeTaskRepo.update(task.id, {
-          status: 'failed',
-          error: {
-            code: dispatchResult.error.code,
-            message: dispatchResult.error.message,
-          },
-        });
-
-        return await reply.fail('MISCONFIGURED', 'Failed to dispatch task to worker');
-      }
-
-      // Save the actual worker location returned by the dispatcher
-      const actualWorkerLocation = dispatchResult.value.workerLocation;
-      await codeTaskRepo.update(task.id, {
-        status: 'dispatched',
-        workerLocation: actualWorkerLocation,
-        dispatchedAt: new Date(),
+        userId,
       });
+
+      if (!enqueueResult.ok) {
+        if (enqueueResult.error.code === 'queue_full') {
+          return await reply.fail('QUEUE_FULL', enqueueResult.error.message);
+        }
+        return await reply.fail('INTERNAL_ERROR', enqueueResult.error.message);
+      }
 
       // Record task start for rate limiting
       await rateLimitService.recordTaskStart(userId);
 
-      // Mark Linear issue as In Progress after successful dispatch
+      // Mark Linear issue as In Progress after successful enqueue
       if (issueResult.linearIssueId !== undefined) {
         await linearIssueService.markInProgress(userId, issueResult.linearIssueId);
       }
 
-      request.log.info({ taskId: task.id, workerLocation: actualWorkerLocation }, 'Code task submitted successfully');
+      request.log.info({ taskId: task.id }, 'Code task submitted and enqueued successfully');
 
       return await reply.ok({
         status: 'submitted',
         codeTaskId: task.id,
+      });
+    }
+  );
+
+  // GET /code/queue - List currently queued tasks (public, Auth0 JWT) (INT-949)
+  fastify.get(
+    '/code/queue',
+    {
+      onRequest: jwtValidator,
+      schema: {
+        operationId: 'listQueuedTasks',
+        summary: 'List currently queued tasks',
+        description: 'Public endpoint for listing all currently queued tasks. Requires Auth0 JWT.',
+        tags: ['public'],
+        response: {
+          200: {
+            description: 'Queue listing',
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                required: ['tasks', 'totalQueued', 'maxQueueSize'],
+                properties: {
+                  tasks: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string' },
+                        prompt: { type: 'string' },
+                        linearIssueId: { type: 'string' },
+                        workerType: workerTypeSchema,
+                        agentType: { type: 'string' },
+                        queuedAt: { type: 'string' },
+                        createdAt: { type: 'string' },
+                        position: { type: 'number' },
+                      },
+                      required: ['id', 'prompt', 'queuedAt', 'createdAt', 'position'],
+                    },
+                  },
+                  totalQueued: { type: 'number' },
+                  maxQueueSize: { type: 'number' },
+                },
+              },
+            },
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'Received request to GET /code/queue' });
+      const { codeTaskRepo } = getServices();
+      const config = loadConfig();
+
+      /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
+      const userId = request.user?.userId ?? 'unknown-user';
+      /* v8 ignore stop @preserve */
+
+      const result = await codeTaskRepo.listQueued();
+      if (!result.ok) {
+        return await reply.fail('INTERNAL_ERROR', 'Failed to fetch queue');
+      }
+
+      // Scope to requesting user's tasks only — prevents cross-user data leakage
+      const userTasks = result.value.filter((task) => task.userId === userId);
+
+      const tasks = userTasks.map((task, index) => ({
+        id: task.id,
+        prompt: task.sanitizedPrompt.slice(0, QUEUE_PROMPT_PREVIEW_LENGTH),
+        linearIssueId: task.linearIssueId,
+        workerType: task.workerType,
+        agentType: task.agentType,
+        /* v8 ignore start -- ts-type: queuedAt is always set by TaskEnqueueService before task enters queue @preserve */
+        queuedAt: task.queuedAt !== undefined ? task.queuedAt.toDate().toISOString() : task.createdAt.toDate().toISOString(),
+        /* v8 ignore stop @preserve */
+        createdAt: task.createdAt.toDate().toISOString(),
+        position: index + 1,
+      }));
+
+      return await reply.ok({
+        tasks,
+        totalQueued: tasks.length,
+        maxQueueSize: config.queue.maxSize,
       });
     }
   );
@@ -1949,6 +1983,90 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       logger.info({ userId, taskId }, 'Code task deleted');
       return await reply.ok({ deleted: true });
+    }
+  );
+
+  // POST /code/tasks/:taskId/archive - Archive a task (public, Auth0 JWT)
+  fastify.post<{
+    Params: { taskId: string };
+  }>(
+    '/code/tasks/:taskId/archive',
+    {
+      onRequest: jwtValidator,
+      schema: {
+        operationId: 'archiveCodeTask',
+        summary: 'Archive a code task',
+        description: 'Archives a code task owned by the authenticated user. Task must be in a terminal status.',
+        tags: ['public'],
+        params: {
+          type: 'object',
+          properties: {
+            taskId: { type: 'string', description: 'Task ID' },
+          },
+          required: ['taskId'],
+        },
+        response: {
+          200: {
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  archived: { type: 'boolean' },
+                },
+                required: ['archived'],
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { taskId: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /code/tasks/:taskId/archive',
+        includeParams: true,
+      });
+
+      const { codeTaskRepo, logger } = getServices();
+      /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
+      const userId = request.user?.userId ?? 'unknown-user';
+      /* v8 ignore stop @preserve */
+      const { taskId } = request.params;
+
+      logger.info({ userId, taskId }, 'Archiving code task');
+
+      const findResult = await codeTaskRepo.findByIdForUser(taskId, userId);
+
+      if (!findResult.ok) {
+        /* v8 ignore start -- ts-type: string literal comparison creates type narrowing branch @preserve */
+        if (findResult.error.code === 'NOT_FOUND') {
+        /* v8 ignore stop @preserve */
+          return await reply.fail('NOT_FOUND', `Task ${taskId} not found`);
+        }
+        logger.error({ error: findResult.error, taskId }, 'Failed to find code task for archiving');
+        return await reply.fail('INTERNAL_ERROR', findResult.error.message);
+      }
+
+      const task = findResult.value;
+      /* v8 ignore start -- ts-type: array includes check creates type narrowing branch @preserve */
+      if (!TERMINAL_STATUSES.includes(task.status)) {
+      /* v8 ignore stop @preserve */
+        return await reply.fail('INVALID_REQUEST', `Cannot archive task with status '${task.status}'`);
+      }
+
+      const updateResult = await codeTaskRepo.update(taskId, { status: 'archived' });
+
+      /* v8 ignore start -- upstream: FakeFirestore update never returns error in tests @preserve */
+      if (!updateResult.ok) {
+        logger.error({ error: updateResult.error, taskId }, 'Failed to archive code task');
+        return await reply.fail('INTERNAL_ERROR', updateResult.error.message);
+      }
+      /* v8 ignore stop @preserve */
+
+      logger.info({ userId, taskId }, 'Code task archived');
+      return await reply.ok({ archived: true });
     }
   );
 
@@ -2896,12 +3014,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           logger: services.logger,
           codeTaskRepo: services.codeTaskRepo,
           linearAgentClient: services.linearAgentClient,
-          taskDispatcher: services.taskDispatcher,
-          whatsappNotifier: services.whatsappNotifier,
+          taskEnqueueService: services.taskEnqueueService,
           metricsClient: services.metricsClient,
           workerSettingsRepo: services.workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
-          serviceUrl: loadConfig().serviceUrl,
         },
         { originalTaskId: taskId, userId }
       );
@@ -3221,10 +3337,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const {
         codeTaskRepo,
         linearAgentClient,
-        taskDispatcher,
-        whatsappNotifier,
+        taskEnqueueService,
         metricsClient,
-        workerSettingsRepo,
         gitHubPRClient,
         userServiceClient,
         automationLog,
@@ -3266,14 +3380,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           logger: request.log,
           codeTaskRepo,
           linearAgentClient,
-          taskDispatcher,
-          whatsappNotifier,
+          taskEnqueueService,
           metricsClient,
-          workerSettingsRepo,
           gitHubPRClient,
           userServiceClient,
           orchestratorSecret: loadConfig().orchestratorSecret,
-          serviceUrl: loadConfig().serviceUrl,
           automationLog,
         },
         retryRequest
@@ -3444,8 +3555,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const {
         codeTaskRepo,
         linearAgentClient,
-        taskDispatcher,
-        whatsappNotifier,
+        taskEnqueueService,
         metricsClient,
         workerSettingsRepo,
         gitHubPRClient,
@@ -3471,8 +3581,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           logger: request.log,
           codeTaskRepo,
           linearAgentClient,
-          taskDispatcher,
-          whatsappNotifier,
+          taskEnqueueService,
           metricsClient,
           workerSettingsRepo,
           gitHubPRClient,
@@ -3652,7 +3761,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         message: 'Received request to POST /code/tasks/:taskId/implement',
       });
 
-      const { codeTaskRepo, linearAgentClient, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo, rateLimitService } =
+      const { codeTaskRepo, linearAgentClient, taskEnqueueService, metricsClient, workerSettingsRepo, rateLimitService } =
         getServices();
       const userId = request.user?.userId;
 
@@ -3690,12 +3799,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           logger: request.log,
           codeTaskRepo,
           linearAgentClient,
-          taskDispatcher,
-          whatsappNotifier,
+          taskEnqueueService,
           metricsClient,
           workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
-          serviceUrl: loadConfig().serviceUrl,
         },
         executionAgentRequest
       );
@@ -3902,28 +4009,12 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         message: 'Received request to POST /internal/drain-queue',
       });
 
-      // Auth strategy: Cloud Scheduler sends OIDC tokens; direct service calls use x-internal-auth.
-      //
-      // SECURITY NOTE: The OIDC token is NOT validated at the application layer. In production,
-      // Cloud Run validates the OIDC token at the infrastructure level before the request reaches
-      // this handler. In the current Terraform config, code-agent uses allow_unauthenticated=true
-      // (required for external webhooks), so this OIDC trust relies on Cloud Run's ingress settings
-      // and IAM invoker configuration — NOT on the Bearer header alone. If Cloud Run ingress is
-      // changed to allow all traffic, this endpoint would need application-level OIDC validation.
-      //
-      // For defense in depth, internal callers should prefer the x-internal-auth header path.
-      const authHeader = request.headers.authorization;
-      const isOidcAuth = typeof authHeader === 'string' && authHeader.startsWith('Bearer ');
-
-      if (isOidcAuth) {
-        request.log.info('Authenticated via OIDC token (Cloud Scheduler)');
-      } else {
-        const authResult = validateInternalAuth(request);
-        if (!authResult.valid) {
-          request.log.warn({ reason: authResult.reason }, 'Internal auth failed for drain-queue');
-          return await reply.fail('UNAUTHORIZED', 'Unauthorized');
-        }
+      const authResult = authenticateInternalScheduler(request);
+      if (!authResult.authenticated) {
+        request.log.warn('Internal auth failed for drain-queue');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
+      request.log.info({ strategy: authResult.strategy }, 'Authenticated for drain-queue');
 
       const services = getServices();
 
@@ -3955,6 +4046,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         linearAgentClient: services.linearAgentClient,
         whatsappNotifier: services.whatsappNotifier,
         workerSettingsRepo: services.workerSettingsRepo,
+        taskEnqueueService: services.taskEnqueueService,
+        orchestratorSecret: loadConfig().orchestratorSecret,
       });
 
       if (!result.ok) {

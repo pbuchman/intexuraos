@@ -28,8 +28,9 @@ import {
   Waypoints,
   Zap,
 } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { motion } from 'framer-motion';
+import { HeroShowcase } from '@/components/home/HeroShowcase.js';
 
 // --- Brand Icons ---
 
@@ -82,85 +83,6 @@ function ModernCard({
       )}
       {children}
     </motion.div>
-  );
-}
-
-// --- Terminal Animation ---
-
-const TERMINAL_LINES = [
-  { text: '$ voice note: "Dentist next Tuesday at 3pm"', delay: 0, color: 'text-green-400' },
-  { text: '  → Transcribing voice note...', delay: 800, color: 'text-neutral-400' },
-  { text: '  → Intent classified: calendar (confidence: 0.94)', delay: 1600, color: 'text-cyan-400' },
-  { text: '  → Calendar Agent: building event preview...', delay: 2400, color: 'text-purple-400' },
-  { text: '  → Preview: "Dentist" — Tue Mar 3, 3:00 PM (1h)', delay: 3200, color: 'text-yellow-400' },
-  { text: '  → WhatsApp: [Approve] [Edit] sent ✓', delay: 4000, color: 'text-blue-400' },
-  { text: '  → User tapped: Approve', delay: 5200, color: 'text-green-400' },
-  { text: '  → Google Calendar event created ✓', delay: 6200, color: 'text-emerald-400' },
-  { text: '  → WhatsApp: "Dentist added to your calendar" ✓', delay: 7200, color: 'text-green-300' },
-];
-
-function AnimatedTerminal(): React.JSX.Element {
-  const [visibleLines, setVisibleLines] = useState(0);
-
-  useEffect(() => {
-    const timers: ReturnType<typeof setTimeout>[] = [];
-
-    for (const [index, line] of TERMINAL_LINES.entries()) {
-      const timer = setTimeout(() => {
-        setVisibleLines(index + 1);
-      }, line.delay);
-      timers.push(timer);
-    }
-
-    const resetTimer = setTimeout(() => {
-      setVisibleLines(0);
-      // Restart the animation
-      const restartTimer = setTimeout(() => {
-        for (const [index, line] of TERMINAL_LINES.entries()) {
-          const timer = setTimeout(() => {
-            setVisibleLines(index + 1);
-          }, line.delay);
-          timers.push(timer);
-        }
-      }, 500);
-      timers.push(restartTimer);
-    }, 10000);
-    timers.push(resetTimer);
-
-    return (): void => {
-      for (const timer of timers) {
-        clearTimeout(timer);
-      }
-    };
-  }, [visibleLines]);
-
-  return (
-    <div className="overflow-hidden rounded-xl border border-neutral-200 bg-neutral-950 font-mono text-sm shadow-sm">
-      <div className="flex items-center gap-1.5 border-b border-neutral-800 bg-neutral-900 px-4 py-2">
-        <div className="h-3 w-3 rounded-full bg-red-400/20" />
-        <div className="h-3 w-3 rounded-full bg-amber-400/20" />
-        <div className="h-3 w-3 rounded-full bg-green-400/20" />
-        <span className="ml-2 text-xs text-neutral-500">intexuraos — voice to action</span>
-      </div>
-      <div className="p-4 md:p-6">
-        <div className="space-y-1">
-          {TERMINAL_LINES.slice(0, visibleLines).map((line, i) => (
-            <div
-              key={i}
-              className={`${line.color} transition-opacity duration-300`}
-            >
-              {line.text}
-              {i === visibleLines - 1 && <span className="animate-pulse">▊</span>}
-            </div>
-          ))}
-          {visibleLines === 0 && (
-            <div className="text-green-400">
-              <span className="animate-pulse">▊</span>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -338,10 +260,9 @@ function HeroSection(): React.JSX.Element {
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3, duration: 0.8 }}
-          className="relative mx-auto mt-20 max-w-5xl rounded-2xl border border-neutral-200 bg-white/50 p-2 shadow-2xl backdrop-blur-xl"
+          className="relative mx-auto mt-20 max-w-6xl"
         >
-          <div className="absolute -top-px left-8 right-8 h-px bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-50" />
-          <AnimatedTerminal />
+          <HeroShowcase />
         </motion.div>
       </div>
     </section>

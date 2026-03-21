@@ -5,7 +5,6 @@
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
 import type { ServiceFeedback } from '@intexuraos/common-core';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
-import { createAppLogger } from '@intexuraos/infra-sentry';
 
 type LogMethod = (obj: unknown, msg?: string) => void;
 
@@ -19,10 +18,8 @@ interface HttpLogger {
 export interface LinearAgentHttpClientConfig {
   baseUrl: string;
   internalAuthToken: string;
-  logger?: HttpLogger;
+  logger: HttpLogger;
 }
-
-const defaultLogger = createAppLogger({ name: 'linearAgentHttpClient' }) as unknown as HttpLogger;
 
 interface ApiResponse {
   success: boolean;
@@ -38,7 +35,7 @@ interface ApiResponse {
 export function createLinearAgentHttpClient(
   config: LinearAgentHttpClientConfig
 ): LinearAgentClient {
-  const logger = config.logger ?? defaultLogger;
+  const logger = config.logger;
 
   return {
     async processAction(

@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   CheckCircle2,
+  Clock,
   Copy,
   Loader2,
   XCircle,
@@ -19,6 +20,9 @@ import { V2NextSteps } from '@/components/code-tasks/v2/V2NextSteps.js';
 import { isActiveStatus } from '@/components/code-tasks/v2/shared.js';
 import type { WorkerType } from '@/components/code-tasks/v2/shared.js';
 
+/** Terminal statuses eligible for archive/delete actions. */
+const ARCHIVABLE_STATUSES: ReadonlySet<string> = new Set(['failed', 'cancelled', 'interrupted', 'planned', 'implemented', 'reviewed']);
+
 export function CodeTaskViewPageV2(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -29,6 +33,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
     sending, sendError, messageStatus,
     implementing, implementError, startImplementation,
     deleting, deleteError, deleteTask, clearDeleteError,
+    archiving, archiveError, archiveTask, clearArchiveError,
     cancelTask, retryTask, sendMessage,
   } = useTaskView(id ?? '');
   const { status: workersStatus } = useWorkersStatus();
@@ -48,7 +53,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
     setShowRetryDropdown(false);
     try {
       const newId = await retryTask(selectedWorkerType);
-      void navigate(`/code-tasks/${newId}/view`);
+      void navigate(`/code-tasks/${newId}`);
     } catch {
       // retryTask already sets retryError state
     }
@@ -58,7 +63,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
     setShowImplementDropdown(false);
     try {
       const newId = await startImplementation(selectedWorkerType);
-      void navigate(`/code-tasks/${newId}/view`);
+      void navigate(`/code-tasks/${newId}`);
     } catch {
       // startImplementation already sets implementError state
     }
@@ -73,8 +78,17 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
     }
   }, [deleteTask, navigate]);
 
+  const handleArchive = useCallback(async (): Promise<void> => {
+    try {
+      await archiveTask();
+      void navigate('/code-tasks');
+    } catch {
+      // archiveTask already sets archiveError state
+    }
+  }, [archiveTask, navigate]);
+
   useEffect(() => {
-    if (task !== null && task.status !== 'failed' && task.status !== 'cancelled' && task.status !== 'interrupted') {
+    if (task !== null && !ARCHIVABLE_STATUSES.has(task.status)) {
       setShowDeleteConfirm(false);
     }
   }, [task?.status]);
@@ -109,6 +123,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
   const isImplementable = task.status === 'planned' &&
     task.implementationTaskId === undefined &&
     task.linearIssueId !== undefined;
+  const isArchivable = ARCHIVABLE_STATUSES.has(task.status);
 
   return (
     <Layout>
@@ -176,8 +191,12 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
         deleteError={deleteError}
         showDeleteConfirm={showDeleteConfirm}
         onShowDeleteConfirm={(): void => { setShowDeleteConfirm(true); }}
-        onCancelDeleteConfirm={(): void => { setShowDeleteConfirm(false); clearDeleteError(); }}
+        onCancelDeleteConfirm={(): void => { setShowDeleteConfirm(false); clearDeleteError(); clearArchiveError(); }}
         onConfirmDelete={(): void => { void handleDelete(); }}
+        isArchivable={isArchivable}
+        archiving={archiving}
+        archiveError={archiveError}
+        onArchive={(): void => { void handleArchive(); }}
         {...(task.result?.prUrl !== undefined ? { prUrl: task.result.prUrl } : {})}
         {...(task.linearIssue?.url !== undefined ? { linearIssueUrl: task.linearIssue.url } : {})}
         linksInNextSteps={isImplementable || task.implementationTaskId !== undefined}
@@ -218,13 +237,17 @@ const MemoActiveProgressCard = memo(function ActiveProgressCard({ task }: { task
   if (!isActiveStatus(task.status)) return null;
   if (task.error !== undefined) return null;
 
+  const isQueued = task.status === 'queued';
+
   return (
-    <Card className="mb-6 border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/30">
+    <Card className={`mb-6 ${task.status === 'queued' ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/30' : 'border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/30'}`}>
       <div className="flex items-center gap-3">
-        <Loader2 className="h-5 w-5 animate-spin text-blue-600 dark:text-blue-400" />
+        {isQueued
+          ? <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+          : <Loader2 className="h-5 w-5 animate-spin text-blue-600 dark:text-blue-400" />}
         <div className="flex-1">
-          <p className="font-medium text-blue-900 dark:text-blue-200">
-            {task.status === 'queued' ? 'Waiting for available worker...' : task.status === 'dispatched' ? 'Task dispatched...' : 'Working on your task...'}
+          <p className={`font-medium ${isQueued ? 'text-amber-900 dark:text-amber-200' : 'text-blue-900 dark:text-blue-200'}`}>
+            {isQueued ? 'Queued for execution...' : task.status === 'dispatched' ? 'Task dispatched...' : 'Working on your task...'}
           </p>
           <ElapsedTimer createdAt={task.createdAt} />
         </div>
@@ -238,7 +261,7 @@ function DesignTaskBanner({ parentTaskId }: { parentTaskId: string }): React.JSX
     <div className="mb-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm text-violet-800 dark:border-violet-800 dark:bg-violet-900/20 dark:text-violet-300">
       {'This task implements the IntexuraOS Agent-Based Code Task Execution Flow. '}
       <a
-        href={`/#/code-tasks/${parentTaskId}/view`}
+        href={`/#/code-tasks/${parentTaskId}`}
         className="font-medium underline hover:no-underline"
       >
         {'PLANNING'}
@@ -252,7 +275,7 @@ function ImplementationLinkBanner({ implementationTaskId }: { implementationTask
     <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
       {'This task is the planning step of the IntexuraOS Agent-Based Code Task Execution Flow. '}
       <a
-        href={`/#/code-tasks/${implementationTaskId}/view`}
+        href={`/#/code-tasks/${implementationTaskId}`}
         className="font-medium underline hover:no-underline"
       >
         {'IMPLEMENTATION'}

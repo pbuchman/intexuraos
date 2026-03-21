@@ -10,11 +10,12 @@ import type {
   GitHubWebhookEventType,
 } from './gitHubWebhookTypes.js';
 import type { WorkerType } from './codeTask.js';
+import type { ReviewType } from '../constants/reviewTypes.js';
 
 export type EventDecisionMaker = 'hard_rules' | 'github_agent' | 'webhook_route';
 export type EventDecisionOutcome = 'dispatch' | 'skip' | 'request_review';
 export type EventDecisionDispatchAction = 'create_task' | 'send_message' | 'create_review_task';
-export type EventDecisionReviewType = 'code_quality' | 'security' | 'architecture';
+export type EventDecisionReviewType = ReviewType;
 
 export interface EventDecision {
   id: string;

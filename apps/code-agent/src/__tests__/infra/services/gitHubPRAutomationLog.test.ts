@@ -26,9 +26,12 @@ function createFakeGitHubPRClient(overrides?: Partial<GitHubPRClient>): GitHubPR
     getPullRequestStatus: vi.fn().mockResolvedValue(ok({ state: 'open', mergedAt: null, headRef: 'branch' })),
     postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 100 })),
     listOpenPullRequestsByBaseBranch: vi.fn().mockResolvedValue(ok([])),
-    getPullRequestDetails: vi.fn().mockResolvedValue(ok({ number: 1, title: '', body: null, authorLogin: '', baseBranch: 'main', headBranch: 'branch', mergeable: null, mergeableState: null })),
+    getPullRequestDetails: vi.fn().mockResolvedValue(ok({ number: 1, title: '', body: null, authorLogin: '', baseBranch: 'main', headBranch: 'branch', mergeable: null, mergeableState: null, headSha: 'sha123' })),
     getIssueComment: vi.fn().mockResolvedValue(ok({ body: '@ignore\n### IntexuraOS Automation\n\n**12:00** -- existing line' })),
     updateIssueComment: vi.fn().mockResolvedValue(ok({ commentId: 100 })),
+    mergePullRequest: vi.fn().mockResolvedValue(ok({ sha: 'abc123', merged: true })),
+    getCombinedCheckStatus: vi.fn().mockResolvedValue(ok({ state: 'success' })),
+    listAllOpenPullRequests: vi.fn().mockResolvedValue(ok([])),
     ...overrides,
   };
 }
@@ -380,6 +383,86 @@ describe('GitHubPRAutomationLog', () => {
         expect.objectContaining({ repository: 'noslash' }),
         expect.stringContaining('invalid repository format'),
       );
+    });
+  });
+
+  describe('concurrency', () => {
+    it('should serialize concurrent record() calls for the same PR', async () => {
+      const log = createLog();
+
+      const taskStartedEvent: AutomationEvent = {
+        type: 'task_started',
+        taskId: 'task_abc',
+        workerType: 'opus',
+        attempt: 1,
+      };
+
+      // Fire two record() calls concurrently — no await between them
+      await Promise.all([
+        log.record(prRef, webhookEvent, tokenUserId),
+        log.record(prRef, taskStartedEvent, tokenUserId),
+      ]);
+
+      // First call should create a new comment
+      const postPRComment = gitHubPRClient.postPRComment as ReturnType<typeof vi.fn>;
+      expect(postPRComment).toHaveBeenCalledOnce();
+
+      // Second call should append to the existing comment (GET + PATCH)
+      const getIssueComment = gitHubPRClient.getIssueComment as ReturnType<typeof vi.fn>;
+      expect(getIssueComment).toHaveBeenCalledOnce();
+
+      const updateIssueComment = gitHubPRClient.updateIssueComment as ReturnType<typeof vi.fn>;
+      expect(updateIssueComment).toHaveBeenCalledOnce();
+
+      // Firestore: create once, update once
+      const stored = await repo.get('pbuchman/intexuraos', 42);
+      expect(stored).toBeDefined();
+      expect(stored?.eventCount).toBe(2);
+    });
+
+    it('should not serialize calls for different PRs', async () => {
+      const log = createLog();
+      const prRef2: PRRef = { repository: 'pbuchman/intexuraos', prNumber: 99 };
+
+      await Promise.all([
+        log.record(prRef, webhookEvent, tokenUserId),
+        log.record(prRef2, webhookEvent, tokenUserId),
+      ]);
+
+      // Each PR should get its own new comment
+      const postPRComment = gitHubPRClient.postPRComment as ReturnType<typeof vi.fn>;
+      expect(postPRComment).toHaveBeenCalledTimes(2);
+
+      // Neither should try to append
+      const getIssueComment = gitHubPRClient.getIssueComment as ReturnType<typeof vi.fn>;
+      expect(getIssueComment).not.toHaveBeenCalled();
+
+      const updateIssueComment = gitHubPRClient.updateIssueComment as ReturnType<typeof vi.fn>;
+      expect(updateIssueComment).not.toHaveBeenCalled();
+    });
+
+    it('should not block subsequent calls when a prior call fails', async () => {
+      gitHubPRClient = createFakeGitHubPRClient({
+        postPRComment: vi.fn()
+          .mockRejectedValueOnce(new Error('GitHub is down'))
+          .mockResolvedValueOnce(ok({ commentId: 200 })),
+      });
+      const log = createLog();
+
+      // First call will throw inside doRecord (caught by try-catch, logged as warning).
+      // Second call must still succeed — not blocked by the first failure.
+      await Promise.all([
+        log.record(prRef, webhookEvent, tokenUserId),
+        log.record(prRef, { type: 'task_started', taskId: 'task_abc', workerType: 'opus', attempt: 1 }, tokenUserId),
+      ]);
+
+      const postPRComment = gitHubPRClient.postPRComment as ReturnType<typeof vi.fn>;
+      expect(postPRComment).toHaveBeenCalledTimes(2);
+
+      // Second call should still have created a comment (first failed, no Firestore doc)
+      const stored = await repo.get('pbuchman/intexuraos', 42);
+      expect(stored).toBeDefined();
+      expect(stored?.commentId).toBe(200);
     });
   });
 

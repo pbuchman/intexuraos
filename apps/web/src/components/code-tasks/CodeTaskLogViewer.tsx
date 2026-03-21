@@ -238,7 +238,10 @@ export function CodeTaskLogViewer({
     <div className="mt-6 mb-6">
       <div className="flex items-center justify-between rounded-t-lg border border-b-0 border-slate-200 bg-white px-4 py-2.5 dark:border-slate-700 dark:bg-slate-800">
         <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-slate-900 dark:text-slate-100">Execution Logs</span>
+          <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+            <span className="md:hidden">Execution</span>
+            <span className="hidden md:inline">Execution Logs</span>
+          </span>
           {isActive && listenerHealthy ? (
             <span className="flex items-center gap-1.5 rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700 dark:bg-green-900/50 dark:text-green-300">
               <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
@@ -247,7 +250,7 @@ export function CodeTaskLogViewer({
           ) : null}
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-slate-400 dark:text-slate-500">
+          <span className="hidden text-xs text-slate-400 md:inline dark:text-slate-500">
             {String(logs.length)} line{logs.length !== 1 ? 's' : ''}
           </span>
           {logs.length > 0 ? (
@@ -272,7 +275,7 @@ export function CodeTaskLogViewer({
                     : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200'
                 }`}
               >
-                {compactMode ? 'Collapse All' : 'Expand All'}
+                {compactMode ? 'Collapse' : 'Expand'}
               </button>
               <button
                 type="button"
@@ -290,7 +293,7 @@ export function CodeTaskLogViewer({
       <div className="overflow-hidden rounded-b-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-950">
         <div
           ref={containerRef}
-          className="max-h-[60vh] overflow-y-auto p-3 font-mono text-[13px] leading-6"
+          className="max-h-[60vh] overflow-x-auto overflow-y-auto p-3 font-mono text-[13px] leading-6"
         >
           {logs.length === 0 ? (
             <div className="flex min-h-[180px] flex-col items-center justify-center gap-2 text-center">
@@ -332,7 +335,7 @@ export function CodeTaskLogViewer({
                     ) : (
                       <span className="w-4 shrink-0" />
                     )}
-                    <pre className={`min-w-0 whitespace-pre-wrap break-words ${getLogLineClass(line.text)}`}>
+                    <pre className={`min-w-0 whitespace-pre ${getLogLineClass(line.text)}`}>
                       {line.text}
                     </pre>
                   </div>
@@ -352,7 +355,7 @@ export function CodeTaskLogViewer({
                   {block !== undefined && !collapsed ? (
                     logs.slice(block.bodyStart, block.bodyEnd).map((bodyLine, bodyIndex) => (
                       <div key={`${String(bodyLine.sequence)}-${String(bodyIndex)}-body`} className="pl-6">
-                        <pre className={`whitespace-pre-wrap break-words rounded px-2 py-0.5 ${getLogLineClass(bodyLine.text)}`}>
+                        <pre className={`whitespace-pre rounded px-2 py-0.5 ${getLogLineClass(bodyLine.text)}`}>
                           {bodyLine.text}
                         </pre>
                       </div>

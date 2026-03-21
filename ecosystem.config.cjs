@@ -49,6 +49,8 @@ const COMMON_SERVICE_URLS = {
   INTEXURAOS_CHAT_AGENT_URL: 'http://localhost:8129',
   INTEXURAOS_CODE_AGENT_URL: 'https://dev.intexuraos.cloud/api/code',
   INTEXURAOS_WEB_AGENT_URL: 'http://localhost:8127',
+  INTEXURAOS_CRON_AGENT_URL: 'http://localhost:8130',
+  INTEXURAOS_HELLSCRIPT_AGENT_URL: 'http://localhost:8131',
 };
 
 // Service-specific env vars (Pub/Sub topics, non-URL config)
@@ -106,7 +108,7 @@ const SERVICE_ENV_MAPPINGS = {
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
     INTEXURAOS_TOKEN_ENCRYPTION_KEY: process.env.INTEXURAOS_TOKEN_ENCRYPTION_KEY,
     INTEXURAOS_GITHUB_WEBHOOK_SECRET: process.env.INTEXURAOS_GITHUB_WEBHOOK_SECRET,
-    INTEXURAOS_QUEUE_MAX_SIZE: process.env.INTEXURAOS_QUEUE_MAX_SIZE ?? '10',
+    INTEXURAOS_QUEUE_MAX_SIZE: process.env.INTEXURAOS_QUEUE_MAX_SIZE ?? '50',
     INTEXURAOS_QUEUE_TTL_MINUTES: process.env.INTEXURAOS_QUEUE_TTL_MINUTES ?? '30',
     INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS: process.env.INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS ?? '3',
     INTEXURAOS_RETRY_QUEUE_TTL_MINUTES: process.env.INTEXURAOS_RETRY_QUEUE_TTL_MINUTES ?? '10',
@@ -214,6 +216,8 @@ module.exports = {
     createServiceConfig('notes-agent', 8121),
     createServiceConfig('bookmarks-agent', 8124),
     createServiceConfig('code-agent', 8128),
+    createServiceConfig('cron-agent', 8130),
+    createServiceConfig('hellscript-agent', 8131),
 
     // Services that depend on app-settings-service (fetch pricing at startup)
     // Poll health endpoint until app-settings-service is ready (max 30s)

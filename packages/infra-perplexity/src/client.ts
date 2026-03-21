@@ -39,7 +39,6 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { buildResearchPrompt } from '@intexuraos/llm-prompts';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
 import {
@@ -241,8 +240,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, PerplexityError>> {
-      const researchPrompt = buildResearchPrompt(prompt);
-      const { auditContext } = createRequestContext('research', model, researchPrompt);
+      const { auditContext } = createRequestContext('research', model, prompt);
 
       try {
         const searchContext = SEARCH_CONTEXT_MAP[model] ?? 'medium';
@@ -256,7 +254,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
             },
             {
               role: 'user',
-              content: researchPrompt,
+              content: prompt,
             },
           ],
           temperature: 0.2,

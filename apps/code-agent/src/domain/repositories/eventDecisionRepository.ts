@@ -16,4 +16,11 @@ export interface EventDecisionRepository {
    */
   save(input: CreateEventDecisionInput): Promise<Result<EventDecision, EventDecisionRepositoryError>>;
   findByEventIds?(eventIds: string[]): Promise<Result<EventDecision[], EventDecisionRepositoryError>>;
+  /**
+   * Check if a decision with the given reason exists for this PR within the time window.
+   * Used for enforcement loop capping.
+   */
+  existsByPRAndReason?(
+    repository: string, prNumber: number, reason: string, since: Date
+  ): Promise<Result<boolean, EventDecisionRepositoryError>>;
 }

@@ -177,6 +177,8 @@ locals {
     "linear-agent",
     "web-agent",
     "code-agent",
+    "cron-agent",
+    "hellscript-agent",
   ]
 
   # Cloud Function workers (zip + upload to GCS)

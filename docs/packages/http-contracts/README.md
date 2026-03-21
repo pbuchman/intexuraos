@@ -2,7 +2,6 @@
 
 Shared API contract definitions for IntexuraOS services. Provides both OpenAPI schema definitions (for Swagger documentation) and Fastify JSON Schemas (for runtime route validation). This package ensures all services describe their APIs with consistent schema structures.
 
-**Version:** 2.1.0
 **Node:** >=22.0.0
 **Type:** ESM
 **Dependencies:** None (leaf package)
@@ -30,7 +29,7 @@ const ERROR_CODES: readonly [
 const ErrorCodeSchema: { type: 'string'; enum: string[] };
 ```
 
-Note: `ERROR_CODES` lists only the 8 generic HTTP-aligned codes. Domain-specific codes (e.g., `WORKER_UNAVAILABLE`, `NOTION_NOT_CONNECTED`) are defined in `common-core` but not listed here. See technical debt.
+Note: `ERROR_CODES` lists only 8 generic HTTP-aligned codes. Domain-specific codes (e.g., `WORKER_UNAVAILABLE`, `NOTION_NOT_CONNECTED`) are defined in `common-core` but not enumerated here. See technical debt.
 
 #### Response Schemas
 
@@ -150,21 +149,13 @@ const swaggerConfig = {
 Fastify JSON Schemas use `$id` for local reference (distinct from OpenAPI `$ref` syntax).
 
 ```typescript
-const fastifyDiagnosticsSchema: {
-  $id: 'Diagnostics';
-  type: 'object';
-  properties: {
-    /* ... */
-  };
-};
+const fastifyDiagnosticsSchema: { $id: 'Diagnostics'; type: 'object'; properties: { /* ... */ } };
 const fastifyErrorCodeSchema: { $id: 'ErrorCode'; type: 'string'; enum: string[] };
 const fastifyErrorBodySchema: {
   $id: 'ErrorBody';
   type: 'object';
   required: ['code', 'message'];
-  properties: {
-    /* ... */
-  };
+  properties: { /* ... */ };
 };
 
 function registerCoreSchemas(app: { addSchema: (schema: { $id: string }) => void }): void;
@@ -196,14 +187,11 @@ app.get(
 
 **Apps (18):** `actions-agent`, `app-settings-service`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `code-agent`, `commands-agent`, `data-insights-agent`, `image-service`, `linear-agent`, `mobile-notifications-service`, `notes-agent`, `notion-service`, `research-agent`, `todos-agent`, `user-service`, `web-agent`, `whatsapp-service`
 
+**Packages (1):** `http-server` (transitively)
+
 ## Recent Changes
 
-| Commit     | Description                                           | Age    |
-| ---------- | ----------------------------------------------------- | ------ |
-| `51cb268d` | Add tests for http-contracts and http-server packages | recent |
-| `d51755b6` | Migrate promptvault-service to use shared contracts   | recent |
-| `42d8c8c9` | Create packages/http-contracts with shared utilities  | recent |
-| `4fa0fed3` | Release v2.0.0                                        | recent |
+No changes since package creation — schemas are stable.
 
 ## Source Files
 

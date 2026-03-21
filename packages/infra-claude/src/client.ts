@@ -46,7 +46,6 @@
 
 import { randomUUID } from 'node:crypto';
 import Anthropic from '@anthropic-ai/sdk';
-import { buildResearchPrompt } from '@intexuraos/llm-prompts';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
 import {
@@ -146,14 +145,13 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, ClaudeError>> {
-      const researchPrompt = buildResearchPrompt(prompt);
-      const { auditContext } = createRequestContext('research', model, researchPrompt);
+      const { auditContext } = createRequestContext('research', model, prompt);
 
       try {
         const response = await client.messages.create({
           model,
           max_tokens: MAX_TOKENS,
-          messages: [{ role: 'user', content: researchPrompt }],
+          messages: [{ role: 'user', content: prompt }],
           tools: [{ type: 'web_search_20250305' as const, name: 'web_search' as const }],
         });
 

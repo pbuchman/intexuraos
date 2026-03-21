@@ -6,15 +6,11 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import { err, getErrorMessage, ok } from '@intexuraos/common-core';
-import {
-  linearActionExtractionPrompt,
-  LinearIssueDataSchema,
-} from '@intexuraos/llm-prompts';
-import { formatZodErrors } from '@intexuraos/llm-utils';
+import { err } from '@intexuraos/common-core';
+import { linearActionExtractionPrompt } from '@intexuraos/llm-prompts';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
-import type { LinearError } from '../../domain/index.js';
-import type { ExtractedIssueData } from '../../domain/index.js';
+import type { ExtractedIssueData, LinearError } from '../../domain/index.js';
+import { parseExtractionResponse } from '../../domain/index.js';
 import type pino from 'pino';
 
 const MAX_DESCRIPTION_LENGTH = 2000;
@@ -71,60 +67,18 @@ export function createLinearActionExtractionService(
         'LLM generation successful'
       );
 
-      // Clean response (remove markdown code blocks if present)
-      let cleaned = result.value.content.trim();
-      const codeBlockRegex = /^```(?:json)?\s*\n([\s\S]*?)\n```$/;
-      const codeBlockMatch = codeBlockRegex.exec(cleaned);
-      const wasWrappedInMarkdown = codeBlockMatch?.[1] !== undefined;
-      if (wasWrappedInMarkdown && codeBlockMatch[1] !== undefined) {
-        cleaned = codeBlockMatch[1].trim();
+      const parseResult = parseExtractionResponse(result.value.content);
+      if (!parseResult.ok) {
+        log.error(
+          { userId, error: parseResult.error.message, rawResponsePreview: result.value.content.slice(0, 500) },
+          'Failed to parse LLM response'
+        );
+        return parseResult;
       }
 
-      try {
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(cleaned);
-        } catch (e) {
-          log.error({ userId, parseError: getErrorMessage(e) }, 'Failed to parse LLM response as JSON');
-          return err({
-            code: 'EXTRACTION_FAILED',
-            message: `Failed to parse: ${getErrorMessage(e)}`,
-          });
-        }
+      log.info({ userId, title: parseResult.value.title, valid: parseResult.value.valid }, 'Extraction complete');
 
-        const validationResult = LinearIssueDataSchema.safeParse(parsed);
-        if (!validationResult.success) {
-          const zodErrors = formatZodErrors(validationResult.error);
-          log.error(
-            { userId, zodErrors, rawResponsePreview: cleaned.slice(0, 500), wasWrappedInMarkdown },
-            'LLM returned invalid response format'
-          );
-          return err({
-            code: 'EXTRACTION_FAILED',
-            message: `LLM returned invalid response format: ${zodErrors}`,
-          });
-        }
-
-        const extracted: ExtractedIssueData = {
-          title: validationResult.data.title,
-          priority: validationResult.data.priority as ExtractedIssueData['priority'],
-          functionalRequirements: validationResult.data.functionalRequirements,
-          technicalDetails: validationResult.data.technicalDetails,
-          valid: validationResult.data.valid,
-          error: validationResult.data.error,
-          reasoning: validationResult.data.reasoning,
-        };
-
-        log.info({ userId, title: extracted.title, valid: extracted.valid }, 'Extraction complete');
-
-        return ok(extracted);
-      } catch (error) {
-        log.error({ userId, parseError: getErrorMessage(error) }, 'Failed to parse LLM response');
-        return err({
-          code: 'EXTRACTION_FAILED',
-          message: `Failed to parse: ${getErrorMessage(error)}`,
-        });
-      }
+      return parseResult;
     },
   };
 }

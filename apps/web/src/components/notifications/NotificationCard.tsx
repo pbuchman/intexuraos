@@ -1,0 +1,105 @@
+import { useState } from 'react';
+import { Trash2 } from 'lucide-react';
+import type { MobileNotification } from '@/types';
+import { formatRelative } from '@/utils/dateFormat';
+import { Badge } from './shared.js';
+
+interface NotificationCardProps {
+  notification: MobileNotification;
+  onDelete: (id: string) => void;
+  isDeleting: boolean;
+}
+
+/**
+ * Individual notification card styled as compact row with R4 pattern.
+ * Desktop grid: Device badge | App badge | Content preview | Source badge | Time | Actions
+ */
+export function NotificationCard({
+  notification,
+  onDelete,
+  isDeleting,
+}: NotificationCardProps): React.JSX.Element {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  return (
+    <div
+      className={`group relative rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm transition-all duration-300 dark:border-slate-700 dark:bg-slate-800 ${
+        isDeleting ? 'scale-95 opacity-50' : 'hover:shadow-md dark:hover:border-slate-600'
+      }`}
+    >
+      <div className="grid grid-cols-[auto_auto_1fr_auto_140px_60px] items-center gap-2">
+        {/* Device badge */}
+        <Badge>{notification.device}</Badge>
+
+        {/* App badge */}
+        <Badge>{notification.app}</Badge>
+
+        {/* Content preview (truncate) */}
+        <div className="min-w-0">
+          <p className="truncate font-medium text-slate-900 dark:text-slate-100">{notification.title}</p>
+          {notification.text !== '' ? (
+            <p className="truncate text-xs text-slate-500 dark:text-slate-400">{notification.text}</p>
+          ) : null}
+        </div>
+
+        {/* Source badge */}
+        <Badge>{notification.source}</Badge>
+
+        {/* Time */}
+        <span className="text-xs text-slate-400 dark:text-slate-500">
+          {formatRelative(notification.receivedAt)}
+        </span>
+
+        {/* Actions - R8 hover-reveal trash */}
+        <div className="flex items-center justify-end">
+          <button
+            onClick={(e): void => {
+              e.stopPropagation();
+              setShowDeleteConfirm(true);
+            }}
+            disabled={isDeleting}
+            className="rounded p-1 text-slate-400 opacity-0 transition-opacity hover:bg-red-500/10 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50 group-hover:opacity-100"
+            aria-label="Delete notification"
+            title="Delete"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* R5 overlay delete */}
+      {showDeleteConfirm ? (
+        <div
+          className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/80 backdrop-blur-sm dark:bg-slate-900/80"
+          onClick={(e): void => {
+            e.stopPropagation();
+          }}
+        >
+          <div className="flex items-center gap-3 rounded-lg bg-white px-4 py-3 shadow-lg dark:bg-slate-800">
+            <p className="text-sm text-slate-700 dark:text-slate-200">Delete this notification?</p>
+            <button
+              onClick={(e): void => {
+                e.stopPropagation();
+                setShowDeleteConfirm(false);
+              }}
+              className="rounded-md px-3 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={(e): void => {
+                e.stopPropagation();
+                setShowDeleteConfirm(false);
+                onDelete(notification.id);
+              }}
+              disabled={isDeleting}
+              className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}

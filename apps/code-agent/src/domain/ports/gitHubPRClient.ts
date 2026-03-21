@@ -38,17 +38,20 @@ export interface GitHubPullRequestListItem {
   authorLogin: string;
   baseBranch: string;
   headBranch: string;
+  createdAt: string;
 }
 
 export interface GitHubPullRequestDetails {
   number: number;
   title: string;
   body: string | null;
+  state: 'open' | 'closed';
   authorLogin: string;
   baseBranch: string;
   headBranch: string;
   mergeable: boolean | null;
   mergeableState: string | null;
+  headSha: string;
 }
 
 export interface GitHubPRClient {
@@ -161,4 +164,36 @@ export interface GitHubPRClient {
     commentId: number,
     body: string
   ): Promise<Result<{ commentId: number }, GitHubPRClientError>>;
+
+  /**
+   * Merge a pull request. Returns 405 if already merged — treat as success.
+   */
+  mergePullRequest(
+    token: string,
+    owner: string,
+    repo: string,
+    pullNumber: number,
+    mergeMethod: 'merge',
+    commitTitle?: string
+  ): Promise<Result<{ sha: string; merged: boolean }, GitHubPRClientError>>;
+
+  /**
+   * Get combined status check state for a commit ref.
+   */
+  getCombinedCheckStatus(
+    token: string,
+    owner: string,
+    repo: string,
+    ref: string
+  ): Promise<Result<{ state: 'success' | 'failure' | 'pending' }, GitHubPRClientError>>;
+
+  /**
+   * List all open pull requests in a repo (not filtered by base branch).
+   * Used by the branches endpoint to group by base branch.
+   */
+  listAllOpenPullRequests(
+    token: string,
+    owner: string,
+    repo: string
+  ): Promise<Result<GitHubPullRequestListItem[], GitHubPRClientError>>;
 }

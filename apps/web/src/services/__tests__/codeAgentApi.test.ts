@@ -12,6 +12,8 @@ import {
   deleteCodeTask,
   getGitHubEventLog,
   hydrateGitHubEventLogRows,
+  startImplementation,
+  getDispatchQueue,
 } from '../codeAgentApi.js';
 import type { CodeTask, ListCodeTasksResponse, WorkersStatusResponse } from '../../types/index.js';
 
@@ -333,6 +335,46 @@ describe('codeAgentApi', () => {
     });
   });
 
+  describe('startImplementation', () => {
+    it('sends empty object body when no workerType is provided', async () => {
+      const { apiRequest } = await import('../apiClient.js');
+      const mockResponse = { taskId: 'impl-task-1', status: 'started' as const };
+      vi.mocked(apiRequest).mockResolvedValue(mockResponse);
+
+      const result = await startImplementation(mockAccessToken, 'task-123');
+
+      expect(apiRequest).toHaveBeenCalledWith(
+        'https://code-agent.test',
+        '/code/tasks/task-123/implement',
+        mockAccessToken,
+        {
+          method: 'POST',
+          body: {},
+        }
+      );
+      expect(result).toEqual(mockResponse);
+    });
+
+    it('sends workerType in body when provided', async () => {
+      const { apiRequest } = await import('../apiClient.js');
+      const mockResponse = { taskId: 'impl-task-2', status: 'started' as const };
+      vi.mocked(apiRequest).mockResolvedValue(mockResponse);
+
+      const result = await startImplementation(mockAccessToken, 'task-456', 'opus');
+
+      expect(apiRequest).toHaveBeenCalledWith(
+        'https://code-agent.test',
+        '/code/tasks/task-456/implement',
+        mockAccessToken,
+        {
+          method: 'POST',
+          body: { workerType: 'opus' },
+        }
+      );
+      expect(result).toEqual(mockResponse);
+    });
+  });
+
   describe('getWorkersStatus', () => {
     it('fetches worker status', async () => {
       const { apiRequest } = await import('../apiClient.js');
@@ -352,6 +394,29 @@ describe('codeAgentApi', () => {
         mockAccessToken
       );
       expect(result).toEqual(mockResponse);
+    });
+  });
+
+  describe('getDispatchQueue', () => {
+    it('fetches dispatch queue status', async () => {
+      const { apiRequest } = await import('../apiClient.js');
+      const mockQueueData = {
+        tasks: [
+          { id: 'task-1', prompt: 'Fix bug', workerType: 'opus', queuedAt: '2026-03-17T10:00:00Z', createdAt: '2026-03-17T09:55:00Z', position: 1 },
+        ],
+        totalQueued: 1,
+        maxQueueSize: 10,
+      };
+      vi.mocked(apiRequest).mockResolvedValue(mockQueueData);
+
+      const result = await getDispatchQueue(mockAccessToken);
+
+      expect(apiRequest).toHaveBeenCalledWith(
+        'https://code-agent.test',
+        '/code/queue',
+        mockAccessToken
+      );
+      expect(result).toEqual(mockQueueData);
     });
   });
 });

@@ -190,9 +190,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('UNAUTHORIZED', 'Internal auth failed for create bookmark');
       }
 
-      const { bookmarkRepository } = getServices();
+      const { bookmarkRepository, enrichPublisher } = getServices();
       const result = await createBookmark(
-        { bookmarkRepository, logger: request.log },
+        { bookmarkRepository, enrichPublisher, logger: request.log },
         {
           userId: request.body.userId,
           url: request.body.url,
@@ -216,21 +216,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const bookmarkId = result.value.id;
       const bookmarkUrl = `/#/bookmarks/${bookmarkId}`;
-
-      const { enrichPublisher } = getServices();
-      const publishResult = await enrichPublisher.publishEnrichBookmark({
-        type: 'bookmarks.enrich',
-        bookmarkId,
-        userId: request.body.userId,
-        url: request.body.url,
-      });
-
-      if (!publishResult.ok) {
-        request.log.warn(
-          { bookmarkId, error: publishResult.error },
-          'Failed to publish enrichment event'
-        );
-      }
 
       void reply.status(201);
       return await reply.ok({

@@ -6,7 +6,7 @@ Machine-readable export map and interface definitions for automated tooling.
 
 ```
 name: @intexuraos/infra-pubsub
-version: 2.1.0
+version: 3.3.0
 type: module
 leaf: false
 dependencies:
@@ -32,6 +32,7 @@ interface SendMessageEvent {
   message: string;
   replyToMessageId?: string;
   buttons?: WhatsAppInteractiveButton[];
+  ctaUrl?: { displayText: string; url: string };
   correlationId: string;
   timestamp: string;
 }
@@ -96,6 +97,7 @@ interface WhatsAppSendPublisher {
     message: string;
     replyToMessageId?: string;
     buttons?: WhatsAppInteractiveButton[];
+    ctaUrl?: { displayText: string; url: string };
     correlationId?: string;
   }): Promise<Result<void, PublishError>>;
 }
@@ -175,6 +177,7 @@ common-core -> infra-pubsub -> actions-agent
                              -> research-agent
                              -> todos-agent
                              -> whatsapp-service
+                             -> workers/transcription
 ```
 
 ## Test Mock Pattern

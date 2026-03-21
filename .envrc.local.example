@@ -48,6 +48,8 @@ export INTEXURAOS_TODOS_AGENT_URL=http://localhost:8123
 export INTEXURAOS_BOOKMARKS_AGENT_URL=http://localhost:8124
 export INTEXURAOS_CALENDAR_AGENT_URL=http://localhost:8125
 export INTEXURAOS_LINEAR_AGENT_URL=http://localhost:8126
+export INTEXURAOS_CRON_AGENT_URL=http://localhost:8130
+export INTEXURAOS_HELLSCRIPT_AGENT_URL=http://localhost:8131
 
 # =============================================================================
 # GCS BUCKETS
@@ -193,10 +195,9 @@ export INTEXURAOS_CHAT_AGENT_URL=http://localhost:8129
 # Worker image reference for Claude containers (tag or digest)
 # Recommended in production: immutable digest (@sha256:...)
 # export INTEXURAOS_CLAUDE_WORKER_IMAGE=europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker@sha256:<digest>
-# Preserve failed/interrupted containers for postmortem debugging (1=on, 0=off)
-export INTEXURAOS_PRESERVE_FAILED_WORKER_CONTAINERS=1
+# Preserve worker containers after task completion for debugging (1=on, 0=off)
+export INTEXURAOS_PRESERVE_WORKER_CONTAINERS=1
 # Only set if source vars are defined (preserves .envrc defaults otherwise)
-[ -n "$ZAI_API_KEY" ] && export INTEXURAOS_ZAI_APP_API_KEY=$ZAI_API_KEY
 [ -n "$GEMINI_APP_API_KEY" ] && export INTEXURAOS_GEMINI_APP_API_KEY=$GEMINI_APP_API_KEY
 [ -n "$DASHSCOPE_API_KEY" ] && export INTEXURAOS_DASHSCOPE_APP_API_KEY=$DASHSCOPE_API_KEY
 # OpenAI key for embeddings

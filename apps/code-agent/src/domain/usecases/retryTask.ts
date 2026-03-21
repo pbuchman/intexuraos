@@ -11,23 +11,20 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
-import type { TaskDispatcherService, DispatchWorkerCredentials } from '../../domain/services/taskDispatcher.js';
-import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
+import type { TaskEnqueueService } from '../../domain/services/taskEnqueueService.js';
 import type { MetricsClient } from '../../domain/services/metrics.js';
-import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerType } from '../../domain/models/codeTask.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { randomUUID } from 'node:crypto';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
-import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../../domain/utils/taskRouting.js';
-import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
+import { resolveTaskAgentType } from '../../domain/utils/taskRouting.js';
+import { generateWebhookSecret } from '../utils/secrets.js';
 import {
   bootstrapContinuationPrTaskComment,
   resolveExecutionContinuationPr,
 } from '../../domain/utils/continuationPr.js';
-import { loadConfig } from '../../config.js';
 import type { AutomationLog } from '../../domain/ports/automationLog.js';
 
 /**
@@ -83,14 +80,11 @@ export interface RetryTaskDeps {
   logger: Logger;
   codeTaskRepo: CodeTaskRepository;
   linearAgentClient: LinearAgentClient;
-  taskDispatcher: TaskDispatcherService;
-  whatsappNotifier: WhatsAppNotifier;
+  taskEnqueueService: TaskEnqueueService;
   metricsClient: MetricsClient;
-  workerSettingsRepo: WorkerSettingsRepository;
   gitHubPRClient: GitHubPRClient;
   userServiceClient: UserServiceClient;
   orchestratorSecret: string;
-  serviceUrl: string;
   automationLog: AutomationLog;
 }
 
@@ -113,7 +107,7 @@ export async function retryTask(
   deps: RetryTaskDeps,
   request: RetryTaskRequest
 ): Promise<Result<RetryTaskResult, RetryTaskError>> {
-  const { logger, codeTaskRepo, linearAgentClient, taskDispatcher, whatsappNotifier, workerSettingsRepo } = deps;
+  const { logger, codeTaskRepo, linearAgentClient, taskEnqueueService } = deps;
   const { originalTaskId, userId, additionalContext, workerType } = request;
 
   // Step 1: Fetch original task
@@ -194,9 +188,8 @@ export async function retryTask(
     }
   }
 
-  // Fetch fresh Linear issue metadata for dispatch (labels/child state not stored on task).
+  // Fetch fresh Linear issue metadata for agent type resolution (labels not stored on task).
   let linearIssueLabelsForDispatch: string[] = [];
-  let hasChildrenForDispatch = false;
 
   if (originalTask.linearIssueId !== undefined) {
     const validateIssueResult = await linearAgentClient.validateIssue({
@@ -206,7 +199,6 @@ export async function retryTask(
 
     if (validateIssueResult.ok) {
       linearIssueLabelsForDispatch = validateIssueResult.value.labels;
-      hasChildrenForDispatch = validateIssueResult.value.childCount > 0;
     } else {
       logger.warn(
         {
@@ -219,42 +211,8 @@ export async function retryTask(
     }
   }
   const agentType = resolveTaskAgentType(originalTask, linearIssueLabelsForDispatch);
-  const dispatchLabels = ensureDispatchLabelsForAgentType(linearIssueLabelsForDispatch, agentType);
 
-  // Step 5: Fetch user's worker settings
-  const settingsResult = await workerSettingsRepo.getSettings(userId);
-  if (!settingsResult.ok) {
-    logger.error({ userId, error: settingsResult.error }, 'Failed to fetch worker settings for retry');
-    return err({
-      code: 'internal_error',
-      message: 'Failed to fetch worker settings',
-    });
-  }
-
-  const settings = settingsResult.value;
-
-  // Handle null settings by providing empty array
-  const enabledWorkers = (settings?.workers ?? []).filter((w) => w.enabled);
-
-  if (enabledWorkers.length === 0) {
-    logger.warn({ userId }, 'User has no workers configured for retry');
-    return err({
-      code: 'worker_not_configured',
-      message: 'Please configure your workers in Settings before retrying tasks',
-    });
-  }
-
-  const workerCredentials: DispatchWorkerCredentials = {
-    workers: enabledWorkers.map((w) => ({
-      name: w.name,
-      url: w.url,
-      cfAccessClientId: w.cfAccessClientId,
-      cfAccessClientSecret: w.cfAccessClientSecret,
-      dispatchSigningSecret: w.dispatchSigningSecret,
-    })),
-  };
-
-  // Step 6: Reconstruct prompt with additional context
+  // Step 5: Reconstruct prompt with additional context
   // Use sanitizedPrompt (what the original worker received) as the base, not the raw prompt,
   // to avoid re-exposing credentials that were already stripped on the first dispatch.
   let retryPrompt = originalTask.sanitizedPrompt;
@@ -310,10 +268,7 @@ ${additionalContext.trim()}
     sanitizedPrompt: sanitizePrompt(retryPrompt),
     systemPromptHash: originalTask.systemPromptHash,
     workerType: effectiveWorkerType,
-    // Safe to access [0] because we return early if enabledWorkers.length === 0
-    /* v8 ignore start -- ts-type: optional chaining with nullish coalescing creates type narrowing branch @preserve */
-    workerLocation: enabledWorkers[0]?.name ?? 'unknown',
-    /* v8 ignore stop @preserve */
+    workerLocation: 'queued',
     repository: originalTask.repository,
     baseBranch: originalTask.baseBranch,
     traceId: `retry-${String(Date.now())}`,
@@ -364,137 +319,20 @@ ${additionalContext.trim()}
     });
   }
 
-  // Step 9: Build webhook URL
-  const webhookUrl = `${deps.serviceUrl}/internal/webhooks/task-complete`;
-
-  // Step 10: Dispatch to worker
-  const dispatchRequest: {
-    taskId: string;
-    linearIssueId?: string;
-    prompt: string;
-    systemPromptHash: string;
-    repository: string;
-    baseBranch: string;
-    workerType: WorkerType;
-    webhookUrl: string;
-    webhookSecret: string;
-    traceId?: string;
-    workerCredentials: DispatchWorkerCredentials;
-    retriedFrom?: string;
-    linearIssueLabels: string[];
-    hasChildren: boolean;
-    agentType: 'planning' | 'execution' | 'pull_request' | 'review';
-    continuationPrNumber?: number;
-    continuationPrBranch?: string;
-  } = {
+  // Enqueue retry task for dispatch (INT-949)
+  const enqueueResult = await taskEnqueueService.enqueue({
     taskId: retryTask.id,
-    prompt: retryTask.sanitizedPrompt,
-    systemPromptHash: retryTask.systemPromptHash,
-    repository: retryTask.repository,
-    baseBranch: retryTask.baseBranch,
-    workerType: retryTask.workerType,
-    webhookUrl,
-    webhookSecret,
-    workerCredentials,
-    retriedFrom: originalTaskId,
-    linearIssueLabels: dispatchLabels,
-    hasChildren: hasChildrenForDispatch,
-    agentType: retryTask.agentType ?? 'planning',
-    ...(continuationPr !== null && { continuationPrNumber: continuationPr.prNumber }),
-    ...(continuationPr !== null && { continuationPrBranch: continuationPr.prBranch }),
-  };
+    userId,
+  });
 
-  // Only include optional fields if defined
-  if (retryTask.linearIssueId !== undefined) {
-    dispatchRequest.linearIssueId = retryTask.linearIssueId;
-  }
-  // traceId was set in createInput, so it's always defined on retryTask
-  // Use ?? for type safety (traceId?: string in CodeTask type)
-  /* v8 ignore start -- ts-type: nullish coalescing creates type narrowing branch @preserve */
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  dispatchRequest.traceId = retryTask.traceId ?? `retry-${String(Date.now())}`;
-  /* v8 ignore stop @preserve */
-
-  const dispatchResult = await taskDispatcher.dispatch(dispatchRequest);
-  const config = loadConfig();
-
-  if (!dispatchResult.ok) {
-    const dispatchError = dispatchResult.error;
-
-    // INT-619: Queue task when all workers are at capacity
-    if (dispatchError.code === 'at_capacity') {
-      const queueCountResult = await codeTaskRepo.countQueued();
-      if (!queueCountResult.ok) {
-        logger.error({ error: queueCountResult.error }, 'Failed to count queued tasks, treating as queue full');
-      }
-      const queueCount = queueCountResult.ok ? queueCountResult.value : config.queue.maxSize + 1;
-
-      if (queueCount > config.queue.maxSize) {
-        await codeTaskRepo.update(retryTask.id, {
-          status: 'failed',
-          error: {
-            code: 'queue_full',
-            message: `All workers are busy and the queue is full (${String(queueCount)}/${String(config.queue.maxSize)}). Please try again in a few minutes.`,
-          },
-        });
-
-        return err({
-          code: 'queue_full',
-          message: 'All workers are busy and the queue is full. Please try again in a few minutes.',
-        });
-      }
-
-      // Task is already in 'queued' status from creation — no status update needed
-      const queuePosition = queueCount;
-      const estimatedWaitMinutes = Math.min(queuePosition * 5, config.queue.ttlMinutes);
-      await whatsappNotifier.notifyTaskQueued(userId, retryTask, queuePosition, estimatedWaitMinutes);
-
-      logger.info({ taskId: retryTask.id, queuePosition }, 'Retry task queued due to worker capacity');
-
-      return ok({
-        codeTaskId: retryTask.id,
-        resourceUrl: `/#/code-tasks/${retryTask.id}`,
-        workerLocation: 'queued' as WorkerLocation,
-        retriedFrom: originalTaskId,
-      });
+  if (!enqueueResult.ok) {
+    if (enqueueResult.error.code === 'queue_full') {
+      return err({ code: 'queue_full', message: enqueueResult.error.message });
     }
-
-    // Non-at_capacity dispatch errors — fail as before
-    logger.warn(
-      { taskId: retryTask.id, error: dispatchError },
-      'Dispatch failed for retry task, but task was created'
-    );
-    const updateWithErrorResult = await codeTaskRepo.update(retryTask.id, {
-      status: 'failed',
-      error: {
-        code: dispatchError.code,
-        message: dispatchError.message,
-      },
-    });
-
-    if (!updateWithErrorResult.ok) {
-      logger.warn(
-        { taskId: retryTask.id, error: updateWithErrorResult.error },
-        'Failed to persist dispatch error on retry task'
-      );
-    }
-
-    // Safe to access [0] because we return early if enabledWorkers.length === 0
-    /* v8 ignore start -- ts-type: optional chaining with nullish coalescing creates type narrowing branch @preserve */
-    const fallbackLocation = enabledWorkers[0]?.name ?? 'unknown';
-    /* v8 ignore stop @preserve */
-
-    return ok({
-      codeTaskId: retryTask.id,
-      resourceUrl: `/#/code-tasks/${retryTask.id}`,
-      workerLocation: fallbackLocation,
-      retriedFrom: originalTaskId,
-    });
+    return err({ code: 'internal_error', message: enqueueResult.error.message });
   }
 
-  const dispatchValue = dispatchResult.value;
-
-  // Step 11: Update Linear issue to In Progress
+  // Step 9: Update Linear issue to In Progress
   if (originalTask.linearIssueId !== undefined) {
     const stateResult = await linearAgentClient.updateIssueState({
       userId,
@@ -514,7 +352,7 @@ ${additionalContext.trim()}
       // Don't fail the retry - continue without Linear state update
     }
 
-    // Step 12: Add comment to Linear issue
+    // Step 10: Add comment to Linear issue
     // Sanitize additionalContext before embedding in Linear comment to prevent secret leakage
     /* v8 ignore start -- ts-type: ternary operator with optional check creates type narrowing branch @preserve */
     const additionalContextSection =
@@ -531,49 +369,27 @@ ${additionalContext.trim()}
 
 *Retry initiated automatically*`;
 
-    const commentResult = await linearAgentClient.addComment({
+    const linearCommentResult = await linearAgentClient.addComment({
       userId,
       issueId: originalTask.linearIssueId,
       body: commentBody,
     });
 
-    if (!commentResult.ok) {
+    if (!linearCommentResult.ok) {
       logger.warn(
-        { linearIssueId: originalTask.linearIssueId, error: commentResult.error },
+        { linearIssueId: originalTask.linearIssueId, error: linearCommentResult.error },
         'Failed to add comment to Linear issue'
       );
       // Don't fail the retry - continue without comment
     }
   }
 
-  // Step 13: Record metrics
+  // Step 11: Record metrics
   await deps.metricsClient.incrementTasksSubmitted(originalTask.workerType, 'web').catch((error: unknown) => {
     logger.warn({ error, taskId: retryTask.id }, 'Failed to record task submission metric for retry');
   });
 
-  // Step 14: Generate cancel nonce and send notification
-  const cancelNonce = generateCancelNonce();
-  const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
-
-  const updateResult = await codeTaskRepo.update(retryTask.id, {
-    status: 'dispatched',
-    dispatchedAt: new Date(),
-    workerLocation: dispatchValue.workerLocation,
-    cancelNonce,
-    cancelNonceExpiresAt,
-  });
-
-  if (updateResult.ok) {
-    const updatedTask = updateResult.value;
-    const notifyResult = await whatsappNotifier.notifyTaskStarted(userId, updatedTask);
-    if (!notifyResult.ok) {
-      logger.warn({ taskId: retryTask.id, error: notifyResult.error }, 'Failed to send task started notification for retry');
-    }
-  } else {
-    logger.warn({ taskId: retryTask.id, error: updateResult.error }, 'Failed to update retry task with cancel nonce');
-  }
-
-  // Step 15: Archive original task (automatic cleanup on retry, INT-711)
+  // Step 12: Archive original task (automatic cleanup on retry, INT-711)
   const archiveResult = await codeTaskRepo.update(originalTaskId, {
     status: 'archived',
   });
@@ -585,7 +401,7 @@ ${additionalContext.trim()}
     // Don't fail the retry - archiving is best-effort cleanup
   }
 
-  // Step 16: Return success
+  // Step 13: Return success — task is in queue, drainTaskQueue will dispatch it
   logger.info(
     { originalTaskId, retryTaskId: retryTask.id, userId },
     'Task retry created successfully'
@@ -594,7 +410,7 @@ ${additionalContext.trim()}
   return ok({
     codeTaskId: retryTask.id,
     resourceUrl: `/#/code-tasks/${retryTask.id}`,
-    workerLocation: dispatchValue.workerLocation,
+    workerLocation: 'queued' as WorkerLocation,
     retriedFrom: originalTaskId,
   });
 }

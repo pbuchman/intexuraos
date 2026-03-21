@@ -544,6 +544,45 @@ Common mappings:
 - `<service>-bucket`: For services with dedicated Cloud Storage buckets
 - `firestore`: Most services use Firestore (already mapped to "all-services")
 
+#### 8e. Add to GitHub Actions Deploy Workflow (`deploy.yml`)
+
+**CRITICAL:** The GitHub Actions workflow (`.github/workflows/deploy.yml`) has its own hardcoded service lists that are **separate from Cloud Build YAML files**. The `MONOLITH` strategy (Deploy All Local) uses these lists directly — it never reads `cloudbuild/cloudbuild.yaml`. You must update **4 places** in `deploy.yml`:
+
+**1. Docker build list** (in "Build and push all Docker images" step):
+
+```bash
+bash cloudbuild/scripts/build-push-monitored.sh <service-name> apps/<service-name>/Dockerfile &
+```
+
+**2. SERVICES deploy array** (in "Deploy Cloud Run services + Cloud Functions" step):
+
+```bash
+SERVICES=(
+  # ... existing services ...
+  <service-name>
+)
+```
+
+**3. CLOUD_RUN_SERVICES array in "Fetch web config" step** (monolith deploy):
+
+```bash
+CLOUD_RUN_SERVICES=(
+  # ... existing services ...
+  "<service-name>:<SERVICE_NAME>"
+)
+```
+
+**4. CLOUD_RUN_SERVICES array in individual web deploy** (in the `web)` case block):
+
+```bash
+CLOUD_RUN_SERVICES=(
+  # ... existing services ...
+  "<service-name>:<SERVICE_NAME>"
+)
+```
+
+**Why this is critical:** Without these changes, the service will be built by pnpm (workspace auto-discovery) but will NOT be docker-pushed or deployed to Cloud Run in the `MONOLITH` strategy. The web frontend will also get an undefined URL for the service.
+
 ### 9. Create Cloud Build Deployment Script
 
 **CRITICAL:** Create `cloudbuild/scripts/deploy-<service-name>.sh` following this exact pattern:
@@ -719,27 +758,7 @@ export INTEXURAOS_<SERVICE_NAME>_SERVICE_URL=http://localhost:81XX
 
 This ensures developers can run the service locally with proper configuration.
 
-### 14. Update Statusline
-
-**MANDATORY:** Update `.claude/statusline.sh` to include the new service in the dev services monitoring.
-
-**Step 1:** Add service name and port to the parallel arrays (around line 278-281):
-
-```bash
-# Dev services (ports 8110-8128) - parallel arrays for bash 3.x compatibility
-DEV_NAMES="user notion whatsapp mobile research commands actions insights image notes settings todos bookmarks calendar linear web-agent code <new-service>"
-DEV_PORTS="8110 8112 8113 8114 8116 8117 8118 8119 8120 8121 8122 8123 8124 8125 8126 8127 8128 81XX"
-DEV_TOTAL=18  # Increment by 1
-```
-
-**Step 2:** Verify the arrays are aligned:
-
-- `DEV_NAMES` and `DEV_PORTS` must have the same number of space-separated entries
-- `DEV_TOTAL` must equal the count of entries
-
-**Why:** The statusline displays dev service health (🟢🟡🔴) based on port availability. Without this update, the new service won't be monitored in the statusline, making debugging harder during local development.
-
-### 15. Run Verification
+### 14. Run Verification
 
 ```bash
 pnpm install
@@ -747,7 +766,7 @@ pnpm run ci
 cd terraform && terraform fmt -recursive && terraform validate
 ```
 
-### 16. Update Domain Docs Registry (if service has domain layer)
+### 15. Update Domain Docs Registry (if service has domain layer)
 
 If your service has a `src/domain/` directory, update the domain documentation registry:
 
@@ -984,12 +1003,12 @@ terraform fmt -check -recursive && terraform validate
 - [ ] Per-service `apps/<service>/cloudbuild.yaml` created
 - [ ] Deploy script `cloudbuild/scripts/deploy-<service>.sh` created
 - [ ] Added to `docker_services` in `terraform/modules/cloud-build/main.tf`
+- [ ] Added to GitHub Actions deploy workflow (`.github/workflows/deploy.yml`): docker build list, SERVICES array, both CLOUD_RUN_SERVICES arrays
 - [ ] Registered in api-docs-hub
-- [ ] Added to `CLOUD_RUN_SERVICES` in Cloud Build files
+- [ ] Added to `CLOUD_RUN_SERVICES` in Cloud Build files (`cloudbuild/cloudbuild.yaml`, `apps/web/cloudbuild.yaml`)
 - [ ] Added to `.envrc.local.example`
 - [ ] Added to root tsconfig.json
 - [ ] Added to local dev setup (`ecosystem.config.cjs`)
-- [ ] Updated statusline (`DEV_NAMES`, `DEV_PORTS`, `DEV_TOTAL` in `.claude/statusline.sh`)
 - [ ] Updated domain docs registry
 - [ ] `pnpm run ci` passes
 - [ ] `terraform validate` passes

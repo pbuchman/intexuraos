@@ -20,9 +20,10 @@ import { resolveLoginForTaskCreation } from '../services/gitHubDispatchService.j
 import { isReviewCommandComment, normalizeReviewWorkerType, SUPPORTED_REVIEW_WORKER_TYPES } from '../utils/reviewTriage.js';
 import { TriageSkipSchema, TriageReviewSchema } from '../validation/triageSchema.js';
 import { buildTriageRepairMessage } from '../validation/buildTriageRepairMessage.js';
+import { evaluatePlanFiles } from '../utils/planDetection.js';
 import type { ZodError } from 'zod';
 
-const VALID_REVIEW_TYPES = ['code_quality', 'security', 'architecture'] as const;
+import { LLM_TOOL_REVIEW_TYPES } from '../constants/reviewTypes.js';
 const VALID_DISPATCH_TEMPLATES = ['pr_comment', 'bot_review_edit'] as const;
 
 function formatZodErrors(error: ZodError): string {
@@ -220,6 +221,23 @@ async function evaluatePREventInternal(
 
   const files = filesResult.value; // @allow-result-access -- narrowed by !filesResult.ok
 
+  // Deterministic plan-only PR detection — no LLM triage needed
+  const planResult = evaluatePlanFiles(files);
+  if (planResult.action === 'dispatch') {
+    logger.info(
+      { repository: event.repository, prNumber: event.pullRequestNumber, fileCount: files.length },
+      'Plan-only PR detected — dispatching plan_review without LLM triage'
+    );
+    return {
+      ok: true,
+      value: {
+        triage: { action: 'request_review', reviewTypes: ['plan_review'] },
+        usage: { costUsd: 0, toolCalls: [] },
+        reasoning: 'Plan-only PR detected — deterministic dispatch to plan_review',
+      },
+    };
+  }
+
   // Build tools for PR triage — state object avoids no-unnecessary-condition
   // lint errors since TypeScript doesn't narrow object properties across callbacks.
   const state = { skipped: false, skipReason: undefined as string | undefined };
@@ -235,7 +253,7 @@ async function evaluatePREventInternal(
         properties: {
           review_type: {
             type: 'string',
-            enum: [...VALID_REVIEW_TYPES],
+            enum: [...LLM_TOOL_REVIEW_TYPES],
             description: 'The type of review to request',
           },
         },
@@ -247,7 +265,7 @@ async function evaluatePREventInternal(
         /* v8 ignore start -- schema: type guard for unknown tool arg @preserve */
         const reviewType = typeof rawReviewType === 'string' ? rawReviewType : '';
         /* v8 ignore stop @preserve */
-        if (!(VALID_REVIEW_TYPES as readonly string[]).includes(reviewType)) {
+        if (!(LLM_TOOL_REVIEW_TYPES as readonly string[]).includes(reviewType)) {
           logger.warn({ reviewType }, 'GitHub Agent requested unknown review type');
           return Promise.resolve(JSON.stringify({ error: `Unknown review type: ${reviewType}` }));
         }
@@ -258,7 +276,7 @@ async function evaluatePREventInternal(
     },
     {
       name: 'skip',
-      description: 'Skip this event. Use when the PR is trivial (docs-only, config, auto-generated).',
+      description: 'Skip this event. Use when the PR is trivial (non-plan docs, config, auto-generated).',
       parameters: {
         type: 'object',
         properties: {
@@ -375,7 +393,7 @@ async function evaluateCommentEventInternal(
         properties: {
           review_type: {
             type: 'string',
-            enum: [...VALID_REVIEW_TYPES],
+            enum: [...LLM_TOOL_REVIEW_TYPES],
             description: 'The review scope to request',
           },
           worker_type: {
@@ -392,7 +410,7 @@ async function evaluateCommentEventInternal(
         const rawWorkerType = args['worker_type'];
         const reviewType = typeof rawReviewType === 'string' ? rawReviewType : '';
 
-        if (!(VALID_REVIEW_TYPES as readonly string[]).includes(reviewType)) {
+        if (!(LLM_TOOL_REVIEW_TYPES as readonly string[]).includes(reviewType)) {
           logger.warn({ reviewType }, 'GitHub Agent requested unknown review type');
           return Promise.resolve(JSON.stringify({ error: `Unknown review type: ${reviewType}` }));
         }

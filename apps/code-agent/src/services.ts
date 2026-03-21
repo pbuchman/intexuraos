@@ -74,6 +74,10 @@ import { createFirestoreGitHubEventLogEntryRepository } from './infra/firestore/
 import type { AutomationLog } from './domain/ports/automationLog.js';
 import { createGitHubPRAutomationLog } from './infra/services/gitHubPRAutomationLog.js';
 import { createFirestorePRAutomationCommentRepository } from './infra/firestore/prAutomationCommentRepository.js';
+import type { TaskEnqueueService } from './domain/services/taskEnqueueService.js';
+import { createTaskEnqueueService } from './infra/services/taskEnqueueServiceImpl.js';
+import type { MergeQueueWatchRepository } from './domain/repositories/mergeQueueWatchRepository.js';
+import { createFirestoreMergeQueueWatchRepository } from './infra/firestore/mergeQueueWatchRepository.js';
 
 const GEMINI_TOOL_CALLING_MODEL = LlmModels.Gemini25Flash;
 const GEMINI_TOOL_CALLING_PRICING = TOOL_CALLING_PRICING[LlmModels.Gemini25Flash];
@@ -113,8 +117,10 @@ export interface ServiceContainer {
   eventDecisionRepo: EventDecisionRepository;
   dispatchRetryRepo: DispatchRetryRepository;
   unifiedEvaluator: UnifiedEvaluator;
-  mergeConflictDetector?: MergeConflictDetector;
+  mergeConflictDetector: MergeConflictDetector;
   automationLog: AutomationLog;
+  taskEnqueueService: TaskEnqueueService;
+  mergeQueueWatchRepo: MergeQueueWatchRepository;
 }
 
 // Configuration required to initialize services
@@ -244,6 +250,9 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
           lastCommentAt: null,
         }))
       ));
+    },
+    getIssueDescription(): ReturnType<LinearAgentClient['getIssueDescription']> {
+      return Promise.resolve(ok(undefined));
     },
   };
 }
@@ -375,6 +384,12 @@ export function initServices(config: ServiceConfig): void {
   const gitHubEventLogEntryRepo = createFirestoreGitHubEventLogEntryRepository({ logger });
   const dispatchRetryRepo = createFirestoreDispatchRetryRepository({ logger });
 
+  const taskEnqueueService = createTaskEnqueueService({
+    logger: logger.child({ service: 'task-enqueue' }),
+    codeTaskRepo,
+    whatsappNotifier,
+  });
+
   const mergeConflictDetector = createDetectMergeConflictsOnPush({
     logger,
     gitHubPRClient,
@@ -384,12 +399,12 @@ export function initServices(config: ServiceConfig): void {
     gitHubPREventRepo,
     linearIssueService,
     taskDispatcher,
+    taskEnqueueService,
     logLineRepo,
     workerSettingsRepo,
     statusMirrorService,
     whatsappNotifier,
     allowedBots: ALLOWED_BOTS,
-    serviceUrl: config.serviceUrl,
     orchestratorSecret: config.orchestratorSecret,
   });
 
@@ -400,13 +415,14 @@ export function initServices(config: ServiceConfig): void {
     userLookupService,
     linearIssueService,
     taskDispatcher,
+    taskEnqueueService,
     whatsappNotifier,
     workerSettingsRepo,
     statusMirrorService,
     gitHubPRClient,
     userServiceClient,
     firestore,
-    messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS),
+    messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS),
     allowedBots: ALLOWED_BOTS,
     orchestratorSecret: config.orchestratorSecret,
     serviceUrl: config.serviceUrl,
@@ -414,6 +430,7 @@ export function initServices(config: ServiceConfig): void {
     automationLog,
   });
 
+  const mergeQueueWatchRepo = createFirestoreMergeQueueWatchRepository({ logger });
   const eventDecisionRepo = createFirestoreEventDecisionRepository({ logger });
 
   const unifiedEvaluator = createUnifiedEvaluator({
@@ -434,13 +451,12 @@ export function initServices(config: ServiceConfig): void {
         codeTaskRepo,
         userLookupService,
         taskDispatcher,
+        taskEnqueueService,
         linearAgentClient,
         gitHubPRClient,
         userServiceClient,
         workerSettingsRepo,
-        whatsappNotifier,
         orchestratorSecret: config.orchestratorSecret,
-        serviceUrl: config.serviceUrl,
         automationLog,
       },
       request,
@@ -503,6 +519,8 @@ export function initServices(config: ServiceConfig): void {
     unifiedEvaluator,
     mergeConflictDetector,
     automationLog,
+    taskEnqueueService,
+    mergeQueueWatchRepo,
   };
 }
 

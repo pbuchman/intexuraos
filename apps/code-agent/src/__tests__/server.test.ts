@@ -12,6 +12,7 @@ vi.mock('jose', () => ({
   }),
 }));
 
+import { EMPTY_RECONCILE_RESULT } from '../domain/services/mergeConflictDetector.js';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
@@ -163,6 +164,20 @@ describe('server configuration', () => {
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
       automationLog: {} as never,
+      taskEnqueueService: {} as never,
+      mergeConflictDetector: {
+        async detectOnPush() { /* no-op */ },
+        async reconcile() { return EMPTY_RECONCILE_RESULT; },
+      },
+      mergeQueueWatchRepo: {
+        create: vi.fn(),
+        findById: vi.fn(),
+        findActiveByUserAndBranch: vi.fn(),
+        findAllActive: vi.fn(),
+        findByUserAndRepo: vi.fn(),
+        update: vi.fn(),
+        appendMergedPr: vi.fn(),
+      },
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -194,6 +209,9 @@ describe('server configuration', () => {
       dispatchRetryRepo: import('../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
       automationLog: import('../domain/ports/automationLog.js').AutomationLog;
+      taskEnqueueService: import('../domain/services/taskEnqueueService.js').TaskEnqueueService;
+      mergeConflictDetector: import('../domain/services/mergeConflictDetector.js').MergeConflictDetector;
+      mergeQueueWatchRepo: import('../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
     });
 
     app = await buildServer();

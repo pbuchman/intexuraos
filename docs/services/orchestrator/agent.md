@@ -252,7 +252,7 @@ Execution Agent note:
 - `already_completed` is sent as `status='completed'` with `execution_outcome_label='already_completed'`
 - Orchestrator verification is Gemini semantic validation of Claude responses only (latest response first)
 - Orchestrator flattens execution verifier metadata into `execution_*` fields on `result`
-- Worker owns GitHub execution (code/tests/CI/PR/review loop)
+- Worker owns GitHub execution (code/tests/CI/PR/review loop); PR descriptions include mandatory `Worker Type` and `Model` lines
 - `code-agent` owns deterministic Linear enforcement for successful execution callbacks (executed issue only)
 
 Review Agent note:
@@ -431,7 +431,7 @@ On startup, the orchestrator:
 | `INTEXURAOS_REPOSITORY_PATH`                   | No       | `~/.claude-orchestrator/repo`      |
 | `INTEXURAOS_WORKER_CAPACITY`                   | No       | `2`                                |
 | `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`           | No       | `3`                                |
-| `INTEXURAOS_PRESERVE_FAILED_WORKER_CONTAINERS` | No       | `1`                                |
+| `INTEXURAOS_PRESERVE_WORKER_CONTAINERS`        | No       | `1`                                |
 | `INTEXURAOS_CLAUDE_WORKER_IMAGE`               | No       | (GCR Artifact Registry)            |
 | `INTEXURAOS_CLAUDE_WORKER_FORENSICS`           | No       | `0`                                |
 | `INTEXURAOS_CLAUDE_WORKER_FORENSICS_PATH`      | No       | `~/.claude-orchestrator/forensics` |

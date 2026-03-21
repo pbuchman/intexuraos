@@ -81,7 +81,7 @@ describe('GeminiAdapter', () => {
       if (result.ok) {
         expect(result.value.content).toBe('Research result');
       }
-      expect(mockResearch).toHaveBeenCalledWith('Test prompt');
+      expect(mockResearch).toHaveBeenCalledWith(expect.stringContaining('Test prompt'));
     });
 
     it('maps error codes correctly', async () => {
@@ -164,7 +164,7 @@ describe('GeminiAdapter', () => {
         defaults_applied: [],
         assumptions: [],
         output_format: { wants_table: false, wants_actionable_summary: true },
-        safety: { high_stakes: false, required_disclaimers: [] },
+        safety: { high_stakes: false, required_disclaimers: [], user_exclusions: [] },
         red_flags: [],
       });
 

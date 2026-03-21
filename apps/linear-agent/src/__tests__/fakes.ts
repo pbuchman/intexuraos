@@ -61,6 +61,7 @@ export function createSyncedIssue(
 export class FakeLinearConnectionRepository implements LinearConnectionRepository {
   private connections = new Map<string, LinearConnection>();
   private shouldFailGetFullConnection = false;
+  private shouldReturnNullForGetFullConnection = false;
   private shouldFailGetConnection = false;
   private shouldFailFindWebhookSecret = false;
   private shouldFailSave = false;
@@ -131,6 +132,7 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
 
   async getFullConnection(userId: string): Promise<Result<LinearConnection | null, LinearError>> {
     if (this.shouldFailGetFullConnection) return err(this.failError);
+    if (this.shouldReturnNullForGetFullConnection) return ok(null);
     const conn = this.connections.get(userId);
     if (!conn || !conn.connected) return ok(null);
     return ok(conn);
@@ -139,6 +141,10 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
   setGetFullConnectionFailure(fail: boolean, error?: LinearError): void {
     this.shouldFailGetFullConnection = fail;
     if (error) this.failError = error;
+  }
+
+  setGetFullConnectionReturnsNull(returnsNull: boolean): void {
+    this.shouldReturnNullForGetFullConnection = returnsNull;
   }
 
   setGetConnectionFailure(fail: boolean, error?: LinearError): void {
@@ -250,6 +256,7 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
   reset(): void {
     this.connections.clear();
     this.shouldFailGetFullConnection = false;
+    this.shouldReturnNullForGetFullConnection = false;
     this.shouldFailGetConnection = false;
     this.shouldFailFindWebhookSecret = false;
     this.shouldFailGetApiKey = false;
@@ -280,6 +287,7 @@ export class FakeLinearApiClient implements LinearApiClient {
     { id: 'state-qa', name: 'QA', type: 'started' },
     { id: 'state-done', name: 'Done', type: 'completed' },
   ];
+  private labels: { id: string; name: string; color: string }[] = [];
 
   async validateAndGetTeams(apiKey: string): Promise<Result<LinearTeam[], LinearError>> {
     if (this.shouldFail) return err(this.failError);
@@ -376,6 +384,18 @@ export class FakeLinearApiClient implements LinearApiClient {
     if (!issue) {
       return err({ code: 'API_ERROR', message: 'Issue not found' });
     }
+    // Apply labelIds from input to issue.labels (this is needed for label mutation tests)
+    if (_input.labelIds !== undefined) {
+      issue.labels = _input.labelIds
+        .map((id) => {
+          const label = this.labels.find((l) => l.id === id);
+          return label ? { id: label.id, name: label.name, color: label.color } : null;
+        })
+        .filter((l): l is { id: string; name: string; color: string } => l !== null);
+    }
+    // Note: We intentionally do NOT set assignee or parentId here.
+    // The real Linear API updateIssue doesn't necessarily return the full issue object,
+    // and tests verify the ?? null fallback for assignee handling.
     issue.updatedAt = new Date().toISOString();
     return ok(issue);
   }
@@ -394,7 +414,7 @@ export class FakeLinearApiClient implements LinearApiClient {
     _teamId: string
   ): Promise<Result<{ id: string; name: string; color: string }[], LinearError>> {
     if (this.shouldFail) return err(this.failError);
-    return ok([]);
+    return ok(this.labels);
   }
 
   async getWorkflowStates(
@@ -410,10 +430,15 @@ export class FakeLinearApiClient implements LinearApiClient {
     this.issuesWithTeam = [];
     this.shouldFail = false;
     this.issueCounter = 1;
+    this.labels = [];
   }
 
   setTeams(teams: LinearTeam[]): void {
     this.teams = teams;
+  }
+
+  setLabels(labels: { id: string; name: string; color: string }[]): void {
+    this.labels = labels;
   }
 
   seedIssue(issue: LinearIssue): void {
@@ -477,6 +502,7 @@ export class FakeFailedIssueRepository implements FailedIssueRepository {
   private failedIssues: FailedLinearIssue[] = [];
   private counter = 1;
   private shouldFailListByUser = false;
+  private shouldFailCreate = false;
   private failError: LinearError = { code: 'INTERNAL_ERROR', message: 'Database error' };
   private shouldFailGetById = false;
   private shouldFailUpdate = false;
@@ -491,6 +517,7 @@ export class FakeFailedIssueRepository implements FailedIssueRepository {
     error: string;
     reasoning: string | null;
   }): Promise<Result<FailedLinearIssue, LinearError>> {
+    if (this.shouldFailCreate) return err(this.failError);
     const failedIssue: FailedLinearIssue = {
       id: `failed-${this.counter++}`,
       userId: input.userId,
@@ -539,6 +566,15 @@ export class FakeFailedIssueRepository implements FailedIssueRepository {
     return ok(undefined);
   }
 
+  setCreateFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailCreate = fail;
+    if (error) this.failError = error;
+  }
+
+  seedFailedIssue(issue: FailedLinearIssue): void {
+    this.failedIssues.push(issue);
+  }
+
   setListByUserFailure(fail: boolean, error?: LinearError): void {
     this.shouldFailListByUser = fail;
     if (error) this.failError = error;
@@ -567,6 +603,7 @@ export class FakeFailedIssueRepository implements FailedIssueRepository {
   reset(): void {
     this.failedIssues = [];
     this.counter = 1;
+    this.shouldFailCreate = false;
     this.shouldFailListByUser = false;
     this.shouldFailGetById = false;
     this.shouldFailUpdate = false;

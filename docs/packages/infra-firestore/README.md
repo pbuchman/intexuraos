@@ -27,8 +27,8 @@ Throws `Error` if `INTEXURAOS_GCP_PROJECT_ID` is not set.
 Overrides the singleton with a custom Firestore instance. Used in tests to inject the fake.
 
 ```ts
-import { setFirestore, resetFirestore } from '@intexuraos/infra-firestore';
-import { createFakeFirestore } from '@intexuraos/infra-firestore';
+import { setFirestore, resetFirestore, createFakeFirestore } from '@intexuraos/infra-firestore';
+import type { Firestore } from '@intexuraos/infra-firestore';
 
 beforeEach(() => {
   const fake = createFakeFirestore();
@@ -56,7 +56,7 @@ Creates an in-memory Firestore implementation for unit testing. Supports:
 - **Queries:** `where()`, `orderBy()`, `limit()`, `startAfter()` with chainable API
 - **Query operators:** `==`, `!=`, `<`, `<=`, `>`, `>=`, `array-contains`, `in`
 - **FieldValue sentinels:** `FieldValue.delete()`, `FieldValue.arrayUnion()`
-- **Dot-notation paths:** Nested field access (e.g., `'user.name'`)
+- **Dot-notation paths:** Nested field access/update (e.g., `'llmApiKeys.google'`)
 - **Subcollections:** Via `doc().collection()` with composite path keys
 - **Batch writes:** `batch()` with `set()`, `update()`, `delete()`, `commit()`
 - **Transactions:** `runTransaction()` with serialized execution and isolated reads/writes
@@ -105,10 +105,10 @@ This is the most widely used infrastructure package. Consumed by virtually every
 
 ## Recent Changes
 
-| Commit     | Description                                              | When   |
-| ---------- | -------------------------------------------------------- | ------ |
-| `76b25770` | Enhance DevBar with tabs, persistence                    | Recent |
-| `33bd4780` | Dev Environment with Scale-to-Zero Cloud Worker          | Recent |
-| `b3a0e1fa` | Implement webhook routes and task dispatcher             | Recent |
-| `adec8ed5` | Add logging to Firestore actionRepository error handling | Recent |
-| `bfdc9581` | Fix duplicate WhatsApp messages when processing actions  | Recent |
+| Commit      | Description                                                 | When        |
+| ----------- | ----------------------------------------------------------- | ----------- |
+| `c4e3a13c`  | Release v3.3.0                                              | 2 hours ago |
+| `293426524` | feat(llm): add tool calling infrastructure for GitHub Agent | 7 days ago  |
+| `44ea683ae` | Release v3.2.0                                              | 8 days ago  |
+| `b3f34d857` | Release v3.1.0                                              | 3 weeks ago |
+| `c8a421050` | Release v3.0.0                                              | 3 weeks ago |

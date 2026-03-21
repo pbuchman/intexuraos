@@ -565,5 +565,51 @@ export function createLinearAgentHttpClient(
         clearTimeout(timeoutId);
       }
     },
+
+    async getIssueDescription(request: ValidateIssueRequest): Promise<Result<string | undefined, LinearAgentError>> {
+      const url = `${baseUrl}/internal/linear/issues/${encodeURIComponent(request.identifier)}`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
+
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'X-Internal-Auth': internalAuthToken,
+            'X-User-Id': request.userId,
+          },
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          logger.warn({ status: response.status, error: errorText }, 'linear-agent getIssueDescription failed');
+          return err({ code: 'UNAVAILABLE', message: errorText });
+        }
+
+        const body = await response.json() as {
+          success: boolean;
+          data?: {
+            description: string | null;
+          };
+        };
+
+        if (!body.success || body.data === undefined) {
+          return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
+        }
+
+        return ok(body.data.description ?? undefined);
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          return err({ code: 'UNAVAILABLE', message: 'Request timed out' });
+        }
+        return err({ code: 'UNKNOWN', message: String(error) });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    },
   };
 }

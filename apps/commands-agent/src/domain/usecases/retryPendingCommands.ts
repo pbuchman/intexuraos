@@ -3,9 +3,14 @@ import type { Logger } from 'pino';
 import type { CommandRepository } from '../ports/commandRepository.js';
 import type { ClassifierFactory } from '../ports/classifier.js';
 import type { EventPublisherPort } from '../ports/eventPublisher.js';
-import type { ActionCreatedEvent } from '../events/actionCreatedEvent.js';
-import type { UserServiceClient } from '@intexuraos/internal-clients';
+import type { UserServicePort } from '../ports/userServicePort.js';
 import type { ActionsAgentClient } from '../ports/actionsAgentClient.js';
+import {
+  classifyCommand,
+  createActionFromClassification,
+  publishActionEvent,
+  finalizeClassifiedCommand,
+} from './processCommand.js';
 
 export interface RetryResult {
   processed: number;
@@ -23,7 +28,7 @@ export function createRetryPendingCommandsUseCase(deps: {
   commandRepository: CommandRepository;
   actionsAgentClient: ActionsAgentClient;
   classifierFactory: ClassifierFactory;
-  userServiceClient: UserServiceClient;
+  userServiceClient: UserServicePort;
   eventPublisher: EventPublisherPort;
   logger: Logger;
 }): RetryPendingCommandsUseCase {
@@ -68,8 +73,12 @@ export function createRetryPendingCommandsUseCase(deps: {
         }
 
         try {
-          const classifier = classifierFactory(llmClientResult.value, logger);
-          const classification = await classifier.classify(command.text);
+          const classification = await classifyCommand({
+            classifierFactory,
+            llmClient: llmClientResult.value,
+            text: command.text,
+            logger,
+          });
 
           logger.info(
             {
@@ -80,13 +89,14 @@ export function createRetryPendingCommandsUseCase(deps: {
             'Classification completed'
           );
 
-          const actionResult = await actionsAgentClient.createAction({
+          const actionResult = await createActionFromClassification({
+            actionsAgentClient,
             userId: command.userId,
             commandId: command.id,
-            type: classification.type,
-            confidence: classification.confidence,
-            title: classification.title,
-            payload: { prompt: command.text },
+            classification,
+            text: command.text,
+            summary: command.summary,
+            logger,
           });
 
           if (!actionResult.ok) {
@@ -103,39 +113,23 @@ export function createRetryPendingCommandsUseCase(deps: {
 
           const action = actionResult.value;
 
-          const eventPayload: ActionCreatedEvent['payload'] = {
-            prompt: command.text,
-            confidence: classification.confidence,
-          };
-
-          const event: ActionCreatedEvent = {
-            type: 'action.created',
-            actionId: action.id,
+          await publishActionEvent({
+            eventPublisher,
+            action,
             userId: command.userId,
             commandId: command.id,
-            actionType: classification.type,
-            title: classification.title,
-            payload: eventPayload,
-            timestamp: new Date().toISOString(),
-          };
+            classification,
+            text: command.text,
+            summary: command.summary,
+            logger,
+          });
 
-          await eventPublisher.publishActionCreated(event);
-
-          command.actionId = action.id;
+          finalizeClassifiedCommand(command, classification, action.id);
 
           logger.info(
             { commandId: command.id, actionId: action.id },
             'Action created and event published'
           );
-
-          command.classification = {
-            type: classification.type,
-            confidence: classification.confidence,
-            reasoning: classification.reasoning,
-            promptVersion: classification.promptVersion,
-            classifiedAt: new Date().toISOString(),
-          };
-          command.status = 'classified';
 
           await commandRepository.update(command);
           processed++;

@@ -1,0 +1,29 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-hellscript-agent'
+    entrypoint: 'bash'
+    args:
+      - 'cloudbuild/scripts/build-push-monitored.sh'
+      - 'hellscript-agent'
+      - 'apps/hellscript-agent/Dockerfile'
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'REGION=$_REGION'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REPO_ID=$_REPO_ID'
+
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'deploy-hellscript-agent'
+    waitFor: ['build-hellscript-agent']
+    entrypoint: 'bash'
+    args:
+      - 'cloudbuild/scripts/deploy-hellscript-agent.sh'
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'REGION=$_REGION'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REPO_ID=$_REPO_ID'
+
+timeout: '600s'
+options:
+  logging: CLOUD_LOGGING_ONLY

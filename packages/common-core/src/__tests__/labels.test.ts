@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeLabel, hasCodeTaskLabel, hasPlanningTaskLabel } from '../labels.js';
+import {
+  normalizeLabel,
+  hasCodeTaskLabel,
+  hasPlanningTaskLabel,
+  hasComplexTaskLabel,
+} from '../labels.js';
 
 describe('labels', () => {
   describe('normalizeLabel', () => {
@@ -79,6 +84,40 @@ describe('labels', () => {
 
     it('returns false for partial match', () => {
       expect(hasPlanningTaskLabel(['planning-task-extra'])).toBe(false);
+    });
+  });
+
+  describe('hasComplexTaskLabel', () => {
+    it('returns true for exact match', () => {
+      expect(hasComplexTaskLabel(['complex-task'])).toBe(true);
+    });
+
+    it('returns true for uppercase label', () => {
+      expect(hasComplexTaskLabel(['COMPLEX-TASK'])).toBe(true);
+    });
+
+    it('returns true for underscores', () => {
+      expect(hasComplexTaskLabel(['complex_task'])).toBe(true);
+    });
+
+    it('returns true for spaces', () => {
+      expect(hasComplexTaskLabel(['complex task'])).toBe(true);
+    });
+
+    it('returns true when multiple labels and one matches', () => {
+      expect(hasComplexTaskLabel(['feature', 'complex-task'])).toBe(true);
+    });
+
+    it('returns false when no match', () => {
+      expect(hasComplexTaskLabel(['feature', 'code-task'])).toBe(false);
+    });
+
+    it('returns false for empty array', () => {
+      expect(hasComplexTaskLabel([])).toBe(false);
+    });
+
+    it('returns false for partial match', () => {
+      expect(hasComplexTaskLabel(['complex-task-extra'])).toBe(false);
     });
   });
 });

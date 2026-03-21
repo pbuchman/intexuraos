@@ -17,7 +17,7 @@ import type { WorktreeManager } from './worktree-manager.js';
 import type { LogForwarder } from './log-forwarder.js';
 import type { WebhookClient } from './webhook-client.js';
 import type { GitHubTokenService } from '../github/token-service.js';
-import type { IsolationProvider, WorkerConfig } from './isolation/types.js';
+import type { IsolationProvider, WorkerConfig, WorkerHandle } from './isolation/types.js';
 import { WORKER_TYPES } from './isolation/types.js';
 import type { TokenRefresher } from './isolation/token-refresher.js';
 import type { ApiKeyValidator } from './api-key-validator.js';
@@ -47,11 +47,13 @@ export function getTaskEventUrl(webhookUrl: string): string {
   return webhookUrl.replace('/internal/webhooks/task-complete', '/internal/webhooks/task-event');
 }
 
-const TASK_TIMEOUT_WARNING_MS = 115 * 60 * 1000; // 1h 55m
-const TASK_TIMEOUT_KILL_MS = 120 * 60 * 1000; // 2h
+const TASK_TIMEOUT_WARNING_MS = 175 * 60 * 1000; // 2h 55m
+const TASK_TIMEOUT_KILL_MS = 180 * 60 * 1000; // 3h
 const COMPLETION_CHECK_INTERVAL_MS = 30 * 1000; // 30s
 const ACTIVITY_HEARTBEAT_THRESHOLD_MS = 30 * 1000; // 30s
+const IMAGE_PULL_TIMEOUT_MS = 900_000; // 15 minutes — image pulls are network-bound
 const CONTAINER_CREATE_TIMEOUT_MS = 120_000; // 2 minutes
+const ZOMBIE_CLEANUP_TIMEOUT_MS = 30_000; // 30s — generous limit for best-effort destroy
 
 export interface DispatchError {
   type:
@@ -88,7 +90,7 @@ export interface IsolationConfig {
 export interface CompletionControlConfig {
   maxAttempts: number;
   verifier: CompletionVerifier;
-  preserveFailedContainers?: boolean;
+  preserveWorkerContainers?: boolean;
 }
 
 export class TaskDispatcher {
@@ -104,7 +106,7 @@ export class TaskDispatcher {
   private readonly lastOutputAt = new Map<string, number>();
   private readonly completionMaxAttempts: number;
   private readonly completionVerifier: CompletionVerifier;
-  private readonly preserveFailedContainers: boolean;
+  private readonly preserveWorkerContainers: boolean;
 
   constructor(
     private readonly config: OrchestratorConfig,
@@ -121,7 +123,7 @@ export class TaskDispatcher {
   ) {
     this.completionMaxAttempts = completionControl.maxAttempts;
     this.completionVerifier = completionControl.verifier;
-    this.preserveFailedContainers = completionControl.preserveFailedContainers ?? false;
+    this.preserveWorkerContainers = completionControl.preserveWorkerContainers ?? false;
   }
 
   private checkDockerAvailability(): Result<void, DispatchError> | null {
@@ -713,7 +715,7 @@ export class TaskDispatcher {
         try {
           const task = await this.getTask(taskId);
           if (task !== null && task.status === 'running') {
-            this.logger.warn({ taskId }, 'Task approaching 2-hour timeout');
+            this.logger.warn({ taskId }, 'Task approaching 3-hour timeout');
           }
         } catch (error) {
           this.logger.error({ taskId, error }, 'Error in timeout warning callback');
@@ -1645,11 +1647,34 @@ export class TaskDispatcher {
     this.claudeLogBuffers.delete(task.taskId);
     this.lastOutputAt.set(task.taskId, Date.now());
 
+    // Store promise to enable zombie cleanup if timeout fires mid-creation.
+    let createPromise: Promise<WorkerHandle> | undefined;
+
     try {
       await this.isolation.tokenRefresher.registerTask(task.taskId);
 
+      // Phase 1/2: Pull worker image (network-bound, variable latency)
+      // Only pull for new containers — continued sessions reuse existing containers.
+      if (!params.continueSession && this.isolation.provider.pullImage !== undefined) {
+        this.appendOrchestratorTaskLog(task.taskId, 'Phase 1/2: Pulling worker image...');
+        const resolvedImage = await withTimeout(
+          this.isolation.provider.pullImage(task.taskId, (message) => {
+            this.appendOrchestratorTaskLog(task.taskId, message);
+          }),
+          IMAGE_PULL_TIMEOUT_MS,
+          `Image pull timed out after ${String(IMAGE_PULL_TIMEOUT_MS / 1000)}s`
+        );
+        workerConfig.resolvedImage = resolvedImage;
+      }
+
+      // Phase 2/2: Create worker container (deterministic, ~40s)
+      if (!params.continueSession) {
+        this.appendOrchestratorTaskLog(task.taskId, 'Phase 2/2: Creating worker container...');
+      }
+      createPromise = this.isolation.provider.createWorker(workerConfig);
+
       const handle = await withTimeout(
-        this.isolation.provider.createWorker(workerConfig),
+        createPromise,
         CONTAINER_CREATE_TIMEOUT_MS,
         `Container creation timed out after ${String(CONTAINER_CREATE_TIMEOUT_MS / 1000)}s — Docker may be unresponsive`
       );
@@ -1681,6 +1706,29 @@ export class TaskDispatcher {
 
       return { ok: true, containerId: handle.containerId };
     } catch (error) {
+      // If the timeout fired but createWorker is still in-flight, it may
+      // eventually succeed and leave a zombie container running with no
+      // monitoring. Attach a cleanup handler to destroy it if that happens.
+      createPromise
+        ?.then((handle) => {
+          this.logger.warn(
+            { taskId: task.taskId, containerId: handle.containerId },
+            'Late container created after timeout — destroying zombie'
+          );
+          this.appendOrchestratorTaskLog(
+            task.taskId,
+            `Destroying zombie container created after timeout: ${handle.containerId}`
+          );
+          return withTimeout(
+            this.isolation.provider.destroyWorker(task.taskId),
+            ZOMBIE_CLEANUP_TIMEOUT_MS,
+            'Zombie container cleanup timed out'
+          );
+        })
+        .catch(() => {
+          // createWorker itself failed or cleanup timed out — best effort
+        });
+
       this.appendOrchestratorTaskLog(
         task.taskId,
         `Worker start failed: ${error instanceof Error ? error.message : String(error)}`
@@ -1729,8 +1777,11 @@ export class TaskDispatcher {
     keepLogForwarderOpen = false
   ): Promise<void> {
     const finalStatus = statusParam;
+    const isNonPreservableAgentType =
+      task.agentType === 'review' || task.agentType === 'pull_request';
     const shouldPreserve =
-      this.preserveFailedContainers &&
+      this.preserveWorkerContainers &&
+      !isNonPreservableAgentType &&
       (finalStatus === 'failed' || finalStatus === 'interrupted' || finalStatus === 'completed');
     if (shouldPreserve) {
       this.appendOrchestratorTaskLog(

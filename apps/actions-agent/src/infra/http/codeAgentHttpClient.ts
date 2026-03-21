@@ -9,7 +9,6 @@
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
 import type { CodeAgentClient, CodeAgentError, CancelTaskError, CancelTaskWithNonceInput, CancelTaskWithNonceOutput, SubmitToPhase2Input, SubmitToPhase2Output, SubmitToPhase2Error } from '../../domain/ports/codeAgentClient.js';
 import type { CodeActionPayload } from '../../domain/models/action.js';
-import { createAppLogger } from '@intexuraos/infra-sentry';
 
 type LogMethod = (obj: unknown, msg?: string) => void;
 
@@ -23,10 +22,8 @@ interface HttpLogger {
 export interface CodeAgentHttpClientConfig {
   baseUrl: string;
   internalAuthToken: string;
-  logger?: HttpLogger;
+  logger: HttpLogger;
 }
-
-const defaultLogger = createAppLogger({ name: 'codeAgentHttpClient' }) as unknown as HttpLogger;
 
 interface ApiResponse {
   success: boolean;
@@ -51,7 +48,7 @@ interface ErrorResponse {
 export function createCodeAgentHttpClient(
   config: CodeAgentHttpClientConfig
 ): CodeAgentClient {
-  const logger = config.logger ?? defaultLogger;
+  const logger = config.logger;
 
   return {
     async submitTask(input: {

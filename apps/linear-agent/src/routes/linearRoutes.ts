@@ -7,7 +7,7 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import type { Logger } from 'pino';
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
-import { listIssues, fullSync } from '../domain/index.js';
+import { listIssues, fullSync, retryFailedIssue, getIssueComments, getIssueDetail } from '../domain/index.js';
 
 interface ConnectionBody {
   apiKey: string;
@@ -274,79 +274,41 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
     const { id } = request.params as { id: string };
     const services = getServices();
-    const { failedIssueRepository, linearApiClient, connectionRepository } = services;
 
-    const failedIssueResult = await failedIssueRepository.getById(id);
-    if (!failedIssueResult.ok) {
-      request.log.error(
-        { error: failedIssueResult.error, failedIssueId: id, userId: user.userId },
-        'Failed to retrieve issue for retry'
-      );
-      reply.status(404);
-      return await reply.fail('NOT_FOUND', 'Failed issue not found');
-    }
-
-    const failedIssue = failedIssueResult.value;
-    if (failedIssue.userId !== user.userId) {
-      reply.status(404);
-      return await reply.fail('NOT_FOUND', 'Failed issue not found');
-    }
-
-    // Get API key for retrying the Linear creation
-    const apiKeyResult = await connectionRepository.getApiKey(user.userId);
-    if (!apiKeyResult.ok || apiKeyResult.value === null) {
-      reply.status(403);
-      return await handleLinearError(
-        { code: 'NOT_CONNECTED', message: 'Linear not connected' },
-        reply
-      );
-    }
-
-    // Get connection to retrieve teamId
-    const connectionResult = await connectionRepository.getFullConnection(user.userId);
-    if (!connectionResult.ok || connectionResult.value === null) {
-      reply.status(403);
-      return await handleLinearError(
-        { code: 'NOT_CONNECTED', message: 'Linear not connected' },
-        reply
-      );
-    }
-
-    // Retry Linear creation
-    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess forces ?? branches on optional extracted fields that cannot be undefined at runtime @preserve */
-    const createResult = await linearApiClient.createIssue(apiKeyResult.value, { // @allow-result-access -- apiKeyResult.ok checked above
-      title: failedIssue.extractedTitle ?? 'Untitled Issue',
-      description: failedIssue.reasoning ?? null,
-      priority: failedIssue.extractedPriority ?? 3,
-      teamId: connectionResult.value.teamId, // @allow-result-access -- connectionResult.ok and value checked above
-    });
-    /* v8 ignore stop @preserve */
-
-    if (!createResult.ok) {
-      // Update error in Firestore - log if this fails but don't block response
-      const updateResult = await failedIssueRepository.update(id, {
-        error: createResult.error.message,
-        lastRetryAt: new Date().toISOString(),
-      });
-      if (!updateResult.ok) {
-        request.log.error(
-          { error: updateResult.error, failedIssueId: id },
-          'Failed to update retry metadata in Firestore'
-        );
+    const result = await retryFailedIssue(
+      { failedIssueId: id, userId: user.userId },
+      {
+        failedIssueRepository: services.failedIssueRepository,
+        linearApiClient: services.linearApiClient,
+        connectionRepository: services.connectionRepository,
+        logger: request.log as Logger,
       }
-      return await reply.fail('UNPROCESSABLE_ENTITY', createResult.error.message);
+    );
+
+    if (!result.ok) {
+      request.log.error({ error: result.error, failedIssueId: id, userId: user.userId }, 'Retry failed');
+      return await handleLinearError(result.error, reply);
     }
 
-    // Success - delete the failed issue
-    const deleteResult = await failedIssueRepository.delete(id);
-    if (!deleteResult.ok) {
-      request.log.error(
-        { error: deleteResult.error, failedIssueId: id, createdLinearIssueId: createResult.value.id },
-        'Failed to delete resolved failed issue from Firestore'
+    const outcome = result.value;
+    if (outcome.status === 'not_found') {
+      reply.status(404);
+      return await reply.fail('NOT_FOUND', 'Failed issue not found');
+    }
+
+    if (outcome.status === 'not_connected') {
+      reply.status(403);
+      return await handleLinearError(
+        { code: 'NOT_CONNECTED', message: 'Linear not connected' },
+        reply
       );
     }
 
-    return await reply.ok({ issue: createResult.value });
+    if (outcome.status === 'creation_failed') {
+      return await reply.fail('UNPROCESSABLE_ENTITY', outcome.errorMessage);
+    }
+
+    return await reply.ok({ issue: outcome.issue });
   });
 
   // Get single issue by identifier
@@ -454,57 +416,26 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { identifier } = request.params;
       const services = getServices();
 
-      request.log.info({ userId: user.userId, identifier }, 'Fetching Linear issue');
+      const result = await getIssueDetail(
+        { identifier, userId: user.userId },
+        {
+          issueRepository: services.issueRepository,
+          commentRepository: services.commentRepository,
+          logger: request.log as Logger,
+        }
+      );
 
-      // Find issue by identifier, scoped to the authenticated user
-      const issueResult = await services.issueRepository.findByIdentifier(identifier, user.userId);
-      if (!issueResult.ok) {
-        request.log.error({ error: issueResult.error, identifier }, 'Failed to fetch issue');
-        return await handleLinearError(issueResult.error, reply);
+      if (!result.ok) {
+        request.log.error({ error: result.error, identifier }, 'Failed to fetch issue');
+        return await handleLinearError(result.error, reply);
       }
 
-      const issue = issueResult.value;
-      if (issue === null) {
+      if (result.value === null) {
         reply.status(404);
         return await reply.fail('NOT_FOUND', `Issue ${identifier} not found`);
       }
 
-      // Get comments (count and last comment timestamp from single query)
-      const commentsResult = await services.commentRepository.listByIssueId(issue.id);
-      if (!commentsResult.ok) {
-        request.log.error({ error: commentsResult.error, issueId: issue.id }, 'Failed to fetch comments');
-        return await handleLinearError(commentsResult.error, reply);
-      }
-
-      const commentCount = commentsResult.value.length;
-      let lastCommentAt: string | null = null;
-      if (commentCount > 0) {
-        // Comments are ordered by createdAt ASC, so last is at the end
-        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes this possibly undefined despite length check @preserve */
-        const lastComment = commentsResult.value[commentCount - 1];
-        if (lastComment !== undefined) {
-          lastCommentAt = lastComment.createdAt;
-        }
-        /* v8 ignore stop @preserve */
-      }
-
-      return await reply.ok({
-        id: issue.id,
-        identifier: issue.identifier,
-        title: issue.title,
-        description: issue.description,
-        state: { name: issue.state, type: issue.stateType },
-        priority: issue.priority,
-        /* v8 ignore start -- ts-type: assigneeName always set when assigneeId is non-null @preserve */
-        assignee: issue.assigneeId !== null ? { id: issue.assigneeId, name: issue.assigneeName ?? '' } : null,
-        /* v8 ignore stop @preserve */
-        labels: issue.labels.map((label) => ({ id: label.id, name: label.name, color: label.color })),
-        url: issue.url,
-        createdAt: issue.createdAt,
-        updatedAt: issue.updatedAt,
-        commentCount,
-        lastCommentAt,
-      });
+      return await reply.ok(result.value);
     }
   );
 
@@ -611,47 +542,26 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       /* v8 ignore stop @preserve */
       const services = getServices();
 
-      request.log.info({ userId: user.userId, identifier, limit, offset }, 'Fetching Linear issue comments');
+      const result = await getIssueComments(
+        { identifier, userId: user.userId, limit, offset },
+        {
+          issueRepository: services.issueRepository,
+          commentRepository: services.commentRepository,
+          logger: request.log as Logger,
+        }
+      );
 
-      // Find issue by identifier, scoped to the authenticated user
-      const issueResult = await services.issueRepository.findByIdentifier(identifier, user.userId);
-      if (!issueResult.ok) {
-        request.log.error({ error: issueResult.error, identifier }, 'Failed to fetch issue');
-        return await handleLinearError(issueResult.error, reply);
+      if (!result.ok) {
+        request.log.error({ error: result.error, identifier }, 'Failed to fetch comments');
+        return await handleLinearError(result.error, reply);
       }
 
-      const issue = issueResult.value;
-      if (issue === null) {
+      if (result.value === null) {
         reply.status(404);
         return await reply.fail('NOT_FOUND', `Issue ${identifier} not found`);
       }
 
-      // Get all comments for the issue (already ordered by createdAt ASC)
-      const commentsResult = await services.commentRepository.listByIssueId(issue.id);
-      if (!commentsResult.ok) {
-        request.log.error({ error: commentsResult.error, issueId: issue.id }, 'Failed to fetch comments');
-        return await handleLinearError(commentsResult.error, reply);
-      }
-
-      // Get total count
-      const countResult = await services.commentRepository.countByIssueId(issue.id);
-      if (!countResult.ok) {
-        request.log.error({ error: countResult.error, issueId: issue.id }, 'Failed to count comments');
-        return await handleLinearError(countResult.error, reply);
-      }
-
-      // Apply pagination
-      const total = countResult.value;
-      const comments = commentsResult.value.slice(offset, offset + limit);
-      const hasMore = offset + limit < total;
-
-      return await reply.ok({
-        comments,
-        total,
-        limit,
-        offset,
-        hasMore,
-      });
+      return await reply.ok(result.value);
     }
   );
 

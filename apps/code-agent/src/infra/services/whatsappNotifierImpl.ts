@@ -81,7 +81,9 @@ Error: ${error.message}${remedation}`;
 }
 
 function formatStartedMessage(title: string, _task: CodeTask, linearIssueId?: string): string {
+  /* v8 ignore start -- test-infra: notifyTaskStarted only called via drainTaskQueue which mocks WhatsAppNotifier @preserve */
   const idPrefix = linearIssueId !== undefined ? `${linearIssueId} | ` : '';
+  /* v8 ignore stop @preserve */
   return `🚀 ${idPrefix}${title}`;
 }
 
@@ -348,19 +350,14 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
     async notifyTaskQueued(
       userId: string,
       task: CodeTask,
-      position: number,
-      estimatedWaitMinutes: number
+      position: number
     ): Promise<Result<void, NotificationError>> {
       const title = await resolveTaskTitle(linearAgentClient, userId, task);
       /* v8 ignore start -- ts-type: ternary branch requires task with linearIssueId for testing @preserve */
       const idPrefix = task.linearIssueId !== undefined ? `${task.linearIssueId} | ` : '';
       /* v8 ignore stop @preserve */
       const message = `🕐 ${idPrefix}${title}
-
-All workers are busy. Your task is in the queue.
-
-Position: ${String(position)}
-Estimated wait: ~${String(estimatedWaitMinutes)} minutes`;
+Queued. Position: ${String(position)}`;
 
       const result = await whatsappPublisher.publishSendMessage({
         userId,

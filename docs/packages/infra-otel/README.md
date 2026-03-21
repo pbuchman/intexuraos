@@ -2,7 +2,7 @@
 
 OpenTelemetry SDK bootstrap package for IntexuraOS services. Initializes distributed tracing and metrics export to Dash0 via OTLP HTTP, with auto-instrumentation for HTTP, Fastify, undici, DNS, and Net layers.
 
-**Package:** `@intexuraos/infra-otel` | **Version:** 1.0.0 | **Type:** ESM | **Node:** >=22.0.0
+**Package:** `@intexuraos/infra-otel` | **Version:** 3.3.0 | **Type:** ESM | **Node:** >=22.0.0
 
 ---
 
@@ -140,8 +140,8 @@ packages/infra-otel/
 
 ## Recent Changes
 
-| Commit     | Description                                                     | When       |
-| ---------- | --------------------------------------------------------------- | ---------- |
-| `0338e04f` | Remove PinoInstrumentation; move log forwarding to infra-sentry | 3 days ago |
-| `a49c3889` | Fix register export to point to compiled dist for --import      | 3 days ago |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration (initial package creation)  | 3 days ago |
+| Commit     | Description                                                     |
+| ---------- | --------------------------------------------------------------- |
+| `0338e04f` | Remove PinoInstrumentation; move log forwarding to infra-sentry |
+| `a49c3889` | Fix register export to point to compiled dist for --import      |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration (initial package creation)  |

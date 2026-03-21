@@ -76,6 +76,10 @@ import {
   type ChangeActionTypeUseCase,
 } from './domain/usecases/changeActionType.js';
 import {
+  createUpdateActionUseCase,
+  type UpdateActionUseCase,
+} from './domain/usecases/updateAction.js';
+import {
   createHandleApprovalReplyUseCase,
   type HandleApprovalReplyUseCase,
 } from './domain/usecases/handleApprovalReply.js';
@@ -136,6 +140,7 @@ export interface Services {
   executeCodeActionUseCase: ExecuteCodeActionUseCase;
   retryPendingActionsUseCase: RetryPendingActionsUseCase;
   changeActionTypeUseCase: ChangeActionTypeUseCase;
+  updateActionUseCase: UpdateActionUseCase;
   handleApprovalReplyUseCase: HandleApprovalReplyUseCase;
   // Action handler registry (for dynamic routing)
   research: HandleResearchActionUseCase;
@@ -204,6 +209,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
   const commandsAgentClient = createCommandsAgentHttpClient({
     baseUrl: config.commandsAgentUrl,
     internalAuthToken: config.internalAuthToken,
+    logger: createAppLogger({ name: 'commandsAgentClient' }),
   });
 
   const researchServiceClient = createResearchAgentClient({
@@ -413,6 +419,12 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     logger: createAppLogger({ name: 'changeActionType' }),
   });
 
+  const updateActionUseCase = createUpdateActionUseCase({
+    actionRepository,
+    changeActionTypeUseCase,
+    logger: createAppLogger({ name: 'updateAction' }),
+  });
+
   const handleApprovalReplyUseCase = createHandleApprovalReplyUseCase({
     actionRepository,
     approvalMessageRepository,
@@ -462,6 +474,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     executeCodeActionUseCase,
     retryPendingActionsUseCase,
     changeActionTypeUseCase,
+    updateActionUseCase,
     handleApprovalReplyUseCase,
     // Action handler registry (for dynamic routing)
     research: handleResearchActionUseCase,

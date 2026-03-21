@@ -142,6 +142,10 @@ graph TB
 
 ## Recent Changes
 
+### v3.3.0 Release (2026-03-15)
+
+Consolidated release including Docker health gate, container creation timeout, unified PR automation log, `already_completed` execution outcome, mandatory model name in PR descriptions, Deep Validation improvements with severity indicators, Review Agent additions, Kimi worker type, and numerous reliability fixes (fatal exit code handling, worktree serialization, resilient repo startup, periodic stale cleanup, Docker exec stream leak fix, resume result preservation, pending resume recovery).
+
 ### Docker Health Gate and Container Creation Timeout (2026-03-15)
 
 The orchestrator now checks Docker daemon health and disk availability before accepting new tasks. Task submission returns `503 docker_unavailable` when the daemon is not responding. Container creation has a 2-minute timeout (`CONTAINER_CREATE_TIMEOUT_MS`) to prevent hung dispatches.
@@ -684,21 +688,21 @@ Appends LLM audit records to a local JSONL file:
 
 #### Optional
 
-| Variable                                       | Default                            | Description                                          |
-| ---------------------------------------------- | ---------------------------------- | ---------------------------------------------------- |
-| `INTEXURAOS_REPOSITORY_PATH`                   | `~/.claude-orchestrator/repo`      | Local repo clone path                                |
-| `INTEXURAOS_WORKER_CAPACITY`                   | `2`                                | Max concurrent tasks                                 |
-| `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`           | `3`                                | Max auto-continue attempts before terminal failure   |
-| `INTEXURAOS_PRESERVE_FAILED_WORKER_CONTAINERS` | `1`                                | Keep containers alive after failure for debugging    |
-| `INTEXURAOS_CLAUDE_WORKER_IMAGE`               | (GCR latest)                       | Override the Docker image used for workers           |
-| `INTEXURAOS_CLAUDE_WORKER_FORENSICS`           | `0`                                | `1` = enable forensics mode (core dumps, crash data) |
-| `INTEXURAOS_CLAUDE_WORKER_FORENSICS_PATH`      | `~/.claude-orchestrator/forensics` | Forensics data output directory                      |
-| `INTEXURAOS_GIT_USER_NAME`                     | host git config                    | Git user.name for commits inside worker containers   |
-| `INTEXURAOS_GIT_USER_EMAIL`                    | host git config                    | Git user.email for commits inside worker containers  |
-| `INTEXURAOS_GITHUB_APP_PRIVATE_KEY`            | (Secret Manager)                   | PEM key override for testing without Secret Manager  |
-| `KEEP_CONTAINERS_ALIVE`                        | `0`                                | `1` = never remove containers (debug mode)           |
-| `PORT`                                         | `8199`                             | HTTP server port                                     |
-| `LOG_LEVEL`                                    | `info`                             | Pino log level                                       |
+| Variable                                       | Default                            | Description                                                |
+| ---------------------------------------------- | ---------------------------------- | ---------------------------------------------------------- |
+| `INTEXURAOS_REPOSITORY_PATH`                   | `~/.claude-orchestrator/repo`      | Local repo clone path                                      |
+| `INTEXURAOS_WORKER_CAPACITY`                   | `2`                                | Max concurrent tasks                                       |
+| `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`           | `3`                                | Max auto-continue attempts before terminal failure         |
+| `INTEXURAOS_PRESERVE_WORKER_CONTAINERS`        | `1`                                | Keep worker containers after task completion for debugging |
+| `INTEXURAOS_CLAUDE_WORKER_IMAGE`               | (GCR latest)                       | Override the Docker image used for workers                 |
+| `INTEXURAOS_CLAUDE_WORKER_FORENSICS`           | `0`                                | `1` = enable forensics mode (core dumps, crash data)       |
+| `INTEXURAOS_CLAUDE_WORKER_FORENSICS_PATH`      | `~/.claude-orchestrator/forensics` | Forensics data output directory                            |
+| `INTEXURAOS_GIT_USER_NAME`                     | host git config                    | Git user.name for commits inside worker containers         |
+| `INTEXURAOS_GIT_USER_EMAIL`                    | host git config                    | Git user.email for commits inside worker containers        |
+| `INTEXURAOS_GITHUB_APP_PRIVATE_KEY`            | (Secret Manager)                   | PEM key override for testing without Secret Manager        |
+| `KEEP_CONTAINERS_ALIVE`                        | `0`                                | `1` = never remove containers (debug mode)                 |
+| `PORT`                                         | `8199`                             | HTTP server port                                           |
+| `LOG_LEVEL`                                    | `info`                             | Pino log level                                             |
 
 ### Docker Container Defaults
 

@@ -30,6 +30,14 @@ import type {
 const LIVE_QUERY_LIMIT = 100;
 const INITIAL_PAGE_SIZE = 100;
 
+const VISIBLE_EVENT_TYPES: ReadonlySet<string> = new Set<GitHubWebhookEventType>([
+  'pull_request',
+  'pull_request_review',
+  'pull_request_review_comment',
+  'issue_comment',
+  'push',
+]);
+
 export interface GitHubEventLogListRow extends GitHubEventLogRow {
   isHydrating: boolean;
 }
@@ -288,10 +296,12 @@ export function useGitHubEventLog(): UseGitHubEventLogResult {
         return;
       }
 
-      const incomingRows = data.rows.map((row) => ({
-        ...row,
-        isHydrating: false,
-      }));
+      const incomingRows = data.rows
+        .filter((row) => VISIBLE_EVENT_TYPES.has(row.eventType))
+        .map((row) => ({
+          ...row,
+          isHydrating: false,
+        }));
       setRows((currentRows) => {
         if (options?.append === true) {
           return mergeRows(currentRows, incomingRows);
@@ -376,10 +386,12 @@ export function useGitHubEventLog(): UseGitHubEventLogResult {
               continue;
             }
 
-            previewRows.push(buildPreviewRow(
-              change.doc.id,
-              change.doc.data() as GitHubEventLogPreviewDoc,
-            ));
+            const data = change.doc.data() as GitHubEventLogPreviewDoc;
+            if (!VISIBLE_EVENT_TYPES.has(data.eventType)) {
+              continue;
+            }
+
+            previewRows.push(buildPreviewRow(change.doc.id, data));
             changedIds.push(change.doc.id);
           }
 

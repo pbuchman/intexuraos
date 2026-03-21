@@ -1,6 +1,6 @@
 # User Service
 
-The trust layer beneath IntexuraOS — the service that encrypts your secrets, validates your credentials, and makes sure every agent in the system can act on your behalf without ever seeing your keys in the clear.
+The identity and credential vault for IntexuraOS — encrypts your secrets, validates your credentials, and ensures every agent in the system can act on your behalf without ever seeing your keys in the clear.
 
 ## The Problem
 

@@ -6,6 +6,7 @@ import type { LogLineRepository } from '../repositories/logLineRepository.js';
 import type { UserLookupService } from '../ports/userLookupService.js';
 import type { LinearIssueService } from './linearIssueService.js';
 import type { TaskDispatcherService } from './taskDispatcher.js';
+import type { TaskEnqueueService } from './taskEnqueueService.js';
 import type { WhatsAppNotifier } from './whatsappNotifier.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
 import type { StatusMirrorService } from './statusMirrorService.js';
@@ -46,6 +47,7 @@ export interface WebhookDispatchServiceDeps {
   userLookupService?: UserLookupService;
   linearIssueService: LinearIssueService;
   taskDispatcher: TaskDispatcherService;
+  taskEnqueueService: TaskEnqueueService;
   whatsappNotifier: WhatsAppNotifier;
   workerSettingsRepo: WorkerSettingsRepository;
   statusMirrorService: StatusMirrorService;
@@ -150,16 +152,21 @@ async function handleNewTask(
     logger.info({ workerType, prNumber: event.pullRequestNumber }, 'Extracted worker type from comment');
   }
 
+  // Use messageBuilder for pull_request_review events to apply template routing
+  // (e.g. code-worker reviews → nitpick-nuker template)
+  const comment = event.eventType === 'pull_request_review'
+    ? deps.messageBuilder.build(event)
+    : event.body ?? '';
+
   const createResult = await createTaskForPR(
     {
       logger,
       codeTaskRepo: deps.codeTaskRepo,
       userLookupService: deps.userLookupService,
       linearIssueService: deps.linearIssueService,
-      taskDispatcher: deps.taskDispatcher,
+      taskEnqueueService: deps.taskEnqueueService,
       whatsappNotifier: deps.whatsappNotifier,
       orchestratorSecret: deps.orchestratorSecret,
-      serviceUrl: deps.serviceUrl,
       gitHubPRClient: deps.gitHubPRClient,
       userServiceClient: deps.userServiceClient,
       firestore: deps.firestore,
@@ -169,7 +176,7 @@ async function handleNewTask(
       repository: event.repository,
       prNumber: event.pullRequestNumber,
       senderLogin: resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots),
-      comment: event.body ?? '',
+      comment,
       eventId: event.id,
       ...(event.title !== null && { prTitle: event.title }),
       ...(resolvedBaseBranch !== null && { baseBranch: resolvedBaseBranch }),

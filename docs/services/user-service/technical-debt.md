@@ -1,7 +1,7 @@
 # User Service - Technical Debt
 
 **Last Updated:** 2026-03-15
-**Analysis Run:** [2026-03-07 entry](../../documentation-runs.md)
+**Analysis Run:** [2026-03-15 entry](../../documentation-runs.md)
 
 ---
 
@@ -156,6 +156,22 @@ No deprecated APIs or dependencies in use.
 
 ## Recent Changes
 
+### v3.3.0 Release (2026-03-15)
+
+**Change:** Release v3.3.0. No functional changes to user-service code.
+
+---
+
+### INT-797: v8-ignore Replacement with Real Tests (2026-03-10)
+
+**Change:** Replaced v8-ignore blocks in user-service route files with real test coverage. The `isTranscriptionProvider` branch that was previously protected by a schema enum is now covered via runtime type guard testing. Reduced v8-ignore annotation count in route files.
+
+**Files changed:**
+- `apps/user-service/src/__tests__/` (multiple route test files updated)
+- `apps/user-service/src/routes/settingsRoutes.ts`
+
+---
+
 ### GitHub OAuth Integration (2026-03-01)
 
 **Change:** Added full GitHub OAuth support: initiate flow, exchange code for tokens, check connection status, disconnect, and revoke. GitHub-specific behavior: tokens never expire (far-future expiry `9999-12-31`), no refresh logic, stores GitHub username in the `email` field of OAuthConnection.
@@ -206,6 +222,13 @@ Release version bump only. No functional changes to user-service code.
 ---
 
 ## Resolved Issues
+
+### 2026-03-10 to 2026-03-15
+
+| Issue   | Description                                                | Resolution                                                                   |
+| ------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| INT-797 | v8-ignore blocks in route files lacked real test coverage  | Replaced v8-ignore annotations with real tests across user-service routes    |
+| -       | isTranscriptionProvider branch uncoverable via schema enum | Removed schema enum constraint; branch now covered by runtime type guard     |
 
 ### 2026-03-01 to 2026-03-07
 

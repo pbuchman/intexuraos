@@ -5,10 +5,17 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { GripVertical, Trash2, Loader2, Minimize2, Maximize2, X, AlertCircle } from 'lucide-react';
+import { MoreVertical, Loader2, X, AlertCircle } from 'lucide-react';
 import { ChatMessage } from './ChatMessage.js';
 import { ChatInput } from './ChatInput.js';
+import { Button } from '../ui/Button.js';
 import type { ChatMessage as ChatMessageType, SuggestedAction } from '../../types/chat.js';
+
+/** Drag threshold constants for swipe-to-dismiss and expand/collapse gestures. */
+const DRAG_CLOSE_MIN = 100;
+const DRAG_CLOSE_MAX = 300;
+const DRAG_EXPAND_THRESHOLD = -100;
+const DRAG_COLLAPSE_THRESHOLD = 50;
 
 interface ChatBottomSheetProps {
   isOpen: boolean;
@@ -39,22 +46,51 @@ export function ChatBottomSheet({
   const [isExpanded, setIsExpanded] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [startY, setStartY] = useState(0);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading, error, pendingAction]);
 
-  // Close on escape key
+  // Reset dropdown when sheet closes
+  useEffect(() => {
+    if (!isOpen) {
+      setIsMenuOpen(false);
+    }
+  }, [isOpen]);
+
+  // Close on escape key (dismiss dropdown first, then sheet)
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        if (isMenuOpen) {
+          setIsMenuOpen(false);
+        } else {
+          onClose();
+        }
+      }
     };
     window.addEventListener('keydown', handleEscape);
     return (): void => {
       window.removeEventListener('keydown', handleEscape);
     };
-  }, [onClose]);
+  }, [onClose, isMenuOpen]);
+
+  // Close menu on outside click (only listens when menu is open)
+  useEffect(() => {
+    if (!isMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent): void => {
+      if (!(e.target instanceof Node) || menuRef.current === null) return;
+      if (menuRef.current.contains(e.target)) return;
+      setIsMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return (): void => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isMenuOpen]);
 
   // Handle drag start
   const handleDragStart = useCallback((clientY: number) => {
@@ -70,16 +106,16 @@ export function ChatBottomSheet({
       const deltaY = clientY - startY;
 
       // If dragged down significantly and not at top, close
-      if (deltaY > 100 && deltaY < 300) {
+      if (deltaY > DRAG_CLOSE_MIN && deltaY < DRAG_CLOSE_MAX) {
         setIsDragging(false);
         onClose();
         return;
       }
 
       // If dragged up significantly, expand
-      if (deltaY < -100) {
+      if (deltaY < DRAG_EXPAND_THRESHOLD) {
         setIsExpanded(true);
-      } else if (deltaY > 50 && isExpanded) {
+      } else if (deltaY > DRAG_COLLAPSE_THRESHOLD && isExpanded) {
         setIsExpanded(false);
       }
     },
@@ -150,10 +186,18 @@ export function ChatBottomSheet({
 
   if (!isOpen) return null;
 
+  const sheetClasses = [
+    'fixed inset-x-0 bottom-0 z-50 flex flex-col bg-white dark:bg-gray-900 shadow-2xl md:hidden',
+    isDragging ? '' : 'transition-[height] duration-300 ease-out',
+    isExpanded ? 'h-[100vh] max-h-[100vh]' : 'h-[60vh] max-h-[60vh]',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
     <div
       ref={sheetRef}
-      className={`fixed inset-x-0 bottom-0 z-50 flex flex-col bg-white dark:bg-gray-900 shadow-2xl md:hidden ${isDragging ? '' : 'transition-[height] duration-300 ease-out'} ${isExpanded ? 'h-[100vh] max-h-[100vh]' : 'h-[60vh] max-h-[60vh]'}`}
+      className={sheetClasses}
     >
       <div
         className="flex shrink-0 cursor-grab select-none items-center justify-between border-b border-gray-200 px-4 py-2 active:cursor-grabbing dark:border-gray-700"
@@ -162,36 +206,62 @@ export function ChatBottomSheet({
         onTouchEnd={handleTouchEnd}
         onMouseDown={handleMouseDown}
       >
-        <div className="flex-1 flex justify-center">
-          <GripVertical className="h-6 w-6 text-gray-400" />
+        <div className="flex items-center gap-2">
+          <img
+            src="/apple-touch-icon-180x180.png"
+            alt="Intex"
+            className="h-7 w-7 rounded-full"
+          />
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            Intex
+          </h2>
         </div>
 
-        <div className="flex items-center gap-1">
-          <div className="flex items-center gap-2">
-            <img
-              src="/apple-touch-icon-180x180.png"
-              alt="Intex"
-              className="h-7 w-7 rounded-full"
-            />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-              Intex
-            </h2>
+        <div
+          className="flex items-center gap-1"
+          onMouseDown={(e) => { e.stopPropagation(); }}
+          onTouchStart={(e) => { e.stopPropagation(); }}
+        >
+          {/* Dropdown menu */}
+          <div ref={menuRef} className="relative">
+            <button
+              type="button"
+              onClick={() => { setIsMenuOpen((prev) => !prev); }}
+              className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+              aria-label="More options"
+              aria-expanded={isMenuOpen}
+              aria-haspopup="true"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </button>
+            {isMenuOpen && (
+              <div
+                role="menu"
+                className="absolute right-0 top-full mt-1 w-40 rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800 z-50"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { toggleExpand(); setIsMenuOpen(false); }}
+                  className="flex w-full items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                  {isExpanded ? 'Collapse' : 'Expand'}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { onClear(); setIsMenuOpen(false); }}
+                  className="flex w-full items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                  Clear conversation
+                </button>
+              </div>
+            )}
           </div>
+
+          {/* Close button stays standalone */}
           <button
-            onClick={toggleExpand}
-            className="rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-            aria-label={isExpanded ? 'Collapse' : 'Expand'}
-          >
-            {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-          </button>
-          <button
-            onClick={onClear}
-            className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-            aria-label="Clear conversation"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-          <button
+            type="button"
             onClick={onClose}
             className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
             aria-label="Close chat"
@@ -246,15 +316,35 @@ export function ChatBottomSheet({
                 Confirm action
               </p>
               <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                Say "yes" to create: <em>"{typeof pendingAction.payload['text'] === 'string' ? pendingAction.payload['text'] : 'this command'}"</em>
+                Create: <em>"{typeof pendingAction.payload['text'] === 'string' ? pendingAction.payload['text'] : 'this command'}"</em>
               </p>
+              <div className="flex gap-2 mt-2">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={isLoading}
+                  onClick={() => { onSendMessage('yes'); }}
+                  className="text-xs"
+                >
+                  ✓ Yes
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={isLoading}
+                  onClick={() => { onSendMessage('cancel'); }}
+                  className="text-xs"
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
       <div className="shrink-0 px-4 py-3">
-        <ChatInput onSend={onSendMessage} disabled={isLoading} {...(pendingAction?.awaitingConfirmation ? { placeholder: 'Say "yes" to confirm...' } : {})} />
+        <ChatInput onSend={onSendMessage} disabled={isLoading} />
       </div>
 
       {!isExpanded && (

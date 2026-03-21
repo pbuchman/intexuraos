@@ -1,10 +1,12 @@
-import { useMemo, useState, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { ArrowUpDown, Plus } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { ArrowUpDown, Clock, Plus } from 'lucide-react';
 import { Button, CodeTaskLogsModal, Layout } from '@/components';
 import { IssueGroupRow } from '@/components/code-tasks/IssueGroupRow';
-import { useCodeTasks } from '@/hooks';
-import { groupByLinearIssue, sortIssueGroups } from '@/utils/issueGroups';
+import { useAuth } from '@/context';
+import { useCodeTasks, useTimeTick } from '@/hooks';
+import { startImplementation, retryCodeTask } from '@/services/codeAgentApi';
+import { ACTIVE_STATUSES, groupByLinearIssue, sortIssueGroups } from '@/utils/issueGroups';
 import type { IssueGroup, GroupStatus, SortOption } from '@/utils/issueGroups';
 import type { CodeTaskStatus } from '@/types';
 
@@ -57,16 +59,15 @@ const SORT_STORAGE_KEY = 'code-tasks-sort';
 const DEFAULT_NON_ARCHIVED: GroupStatus[] = ['active', 'needs-action', 'done', 'failed'];
 
 const SORT_OPTIONS: { key: SortOption; label: string }[] = [
-  { key: 'linear-id', label: 'Linear ID' },
-  { key: 'pr-number', label: 'PR #' },
-  { key: 'finished-time', label: 'Finished' },
+  { key: 'linear-id', label: 'Linear' },
+  { key: 'pr-number', label: 'PR#' },
   { key: 'created-time', label: 'Created' },
-  { key: 'started-time', label: 'Started At' },
+  { key: 'started-time', label: 'Dispatched' },
 ];
 
 function loadSortFromStorage(): SortOption {
   const stored = localStorage.getItem(SORT_STORAGE_KEY);
-  if (stored === 'linear-id' || stored === 'pr-number' || stored === 'finished-time' || stored === 'started-time' || stored === 'created-time') {
+  if (stored === 'linear-id' || stored === 'pr-number' || stored === 'started-time' || stored === 'created-time') {
     return stored;
   }
   return 'linear-id';
@@ -119,12 +120,21 @@ function PageHeader({ issueGroups }: PageHeaderProps): React.JSX.Element {
           {parts.join(' \u00B7 ')}
         </p>
       </div>
-      <Link to="/code-tasks/new">
-        <Button>
-          <Plus className="h-4 w-4 sm:mr-2" />
-          <span className="hidden sm:inline">New Task</span>
-        </Button>
-      </Link>
+      <div className="flex items-center gap-2">
+        <Link
+          to="/code-tasks/dispatch-queue"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-800 dark:border-slate-600 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-200"
+        >
+          <Clock className="h-4 w-4" />
+          Queue
+        </Link>
+        <Link to="/code-tasks/new">
+          <Button>
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">New Task</span>
+          </Button>
+        </Link>
+      </div>
     </div>
   );
 }
@@ -212,11 +222,12 @@ function ColumnHeader(): React.JSX.Element {
 // --- CodeTasksPage ---
 
 export function CodeTasksPage(): React.JSX.Element {
-  const navigate = useNavigate();
+  const { getAccessToken } = useAuth();
 
   const [activeFilters, setActiveFilters] = useState<Set<GroupStatus>>(loadFiltersFromStorage);
   const [activeSort, setActiveSort] = useState<SortOption>(loadSortFromStorage);
   const [previewTaskId, setPreviewTaskId] = useState<string | null>(null);
+  const [actioningTaskId, setActioningTaskId] = useState<string | null>(null);
 
   // When the Archived filter is active, include 'archived' in the API status filter
   // so the backend returns archived tasks. Otherwise use default (non-archived) statuses.
@@ -225,10 +236,43 @@ export function CodeTasksPage(): React.JSX.Element {
     [activeFilters],
   );
 
-  const { tasks, loading, loadingMore, error, hasMore, loadMore, deleteTask } = useCodeTasks({
+  const { tasks, loading, loadingMore, error, hasMore, loadMore, deleteTask, refresh } = useCodeTasks({
     status: apiStatuses,
   });
+
+  const hasActiveTasks = useMemo(
+    () => tasks.some((t) => ACTIVE_STATUSES.has(t.status)),
+    [tasks],
+  );
+  const timeTick = useTimeTick(30000, hasActiveTasks);
+
   const allGroups = useMemo(() => groupByLinearIssue(tasks), [tasks]);
+
+  // --- Rapid poll + transition detection while an action is in flight ---
+  const rapidPollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (actioningTaskId === null) return;
+    const pollId = setInterval(() => { refresh(false).catch(() => undefined); }, 3000);
+    rapidPollTimeoutRef.current = setTimeout(() => { rapidPollTimeoutRef.current = null; setActioningTaskId(null); }, 30000);
+    return (): void => {
+      clearInterval(pollId);
+      if (rapidPollTimeoutRef.current !== null) {
+        clearTimeout(rapidPollTimeoutRef.current);
+        rapidPollTimeoutRef.current = null;
+      }
+    };
+  }, [actioningTaskId, refresh]);
+
+  useEffect(() => {
+    if (actioningTaskId === null) return;
+    const group = allGroups.find(
+      (g) => g.latestTask.id === actioningTaskId || g.tasks.some((t) => t.id === actioningTaskId),
+    );
+    if (group === undefined || (group.aggregateStatus !== 'failed' && group.aggregateStatus !== 'needs-action')) {
+      setActioningTaskId(null);
+    }
+  }, [actioningTaskId, allGroups]);
 
   const filteredGroups = useMemo(() => {
     const filtered =
@@ -271,15 +315,33 @@ export function CodeTasksPage(): React.JSX.Element {
   }, []);
 
   const handleAction = useCallback(
-    (taskId: string, action: 'delete' | 'retry' | 'implement') => {
+    async (taskId: string, action: 'delete' | 'retry' | 'implement') => {
       if (action === 'delete') {
         void deleteTask(taskId);
+        return;
       }
-      if (action === 'retry' || action === 'implement') {
-        void navigate(`/code-tasks/${taskId}/view`);
+      setActioningTaskId(taskId);
+      try {
+        const token = await getAccessToken();
+        if (action === 'implement') {
+          await startImplementation(token, taskId);
+        }
+        if (action === 'retry') {
+          await retryCodeTask(token, { taskId });
+        }
+        await refresh(false);
+      } catch {
+        setActioningTaskId(null);
       }
     },
-    [deleteTask, navigate],
+    [deleteTask, getAccessToken, refresh],
+  );
+
+  const fireAction = useCallback(
+    (taskId: string, action: 'delete' | 'retry' | 'implement'): void => {
+      void handleAction(taskId, action);
+    },
+    [handleAction],
   );
 
   if (loading && tasks.length === 0) {
@@ -346,8 +408,10 @@ export function CodeTasksPage(): React.JSX.Element {
               <IssueGroupRow
                 key={group.linearIssueId ?? group.latestTask.id}
                 group={group}
-                onAction={handleAction}
+                timeTick={timeTick}
+                onAction={fireAction}
                 onOpenLogs={setPreviewTaskId}
+                actioningTaskId={actioningTaskId}
               />
             ))}
           </div>

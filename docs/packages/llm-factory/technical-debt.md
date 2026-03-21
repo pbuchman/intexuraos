@@ -1,27 +1,87 @@
-# @intexuraos/llm-factory - Technical Debt
+# @intexuraos/llm-factory — Technical Debt
 
-## Code Quality
+**Last Updated:** 2026-03-15
+**Analysis Run:** [2026-03-15 documentation run](../../documentation-runs.md)
 
-The package is minimal and focused. The factory uses an exhaustive switch with a `never` check to catch missing providers at compile time. Test coverage exercises all supported and unsupported providers.
+---
 
-### Current Issues
+## Summary
 
-#### 1. Only two of five providers routed through the factory
+| Category    | Count | Severity |
+| ----------- | ----- | -------- |
+| Code Smells | 2     | Medium   |
+| Test Gaps   | 0     | —        |
+| Type Issues | 0     | —        |
+| TODOs       | 0     | —        |
+| **Total**   | **2** | Medium   |
 
-The factory supports Google (Gemini) and Zai (GLM) but not Anthropic, OpenAI, or Perplexity. Those providers are configured through separate code paths in each app. This means the factory does not fully deliver on its promise of being a "unified" creation point.
-
-**Impact:** Medium. Apps that use Claude, GPT, or Perplexity models cannot use the factory pattern and must handle provider-specific setup themselves.
-**Suggested fix:** Add `infra-claude`, `infra-gpt`, and `infra-perplexity` as dependencies and route all providers through the factory.
-
-#### 2. LlmGenerateClient is a subset of LLMClient
-
-The factory returns `LlmGenerateClient` (which only has `generate()`), while `@intexuraos/llm-contract` defines `LLMClient` with `research()` and optional `generateImage()`. This means callers cannot use the factory to get a full-featured client with web search capabilities.
-
-**Impact:** Medium. Callers that need `research()` or `generateImage()` must bypass the factory or cast the result.
-**Suggested fix:** Align `LlmGenerateClient` with `LLMClient` from `llm-contract`, or make the factory return the full `LLMClient` interface.
+---
 
 ## Future Plans
 
-- Expand factory to cover all five providers for true provider-agnostic client creation
-- Consider adding a `createResearchClient()` factory function that returns the full `LLMClient` interface
-- Evaluate adding connection pooling or client caching for repeated calls with the same configuration
+- Expand the factory to cover all four providers for true provider-agnostic client creation. Currently only Google (Gemini) is routed here; Anthropic, OpenAI, and Perplexity require per-app configuration.
+- Consider adding a `createResearchClient()` factory that returns the full `LLMClient` interface from `llm-contract`, including `research()` and `generateImage()`.
+- Evaluate client caching or connection pooling for repeated calls with the same configuration.
+
+---
+
+## Code Smells
+
+### Medium Priority
+
+| File                      | Issue                                                                                                                                                                              | Impact                                                                         |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `src/llmClientFactory.ts` | Only Google is routed through the factory — Anthropic, OpenAI, and Perplexity require per-app configuration, making the factory incomplete as a unification point                  | Apps using non-Gemini models bypass the factory entirely                       |
+| `src/llmClientFactory.ts` | `LlmGenerateClient` exposes only `generate()`, while `LLMClient` in `llm-contract` includes `research()` and optional `generateImage()` — callers needing more must cast or bypass | Constrains usefulness of the factory pattern                                   |
+
+---
+
+## Test Coverage Gaps
+
+None identified. Both factory functions and the `isSupportedProvider` guard are tested. Unsupported-provider error paths are covered.
+
+---
+
+## TypeScript Issues
+
+None identified.
+
+---
+
+## TODOs / FIXMEs
+
+None in source files.
+
+---
+
+## SRP Violations
+
+None. The single factory file handles model validation, provider routing, and client construction — all tightly related concerns.
+
+---
+
+## Code Duplicates
+
+`createLlmClient` and `createToolCallingClient` both repeat the same `isValidModel` + `getProviderForModel` + Google-provider assertion pattern. A private `assertGoogleModel(model)` helper could reduce the repetition without changing semantics.
+
+---
+
+## Deprecations
+
+None active. The `@intexuraos/infra-glm` dependency and Zai routing were removed in v3.3.0.
+
+---
+
+## Resolved Issues
+
+| Date       | Issue                                          | Resolution                                  |
+| ---------- | ---------------------------------------------- | ------------------------------------------- |
+| 2026-03-12 | `infra-glm` dependency and Zai routing         | Removed with ZAI provider in v3.3.0         |
+| 2026-03-07 | `createToolCallingClient` missing from factory | Added for GitHub Agent tool-calling support |
+
+---
+
+## Related
+
+- [Agent Reference](agent.md)
+- [Documentation Run Log](../../documentation-runs.md)

@@ -57,7 +57,7 @@ This means you can inspect why any message was routed the way it was — the rea
 
 ### Recovers Without Asking You to Resend
 
-If a message cannot be classified — because an API key is temporarily unavailable, for instance — it enters a pending state and retries automatically every five minutes. You do not receive an error message. You do not need to send the message again. The system handles the interruption on its own and processes your message once the issue clears.
+If a message cannot be classified — because an API key is temporarily unavailable, for instance — it enters a pending state and retries automatically. You do not receive an error message. You do not need to send the message again. The system handles the interruption on its own and processes your message once the issue clears.
 
 **Example:** You send a research request while a backend service is briefly unavailable. Instead of failing silently or asking you to try again, the system holds the message and retries until classification succeeds. Your research task appears in the queue without any action on your part.
 
@@ -71,7 +71,7 @@ Send a message through WhatsApp, record a voice note, or use the share menu on y
 - **Intent over keywords** — explicit instructions override misleading words, so "create a todo to research competitors" becomes a to-do, not a research task
 - **Bilingual by design** — English and Polish intent phrases are understood natively, not translated, preserving the clarity of your original words
 - **Eight categories, zero menus** — to-do, research, note, link, calendar, project tracking, reminder, and code tasks are all classified automatically
-- **Automatic retry** — messages that cannot be classified immediately enter a pending state and retry every five minutes without any action from you
+- **Automatic retry** — messages that cannot be classified immediately enter a pending state and retry without any action from you
 - **Auditable decisions** — every classification is stored with confidence scores, reasoning, and logic version, so you can inspect why any message was routed the way it was
 
 ## Limitations

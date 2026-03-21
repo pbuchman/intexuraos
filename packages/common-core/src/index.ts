@@ -14,6 +14,7 @@ export {
   ERROR_HTTP_STATUS,
   IntexuraOSError,
   getErrorMessage,
+  getErrorCauseChain,
   type SerializedError,
   serializeError,
 } from './errors.js';
@@ -46,7 +47,12 @@ export { ServiceErrorCodes, type ServiceErrorCode } from './serviceErrorCodes.js
 export * from './tracing/index.js';
 
 // Label utilities for Linear issue labels
-export { normalizeLabel, hasCodeTaskLabel, hasPlanningTaskLabel } from './labels.js';
+export {
+  normalizeLabel,
+  hasCodeTaskLabel,
+  hasPlanningTaskLabel,
+  hasComplexTaskLabel,
+} from './labels.js';
 
 // Shared code-task worker type contract
 export {
@@ -54,3 +60,21 @@ export {
   isCodeTaskWorkerType,
   type CodeTaskWorkerType,
 } from './codeTaskWorkerTypes.js';
+
+// Plan document path resolution
+export {
+  resolvePlanDocumentPathFromLinearContext,
+  type PlanResolutionContext,
+} from './planPathResolver.js';
+
+// Shared internal API service catalog
+export {
+  INTERNAL_API_SERVICE_CATALOG,
+  INTERNAL_API_BASE_URL_ENV_VARS,
+  INTERNAL_API_OPENAPI_URL_ENV_VARS,
+  buildInternalApiServiceDefinitions,
+  buildInternalApiOpenApiSources,
+  type InternalApiServiceCatalogEntry,
+  type InternalApiServiceDefinition,
+  type InternalApiOpenApiSource,
+} from './internalServiceCatalog.js';

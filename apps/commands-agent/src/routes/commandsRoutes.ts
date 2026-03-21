@@ -1,50 +1,7 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
-
-const commandSchema = {
-  type: 'object',
-  properties: {
-    id: { type: 'string' },
-    userId: { type: 'string' },
-    sourceType: { type: 'string', enum: ['whatsapp_text', 'whatsapp_voice', 'pwa-shared'] },
-    externalId: { type: 'string' },
-    text: { type: 'string' },
-    timestamp: { type: 'string', format: 'date-time' },
-    status: {
-      type: 'string',
-      enum: ['received', 'classified', 'pending_classification', 'failed', 'archived'],
-    },
-    classification: {
-      type: 'object',
-      nullable: true,
-      properties: {
-        type: {
-          type: 'string',
-          enum: ['todo', 'research', 'note', 'link', 'calendar', 'reminder', 'linear', 'code'],
-        },
-        confidence: { type: 'number' },
-        reasoning: { type: 'string' },
-        promptVersion: { type: 'string' },
-        classifiedAt: { type: 'string', format: 'date-time' },
-      },
-    },
-    actionId: { type: 'string', nullable: true },
-    createdAt: { type: 'string', format: 'date-time' },
-    updatedAt: { type: 'string', format: 'date-time' },
-  },
-  required: [
-    'id',
-    'userId',
-    'sourceType',
-    'externalId',
-    'text',
-    'timestamp',
-    'status',
-    'createdAt',
-    'updatedAt',
-  ],
-} as const;
+import { commandSchema } from './schemas/index.js';
 
 export const commandsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.get(
@@ -97,10 +54,10 @@ export const commandsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return;
       }
 
-      const { commandRepository } = getServices();
-      const commands = await commandRepository.listByUserId(user.userId);
+      const { listCommandsUseCase } = getServices();
+      const result = await listCommandsUseCase.execute(user.userId);
 
-      return await reply.ok({ commands });
+      return await reply.ok({ commands: result.commands });
     }
   );
 
@@ -264,22 +221,15 @@ export const commandsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const { commandId } = request.params as { commandId: string };
 
-      const { commandRepository } = getServices();
-      const command = await commandRepository.getById(commandId);
+      const { deleteCommandUseCase } = getServices();
+      const result = await deleteCommandUseCase.execute(commandId, user.userId);
 
-      if (command?.userId !== user.userId) {
-        return await reply.fail('NOT_FOUND', 'Command not found');
-      }
-
-      const deletableStatuses = ['received', 'pending_classification', 'failed'];
-      if (!deletableStatuses.includes(command.status)) {
+      if (!result.success) {
         return await reply.fail(
-          'INVALID_REQUEST',
-          'Cannot delete classified command. Use archive instead.'
+          result.error === 'NOT_FOUND' ? 'NOT_FOUND' : 'INVALID_REQUEST',
+          result.message
         );
       }
-
-      await commandRepository.delete(commandId);
 
       return await reply.ok({});
     }
@@ -368,24 +318,18 @@ export const commandsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const { commandId } = request.params as { commandId: string };
-      const { status } = request.body as { status: 'archived' };
 
-      const { commandRepository } = getServices();
-      const command = await commandRepository.getById(commandId);
+      const { archiveCommandUseCase } = getServices();
+      const result = await archiveCommandUseCase.execute(commandId, user.userId);
 
-      if (command?.userId !== user.userId) {
-        return await reply.fail('NOT_FOUND', 'Command not found');
+      if (!result.success) {
+        return await reply.fail(
+          result.error === 'NOT_FOUND' ? 'NOT_FOUND' : 'INVALID_REQUEST',
+          result.message
+        );
       }
 
-      if (command.status !== 'classified') {
-        return await reply.fail('INVALID_REQUEST', 'Can only archive classified commands');
-      }
-
-      command.status = status;
-      command.updatedAt = new Date().toISOString();
-      await commandRepository.update(command);
-
-      return await reply.ok({ command });
+      return await reply.ok({ command: result.command });
     }
   );
 

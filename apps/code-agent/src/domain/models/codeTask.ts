@@ -16,6 +16,9 @@ export type WorkerLocation = string;
 
 export type AgentType = 'planning' | 'execution' | 'pull_request' | 'review';
 
+/** System prompt hash for auto-triggered merge-conflict resolution tasks. */
+export const MERGE_CONFLICT_SYSTEM_PROMPT_HASH = 'pr-merge-conflict-auto';
+
 /**
  * Task status lifecycle.
  * Design reference: Lines 316, 1422
@@ -184,4 +187,9 @@ export interface CodeTask {
   // WhatsApp cancel nonce (INT-379)
   cancelNonce?: string;           // 4-char hex nonce for WhatsApp cancel button
   cancelNonceExpiresAt?: string;  // ISO timestamp (15 min TTL)
+
+  // Dispatch metadata for queue reconstruction (INT-949)
+  planningPrBranch?: string;     // Planning PR branch to merge into execution worktree
+  planningPrUrl?: string;        // Planning PR URL to close after execution
+  trackingCommentId?: string;    // PR tracking comment ID to reuse for pull_request tasks
 }
