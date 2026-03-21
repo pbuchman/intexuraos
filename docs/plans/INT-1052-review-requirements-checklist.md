@@ -163,7 +163,7 @@ cd /repo && pnpm vitest run workers/orchestrator/src/services/__tests__/system-p
 
 - [ ] **Step 3: Add Requirements Tracker Comment section to review prompt**
 
-In `system-prompt.ts`, inside `reviewPrompt.build()`, add a new section AFTER "### Requirements Validation" and BEFORE "### Plan Compliance". This section instructs the agent to:
+In `system-prompt.ts`, inside `reviewPrompt.build()`, add a new section AFTER "### Posting Review Comments" (line ~693). This groups the tracker with other PR-writing actions rather than placing it between analysis sections. The section instructs the agent to:
 
 1. After posting the review, search for existing `### Requirements Tracker` comment on the PR
 2. If not found: POST a new PR issue comment with the tracker table
@@ -270,6 +270,18 @@ Update `buildReviewPrompt()` in `completion-verifier.ts` (lines 229-248). Specif
 
 - [ ] **Step 12: Run test — expect PASS**
 
+- [ ] **Step 12a: Write failing test for REVIEW_AGENT_FINAL containing requirements_tracker_updated**
+
+```typescript
+it('REVIEW_AGENT_FINAL block includes requirements_tracker_updated field', () => {
+  const result = reviewPrompt.build(baseParams);
+  expect(result).toContain('requirements_tracker_updated');
+  expect(result).toContain('REVIEW_AGENT_FINAL');
+});
+```
+
+- [ ] **Step 12b: Run test — expect FAIL**
+
 - [ ] **Step 13: Update REVIEW_AGENT_FINAL block in system prompt**
 
 In the `### Completion Criteria` section of the review prompt, update the REVIEW_AGENT_FINAL block to include:
@@ -282,6 +294,8 @@ REVIEW_AGENT_FINAL:
 - requirements_tracker_updated: <yes|no — whether the requirements tracker comment was created/updated>
 - Summary: <3-5 sentences on one line: what you reviewed, key findings, overall quality assessment>
 ```
+
+- [ ] **Step 13a: Run test from Step 12a — expect PASS**
 
 - [ ] **Step 14: Write failing test for task-dispatcher result mapping**
 
