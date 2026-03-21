@@ -57,11 +57,8 @@ export function MergeQueuePage(): React.JSX.Element {
       ?? null;
   }, [watches, selectedBranch]);
 
-  const isSelectedBranchBlocked = useMemo(() => {
-    if (selectedBranch === null) return false;
-    const branch = branches.find((b) => b.name === selectedBranch);
-    return branch?.blocked === true;
-  }, [branches, selectedBranch]);
+  const isSelectedBranchBlocked = selectedBranch !== null &&
+    branches.find((b) => b.name === selectedBranch)?.blocked === true;
 
   // Merged PRs for timeline (from active/drained watch)
   const mergedPrs = currentWatch !== null ? currentWatch.mergedPrs : [];
