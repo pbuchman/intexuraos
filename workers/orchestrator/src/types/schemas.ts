@@ -44,7 +44,9 @@ export const CreateTaskRequestSchema = z.object({
   continuationPrBranch: z.string().min(1).optional(),
   planningPrBranch: z.string().optional(),
   planningPrUrl: z.string().url().optional(),
-  reviewTypes: z.array(z.string().min(1)).optional(),
+  reviewTypes: z
+    .array(z.enum(['code_quality', 'security', 'architecture', 'plan_review']))
+    .optional(),
 });
 
 // POST /tasks/:id/message request schema
