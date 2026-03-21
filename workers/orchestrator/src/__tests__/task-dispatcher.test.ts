@@ -30,21 +30,21 @@ vi.mock('../services/transcript-reader.js', () => ({
 
 vi.mock('../services/deep-validator-helpers.js', () => ({
   extractPrNumber: vi.fn(),
-  fetchLinearIssueContext: vi.fn(),
-  readPlanReferencedInLinearIssue: vi.fn(),
+  fetchLinearIssueContextViaCodeAgent: vi.fn(),
+  readPlanFile: vi.fn(),
 }));
 
 import { readSessionTranscript } from '../services/transcript-reader.js';
 import {
   extractPrNumber,
-  fetchLinearIssueContext,
-  readPlanReferencedInLinearIssue,
+  fetchLinearIssueContextViaCodeAgent,
+  readPlanFile,
 } from '../services/deep-validator-helpers.js';
 
 const mockReadSessionTranscript = vi.mocked(readSessionTranscript);
 const mockExtractPrNumber = vi.mocked(extractPrNumber);
-const mockFetchLinearIssueContext = vi.mocked(fetchLinearIssueContext);
-const mockReadPlanReferencedInLinearIssue = vi.mocked(readPlanReferencedInLinearIssue);
+const mockFetchLinearIssueContextViaCodeAgent = vi.mocked(fetchLinearIssueContextViaCodeAgent);
+const mockReadPlanFile = vi.mocked(readPlanFile);
 
 const flushAsync = async (): Promise<void> => {
   await new Promise((resolve) => {
@@ -156,6 +156,7 @@ describe('TaskDispatcher', () => {
     githubInstallationId: 'test-installation-id',
     orchestratorSecret: 'test-secret',
     secretsBasePath: '/tmp/secrets',
+    internalAuthToken: 'test-internal-auth-token',
   };
 
   // Mock StatePersistence
@@ -3885,8 +3886,8 @@ describe('TaskDispatcher', () => {
 
       mockExtractPrNumber.mockReturnValue(123);
       mockReadSessionTranscript.mockResolvedValue([mockTranscriptEntry]);
-      mockFetchLinearIssueContext.mockResolvedValue(undefined);
-      mockReadPlanReferencedInLinearIssue.mockResolvedValue('# Plan');
+      mockFetchLinearIssueContextViaCodeAgent.mockResolvedValue(undefined);
+      mockReadPlanFile.mockResolvedValue('# Plan');
 
       const deepValDispatcher = new TaskDispatcher(
         mockConfig,
@@ -3917,7 +3918,7 @@ describe('TaskDispatcher', () => {
       expect(input?.repository).toBe('pbuchman/intexuraos');
       expect(input?.agentClaims.superpowers_executing_plans).toBe('used');
       expect(mockReadSessionTranscript).toHaveBeenCalled();
-      expect(mockReadPlanReferencedInLinearIssue).not.toHaveBeenCalled();
+      expect(mockReadPlanFile).not.toHaveBeenCalled();
     });
 
     it('prepareDeepValidationInput enriches linearIssueBody with description when available', async () => {
@@ -3927,11 +3928,12 @@ describe('TaskDispatcher', () => {
 
       mockExtractPrNumber.mockReturnValue(123);
       mockReadSessionTranscript.mockResolvedValue([mockTranscriptEntry]);
-      mockFetchLinearIssueContext.mockResolvedValue({
+      mockFetchLinearIssueContextViaCodeAgent.mockResolvedValue({
         description: '## Requirements\n1. Fix bug',
         comments: [],
+        planDocumentPath: null,
       });
-      mockReadPlanReferencedInLinearIssue.mockResolvedValue(undefined);
+      mockReadPlanFile.mockResolvedValue(undefined);
 
       const deepValDispatcher = new TaskDispatcher(
         mockConfig,
@@ -3964,21 +3966,17 @@ describe('TaskDispatcher', () => {
       );
 
       expect(input).toBeDefined();
-      expect(mockFetchLinearIssueContext).toHaveBeenCalledWith(
+      expect(mockFetchLinearIssueContextViaCodeAgent).toHaveBeenCalledWith(
         'INT-999',
-        expect.any(String),
+        {
+          codeAgentUrl: 'http://localhost:8080',
+          internalAuthToken: 'test-internal-auth-token',
+        },
         expect.anything()
       );
       expect(input?.linearIssueBody).toContain('Linear Issue: INT-999');
       expect(input?.linearIssueBody).toContain('Description:\n## Requirements\n1. Fix bug');
-      expect(mockReadPlanReferencedInLinearIssue).toHaveBeenCalledWith(
-        '/tmp/worktrees/deep-val-test',
-        {
-          description: '## Requirements\n1. Fix bug',
-          comments: [],
-        },
-        expect.anything()
-      );
+      expect(mockReadPlanFile).not.toHaveBeenCalled();
     });
 
     it('executeDeepValidation calls validate with onProgress and logs comment posted', async () => {
