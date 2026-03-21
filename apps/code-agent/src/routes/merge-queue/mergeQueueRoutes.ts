@@ -224,16 +224,16 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
         const { gitHubPRSummaryRepo } = getServices();
         const repository = `${query.owner}/${query.repo}`;
 
-        const summariesResult = await gitHubPRSummaryRepo.findAllOpen();
+        const summariesResult = await gitHubPRSummaryRepo.findOpenByRepository(repository);
         if (!summariesResult.ok) {
           request.log.error({ error: summariesResult.error }, 'Failed to load open PR summaries');
           return await reply.fail('INTERNAL_ERROR', summariesResult.error.message);
         }
 
-        // Filter to this repository and group by baseBranch
+        // Group by baseBranch
         const branchCounts = new Map<string, number>();
         for (const summary of summariesResult.value) {
-          if (summary.repository !== repository || summary.baseBranch === null) continue;
+          if (summary.baseBranch === null) continue;
           const current = branchCounts.get(summary.baseBranch) ?? 0;
           branchCounts.set(summary.baseBranch, current + 1);
         }

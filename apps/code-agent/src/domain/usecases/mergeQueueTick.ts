@@ -130,7 +130,7 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
       authorLogin: summary.authorLogin ?? '',
       baseBranch: summary.baseBranch ?? baseBranch,
       headBranch: summary.headBranch ?? '',
-      createdAt: summary.lastActivityAt.toISOString(),
+      createdAt: summary.firstSeenAt.toISOString(),
     }));
 
     // Step 3e: Filter to eligible authors

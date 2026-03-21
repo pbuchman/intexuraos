@@ -18,6 +18,7 @@ interface TestDeps {
   };
   gitHubPRSummaryRepo: {
     findOpenByBaseBranch: ReturnType<typeof vi.fn>;
+    findOpenByRepository: ReturnType<typeof vi.fn>;
     findAllOpen: ReturnType<typeof vi.fn>;
     findRecentlyActive: ReturnType<typeof vi.fn>;
     upsert: ReturnType<typeof vi.fn>;
@@ -213,6 +214,7 @@ function createDeps(logger: Logger, options?: { includeSleep?: boolean }): TestD
     },
     gitHubPRSummaryRepo: {
       findOpenByBaseBranch: vi.fn().mockResolvedValue(ok([createSummary()])),
+      findOpenByRepository: vi.fn().mockResolvedValue(ok([])),
       findAllOpen: vi.fn().mockResolvedValue(ok([])),
       findRecentlyActive: vi.fn().mockResolvedValue(ok([])),
       upsert: vi.fn().mockResolvedValue(ok(undefined)),

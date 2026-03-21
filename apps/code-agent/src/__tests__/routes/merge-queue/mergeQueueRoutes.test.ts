@@ -791,6 +791,32 @@ describe('Merge queue JWT routes', () => {
       expect(body.data.branches[0]?.openPrCount).toBe(1);
     });
 
+    it('should skip PRs with null baseBranch', async () => {
+      const { gitHubPRSummaryRepo } = getServices();
+      await gitHubPRSummaryRepo.upsert({
+        repository: 'intexuraos/repo', pullRequestNumber: 1, title: 'PR 1',
+        state: 'open', baseBranch: 'main', authorLogin: 'user1', headBranch: 'feat-1',
+        lastActivityAt: new Date(), firstSeenAt: new Date(),
+      });
+      await gitHubPRSummaryRepo.upsert({
+        repository: 'intexuraos/repo', pullRequestNumber: 2, title: 'PR no base',
+        state: 'open', baseBranch: null, authorLogin: 'user2', headBranch: 'feat-2',
+        lastActivityAt: new Date(), firstSeenAt: new Date(),
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/merge-queue/branches?owner=intexuraos&repo=repo',
+        headers: { authorization: 'Bearer fake-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { branches: { name: string; openPrCount: number }[] } };
+      expect(body.data.branches).toHaveLength(1);
+      expect(body.data.branches[0]?.name).toBe('main');
+      expect(body.data.branches[0]?.openPrCount).toBe(1);
+    });
+
     it('should return error when owner or repo query params are missing', async () => {
       const response = await server.inject({
         method: 'GET',
