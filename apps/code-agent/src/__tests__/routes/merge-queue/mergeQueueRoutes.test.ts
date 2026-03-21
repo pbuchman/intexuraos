@@ -329,9 +329,9 @@ describe('Merge queue JWT routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: { id: string } };
+      const body = JSON.parse(response.body) as { success: boolean; data: { watchId: string } };
       expect(body.success).toBe(true);
-      expect(body.data.id).toBe('watch-123');
+      expect(body.data.watchId).toBe('watch-123');
     });
 
     it('should return error when body fields are missing', async () => {
