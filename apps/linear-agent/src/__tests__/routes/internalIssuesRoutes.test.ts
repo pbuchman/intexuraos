@@ -1594,6 +1594,24 @@ describe('internalIssuesRoutes', () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('DOWNSTREAM_ERROR');
     });
+
+    it('returns null description when issue has empty-string description', async () => {
+      const emptyDescIssue: SyncedLinearIssue = { ...testIssue, description: '' };
+      fakeIssueRepo.seedIssue(emptyDescIssue);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/linear/issues/${testIdentifier}/context`,
+        headers: internalAuthHeader,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { description: string | null; comments: unknown[] };
+      };
+      expect(body.data.description).toBeNull();
+    });
   });
 
   describe('GET /internal/issues/:issueId/tree', () => {

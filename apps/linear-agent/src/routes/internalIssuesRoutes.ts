@@ -882,7 +882,6 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
       const issueResult = await services.issueRepository.findByIdentifier(identifier);
       if (!issueResult.ok) {
         logger.error({ error: issueResult.error, identifier }, 'Failed to fetch issue');
-        reply.status(500);
         return await handleLinearError(issueResult.error, reply);
       }
 
@@ -896,7 +895,6 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
       const commentsResult = await services.commentRepository.listByIssueId(issue.id);
       if (!commentsResult.ok) {
         logger.error({ error: commentsResult.error, issueId: issue.id, identifier }, 'Failed to fetch comments');
-        reply.status(500);
         return await handleLinearError(commentsResult.error, reply);
       }
 
@@ -908,7 +906,7 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
         .map((c) => ({ body: c.body, createdAt: c.createdAt }));
 
       return await reply.ok({
-        description: issue.description,
+        description: issue.description !== null && issue.description !== '' ? issue.description : null,
         comments: sortedComments,
       });
     }
