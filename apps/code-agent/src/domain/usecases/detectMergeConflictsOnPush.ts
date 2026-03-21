@@ -1165,6 +1165,8 @@ export function createDetectMergeConflictsOnPush(
 
         for (const existingSummary of repoSummaries) {
           try {
+            processed++;
+
             if (!openPRNumbers.has(existingSummary.pullRequestNumber)) {
               // PR is not open on GitHub
               if (existingSummary.state === 'open') {
@@ -1183,7 +1185,6 @@ export function createDetectMergeConflictsOnPush(
                   },
                   logger
                 );
-                processed++;
                 closed++;
               }
               // Already closed in Firestore — skip silently
@@ -1207,7 +1208,6 @@ export function createDetectMergeConflictsOnPush(
                 },
                 logger
               );
-              processed++;
               reopened++;
             }
 
@@ -1244,7 +1244,6 @@ export function createDetectMergeConflictsOnPush(
                   logger
                 );
                 mergeConflictRefreshed++;
-                processed++;
               }
             } else {
               logger.warn(
@@ -1254,7 +1253,6 @@ export function createDetectMergeConflictsOnPush(
             }
           } catch (caughtError: unknown) {
             error++;
-            processed++;
             logger.error(
               { error: caughtError, repository: existingSummary.repository, prNumber: existingSummary.pullRequestNumber },
               'Unhandled error processing PR summary in reconcile; continuing'

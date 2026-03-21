@@ -80,7 +80,7 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
         }
 
         if (BLOCKED_BASE_BRANCHES.has(baseBranch)) {
-          return await reply.fail('INVALID_REQUEST', 'Merge queue cannot be enabled for the main branch');
+          return await reply.fail('INVALID_REQUEST', `Merge queue cannot be enabled for the ${baseBranch} branch`);
         }
 
         const { userServiceClient, mergeQueueWatchRepo } = getServices();

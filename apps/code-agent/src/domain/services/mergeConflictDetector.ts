@@ -2,7 +2,7 @@ import type { Logger } from 'pino';
 import type { GitHubPREvent } from '../models/gitHubPREvent.js';
 
 export interface ReconcileResult {
-  /** Number of summaries processed (state transitions + skips). */
+  /** Total number of PR summaries examined during reconciliation. */
   processed: number;
   /** Summaries transitioned from open → closed (PR no longer on GitHub). */
   closed: number;
