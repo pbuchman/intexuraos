@@ -211,7 +211,7 @@ These phrases OVERRIDE category signals from URL content or incidental keywords.
 - **code**: "implement", "build", "code", "write code", "develop", "create endpoint", "create code task", "create coding task", "zaimplementuj", "napisz kod", "zbuduj", "stwórz code task"
 - **todo**: "create todo", "add todo", "add task", "make todo", "stwórz zadanie", "dodaj zadanie"
 - **research**: "perform research", "do research", "research this", "investigate", "create research", "create research task", "zbadaj", "sprawdź"
-- **note**: "create note", "save note", "make note", "write note", "create node", "stwórz notatkę", "zapisz notatkę"
+- **note**: "create note", "save note", "make note", "write note", "create node" (common typo for "note"), "stwórz notatkę", "zapisz notatkę"
 - **reminder**: "set reminder", "remind me", "create reminder", "przypomnij mi", "stwórz przypomnienie"
 - **calendar**: "schedule", "add to calendar", "book appointment", "create calendar event", "create event", "zaplanuj", "dodaj do kalendarza", "stwórz wydarzenie", "stwórz event"
 
@@ -220,6 +220,8 @@ Examples:
 - "create todo to research competitors" → todo (explicit "create todo" overrides "research" keyword)
 - "perform research on todo apps" → research (explicit "perform research" overrides "todo" keyword)
 - "save note about the research meeting" → note (explicit "save note" is the command)
+- "create code task to fix the login bug" → code (explicit "create code task")
+- "create calendar event for team standup" → calendar (explicit "create calendar event")
 
 ## STEP 3: Code vs Linear Detection (if no explicit intent match)
 **code** — Engineering tasks requiring implementation:

@@ -75,7 +75,7 @@ Only classify as "linear" when user EXPLICITLY asks to create/document an issue 
 - **link/bookmark**: "save bookmark", "save link", "bookmark this", "save this link", "create link", "create bookmark", "zapisz link", "dodaj zakładkę", "zapisz zakładkę"
 - **todo**: "create todo", "add todo", "add task", "make todo", "stwórz zadanie", "dodaj zadanie"
 - **research**: "perform research", "do research", "research this", "investigate", "create research", "create research task", "zbadaj", "sprawdź", "przeprowadź research"
-- **note**: "create note", "save note", "make note", "write note", "create node", "stwórz notatkę", "zapisz notatkę"
+- **note**: "create note", "save note", "make note", "write note", "create node" (common typo for "note"), "stwórz notatkę", "zapisz notatkę"
 - **reminder**: "set reminder", "remind me", "create reminder", "przypomnij mi", "stwórz przypomnienie"
 - **calendar**: "schedule", "add to calendar", "book appointment", "create calendar event", "create event", "zaplanuj", "dodaj do kalendarza", "stwórz wydarzenie", "stwórz event"
 - **linear** (EXPLICIT tracking intent - user must mention "linear", "issue", "track", or "report"): "linear issue", "linear task", "create linear", "create linear issue", "create issue", "add issue", "report issue", "report bug", "track this", "document this", "log this bug", "zgłoś błąd", "stwórz issue", "dodaj do lineara", "do lineara", "zapisz jako issue"
