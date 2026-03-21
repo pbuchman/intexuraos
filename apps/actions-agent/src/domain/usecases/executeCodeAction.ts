@@ -13,6 +13,7 @@
 
 import type { Result, CodeTaskWorkerType } from '@intexuraos/common-core';
 import { ok, err, getErrorMessage } from '@intexuraos/common-core';
+import { detectWorkerTypeFromMessage } from '../utils/workerTypeDetection.js';
 import type { Action } from '../models/action.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { CodeAgentClient } from '../ports/codeAgentClient.js';
@@ -90,10 +91,10 @@ export function createExecuteCodeActionUseCase(
     // This prevents WhatsApp retries or duplicate approval messages from spawning multiple tasks
     const approvalEventId = randomUUID();
 
-    // Get payload fields
     const prompt = typeof action.payload['prompt'] === 'string' ? action.payload['prompt'] : action.title;
     const workerTypeRaw = action.payload['workerType'] as CodeTaskWorkerType | undefined;
-    const workerType: CodeTaskWorkerType = workerTypeRaw ?? 'auto';
+    const detectedType = detectWorkerTypeFromMessage(prompt);
+    const workerType: CodeTaskWorkerType = workerTypeRaw ?? detectedType ?? 'auto';
     const linearIssueId = action.payload['linearIssueId'] as string | undefined;
     const linearIssueTitle = action.payload['linearIssueTitle'] as string | undefined;
 
