@@ -193,4 +193,7 @@ export interface CodeTask {
   planningPrBranch?: string;     // Planning PR branch to merge into execution worktree
   planningPrUrl?: string;        // Planning PR URL to close after execution
   trackingCommentId?: string;    // PR tracking comment ID to reuse for pull_request tasks
+
+  // Review task metadata
+  reviewTypes?: string[];        // Review types requested (e.g., ['code_quality', 'security'])
 }

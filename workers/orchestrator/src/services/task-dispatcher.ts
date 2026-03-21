@@ -339,6 +339,9 @@ export class TaskDispatcher {
           planningPrBranch: request.planningPrBranch,
         }),
         ...(request.planningPrUrl !== undefined && { planningPrUrl: request.planningPrUrl }),
+        /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
+        ...(request.reviewTypes !== undefined && { reviewTypes: request.reviewTypes }),
+        /* v8 ignore stop @preserve */
         startedAt: new Date().toISOString(),
         attemptCount: 1,
         maxAttempts: this.completionMaxAttempts,
@@ -1249,8 +1252,7 @@ export class TaskDispatcher {
         result.requirements_tracker_updated === undefined &&
         task.lastSuccessResult.requirements_tracker_updated !== undefined
       ) {
-        result.requirements_tracker_updated =
-          task.lastSuccessResult.requirements_tracker_updated;
+        result.requirements_tracker_updated = task.lastSuccessResult.requirements_tracker_updated;
       }
     }
     if (task.agentType === 'pull_request' && task.lastSuccessResult !== undefined) {
@@ -1613,6 +1615,7 @@ export class TaskDispatcher {
           ...(task.continuationPrBranch !== undefined && {
             continuationPrBranch: task.continuationPrBranch,
           }),
+          ...(task.reviewTypes !== undefined && { reviewTypes: task.reviewTypes }),
         }) +
         /* v8 ignore stop @preserve */
         (params.injectActiveGoal === true ? this.buildActiveGoalSection(task, params.prompt) : ''),

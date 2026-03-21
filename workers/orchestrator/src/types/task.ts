@@ -57,6 +57,8 @@ export interface Task {
   planningPrBranch?: string;
   /** PR URL to close after successful execution. */
   planningPrUrl?: string;
+  /** Review types requested for review agent tasks. */
+  reviewTypes?: string[];
   /**
    * Current execution attempt (starts at 1).
    */
