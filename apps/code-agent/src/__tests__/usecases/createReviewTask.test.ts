@@ -1649,6 +1649,36 @@ describe('createReviewTask', () => {
       }
     });
 
+    it('uses created description as fallback when getIssueDescription returns undefined for newly-created issue', async () => {
+      // Tier 3: createIssue succeeds, but getIssueDescription returns undefined
+      // (simulates Linear webhook race — issue.create webhook has description: null)
+      const linearAgentClient = createFakeLinearAgentClient();
+      vi.mocked(linearAgentClient.getIssueDescription).mockResolvedValue(ok(undefined));
+      const deps = createFakeDeps({ linearAgentClient });
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality', 'security'],
+        eventId: 'evt-desc-fallback',
+        prTitle: 'Fix auth bug',
+        prBody: 'This PR fixes the authentication bypass.',
+      });
+
+      // Tier 3 should have been used (no existing task, no INT-XXX in title/body)
+      expect(linearAgentClient.createIssue).toHaveBeenCalled();
+
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        // The fallback description from buildLinearIssueDescription should be embedded
+        expect(createCall[0].prompt).toContain('### Issue Requirements');
+        expect(createCall[0].prompt).toContain('Automated PR review created by GitHub Agent triage system.');
+        expect(createCall[0].prompt).toContain('This PR fixes the authentication bypass.');
+      }
+    });
+
     it('creates prompt without requirements when getIssueDescription fails', async () => {
       const linearAgentClient = createFakeLinearAgentClient();
       vi.mocked(linearAgentClient.getIssueDescription).mockResolvedValue(

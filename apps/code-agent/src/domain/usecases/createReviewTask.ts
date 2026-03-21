@@ -61,11 +61,16 @@ export interface CreateReviewTaskDeps {
   automationLog: AutomationLog;
 }
 
+interface ResolvedLinearIssue {
+  identifier?: string;
+  createdDescription?: string;
+}
+
 async function resolveLinearIssueId(
   deps: Pick<CreateReviewTaskDeps, 'logger' | 'codeTaskRepo'> & { linearAgentClient: LinearAgentClient },
   request: CreateReviewTaskRequest,
   userId: string,
-): Promise<Result<string | undefined, string>> {
+): Promise<Result<ResolvedLinearIssue, string>> {
   const { logger, codeTaskRepo, linearAgentClient } = deps;
   const { repository, prNumber, prTitle } = request;
 
@@ -75,7 +80,7 @@ async function resolveLinearIssueId(
     const existingTask = existingResult.value; // @allow-result-access -- narrowed by existingResult.ok
     if (existingTask?.linearIssueId !== undefined) {
       logger.info({ linearIssueId: existingTask.linearIssueId, prNumber }, 'Copied linearIssueId from existing PR task');
-      return ok(existingTask.linearIssueId);
+      return ok({ identifier: existingTask.linearIssueId });
     }
   } else {
     logger.warn({ error: existingResult.error, prNumber }, 'Failed to look up existing PR task for Linear linking');
@@ -85,7 +90,7 @@ async function resolveLinearIssueId(
   const titleIssueId = extractIntIssueId(prTitle);
   if (titleIssueId !== null) {
     logger.info({ linearIssueId: titleIssueId, prNumber }, 'Extracted linearIssueId from PR title');
-    return ok(titleIssueId);
+    return ok({ identifier: titleIssueId });
   }
 
   // Tier 2b: Extract INT-XXX from PR body
@@ -93,7 +98,7 @@ async function resolveLinearIssueId(
   const bodyIssueId = extractIntIssueId(prBody);
   if (bodyIssueId !== null) {
     logger.info({ linearIssueId: bodyIssueId, prNumber }, 'Extracted linearIssueId from PR body');
-    return ok(bodyIssueId);
+    return ok({ identifier: bodyIssueId });
   }
 
   // Tier 2c: Extract from Linear URL in PR body
@@ -101,7 +106,7 @@ async function resolveLinearIssueId(
     const linearUrlId = extractLinearIdentifierFromText(prBody);
     if (linearUrlId !== null) {
       logger.info({ linearIssueId: linearUrlId, prNumber }, 'Extracted linearIssueId from Linear URL in PR body');
-      return ok(linearUrlId);
+      return ok({ identifier: linearUrlId });
     }
   }
 
@@ -114,7 +119,7 @@ async function resolveLinearIssueId(
   if (createResult.ok) {
     const created = createResult.value; // @allow-result-access -- narrowed by createResult.ok
     logger.info({ linearIssueId: created.issueIdentifier, prNumber }, 'Created new Linear issue for review task');
-    return ok(created.issueIdentifier);
+    return ok({ identifier: created.issueIdentifier, createdDescription: description });
   }
 
   logger.warn({ error: createResult.error, prNumber }, 'Failed to create Linear issue for review task');
@@ -314,11 +319,14 @@ export async function createReviewTask(
 
   // Best-effort Linear issue linking for UI grouping
   let linearIssueId: string | undefined;
+  let createdDescription: string | undefined; // @allow-undefined-type -- mutable variable, not a property
   if (linearAgentClient !== undefined) {
     try {
       const linearResult = await resolveLinearIssueId({ logger, codeTaskRepo, linearAgentClient }, request, userId);
       if (linearResult.ok) {
-        linearIssueId = linearResult.value; // @allow-result-access -- narrowed by linearResult.ok
+        const resolved = linearResult.value; // @allow-result-access -- narrowed by linearResult.ok
+        linearIssueId = resolved.identifier;
+        createdDescription = resolved.createdDescription;
       } else {
         deps.automationLog.record(
           { repository, prNumber },
@@ -351,16 +359,23 @@ export async function createReviewTask(
       });
       if (descResult.ok) {
         issueDescription = descResult.value;
-        if (issueDescription !== undefined) {
-          // v1: description-only — comment-based plan refs deferred
-          planDocumentPath = resolvePlanDocumentPathFromLinearContext({
-            description: issueDescription,
-            comments: [],
-          });
-        }
       }
     } catch (error: unknown) {
       logger.warn({ error, linearIssueId }, 'Failed to fetch issue description for review context');
+    }
+
+    // Fallback: use the description we passed to createIssue (Tier 3) when
+    // Firestore cache is empty due to Linear webhook race (~6s delay)
+    if (issueDescription === undefined && createdDescription !== undefined) {
+      issueDescription = createdDescription;
+    }
+
+    if (issueDescription !== undefined) {
+      // v1: description-only — comment-based plan refs deferred
+      planDocumentPath = resolvePlanDocumentPathFromLinearContext({
+        description: issueDescription,
+        comments: [],
+      });
     }
   }
 
