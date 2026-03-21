@@ -108,6 +108,7 @@ describe('POST /internal/merge-conflicts/reconcile', () => {
       processed: 3,
       closed: 1,
       reopened: 1,
+      mergeConflictRefreshed: 0,
       skipped: 1,
       error: 0,
     });

@@ -10,8 +10,12 @@ import { logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../../services.js';
 import type { CodeRoutesOptions } from '../code/github-pre-events.js';
 import { ALLOWED_BOTS } from '../webhooks/github.js';
+import { serializeWatch } from './serializeWatch.js';
 
 const GITHUB_API = 'https://api.github.com';
+
+/** Branches that cannot be used as merge queue base branches. */
+const BLOCKED_BASE_BRANCHES = new Set(['main']);
 
 function githubHeaders(token: string): Record<string, string> {
   return {
@@ -75,6 +79,10 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           return await reply.fail('INVALID_REQUEST', 'owner, repo, and baseBranch are required');
         }
 
+        if (BLOCKED_BASE_BRANCHES.has(baseBranch)) {
+          return await reply.fail('INVALID_REQUEST', `Merge queue cannot be enabled for the ${baseBranch} branch`);
+        }
+
         const { userServiceClient, mergeQueueWatchRepo } = getServices();
 
         const tokenResult = await userServiceClient.getOAuthToken(userId, 'github');
@@ -131,8 +139,7 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           return await reply.fail('INTERNAL_ERROR', createResult.error.message);
         }
 
-        const { id: watchId, ...rest } = createResult.value;
-        return await reply.ok({ watchId, ...rest });
+        return await reply.ok(serializeWatch(createResult.value));
       }
     );
 
@@ -204,7 +211,7 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           return await reply.fail('INTERNAL_ERROR', result.error.message);
         }
 
-        const watches = result.value.map(({ id: watchId, ...rest }) => ({ watchId, ...rest }));
+        const watches = result.value.map(serializeWatch);
         return await reply.ok({ watches });
       }
     );
@@ -232,10 +239,10 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           return await reply.fail('INTERNAL_ERROR', summariesResult.error.message);
         }
 
-        // Group by baseBranch
+        // Group by baseBranch (exclude main — merge queue is not allowed on main)
         const branchCounts = new Map<string, number>();
         for (const summary of summariesResult.value) {
-          if (summary.baseBranch === null) continue;
+          if (summary.baseBranch === null || BLOCKED_BASE_BRANCHES.has(summary.baseBranch)) continue;
           const current = branchCounts.get(summary.baseBranch) ?? 0;
           branchCounts.set(summary.baseBranch, current + 1);
         }

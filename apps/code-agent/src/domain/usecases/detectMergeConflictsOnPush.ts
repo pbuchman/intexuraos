@@ -1100,6 +1100,7 @@ export function createDetectMergeConflictsOnPush(
       let processed = 0;
       let closed = 0;
       let reopened = 0;
+      let mergeConflictRefreshed = 0;
       let skipped = 0;
       let error = 0;
 
@@ -1164,6 +1165,8 @@ export function createDetectMergeConflictsOnPush(
 
         for (const existingSummary of repoSummaries) {
           try {
+            processed++;
+
             if (!openPRNumbers.has(existingSummary.pullRequestNumber)) {
               // PR is not open on GitHub
               if (existingSummary.state === 'open') {
@@ -1182,7 +1185,6 @@ export function createDetectMergeConflictsOnPush(
                   },
                   logger
                 );
-                processed++;
                 closed++;
               }
               // Already closed in Firestore — skip silently
@@ -1206,13 +1208,51 @@ export function createDetectMergeConflictsOnPush(
                 },
                 logger
               );
-              processed++;
               reopened++;
             }
-            // Already open in Firestore — skip silently
+
+            // Refresh mergeConflictStatus for all open PRs (INT-1051)
+            const detailsResult = await deps.gitHubPRClient.getPullRequestDetails(
+              accessContext.token,
+              parsedRepository.owner,
+              parsedRepository.repo,
+              existingSummary.pullRequestNumber
+            );
+            if (detailsResult.ok) {
+              const newStatus = classifyMergeConflictStatus(detailsResult.value.mergeable);
+              const previousStatus = existingSummary.mergeConflictStatus;
+              if (newStatus !== 'unknown' && newStatus !== previousStatus) {
+                logger.info(
+                  {
+                    prNumber: existingSummary.pullRequestNumber,
+                    repository,
+                    previousStatus,
+                    newStatus,
+                  },
+                  'Refreshing mergeConflictStatus during reconcile'
+                );
+                await upsertSummary(
+                  deps.gitHubPRSummaryRepo,
+                  {
+                    repository,
+                    pullRequestNumber: existingSummary.pullRequestNumber,
+                    lastActivityAt: existingSummary.lastActivityAt,
+                    firstSeenAt: existingSummary.firstSeenAt,
+                    mergeConflictStatus: newStatus,
+                    lastConflictCheckedAt: new Date(),
+                  },
+                  logger
+                );
+                mergeConflictRefreshed++;
+              }
+            } else {
+              logger.warn(
+                { error: detailsResult.error, prNumber: existingSummary.pullRequestNumber, repository },
+                'Failed to fetch PR details for mergeability refresh during reconcile; skipping'
+              );
+            }
           } catch (caughtError: unknown) {
             error++;
-            processed++;
             logger.error(
               { error: caughtError, repository: existingSummary.repository, prNumber: existingSummary.pullRequestNumber },
               'Unhandled error processing PR summary in reconcile; continuing'
@@ -1222,11 +1262,11 @@ export function createDetectMergeConflictsOnPush(
       }
 
       logger.info(
-        { processed, closed, reopened, skipped, error },
+        { processed, closed, reopened, mergeConflictRefreshed, skipped, error },
         'PR state reconciliation complete'
       );
 
-      return { processed, closed, reopened, skipped, error };
+      return { processed, closed, reopened, mergeConflictRefreshed, skipped, error };
     },
   };
 }
