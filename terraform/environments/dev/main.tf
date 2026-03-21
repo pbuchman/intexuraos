@@ -1959,6 +1959,34 @@ resource "google_cloud_scheduler_job" "merge_conflict_reconcile" {
   ]
 }
 
+resource "google_cloud_scheduler_job" "merge_queue_tick" {
+  name        = "intexuraos-merge-queue-tick-${var.environment}"
+  description = "Process one merge cycle for all active merge queue watches"
+  schedule    = "*/1 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.code_agent.service_url}/internal/merge-queue/tick"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.code_agent.service_url
+    }
+  }
+
+  retry_config {
+    retry_count = 0
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
+    module.code_agent,
+  ]
+}
+
 # -----------------------------------------------------------------------------
 # Firebase Authentication (Identity Platform)
 # -----------------------------------------------------------------------------
