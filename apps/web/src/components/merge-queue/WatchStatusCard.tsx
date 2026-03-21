@@ -6,6 +6,7 @@ interface WatchStatusCardProps {
   watch: MergeQueueWatch | null;
   onToggle: () => void;
   isToggling: boolean;
+  blocked: boolean;
 }
 
 function ToggleSwitch({ enabled, disabled, onToggle }: { enabled: boolean; disabled: boolean; onToggle: () => void }): React.JSX.Element {
@@ -29,17 +30,20 @@ function ToggleSwitch({ enabled, disabled, onToggle }: { enabled: boolean; disab
   );
 }
 
-export function WatchStatusCard({ watch, onToggle, isToggling }: WatchStatusCardProps): React.JSX.Element {
+export function WatchStatusCard({ watch, onToggle, isToggling, blocked }: WatchStatusCardProps): React.JSX.Element {
   const isActive = watch !== null && watch.status === 'active';
   const isDrained = watch !== null && watch.status === 'drained';
   const hasError = isActive && watch.lastError !== null;
 
-  // No watch or cancelled watch: simple inline toggle
-  if (watch === null || watch.status === 'cancelled') {
+  // No watch, cancelled watch, or blocked branch: simple inline toggle
+  if (blocked || watch === null || watch.status === 'cancelled') {
     return (
       <div className="flex items-center gap-3">
-        <ToggleSwitch enabled={false} disabled={isToggling} onToggle={onToggle} />
+        <ToggleSwitch enabled={false} disabled={blocked || isToggling} onToggle={onToggle} />
         <span className="text-sm text-slate-600 dark:text-slate-400">Auto-merge</span>
+        {blocked ? (
+          <span className="text-xs text-slate-400 dark:text-slate-500">Not available for this branch</span>
+        ) : null}
         {isToggling ? <Loader2 className="h-4 w-4 animate-spin text-slate-400" /> : null}
       </div>
     );

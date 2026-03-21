@@ -239,10 +239,10 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           return await reply.fail('INTERNAL_ERROR', summariesResult.error.message);
         }
 
-        // Group by baseBranch (exclude main — merge queue is not allowed on main)
+        // Group by baseBranch (include all, flag blocked branches)
         const branchCounts = new Map<string, number>();
         for (const summary of summariesResult.value) {
-          if (summary.baseBranch === null || BLOCKED_BASE_BRANCHES.has(summary.baseBranch)) continue;
+          if (summary.baseBranch === null) continue;
           const current = branchCounts.get(summary.baseBranch) ?? 0;
           branchCounts.set(summary.baseBranch, current + 1);
         }
@@ -250,6 +250,7 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
         const branches = Array.from(branchCounts.entries()).map(([name, openPrCount]) => ({
           name,
           openPrCount,
+          blocked: BLOCKED_BASE_BRANCHES.has(name),
         }));
 
         return await reply.ok({ branches });
