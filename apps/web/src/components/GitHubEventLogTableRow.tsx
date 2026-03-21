@@ -1,5 +1,7 @@
-import { memo } from 'react';
-import { Loader2 } from 'lucide-react';
+import { memo, useState } from 'react';
+import { ChevronRight, Loader2 } from 'lucide-react';
+import { useAuth } from '@/context';
+import { getGitHubEventLogPayload } from '@/services/codeAgentApi';
 import type { GitHubEventLogListRow } from '@/hooks';
 import { formatTimeOnly } from '@/utils/dateFormat';
 
@@ -98,13 +100,53 @@ function buildEntityUrl(row: GitHubEventLogListRow): string | null {
 
 function GitHubEventLogTableRowComponent({ row }: GitHubEventLogTableRowProps): React.JSX.Element {
   const entityUrl = buildEntityUrl(row);
+  const { getAccessToken } = useAuth();
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [payload, setPayload] = useState<unknown>(undefined);
+  const [payloadFetched, setPayloadFetched] = useState(false);
+  const [payloadLoading, setPayloadLoading] = useState(false);
+  const [payloadError, setPayloadError] = useState<string | null>(null);
+
+  const handleToggle = (): void => {
+    const willExpand = !isExpanded;
+    setIsExpanded(willExpand);
+    if (willExpand && !payloadFetched) {
+      setPayloadLoading(true);
+      setPayloadError(null);
+      void (async (): Promise<void> => {
+        try {
+          const token = await getAccessToken();
+          const result = await getGitHubEventLogPayload(token, row.id);
+          setPayload(result.payload);
+          setPayloadFetched(true);
+        } catch (err) {
+          setPayloadError(err instanceof Error ? err.message : 'Failed to load payload');
+        } finally {
+          setPayloadLoading(false);
+        }
+      })();
+    }
+  };
+
+  const chevronButton = (
+    <button
+      type="button"
+      onClick={handleToggle}
+      className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-400 transition-transform hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+      aria-label={isExpanded ? 'Collapse payload' : 'Expand payload'}
+    >
+      <ChevronRight className={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+    </button>
+  );
 
   return (
     <div
       className={`group overflow-hidden rounded-lg border border-slate-200 bg-white transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800 ${getAccentShadow(row)}`}
     >
       {/* Desktop: grid layout */}
-      <div className="hidden items-center gap-2 px-3 py-1.5 lg:grid lg:grid-cols-[80px_160px_120px_100px_1fr_220px]">
+      <div className="hidden items-center gap-2 px-3 py-1.5 lg:grid lg:grid-cols-[24px_80px_160px_120px_100px_1fr_220px]">
+        {chevronButton}
+
         {/* Time */}
         <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
           {formatTimeOnly(row.authPassedAt)}
@@ -152,6 +194,7 @@ function GitHubEventLogTableRowComponent({ row }: GitHubEventLogTableRowProps): 
 
       {/* Mobile: compact flex row */}
       <div className="flex items-center gap-2 px-3 py-1.5 lg:hidden">
+        {chevronButton}
         <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
           {formatTimeOnly(row.authPassedAt)}
         </span>
@@ -165,6 +208,24 @@ function GitHubEventLogTableRowComponent({ row }: GitHubEventLogTableRowProps): 
           {formatDecisionSummary(row)}
         </span>
       </div>
+
+      {/* Expanded payload section */}
+      {isExpanded ? (
+        <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
+          {payloadLoading ? (
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading payload…
+            </div>
+          ) : payloadError !== null ? (
+            <p className="text-sm text-red-600 dark:text-red-400">{payloadError}</p>
+          ) : (
+            <pre className="max-h-96 overflow-auto rounded bg-slate-100 p-3 text-xs text-slate-800 dark:bg-slate-800 dark:text-slate-200">
+              <code>{JSON.stringify(payload, null, 2)}</code>
+            </pre>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
