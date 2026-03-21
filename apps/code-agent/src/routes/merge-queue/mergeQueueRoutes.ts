@@ -207,7 +207,7 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
       }
     );
 
-    // GET /code/merge-queue/branches — list branches with open PR counts
+    // GET /code/merge-queue/branches — list branches with open PR counts (reads from Firestore)
     fastify.get(
       '/code/merge-queue/branches',
       async (request: FastifyRequest, reply: FastifyReply) => {
@@ -215,33 +215,27 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           message: 'Received request to GET /code/merge-queue/branches',
         });
 
-        const userId = getUserId(request);
         const query = request.query as { owner?: string; repo?: string };
 
         if (query.owner === undefined || query.repo === undefined) {
           return await reply.fail('INVALID_REQUEST', 'owner and repo query parameters are required');
         }
 
-        const { userServiceClient, gitHubPRClient } = getServices();
+        const { gitHubPRSummaryRepo } = getServices();
+        const repository = `${query.owner}/${query.repo}`;
 
-        const tokenResult = await userServiceClient.getOAuthToken(userId, 'github');
-        if (!tokenResult.ok) {
-          request.log.error({ error: tokenResult.error }, 'Failed to resolve GitHub token');
-          return await reply.fail('INTERNAL_ERROR', 'Failed to resolve GitHub token');
-        }
-        const token = tokenResult.value.accessToken;
-
-        const prsResult = await gitHubPRClient.listAllOpenPullRequests(token, query.owner, query.repo);
-        if (!prsResult.ok) {
-          request.log.error({ error: prsResult.error }, 'Failed to list open pull requests');
-          return await reply.fail('INTERNAL_ERROR', prsResult.error.message);
+        const summariesResult = await gitHubPRSummaryRepo.findOpenByRepository(repository);
+        if (!summariesResult.ok) {
+          request.log.error({ error: summariesResult.error }, 'Failed to load open PR summaries');
+          return await reply.fail('INTERNAL_ERROR', summariesResult.error.message);
         }
 
-        // Group by baseBranch and count
+        // Group by baseBranch
         const branchCounts = new Map<string, number>();
-        for (const pr of prsResult.value) {
-          const current = branchCounts.get(pr.baseBranch) ?? 0;
-          branchCounts.set(pr.baseBranch, current + 1);
+        for (const summary of summariesResult.value) {
+          if (summary.baseBranch === null) continue;
+          const current = branchCounts.get(summary.baseBranch) ?? 0;
+          branchCounts.set(summary.baseBranch, current + 1);
         }
 
         const branches = Array.from(branchCounts.entries()).map(([name, openPrCount]) => ({
@@ -253,7 +247,7 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
       }
     );
 
-    // GET /code/merge-queue/prs — list PRs for a specific base branch
+    // GET /code/merge-queue/prs — list PRs for a specific base branch (reads from Firestore)
     fastify.get(
       '/code/merge-queue/prs',
       async (request: FastifyRequest, reply: FastifyReply) => {
@@ -269,7 +263,8 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
         }
 
         const { owner, repo, baseBranch } = query;
-        const { userServiceClient, gitHubPRClient, mergeQueueWatchRepo } = getServices();
+        const repository = `${owner}/${repo}`;
+        const { userServiceClient, mergeQueueWatchRepo, gitHubPRSummaryRepo } = getServices();
 
         const tokenResult = await userServiceClient.getOAuthToken(userId, 'github');
         if (!tokenResult.ok) {
@@ -278,54 +273,34 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
         }
         const token = tokenResult.value.accessToken;
 
-        // Resolve the requesting user's GitHub username
+        // Resolve the requesting user's GitHub username (for eligibility check)
         const gitHubUsername = await resolveGitHubUsername(token);
 
         // Find active watch for this user+branch to determine eligibility
         const watchResult = await mergeQueueWatchRepo.findActiveByUserAndBranch(userId, owner, repo, baseBranch);
         const activeWatch = watchResult.ok ? watchResult.value : null;
 
-        const prsResult = await gitHubPRClient.listOpenPullRequestsByBaseBranch(token, owner, repo, baseBranch);
-        if (!prsResult.ok) {
-          request.log.error({ error: prsResult.error }, 'Failed to list PRs by base branch');
-          return await reply.fail('INTERNAL_ERROR', prsResult.error.message);
+        const summariesResult = await gitHubPRSummaryRepo.findOpenByBaseBranch(repository, baseBranch);
+        if (!summariesResult.ok) {
+          request.log.error({ error: summariesResult.error }, 'Failed to load PR summaries');
+          return await reply.fail('INTERNAL_ERROR', summariesResult.error.message);
         }
 
-        // For each PR, get details then check status in parallel
-        const pullRequests = await Promise.all(
-          prsResult.value.map(async (pr) => {
-            const detailsResult = await gitHubPRClient.getPullRequestDetails(token, owner, repo, pr.number);
+        const pullRequests = summariesResult.value.map((summary) => {
+          const eligibleUsername = activeWatch !== null ? activeWatch.gitHubUsername : gitHubUsername;
+          const authorIsEligible = ALLOWED_BOTS.has(summary.authorLogin ?? '') ||
+            (eligibleUsername !== null && summary.authorLogin === eligibleUsername);
 
-            const mergeable = detailsResult.ok ? detailsResult.value.mergeable : null;
-            const mergeableState = detailsResult.ok ? detailsResult.value.mergeableState : null;
-
-            // Use headSha from details for check status lookup
-            let checksStatus = 'pending';
-            if (detailsResult.ok) {
-              const checksResult = await gitHubPRClient.getCombinedCheckStatus(
-                token, owner, repo, detailsResult.value.headSha
-              );
-              checksStatus = checksResult.ok ? checksResult.value.state : 'pending';
-            }
-
-            // authorIsEligible: true if author is the requesting user or an allowed bot
-            const eligibleUsername = activeWatch !== null ? activeWatch.gitHubUsername : gitHubUsername;
-            const authorIsEligible = ALLOWED_BOTS.has(pr.authorLogin) ||
-              (eligibleUsername !== null && pr.authorLogin === eligibleUsername);
-
-            return {
-              number: pr.number,
-              title: pr.title,
-              author: pr.authorLogin,
-              authorIsEligible,
-              mergeable,
-              mergeableState,
-              checksStatus,
-              createdAt: pr.createdAt,
-              htmlUrl: `https://github.com/${owner}/${repo}/pull/${String(pr.number)}`,
-            };
-          })
-        );
+          return {
+            number: summary.pullRequestNumber,
+            title: summary.title,
+            author: summary.authorLogin,
+            authorIsEligible,
+            mergeConflictStatus: summary.mergeConflictStatus,
+            createdAt: summary.firstSeenAt.toISOString(),
+            htmlUrl: `https://github.com/${owner}/${repo}/pull/${String(summary.pullRequestNumber)}`,
+          };
+        });
 
         return await reply.ok({ pullRequests });
       }

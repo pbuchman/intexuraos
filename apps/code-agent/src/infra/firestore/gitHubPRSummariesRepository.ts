@@ -220,6 +220,27 @@ export function createFirestoreGitHubPRSummariesRepository(deps: {
       }
     },
 
+    async findOpenByRepository(
+      repository: string
+    ): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>> {
+      try {
+        const snapshot = await collection
+          .where('repository', '==', repository)
+          .where('state', '==', 'open')
+          .get();
+
+        return ok(
+          snapshot.docs.map((doc) => mapSummaryData(doc.data() as Record<string, unknown>))
+        );
+      } catch (error) {
+        logger.error({ error, repository }, 'Failed to find open GitHub PR summaries by repository');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: getErrorMessage(error, 'Unknown error'),
+        });
+      }
+    },
+
     async findAllOpen(): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>> {
       // No pagination limit — expected to be bounded by the number of active repos and open PRs
       // in a single IntexuraOS deployment. Add a limit + cursor if this grows beyond ~500 rows.

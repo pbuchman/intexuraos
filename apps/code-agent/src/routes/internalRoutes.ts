@@ -10,19 +10,23 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     {
       schema: {
         operationId: 'reconcileMergeConflicts',
-        summary: 'Reconcile merge conflict status for all open PRs',
+        summary: 'Sync Firestore PR state from GitHub',
         description:
-          'Called by Cloud Scheduler every minute to check mergeability of all open PRs and dispatch conflict resolution tasks.',
+          'Called by Cloud Scheduler every minute. Syncs open/closed state from GitHub into Firestore — no mergeability checking.',
         tags: ['internal'],
         response: {
           200: {
-            description: 'Reconcile accepted',
+            description: 'Reconcile completed',
             type: 'object',
             additionalProperties: false,
             properties: {
-              accepted: { type: 'boolean', enum: [true] },
+              processed: { type: 'number' },
+              closed: { type: 'number' },
+              reopened: { type: 'number' },
+              skipped: { type: 'number' },
+              error: { type: 'number' },
             },
-            required: ['accepted'],
+            required: ['processed', 'closed', 'reopened', 'skipped', 'error'],
           },
           401: {
             description: 'Unauthorized',
@@ -56,17 +60,11 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       request.log.info({ strategy: authResult.strategy }, 'Authenticated for merge-conflicts reconcile');
 
       const { mergeConflictDetector, logger } = getServices();
+      const result = await mergeConflictDetector.reconcile(logger);
+      logger.info(result, 'PR state reconciliation completed');
 
-      // Fire-and-forget: Cloud Scheduler expects a fast 200 response.
-      // The reconciliation runs asynchronously in the background.
-      void mergeConflictDetector.reconcile(logger).then((result) => {
-        logger.info({ processed: result.processed }, 'Merge-conflict reconciliation completed');
-      }).catch((err: unknown) => {
-        logger.error({ error: err }, 'Unhandled error in merge-conflict reconciliation');
-      });
-
-      // @allow-raw-send: cron endpoint - Cloud Scheduler expects immediate acknowledgment
-      return await reply.send({ accepted: true });
+      // @allow-raw-send: cron endpoint returns reconcile stats directly
+      return await reply.send(result);
     }
   );
 
