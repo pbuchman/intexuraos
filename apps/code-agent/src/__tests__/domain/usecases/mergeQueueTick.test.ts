@@ -629,4 +629,31 @@ describe('mergeQueueTick', () => {
       lastErrorAt: null,
     }));
   });
+
+  it('handles summaries with null title, authorLogin, baseBranch, and headBranch', async () => {
+    const watch = makeWatch();
+    mockWatchRepo.findAllActive.mockResolvedValue(ok([watch]));
+    mockUserServiceClient.getOAuthToken.mockResolvedValue(ok({ accessToken: 'tok-123', email: 'test@test.com' }));
+
+    // Summary with all nullable string fields set to null
+    const prs = [
+      makePrSummary({
+        pullRequestNumber: 99,
+        title: null,
+        authorLogin: null,
+        baseBranch: null,
+        headBranch: null,
+      }),
+    ];
+    mockGitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok(prs));
+
+    const tick = createMergeQueueTick(deps);
+    const result = await tick();
+
+    // PR should be filtered out (authorLogin is null, doesn't match gitHubUsername or allowedBots)
+    expect(result.ok).toBe(true);
+    if (result.ok === true) {
+      expect(result.value[0]?.action).toBe('drained');
+    }
+  });
 });

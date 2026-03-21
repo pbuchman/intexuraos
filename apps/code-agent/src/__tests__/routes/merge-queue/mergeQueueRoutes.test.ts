@@ -829,6 +829,31 @@ describe('Merge queue JWT routes', () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INVALID_REQUEST');
     });
+
+    it('should return error when findOpenByRepository fails', async () => {
+      const services = getServices();
+      setServices({
+        ...services,
+        gitHubPRSummaryRepo: {
+          ...services.gitHubPRSummaryRepo,
+          async findOpenByRepository() {
+            return err({ code: 'FIRESTORE_ERROR' as const, message: 'Firestore connection lost' });
+          },
+        },
+      } as never);
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/merge-queue/branches?owner=intexuraos&repo=repo',
+        headers: { authorization: 'Bearer fake-token' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('Firestore connection lost');
+    });
   });
 
   // ─── GET /code/merge-queue/prs ────────────────────────────────────────────
@@ -1020,6 +1045,68 @@ describe('Merge queue JWT routes', () => {
         data: { pullRequests: { number: number; authorIsEligible: boolean }[] };
       };
       expect(body.data.pullRequests[0]?.authorIsEligible).toBe(true);
+    });
+
+    it('should return error when findOpenByBaseBranch fails', async () => {
+      nock('https://api.github.com')
+        .get('/user')
+        .reply(200, { login: 'testuser' });
+
+      vi.mocked(mockMergeQueueWatchRepo.findActiveByUserAndBranch).mockResolvedValue(ok(null));
+
+      const services = getServices();
+      setServices({
+        ...services,
+        gitHubPRSummaryRepo: {
+          ...services.gitHubPRSummaryRepo,
+          async findOpenByBaseBranch() {
+            return err({ code: 'FIRESTORE_ERROR' as const, message: 'Firestore read failed' });
+          },
+        },
+      } as never);
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=main',
+        headers: { authorization: 'Bearer fake-token' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('Firestore read failed');
+    });
+
+    it('should handle PR with null authorLogin for eligibility check', async () => {
+      nock('https://api.github.com')
+        .get('/user')
+        .reply(200, { login: 'testuser' });
+
+      vi.mocked(mockMergeQueueWatchRepo.findActiveByUserAndBranch).mockResolvedValue(ok(null));
+
+      const { gitHubPRSummaryRepo } = getServices();
+      await gitHubPRSummaryRepo.upsert({
+        repository: 'intexuraos/repo', pullRequestNumber: 50, title: 'Orphan PR',
+        state: 'open', baseBranch: 'main', authorLogin: null, headBranch: 'orphan',
+        lastActivityAt: new Date(), firstSeenAt: new Date(),
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=main',
+        headers: { authorization: 'Bearer fake-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { pullRequests: { number: number; author: string | null; authorIsEligible: boolean }[] };
+      };
+      expect(body.data.pullRequests).toHaveLength(1);
+      // null authorLogin won't match any username or bot
+      expect(body.data.pullRequests[0]?.authorIsEligible).toBe(false);
+      expect(body.data.pullRequests[0]?.author).toBeNull();
     });
   });
 });
