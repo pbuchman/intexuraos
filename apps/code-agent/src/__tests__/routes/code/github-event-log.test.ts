@@ -603,6 +603,59 @@ describe('GitHub event log routes', () => {
     expect(response.statusCode).toBe(500);
   });
 
+  it('filters out non-visible event types server-side', async () => {
+    const eventLogRepo = baseServices.gitHubEventLogEntryRepo;
+    if (eventLogRepo === undefined) {
+      throw new Error('GitHub event log entry repo not configured in test');
+    }
+
+    // Seed an 'unknown' event (e.g. check_run mapped to unknown)
+    await eventLogRepo.createPending({
+      id: 'delivery-unknown',
+      githubEventName: 'check_run',
+      eventType: 'unknown',
+      action: null,
+      repository: 'intexuraos/test-repo',
+      pullRequestNumber: null,
+      authPassedAt: new Date('2026-03-12T12:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T12:00:00.000Z'),
+      decisionState: 'pending',
+      decisionOutcome: null,
+      rowVersion: 1,
+    });
+
+    // Seed a 'ping' event
+    await eventLogRepo.createPending({
+      id: 'delivery-ping',
+      githubEventName: 'ping',
+      eventType: 'ping',
+      action: null,
+      repository: null,
+      pullRequestNumber: null,
+      authPassedAt: new Date('2026-03-12T12:01:00.000Z'),
+      updatedAt: new Date('2026-03-12T12:01:00.000Z'),
+      decisionState: 'pending',
+      decisionOutcome: null,
+      rowVersion: 1,
+    });
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-event-log',
+      headers: { authorization: 'Bearer fake-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(true);
+
+    // Only the seeded pull_request event from beforeEach should be returned
+    const eventTypes = body.data.rows.map((row: { eventType: string }) => row.eventType);
+    expect(eventTypes).not.toContain('unknown');
+    expect(eventTypes).not.toContain('ping');
+    expect(eventTypes).toContain('pull_request');
+  });
+
   describe('GET /code/github-event-log/:id/payload', () => {
     it('returns 200 with payload for valid audit event ID', async () => {
       const response = await server.inject({

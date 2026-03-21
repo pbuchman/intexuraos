@@ -6,6 +6,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  where,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { useAuth } from '@/context';
@@ -365,6 +366,7 @@ export function useGitHubEventLog(): UseGitHubEventLogResult {
       const db = getFirestoreClient();
       const liveQuery = query(
         collection(db, 'github-event-log-entries'),
+        where('eventType', 'in', [...VISIBLE_EVENT_TYPES]),
         orderBy('authPassedAt', 'desc'),
         limit(LIVE_QUERY_LIMIT),
       );

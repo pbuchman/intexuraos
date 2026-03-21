@@ -20,6 +20,7 @@ export interface GitHubEventLogEntryRepository {
   listRecent(options: {
     limit: number;
     cursor?: string;
+    eventTypes?: readonly string[];
   }): Promise<
     Result<{
       entries: GitHubEventLogEntry[];
