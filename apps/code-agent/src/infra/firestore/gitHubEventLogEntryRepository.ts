@@ -119,7 +119,7 @@ export function createFirestoreGitHubEventLogEntryRepository(deps: {
       try {
         let query = collection.orderBy('authPassedAt', 'desc');
         if (options.eventTypes !== undefined && options.eventTypes.length > 0) {
-          query = query.where('eventType', 'in', options.eventTypes as string[]);
+          query = query.where('eventType', 'in', [...options.eventTypes]);
         }
         if (options.cursor !== undefined) {
           const cursorDate = new Date(options.cursor);
