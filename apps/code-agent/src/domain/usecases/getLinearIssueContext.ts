@@ -39,6 +39,8 @@ export async function getLinearIssueContext(
   }
 
   const context: IssueContext = result.value;
+  // null→undefined: PlanResolutionContext expects `string | undefined`, not `string | null`.
+  // undefined→null: our response contract uses `string | null` for JSON serializability.
   const planDocumentPath = resolvePlanDocumentPathFromLinearContext({
     description: context.description ?? undefined,
     comments: context.comments,
