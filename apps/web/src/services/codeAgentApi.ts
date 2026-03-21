@@ -243,6 +243,21 @@ export async function hydrateGitHubEventLogRows(
   );
 }
 
+export interface GitHubEventLogPayloadResponse {
+  payload: unknown;
+}
+
+export async function getGitHubEventLogPayload(
+  accessToken: string,
+  id: string,
+): Promise<GitHubEventLogPayloadResponse> {
+  return await apiRequest<GitHubEventLogPayloadResponse>(
+    config.codeAgentUrl,
+    `/code/github-event-log/${encodeURIComponent(id)}/payload`,
+    accessToken,
+  );
+}
+
 /**
  * Get the current dispatch queue status
  */

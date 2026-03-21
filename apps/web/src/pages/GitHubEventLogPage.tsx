@@ -152,7 +152,8 @@ function PageHeader({
 
 function ColumnHeader(): React.JSX.Element {
   return (
-    <div className="mb-1 hidden grid-cols-[80px_160px_120px_100px_1fr_220px] gap-2 px-3 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500 lg:grid">
+    <div className="mb-1 hidden grid-cols-[24px_80px_160px_120px_100px_1fr_220px] gap-2 px-3 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500 lg:grid">
+      <div />
       <div>Time</div>
       <div>Event</div>
       <div>Action</div>
