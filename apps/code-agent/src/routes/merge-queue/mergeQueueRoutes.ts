@@ -10,8 +10,42 @@ import { logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../../services.js';
 import type { CodeRoutesOptions } from '../code/github-pre-events.js';
 import { ALLOWED_BOTS } from '../webhooks/github.js';
+import type { MergeQueueWatch } from '../../domain/models/mergeQueueWatch.js';
 
 const GITHUB_API = 'https://api.github.com';
+
+/** Convert a Firestore Timestamp or Date to ISO string, or null. */
+function tsToIso(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === 'object' && 'toDate' in value) {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  return null;
+}
+
+/** Serialize a MergeQueueWatch for the API response (Timestamps → ISO strings, id → watchId). */
+function serializeWatch(watch: MergeQueueWatch): Record<string, unknown> {
+  return {
+    watchId: watch.id,
+    owner: watch.owner,
+    repo: watch.repo,
+    baseBranch: watch.baseBranch,
+    status: watch.status,
+    lastError: watch.lastError,
+    createdAt: tsToIso(watch.createdAt),
+    lastTickAt: tsToIso(watch.lastTickAt),
+    lastErrorAt: tsToIso(watch.lastErrorAt),
+    drainedAt: tsToIso(watch.drainedAt),
+    skippedPrs: watch.skippedPrs,
+    mergedPrs: watch.mergedPrs.map((pr) => ({
+      prNumber: pr.prNumber,
+      title: pr.title,
+      author: pr.author,
+      mergedAt: tsToIso(pr.mergedAt),
+    })),
+  };
+}
 
 function githubHeaders(token: string): Record<string, string> {
   return {
@@ -131,8 +165,7 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           return await reply.fail('INTERNAL_ERROR', createResult.error.message);
         }
 
-        const { id: watchId, ...rest } = createResult.value;
-        return await reply.ok({ watchId, ...rest });
+        return await reply.ok(serializeWatch(createResult.value));
       }
     );
 
@@ -204,7 +237,7 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           return await reply.fail('INTERNAL_ERROR', result.error.message);
         }
 
-        const watches = result.value.map(({ id: watchId, ...rest }) => ({ watchId, ...rest }));
+        const watches = result.value.map(serializeWatch);
         return await reply.ok({ watches });
       }
     );
