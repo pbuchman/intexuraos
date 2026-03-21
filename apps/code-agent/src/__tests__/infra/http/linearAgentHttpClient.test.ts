@@ -1664,4 +1664,138 @@ describe('linearAgentHttpClient', () => {
       }
     });
   });
+
+  describe('getIssueContext', () => {
+    it('should return issue context on success', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-100/context')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(200, {
+          success: true,
+          data: {
+            description: 'Fix the bug',
+            comments: [{ body: 'comment 1', createdAt: '2026-03-20T10:00:00Z' }],
+          },
+        });
+
+      const result = await client.getIssueContext({ identifier: 'INT-100' });
+
+      expect(result.ok).toBe(true);
+      if (result.ok === true) {
+        expect(result.value).toEqual({
+          description: 'Fix the bug',
+          comments: [{ body: 'comment 1', createdAt: '2026-03-20T10:00:00Z' }],
+        });
+      }
+    });
+
+    it('should return NOT_FOUND when linear-agent returns 404', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-404/context')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(404, 'Issue not found');
+
+      const result = await client.getIssueContext({ identifier: 'INT-404' });
+
+      expect(result.ok).toBe(false);
+      if (result.ok === false) {
+        expect(result.error.code).toBe('NOT_FOUND');
+      }
+    });
+
+    it('should return UNAVAILABLE when linear-agent returns non-404 error', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-500/context')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(500, 'Internal Server Error');
+
+      const result = await client.getIssueContext({ identifier: 'INT-500' });
+
+      expect(result.ok).toBe(false);
+      if (result.ok === false) {
+        expect(result.error.code).toBe('UNAVAILABLE');
+      }
+    });
+
+    it('should return UNKNOWN when response body is invalid', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-BAD/context')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(200, { success: false });
+
+      const result = await client.getIssueContext({ identifier: 'INT-BAD' });
+
+      expect(result.ok).toBe(false);
+      if (result.ok === false) {
+        expect(result.error.code).toBe('UNKNOWN');
+      }
+    });
+
+    it('should return UNAVAILABLE on timeout', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-TIMEOUT/context')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .delayConnection(10000)
+        .reply(200, { success: true, data: { description: null, comments: [] } });
+
+      const shortTimeoutClient = createLinearAgentHttpClient({
+        baseUrl,
+        internalAuthToken,
+        timeoutMs: 50,
+      }, mockLogger);
+
+      const result = await shortTimeoutClient.getIssueContext({ identifier: 'INT-TIMEOUT' });
+
+      expect(result.ok).toBe(false);
+      if (result.ok === false) {
+        expect(result.error.code).toBe('UNAVAILABLE');
+        expect(result.error.message).toBe('Request timed out');
+      }
+    });
+
+    it('should return UNKNOWN on network error', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-ERR/context')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .replyWithError('ECONNREFUSED');
+
+      const result = await client.getIssueContext({ identifier: 'INT-ERR' });
+
+      expect(result.ok).toBe(false);
+      if (result.ok === false) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toContain('ECONNREFUSED');
+      }
+    });
+
+    it('should not send X-User-Id header', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-100/context')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(function () {
+          // Verify no X-User-Id header is sent
+          expect(this.req.headers['x-user-id']).toBeUndefined();
+          return [200, { success: true, data: { description: null, comments: [] } }];
+        });
+
+      await client.getIssueContext({ identifier: 'INT-100' });
+    });
+
+    it('should encode identifier in URL', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT%2F102/context')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(200, {
+          success: true,
+          data: { description: 'encoded', comments: [] },
+        });
+
+      const result = await client.getIssueContext({ identifier: 'INT/102' });
+
+      expect(result.ok).toBe(true);
+      if (result.ok === true) {
+        expect(result.value.description).toBe('encoded');
+      }
+    });
+  });
 });

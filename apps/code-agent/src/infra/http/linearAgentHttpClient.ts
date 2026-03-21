@@ -23,6 +23,7 @@ import type {
   IssueTreeResponse,
   LinearAgentError,
   LinearIssueForDisplay,
+  IssueContext,
 } from '../../domain/ports/linearAgentClient.js';
 
 export interface LinearAgentHttpClientConfig {
@@ -602,6 +603,55 @@ export function createLinearAgentHttpClient(
         }
 
         return ok(body.data.description ?? undefined);
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          return err({ code: 'UNAVAILABLE', message: 'Request timed out' });
+        }
+        return err({ code: 'UNKNOWN', message: String(error) });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    },
+
+    async getIssueContext(request: { identifier: string }): Promise<Result<IssueContext, LinearAgentError>> {
+      const url = `${baseUrl}/internal/linear/issues/${encodeURIComponent(request.identifier)}/context`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
+
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'X-Internal-Auth': internalAuthToken,
+          },
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          if (response.status === 404) {
+            return err({ code: 'NOT_FOUND', message: errorText });
+          }
+          logger.warn({ status: response.status, error: errorText }, 'linear-agent getIssueContext failed');
+          return err({ code: 'UNAVAILABLE', message: errorText });
+        }
+
+        const body = await response.json() as {
+          success: boolean;
+          data?: {
+            description: string | null;
+            comments: { body: string; createdAt: string }[];
+          };
+        };
+
+        if (!body.success || body.data === undefined) {
+          return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
+        }
+
+        return ok({ description: body.data.description, comments: body.data.comments });
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
           return err({ code: 'UNAVAILABLE', message: 'Request timed out' });
