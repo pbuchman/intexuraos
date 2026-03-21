@@ -260,4 +260,28 @@ describe('GET /internal/linear/issue-context/:identifier', () => {
     expect(body.description).toBe('Just a normal description');
     expect(body.planDocumentPath).toBeNull();
   });
+
+  it('returns 502 when linear-agent is unavailable', async () => {
+    const services = getServices();
+
+    const mockClient: LinearAgentClient = {
+      ...services.linearAgentClient,
+      async getIssueContext() {
+        return err({ code: 'UNAVAILABLE' as const, message: 'Service down' });
+      },
+    };
+
+    setServices({ ...services, linearAgentClient: mockClient });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/internal/linear/issue-context/INT-ERR',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(502);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+  });
 });

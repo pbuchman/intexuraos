@@ -15,22 +15,27 @@ export interface LinearIssueContextResponse {
   planDocumentPath: string | null;
 }
 
+export type GetLinearIssueContextResult =
+  | { status: 'ok'; data: LinearIssueContextResponse }
+  | { status: 'not_found' }
+  | { status: 'error'; code: string };
+
 export async function getLinearIssueContext(
   identifier: string,
   deps: GetLinearIssueContextDeps
-): Promise<LinearIssueContextResponse | undefined> {
+): Promise<GetLinearIssueContextResult> {
   const { linearAgentClient, logger } = deps;
 
   const result = await linearAgentClient.getIssueContext({ identifier });
   if (!result.ok) {
     if (result.error.code === 'NOT_FOUND') {
-      return undefined;
+      return { status: 'not_found' };
     }
     logger.warn(
       { identifier, error: result.error },
       'Failed to fetch issue context from linear-agent'
     );
-    return undefined;
+    return { status: 'error', code: result.error.code };
   }
 
   const context: IssueContext = result.value;
@@ -40,8 +45,11 @@ export async function getLinearIssueContext(
   }) ?? null;
 
   return {
-    description: context.description,
-    comments: context.comments,
-    planDocumentPath,
+    status: 'ok',
+    data: {
+      description: context.description,
+      comments: context.comments,
+      planDocumentPath,
+    },
   };
 }
