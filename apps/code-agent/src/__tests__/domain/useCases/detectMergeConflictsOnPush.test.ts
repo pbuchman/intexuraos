@@ -817,6 +817,25 @@ describe('createDetectMergeConflictsOnPush', () => {
     expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
   });
 
+  it('closes summary when PR details show state is not open', async () => {
+    const logger = createLogger();
+    const deps = createDeps(logger);
+    deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails({
+      mergeable: true,
+      state: 'closed',
+    })));
+
+    const detector = createDetectMergeConflictsOnPush(deps as never);
+    await detector.detectOnPush(createPushEvent('refs/heads/release/2026.03'), logger);
+
+    expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ state: 'closed' }),
+    );
+    // No conflict comment or task should be created for a closed PR
+    expect(deps.gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+    expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
+  });
+
   it('updates the managed comment and clears conflict metadata when conflicts are resolved', async () => {
     const logger = createLogger();
     const deps = createDeps(logger);
@@ -1728,6 +1747,89 @@ describe('createDetectMergeConflictsOnPush', () => {
       expect(result).toEqual(expect.objectContaining({ processed: 2, skipped: 2, closed: 0 }));
       expect(deps.gitHubPRSummaryRepo.upsert).not.toHaveBeenCalled();
       expect(deps.gitHubPRClient.getPullRequestDetails).not.toHaveBeenCalled();
+    });
+
+    it('counts closed outcome when PR details state is not open during reconcile', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+      deps.gitHubPRSummaryRepo.findAllOpen.mockResolvedValue(ok([
+        createSummary({ pullRequestNumber: 10 }),
+      ]));
+      deps.gitHubPRClient.listAllOpenPullRequests.mockResolvedValue(ok([
+        createOpenPRListItem(10),
+      ]));
+      // PR is in the open list but details show it's now closed (race condition)
+      deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails({ state: 'closed' })));
+
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      const result = await detector.reconcile(logger);
+
+      expect(result).toEqual(expect.objectContaining({ processed: 1, closed: 1 }));
+    });
+
+    it('counts skipped outcome when PR details fail to load during reconcile', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+      deps.gitHubPRSummaryRepo.findAllOpen.mockResolvedValue(ok([
+        createSummary({ pullRequestNumber: 10 }),
+      ]));
+      deps.gitHubPRClient.listAllOpenPullRequests.mockResolvedValue(ok([
+        createOpenPRListItem(10),
+      ]));
+      deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(err({
+        code: 'API_ERROR' as const,
+        message: 'GitHub API error',
+      }));
+
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      const result = await detector.reconcile(logger);
+
+      expect(result).toEqual(expect.objectContaining({ processed: 1, skipped: 1 }));
+    });
+
+    it('reuses repo-level token — does not re-resolve per PR during reconcile', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+      deps.gitHubPRSummaryRepo.findAllOpen.mockResolvedValue(ok([
+        createSummary({ pullRequestNumber: 10 }),
+        createSummary({ pullRequestNumber: 11 }),
+      ]));
+      deps.gitHubPRClient.listAllOpenPullRequests.mockResolvedValue(ok([
+        createOpenPRListItem(10),
+        createOpenPRListItem(11),
+      ]));
+      deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails({ mergeable: true })));
+
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      await detector.reconcile(logger);
+
+      // resolveGitHubUsername should only be called once (for the repo-level token resolution),
+      // not once per PR — the pre-resolved context is passed to processOpenSummaryOnPush
+      expect(deps.userServiceClient.resolveGitHubUsername).toHaveBeenCalledTimes(1);
+    });
+
+    it('falls back to second summary when first has no OAuth token', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+      // First summary: no token (null author, null managed owner, no events)
+      // Second summary: has a valid authorLogin that resolves
+      deps.gitHubPRSummaryRepo.findAllOpen.mockResolvedValue(ok([
+        createSummary({ pullRequestNumber: 10, authorLogin: null, managedConflictTaskOwnerUserId: null }),
+        createSummary({ pullRequestNumber: 11, authorLogin: 'alice' }),
+      ]));
+      deps.gitHubPREventRepo.findByPullRequest.mockResolvedValue(ok([]));
+      deps.gitHubPRClient.listAllOpenPullRequests.mockResolvedValue(ok([
+        createOpenPRListItem(10),
+        createOpenPRListItem(11),
+      ]));
+      deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails({ mergeable: true })));
+
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      const result = await detector.reconcile(logger);
+
+      // Both PRs should be processed (not skipped), using the second summary's token
+      expect(result).toEqual(expect.objectContaining({ processed: 2, skipped: 0 }));
+      expect(deps.gitHubPRClient.listAllOpenPullRequests).toHaveBeenCalledTimes(1);
     });
 
     it('skips entire repo when token resolution fails — listAllOpenPullRequests not called', async () => {
