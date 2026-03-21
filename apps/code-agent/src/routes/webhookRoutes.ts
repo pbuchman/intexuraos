@@ -78,6 +78,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       execution_linear_issue_url?: string;
       review_comments_posted?: string;
       review_types?: string;
+      requirements_tracker_updated?: string;
     };
     error?: {
       code: string;
@@ -125,6 +126,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 execution_superpowers_requesting_code_review_used: { type: 'string' },
                 review_comments_posted: { type: 'string' },
                 review_types: { type: 'string' },
+                requirements_tracker_updated: { type: 'string' },
               },
               required: [],
             },
