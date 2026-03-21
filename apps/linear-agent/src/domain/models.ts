@@ -142,6 +142,17 @@ export interface ProcessedAction {
 /** Dashboard filter for issue states */
 export type DashboardColumn = 'todo' | 'backlog' | 'in_progress' | 'in_review' | 'to_test' | 'done';
 
+/** Grouped issues by dashboard column */
+export interface GroupedIssues {
+  todo: LinearIssue[];
+  backlog: LinearIssue[];
+  in_progress: LinearIssue[];
+  in_review: LinearIssue[];
+  to_test: LinearIssue[];
+  done: LinearIssue[];
+  archive: LinearIssue[];
+}
+
 /** Linear workflow state for state transition */
 export interface WorkflowState {
   id: string;
