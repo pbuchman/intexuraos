@@ -33,6 +33,7 @@ export interface SystemPromptParams {
   trackingCommentId?: string;
   continuationPrNumber?: number;
   continuationPrBranch?: string;
+  reviewTypes?: string[];
 }
 
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
@@ -558,12 +559,65 @@ After this block, stop. Do not append any other checklist or schema payload.`;
   /* v8 ignore stop @preserve */
 };
 
+const REVIEW_TYPE_SECTIONS: Record<string, string> = {
+  code_quality: `### 🔍 Code Quality
+**Verdict:** Clean / Minor issues / Needs attention
+- Finding 1...
+- Finding 2...`,
+  security: `### 🔒 Security
+**Verdict:** No concerns / Advisory / Blocking
+- Finding 1...`,
+  architecture: `### 🏗️ Architecture
+**Verdict:** Sound / Minor concerns / Needs redesign
+- Finding 1...`,
+  plan_review: `### 📐 Plan Review
+**Verdict:** Ready / Gaps found / Needs rework
+- Finding 1...`,
+};
+
+function buildReviewStructureSection(reviewTypes: string[] | undefined): string {
+  const types = reviewTypes ?? Object.keys(REVIEW_TYPE_SECTIONS);
+  /* v8 ignore start -- ts-type: nullish coalescing fallback is unreachable after filter but required by noUncheckedIndexedAccess @preserve */
+  const typeSections = types
+    .filter((t) => REVIEW_TYPE_SECTIONS[t] !== undefined)
+    .map((t) => REVIEW_TYPE_SECTIONS[t] ?? '');
+
+  if (typeSections.length === 0) return '';
+  /* v8 ignore stop @preserve */
+
+  const typeLabel = types.join(', ');
+
+  return `### Per-Type Review Structure (MANDATORY)
+
+Each requested review type MUST get its own dedicated section in the review body. Use this exact structure:
+
+\`\`\`markdown
+## Automated Code Review — ${typeLabel}
+
+${typeSections.join('\n\n')}
+
+### 📋 Requirements Coverage
+| Requirement | Status |
+| --- | --- |
+| ... | ✅ / ⚠️ / ❌ |
+
+### Overall Assessment
+<synthesis across all types, 2-3 sentences>
+\`\`\`
+
+Rules:
+- Include ONLY the sections listed above. Do NOT add sections for review types that were not requested.
+- Every included type section MUST have a \`**Verdict:**\` line.
+- The \`### 📋 Requirements Coverage\` and \`### Overall Assessment\` sections are ALWAYS required.`;
+}
+
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '5.1.0',
+  version: '6.1.0',
   build(params: SystemPromptParams): string {
-    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
+    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
+      params;
 
     /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
     return `[SYSTEM CONTEXT]
@@ -699,6 +753,42 @@ When composing the review summary body:
 ${taskUrl !== undefined ? `- Append a final standalone markdown link line exactly as: \`[View in IntexuraOS](${taskUrl})\`` : ''}
 ${taskUrl !== undefined ? '- Include that line in the same `POST /reviews` body, not as a separate PR comment.' : ''}
 
+${buildReviewStructureSection(reviewTypes)}
+
+### Requirements Tracker Comment
+
+After posting the review, create or update a persistent PR issue comment that tracks requirements across consecutive reviews.
+
+**Finding the tracker comment:**
+Search PR issue comments for a comment body containing \`### Requirements Tracker\`. If multiple matches, use the first (oldest by creation date) and log a warning.
+
+**First review (no existing tracker):**
+POST a new PR issue comment:
+
+\`\`\`bash
+gh api /repos/{owner}/{repo}/issues/{pr_number}/comments -f body="@ignore
+### Requirements Tracker
+
+> Auto-maintained by review agent. Updated on each review pass.
+
+| #   | Requirement | Status | Evidence | Last Reviewed |
+| --- | --- | --- | --- | --- |
+| 1   | <requirement> | <status> | <evidence> | Review 1 |
+
+**Summary:** X/Y original requirements met. Z new requirements identified."
+\`\`\`
+
+**Consecutive reviews (tracker exists):**
+GET the existing comment body, update status values and add new rows, then PATCH:
+
+\`\`\`bash
+gh api -X PATCH /repos/{owner}/{repo}/issues/comments/{comment_id} -f body="<updated body>"
+\`\`\`
+
+**Valid status values:** \`✅ Met\`, \`⚠️ Partial\`, \`❌ Missing\`, \`🔍 Not yet verified\`
+
+**New requirements discovered during review:** Add with \`🆕\` prefix in the Requirement column. Explain in the Evidence column where the requirement was discovered (e.g., "Found during code_quality review").
+
 ### Rules
 
 - This is a **read-only** review. Do NOT push commits, modify code, or create branches.
@@ -723,6 +813,7 @@ REVIEW_AGENT_FINAL:
 - PR: <full GitHub PR URL>
 - review_comments_posted: <number of review comments posted>
 - review_types: <comma-separated list of review types performed>
+- requirements_tracker_updated: <yes|no — whether the requirements tracker comment was created/updated>
 - Summary: <3-5 sentences on one line: what you reviewed, key findings, overall quality assessment>
 \`\`\`
 

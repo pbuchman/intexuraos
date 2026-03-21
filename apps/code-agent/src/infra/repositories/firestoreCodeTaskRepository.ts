@@ -244,6 +244,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.trackingCommentId !== undefined) {
           taskData.trackingCommentId = input.trackingCommentId;
         }
+        if (input.reviewTypes !== undefined) {
+          taskData.reviewTypes = input.reviewTypes;
+        }
         /* v8 ignore stop @preserve */
 
         const docRef = collection.doc(taskId);
