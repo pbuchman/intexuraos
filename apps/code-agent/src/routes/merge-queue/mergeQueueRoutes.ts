@@ -14,6 +14,9 @@ import { serializeWatch } from './serializeWatch.js';
 
 const GITHUB_API = 'https://api.github.com';
 
+/** Branches that cannot be used as merge queue base branches. */
+const BLOCKED_BASE_BRANCHES = new Set(['main']);
+
 function githubHeaders(token: string): Record<string, string> {
   return {
     Authorization: `Bearer ${token}`,
@@ -76,7 +79,7 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           return await reply.fail('INVALID_REQUEST', 'owner, repo, and baseBranch are required');
         }
 
-        if (baseBranch === 'main') {
+        if (BLOCKED_BASE_BRANCHES.has(baseBranch)) {
           return await reply.fail('INVALID_REQUEST', 'Merge queue cannot be enabled for the main branch');
         }
 
@@ -239,7 +242,7 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
         // Group by baseBranch (exclude main — merge queue is not allowed on main)
         const branchCounts = new Map<string, number>();
         for (const summary of summariesResult.value) {
-          if (summary.baseBranch === null || summary.baseBranch === 'main') continue;
+          if (summary.baseBranch === null || BLOCKED_BASE_BRANCHES.has(summary.baseBranch)) continue;
           const current = branchCounts.get(summary.baseBranch) ?? 0;
           branchCounts.set(summary.baseBranch, current + 1);
         }
