@@ -6,7 +6,11 @@ export function tsToIso(value: unknown): string | null {
   if (typeof value === 'string') return value;
   if (value instanceof Date) return value.toISOString();
   if (typeof value === 'object' && 'toDate' in value) {
-    return (value as { toDate: () => Date }).toDate().toISOString();
+    try {
+      return (value as { toDate: () => Date }).toDate().toISOString();
+    } catch {
+      return null;
+    }
   }
   return null;
 }

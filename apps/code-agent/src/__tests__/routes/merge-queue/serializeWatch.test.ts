@@ -37,6 +37,20 @@ describe('tsToIso', () => {
   it('should return null for objects without toDate', () => {
     expect(tsToIso({ foo: 'bar' })).toBeNull();
   });
+
+  it('should return null when toDate throws', () => {
+    const broken = {
+      toDate: (): Date => {
+        throw new Error('not a real Timestamp');
+      },
+    };
+    expect(tsToIso(broken)).toBeNull();
+  });
+
+  it('should return null when toDate returns a non-Date value', () => {
+    const bad = { toDate: (): Date => 'not-a-date' as unknown as Date };
+    expect(tsToIso(bad)).toBeNull();
+  });
 });
 
 describe('serializeWatch', () => {
