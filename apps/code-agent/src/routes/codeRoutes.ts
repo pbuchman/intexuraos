@@ -142,6 +142,7 @@ const codeTaskSchema = {
         rebaseResult: { type: 'string', enum: ['success', 'conflict', 'skipped'], nullable: true },
         review_comments_posted: { type: 'string', nullable: true },
         review_types: { type: 'string', nullable: true },
+        requirements_tracker_updated: { type: 'string', nullable: true },
       },
     },
     error: {
@@ -237,6 +238,7 @@ function taskToApiResponse(task: {
     rebaseResult?: 'success' | 'conflict' | 'skipped';
     review_comments_posted?: string;
     review_types?: string;
+    requirements_tracker_updated?: string;
   };
   error?: {
     code: string;
@@ -285,6 +287,7 @@ function taskToApiResponse(task: {
     rebaseResult?: 'success' | 'conflict' | 'skipped';
     review_comments_posted?: string;
     review_types?: string;
+    requirements_tracker_updated?: string;
   };
   error?: {
     code: string;
@@ -1757,6 +1760,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                       rebaseResult: { type: 'string', nullable: true },
                       review_comments_posted: { type: 'string', nullable: true },
                       review_types: { type: 'string', nullable: true },
+                      requirements_tracker_updated: { type: 'string', nullable: true },
                     },
                   },
                   error: {

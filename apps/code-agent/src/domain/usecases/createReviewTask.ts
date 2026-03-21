@@ -406,6 +406,7 @@ export async function createReviewTask(
     prNumber,
     agentType: 'review',
     ...(linearIssueId !== undefined && { linearIssueId }),
+    reviewTypes: request.reviewTypes,
   };
 
   const createResult = await codeTaskRepo.create(taskInput);
