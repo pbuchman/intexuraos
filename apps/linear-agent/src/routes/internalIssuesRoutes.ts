@@ -793,6 +793,8 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
   );
 
   // GET /internal/linear/issues/:identifier/context - Return issue description + comments
+  // No userId scoping — this is a service-to-service call from code-agent;
+  // orchestrator has no user context during deep validation.
   fastify.get<{ Params: { identifier: string } }>(
     '/internal/linear/issues/:identifier/context',
     {
