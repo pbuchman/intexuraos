@@ -819,7 +819,7 @@ describe('POST /webhooks/github', () => {
       expect(body.success).toBe(true);
     });
 
-    it('does not trigger merge-conflict detection from push webhook (now handled by cron reconcile)', async () => {
+    it('triggers merge-conflict detection from push webhook', async () => {
       const { getServices } = await import('../../../services.js');
       const currentServices = getServices();
       const mockDetectOnPush = vi.fn().mockResolvedValue(undefined);
@@ -884,7 +884,7 @@ describe('POST /webhooks/github', () => {
 
       await waitForSettlement();
 
-      expect(mockDetectOnPush).not.toHaveBeenCalled();
+      expect(mockDetectOnPush).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -76,6 +76,10 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           return await reply.fail('INVALID_REQUEST', 'owner, repo, and baseBranch are required');
         }
 
+        if (baseBranch === 'main') {
+          return await reply.fail('INVALID_REQUEST', 'Merge queue cannot be enabled for the main branch');
+        }
+
         const { userServiceClient, mergeQueueWatchRepo } = getServices();
 
         const tokenResult = await userServiceClient.getOAuthToken(userId, 'github');
@@ -232,10 +236,10 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           return await reply.fail('INTERNAL_ERROR', summariesResult.error.message);
         }
 
-        // Group by baseBranch
+        // Group by baseBranch (exclude main — merge queue is not allowed on main)
         const branchCounts = new Map<string, number>();
         for (const summary of summariesResult.value) {
-          if (summary.baseBranch === null) continue;
+          if (summary.baseBranch === null || summary.baseBranch === 'main') continue;
           const current = branchCounts.get(summary.baseBranch) ?? 0;
           branchCounts.set(summary.baseBranch, current + 1);
         }
