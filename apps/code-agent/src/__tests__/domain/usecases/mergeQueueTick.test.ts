@@ -502,15 +502,16 @@ describe('mergeQueueTick', () => {
     }));
   });
 
-  it('sorts PRs by firstSeenAt (oldest first) and uses number as tiebreaker', async () => {
+  it('sorts PRs by PR number ASC (oldest first)', async () => {
     const watch = makeWatch();
     mockWatchRepo.findAllActive.mockResolvedValue(ok([watch]));
     mockUserServiceClient.getOAuthToken.mockResolvedValue(ok({ accessToken: 'tok-123', email: 'test@test.com' }));
 
-    // Two PRs with same firstSeenAt — tiebreak by number
+    // PRs returned in arbitrary order — should be sorted by number
     const prs = [
-      makePrSummary({ pullRequestNumber: 20, firstSeenAt: new Date('2026-03-14T00:00:00Z') }),
-      makePrSummary({ pullRequestNumber: 10, firstSeenAt: new Date('2026-03-14T00:00:00Z') }),
+      makePrSummary({ pullRequestNumber: 30 }),
+      makePrSummary({ pullRequestNumber: 10 }),
+      makePrSummary({ pullRequestNumber: 20 }),
     ];
     mockGitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok(prs));
 
@@ -525,7 +526,7 @@ describe('mergeQueueTick', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok === true) {
-      // PR #10 should be merged first (lower number tiebreaker)
+      // PR #10 should be merged first (lowest number)
       expect(result.value[0]?.mergedPrNumber).toBe(10);
     }
   });
