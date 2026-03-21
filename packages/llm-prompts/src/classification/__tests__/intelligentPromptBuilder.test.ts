@@ -281,6 +281,22 @@ describe('intelligentClassifierPrompt', () => {
       expect(prompt).toContain('"create node"');
     });
 
+    it('includes disambiguation example for "create code task"', () => {
+      const prompt = intelligentClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain(
+        '"create code task to fix the login bug" → code (explicit "create code task")'
+      );
+    });
+
+    it('includes disambiguation example for "create calendar event"', () => {
+      const prompt = intelligentClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain(
+        '"create calendar event for team standup" → calendar (explicit "create calendar event")'
+      );
+    });
+
     it('includes calendar vs todo tiebreaker guidance', () => {
       const prompt = intelligentClassifierPrompt.build({ message: 'test' });
 
