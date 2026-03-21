@@ -252,21 +252,32 @@ it('returns null payload when audit event exists with null payload', async () =>
 
 - [ ] Add test case:
 
+**Important:** This test overrides services and rebuilds the server, which affects shared state. Restore original services and server after this test to avoid leaking into subsequent tests.
+
 ```typescript
 it('returns 500 when audit event repository is not configured', async () => {
+  // Save original server reference for restoration
+  const originalServer = server;
+
   setServices({ ...baseServices, gitHubWebhookAuditEventRepo: undefined });
   server = await buildServer();
 
-  const response = await server.inject({
-    method: 'GET',
-    url: '/code/github-event-log/some-id/payload',
-    headers: { authorization: 'Bearer valid-token' },
-  });
+  try {
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-event-log/some-id/payload',
+      headers: { authorization: 'Bearer valid-token' },
+    });
 
-  expect(response.statusCode).toBe(500);
-  const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
-  expect(body.success).toBe(false);
-  expect(body.error.code).toBe('INTERNAL_ERROR');
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  } finally {
+    // Restore original services and server to avoid affecting other tests
+    setServices(baseServices);
+    server = originalServer;
+  }
 });
 ```
 
