@@ -156,7 +156,6 @@ function mergeRows(
   currentRows: GitHubEventLogListRow[],
   incomingRows: GitHubEventLogListRow[],
 ): GitHubEventLogListRow[] {
-  const currentById = new Map(currentRows.map((row) => [row.id, row]));
   let didChange = false;
 
   const mergedRows: GitHubEventLogListRow[] = [];
@@ -184,7 +183,6 @@ function mergeRows(
       continue;
     }
     mergedRows.push(incomingRow);
-    currentById.set(incomingRow.id, incomingRow);
     didChange = true;
   }
 

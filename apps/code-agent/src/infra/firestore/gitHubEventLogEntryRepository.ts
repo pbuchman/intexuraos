@@ -6,6 +6,7 @@ import type {
   CreatePendingGitHubEventLogEntryInput,
   GitHubEventLogEntry,
 } from '../../domain/models/gitHubEventLogEntry.js';
+import type { GitHubWebhookEventType } from '../../domain/models/gitHubWebhookTypes.js';
 import type {
   GitHubEventLogEntryRepository,
   GitHubEventLogEntryRepositoryError,
@@ -108,7 +109,7 @@ export function createFirestoreGitHubEventLogEntryRepository(deps: {
     async listRecent(options: {
       limit: number;
       cursor?: string;
-      eventTypes?: readonly string[];
+      eventTypes?: readonly GitHubWebhookEventType[];
     }): Promise<
       Result<{
         entries: GitHubEventLogEntry[];
@@ -118,7 +119,7 @@ export function createFirestoreGitHubEventLogEntryRepository(deps: {
       try {
         let query = collection.orderBy('authPassedAt', 'desc');
         if (options.eventTypes !== undefined && options.eventTypes.length > 0) {
-          query = query.where('eventType', 'in', [...options.eventTypes]);
+          query = query.where('eventType', 'in', options.eventTypes as string[]);
         }
         if (options.cursor !== undefined) {
           const cursorDate = new Date(options.cursor);
