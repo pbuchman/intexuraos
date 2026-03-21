@@ -5336,6 +5336,57 @@ describe('TaskDispatcher', () => {
       );
     });
 
+    it('carries forward requirements_tracker_updated from lastSuccessResult for review tasks', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'resumed-review-tracker-carry-test',
+        workerType: 'auto',
+        prompt: 'Test requirements_tracker_updated carry-forward',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'review',
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const internal = resumedDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internal, 'checkForResult').mockResolvedValue({
+        branch: 'feature/tracker',
+        commits: 1,
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/600',
+        summary: 'new summary',
+      });
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['resumed-review-tracker-carry-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      task.lastSuccessResult = {
+        review_comments_posted: '2',
+        review_types: 'code_quality',
+        requirements_tracker_updated: 'yes',
+      };
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'completed',
+            result: expect.objectContaining({
+              requirements_tracker_updated: 'yes',
+            }),
+          }),
+        })
+      );
+    });
+
     it('does not carry forward review fields for non-review tasks', async () => {
       const request: CreateTaskRequest = {
         taskId: 'resumed-no-review-carry-test',

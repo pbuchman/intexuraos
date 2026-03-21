@@ -754,6 +754,29 @@ describe('system-prompt', () => {
     expect(planIdx).toBeLessThan(gatherIdx);
   });
 
+  it('includes requirements tracker comment instructions', () => {
+    const result = reviewPrompt.build(baseParams);
+    expect(result).toContain('### Requirements Tracker Comment');
+    expect(result).toContain('@ignore');
+    expect(result).toContain('### Requirements Tracker');
+    expect(result).toContain('PATCH');
+  });
+
+  it('includes per-type review section structure', () => {
+    const result = reviewPrompt.build(baseParams);
+    expect(result).toContain('### Per-Type Review Structure (MANDATORY)');
+    expect(result).toContain('🔍 Code Quality');
+    expect(result).toContain('🔒 Security');
+    expect(result).toContain('🏗️ Architecture');
+    expect(result).toContain('Verdict:');
+  });
+
+  it('REVIEW_AGENT_FINAL block includes requirements_tracker_updated field', () => {
+    const result = reviewPrompt.build(baseParams);
+    expect(result).toContain('requirements_tracker_updated');
+    expect(result).toContain('REVIEW_AGENT_FINAL');
+  });
+
   it('review agent prompt includes Linear section when linearIssueId is provided', () => {
     const result = buildSystemPrompt({
       ...baseParams,
