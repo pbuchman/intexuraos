@@ -6,6 +6,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  where,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { useAuth } from '@/context';
@@ -30,6 +31,10 @@ import type {
 const LIVE_QUERY_LIMIT = 100;
 const INITIAL_PAGE_SIZE = 100;
 
+/**
+ * Event types shown in the GitHub Event Log UI.
+ * Must stay in sync with VISIBLE_EVENT_TYPES in apps/code-agent/src/domain/constants/visibleEventTypes.ts
+ */
 const VISIBLE_EVENT_TYPES: ReadonlySet<string> = new Set<GitHubWebhookEventType>([
   'pull_request',
   'pull_request_review',
@@ -155,7 +160,6 @@ function mergeRows(
   currentRows: GitHubEventLogListRow[],
   incomingRows: GitHubEventLogListRow[],
 ): GitHubEventLogListRow[] {
-  const currentById = new Map(currentRows.map((row) => [row.id, row]));
   let didChange = false;
 
   const mergedRows: GitHubEventLogListRow[] = [];
@@ -183,7 +187,6 @@ function mergeRows(
       continue;
     }
     mergedRows.push(incomingRow);
-    currentById.set(incomingRow.id, incomingRow);
     didChange = true;
   }
 
@@ -296,6 +299,7 @@ export function useGitHubEventLog(): UseGitHubEventLogResult {
         return;
       }
 
+      // Defense-in-depth: server also filters by eventTypes, but keep client filter as safety net
       const incomingRows = data.rows
         .filter((row) => VISIBLE_EVENT_TYPES.has(row.eventType))
         .map((row) => ({
@@ -365,6 +369,7 @@ export function useGitHubEventLog(): UseGitHubEventLogResult {
       const db = getFirestoreClient();
       const liveQuery = query(
         collection(db, 'github-event-log-entries'),
+        where('eventType', 'in', [...VISIBLE_EVENT_TYPES]),
         orderBy('authPassedAt', 'desc'),
         limit(LIVE_QUERY_LIMIT),
       );
