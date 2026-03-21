@@ -373,7 +373,10 @@ describe('fetchLinearIssueContextViaCodeAgent', () => {
   });
 
   it('returns null fields when response omits optional properties', async () => {
-    nock(codeAgentUrl).get('/internal/linear/issue-context/INT-101').reply(200, {});
+    nock(codeAgentUrl)
+      .get('/internal/linear/issue-context/INT-101')
+      .matchHeader('X-Internal-Auth', authToken)
+      .reply(200, {});
 
     const result = await fetchLinearIssueContextViaCodeAgent(
       'INT-101',
@@ -391,6 +394,7 @@ describe('fetchLinearIssueContextViaCodeAgent', () => {
   it('returns undefined when code-agent returns 404', async () => {
     nock(codeAgentUrl)
       .get('/internal/linear/issue-context/INT-404')
+      .matchHeader('X-Internal-Auth', authToken)
       .reply(404, { error: 'Not found' });
 
     const result = await fetchLinearIssueContextViaCodeAgent(
@@ -409,6 +413,7 @@ describe('fetchLinearIssueContextViaCodeAgent', () => {
   it('returns undefined when code-agent is unreachable', async () => {
     nock(codeAgentUrl)
       .get('/internal/linear/issue-context/INT-500')
+      .matchHeader('X-Internal-Auth', authToken)
       .replyWithError('connect ECONNREFUSED');
 
     const result = await fetchLinearIssueContextViaCodeAgent(
@@ -427,6 +432,7 @@ describe('fetchLinearIssueContextViaCodeAgent', () => {
   it('returns undefined when request times out', async () => {
     nock(codeAgentUrl)
       .get('/internal/linear/issue-context/INT-TIMEOUT')
+      .matchHeader('X-Internal-Auth', authToken)
       .delayConnection(200)
       .reply(200, { description: 'too late' });
 
@@ -446,6 +452,7 @@ describe('fetchLinearIssueContextViaCodeAgent', () => {
   it('encodes identifier with special characters in URL', async () => {
     nock(codeAgentUrl)
       .get('/internal/linear/issue-context/INT%2F102')
+      .matchHeader('X-Internal-Auth', authToken)
       .reply(200, { description: 'encoded' });
 
     const result = await fetchLinearIssueContextViaCodeAgent(
