@@ -31,6 +31,10 @@ import type {
 const LIVE_QUERY_LIMIT = 100;
 const INITIAL_PAGE_SIZE = 100;
 
+/**
+ * Event types shown in the GitHub Event Log UI.
+ * Must stay in sync with VISIBLE_EVENT_TYPES in apps/code-agent/src/domain/constants/visibleEventTypes.ts
+ */
 const VISIBLE_EVENT_TYPES: ReadonlySet<string> = new Set<GitHubWebhookEventType>([
   'pull_request',
   'pull_request_review',
@@ -295,6 +299,7 @@ export function useGitHubEventLog(): UseGitHubEventLogResult {
         return;
       }
 
+      // Defense-in-depth: server also filters by eventTypes, but keep client filter as safety net
       const incomingRows = data.rows
         .filter((row) => VISIBLE_EVENT_TYPES.has(row.eventType))
         .map((row) => ({
