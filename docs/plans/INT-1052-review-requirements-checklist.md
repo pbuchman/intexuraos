@@ -30,7 +30,7 @@ Analysis of review comments on PRs #1392–#1402 reveals:
 **Mechanism:** The review agent creates/updates a dedicated PR issue comment (separate from its review body) that tracks requirements across reviews. This mirrors the automation activity log pattern in `gitHubPRAutomationLog.ts`.
 
 **Flow:**
-1. **First review on a PR:** Agent searches for existing tracker comment (pattern: `### Requirements Tracker`). Not found → POST new comment with `@ignore` header + requirements table.
+1. **First review on a PR:** Agent searches for existing tracker comment (pattern: `### Requirements Tracker`). Not found → POST new comment with `@ignore` header + requirements table. **Disambiguation:** If multiple comments match, use the first (oldest by creation date) and log a warning. This mirrors how the automation activity log handles its own comment discovery.
 2. **Consecutive reviews:** Agent searches for existing tracker comment. Found → GET body, update table rows (change statuses, add new requirements), PATCH comment.
 3. **New requirements:** When the reviewer discovers something not in the original spec (e.g., missing validation, edge case), it adds a row with `🆕` prefix in the Requirement column.
 
@@ -392,6 +392,5 @@ git add apps/code-agent/
 git commit -m "feat(code-agent): emphasize requirements validation in review user prompt
 
 - Add CRITICAL emphasis before Issue Requirements section
-- Instruct agent to verify every requirement against the PR
-- Link requirements to the Requirements Tracker comment"
+- Instruct agent to flag missing requirements as 🔴 findings"
 ```
