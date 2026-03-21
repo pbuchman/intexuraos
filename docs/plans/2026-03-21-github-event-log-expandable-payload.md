@@ -475,12 +475,12 @@ import { getGitHubEventLogPayload } from '@/services/codeAgentApi';
 **Replace the component function** with expand/collapse logic:
 
 Key changes:
-1. Add state: `isExpanded`, `payload`, `payloadLoading`, `payloadError`
+1. Add state: `isExpanded`, `payload`, `payloadFetched`, `payloadLoading`, `payloadError`
 2. Add a click handler that toggles `isExpanded` and lazy-fetches payload on first expand
 3. Add a chevron icon (rotates when expanded) as the first element in the row
 4. Add an expanded section below the row with formatted JSON in `<pre><code>`
 5. Update the grid columns to accommodate the chevron (add a small column at the start)
-6. Cache payload in state so re-expand doesn't re-fetch
+6. Cache payload in state so re-expand doesn't re-fetch (use `payloadFetched` flag, NOT `payload === null`, because the backend can legitimately return `null` as the payload value)
 7. Show loading spinner while fetching, error message on failure
 
 **Desktop grid column update:**
@@ -501,7 +501,9 @@ lg:grid-cols-[24px_80px_160px_120px_100px_1fr_220px]
 </button>
 ```
 
-**Expanded payload section (after the row grid, inside the outer div):**
+**Expanded payload section (rendered ONCE, after BOTH the desktop `hidden lg:grid` div and the mobile `lg:hidden` div, inside the outer container div):**
+
+**Important:** Do NOT duplicate this section for desktop and mobile. Place it once after both layout divs — it will be visible regardless of viewport because it's not wrapped in any responsive visibility class.
 ```tsx
 {isExpanded ? (
   <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
@@ -530,17 +532,21 @@ const { getAccessToken } = useAuth();
 
 const [isExpanded, setIsExpanded] = useState(false);
 const [payload, setPayload] = useState<unknown>(null);
+const [payloadFetched, setPayloadFetched] = useState(false);
 const [payloadLoading, setPayloadLoading] = useState(false);
 const [payloadError, setPayloadError] = useState<string | null>(null);
 
 const handleToggle = async (): Promise<void> => {
-  if (!isExpanded && payload === null && !payloadLoading) {
+  // Use payloadFetched flag (NOT payload === null) because the backend
+  // can legitimately return null as the payload value.
+  if (!isExpanded && !payloadFetched && !payloadLoading) {
     setPayloadLoading(true);
     setPayloadError(null);
     try {
       const token = await getAccessToken();
       const result = await getGitHubEventLogPayload(token, row.id);
       setPayload(result.data.payload);
+      setPayloadFetched(true);
     } catch {
       setPayloadError('Failed to load payload');
     } finally {
@@ -553,7 +559,7 @@ const handleToggle = async (): Promise<void> => {
 
 **Important memo update:** The `memo` equality check at the bottom needs updating. Since the component now has internal state (expand/payload), the memo check remains on `prevProps.row === nextProps.row` — internal state changes are handled by React's own state mechanism, not props. No change needed to the memo wrapper.
 
-**Mobile row:** Add the same chevron as the first element in the mobile flex layout, and the same expanded section below both layouts.
+**Mobile row:** Add the same chevron `<button>` as the first element in the mobile `lg:hidden` flex layout. The expanded payload section is already shared between both layouts (rendered once after both divs), so no duplication is needed.
 
 ### Step 2.4: Update ColumnHeader in GitHubEventLogPage
 
