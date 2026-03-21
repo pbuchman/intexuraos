@@ -14,6 +14,8 @@ const {
   extractPrNumber,
   fetchLinearIssueContext,
   fetchLinearIssueDescription,
+  fetchLinearIssueContextViaCodeAgent,
+  readPlanFile,
   readPlanReferencedInLinearIssue,
 } = await import('../deep-validator-helpers.js');
 
@@ -104,7 +106,7 @@ describe('readPlanReferencedInLinearIssue', () => {
         worktreePath: '/worktree',
         planPath: 'docs/plans/INT-800-design.md',
       }),
-      'Failed to read plan referenced in Linear issue'
+      'Failed to read plan file from worktree'
     );
   });
 });
@@ -333,6 +335,188 @@ describe('fetchLinearIssueDescription', () => {
     expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ identifier: 'INT-000' }),
       expect.stringContaining('Failed to fetch Linear issue context')
+    );
+  });
+});
+
+describe('fetchLinearIssueContextViaCodeAgent', () => {
+  const codeAgentUrl = 'http://localhost:8080';
+  const authToken = 'test-internal-auth-token';
+
+  it('returns description, comments, and planDocumentPath on success', async () => {
+    nock(codeAgentUrl)
+      .get('/internal/linear/issue-context/INT-100')
+      .matchHeader('X-Internal-Auth', authToken)
+      .reply(200, {
+        description: 'Fix the bug',
+        comments: [
+          { body: 'comment 1', createdAt: '2026-03-08T10:00:00.000Z' },
+          { body: 'comment 2', createdAt: '2026-03-09T10:00:00.000Z' },
+        ],
+        planDocumentPath: 'docs/plans/INT-100-design.md',
+      });
+
+    const result = await fetchLinearIssueContextViaCodeAgent(
+      'INT-100',
+      { codeAgentUrl, internalAuthToken: authToken },
+      mockLogger
+    );
+
+    expect(result).toEqual({
+      description: 'Fix the bug',
+      comments: [
+        { body: 'comment 1', createdAt: '2026-03-08T10:00:00.000Z' },
+        { body: 'comment 2', createdAt: '2026-03-09T10:00:00.000Z' },
+      ],
+      planDocumentPath: 'docs/plans/INT-100-design.md',
+    });
+  });
+
+  it('returns null fields when response omits optional properties', async () => {
+    nock(codeAgentUrl)
+      .get('/internal/linear/issue-context/INT-101')
+      .matchHeader('X-Internal-Auth', authToken)
+      .reply(200, {});
+
+    const result = await fetchLinearIssueContextViaCodeAgent(
+      'INT-101',
+      { codeAgentUrl, internalAuthToken: authToken },
+      mockLogger
+    );
+
+    expect(result).toEqual({
+      description: null,
+      comments: [],
+      planDocumentPath: null,
+    });
+  });
+
+  it('returns undefined when code-agent returns 404', async () => {
+    nock(codeAgentUrl)
+      .get('/internal/linear/issue-context/INT-404')
+      .matchHeader('X-Internal-Auth', authToken)
+      .reply(404, { error: 'Not found' });
+
+    const result = await fetchLinearIssueContextViaCodeAgent(
+      'INT-404',
+      { codeAgentUrl, internalAuthToken: authToken },
+      mockLogger
+    );
+
+    expect(result).toBeUndefined();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ identifier: 'INT-404', status: 404 }),
+      'Failed to fetch Linear issue context via code-agent'
+    );
+  });
+
+  it('returns undefined when code-agent is unreachable', async () => {
+    nock(codeAgentUrl)
+      .get('/internal/linear/issue-context/INT-500')
+      .matchHeader('X-Internal-Auth', authToken)
+      .replyWithError('connect ECONNREFUSED');
+
+    const result = await fetchLinearIssueContextViaCodeAgent(
+      'INT-500',
+      { codeAgentUrl, internalAuthToken: authToken },
+      mockLogger
+    );
+
+    expect(result).toBeUndefined();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ identifier: 'INT-500' }),
+      'Failed to fetch Linear issue context via code-agent'
+    );
+  });
+
+  it('returns undefined when request times out', async () => {
+    nock(codeAgentUrl)
+      .get('/internal/linear/issue-context/INT-TIMEOUT')
+      .matchHeader('X-Internal-Auth', authToken)
+      .delayConnection(200)
+      .reply(200, { description: 'too late' });
+
+    const result = await fetchLinearIssueContextViaCodeAgent(
+      'INT-TIMEOUT',
+      { codeAgentUrl, internalAuthToken: authToken, timeoutMs: 50 },
+      mockLogger
+    );
+
+    expect(result).toBeUndefined();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ identifier: 'INT-TIMEOUT' }),
+      'Failed to fetch Linear issue context via code-agent'
+    );
+  });
+
+  it('encodes identifier with special characters in URL', async () => {
+    nock(codeAgentUrl)
+      .get('/internal/linear/issue-context/INT%2F102')
+      .matchHeader('X-Internal-Auth', authToken)
+      .reply(200, { description: 'encoded' });
+
+    const result = await fetchLinearIssueContextViaCodeAgent(
+      'INT/102',
+      { codeAgentUrl, internalAuthToken: authToken },
+      mockLogger
+    );
+
+    expect(result).toEqual({
+      description: 'encoded',
+      comments: [],
+      planDocumentPath: null,
+    });
+  });
+
+  it('defaults missing comment fields to empty strings', async () => {
+    nock(codeAgentUrl)
+      .get('/internal/linear/issue-context/INT-PARTIAL')
+      .reply(200, {
+        description: 'partial data',
+        comments: [{ body: 'has body' }, { createdAt: '2026-03-10T00:00:00Z' }, {}],
+        planDocumentPath: null,
+      });
+
+    const result = await fetchLinearIssueContextViaCodeAgent(
+      'INT-PARTIAL',
+      { codeAgentUrl, internalAuthToken: authToken },
+      mockLogger
+    );
+
+    expect(result).toEqual({
+      description: 'partial data',
+      comments: [
+        { body: 'has body', createdAt: '' },
+        { body: '', createdAt: '2026-03-10T00:00:00Z' },
+        { body: '', createdAt: '' },
+      ],
+      planDocumentPath: null,
+    });
+  });
+});
+
+describe('readPlanFile', () => {
+  it('reads file from worktree path', async () => {
+    mockReadFile.mockResolvedValueOnce('# Plan\nStep 1...');
+
+    const result = await readPlanFile('/worktree', 'docs/plans/INT-100.md', mockLogger);
+
+    expect(result).toBe('# Plan\nStep 1...');
+    expect(mockReadFile).toHaveBeenCalledWith('/worktree/docs/plans/INT-100.md', 'utf-8');
+  });
+
+  it('returns undefined when file does not exist', async () => {
+    mockReadFile.mockRejectedValueOnce(new Error('ENOENT'));
+
+    const result = await readPlanFile('/worktree', 'docs/plans/missing.md', mockLogger);
+
+    expect(result).toBeUndefined();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        worktreePath: '/worktree',
+        planPath: 'docs/plans/missing.md',
+      }),
+      'Failed to read plan file from worktree'
     );
   });
 });

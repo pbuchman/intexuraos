@@ -371,6 +371,7 @@ async function bootstrap(): Promise<void> {
 
   // Load required env vars
   const codeAgentUrl = getRequiredEnv('INTEXURAOS_CODE_AGENT_URL');
+  const internalAuthToken = getRequiredEnv('INTEXURAOS_INTERNAL_AUTH_TOKEN');
   const orchestratorSecret = getRequiredEnv('INTEXURAOS_ORCHESTRATOR_SECRET');
   const githubAppId = getRequiredEnv('INTEXURAOS_GITHUB_APP_ID');
   const githubInstallationId = getRequiredEnv('INTEXURAOS_GITHUB_INSTALLATION_ID');
@@ -418,6 +419,7 @@ async function bootstrap(): Promise<void> {
     githubInstallationId,
     orchestratorSecret,
     secretsBasePath: join(orchestratorDir, 'secrets'),
+    internalAuthToken,
   };
 
   const logFilePath = join(logsDir, 'orchestrator.log');
@@ -468,8 +470,7 @@ async function bootstrap(): Promise<void> {
     join(orchestratorDir, 'github-token')
   );
 
-  const internalAuthToken = getRequiredEnv('INTEXURAOS_INTERNAL_AUTH_TOKEN');
-  const webhookClient = new WebhookClient(statePersistence, logger, internalAuthToken);
+  const webhookClient = new WebhookClient(statePersistence, logger, config.internalAuthToken);
 
   const worktreeManager = new WorktreeManager(
     {
@@ -492,7 +493,7 @@ async function bootstrap(): Promise<void> {
       logBasePath: config.logBasePath,
       codeAgentUrl: config.codeAgentUrl,
       orchestratorSecret: config.orchestratorSecret,
-      internalAuthToken,
+      internalAuthToken: config.internalAuthToken,
     },
     logger
   );
@@ -672,7 +673,7 @@ async function bootstrap(): Promise<void> {
     {
       codeAgentUrl: config.codeAgentUrl,
       orchestratorSecret: config.orchestratorSecret,
-      internalAuthToken,
+      internalAuthToken: config.internalAuthToken,
       secretsBasePath,
       sharedCredsPath,
     },
