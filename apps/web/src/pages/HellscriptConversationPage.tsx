@@ -16,6 +16,7 @@ export function HellscriptConversationPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
   const { workspace, loading, error, impose, imposing, lastAction, clearLastAction } = useHellscriptWorkspace(id);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [pendingUtterance, setPendingUtterance] = useState<string | null>(null);
 
   const versions = useMemo<HellscriptDraftVersion[]>(
     () => workspace?.draftVersions ?? [],
@@ -37,9 +38,13 @@ export function HellscriptConversationPage(): React.JSX.Element {
 
   const handleCategorySelect = useCallback(
     (category: WritingCategory) => {
-      void impose(`Generate a ${category} draft`);
+      const utterance = pendingUtterance !== null
+        ? `[${category}] ${pendingUtterance}`
+        : `Generate a ${category} draft`;
+      setPendingUtterance(null);
+      void impose(utterance);
     },
-    [impose]
+    [impose, pendingUtterance]
   );
 
   const isNewConversation = id === undefined;
@@ -80,7 +85,10 @@ export function HellscriptConversationPage(): React.JSX.Element {
               <div className="flex-1 overflow-y-auto">
                 <HellscriptTimeline events={workspace?.events ?? []} />
               </div>
-              <HellscriptComposer onSubmit={impose} disabled={imposing} />
+              <HellscriptComposer onSubmit={(utterance: string) => {
+                setPendingUtterance(utterance);
+                return impose(utterance);
+              }} disabled={imposing} />
               {lastAction === 'category_required' ? (
                 <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-900/20">
                   <div className="mb-2 flex items-center justify-between">

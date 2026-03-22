@@ -1,7 +1,6 @@
 import type { Result } from '@intexuraos/common-core';
 import type { WritingConfigRepository } from '../ports/writingConfigRepository.js';
 import type { WritingCategory } from '../models/writingCategory.js';
-import { escapeXmlTags } from '../services/sanitize.js';
 
 export interface UpdateStyleInstructionsDeps {
   writingConfigRepository: WritingConfigRepository;
@@ -13,6 +12,5 @@ export async function updateStyleInstructions(
   category: WritingCategory,
   text: string
 ): Promise<Result<void>> {
-  const sanitized = escapeXmlTags(text);
-  return await deps.writingConfigRepository.upsertStyleInstructions(userId, category, sanitized);
+  return await deps.writingConfigRepository.upsertStyleInstructions(userId, category, text);
 }

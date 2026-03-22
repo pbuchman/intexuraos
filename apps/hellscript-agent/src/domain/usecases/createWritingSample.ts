@@ -2,12 +2,19 @@ import type { Result } from '@intexuraos/common-core';
 import type { WritingConfigRepository } from '../ports/writingConfigRepository.js';
 import type { WritingCategory } from '../models/writingCategory.js';
 import type { WritingSample } from '../models/writingSample.js';
-import { escapeXmlTags } from '../services/sanitize.js';
 
 const MAX_SAMPLES_PER_CATEGORY = 5;
 
 export interface CreateWritingSampleDeps {
   writingConfigRepository: WritingConfigRepository;
+}
+
+export class MaxSamplesError extends Error {
+  readonly code = 'MAX_SAMPLES' as const;
+  constructor(max: number) {
+    super(`Maximum ${String(max)} samples per category reached`);
+    this.name = 'MaxSamplesError';
+  }
 }
 
 export async function createWritingSample(
@@ -25,16 +32,13 @@ export async function createWritingSample(
   if (countResult.value >= MAX_SAMPLES_PER_CATEGORY) {
     return {
       ok: false,
-      error: new Error(`Maximum ${String(MAX_SAMPLES_PER_CATEGORY)} samples per category reached`),
+      error: new MaxSamplesError(MAX_SAMPLES_PER_CATEGORY),
     };
   }
 
-  const sanitizedTitle = escapeXmlTags(title);
-  const sanitizedText = escapeXmlTags(text);
-
   return await deps.writingConfigRepository.createSample(userId, {
     category,
-    title: sanitizedTitle,
-    text: sanitizedText,
+    title,
+    text,
   });
 }

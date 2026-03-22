@@ -7,8 +7,8 @@ import { getWritingConfig } from '../domain/usecases/getWritingConfig.js';
 import { updateStyleInstructions } from '../domain/usecases/updateStyleInstructions.js';
 import { clearStyleInstructions } from '../domain/usecases/clearStyleInstructions.js';
 import { listWritingSamples } from '../domain/usecases/listWritingSamples.js';
-import { createWritingSample } from '../domain/usecases/createWritingSample.js';
-import { updateWritingSample } from '../domain/usecases/updateWritingSample.js';
+import { createWritingSample, MaxSamplesError } from '../domain/usecases/createWritingSample.js';
+import { updateWritingSample, SampleNotFoundError } from '../domain/usecases/updateWritingSample.js';
 import { deleteWritingSample } from '../domain/usecases/deleteWritingSample.js';
 
 interface CategoryParams {
@@ -264,7 +264,7 @@ export const writingConfigRoutes: FastifyPluginCallback = (fastify, _opts, done)
       );
 
       if (!result.ok) {
-        if (result.error.message.includes('Maximum')) {
+        if (result.error instanceof MaxSamplesError) {
           return await reply.fail('CONFLICT', result.error.message);
         }
         request.log.error({ err: result.error }, 'Create writing sample failed');
@@ -311,7 +311,7 @@ export const writingConfigRoutes: FastifyPluginCallback = (fastify, _opts, done)
       );
 
       if (!result.ok) {
-        if (result.error.message === 'Sample not found') {
+        if (result.error instanceof SampleNotFoundError) {
           return await reply.fail('NOT_FOUND', result.error.message);
         }
         request.log.error({ err: result.error }, 'Update writing sample failed');
@@ -355,7 +355,7 @@ export const writingConfigRoutes: FastifyPluginCallback = (fastify, _opts, done)
       );
 
       if (!result.ok) {
-        if (result.error.message === 'Sample not found') {
+        if (result.error instanceof SampleNotFoundError) {
           return await reply.fail('NOT_FOUND', result.error.message);
         }
         request.log.error({ err: result.error }, 'Delete writing sample failed');
