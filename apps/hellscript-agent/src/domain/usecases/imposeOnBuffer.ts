@@ -10,6 +10,7 @@ import type { WritingCategory } from '../models/writingCategory.js';
 import { emptyState } from '../models/materializedBufferState.js';
 import { isValidCategory } from '../models/writingCategory.js';
 import { applyIntentToState } from '../services/applyIntentToState.js';
+import { BufferNotFoundError, DraftGenerationError } from '../errors.js';
 
 export interface ImposeOnBufferDeps {
   repository: HellscriptRepository;
@@ -58,7 +59,7 @@ export async function imposeOnBuffer(
       return bufferWithStateResult;
     }
     if (bufferWithStateResult.value === null) {
-      return { ok: false, error: new Error('Buffer not found') };
+      return { ok: false, error: new BufferNotFoundError() };
     }
     buffer = bufferWithStateResult.value.buffer;
     currentState = bufferWithStateResult.value.state ?? emptyState();
@@ -157,7 +158,7 @@ export async function imposeOnBuffer(
     );
     if (!generateResult.ok) {
       logger.error({ bufferId, err: generateResult.error }, 'Draft generation failed');
-      return { ok: false, error: new Error('Draft generation failed') };
+      return { ok: false, error: new DraftGenerationError() };
     }
 
     const draftResult = await repository.saveDraftVersion({

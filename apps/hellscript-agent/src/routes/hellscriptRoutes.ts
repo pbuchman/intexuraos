@@ -4,6 +4,7 @@ import { getServices } from '../services.js';
 import { imposeOnBuffer } from '../domain/usecases/imposeOnBuffer.js';
 import { listBuffers } from '../domain/usecases/listBuffers.js';
 import { getBufferWorkspace } from '../domain/usecases/getBufferWorkspace.js';
+import { BufferNotFoundError, DraftGenerationError } from '../domain/errors.js';
 
 interface ImposeBody {
   bufferId?: string;
@@ -86,10 +87,10 @@ export const hellscriptRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
       );
 
       if (!result.ok) {
-        if (result.error.message === 'Buffer not found') {
+        if (result.error instanceof BufferNotFoundError) {
           return await reply.fail('NOT_FOUND', result.error.message);
         }
-        if (result.error.message === 'Draft generation failed') {
+        if (result.error instanceof DraftGenerationError) {
           return await reply.fail('INTERNAL_ERROR', 'Draft generation failed. Please try again.');
         }
         request.log.error({ err: result.error }, 'Impose failed');
@@ -213,7 +214,7 @@ export const hellscriptRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
       );
 
       if (!result.ok) {
-        if (result.error.message === 'Buffer not found') {
+        if (result.error instanceof BufferNotFoundError) {
           return await reply.fail('NOT_FOUND', result.error.message);
         }
         request.log.error({ err: result.error }, 'Get workspace failed');
