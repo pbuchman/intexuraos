@@ -1,22 +1,15 @@
 import { useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Pencil, Trash2 } from 'lucide-react';
-import { Layout } from '@/components';
+import { Layout, ErrorBanner } from '@/components';
 import { useWritingSamples } from '@/hooks/useWritingSamples';
 import type { WritingCategory, WritingSample } from '@/types';
-
-const CATEGORIES: { key: WritingCategory; label: string }[] = [
-  { key: 'threads', label: 'Threads' },
-  { key: 'linkedin', label: 'LinkedIn' },
-  { key: 'general', label: 'General' },
-];
-
-const VALID_TABS = new Set<string>(['threads', 'linkedin', 'general']);
+import { WRITING_CATEGORIES } from '@/types';
 
 const MAX_SAMPLES = 5;
 
 function isValidTab(value: string | null): value is WritingCategory {
-  return value !== null && VALID_TABS.has(value);
+  return value !== null && WRITING_CATEGORIES.some((c) => c.key === value);
 }
 
 function SampleForm({
@@ -87,7 +80,7 @@ function SampleRow({
   onEdit: (sample: WritingSample) => void;
   onDelete: (sampleId: string) => Promise<void>;
 }): React.JSX.Element {
-  const handleDelete = useCallback(async () => {
+  const handleDelete = useCallback(async (): Promise<void> => {
     if (!window.confirm(`Delete sample "${sample.title}"?`)) return;
     await onDelete(sample.id);
   }, [sample.id, sample.title, onDelete]);
@@ -134,16 +127,22 @@ function CategorySamplesPanel({
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingSample, setEditingSample] = useState<WritingSample | null>(null);
 
-  const handleCreate = async (title: string, text: string): Promise<void> => {
-    await createSample(title, text);
-    setShowAddForm(false);
-  };
+  const handleCreate = useCallback(
+    async (title: string, text: string): Promise<void> => {
+      await createSample(title, text);
+      setShowAddForm(false);
+    },
+    [createSample]
+  );
 
-  const handleUpdate = async (title: string, text: string): Promise<void> => {
-    if (editingSample === null) return;
-    await updateSample(editingSample.id, title, text);
-    setEditingSample(null);
-  };
+  const handleUpdate = useCallback(
+    async (title: string, text: string): Promise<void> => {
+      if (editingSample === null) return;
+      await updateSample(editingSample.id, title, text);
+      setEditingSample(null);
+    },
+    [editingSample, updateSample]
+  );
 
   if (loading) {
     return (
@@ -155,11 +154,7 @@ function CategorySamplesPanel({
 
   return (
     <div className="space-y-3">
-      {error !== null ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
-          {error}
-        </div>
-      ) : null}
+      <ErrorBanner message={error} />
 
       <div className="text-sm text-slate-500 dark:text-slate-400">
         {String(samples.length)}/{String(MAX_SAMPLES)} samples
@@ -206,23 +201,10 @@ function CategorySamplesPanel({
   );
 }
 
-function useTabCounts(): Record<WritingCategory, number> {
-  const threadsSamples = useWritingSamples('threads');
-  const linkedinSamples = useWritingSamples('linkedin');
-  const generalSamples = useWritingSamples('general');
-
-  return {
-    threads: threadsSamples.samples.length,
-    linkedin: linkedinSamples.samples.length,
-    general: generalSamples.samples.length,
-  };
-}
-
 export function HellscriptSamplesPage(): React.JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
   const activeTab: WritingCategory = isValidTab(tabParam) ? tabParam : 'threads';
-  const counts = useTabCounts();
 
   const setActiveTab = useCallback(
     (tab: WritingCategory) => {
@@ -244,7 +226,7 @@ export function HellscriptSamplesPage(): React.JSX.Element {
         </div>
 
         <div className="mb-4 flex gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1 dark:border-slate-700 dark:bg-slate-800">
-          {CATEGORIES.map(({ key, label }) => (
+          {WRITING_CATEGORIES.map(({ key, label }) => (
             <button
               key={key}
               type="button"
@@ -255,7 +237,7 @@ export function HellscriptSamplesPage(): React.JSX.Element {
               }`}
               onClick={() => { setActiveTab(key); }}
             >
-              {label} ({String(counts[key])})
+              {label}
             </button>
           ))}
         </div>

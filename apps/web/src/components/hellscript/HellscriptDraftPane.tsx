@@ -9,18 +9,16 @@ export function HellscriptDraftPane({ draft }: HellscriptDraftPaneProps): React.
   if (draft === null) {
     return (
       <div className="flex h-full items-center justify-center p-8 text-center">
-        <div>
-          <p className="text-sm text-slate-400 dark:text-slate-500">
-            No draft yet. Add thoughts and ask to generate a draft.
-          </p>
-        </div>
+        <p className="text-sm text-slate-400 dark:text-slate-500">
+          No draft yet. Add thoughts and ask to generate a draft.
+        </p>
       </div>
     );
   }
 
   return (
     <div className="flex h-full flex-col">
-      <div className="mb-2 flex items-center justify-between border-b border-slate-200 pb-2 dark:border-slate-700">
+      <div className="mb-2 border-b border-slate-200 pb-2 dark:border-slate-700">
         <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
           Draft v{String(draft.versionNumber)}
         </span>
