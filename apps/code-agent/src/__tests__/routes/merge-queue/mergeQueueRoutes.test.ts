@@ -774,14 +774,48 @@ describe('Merge queue JWT routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: { branches: { name: string; openPrCount: number }[] } };
+      const body = JSON.parse(response.body) as { success: boolean; data: { branches: { name: string; openPrCount: number; blocked: boolean }[] } };
       expect(body.success).toBe(true);
 
       const branches = body.data.branches;
       const devBranch = branches.find((b) => b.name === 'development');
       const developBranch = branches.find((b) => b.name === 'develop');
       expect(devBranch?.openPrCount).toBe(2);
+      expect(devBranch?.blocked).toBe(false);
       expect(developBranch?.openPrCount).toBe(1);
+      expect(developBranch?.blocked).toBe(false);
+    });
+
+    it('should include main branch with blocked: true', async () => {
+      const { gitHubPRSummaryRepo } = getServices();
+      await gitHubPRSummaryRepo.upsert({
+        repository: 'intexuraos/repo', pullRequestNumber: 1, title: 'PR targeting dev',
+        state: 'open', baseBranch: 'development', authorLogin: 'user1', headBranch: 'feat-1',
+        lastActivityAt: new Date(), firstSeenAt: new Date(),
+      });
+      await gitHubPRSummaryRepo.upsert({
+        repository: 'intexuraos/repo', pullRequestNumber: 2, title: 'PR targeting main',
+        state: 'open', baseBranch: 'main', authorLogin: 'user1', headBranch: 'feat-2',
+        lastActivityAt: new Date(), firstSeenAt: new Date(),
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/merge-queue/branches?owner=intexuraos&repo=repo',
+        headers: { authorization: 'Bearer fake-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { branches: { name: string; openPrCount: number; blocked: boolean }[] } };
+      const branches = body.data.branches;
+
+      const mainBranch = branches.find((b) => b.name === 'main');
+      expect(mainBranch).toBeDefined();
+      expect(mainBranch?.openPrCount).toBe(1);
+      expect(mainBranch?.blocked).toBe(true);
+
+      const devBranch = branches.find((b) => b.name === 'development');
+      expect(devBranch?.blocked).toBe(false);
     });
 
     it('should not include PRs from other repositories', async () => {
@@ -804,9 +838,10 @@ describe('Merge queue JWT routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: { branches: { name: string; openPrCount: number }[] } };
+      const body = JSON.parse(response.body) as { success: boolean; data: { branches: { name: string; openPrCount: number; blocked: boolean }[] } };
       expect(body.data.branches).toHaveLength(1);
       expect(body.data.branches[0]?.openPrCount).toBe(1);
+      expect(body.data.branches[0]?.blocked).toBe(false);
     });
 
     it('should skip PRs with null baseBranch', async () => {
@@ -829,10 +864,11 @@ describe('Merge queue JWT routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: { branches: { name: string; openPrCount: number }[] } };
+      const body = JSON.parse(response.body) as { success: boolean; data: { branches: { name: string; openPrCount: number; blocked: boolean }[] } };
       expect(body.data.branches).toHaveLength(1);
       expect(body.data.branches[0]?.name).toBe('development');
       expect(body.data.branches[0]?.openPrCount).toBe(1);
+      expect(body.data.branches[0]?.blocked).toBe(false);
     });
 
     it('should return error when owner or repo query params are missing', async () => {
