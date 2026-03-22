@@ -16,6 +16,7 @@ import type { GitHubPREventRepository } from '../repositories/gitHubPREventRepos
 import type { WebhookMessageBuilder } from './gitHubMessageBuilder.js';
 import { createTaskForPR } from '../usecases/createTaskForPR.js';
 import { sendTaskMessage } from '../usecases/sendTaskMessage.js';
+import type { SendTaskMessageErrorCode } from '../usecases/sendTaskMessage.js';
 import type { DispatchRetryRepository } from '../repositories/dispatchRetryRepository.js';
 import { isRetryableErrorCode } from '../utils/retryableErrors.js';
 import { loadConfig } from '../../config.js';
@@ -34,7 +35,7 @@ export interface WebhookDispatchResult {
   dispatched: boolean;
   taskId?: string;
   error?: string;
-  errorCode?: string;
+  errorCode?: SendTaskMessageErrorCode;
 }
 
 export interface WebhookDispatchService {
@@ -130,9 +131,10 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
 }
 
 /**
- * Detect when a dispatch failure indicates the task no longer exists on the worker.
- * This happens when a task completed/crashed and was cleaned up, but Firestore
- * still has a record — the worker returns HTTP 404 "Task not found".
+ * Detect when a dispatch failure indicates the task is stale and no longer reachable.
+ * Two scenarios: (1) task_not_found — task was found by PR lookup but deleted before
+ * message send (Firestore-level race), (2) worker_error with "Task not found" — task
+ * completed/crashed and was cleaned up on the worker but Firestore still has a record.
  *
  * Checks the structured error code first (preferred), then falls back to message
  * matching for worker_error responses where the code is generic.
