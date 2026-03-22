@@ -455,7 +455,7 @@ describe('imposeOnBuffer', () => {
       expect(result.ok).toBe(false);
     });
 
-    it('returns update_draft_failed when draft generation fails', async () => {
+    it('returns error when draft generation fails', async () => {
       interpreter.setNextIntent({
         kind: 'update_draft',
         payload: { text: 'draft', category: 'general' },
@@ -467,10 +467,9 @@ describe('imposeOnBuffer', () => {
         utterance: 'generate draft',
       });
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.action).toBe('update_draft_failed');
-        expect(result.value.latestDraftVersionId).toBeUndefined();
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Draft generation failed');
       }
     });
 

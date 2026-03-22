@@ -115,6 +115,30 @@ describe('hellscriptRoutes', () => {
       expect(response.statusCode).toBe(500);
       expect(response.json().error.code).toBe('INTERNAL_ERROR');
     });
+
+    it('returns 500 with draft failure message when draft generation fails', async () => {
+      ctx.intentInterpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'write it', category: 'general' },
+      });
+      ctx.draftGenerator.simulateError(new Error('LLM failed'));
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/hellscript/impose',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+        },
+        payload: { utterance: 'write it' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = response.json();
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('Draft generation failed. Please try again.');
+    });
   });
 
   describe('GET /hellscript/buffers', () => {

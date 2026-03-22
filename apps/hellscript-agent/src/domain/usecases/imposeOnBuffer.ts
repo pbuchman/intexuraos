@@ -157,13 +157,7 @@ export async function imposeOnBuffer(
     );
     if (!generateResult.ok) {
       logger.error({ bufferId, err: generateResult.error }, 'Draft generation failed');
-      return {
-        ok: true,
-        value: {
-          bufferId,
-          action: 'update_draft_failed',
-        },
-      };
+      return { ok: false, error: new Error('Draft generation failed') };
     }
 
     const draftResult = await repository.saveDraftVersion({
