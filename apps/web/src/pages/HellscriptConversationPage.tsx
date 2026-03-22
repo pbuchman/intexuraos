@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useState, useMemo, useCallback } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import { PenTool, X } from 'lucide-react';
 import { Layout } from '@/components';
 import {
   HellscriptTimeline,
@@ -8,11 +9,17 @@ import {
   HellscriptVersionSelector,
 } from '@/components/hellscript/index.js';
 import { useHellscriptWorkspace } from '@/hooks';
-import type { HellscriptDraftVersion } from '@/types';
+import type { HellscriptDraftVersion, WritingCategory } from '@/types';
+
+const CATEGORY_OPTIONS: { key: WritingCategory; label: string }[] = [
+  { key: 'threads', label: 'Threads' },
+  { key: 'linkedin', label: 'LinkedIn' },
+  { key: 'general', label: 'General' },
+];
 
 export function HellscriptConversationPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
-  const { workspace, loading, error, impose, imposing, lastAction } = useHellscriptWorkspace(id);
+  const { workspace, loading, error, impose, imposing, lastAction, clearLastAction } = useHellscriptWorkspace(id);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
 
   const versions = useMemo<HellscriptDraftVersion[]>(
@@ -33,17 +40,32 @@ export function HellscriptConversationPage(): React.JSX.Element {
     return sorted[0] ?? null;
   }, [versions, selectedVersionId]);
 
+  const handleCategorySelect = useCallback(
+    (category: WritingCategory) => {
+      clearLastAction();
+      void impose(`Generate a ${category} draft`);
+    },
+    [impose, clearLastAction]
+  );
+
   const isNewConversation = id === undefined;
 
   return (
     <Layout>
       <div className="mx-auto max-w-7xl">
-        <div className="mb-4">
+        <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
             {isNewConversation
               ? 'New Conversation'
               : workspace?.buffer.title ?? 'Loading...'}
           </h2>
+          <Link
+            to="/hellscript/voice"
+            className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+          >
+            <PenTool className="h-3.5 w-3.5" />
+            Writing voice
+          </Link>
         </div>
 
         {loading ? (
@@ -66,8 +88,38 @@ export function HellscriptConversationPage(): React.JSX.Element {
               </div>
               <HellscriptComposer onSubmit={impose} disabled={imposing} />
               {lastAction === 'category_required' ? (
-                <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
-                  Please specify which platform you want the draft for: <strong>Threads</strong>, <strong>LinkedIn</strong>, or <strong>General</strong>.
+                <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-900/20">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-sm text-amber-800 dark:text-amber-300">
+                      Which platform is this draft for?
+                    </span>
+                    <button
+                      type="button"
+                      onClick={clearLastAction}
+                      className="rounded p-0.5 text-amber-400 transition-colors hover:text-amber-600 dark:hover:text-amber-200"
+                      aria-label="Dismiss"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    {CATEGORY_OPTIONS.map(({ key, label }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        disabled={imposing}
+                        onClick={() => { handleCategorySelect(key); }}
+                        className="rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-amber-700 disabled:opacity-50 dark:bg-amber-500 dark:hover:bg-amber-600"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {lastAction === 'update_draft_failed' ? (
+                <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+                  Draft generation failed. Please try again.
                 </div>
               ) : null}
               {error !== null ? (
