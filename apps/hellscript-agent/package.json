@@ -1,9 +1,11 @@
 {
   "name": "@intexuraos/hellscript-agent",
-  "version": "1.0.0",
+  "version": "3.4.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.0.0" },
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "build": "node ../../scripts/build-service.mjs hellscript-agent",
     "typecheck": "tsc --noEmit",

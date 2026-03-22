@@ -110,24 +110,31 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                              | Date       |
-| ---------- | ------------------------------------------------------------------------ | ---------- |
-| `f9eb2a5c` | Add tests for webhookRoutes metadata and button edge cases (INT-860)     | 2026-03-15 |
-| `66b35e3e` | Add tests for sendCtaUrlMessage and remove v8 ignore markers (INT-858)   | 2026-03-15 |
-| `a15e13b8` | Add tests for pubsubRoutes empty buttons routing and outbound save       | 2026-03-15 |
-| `e348b66e` | Fix silent dispatch failures and nested transaction (INT-810, INT-811)   | 2026-03-10 |
-| `582960d0` | Write tests for v8-ignore blocks and remove exemptions (INT-799)         | 2026-03-10 |
-| `55b959e6` | Add deep link ctaUrl to WhatsApp notifications                           | 2026-03-07 |
-| `a41ca812` | Replace PR URL text with WhatsApp CTA URL buttons                        | 2026-03-06 |
-| `96ae9463` | Migrate from Speechmatics to event-driven transcription (INT-684)        | 2026-03-06 |
+| Commit     | Description                                                                  | Date       |
+| ---------- | ---------------------------------------------------------------------------- | ---------- |
+| `376ea03e` | Add missing persistence error test and simplify FakeQuery (INT-989)          | 2026-03-19 |
+| `087b7f76` | Standardize v8-ignore format and remove whatsapp-service override (INT-989)  | 2026-03-19 |
+| `2d0f9d25` | Add logIncomingRequest to DELETE handler for consistency (INT-883)           | 2026-03-18 |
+| `0b605f5f` | Split messageRoutes.ts by concern (INT-883)                                  | 2026-03-18 |
+| `dc2e9f4f` | Address PR review feedback (INT-882)                                         | 2026-03-17 |
+| `3b11aff0` | Deduplicate HTTP patterns in sender.ts (INT-882)                             | 2026-03-17 |
+| `741711b2` | Extract processWebhookEvent into ProcessWebhookEventUseCase (INT-880)        | 2026-03-16 |
 
-### v8 Ignore Test Replacement (INT-799, INT-858, INT-860)
+### Route Restructuring (INT-883)
 
-Replaced v8 ignore blocks with real tests across multiple files. New test suites cover: `sender.ts` (CTA URL message formatting), `outboundMessageRepository.ts` (Firestore save/query edge cases), `pubsubRoutes.ts` (empty buttons routing, outbound message save), `webhookRoutes.ts` (metadata and button edge cases), and `webhookAsyncProcessing.ts` (comprehensive async processing paths). Remaining v8 ignore directives use documented categories: `ts-type`, `async-timing`, `test-infra`.
+Split the monolithic `messageRoutes.ts` into two focused files: `messageRoutes.ts` (GET /whatsapp/messages — list messages) and `messageMediaRoutes.ts` (GET media, GET thumbnail, DELETE message). Each file now handles a single concern. The DELETE handler also gained a missing `logIncomingRequest` call for consistency.
 
-### Silent Dispatch Failures Fix (INT-810, INT-811)
+### HTTP Pattern Deduplication (INT-882)
 
-Fixed two bugs in webhook async processing: (1) dispatch failures were silently swallowed when Pub/Sub publish failed, and (2) a nested Firestore transaction caused intermittent failures during message processing. The fix ensures dispatch errors are properly logged and surfaced.
+Consolidated duplicated HTTP request/response patterns in the WhatsApp Cloud API sender infrastructure. Shared patterns for API calls were extracted into reusable functions, reducing boilerplate across `sendTextMessage`, `sendInteractiveMessage`, and `sendCtaUrlMessage`.
+
+### ProcessWebhookEvent Use Case Extraction (INT-880)
+
+Extracted the `processWebhookEvent` function from `webhookRoutes.ts` into a dedicated `ProcessWebhookEventUseCase` class in the domain layer. This decouples webhook processing from Fastify route concerns and improves testability by accepting typed dependency injection.
+
+### v8-Ignore Standardization (INT-989)
+
+Standardized the v8-ignore format across the service to use the canonical category-based format. Removed the whatsapp-service entry from `v8-ignore-overrides.json`. Added a missing persistence error test case.
 
 ## API Endpoints
 
@@ -187,15 +194,15 @@ Fixed two bugs in webhook async processing: (1) dispatch failures were silently 
 
 ### TranscriptionState
 
-| Field         | Type                                                              | Description               |
-| ------------- | ----------------------------------------------------------------- | ------------------------- |
-| `status`      | `'pending' \                                                      | 'processing' \            | 'completed' \ | 'failed'` | Transcription progress |
-| `jobId`       | `string \                                                         | undefined`                | Provider job ID |
-| `text`        | `string \                                                         | undefined`                | Full transcribed text |
-| `summary`     | `string \                                                         | undefined`                | AI-generated key points |
-| `error`       | `TranscriptionError \                                             | undefined`                | Error details if failed |
-| `startedAt`   | `string \                                                         | undefined`                | When processing started |
-| `completedAt` | `string \                                                         | undefined`                | When completed or failed |
+| Field         | Type                                                           | Description               |
+| ------------- | -------------------------------------------------------------- | ------------------------- |
+| `status`      | `'pending' \                                                   | 'processing' \            | 'completed' \ | 'failed'` | Transcription progress |
+| `jobId`       | `string \                                                      | undefined`                | Provider job ID |
+| `text`        | `string \                                                      | undefined`                | Full transcribed text |
+| `summary`     | `string \                                                      | undefined`                | AI-generated key points |
+| `error`       | `TranscriptionError \                                          | undefined`                | Error details if failed |
+| `startedAt`   | `string \                                                      | undefined`                | When processing started |
+| `completedAt` | `string \                                                      | undefined`                | When completed or failed |
 
 ### OutboundMessage
 
@@ -213,29 +220,29 @@ Tracks sent messages for reply correlation. Uses wamid as document ID for effici
 
 Tracks phone number verification attempts with rate limiting and cooldown.
 
-| Field           | Type                                                              | Description                  |
-| --------------- | ----------------------------------------------------------------- | ---------------------------- |
-| `id`            | `string`                                                          | Unique verification ID       |
-| `userId`        | `string`                                                          | User requesting verification |
-| `phoneNumber`   | `string`                                                          | Phone number being verified  |
-| `code`          | `string`                                                          | 6-digit verification code    |
-| `attempts`      | `number`                                                          | Failed attempt count         |
-| `status`        | `'pending' \                                                      | 'verified' \                 | 'expired' \ | 'max_attempts'` | Verification progress |
-| `createdAt`     | `string`                                                          | ISO 8601 creation time       |
-| `expiresAt`     | `number`                                                          | Unix timestamp (10 min TTL)  |
-| `lastAttemptAt` | `string \                                                         | undefined`                   | Last failed attempt time |
-| `verifiedAt`    | `string \                                                         | undefined`                   | When verification succeeded |
+| Field           | Type                                                           | Description                  |
+| --------------- | -------------------------------------------------------------- | ---------------------------- |
+| `id`            | `string`                                                       | Unique verification ID       |
+| `userId`        | `string`                                                       | User requesting verification |
+| `phoneNumber`   | `string`                                                       | Phone number being verified  |
+| `code`          | `string`                                                       | 6-digit verification code    |
+| `attempts`      | `number`                                                       | Failed attempt count         |
+| `status`        | `'pending' \                                                   | 'verified' \                 | 'expired' \ | 'max_attempts'` | Verification progress |
+| `createdAt`     | `string`                                                       | ISO 8601 creation time       |
+| `expiresAt`     | `number`                                                       | Unix timestamp (10 min TTL)  |
+| `lastAttemptAt` | `string \                                                      | undefined`                   | Last failed attempt time |
+| `verifiedAt`    | `string \                                                      | undefined`                   | When verification succeeded |
 
 ### WebhookEvent
 
-| Field            | Type                                                                                        | Description                   |
-| ---------------- | ------------------------------------------------------------------------------------------- | ----------------------------- |
-| `id`             | `string`                                                                                    | Unique event ID               |
-| `payload`        | `unknown`                                                                                   | Raw webhook payload           |
-| `signatureValid` | `boolean`                                                                                   | Signature verification result |
-| `receivedAt`     | `string`                                                                                    | ISO 8601 timestamp            |
-| `phoneNumberId`  | `string \                                                                                   | null`                         | WhatsApp phone number ID |
-| `status`         | `'pending' \                                                                                | 'completed' \                 | 'failed' \ | 'ignored' \ | 'user_unmapped'` | Processing status |
+| Field            | Type                                                                              | Description                   |
+| ---------------- | --------------------------------------------------------------------------------- | ----------------------------- |
+| `id`             | `string`                                                                          | Unique event ID               |
+| `payload`        | `unknown`                                                                         | Raw webhook payload           |
+| `signatureValid` | `boolean`                                                                         | Signature verification result |
+| `receivedAt`     | `string`                                                                          | ISO 8601 timestamp            |
+| `phoneNumberId`  | `string \                                                                         | null`                         | WhatsApp phone number ID |
+| `status`         | `'pending' \                                                                      | 'completed' \                 | 'failed' \ | 'ignored' \ | 'user_unmapped'` | Processing status |
 
 ### UserMapping
 
@@ -446,6 +453,7 @@ apps/whatsapp-service/src/
         mediaStorage.ts
         thumbnailGenerator.ts
       usecases/
+        processWebhookEventUseCase.ts # Orchestrates webhook handling (text, image, audio, button)
         processAudioMessage.ts        # Download + store audio in GCS
         processImageMessage.ts        # Download + thumbnail + store image
         handleTranscriptionCompleted.ts  # Handle srt-service transcription result
@@ -468,15 +476,16 @@ apps/whatsapp-service/src/
     gcs/
     whatsapp/
       cloudApiAdapter.ts              # markAsReadWithTyping
-      sender.ts                       # sendInteractiveMessage, sendCtaUrlMessage
+      sender.ts                       # sendInteractiveMessage, sendCtaUrlMessage (deduplicated HTTP patterns)
     media/
     linkpreview/
       webAgentLinkPreviewClient.ts
     pubsub/
       publisher.ts
   routes/
-    webhookRoutes.ts                  # Button handling, approval detection, async dispatch
-    messageRoutes.ts
+    webhookRoutes.ts                  # Webhook validation and async dispatch
+    messageRoutes.ts                  # GET /whatsapp/messages (list)
+    messageMediaRoutes.ts             # GET media, GET thumbnail, DELETE message
     mappingRoutes.ts                  # Verification-gated connect
     pubsubRoutes.ts                   # send-message, media-cleanup, transcription-completed, process-webhook
     verificationRoutes.ts

@@ -22,7 +22,7 @@ You are a founder who lives in WhatsApp and sends half a dozen requests a day.
 
 4. You send: "Schedule a team standup tomorrow at 9am for 30 minutes." The system classifies this as a calendar action with high confidence. It auto-executes, creates the event in Google Calendar, and sends you a rich WhatsApp notification showing the event title, date, time, and duration — with a direct "View in Calendar" link that opens right in Google Calendar.
 
-5. Later, you send: "Fix the authentication bug in the login module." The system recognizes this as a code task. A WhatsApp message arrives showing estimated cost and time, with three buttons: Approve, Reject, and Convert to Issue. You tap Approve. The code agent starts working. When the task reaches the design phase, you receive a new message with a "Proceed to Implementation" button to greenlight the next stage.
+5. Later, you send: "Fix the authentication bug in the login module, use opus." The system recognizes this as a code task and detects the "use opus" keyword to select the right worker type automatically. A WhatsApp message arrives showing estimated cost and time, with three buttons: Approve, Reject, and Convert to Issue. You tap Approve. The code agent starts working. When the task reaches the design phase, you receive a new message with a "Proceed to Implementation" button to greenlight the next stage.
 
 6. You open the web dashboard and notice an action that was classified as a note but should have been a to-do. You change the type with one click. The system immediately routes it to the correct specialist — and quietly records the correction so future classifications improve.
 
@@ -57,6 +57,12 @@ Calendar actions include a rich preview in the approval message — the event ti
 If you reply with text instead of tapping a button, the system resends the buttons. There is no language model interpreting your reply, no ambiguity, no misread "yes" or "sure." Approval is a binary decision delivered through a binary interface.
 
 **Example:** A code action arrives for approval. The message reads: estimated cost, estimated time, and three buttons — Approve, Reject, Convert to Issue. You glance at the estimate, tap Approve, and move on. The entire interaction takes two seconds.
+
+### Detect Worker Preferences from Natural Language
+
+When sending a code task, you can specify which AI model to use directly in your message. Say "use opus" or "use sonnet" and the system automatically detects your preference and selects the right worker type — no configuration menus, no separate settings. If you do not specify, the system picks the best available model automatically.
+
+**Example:** "Refactor the payment module, use sonnet" dispatches the task to a Sonnet worker. "Fix the CSS layout" dispatches to the default auto-selected worker.
 
 ### Get Rich Notifications When Work Completes
 
@@ -100,6 +106,7 @@ Every message you send through IntexuraOS is already routed through the actions 
 - **Rich WhatsApp notifications** — Calendar completions show event details with a "View in Calendar" button; each action type delivers context-specific completion messages
 - **Multi-phase engineering task control** — Approve, proceed to implementation, cancel, or view code tasks at each stage from WhatsApp
 - **Seven specialized agents, one dispatcher** — Research, to-dos, notes, bookmarks, calendar, project tracking, and engineering tasks each have a dedicated service
+- **Natural language worker selection** — Say "use opus" or "use sonnet" in code task messages to select the AI model
 - **Corrections that compound** — Every type change you make in the dashboard is stored as training data, improving future classification accuracy
 - **Automatic retry and graceful cleanup** — Stuck actions retry on a schedule; deleted actions notify you and clean up without intervention
 

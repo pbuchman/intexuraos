@@ -1,7 +1,7 @@
 # User Service - Technical Debt
 
-**Last Updated:** 2026-03-15
-**Analysis Run:** [2026-03-15 entry](../../documentation-runs.md)
+**Last Updated:** 2026-03-22
+**Analysis Run:** [2026-03-22 entry](../../documentation-runs.md)
 
 ---
 
@@ -156,6 +156,12 @@ No deprecated APIs or dependencies in use.
 
 ## Recent Changes
 
+### v3.4.0 (2026-03-22)
+
+**Change:** Removed unnecessary v8-ignore annotations and standardized the remaining ones across OAuth route files (INT-988, PR #1330). This was part of a monorepo-wide cleanup that affected user-service's `oauthConnectionRoutes.ts` and `gitHubOAuthConnectionRoutes.ts`. No functional changes.
+
+---
+
 ### v3.3.0 Release (2026-03-15)
 
 **Change:** Release v3.3.0. No functional changes to user-service code.
@@ -222,6 +228,12 @@ Release version bump only. No functional changes to user-service code.
 ---
 
 ## Resolved Issues
+
+### 2026-03-19
+
+| Issue   | Description                                             | Resolution                                                             |
+| ------- | ------------------------------------------------------- | ---------------------------------------------------------------------- |
+| INT-988 | Unnecessary v8-ignore annotations in OAuth route files  | Removed unnecessary annotations, standardized wording on remainder     |
 
 ### 2026-03-10 to 2026-03-15
 

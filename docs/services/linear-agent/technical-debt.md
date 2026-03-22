@@ -1,7 +1,7 @@
 # Linear Agent — Technical Debt
 
-**Last Updated:** 2026-03-15
-**Analysis Run:** v3.3.0 documentation refresh (already_completed outcome, display-batch batched reads, v8 ignore test replacement, planning-task label gating)
+**Last Updated:** 2026-03-22
+**Analysis Run:** v3.4.0 documentation refresh (context endpoint, decomposition sprint, v8 ignore resolution, parentId fix)
 
 ---
 
@@ -9,9 +9,9 @@
 
 | Category           | Count | Severity |
 | ------------------ | ----- | -------- |
-| TODOs/FIXMEs       | 0     | —        |
-| Test Coverage Gaps | 0     | —        |
-| TypeScript Issues  | 0     | —        |
+| TODOs/FIXMEs       | 0     | ---      |
+| Test Coverage Gaps | 0     | ---      |
+| TypeScript Issues  | 0     | ---      |
 | Code Smells        | 2     | Low      |
 | SRP Violations     | 1     | Low      |
 | **Total**          | **3** | Low      |
@@ -49,9 +49,9 @@ Based on code analysis, git history, and domain patterns:
 | `src/infra/linear/linearApiClient.ts`                  | Module-level client cache     | Global state, harder to test in isolation  |
 | `src/domain/useCases/triggerCodeTaskFromAssignment.ts` | Fire-and-forget async pattern | Errors logged but not propagated to caller |
 
-**Details (client cache):** The Linear API client uses module-level `Map` instances for client caching and request deduplication. While this enables performance optimizations (INT-95), it makes the code harder to test without coverage exemption pragmas.
+**Details (client cache):** The Linear API client uses module-level `Map` instances for client caching and request deduplication. While this enables performance optimizations (INT-95), it makes the code harder to test without coverage exemption pragmas. The caching and dedup logic has been extracted into a dedicated `requestCache.ts` module (INT-904), improving isolation.
 
-**Mitigation:** The caching behavior is well-isolated with exported functions (`clearClientCache`, `getClientCacheSize`) for test cleanup.
+**Mitigation:** The caching behavior is well-isolated with exported functions (`clearClientCache`, `getClientCacheSize`) for test cleanup. The INT-904 split further improved testability.
 
 **Details (fire-and-forget):** `triggerCodeTaskFromAssignment` uses `void` to discard the promise, meaning code-agent failures are only logged, not surfaced to the webhook caller. This is by design (webhook responses should not be blocked), but means trigger failures require log monitoring to detect.
 
@@ -59,7 +59,7 @@ Based on code analysis, git history, and domain patterns:
 
 ## Test Coverage Gaps
 
-None identified. Current coverage meets the 100% branch threshold with valid v8 ignore exemptions across 8 files (56 total `v8 ignore` directives, reduced from 92 in v3.2.0 thanks to INT-792 real test replacement). All exemptions use documented categories: `test-infra`, `ts-type`, `async-timing`, `upstream`, `schema`.
+None identified. Current coverage meets the 100% branch threshold with valid v8 ignore exemptions across 13 files (52 total `v8 ignore` directives in production source, reduced from 56 in v3.3.0 thanks to INT-990 PENDING annotation removal). All exemptions use documented categories: `test-infra`, `ts-type`, `async-timing`, `upstream`, `schema`.
 
 ---
 
@@ -82,22 +82,21 @@ None identified. One `@ts-expect-error` exists in test code (`linearActionExtrac
 
 ## SRP Violations
 
-| File                      | Lines | Status                                                 |
-| ------------------------- | ----- | ------------------------------------------------------ |
-| `linearRoutes.ts`         | ~983  | Borderline (14 endpoints). Watch closely               |
-| `internalIssuesRoutes.ts` | ~933  | Borderline (7 endpoints). Growth from new internal API |
-| `linearApiClient.ts`      | ~636  | Acceptable (includes caching and dedup optimizations)  |
-| `internalRoutes.ts`       | ~590  | OK (5 endpoints)                                       |
-| `linearWebhookRoutes.ts`  | ~453  | OK                                                     |
-| `processLinearAction.ts`  | ~233  | OK                                                     |
-| `listIssues.ts`           | ~208  | OK                                                     |
-| `fullSyncUseCase.ts`      | ~151  | OK                                                     |
-| `generateIssueTitle.ts`   | ~134  | OK                                                     |
-| `validateIssue.ts`        | ~111  | OK                                                     |
+| File                      | Lines | Status                                                                 |
+| ------------------------- | ----- | ---------------------------------------------------------------------- |
+| `internalIssuesRoutes.ts` | ~970  | Borderline (8 endpoints including new context). Watch closely          |
+| `linearRoutes.ts`         | ~893  | Borderline (14 endpoints). Stable since v3.3.0                         |
+| `internalRoutes.ts`       | ~590  | OK (5 endpoints)                                                       |
+| `linearApiClient.ts`      | ~361  | OK (reduced from ~636 via INT-904 split)                               |
+| `linearMappers.ts`        | ~241  | OK (extracted from linearApiClient)                                    |
+| `linearWebhookRoutes.ts`  | ~227  | OK                                                                     |
+| `processLinearAction.ts`  | ~207  | OK                                                                     |
+| `requestCache.ts`         | ~88   | OK (extracted from linearApiClient)                                    |
+| `listIssues.ts`           | ~93   | OK (reduced from ~208 via INT-906 decomposition)                       |
 
-**Note:** `internalIssuesRoutes.ts` grew from ~563 lines to ~933 lines since the v3.1.0 analysis, adding 4 new endpoints (comments, metadata, display-batch, issue tree). It is now the second-largest route file. Consider splitting into focused modules (e.g., `internalIssueDisplayRoutes.ts`, `internalIssueMutationRoutes.ts`) if further endpoints are added.
+**Note:** `internalIssuesRoutes.ts` grew to ~970 lines with the addition of the context endpoint (INT-1040). It now holds 8 endpoints: create, comments, metadata, state, display-batch, get-by-identifier, context, and tree. Consider splitting into focused modules (e.g., `internalIssueDisplayRoutes.ts`, `internalIssueMutationRoutes.ts`) if further endpoints are added.
 
-**Note:** `linearApiClient.ts` grew from ~360 to ~636 lines. The growth is from new API methods (`createComment`, `updateIssue`, `listIssueLabels`, `listTeamMembers`) and remains cohesive since all methods operate on the same Linear SDK client.
+**Improvement:** The INT-904 split reduced `linearApiClient.ts` from ~636 to ~361 lines. The INT-906 decomposition reduced `listIssues.ts` from ~208 to ~93 lines. These refactorings significantly improved code organization.
 
 ---
 
@@ -130,45 +129,55 @@ None. The service uses current versions of:
 
 ## Resolved Issues
 
-| Date       | Issue                                                 | Resolution                                                                |
-| ---------- | ----------------------------------------------------- | ------------------------------------------------------------------------- |
-| 2026-03-14 | No `done` state in internal state update API          | Added `done` to `UpdateStateBody` for already_completed outcome (INT-773) |
-| 2026-03-13 | Display-batch performed 2N sequential Firestore reads | Replaced with batched `getCommentSummaries` call                          |
-| 2026-03-13 | 92 v8 ignore directives across 12 files               | Replaced with real tests, reduced to 56 across 8 files (INT-792)          |
-| 2026-03-12 | GLM-4.7/GLM-4.7 Flash in required models list         | Removed as part of ZAI-to-DashScope migration (INT-835)                   |
-| 2026-03-09 | Auto-trigger fired for any assigned issue             | Gated on planning-task or code-task label                                 |
-| 2026-03-05 | Comment webhook errors not logged                     | Added error logging in `findUserIdsByIssueId` comment handler (INT-623)   |
-| 2026-03-03 | Cross-user data overwrite during sync                 | Composite Firestore keys `userId_issueId` prevent overwrites (INT-623)    |
-| 2026-03-03 | Webhooks only processed for single user               | Multi-user fan-out via `findUserIdsByTeamId` + Promise.allSettled         |
-| 2026-03-03 | Comment routing missed connected users                | Per-issue user lookup for comment webhook fan-out                         |
-| 2026-03-03 | Internal routes scoped incorrectly                    | Fixed route prefix scoping for internal endpoints (INT-623)               |
-| 2026-02-28 | Index migration and orphan cleanup                    | New migration + orphan cleanup for composite key transition (INT-623)     |
-| 2026-02-27 | Auto-trigger prompt mismatched for code-task label    | Prompt selection based on `code-task` label presence                      |
-| 2026-02-27 | Auto-trigger only fired for unstarted state           | `shouldTriggerCodeTask` now accepts both `backlog` and `unstarted`        |
-| 2026-02-25 | Case-sensitivity in code-task label detection         | Fixed case-sensitive label comparison                                     |
-| 2026-02-21 | Webhook dedup action IDs could collide                | Unique actionId format: `webhook-assign-{id}-{timestamp}`                 |
-| 2026-02-21 | Auto-trigger prompt misaligned with planning agent    | Aligned prompt to analyze/enrich/mark-ready behavior                      |
-| 2026-02-20 | Assignee lost during full sync                        | Fetch assignee data from Linear API in listIssues (INT-573)               |
-| 2026-02-20 | Assignee missing from dashboard response              | Include assignee in syncedToLinearIssue mapper                            |
-| 2026-02-20 | Raw errors not passed to pino logger                  | Pass raw error objects to logger for structured logging                   |
-| 2026-02-19 | validateIssue labels serialized as "[object Object]"  | Map LinearLabel[] to string[] at HTTP boundary in internalRoutes          |
-| 2026-02-15 | Silent title degradation on LLM failure               | Removed regex fallback, return err() after 2 retries                      |
-| 2026-02-10 | Hardcoded `teamId: 'TODO'` in retry                   | Fixed to use `connectionRepository.getFullConnection`                     |
-| 2026-02-10 | Dashboard called Linear API on every load             | Switched to Firestore-first with local cache                              |
-| 2026-02-10 | No parent-child issue hierarchy                       | Built in-memory tree in `listIssues` use case                             |
-| 2026-02-10 | Labels stored as strings only                         | Labels now stored as `{ id, name, color }` objects                        |
-| 2026-02-06 | No programmatic issue management                      | INT-486: Internal API for issue CRUD + state                              |
-| 2026-02-06 | No issue validation capability                        | INT-486: validateIssue use case                                           |
-| 2026-02-06 | No AI title generation                                | INT-486: generateIssueTitle use case                                      |
-| 2026-02-03 | Single-tenant webhook support only                    | Multi-tenant webhook routing by team ID                                   |
-| 2026-02-02 | No bidirectional sync with Linear                     | INT-444: Webhook sync + full sync use cases                               |
-| 2026-02-02 | No local issue storage                                | INT-444: SyncedLinearIssue + issue repository                             |
-| 2026-02-01 | Multi-user Linear support broken                      | INT-443: Fixed multi-user connection handling                             |
-| 2026-01-24 | Test coverage gaps for dashboard columns              | INT-166: Added comprehensive tests                                        |
-| 2026-01-24 | Missing todo/to_test columns                          | INT-208: Added new column types                                           |
-| 2026-01-16 | Duplicate issue creation on retry                     | INT-97: Added idempotency check                                           |
-| 2026-01-16 | Rate limiting from Linear API                         | INT-95: Client caching + deduplication                                    |
-| 2026-01-17 | Silent success masking failures                       | INT-125: ServiceFeedback contract                                         |
+| Date       | Issue                                                 | Resolution                                                                        |
+| ---------- | ----------------------------------------------------- | --------------------------------------------------------------------------------- |
+| 2026-03-22 | Orchestrator needed direct Linear API access          | New context endpoint proxies issue data from local store (INT-1040)               |
+| 2026-03-19 | linearApiClient.ts at ~636 lines                      | Split into client + mappers + requestCache (INT-904)                              |
+| 2026-03-19 | listIssues.ts at ~208 lines with mixed concerns       | Decomposed into issueTreeBuilder, issueGrouper, syncedIssueMapper (INT-906)       |
+| 2026-03-19 | processLinearAction.ts mixed orchestration concerns   | Extracted checkIdempotency and descriptionBuilder (INT-907)                       |
+| 2026-03-19 | Extraction parsing coupled with LLM infra             | Extracted extractionParser.ts to domain (INT-905)                                 |
+| 2026-03-19 | Webhook handler logic in route file                   | Extracted processWebhook use-case (INT-903)                                       |
+| 2026-03-19 | linearRoutes repository calls not in use-cases        | Extracted retryFailedIssue, getIssueComments, getIssueDetail (INT-902)            |
+| 2026-03-19 | PENDING v8 ignore annotations                         | Replaced with full test coverage (INT-990)                                        |
+| 2026-03-17 | Missing parentId in mapSingleIssueWithTeam            | Fixed to populate parentId, preventing false subtask rejection (INT-953)          |
+| 2026-03-16 | internalIssuesRoutes mixed domain/route logic         | Domain logic extracted into dedicated functions (INT-901)                         |
+| 2026-03-14 | No `done` state in internal state update API          | Added `done` to `UpdateStateBody` for already_completed outcome (INT-773)         |
+| 2026-03-13 | Display-batch performed 2N sequential Firestore reads | Replaced with batched `getCommentSummaries` call                                  |
+| 2026-03-13 | 92 v8 ignore directives across 12 files               | Replaced with real tests, reduced to 56 across 8 files (INT-792)                  |
+| 2026-03-12 | GLM-4.7/GLM-4.7 Flash in required models list         | Removed as part of ZAI-to-DashScope migration (INT-835)                           |
+| 2026-03-09 | Auto-trigger fired for any assigned issue             | Gated on planning-task or code-task label                                         |
+| 2026-03-05 | Comment webhook errors not logged                     | Added error logging in `findUserIdsByIssueId` comment handler (INT-623)           |
+| 2026-03-03 | Cross-user data overwrite during sync                 | Composite Firestore keys `userId_issueId` prevent overwrites (INT-623)            |
+| 2026-03-03 | Webhooks only processed for single user               | Multi-user fan-out via `findUserIdsByTeamId` + Promise.allSettled                 |
+| 2026-03-03 | Comment routing missed connected users                | Per-issue user lookup for comment webhook fan-out                                 |
+| 2026-03-03 | Internal routes scoped incorrectly                    | Fixed route prefix scoping for internal endpoints (INT-623)                       |
+| 2026-02-28 | Index migration and orphan cleanup                    | New migration + orphan cleanup for composite key transition (INT-623)             |
+| 2026-02-27 | Auto-trigger prompt mismatched for code-task label    | Prompt selection based on `code-task` label presence                              |
+| 2026-02-27 | Auto-trigger only fired for unstarted state           | `shouldTriggerCodeTask` now accepts both `backlog` and `unstarted`                |
+| 2026-02-25 | Case-sensitivity in code-task label detection         | Fixed case-sensitive label comparison                                             |
+| 2026-02-21 | Webhook dedup action IDs could collide                | Unique actionId format: `webhook-assign-{id}-{timestamp}`                         |
+| 2026-02-21 | Auto-trigger prompt misaligned with planning agent    | Aligned prompt to analyze/enrich/mark-ready behavior                              |
+| 2026-02-20 | Assignee lost during full sync                        | Fetch assignee data from Linear API in listIssues (INT-573)                       |
+| 2026-02-20 | Assignee missing from dashboard response              | Include assignee in syncedToLinearIssue mapper                                    |
+| 2026-02-20 | Raw errors not passed to pino logger                  | Pass raw error objects to logger for structured logging                           |
+| 2026-02-19 | validateIssue labels serialized as "[object Object]"  | Map LinearLabel[] to string[] at HTTP boundary in internalRoutes                  |
+| 2026-02-15 | Silent title degradation on LLM failure               | Removed regex fallback, return err() after 2 retries                              |
+| 2026-02-10 | Hardcoded `teamId: 'TODO'` in retry                   | Fixed to use `connectionRepository.getFullConnection`                             |
+| 2026-02-10 | Dashboard called Linear API on every load             | Switched to Firestore-first with local cache                                      |
+| 2026-02-10 | No parent-child issue hierarchy                       | Built in-memory tree in `listIssues` use case                                     |
+| 2026-02-10 | Labels stored as strings only                         | Labels now stored as `{ id, name, color }` objects                                |
+| 2026-02-06 | No programmatic issue management                      | INT-486: Internal API for issue CRUD + state                                      |
+| 2026-02-06 | No issue validation capability                        | INT-486: validateIssue use case                                                   |
+| 2026-02-06 | No AI title generation                                | INT-486: generateIssueTitle use case                                              |
+| 2026-02-03 | Single-tenant webhook support only                    | Multi-tenant webhook routing by team ID                                           |
+| 2026-02-02 | No bidirectional sync with Linear                     | INT-444: Webhook sync + full sync use cases                                       |
+| 2026-02-02 | No local issue storage                                | INT-444: SyncedLinearIssue + issue repository                                     |
+| 2026-02-01 | Multi-user Linear support broken                      | INT-443: Fixed multi-user connection handling                                     |
+| 2026-01-24 | Test coverage gaps for dashboard columns              | INT-166: Added comprehensive tests                                                |
+| 2026-01-24 | Missing todo/to_test columns                          | INT-208: Added new column types                                                   |
+| 2026-01-16 | Duplicate issue creation on retry                     | INT-97: Added idempotency check                                                   |
+| 2026-01-16 | Rate limiting from Linear API                         | INT-95: Client caching + deduplication                                            |
+| 2026-01-17 | Silent success masking failures                       | INT-125: ServiceFeedback contract                                                 |
 
 ---
 
@@ -200,16 +209,18 @@ None. The service uses current versions of:
 22. **Issue Tree Traversal**: `GET /internal/issues/:issueId/tree` returns recursive descendants from local sync data without Linear API calls
 23. **Already-Completed Flow**: `done` state support enables enforcement pipeline to close issues when work is already merged (INT-773)
 24. **Comments in Agent Prompts**: Both ASSIGNMENT_PROMPT and EXECUTION_PROMPT instruct the code agent to read all issue comments newest-first (INT-715)
+25. **Module Decomposition**: INT-901 through INT-907 decomposed six large modules into focused, testable units
+26. **Context Proxy**: New context endpoint enables cross-service issue data access without user credentials (INT-1040)
 
 ### Areas for Improvement
 
 1. **Label Passthrough**: Internal API accepts labels but does not forward them to Linear on creation
 2. **completedAt Gap**: SyncedLinearIssue uses `updatedAt` as proxy for archive cutoff
 3. **Module-Level State**: Client cache uses global state (isolated but harder to test)
-4. **Route File Size**: `linearRoutes.ts` at ~983 lines and `internalIssuesRoutes.ts` at ~933 lines could benefit from splitting
+4. **Route File Size**: `internalIssuesRoutes.ts` at ~970 lines and `linearRoutes.ts` at ~893 lines could benefit from splitting
 5. **Comment Full Sync**: No bulk comment reconciliation for initial setup
 6. **Fire-and-Forget Auto-Trigger**: `triggerCodeTaskFromAssignment` errors only logged, not surfaced
-7. **v8 Ignore Density**: 56 coverage exemption directives across 8 files (reduced from 92 across 12 files in v3.2.0 via INT-792)
+7. **v8 Ignore Density**: 52 coverage exemption directives across 13 production files
 
 ---
 
@@ -222,5 +233,5 @@ None. The service uses current versions of:
 
 ---
 
-**Last analyzed:** 2026-03-15 (v3.3.0)
+**Last analyzed:** 2026-03-22 (v3.4.0)
 **Analyzed by:** service-scribe (autonomous)

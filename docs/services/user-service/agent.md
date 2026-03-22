@@ -378,4 +378,4 @@ Keys are validated using cheap, fast models to minimize cost:
 
 ---
 
-**Last updated:** 2026-03-15
+**Last updated:** 2026-03-22

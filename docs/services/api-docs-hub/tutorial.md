@@ -46,7 +46,7 @@ Then visit `http://localhost:8080/docs`.
 
 ### What You Should See
 
-Swagger UI loads with a dropdown in the top-left corner listing all 18 configured services. The first service in the list is selected by default.
+Swagger UI loads with a dropdown in the top-left corner listing all 20 configured services. The first service in the list is selected by default.
 
 ---
 
@@ -61,9 +61,9 @@ Click the dropdown at the top of the Swagger UI page. You will see entries such 
 - Commands Agent API
 - Chat Agent API
 - Code Agent API
-- Linear Agent API
-- Web Agent API
-- ... and 11 more
+- Cron Agent API
+- Hellscript Agent API
+- ... and 13 more
 
 ### Step 2.2: Select a Service
 
@@ -106,7 +106,7 @@ curl https://api-docs-hub.intexuraos.com/health
       "status": "ok",
       "latencyMs": 0,
       "details": {
-        "sourceCount": 18
+        "sourceCount": 20
       }
     }
   ]
@@ -129,13 +129,13 @@ curl https://api-docs-hub.intexuraos.com/health
 
 ### Step 4.1: Set Environment Variables
 
-All 18 `*_OPENAPI_URL` environment variables must be set. If using `direnv`, these are loaded from `.envrc`. Verify:
+All 20 `*_OPENAPI_URL` environment variables must be set. If using `direnv`, these are loaded from `.envrc`. Verify:
 
 ```bash
 env | grep OPENAPI_URL | wc -l
 ```
 
-Expected output: `18`
+Expected output: `20`
 
 ### Step 4.2: Start the Service
 
@@ -155,20 +155,20 @@ curl http://localhost:8080/health | jq .
 
 ## Troubleshooting
 
-| Issue                 | Cause                         | Solution                                                               |
-| --------------------- | ----------------------------- | ---------------------------------------------------------------------- |
-| Spec not loading      | Target service is down        | Check target service status and network accessibility                  |
-| CORS error            | Service blocks browser origin | Configure CORS headers on the target service                           |
-| Health returns "down" | Missing env vars at startup   | Ensure all 18 `*_OPENAPI_URL` vars are set                             |
-| Startup crash         | Any required env var missing  | Run `direnv allow` and verify with `env \                              | grep OPENAPI` |
-| Blank Swagger UI      | All services unreachable      | Verify at least one service URL is reachable from browser              |
-| Port conflict         | Port 8080 already in use      | Set `PORT=8081` or stop the conflicting process                        |
+| Issue                 | Cause                         | Solution                                                         |
+| --------------------- | ----------------------------- | ---------------------------------------------------------------- |
+| Spec not loading      | Target service is down        | Check target service status and network accessibility            |
+| CORS error            | Service blocks browser origin | Configure CORS headers on the target service                     |
+| Health returns "down" | Missing env vars at startup   | Ensure all 20 `*_OPENAPI_URL` vars are set                       |
+| Startup crash         | Any required env var missing  | Run `direnv allow` and verify with `env \                        | grep OPENAPI` |
+| Blank Swagger UI      | All services unreachable      | Verify at least one service URL is reachable from browser        |
+| Port conflict         | Port 8080 already in use      | Set `PORT=8081` or stop the conflicting process                  |
 
 ---
 
 ## Next Steps
 
-1. Explore each of the 18 service APIs to understand the full IntexuraOS surface
+1. Explore each of the 20 service APIs to understand the full IntexuraOS surface
 2. Read the [Technical Reference](technical.md) for architecture details
 3. Check individual service documentation for endpoint-specific tutorials
 
@@ -179,7 +179,7 @@ curl http://localhost:8080/health | jq .
 Test your understanding:
 
 1. **Easy:** Find which service provides the `/internal/messages/send` endpoint
-2. **Medium:** Count the total number of endpoints across all 18 services
+2. **Medium:** Count the total number of endpoints across all 20 services
 3. **Hard:** Identify which services have internal-only endpoints (no public routes)
 
 <details>
@@ -191,7 +191,7 @@ Select "WhatsApp Service API" from the dropdown and look under the internal endp
 
 ### Exercise 2: Count Total Endpoints
 
-Switch through each of the 18 services in the dropdown and tally the endpoint count shown at the top of each spec. The total varies as services evolve.
+Switch through each of the 20 services in the dropdown and tally the endpoint count shown at the top of each spec. The total varies as services evolve.
 
 ### Exercise 3: Internal-Only Services
 

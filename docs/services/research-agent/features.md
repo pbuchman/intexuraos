@@ -16,9 +16,15 @@ Submit a single research prompt and Research Agent dispatches it simultaneously 
 
 **Example:** A user asks "What are the risks of adopting a microservices architecture for a 10-person startup?" All five configured models research the question in parallel. Within minutes, the user has five expert perspectives ready for synthesis.
 
+### Context-Aware Research Pipeline
+
+Before dispatching prompts, Research Agent infers a structured research context from the user's question — domain, answer style, preferred source types, time scope, and safety constraints. Each model receives a tailored prompt that includes this context, producing more relevant and focused results. Low-quality model responses (those below the minimum content threshold) are automatically flagged and deprioritized during synthesis.
+
+**Example:** A question about fishing regulations triggers automatic domain detection (`outdoor_recreation`), scopes sources to official regulators and primary documentation, and sets a practical answer style. If one model returns a superficial two-paragraph answer, synthesis treats it as supplementary rather than primary evidence.
+
 ### Intelligent Synthesis with Attribution
 
-Once all models complete, a dedicated synthesis model reads every report and produces a structured output: executive summary, detailed findings organized by theme, explicit agreements between models, contradictions flagged with confidence notes, and unique insights from individual models. Every claim in the synthesis is attributed to the model that made it.
+Once all models complete, a dedicated synthesis model reads every report and produces a structured output: executive summary, detailed findings organized by theme, explicit agreements between models, contradictions flagged with confidence notes, and unique insights from individual models. Every claim in the synthesis is attributed to the model that made it. If attribution validation fails, the service automatically calls the synthesizer again to repair it.
 
 **Example:** Gemini and Claude both warn about operational complexity; GPT uniquely flags DNS management overhead; Perplexity cites three recent case studies. The synthesis surfaces all of this in one readable document without the user needing to manually compare five long outputs.
 
@@ -50,9 +56,9 @@ Research can be created as a draft by other services — for example, when trigg
 
 A product manager needs competitive intelligence before a board meeting. She submits: "Compare the pricing models and market positioning of Notion, Confluence, and Linear for a 50-person engineering team."
 
-Research Agent dispatches the prompt to Gemini 2.5 Pro, Claude Sonnet 4.5, and Perplexity Sonar Pro simultaneously. Gemini Pro focuses on feature depth, Claude Sonnet emphasizes integration ecosystems, Sonar Pro pulls current pricing pages. All three complete within minutes.
+Research Agent infers the domain as business strategy, selects an executive answer style, and builds context-enhanced prompts for each model. Gemini 2.5 Pro, Claude Sonnet 4.5, and Perplexity Sonar Pro each receive the tailored prompt and research the question in parallel. Within minutes, all three complete — but Sonar Pro's response is unusually brief and gets flagged as low quality.
 
-The synthesis model reads all three reports and produces a structured document: an executive summary, detailed findings per product, agreements on Notion's document flexibility, and a flagged contradiction between two models' assessments of Confluence pricing. The report is automatically uploaded as a shareable HTML page with a generated cover image.
+The synthesis model reads all three reports, deprioritizing the flagged result, and produces a structured document: an executive summary, detailed findings per product, agreements on Notion's document flexibility, and a flagged contradiction between two models' assessments of Confluence pricing. The report is automatically uploaded as a shareable HTML page with a generated cover image.
 
 The PM shares the link in the board pre-read Slack channel and exports it to Notion for the meeting notes.
 
@@ -60,6 +66,8 @@ The PM shares the link in the board pre-read Slack channel and exports it to Not
 
 - Eliminate single-model bias by cross-validating across providers
 - Identify contradictions and confidence gaps automatically
+- Context-aware prompts produce more relevant, focused research results
+- Low-quality responses detected and deprioritized before synthesis
 - Reuse prior results when expanding research — no redundant API costs
 - Shareable reports generated automatically with no export friction
 - Research organized in Notion without manual copy-paste

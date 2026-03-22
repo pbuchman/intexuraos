@@ -1,8 +1,8 @@
 # Linear Agent — Tutorial
 
-> **Time:** 40–50 minutes
+> **Time:** 40-50 minutes
 > **Prerequisites:** Node.js 20+, Linear account with API key, IntexuraOS running locally
-> **You'll learn:** How to connect Linear, create issues via AI, view issues with parent-child support, read comments, configure webhooks, sync issues, use the internal API, and observe auto-triggered code tasks
+> **You'll learn:** How to connect Linear, create issues via AI, view issues with parent-child support, read comments, configure webhooks, sync issues, use the internal API, fetch issue context, and observe auto-triggered code tasks
 
 ---
 
@@ -17,6 +17,7 @@ A working integration that:
 - Configures webhooks for real-time issue sync with multi-user fan-out
 - Triggers full issue synchronization
 - Manages issues programmatically via the internal API (create, state, comments, labels, tree)
+- Fetches issue context (description + comments) for cross-service use
 - Observes auto-triggered code tasks on issue assignment
 - Handles errors and reviews failed extractions
 
@@ -262,7 +263,7 @@ curl http://localhost:3000/linear/webhook-config \
 
 ### Step 4.2: Set Up in Linear
 
-1. Go to Linear Settings → API → Webhooks
+1. Go to Linear Settings -> API -> Webhooks
 2. Create a new webhook with the URL from step 4.1
 3. Select "Issues" and "Comments" as resource types
 4. Copy the webhook signing secret
@@ -413,7 +414,33 @@ curl http://localhost:3000/internal/issues/ISSUE_ID/tree \
   -H "X-User-Id: YOUR_USER_ID"
 ```
 
-**Checkpoint:** You can create issues, generate titles, validate identifiers, move through the workflow, add comments, update metadata, fetch batches, and traverse trees using the internal API.
+### Step 5.9: Fetch Issue Context (New in v3.4.0)
+
+Retrieve an issue's description and comments for cross-service use — no `X-User-Id` required.
+
+```bash
+curl http://localhost:3000/internal/linear/issues/ENG-100/context \
+  -H "X-Internal-Auth: your-internal-secret"
+```
+
+**Expected response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "description": "The onboarding wizard crashes when company name is skipped...",
+    "comments": [
+      { "body": "Confirmed — reproducible on step 2.", "createdAt": "2026-03-20T14:30:00Z" },
+      { "body": "Looks like a validation issue.", "createdAt": "2026-03-20T10:15:00Z" }
+    ]
+  }
+}
+```
+
+Comments are sorted newest-first, capped at 100, with empty bodies filtered. This endpoint does not require user scoping — it is designed for service-to-service calls.
+
+**Checkpoint:** You can create issues, generate titles, validate identifiers, move through the workflow, add comments, update metadata, fetch batches, traverse trees, and retrieve issue context using the internal API.
 
 ---
 
@@ -497,6 +524,7 @@ curl -X DELETE http://localhost:3000/linear/failed-issues/FAILED_ID \
 | No child issues on dashboard  | Not synced yet               | Run full sync to populate parent-child data                         |
 | Other user missing updates    | Old single-user routing      | Ensure webhook configured; fan-out is default                       |
 | Internal endpoint returns 401 | Missing header               | Both `X-Internal-Auth` and `X-User-Id` required for issue endpoints |
+| Context endpoint returns 404  | Issue not synced             | Run a full sync before querying context                             |
 
 ---
 
@@ -514,12 +542,13 @@ curl -X DELETE http://localhost:3000/linear/failed-issues/FAILED_ID \
 5. Configure a webhook and verify real-time sync by updating an issue in Linear.
 6. Send vague input ("fix bug") — find it in the failed-issues queue, then delete it.
 7. Use the batch display endpoint to fetch three issues with their comment counts in one call.
+8. Use the context endpoint to fetch an issue's description and comments.
 
 ### Hard
 
-8. Simulate the full code-agent workflow: create an issue with `POST /internal/issues`, move it to `in_progress`, add a comment, update a label, then move it to `done`.
-9. Create a parent issue in Linear, create two sub-issues, run a full sync, then verify the tree structure with `GET /internal/issues/:issueId/tree`.
-10. Test the auto-trigger: create an issue with a `planning-task` label, assign it, and trace the log output to confirm the code agent receives the task.
+9. Simulate the full code-agent workflow: create an issue with `POST /internal/issues`, move it to `in_progress`, add a comment, update a label, then move it to `done`.
+10. Create a parent issue in Linear, create two sub-issues, run a full sync, then verify the tree structure with `GET /internal/issues/:issueId/tree`.
+11. Test the auto-trigger: create an issue with a `planning-task` label, assign it, and trace the log output to confirm the code agent receives the task.
 
 <details>
 <summary>Solutions</summary>
@@ -552,7 +581,16 @@ curl -X POST http://localhost:3000/internal/linear/process-action \
   -d '{"action": {"id": "ex4-4", "userId": "USER", "text": "When you have time, update the footer copyright"}}'
 ```
 
-### Exercise 8: Full Code-Agent Workflow
+### Exercise 8: Fetch Issue Context
+
+```bash
+curl http://localhost:3000/internal/linear/issues/ENG-100/context \
+  -H "X-Internal-Auth: your-internal-secret"
+```
+
+Verify the response contains `description` (string or null) and `comments` array sorted newest-first.
+
+### Exercise 9: Full Code-Agent Workflow
 
 ```bash
 # 1. Create issue
@@ -606,4 +644,4 @@ Now that you understand the basics:
 
 ---
 
-**Last updated:** 2026-03-15
+**Last updated:** 2026-03-22

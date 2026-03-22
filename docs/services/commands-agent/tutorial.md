@@ -1,6 +1,6 @@
 # Commands Agent — Tutorial
 
-> **Time:** 20–30 minutes
+> **Time:** 20--30 minutes
 > **Prerequisites:** Node.js 20+, access to a running IntexuraOS environment, valid Auth0 bearer token
 > **You'll learn:** How to submit commands, read classification results, archive completed commands, and trigger a retry for pending classifications
 

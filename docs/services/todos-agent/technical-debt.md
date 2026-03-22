@@ -1,7 +1,7 @@
 # Todos Agent — Technical Debt
 
-**Last Updated:** 2026-03-15
-**Analysis Run:** Autonomous documentation refresh (service-scribe, v3.3.0 force refresh)
+**Last Updated:** 2026-03-22
+**Analysis Run:** Autonomous documentation refresh (service-scribe, v3.4.0 release)
 
 ---
 
@@ -9,13 +9,13 @@
 
 | Category            | Count | Severity |
 | ------------------- | ----- | -------- |
-| TODO/FIXME Comments | 0     | —        |
-| Test Coverage Gaps  | 0     | —        |
-| TypeScript Issues   | 0     | —        |
-| SRP Violations      | 0     | —        |
+| TODO/FIXME Comments | 0     | ---      |
+| Test Coverage Gaps  | 0     | ---      |
+| TypeScript Issues   | 0     | ---      |
+| SRP Violations      | 0     | ---      |
 | Code Duplicates     | 1     | Low      |
-| Deprecations        | 0     | —        |
-| **Total**           | **1** | —        |
+| Deprecations        | 0     | ---      |
+| **Total**           | **1** | ---      |
 
 ---
 
@@ -103,6 +103,10 @@ No deprecated APIs or dependencies in use. ZAI provider and GLM-4.7 model refere
 
 ## Recent Improvements
 
+### v3.4.0 (2026-03-22)
+
+Standardized PENDING v8-ignore comments to permanent `ts-type` category (INT-987, commit `da00218e`). Two `ts-type` annotations in `updateTodoItem.ts` and `reorderTodoItems.ts` were reclassified from pending to permanent, confirming these TypeScript narrowing guards are structurally untestable rather than awaiting future test infrastructure.
+
 ### Release v3.3.0 (2026-03-15)
 
 Removed ZAI provider and GLM-4.7 models from the LLM dependency chain (commit `93aeac4a`). The service now relies exclusively on Gemini 2.5 Flash with platform Gemini (`INTEXURAOS_GEMINI_APP_API_KEY`) as fallback.
@@ -165,6 +169,7 @@ Achieved 100% branch coverage with proper v8 ignore annotations (INT-427).
 
 | Date       | Issue                              | Resolution                                       |
 | ---------- | ---------------------------------- | ------------------------------------------------ |
+| 2026-03-19 | PENDING v8-ignore annotations      | Standardized to permanent ts-type (INT-987)      |
 | 2026-03-12 | ZAI/GLM-4.7 still in LLM chain     | Removed ZAI provider and GLM-4.7 (93aeac4a)      |
 | 2026-03-07 | Version at 3.1.0                   | Released v3.2.0 (44ea683a)                       |
 | 2026-03-02 | UserServiceClient mock incomplete  | Added resolveGitHubUsername mock (99febe66)      |
