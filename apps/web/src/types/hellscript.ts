@@ -98,6 +98,7 @@ export interface HellscriptWorkspaceResponse {
 export interface HellscriptImposeRequest {
   bufferId?: string;
   utterance: string;
+  category?: WritingCategory;
 }
 
 /**

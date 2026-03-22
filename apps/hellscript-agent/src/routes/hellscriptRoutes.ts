@@ -5,10 +5,12 @@ import { imposeOnBuffer } from '../domain/usecases/imposeOnBuffer.js';
 import { listBuffers } from '../domain/usecases/listBuffers.js';
 import { getBufferWorkspace } from '../domain/usecases/getBufferWorkspace.js';
 import { BufferNotFoundError, DraftGenerationError } from '../domain/errors.js';
+import { isValidCategory } from '../domain/models/writingCategory.js';
 
 interface ImposeBody {
   bufferId?: string;
   utterance: string;
+  category?: string;
 }
 
 interface BufferParams {
@@ -21,6 +23,7 @@ const imposeBodySchema = {
   properties: {
     bufferId: { type: 'string', maxLength: 128 },
     utterance: { type: 'string', minLength: 1, maxLength: 10000 },
+    category: { type: 'string', enum: ['threads', 'linkedin', 'general'] },
   },
 } as const;
 
@@ -83,6 +86,9 @@ export const hellscriptRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
           userId: user.userId,
           bufferId: request.body.bufferId,
           utterance: request.body.utterance,
+          category: request.body.category !== undefined && isValidCategory(request.body.category)
+            ? request.body.category
+            : undefined,
         }
       );
 
