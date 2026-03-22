@@ -1455,6 +1455,7 @@ export type {
   WritingStyleConfig,
   WritingSample,
 } from './hellscript.js';
+export { WRITING_CATEGORIES } from './hellscript.js';
 
 // Cron Agent types
 export type {

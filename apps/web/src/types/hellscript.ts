@@ -63,6 +63,12 @@ export interface HellscriptMaterializedState {
 
 export type WritingCategory = 'threads' | 'linkedin' | 'general';
 
+export const WRITING_CATEGORIES: readonly { key: WritingCategory; label: string }[] = [
+  { key: 'threads', label: 'Threads' },
+  { key: 'linkedin', label: 'LinkedIn' },
+  { key: 'general', label: 'General' },
+] as const;
+
 export interface WritingStyleConfig {
   threads: string | null;
   linkedin: string | null;

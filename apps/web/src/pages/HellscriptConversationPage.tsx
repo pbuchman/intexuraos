@@ -10,12 +10,7 @@ import {
 } from '@/components/hellscript/index.js';
 import { useHellscriptWorkspace } from '@/hooks';
 import type { HellscriptDraftVersion, WritingCategory } from '@/types';
-
-const CATEGORY_OPTIONS: { key: WritingCategory; label: string }[] = [
-  { key: 'threads', label: 'Threads' },
-  { key: 'linkedin', label: 'LinkedIn' },
-  { key: 'general', label: 'General' },
-];
+import { WRITING_CATEGORIES } from '@/types';
 
 export function HellscriptConversationPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
@@ -42,10 +37,9 @@ export function HellscriptConversationPage(): React.JSX.Element {
 
   const handleCategorySelect = useCallback(
     (category: WritingCategory) => {
-      clearLastAction();
       void impose(`Generate a ${category} draft`);
     },
-    [impose, clearLastAction]
+    [impose]
   );
 
   const isNewConversation = id === undefined;
@@ -103,7 +97,7 @@ export function HellscriptConversationPage(): React.JSX.Element {
                     </button>
                   </div>
                   <div className="flex gap-2">
-                    {CATEGORY_OPTIONS.map(({ key, label }) => (
+                    {WRITING_CATEGORIES.map(({ key, label }) => (
                       <button
                         key={key}
                         type="button"

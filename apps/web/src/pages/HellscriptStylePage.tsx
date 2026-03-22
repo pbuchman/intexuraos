@@ -1,14 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Loader2, Check } from 'lucide-react';
-import { Layout } from '@/components';
+import { Layout, ErrorBanner } from '@/components';
 import { useWritingConfig } from '@/hooks/useWritingConfig';
 import type { WritingCategory } from '@/types';
-
-const CATEGORIES: { key: WritingCategory; label: string }[] = [
-  { key: 'threads', label: 'Threads' },
-  { key: 'linkedin', label: 'LinkedIn' },
-  { key: 'general', label: 'General' },
-];
+import { WRITING_CATEGORIES } from '@/types';
 
 function StyleSection({
   category,
@@ -27,17 +22,25 @@ function StyleSection({
 }): React.JSX.Element {
   const [text, setText] = useState(value ?? '');
   const [showSaved, setShowSaved] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setText(value ?? '');
   }, [value]);
+
+  useEffect((): (() => void) => {
+    return (): void => {
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   const isDirty = text !== (value ?? '');
 
   const handleSave = useCallback(async (): Promise<void> => {
     await onSave(category, text);
     setShowSaved(true);
-    setTimeout(() => { setShowSaved(false); }, 2000);
+    if (timerRef.current !== null) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => { setShowSaved(false); }, 2000);
   }, [category, text, onSave]);
 
   const handleClear = useCallback(async (): Promise<void> => {
@@ -115,17 +118,11 @@ export function HellscriptStylePage(): React.JSX.Element {
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
           </div>
         ) : error !== null && config === null ? (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
-            {error}
-          </div>
+          <ErrorBanner message={error} />
         ) : (
           <div className="space-y-4">
-            {error !== null ? (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
-                {error}
-              </div>
-            ) : null}
-            {CATEGORIES.map(({ key, label }) => (
+            <ErrorBanner message={error} />
+            {WRITING_CATEGORIES.map(({ key, label }) => (
               <StyleSection
                 key={key}
                 category={key}
