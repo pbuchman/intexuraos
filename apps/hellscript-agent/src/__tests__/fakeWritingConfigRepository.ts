@@ -4,6 +4,7 @@ import type { WritingCategory } from '../domain/models/writingCategory.js';
 import type { WritingStyleConfig } from '../domain/models/writingStyleConfig.js';
 import type { WritingSample } from '../domain/models/writingSample.js';
 import type { WritingConfigRepository } from '../domain/ports/writingConfigRepository.js';
+import { SampleNotFoundError } from '../domain/errors.js';
 
 type MethodName =
   | 'getStyleConfig'
@@ -127,7 +128,7 @@ export class FakeWritingConfigRepository implements WritingConfigRepository {
     const all = this.samples.get(userId) ?? [];
     const sample = all.find((s) => s.id === sampleId && s.category === category);
     if (sample === undefined) {
-      return { ok: false, error: new Error('Sample not found') };
+      return { ok: false, error: new SampleNotFoundError() };
     }
     sample.text = text;
     sample.title = title;
@@ -146,7 +147,7 @@ export class FakeWritingConfigRepository implements WritingConfigRepository {
     const all = this.samples.get(userId) ?? [];
     const idx = all.findIndex((s) => s.id === sampleId && s.category === category);
     if (idx === -1) {
-      return { ok: false, error: new Error('Sample not found') };
+      return { ok: false, error: new SampleNotFoundError() };
     }
     all.splice(idx, 1);
     return { ok: true, value: undefined };

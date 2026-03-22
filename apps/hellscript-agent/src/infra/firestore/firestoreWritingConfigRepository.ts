@@ -6,6 +6,7 @@ import type { WritingCategory } from '../../domain/models/writingCategory.js';
 import type { WritingStyleConfig } from '../../domain/models/writingStyleConfig.js';
 import type { WritingSample } from '../../domain/models/writingSample.js';
 import type { WritingConfigRepository } from '../../domain/ports/writingConfigRepository.js';
+import { SampleNotFoundError } from '../../domain/errors.js';
 
 const COLLECTION = 'hellscript_writing_config';
 
@@ -199,12 +200,12 @@ export class FirestoreWritingConfigRepository implements WritingConfigRepository
 
       const doc = await ref.get();
       if (!doc.exists) {
-        return { ok: false, error: new Error('Sample not found') };
+        return { ok: false, error: new SampleNotFoundError() };
       }
 
       const data = doc.data() as SampleDoc;
       if (data.category !== category) {
-        return { ok: false, error: new Error('Sample not found') };
+        return { ok: false, error: new SampleNotFoundError() };
       }
 
       await ref.update({ text, title, updatedAt: new Date().toISOString() });
@@ -227,12 +228,12 @@ export class FirestoreWritingConfigRepository implements WritingConfigRepository
 
       const doc = await ref.get();
       if (!doc.exists) {
-        return { ok: false, error: new Error('Sample not found') };
+        return { ok: false, error: new SampleNotFoundError() };
       }
 
       const data = doc.data() as SampleDoc;
       if (data.category !== category) {
-        return { ok: false, error: new Error('Sample not found') };
+        return { ok: false, error: new SampleNotFoundError() };
       }
 
       await ref.delete();
