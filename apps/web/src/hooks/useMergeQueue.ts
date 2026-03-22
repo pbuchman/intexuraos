@@ -55,12 +55,17 @@ export function useMergeQueue(owner: string, repo: string): UseMergeQueueResult 
       setBranches(branchesRes.branches);
       setWatches(watchesRes.watches);
 
-      // Auto-select branch with most PRs
+      // Auto-select development branch if present, otherwise branch with most PRs
       if (branchesRes.branches.length > 0) {
-        const sorted = [...branchesRes.branches].sort((a, b) => b.openPrCount - a.openPrCount);
-        const best = sorted[0];
-        if (best !== undefined) {
-          setSelectedBranch(best.name);
+        const dev = branchesRes.branches.find((b) => b.name === 'development');
+        if (dev !== undefined) {
+          setSelectedBranch(dev.name);
+        } else {
+          const sorted = [...branchesRes.branches].sort((a, b) => b.openPrCount - a.openPrCount);
+          const best = sorted[0];
+          if (best !== undefined) {
+            setSelectedBranch(best.name);
+          }
         }
       }
     } catch (err) {

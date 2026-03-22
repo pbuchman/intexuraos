@@ -225,6 +225,95 @@ describe('createFirestoreGitHubEventLogEntryRepository', () => {
     expect(query.startAfter).not.toHaveBeenCalled();
   });
 
+  it('adds where clause when eventTypes filter is provided', async () => {
+    const whereFn = vi.fn();
+    const startAfterFn = vi.fn();
+    const getFn = vi.fn().mockResolvedValue({
+      docs: [
+        {
+          id: 'entry-1',
+          data: (): Record<string, unknown> => ({
+            githubEventName: 'pull_request',
+            eventType: 'pull_request',
+            action: 'opened',
+            repository: 'intexuraos/test-repo',
+            pullRequestNumber: 42,
+            authPassedAt: new Date('2026-03-12T10:00:00.000Z'),
+            updatedAt: new Date('2026-03-12T10:00:00.000Z'),
+            decisionState: 'pending',
+            decisionOutcome: null,
+            decisionId: null,
+            rowVersion: 1,
+          }),
+        },
+      ],
+    });
+
+    interface QueryChain {
+      where: ReturnType<typeof vi.fn>;
+      startAfter: ReturnType<typeof vi.fn>;
+      limit: ReturnType<typeof vi.fn>;
+    }
+
+    const query: QueryChain = {
+      where: vi.fn().mockImplementation((...args: unknown[]): QueryChain => {
+        whereFn(...args);
+        return query;
+      }),
+      startAfter: vi.fn().mockImplementation((...args: unknown[]): QueryChain => {
+        startAfterFn(...args);
+        return query;
+      }),
+      limit: vi.fn().mockReturnValue({ get: getFn }),
+    };
+    const mockCollection = {
+      orderBy: vi.fn().mockReturnValue(query),
+    };
+
+    mockGetFirestore.mockReturnValue({
+      collection: vi.fn().mockReturnValue(mockCollection),
+    } as never);
+
+    const repo = createFirestoreGitHubEventLogEntryRepository({ logger: mockLogger });
+    const result = await repo.listRecent({
+      limit: 10,
+      eventTypes: ['pull_request', 'push', 'issue_comment'],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(whereFn).toHaveBeenCalledWith('eventType', 'in', ['pull_request', 'push', 'issue_comment']);
+    expect(startAfterFn).not.toHaveBeenCalled();
+  });
+
+  it('skips where clause when eventTypes is not provided', async () => {
+    const getFn = vi.fn().mockResolvedValue({ docs: [] });
+
+    interface QueryChain {
+      where: ReturnType<typeof vi.fn>;
+      startAfter: ReturnType<typeof vi.fn>;
+      limit: ReturnType<typeof vi.fn>;
+    }
+
+    const query: QueryChain = {
+      where: vi.fn().mockReturnThis(),
+      startAfter: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnValue({ get: getFn }),
+    };
+    const mockCollection = {
+      orderBy: vi.fn().mockReturnValue(query),
+    };
+
+    mockGetFirestore.mockReturnValue({
+      collection: vi.fn().mockReturnValue(mockCollection),
+    } as never);
+
+    const repo = createFirestoreGitHubEventLogEntryRepository({ logger: mockLogger });
+    const result = await repo.listRecent({ limit: 10 });
+
+    expect(result.ok).toBe(true);
+    expect(query.where).not.toHaveBeenCalled();
+  });
+
   it('finds rows by ids, skips missing docs, and normalizes Firestore date shapes', async () => {
     const snapshotById = new Map<string, {
       exists: boolean;

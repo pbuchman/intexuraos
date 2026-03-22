@@ -266,6 +266,9 @@ async function handleNewTaskRetry(
       continuationPrBranch: task.prBranch,
     }),
     ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+    /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
+    ...(task.reviewTypes !== undefined && { reviewTypes: task.reviewTypes }),
+    /* v8 ignore stop @preserve */
   });
 
   if (!dispatchResult.ok) {

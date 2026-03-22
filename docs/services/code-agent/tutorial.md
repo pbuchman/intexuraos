@@ -80,7 +80,7 @@ Expected response:
   "data": {
     "testStatus": "success",
     "testMessage": "Connection successful",
-    "lastTestedAt": "2026-03-15T10:30:00.000Z"
+    "lastTestedAt": "2026-03-22T10:30:00.000Z"
   }
 }
 ```
@@ -129,7 +129,7 @@ curl http://localhost:8128/code/tasks/<codeTaskId> \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
-The task progresses through statuses: `queued` → `dispatched` → `running` → `planned` or `implemented` or `reviewed` (or `failed`). Tasks never reach a generic `completed` status — they finish as `planned` (planning agent), `implemented` (execution agent), or `reviewed` (review agent). If all workers are busy, the task enters `queued` status and dispatches automatically when capacity opens.
+The task progresses through statuses: `queued` -> `dispatched` -> `running` -> `planned` or `implemented` or `reviewed` (or `failed`). Tasks never reach a generic `completed` status — they finish as `planned` (planning agent), `implemented` (execution agent), or `reviewed` (review agent). If all workers are busy, the task enters `queued` status and dispatches automatically when capacity opens.
 
 ### Step 3: List your tasks
 
@@ -156,7 +156,66 @@ curl -X POST http://localhost:8128/code/cancel \
   -d '{ "taskId": "<codeTaskId>" }'
 ```
 
-## Part 4: Advanced Features (10 min)
+## Part 4: Merge Queue (10 min)
+
+### Step 1: List available branches
+
+```bash
+curl "http://localhost:8128/code/merge-queue/branches" \
+  -H "Authorization: Bearer <your-auth0-jwt>"
+```
+
+The response shows available base branches. Branches marked with `blocked: true` (such as `main`) cannot be used as merge queue targets.
+
+### Step 2: Create a merge queue watch
+
+```bash
+curl -X POST http://localhost:8128/code/merge-queue/watch \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your-auth0-jwt>" \
+  -d '{
+    "owner": "pbuchman",
+    "repo": "intexuraos",
+    "baseBranch": "development"
+  }'
+```
+
+Expected response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "watchId": "watch-uuid-123",
+    "status": "active"
+  }
+}
+```
+
+### Step 3: Check watch status and merged PRs
+
+```bash
+curl "http://localhost:8128/code/merge-queue/watches" \
+  -H "Authorization: Bearer <your-auth0-jwt>"
+```
+
+Each watch shows which PRs have been merged, which were skipped (with reasons like `merge_conflict`, `checks_failing`, or `checks_pending`), and the current watch status (`active`, `drained`, or `cancelled`).
+
+### Step 4: View eligible PRs
+
+```bash
+curl "http://localhost:8128/code/merge-queue/prs" \
+  -H "Authorization: Bearer <your-auth0-jwt>"
+```
+
+### Step 5: Cancel a watch
+
+```bash
+curl -X DELETE "http://localhost:8128/code/merge-queue/watch/<watchId>" \
+  -H "Authorization: Bearer <your-auth0-jwt>"
+```
+
+## Part 5: Advanced Features (10 min)
 
 ### Retry a failed task
 
@@ -250,6 +309,15 @@ curl "http://localhost:8128/code/github-event-log?limit=20" \
 
 Each entry shows the event type, action, repository, and the evaluation outcome (dispatch, skip, or request_review). For entries decided by the GitHub Agent (LLM triage), the associated `event_decisions` record includes the model's reasoning and tool calls.
 
+### Inspect a raw webhook payload
+
+Expand any event log entry to view the full GitHub webhook payload:
+
+```bash
+curl "http://localhost:8128/code/github-event-log/<entryId>/payload" \
+  -H "Authorization: Bearer <your-auth0-jwt>"
+```
+
 ### Hydrate event log rows with full detail
 
 Fetch full audit and decision data for specific log entries:
@@ -269,15 +337,6 @@ View the list of PRs with recent activity (30-day window):
 
 ```bash
 curl "http://localhost:8128/code/github-pr-summaries" \
-  -H "Authorization: Bearer <your-auth0-jwt>"
-```
-
-### Query GitHub PR events
-
-View the timeline of GitHub events for your PRs:
-
-```bash
-curl "http://localhost:8128/code/github-pr-events?repository=pbuchman/intexuraos&limit=20" \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
@@ -317,6 +376,8 @@ curl -X POST http://localhost:8128/internal/code/process \
 | GitHub webhook returning 401          | GitHub webhook secret mismatch                    | Verify `INTEXURAOS_GITHUB_WEBHOOK_SECRET` matches GitHub app settings            |
 | Task queued but never dispatched      | Workers remain busy past queue TTL                | Check worker status; task expires after 30 min in queue                          |
 | Review task not dispatching           | Workers at capacity                               | Review tasks now queue like regular tasks — they dispatch when a worker frees up |
+| Merge queue watch not merging PRs     | CI checks pending or PRs have conflicts           | Check PR status on GitHub; the queue merges one PR per tick when checks pass     |
+| Cannot create watch for `main`        | Main branch is blocked as merge queue target      | Use `development` or another non-blocked branch as the base branch               |
 
 ## Exercises
 
@@ -362,7 +423,29 @@ curl -X POST http://localhost:8128/code/submit \
 
 **Solution verification:** The created task should have `linearIssueId: "INT-500"` and the Linear issue should transition to "In Progress" when the worker starts.
 
-### Exercise 3: Trigger zombie detection
+### Exercise 3: Create a merge queue watch
+
+Create a watch and observe the merge queue processing PRs:
+
+```bash
+# Create watch
+curl -X POST http://localhost:8128/code/merge-queue/watch \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <jwt>" \
+  -d '{
+    "owner": "your-org",
+    "repo": "your-repo",
+    "baseBranch": "development"
+  }'
+
+# Check status after a few scheduler ticks
+curl "http://localhost:8128/code/merge-queue/watches" \
+  -H "Authorization: Bearer <jwt>"
+```
+
+**Solution verification:** After Cloud Scheduler triggers a few ticks, the watch should show merged PRs in the `mergedPrs` array and any skipped PRs with reasons in `skippedPrs`.
+
+### Exercise 4: Trigger zombie detection
 
 Use the internal endpoint to scan for zombie tasks:
 
@@ -373,23 +456,23 @@ curl -X POST http://localhost:8128/internal/code/detect-zombies \
 
 **Solution verification:** The response includes `detected` (count of stale tasks) and `interrupted` (count successfully marked as interrupted).
 
-### Exercise 4: Explore the event decision log
+### Exercise 5: Explore the event decision log
 
-Fetch the GitHub event decision log to see how webhook events are being evaluated:
+Fetch the GitHub event decision log and inspect a raw payload:
 
 ```bash
+# List recent events
 curl "http://localhost:8128/code/github-event-log?limit=10" \
+  -H "Authorization: Bearer <your-auth0-jwt>"
+
+# Pick an entry ID and view its raw webhook payload
+curl "http://localhost:8128/code/github-event-log/<entryId>/payload" \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
-Look at the response:
+**Solution verification:** The payload endpoint returns the full GitHub webhook JSON for the selected event, including all nested fields that were sent by GitHub.
 
-- Each entry shows `decisionState: 'completed'` and `decisionOutcome: 'dispatch' | 'skip' | 'request_review'`.
-- Use the `POST /code/github-event-log/rows` endpoint with specific IDs to hydrate full row details including the audit event payload and the decision record with LLM reasoning.
-
-**Solution verification:** If a PR was recently opened, you should see an entry with `eventType: 'pull_request'`, `action: 'opened'`, and a decision outcome.
-
-### Exercise 5: Set the default review worker type
+### Exercise 6: Set the default review worker type
 
 Configure which model is used for automated code reviews when the GitHub Agent does not specify one:
 

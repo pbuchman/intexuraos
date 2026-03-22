@@ -1,7 +1,7 @@
 # Orchestrator — Technical Debt
 
-**Last Updated:** 2026-03-15
-**Analysis Run:** [2026-03-15 — orchestrator v3.3.0 force refresh](../../documentation-runs.md)
+**Last Updated:** 2026-03-22
+**Analysis Run:** [2026-03-22 — orchestrator v3.4.0](../../documentation-runs.md)
 
 ---
 
@@ -11,7 +11,7 @@
 | ------------------- | ------ | -------- |
 | TODO/FIXME Comments | 2      | Low      |
 | Architectural Gaps  | 4      | Medium   |
-| Code Duplicates     | 1      | Low      |
+| Deprecations        | 1      | Low      |
 | Missing Features    | 4      | Medium   |
 | **Total**           | **11** | Medium   |
 
@@ -148,9 +148,21 @@ When Gemini is unavailable (network error, rate limit, API outage), all in-fligh
 
 ---
 
+## Deprecations
+
+### 7. Direct Linear GraphQL queries
+
+**Severity:** Low
+
+The `readPlanReferencedInLinearIssue` function and direct `LINEAR_GRAPHQL_URL` usage in `deep-validator-helpers.ts` are deprecated in favor of the code-agent proxy (`fetchLinearIssueContextViaCodeAgent`). The deprecated code path remains as a fallback.
+
+**Recommended fix:** Remove the deprecated function and the `LINEAR_GRAPHQL_URL` constant after confirming all deployments use the code-agent proxy (INT-1040).
+
+---
+
 ## Missing Features
 
-### 7. No task retry from the orchestrator
+### 8. No task retry from the orchestrator
 
 **Severity:** Medium
 
@@ -160,7 +172,7 @@ The `retriedFrom` field exists on tasks, but retry logic lives entirely in code-
 
 ---
 
-### 8. No worktree cleanup on completed tasks
+### 9. No worktree cleanup on completed tasks
 
 **Severity:** Medium
 
@@ -170,7 +182,7 @@ Worktrees accumulate until manually cleaned or the stale threshold is exceeded. 
 
 ---
 
-### 9. No resource usage monitoring
+### 10. No resource usage monitoring
 
 **Severity:** Low
 
@@ -180,7 +192,7 @@ Worktrees accumulate until manually cleaned or the stale threshold is exceeded. 
 
 ---
 
-### 10. No container log persistence
+### 11. No container log persistence
 
 **Severity:** Low
 
@@ -190,42 +202,41 @@ Container logs are streamed to code-agent via `LogForwarder` but are not persist
 
 ---
 
-## Recent Improvements (v3.3.0)
+## Recent Improvements (v3.4.0)
 
-The following items improved reliability and observability since v3.2.0:
+The following items improved quality and capability since v3.3.0:
 
-- **Docker health gate** — Task submission now checks Docker daemon availability before accepting work, preventing tasks from failing during container creation when Docker is unresponsive
-- **Container creation timeout** — 2-minute timeout prevents hung dispatches from occupying capacity indefinitely
-- **Unified PR automation log** — Structured task-event logging enables a full timeline of all automation activity on a PR
-- **Already-completed outcome label** — Execution agent can now report `already_completed` when requested work is already merged, preventing redundant re-implementation
-- **Mandatory model name in PR descriptions** — Worker type and model name are now required in every PR description, enabling tracking of which model produced each PR
-- **Fatal exit code handling** — Exit codes 137 (OOM kill) and 139 (segfault) skip Gemini verification and trigger immediate retries
-- **Deep Validation severity indicators** — Reports use a four-level visual scale (Critical/Warning/Minor/Pass) with emoji for faster human triage
-- **Review Agent** — Fourth agent type (`review`) performs automated read-only PR reviews without pushing code changes
-- **Kimi worker type** — Added Kimi K2.5 via DashScope alongside existing GLM and Qwen models
-- **Worktree mutex** — All git worktree operations serialized via `async-mutex` to prevent concurrent index corruption
-- **Resilient repo startup** — Repository manager sanitizes credentials from remote URLs and gracefully degrades when fetch fails
-- **Periodic stale cleanup** — Orphaned containers are automatically removed instead of requiring manual cleanup
-- **Docker exec stream leak fixed** — Resolved a stream leak that caused container exits to go undetected until the 2-hour timeout
-- **Resume result preservation** — `lastSuccessResult` field ensures resumed tasks do not lose their previous successful result
-- **Pending resume recovery** — Startup recovery can now detect and restart accepted resumes that were interrupted by a crash
+- **Review Agent plan awareness** — Review Agent now cross-references implementations against original plan documents, posting structured requirements coverage tables on PRs (INT-1038)
+- **Linear proxy via code-agent** — Deep Validator fetches Linear issue context via code-agent instead of querying Linear GraphQL directly, improving resilience and decoupling (INT-1040)
+- **Auto-enforcement of review findings** — Quality issues identified in code reviews are automatically acted upon without manual intervention (INT-926)
+- **Unified task enqueue** — Queue-first dispatch ensures all tasks are durably recorded before execution (INT-950)
+- **Plan-based review dispatch** — Review agent automatically triggered when plan review is needed, with `plan_review` as a new review type (INT-1039)
+- **Separate image pull timeout** — 15-minute timeout for image pulls prevents slow networks from causing container creation failures (INT-1022)
+- **Base branch fetch** — Worktree creation now fetches base branch first, preventing stale ref failures (INT-984)
+- **Queue position fix** — Off-by-one error in queue position calculation and fan-out parent pollution corrected (INT-977)
+- **Worker instruction sections** — System prompts include shared `WORKER_INSTRUCTIONS` constant for consistency (INT-972)
+- **Selective container preservation** — Only execution and planning containers preserved; review and PR containers cleaned up immediately (INT-973)
+- **MiniMax M2.7 migration** — MiniMax worker type updated from M2.5 to M2.7 model (INT-1009)
+- **Fetch error cause chain** — Full cause chain logged for fetch errors instead of just top-level message (INT-1016)
+- **Timeout increase** — Task execution timeout increased from 2h to 3h; queue TTL increased to 6h
 
 ---
 
 ## Debt Resolution Tracking
 
-| ID  | Description                       | Created    | Resolved | Ticket |
-| --- | --------------------------------- | ---------- | -------- | ------ |
-| 1   | Default repository hardcoded      | 2026-02-08 | -        | -      |
-| 2   | Admin shutdown not wired          | 2026-02-08 | -        | -      |
-| 3   | Duplicate JWT libraries           | 2026-02-08 | -        | -      |
-| 4   | No horizontal scaling             | 2026-02-08 | -        | -      |
-| 5   | Verifier has no circuit-breaker   | 2026-02-19 | -        | -      |
-| 6   | No graceful container cancel      | 2026-02-08 | -        | -      |
-| 7   | No orchestrator-side retry        | 2026-02-08 | -        | -      |
-| 8   | No worktree cleanup on completion | 2026-02-08 | -        | -      |
-| 9   | No resource usage monitoring      | 2026-02-08 | -        | -      |
-| 10  | No local log persistence fallback | 2026-02-08 | -        | -      |
+| ID  | Description                       | Created    | Resolved   | Ticket   |
+| --- | --------------------------------- | ---------- | ---------- | -------- |
+| 1   | Default repository hardcoded      | 2026-02-08 | -          | -        |
+| 2   | Admin shutdown not wired          | 2026-02-08 | -          | -        |
+| 3   | Duplicate JWT libraries           | 2026-02-08 | -          | -        |
+| 4   | No horizontal scaling             | 2026-02-08 | -          | -        |
+| 5   | Verifier has no circuit-breaker   | 2026-02-19 | -          | -        |
+| 6   | No graceful container cancel      | 2026-02-08 | -          | -        |
+| 7   | Deprecated Linear GraphQL usage   | 2026-03-22 | -          | INT-1040 |
+| 8   | No orchestrator-side retry        | 2026-02-08 | -          | -        |
+| 9   | No worktree cleanup on completion | 2026-02-08 | -          | -        |
+| 10  | No resource usage monitoring      | 2026-02-08 | -          | -        |
+| 11  | No local log persistence fallback | 2026-02-08 | -          | -        |
 
 ---
 

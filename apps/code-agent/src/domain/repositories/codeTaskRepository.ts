@@ -44,6 +44,9 @@ export interface CreateTaskInput {
   planningPrBranch?: string;
   planningPrUrl?: string;
   trackingCommentId?: string;
+
+  // Review task metadata
+  reviewTypes?: string[];
 }
 
 export interface UpdateTaskInput {

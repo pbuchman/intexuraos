@@ -1,6 +1,6 @@
 # Image Service — Technical Debt
 
-**Last Updated:** 2026-03-15
+**Last Updated:** 2026-03-22
 **Analysis Run:** [documentation-runs.md](../../documentation-runs.md)
 
 ---
@@ -46,9 +46,9 @@ The port-based architecture (`ImageGenerator` interface) makes adding new provid
 
 ### Medium Priority
 
-| File                       | Issue                  | Impact                                                                                                                                                                                                     |
-| -------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.ts` + `services.ts` | Pricing model mismatch | `REQUIRED_MODELS` fetches pricing for `gemini-2.5-flash` and `gpt-4o-mini`, but prompt adapters use `gemini-2.5-pro` and `gpt-4.1`. Cost tracking may use incorrect per-token rates for prompt generation. |
+| File                             | Issue                  | Impact                                                                                                                                                                                                     |
+| -------------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.ts` + `serviceFactory.ts` | Pricing model mismatch | `REQUIRED_MODELS` fetches pricing for `gemini-2.5-flash` and `gpt-4o-mini`, but prompt adapters use `gemini-2.5-pro` and `gpt-4.1`. Cost tracking may use incorrect per-token rates for prompt generation. |
 
 ### Low Priority
 
@@ -60,16 +60,18 @@ None detected.
 
 ### Current Status
 
-Comprehensive test coverage achieved. All adapters, routes, and infrastructure layers are tested:
+Comprehensive test coverage achieved. All adapters, routes, use cases, and infrastructure layers are tested:
 
+- Application use cases: `generateImage`, `generatePrompt`, `deleteImage` — all with dedicated test files
 - Image generators: OpenAI and Google adapters fully tested including error paths
 - Prompt generation: GPT and Gemini adapters tested including `mapError` function
 - GCS storage: Upload, delete, and path building tested
 - Routes: Internal endpoints with auth validation, error handling, and success paths tested
 - Models: Validation functions and configuration objects tested
 - Parser: INT-605 contract alignment verified with explicit tests confirming stale fields are excluded
+- Slugify: Edge cases including unicode, special characters, and max length tested
 
-No v8 ignore comments present in the codebase.
+v8 ignore comments present only in `serviceFactory.ts` (env var fallbacks — `module-init` category) and `internalRoutes.ts` (DeleteImageUseCase error type is `never` — `test-infra` category).
 
 ---
 
@@ -93,7 +95,7 @@ No TODO, FIXME, HACK, or XXX comments found in the source code.
 
 ### None Detected
 
-All files are within reasonable size limits. The largest file is `routes/internalRoutes.ts` which handles three related endpoints in a single route plugin — an appropriate grouping for internal image operations.
+All files are within reasonable size limits. The v3.4.0 refactoring improved the situation further — `internalRoutes.ts` is now a thin handler layer, with business logic moved to dedicated use-case files in the `application/` directory.
 
 ---
 
@@ -117,6 +119,17 @@ No deprecated APIs or dependencies in use.
 ---
 
 ## Resolved Issues
+
+### 2026-03-16: v3.4.0 Application Layer Extraction (INT-898, INT-899, INT-900)
+
+**Issue:** Business logic was embedded in route handlers (`internalRoutes.ts`), making it harder to test in isolation and violating the layered architecture pattern used by other services. The `services.ts` file mixed container interface, state management, and factory initialization.
+
+**Resolution:**
+- New `application/` layer with `generatePrompt.ts`, `generateImage.ts`, `deleteImage.ts` use cases
+- Route handlers now delegate to use cases — thin HTTP layer with no business logic
+- `services.ts` split into `serviceContainer.ts` (DI interface) and `serviceFactory.ts` (initialization)
+- `slugify.ts` extracted as standalone utility
+- Dedicated test files for each use case added
 
 ### 2026-03-12: v3.3.0 ZAI Provider Removal
 

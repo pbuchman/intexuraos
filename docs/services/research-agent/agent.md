@@ -122,6 +122,20 @@ type ResearchStatus =
   | 'synthesizing'
   | 'completed'
   | 'failed';
+
+interface LlmResult {
+  provider: string;
+  model: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  result?: string;
+  sources?: string[];
+  inputTokens?: number;
+  outputTokens?: number;
+  costUsd?: number;
+  durationMs?: number;
+  copiedFromSource?: boolean;
+  qualityFlag?: 'normal' | 'low_quality';
+}
 ```
 
 ---
@@ -145,7 +159,7 @@ interface ConfirmPartialFailureInput {
 | Decision  | Effect                                                   |
 | --------- | -------------------------------------------------------- |
 | `proceed` | Synthesize using successful results only                 |
-| `retry`   | Re-queue failed models; status → `retrying`              |
+| `retry`   | Re-queue failed models; status -> `retrying`             |
 | `cancel`  | Mark research as `failed`                                |
 
 ---
@@ -232,7 +246,7 @@ interface ServiceFeedback {
 ### Pattern 1: Submit and Poll to Completion
 
 ```
-1. POST /research → receive researchId
+1. POST /research -> receive researchId
 2. GET /research/:id every 5 seconds
 3. If status === 'awaiting_confirmation':
    a. Read partialFailure.failedModels
@@ -247,7 +261,7 @@ interface ServiceFeedback {
 1. POST /internal/research/draft with userId, title, prompt, originalMessage
 2. Response includes resourceUrl = "/#/research/{id}"
 3. User visits dashboard, reviews draft, clicks approve
-4. Research moves to pending → processing → completed
+4. Research moves to pending -> processing -> completed
 ```
 
 ### Pattern 3: Incremental Enhancement

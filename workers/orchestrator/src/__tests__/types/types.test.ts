@@ -80,6 +80,7 @@ describe('Orchestrator Types', () => {
         githubInstallationId: 'test-installation-id',
         orchestratorSecret: 'test-secret',
         secretsBasePath: '/tmp/secrets',
+        internalAuthToken: 'test-internal-auth-token',
       };
 
       expect(config.capacity).toBe(5);

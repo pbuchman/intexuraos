@@ -6,6 +6,7 @@ import type { GitHubEventLogEntry } from '../../domain/models/gitHubEventLogEntr
 import type { GitHubWebhookAuditEvent } from '../../domain/models/gitHubWebhookAuditEvent.js';
 import type { EventDecision, EventDecisionReviewType } from '../../domain/models/eventDecision.js';
 import { ALL_REVIEW_TYPES } from '../../domain/constants/reviewTypes.js';
+import { VISIBLE_EVENT_TYPES } from '../../domain/constants/visibleEventTypes.js';
 
 interface GitHubEventLogRow {
   id: string;
@@ -260,6 +261,7 @@ const githubEventLogRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
         const result = await gitHubEventLogEntryRepo.listRecent({
           limit,
           ...(cursor !== undefined && { cursor }),
+          eventTypes: VISIBLE_EVENT_TYPES,
         });
 
         if (!result.ok) {
@@ -277,6 +279,65 @@ const githubEventLogRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
           request.log.error({ error }, 'Failed to hydrate GitHub event log rows');
           return await reply.fail('INTERNAL_ERROR', 'Failed to hydrate GitHub event log rows');
         }
+      }
+    );
+
+    secured.get<{
+      Params: { id: string };
+    }>(
+      '/code/github-event-log/:id/payload',
+      {
+        schema: {
+          params: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+            },
+            required: ['id'],
+          },
+          response: {
+            200: {
+              type: 'object',
+              properties: {
+                success: { type: 'boolean', enum: [true] },
+                data: {
+                  type: 'object',
+                  properties: {
+                    payload: {},
+                  },
+                  required: ['payload'],
+                },
+              },
+              required: ['success', 'data'],
+            },
+            401: errorResponseSchema,
+            404: errorResponseSchema,
+            500: errorResponseSchema,
+          },
+        },
+      },
+      async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+        logIncomingRequest(request, {
+          message: `Received request to GET /code/github-event-log/${request.params.id}/payload`,
+        });
+
+        const { gitHubWebhookAuditEventRepo } = getServices();
+        if (gitHubWebhookAuditEventRepo === undefined) {
+          return await reply.fail('INTERNAL_ERROR', 'GitHub webhook audit event repository is not configured');
+        }
+
+        const result = await gitHubWebhookAuditEventRepo.findByIds([request.params.id]);
+        if (!result.ok) {
+          request.log.error({ error: result.error }, 'Failed to load audit event');
+          return await reply.fail('INTERNAL_ERROR', 'Failed to load audit event');
+        }
+
+        const auditEvent = result.value[0];
+        if (auditEvent === undefined) {
+          return await reply.fail('NOT_FOUND', `Audit event not found for id: ${request.params.id}`);
+        }
+
+        return await reply.ok({ payload: auditEvent.payload ?? null });
       }
     );
 

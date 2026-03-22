@@ -36,8 +36,8 @@ import { readSessionTranscript } from './transcript-reader.js';
 import { formatTranscript } from './transcript-formatter.js';
 import {
   extractPrNumber,
-  fetchLinearIssueContext,
-  readPlanReferencedInLinearIssue,
+  fetchLinearIssueContextViaCodeAgent,
+  readPlanFile,
 } from './deep-validator-helpers.js';
 
 const execAsync = promisify(exec);
@@ -339,6 +339,9 @@ export class TaskDispatcher {
           planningPrBranch: request.planningPrBranch,
         }),
         ...(request.planningPrUrl !== undefined && { planningPrUrl: request.planningPrUrl }),
+        /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
+        ...(request.reviewTypes !== undefined && { reviewTypes: request.reviewTypes }),
+        /* v8 ignore stop @preserve */
         startedAt: new Date().toISOString(),
         attemptCount: 1,
         maxAttempts: this.completionMaxAttempts,
@@ -1214,6 +1217,7 @@ export class TaskDispatcher {
       }
       base.review_comments_posted = agentData.review_comments_posted;
       base.review_types = agentData.review_types;
+      base.requirements_tracker_updated = agentData.requirements_tracker_updated;
     } else {
       if (agentData.gh_pr_url !== '') {
         base.prUrl = agentData.gh_pr_url;
@@ -1241,6 +1245,12 @@ export class TaskDispatcher {
       }
       if (result.review_types === undefined && task.lastSuccessResult.review_types !== undefined) {
         result.review_types = task.lastSuccessResult.review_types;
+      }
+      if (
+        result.requirements_tracker_updated === undefined &&
+        task.lastSuccessResult.requirements_tracker_updated !== undefined
+      ) {
+        result.requirements_tracker_updated = task.lastSuccessResult.requirements_tracker_updated;
       }
     }
     if (task.agentType === 'pull_request' && task.lastSuccessResult !== undefined) {
@@ -1603,6 +1613,7 @@ export class TaskDispatcher {
           ...(task.continuationPrBranch !== undefined && {
             continuationPrBranch: task.continuationPrBranch,
           }),
+          ...(task.reviewTypes !== undefined && { reviewTypes: task.reviewTypes }),
         }) +
         /* v8 ignore stop @preserve */
         (params.injectActiveGoal === true ? this.buildActiveGoalSection(task, params.prompt) : ''),
@@ -2265,11 +2276,21 @@ export class TaskDispatcher {
 
       this.appendOrchestratorTaskLog(task.taskId, 'Starting deep validation');
 
-      const entries = await readSessionTranscript(
-        this.config.secretsBasePath,
-        task.taskId,
-        this.logger
-      );
+      // Parallelize independent I/O: transcript reading and code-agent context fetch
+      const [entries, codeAgentContext] = await Promise.all([
+        readSessionTranscript(this.config.secretsBasePath, task.taskId, this.logger),
+        task.linearIssueId !== undefined
+          ? fetchLinearIssueContextViaCodeAgent(
+              task.linearIssueId,
+              {
+                codeAgentUrl: this.config.codeAgentUrl,
+                internalAuthToken: this.config.internalAuthToken,
+              },
+              this.logger
+            )
+          : Promise.resolve(undefined),
+      ]);
+
       if (entries.length === 0) {
         this.logger.warn({ taskId: task.taskId }, 'Deep validation skipped: no transcript entries');
         return undefined;
@@ -2279,21 +2300,15 @@ export class TaskDispatcher {
 
       let linearIssueBody = this.buildLinearIssueSummary(task);
       let planContent: string | undefined;
-      if (task.linearIssueId !== undefined) {
-        const issueContext = await fetchLinearIssueContext(
-          task.linearIssueId,
-          this.isolation.getSecrets().LINEAR_API_KEY,
-          this.logger
-        );
-        const description = issueContext?.description;
-        if (description !== undefined) {
-          linearIssueBody = `${linearIssueBody}\n\nDescription:\n${description}`;
+      if (codeAgentContext !== undefined) {
+        if (codeAgentContext.description !== null) {
+          linearIssueBody = `${linearIssueBody}\n\nDescription:\n${codeAgentContext.description}`;
         }
 
-        if (issueContext !== undefined) {
-          planContent = await readPlanReferencedInLinearIssue(
+        if (codeAgentContext.planDocumentPath !== null) {
+          planContent = await readPlanFile(
             task.worktreePath,
-            issueContext,
+            codeAgentContext.planDocumentPath,
             this.logger
           );
         }

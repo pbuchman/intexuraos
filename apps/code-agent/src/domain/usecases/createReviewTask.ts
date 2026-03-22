@@ -192,7 +192,8 @@ function buildReviewPrompt(request: CreateReviewTaskRequest & {
       '',
       '### Issue Requirements',
       '',
-      'The following is the Linear issue description. This defines what the implementation must achieve.',
+      '**CRITICAL: Verify every requirement below against the PR implementation.**',
+      'Missing or partially implemented requirements are 🔴 findings.',
       '',
       request.issueDescription.length > ISSUE_DESCRIPTION_MAX_LENGTH
         ? `${request.issueDescription.slice(0, ISSUE_DESCRIPTION_MAX_LENGTH)}...\n\n(Truncated — full description available in the Linear issue)`
@@ -405,6 +406,7 @@ export async function createReviewTask(
     prNumber,
     agentType: 'review',
     ...(linearIssueId !== undefined && { linearIssueId }),
+    reviewTypes: request.reviewTypes,
   };
 
   const createResult = await codeTaskRepo.create(taskInput);

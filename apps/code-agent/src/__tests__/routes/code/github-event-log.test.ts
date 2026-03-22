@@ -1,5 +1,5 @@
 /**
- * Tests for GET/POST /code/github-event-log endpoints.
+ * Tests for GET/POST /code/github-event-log and GET /code/github-event-log/:id/payload endpoints.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -49,6 +49,7 @@ describe('GitHub event log routes', () => {
   let logger: Logger;
   let server: Awaited<ReturnType<typeof buildServer>>;
   let baseServices: import('../../../services.js').ServiceContainer;
+  let seededAuditEventId: string;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -243,7 +244,7 @@ describe('GitHub event log routes', () => {
 
     setServices(baseServices);
 
-    await gitHubWebhookAuditEventRepo.save({
+    const auditSaveResult = await gitHubWebhookAuditEventRepo.save({
       deliveryId: 'delivery-1',
       githubEventName: 'pull_request',
       eventType: 'pull_request',
@@ -260,6 +261,10 @@ describe('GitHub event log routes', () => {
       normalizationStatus: 'normalized',
       payload: { action: 'opened' },
     });
+    if (!auditSaveResult.ok) {
+      throw new Error('Failed to save seeded audit event');
+    }
+    seededAuditEventId = auditSaveResult.value.id;
     await gitHubEventLogEntryRepo.createPending({
       id: 'delivery-1',
       githubEventName: 'pull_request',
@@ -596,5 +601,177 @@ describe('GitHub event log routes', () => {
     });
 
     expect(response.statusCode).toBe(500);
+  });
+
+  it('filters out non-visible event types server-side', async () => {
+    const eventLogRepo = baseServices.gitHubEventLogEntryRepo;
+    if (eventLogRepo === undefined) {
+      throw new Error('GitHub event log entry repo not configured in test');
+    }
+
+    // Seed an 'unknown' event (e.g. check_run mapped to unknown)
+    await eventLogRepo.createPending({
+      id: 'delivery-unknown',
+      githubEventName: 'check_run',
+      eventType: 'unknown',
+      action: null,
+      repository: 'intexuraos/test-repo',
+      pullRequestNumber: null,
+      authPassedAt: new Date('2026-03-12T12:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T12:00:00.000Z'),
+      decisionState: 'pending',
+      decisionOutcome: null,
+      rowVersion: 1,
+    });
+
+    // Seed a 'ping' event
+    await eventLogRepo.createPending({
+      id: 'delivery-ping',
+      githubEventName: 'ping',
+      eventType: 'ping',
+      action: null,
+      repository: null,
+      pullRequestNumber: null,
+      authPassedAt: new Date('2026-03-12T12:01:00.000Z'),
+      updatedAt: new Date('2026-03-12T12:01:00.000Z'),
+      decisionState: 'pending',
+      decisionOutcome: null,
+      rowVersion: 1,
+    });
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-event-log',
+      headers: { authorization: 'Bearer fake-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(true);
+
+    // Only the seeded pull_request event from beforeEach should be returned
+    const eventTypes = body.data.rows.map((row: { eventType: string }) => row.eventType);
+    expect(eventTypes).not.toContain('unknown');
+    expect(eventTypes).not.toContain('ping');
+    expect(eventTypes).toContain('pull_request');
+  });
+
+  describe('GET /code/github-event-log/:id/payload', () => {
+    it('returns 200 with payload for valid audit event ID', async () => {
+      const response = await server.inject({
+        method: 'GET',
+        url: `/code/github-event-log/${seededAuditEventId}/payload`,
+        headers: { authorization: 'Bearer fake-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data).toEqual({ payload: { action: 'opened' } });
+    });
+
+    it('returns 404 when audit event does not exist', async () => {
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/github-event-log/non-existent-id/payload',
+        headers: { authorization: 'Bearer fake-token' },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 401 when no auth token provided', async () => {
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/github-event-log/delivery-1/payload',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 200 with null payload when audit event exists but payload is null', async () => {
+      const { gitHubWebhookAuditEventRepo } = baseServices;
+      if (gitHubWebhookAuditEventRepo === undefined) {
+        throw new Error('Audit event repo not configured in test');
+      }
+
+      const saveResult = await gitHubWebhookAuditEventRepo.save({
+        deliveryId: 'delivery-null-payload',
+        githubEventName: 'push',
+        eventType: 'push',
+        action: null,
+        repository: 'intexuraos/test-repo',
+        repositoryId: 200,
+        pullRequestNumber: null,
+        pullRequestId: null,
+        senderLogin: 'octocat',
+        senderId: 99,
+        senderType: 'User',
+        authPassedAt: new Date('2026-03-12T12:00:00.000Z'),
+        receivedAt: new Date('2026-03-12T12:00:00.000Z'),
+        normalizationStatus: 'normalized',
+        payload: null,
+      });
+
+      if (!saveResult.ok) {
+        throw new Error('Failed to save audit event');
+      }
+
+      const response = await server.inject({
+        method: 'GET',
+        url: `/code/github-event-log/${saveResult.value.id}/payload`,
+        headers: { authorization: 'Bearer fake-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data).toEqual({ payload: null });
+    });
+
+    it('returns 500 when audit event lookup fails', async () => {
+      setServices({
+        ...baseServices,
+        gitHubWebhookAuditEventRepo: {
+          ...baseServices.gitHubWebhookAuditEventRepo,
+          findByIds: vi.fn().mockResolvedValue(err({
+            code: 'FIRESTORE_ERROR',
+            message: 'lookup failed',
+          })),
+        } as import('../../../domain/repositories/gitHubWebhookAuditEventRepository.js').GitHubWebhookAuditEventRepository,
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/github-event-log/delivery-1/payload',
+        headers: { authorization: 'Bearer fake-token' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 500 when audit event repo is not configured', async () => {
+      const { gitHubWebhookAuditEventRepo: _ignoredAuditRepo, ...servicesWithoutAuditRepo } = baseServices;
+      setServices({
+        ...servicesWithoutAuditRepo,
+      } as import('../../../services.js').ServiceContainer);
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/github-event-log/delivery-1/payload',
+        headers: { authorization: 'Bearer fake-token' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
   });
 });

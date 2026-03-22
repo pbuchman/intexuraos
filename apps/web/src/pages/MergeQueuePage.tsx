@@ -47,10 +47,18 @@ export function MergeQueuePage(): React.JSX.Element {
     return counts;
   }, [prs]);
 
-  // Find active watch for selected branch
-  const currentWatch = useMemo(() => selectedBranch !== null
-    ? watches.find((w) => w.baseBranch === selectedBranch && (w.status === 'active' || w.status === 'drained')) ?? null
-    : null, [watches, selectedBranch]);
+  // Find watch for selected branch — prefer active over drained so a newly
+  // created watch is picked up even when a stale drained watch still exists.
+  const currentWatch = useMemo(() => {
+    if (selectedBranch === null) return null;
+    const branchWatches = watches.filter((w) => w.baseBranch === selectedBranch);
+    return branchWatches.find((w) => w.status === 'active')
+      ?? branchWatches.find((w) => w.status === 'drained')
+      ?? null;
+  }, [watches, selectedBranch]);
+
+  const isSelectedBranchBlocked = selectedBranch !== null &&
+    branches.find((b) => b.name === selectedBranch)?.blocked === true;
 
   // Merged PRs for timeline (from active/drained watch)
   const mergedPrs = currentWatch !== null ? currentWatch.mergedPrs : [];
@@ -121,6 +129,7 @@ export function MergeQueuePage(): React.JSX.Element {
           watch={currentWatch}
           onToggle={handleToggleWatch}
           isToggling={isToggling}
+          blocked={isSelectedBranchBlocked}
         />
         {toggleError !== null ? (
           <p className="mt-1 text-xs text-red-600 dark:text-red-400">{toggleError}</p>

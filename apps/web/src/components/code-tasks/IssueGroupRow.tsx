@@ -416,6 +416,11 @@ const IssueGroupRow = memo(function IssueGroupRow({
               </div>
             </div>
           </div>
+          <p className="truncate pl-6 text-xs text-slate-500 dark:text-slate-400">
+            {group.linearIssue !== undefined
+              ? group.linearIssue.title
+              : summaryOrPrompt(latestTask)}
+          </p>
           <div className="flex items-center gap-3 pl-6 text-xs text-slate-500 dark:text-slate-400">
             <PipelineVisualization group={group} compact />
           </div>

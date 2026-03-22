@@ -460,7 +460,7 @@ curl -X DELETE "https://calendar-agent.intexuraos.com/calendar/failed-events/fai
 | NOT_CONNECTED     | 403 on all requests  | Connect Google account via user-service              |
 | Invalid time      | 400 error            | Use ISO 8601 format with timezone                    |
 | Event not found   | 404                  | Verify eventId and calendarId                        |
-| Preview pending   | Status stays pending | Wait and poll, may take 2–5 seconds                  |
+| Preview pending   | Status stays pending | Wait and poll, may take 2-5 seconds                  |
 | Preview failed    | Status is failed     | Check error field, event saved for manual review     |
 | Attendee ignored  | Attendee not added   | Ensure email is valid email address                  |
 | Retry returns 422 | Missing start/end    | Failed event has no extracted times, create manually |
@@ -502,4 +502,4 @@ curl -X DELETE "https://calendar-agent.intexuraos.com/calendar/failed-events/fai
 
 ---
 
-**Last updated:** 2026-03-07
+**Last updated:** 2026-03-22

@@ -1,7 +1,7 @@
 # Chat Agent — Technical Debt
 
-**Last Updated:** 2026-03-15
-**Analysis Run:** [2026-03-07 entry](../../documentation-runs.md)
+**Last Updated:** 2026-03-22
+**Analysis Run:** [2026-03-22 entry](../../documentation-runs.md)
 
 ---
 
@@ -49,7 +49,7 @@ The rate limiter stores usage data in a `Map` local to the process. When Cloud R
 
 ### Hardcoded Embedding Model
 
-**File:** `apps/chat-agent/src/infra/llm/embeddingClient.ts` (line 56)
+**File:** `apps/chat-agent/src/infra/llm/embeddingClient.ts`
 
 The OpenAI embedding model (`text-embedding-3-small`) is hardcoded as a default. Changing the model requires reindexing all documents in `doc_embeddings` because different models produce incompatible vector spaces.
 
@@ -57,7 +57,7 @@ The OpenAI embedding model (`text-embedding-3-small`) is hardcoded as a default.
 
 ### Action Extraction via Regex
 
-**File:** `apps/chat-agent/src/infra/llm/chatClient.ts` (lines 100-122)
+**File:** `apps/chat-agent/src/infra/llm/chatClient.ts`
 
 The `extractSuggestedAction` function uses a regex (`/\[ACTION:\s*(create_command)\s+({.*?})\]/s`) to detect structured actions from raw LLM output. This is fragile: if the LLM slightly varies the format, the regex misses it. A structured output format (JSON mode or function calling) would be more reliable.
 
@@ -71,7 +71,7 @@ The `extractSuggestedAction` function uses a regex (`/\[ACTION:\s*(create_comman
 
 **Files:**
 
-- `apps/chat-agent/src/infra/firestore/embeddingRepository.ts` (lines 80-100 in `findNearest`, lines 142-162 in `findById`)
+- `apps/chat-agent/src/infra/firestore/embeddingRepository.ts` (`findNearest` and `findById`)
 
 The field extraction logic (reading `content`, `filePath`, `section`, `docType`, `createdAt` from Firestore data with type guards and defaults) is duplicated between `findNearest` and `findById`. A shared `toDocChunk(data, id)` helper would reduce duplication.
 
@@ -79,7 +79,7 @@ The field extraction logic (reading `content`, `filePath`, `section`, `docType`,
 
 **File:** `apps/chat-agent/src/infra/llm/chatClient.ts`
 
-The entire `generate` method (lines 44-91) is wrapped in a v8 ignore block. This covers a significant amount of logic: prompt building, LLM calling, error handling, and action extraction. While the exemption reason is valid (LLM output-dependent paths tested through fakes), the block size is large.
+The `generate` method contains a v8 ignore block covering a significant amount of logic: prompt building, LLM calling, error handling, and action extraction. While the exemption reason is valid (LLM output-dependent paths tested through fakes), the block size is large.
 
 ---
 
@@ -108,22 +108,22 @@ No TODO or FIXME comments found in the codebase.
 
 ## v8 Ignore Exemptions
 
-| File                                  | Lines   | Category   | Reason                                                      |
-| ------------------------------------- | ------- | ---------- | ----------------------------------------------------------- |
-| `routes/chatRoutes.ts`                | 179-189 | upstream   | Fallback for unknown error codes from domain layer          |
-| `infra/llm/chatClient.ts`             | 44-91   | upstream   | LLM client error paths tested in fakes, not real LLM        |
-| `infra/llm/chatClient.ts`             | 101-121 | upstream   | Branches depend on LLM output format                        |
-| `infra/llm/chatClient.ts`             | 128-133 | upstream   | String.replace branch depends on action being present       |
-| `domain/usecases/generateResponse.ts` | 226-228 | test-infra | Fallback impossible to trigger (split always returns array) |
+| File                                  | Category   | Reason                                                      |
+| ------------------------------------- | ---------- | ----------------------------------------------------------- |
+| `routes/chatRoutes.ts`                | upstream   | Fallback for unknown error codes from domain layer          |
+| `infra/llm/chatClient.ts`             | upstream   | LLM client error paths tested in fakes, not real LLM        |
+| `infra/llm/chatClient.ts`             | upstream   | Branches depend on LLM output format                        |
+| `infra/llm/chatClient.ts`             | upstream   | String.replace branch depends on action being present       |
+| `domain/usecases/generateResponse.ts` | test-infra | Fallback impossible to trigger (split always returns array) |
 
 ---
 
 ## SRP Violations (Files > 300 Lines)
 
-| File                                  | Lines | Concern                                                                            |
-| ------------------------------------- | ----- | ---------------------------------------------------------------------------------- |
-| `__tests__/fakes.fixture.ts`          | 322   | Contains 7 fake classes. Could split into per-class files if it grows.             |
-| `domain/usecases/generateResponse.ts` | 300   | At the threshold. Contains main use case + 4 helper functions. Acceptable for now. |
+| File                                  | Concern                                                                            |
+| ------------------------------------- | ---------------------------------------------------------------------------------- |
+| `__tests__/fakes.fixture.ts`          | Contains 7 fake classes. Could split into per-class files if it grows.             |
+| `domain/usecases/generateResponse.ts` | At the threshold. Contains main use case + 4 helper functions. Acceptable for now. |
 
 ---
 
@@ -131,6 +131,7 @@ No TODO or FIXME comments found in the codebase.
 
 | Issue      | Description                                           | Resolution                                                          |
 | ---------- | ----------------------------------------------------- | ------------------------------------------------------------------- |
+| `47b1b9e9` | Redundant "Say yes to confirm" in system prompt       | Removed; confirmation prompt simplified to "Shall I create this?"   |
 | `99febe66` | FakeUserServiceClient missing resolveGitHubUsername   | Added stub method to conform to updated UserServiceClient interface |
 | `e6782f64` | INTEXURAOS_LLM_MODEL env var no longer needed         | Removed; model selection via user-service                           |
 | `332fd990` | EmbeddingClient had tight OpenAI coupling             | Refactored to function injection pattern                            |

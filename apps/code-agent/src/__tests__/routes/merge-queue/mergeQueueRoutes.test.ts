@@ -281,7 +281,7 @@ describe('Merge queue JWT routes', () => {
         method: 'POST',
         url: '/code/merge-queue/watch',
         headers: { authorization: 'Bearer bad-token' },
-        payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'main' },
+        payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'development' },
       });
 
       expect(response.statusCode).toBe(401);
@@ -307,7 +307,7 @@ describe('Merge queue JWT routes', () => {
         gitHubUsername: 'testuser',
         owner: 'intexuraos',
         repo: 'repo',
-        baseBranch: 'main',
+        baseBranch: 'development',
         status: 'active' as const,
         mergedPrs: [],
         skippedPrs: [],
@@ -325,7 +325,7 @@ describe('Merge queue JWT routes', () => {
         method: 'POST',
         url: '/code/merge-queue/watch',
         headers: { authorization: 'Bearer fake-token' },
-        payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'main' },
+        payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'development' },
       });
 
       expect(response.statusCode).toBe(200);
@@ -348,6 +348,20 @@ describe('Merge queue JWT routes', () => {
       expect(body.error.message).toBe('owner, repo, and baseBranch are required');
     });
 
+    it('should reject baseBranch main', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/merge-queue/watch',
+        headers: { authorization: 'Bearer fake-token' },
+        payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'main' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.message).toBe('Merge queue cannot be enabled for the main branch');
+    });
+
     it('should return 409 on duplicate watch', async () => {
       nock('https://api.github.com')
         .get('/user')
@@ -365,7 +379,7 @@ describe('Merge queue JWT routes', () => {
         method: 'POST',
         url: '/code/merge-queue/watch',
         headers: { authorization: 'Bearer fake-token' },
-        payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'main' },
+        payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'development' },
       });
 
       expect(response.statusCode).toBe(409);
@@ -384,7 +398,7 @@ describe('Merge queue JWT routes', () => {
         method: 'POST',
         url: '/code/merge-queue/watch',
         headers: { authorization: 'Bearer fake-token' },
-        payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'main' },
+        payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'development' },
       });
 
       expect(response.statusCode).toBe(500);
@@ -410,7 +424,7 @@ describe('Merge queue JWT routes', () => {
         method: 'POST',
         url: '/code/merge-queue/watch',
         headers: { authorization: 'Bearer fake-token' },
-        payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'main' },
+        payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'development' },
       });
 
       expect(response.statusCode).toBe(500);
@@ -432,7 +446,7 @@ describe('Merge queue JWT routes', () => {
         method: 'POST',
         url: '/code/merge-queue/watch',
         headers: { authorization: 'Bearer fake-token' },
-        payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'main' },
+        payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'development' },
       });
 
       expect(response.statusCode).toBe(500);
@@ -458,7 +472,7 @@ describe('Merge queue JWT routes', () => {
         method: 'POST',
         url: '/code/merge-queue/watch',
         headers: { authorization: 'Bearer fake-token' },
-        payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'main' },
+        payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'development' },
       });
 
       expect(response.statusCode).toBe(500);
@@ -476,7 +490,7 @@ describe('Merge queue JWT routes', () => {
         method: 'POST',
         url: '/code/merge-queue/watch',
         headers: { authorization: 'Bearer fake-token' },
-        payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'main' },
+        payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'development' },
       });
 
       expect(response.statusCode).toBe(500);
@@ -498,7 +512,7 @@ describe('Merge queue JWT routes', () => {
         method: 'POST',
         url: '/code/merge-queue/watch',
         headers: { authorization: 'Bearer fake-token' },
-        payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'main' },
+        payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'development' },
       });
 
       expect(response.statusCode).toBe(403);
@@ -520,7 +534,7 @@ describe('Merge queue JWT routes', () => {
           gitHubUsername: 'testuser',
           owner: 'intexuraos',
           repo: 'repo',
-          baseBranch: 'main',
+          baseBranch: 'development',
           status: 'active' as const,
           mergedPrs: [],
           skippedPrs: [],
@@ -594,7 +608,7 @@ describe('Merge queue JWT routes', () => {
           gitHubUsername: 'testuser',
           owner: 'intexuraos',
           repo: 'repo',
-          baseBranch: 'main',
+          baseBranch: 'development',
           status: 'active' as const,
           mergedPrs: [],
           skippedPrs: [],
@@ -631,7 +645,7 @@ describe('Merge queue JWT routes', () => {
           gitHubUsername: 'otheruser',
           owner: 'intexuraos',
           repo: 'repo',
-          baseBranch: 'main',
+          baseBranch: 'development',
           status: 'active' as const,
           mergedPrs: [],
           skippedPrs: [],
@@ -668,7 +682,7 @@ describe('Merge queue JWT routes', () => {
           gitHubUsername: 'testuser',
           owner: 'intexuraos',
           repo: 'repo',
-          baseBranch: 'main',
+          baseBranch: 'development',
           status: 'active' as const,
           mergedPrs: [],
           skippedPrs: [],
@@ -690,9 +704,13 @@ describe('Merge queue JWT routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: { watches: unknown[] } };
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { watches: { watchId: string }[] };
+      };
       expect(body.success).toBe(true);
       expect(body.data.watches).toHaveLength(1);
+      expect(body.data.watches[0]?.watchId).toBe('watch-1');
     });
 
     it('should return error when owner or repo query params are missing', async () => {
@@ -735,12 +753,12 @@ describe('Merge queue JWT routes', () => {
       const { gitHubPRSummaryRepo } = getServices();
       await gitHubPRSummaryRepo.upsert({
         repository: 'intexuraos/repo', pullRequestNumber: 1, title: 'PR 1',
-        state: 'open', baseBranch: 'main', authorLogin: 'user1', headBranch: 'feat-1',
+        state: 'open', baseBranch: 'development', authorLogin: 'user1', headBranch: 'feat-1',
         lastActivityAt: new Date(), firstSeenAt: new Date(),
       });
       await gitHubPRSummaryRepo.upsert({
         repository: 'intexuraos/repo', pullRequestNumber: 2, title: 'PR 2',
-        state: 'open', baseBranch: 'main', authorLogin: 'user2', headBranch: 'feat-2',
+        state: 'open', baseBranch: 'development', authorLogin: 'user2', headBranch: 'feat-2',
         lastActivityAt: new Date(), firstSeenAt: new Date(),
       });
       await gitHubPRSummaryRepo.upsert({
@@ -756,26 +774,28 @@ describe('Merge queue JWT routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: { branches: { name: string; openPrCount: number }[] } };
+      const body = JSON.parse(response.body) as { success: boolean; data: { branches: { name: string; openPrCount: number; blocked: boolean }[] } };
       expect(body.success).toBe(true);
 
       const branches = body.data.branches;
-      const mainBranch = branches.find((b) => b.name === 'main');
+      const devBranch = branches.find((b) => b.name === 'development');
       const developBranch = branches.find((b) => b.name === 'develop');
-      expect(mainBranch?.openPrCount).toBe(2);
+      expect(devBranch?.openPrCount).toBe(2);
+      expect(devBranch?.blocked).toBe(false);
       expect(developBranch?.openPrCount).toBe(1);
+      expect(developBranch?.blocked).toBe(false);
     });
 
-    it('should not include PRs from other repositories', async () => {
+    it('should include main branch with blocked: true', async () => {
       const { gitHubPRSummaryRepo } = getServices();
       await gitHubPRSummaryRepo.upsert({
-        repository: 'intexuraos/repo', pullRequestNumber: 1, title: 'PR 1',
-        state: 'open', baseBranch: 'main', authorLogin: 'user1', headBranch: 'feat-1',
+        repository: 'intexuraos/repo', pullRequestNumber: 1, title: 'PR targeting dev',
+        state: 'open', baseBranch: 'development', authorLogin: 'user1', headBranch: 'feat-1',
         lastActivityAt: new Date(), firstSeenAt: new Date(),
       });
       await gitHubPRSummaryRepo.upsert({
-        repository: 'other-org/other-repo', pullRequestNumber: 2, title: 'PR 2',
-        state: 'open', baseBranch: 'main', authorLogin: 'user2', headBranch: 'feat-2',
+        repository: 'intexuraos/repo', pullRequestNumber: 2, title: 'PR targeting main',
+        state: 'open', baseBranch: 'main', authorLogin: 'user1', headBranch: 'feat-2',
         lastActivityAt: new Date(), firstSeenAt: new Date(),
       });
 
@@ -786,16 +806,49 @@ describe('Merge queue JWT routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: { branches: { name: string; openPrCount: number }[] } };
+      const body = JSON.parse(response.body) as { success: boolean; data: { branches: { name: string; openPrCount: number; blocked: boolean }[] } };
+      const branches = body.data.branches;
+
+      const mainBranch = branches.find((b) => b.name === 'main');
+      expect(mainBranch).toBeDefined();
+      expect(mainBranch?.openPrCount).toBe(1);
+      expect(mainBranch?.blocked).toBe(true);
+
+      const devBranch = branches.find((b) => b.name === 'development');
+      expect(devBranch?.blocked).toBe(false);
+    });
+
+    it('should not include PRs from other repositories', async () => {
+      const { gitHubPRSummaryRepo } = getServices();
+      await gitHubPRSummaryRepo.upsert({
+        repository: 'intexuraos/repo', pullRequestNumber: 1, title: 'PR 1',
+        state: 'open', baseBranch: 'development', authorLogin: 'user1', headBranch: 'feat-1',
+        lastActivityAt: new Date(), firstSeenAt: new Date(),
+      });
+      await gitHubPRSummaryRepo.upsert({
+        repository: 'other-org/other-repo', pullRequestNumber: 2, title: 'PR 2',
+        state: 'open', baseBranch: 'development', authorLogin: 'user2', headBranch: 'feat-2',
+        lastActivityAt: new Date(), firstSeenAt: new Date(),
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/merge-queue/branches?owner=intexuraos&repo=repo',
+        headers: { authorization: 'Bearer fake-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { branches: { name: string; openPrCount: number; blocked: boolean }[] } };
       expect(body.data.branches).toHaveLength(1);
       expect(body.data.branches[0]?.openPrCount).toBe(1);
+      expect(body.data.branches[0]?.blocked).toBe(false);
     });
 
     it('should skip PRs with null baseBranch', async () => {
       const { gitHubPRSummaryRepo } = getServices();
       await gitHubPRSummaryRepo.upsert({
         repository: 'intexuraos/repo', pullRequestNumber: 1, title: 'PR 1',
-        state: 'open', baseBranch: 'main', authorLogin: 'user1', headBranch: 'feat-1',
+        state: 'open', baseBranch: 'development', authorLogin: 'user1', headBranch: 'feat-1',
         lastActivityAt: new Date(), firstSeenAt: new Date(),
       });
       await gitHubPRSummaryRepo.upsert({
@@ -811,10 +864,11 @@ describe('Merge queue JWT routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: { branches: { name: string; openPrCount: number }[] } };
+      const body = JSON.parse(response.body) as { success: boolean; data: { branches: { name: string; openPrCount: number; blocked: boolean }[] } };
       expect(body.data.branches).toHaveLength(1);
-      expect(body.data.branches[0]?.name).toBe('main');
+      expect(body.data.branches[0]?.name).toBe('development');
       expect(body.data.branches[0]?.openPrCount).toBe(1);
+      expect(body.data.branches[0]?.blocked).toBe(false);
     });
 
     it('should return error when owner or repo query params are missing', async () => {
@@ -870,14 +924,14 @@ describe('Merge queue JWT routes', () => {
       const { gitHubPRSummaryRepo } = getServices();
       await gitHubPRSummaryRepo.upsert({
         repository: 'intexuraos/repo', pullRequestNumber: 10, title: 'Feature PR',
-        state: 'open', baseBranch: 'main', authorLogin: 'testuser', headBranch: 'feat-10',
+        state: 'open', baseBranch: 'development', authorLogin: 'testuser', headBranch: 'feat-10',
         mergeConflictStatus: 'clean', lastConflictCheckedAt: new Date(),
         lastActivityAt: new Date('2024-01-01T00:00:00Z'), firstSeenAt: new Date('2024-01-01T00:00:00Z'),
       });
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=main',
+        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=development',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -924,7 +978,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=main',
+        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=development',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -945,7 +999,7 @@ describe('Merge queue JWT routes', () => {
         gitHubUsername: 'watch-owner',
         owner: 'intexuraos',
         repo: 'repo',
-        baseBranch: 'main',
+        baseBranch: 'development',
         status: 'active' as const,
         mergedPrs: [],
         skippedPrs: [],
@@ -960,18 +1014,18 @@ describe('Merge queue JWT routes', () => {
       const { gitHubPRSummaryRepo } = getServices();
       await gitHubPRSummaryRepo.upsert({
         repository: 'intexuraos/repo', pullRequestNumber: 10, title: 'PR',
-        state: 'open', baseBranch: 'main', authorLogin: 'watch-owner', headBranch: 'feat',
+        state: 'open', baseBranch: 'development', authorLogin: 'watch-owner', headBranch: 'feat',
         lastActivityAt: new Date(), firstSeenAt: new Date(),
       });
       await gitHubPRSummaryRepo.upsert({
         repository: 'intexuraos/repo', pullRequestNumber: 11, title: 'PR2',
-        state: 'open', baseBranch: 'main', authorLogin: 'testuser', headBranch: 'feat2',
+        state: 'open', baseBranch: 'development', authorLogin: 'testuser', headBranch: 'feat2',
         lastActivityAt: new Date(), firstSeenAt: new Date(),
       });
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=main',
+        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=development',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -1000,13 +1054,13 @@ describe('Merge queue JWT routes', () => {
       const { gitHubPRSummaryRepo } = getServices();
       await gitHubPRSummaryRepo.upsert({
         repository: 'intexuraos/repo', pullRequestNumber: 10, title: 'PR',
-        state: 'open', baseBranch: 'main', authorLogin: 'testuser', headBranch: 'feat',
+        state: 'open', baseBranch: 'development', authorLogin: 'testuser', headBranch: 'feat',
         lastActivityAt: new Date(), firstSeenAt: new Date(),
       });
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=main',
+        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=development',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -1029,13 +1083,13 @@ describe('Merge queue JWT routes', () => {
       const { gitHubPRSummaryRepo } = getServices();
       await gitHubPRSummaryRepo.upsert({
         repository: 'intexuraos/repo', pullRequestNumber: 20, title: 'Bot PR',
-        state: 'open', baseBranch: 'main', authorLogin: 'claude[bot]', headBranch: 'bot-branch',
+        state: 'open', baseBranch: 'development', authorLogin: 'claude[bot]', headBranch: 'bot-branch',
         lastActivityAt: new Date(), firstSeenAt: new Date(),
       });
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=main',
+        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=development',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -1067,7 +1121,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=main',
+        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=development',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -1088,13 +1142,13 @@ describe('Merge queue JWT routes', () => {
       const { gitHubPRSummaryRepo } = getServices();
       await gitHubPRSummaryRepo.upsert({
         repository: 'intexuraos/repo', pullRequestNumber: 50, title: 'Orphan PR',
-        state: 'open', baseBranch: 'main', authorLogin: null, headBranch: 'orphan',
+        state: 'open', baseBranch: 'development', authorLogin: null, headBranch: 'orphan',
         lastActivityAt: new Date(), firstSeenAt: new Date(),
       });
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=main',
+        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=development',
         headers: { authorization: 'Bearer fake-token' },
       });
 

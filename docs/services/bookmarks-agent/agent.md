@@ -9,7 +9,7 @@
 | Attribute | Value                                                                                             |
 | --------- | ------------------------------------------------------------------------------------------------- |
 | Name      | bookmarks-agent                                                                                   |
-| Version   | 3.3.0                                                                                             |
+| Version   | 3.4.0                                                                                             |
 | Port      | 8124                                                                                              |
 | Role      | Link Intelligence Service                                                                         |
 | Goal      | Save, enrich, and organize bookmarks with OpenGraph metadata, AI summaries, and WhatsApp delivery |
@@ -52,7 +52,7 @@ interface CreateBookmarkOutput {
 **Endpoint:** `POST /internal/bookmarks`
 **Auth:** `X-Internal-Auth` header
 
-**When to use:** When creating a bookmark from another service (e.g., actions-agent). Triggers async enrichment pipeline (OG fetch → AI summary → WhatsApp notification).
+**When to use:** When creating a bookmark from another service (e.g., actions-agent). Triggers async enrichment pipeline (OG fetch -> AI summary -> WhatsApp notification).
 
 **Input Schema:**
 
@@ -297,11 +297,11 @@ interface Bookmark {
 ## Event Flow
 
 ```
-createBookmark (internal)
+createBookmark (internal, with enrichPublisher)
       |
 ogFetchStatus: 'pending'
       |
-Pub/Sub: bookmarks.enrich
+Pub/Sub: bookmarks.enrich (fire-and-forget from createBookmark use-case)
       |
 web-agent fetches OG data
       |
@@ -385,4 +385,4 @@ The title line is omitted if no title is available. `correlationId` is `bookmark
 
 ---
 
-**Last updated:** 2026-03-15 (v3.3.0 documentation refresh)
+**Last updated:** 2026-03-22 (v3.4.0 documentation refresh)

@@ -336,6 +336,9 @@ export async function drainTaskQueue(
       ...(task.planningPrUrl !== undefined && { planningPrUrl: task.planningPrUrl }),
       ...(task.trackingCommentId !== undefined && { trackingCommentId: task.trackingCommentId }),
       ...(task.retriedFrom !== undefined && { retriedFrom: task.retriedFrom }),
+      /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
+      ...(task.reviewTypes !== undefined && { reviewTypes: task.reviewTypes }),
+      /* v8 ignore stop @preserve */
     });
 
     if (!dispatchResult.ok) {

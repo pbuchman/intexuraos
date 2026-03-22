@@ -91,21 +91,22 @@ sequenceDiagram
 
 ## Recent Changes
 
+### v3.4.0 (since v3.3.0)
+
+| Commit     | Description                                                   | Date       |
+| ---------- | ------------------------------------------------------------- | ---------- |
+| `da00218e` | Standardize PENDING v8-ignore to permanent ts-type (INT-987)  | 2026-03-19 |
+
+**Summary:** The only change touching todos-agent in this release was a codebase-wide v8-ignore standardization (INT-987). Previously PENDING v8-ignore comments were converted to permanent `ts-type` category annotations, reflecting that these TypeScript narrowing guards are structurally untestable rather than temporarily deferred.
+
+### v3.3.0 (previous release)
+
 | Commit     | Description                                               | Date       |
 | ---------- | --------------------------------------------------------- | ---------- |
 | `c4e3a13c` | Release v3.3.0                                            | 2026-03-15 |
 | `93aeac4a` | Remove ZAI provider and GLM-4.7 models, finalize GLM-5    | 2026-03-12 |
 | `4ab46156` | Fix v8 ignore comments for test-infra category            | 2026-03-11 |
 | `752fd017` | Add tests for v8-ignore blocks (INT-796)                  | 2026-03-11 |
-| `44ea683a` | Release v3.2.0                                            | 2026-03-07 |
-| `99febe66` | Wire GitHub OAuth integration, update cross-service mocks | 2026-03-02 |
-| `b3f34d85` | Release v3.1.0                                            | 2026-02-22 |
-| `c8a42105` | Release v3.0.0                                            | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability           | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration (#803)                | 2026-02-16 |
-| `e60eafc1` | Standardize API key secrets to APP naming (#793)          | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + fallback (#792)  | 2026-02-15 |
-| `45f001c1` | Switch PM2 ecosystem to pnpm --filter (#790)              | 2026-02-14 |
 
 ## API Endpoints
 

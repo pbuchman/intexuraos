@@ -1444,6 +1444,176 @@ describe('internalIssuesRoutes', () => {
     });
   });
 
+  describe('GET /internal/linear/issues/:identifier/context', () => {
+    const testIssueId = 'ctx-issue-1';
+    const testIdentifier = 'ENG-100';
+    const testIssue: SyncedLinearIssue = {
+      id: testIssueId,
+      identifier: testIdentifier,
+      title: 'Context Test Issue',
+      description: 'Some issue description',
+      state: 'In Progress',
+      stateType: 'started',
+      priority: 2,
+      assigneeId: null,
+      assigneeName: null,
+      labels: [],
+      url: 'https://linear.app/test/ENG-100',
+      userId: testUserId,
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+      syncedAt: '2024-01-01T00:00:00.000Z',
+      teamId: 'team-1',
+      parentId: null,
+    };
+
+    it('returns description and comments sorted newest first', async () => {
+      fakeIssueRepo.seedIssue(testIssue);
+
+      const olderComment: LinearComment = {
+        id: 'comment-1',
+        issueId: testIssueId,
+        issueIdentifier: testIdentifier,
+        userId: 'linear-user-1',
+        userName: 'Alice',
+        body: 'Older comment',
+        createdAt: '2024-01-10T10:00:00.000Z',
+        updatedAt: '2024-01-10T10:00:00.000Z',
+        syncedAt: '2024-01-10T10:00:00.000Z',
+      };
+      const newerComment: LinearComment = {
+        id: 'comment-2',
+        issueId: testIssueId,
+        issueIdentifier: testIdentifier,
+        userId: 'linear-user-2',
+        userName: 'Bob',
+        body: 'Newer comment',
+        createdAt: '2024-01-15T10:00:00.000Z',
+        updatedAt: '2024-01-15T10:00:00.000Z',
+        syncedAt: '2024-01-15T10:00:00.000Z',
+      };
+
+      await fakeCommentRepo.save(olderComment);
+      await fakeCommentRepo.save(newerComment);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/linear/issues/${testIdentifier}/context`,
+        headers: internalAuthHeader,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          description: string | null;
+          comments: { body: string; createdAt: string }[];
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.description).toBe('Some issue description');
+      expect(body.data.comments).toHaveLength(2);
+      // Newest first
+      expect(body.data.comments[0]?.body).toBe('Newer comment');
+      expect(body.data.comments[0]?.createdAt).toBe('2024-01-15T10:00:00.000Z');
+      expect(body.data.comments[1]?.body).toBe('Older comment');
+      expect(body.data.comments[1]?.createdAt).toBe('2024-01-10T10:00:00.000Z');
+    });
+
+    it('returns null description when issue has no description', async () => {
+      const noDescIssue: SyncedLinearIssue = { ...testIssue, description: null };
+      fakeIssueRepo.seedIssue(noDescIssue);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/linear/issues/${testIdentifier}/context`,
+        headers: internalAuthHeader,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { description: string | null; comments: unknown[] };
+      };
+      expect(body.data.description).toBeNull();
+      expect(body.data.comments).toHaveLength(0);
+    });
+
+    it('returns 404 when issue not found', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/ENG-NOTFOUND/context',
+        headers: internalAuthHeader,
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 401 when X-Internal-Auth is missing', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/linear/issues/${testIdentifier}/context`,
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 502 when issueRepository fails', async () => {
+      fakeIssueRepo.setFailure(true, { code: 'INTERNAL_ERROR', message: 'DB error' });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/linear/issues/${testIdentifier}/context`,
+        headers: internalAuthHeader,
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
+
+    it('returns 502 when commentRepository fails', async () => {
+      fakeIssueRepo.seedIssue(testIssue);
+      fakeCommentRepo.setListByIssueIdFailure(true, { code: 'INTERNAL_ERROR', message: 'Comment DB error' });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/linear/issues/${testIdentifier}/context`,
+        headers: internalAuthHeader,
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
+
+    it('returns null description when issue has empty-string description', async () => {
+      const emptyDescIssue: SyncedLinearIssue = { ...testIssue, description: '' };
+      fakeIssueRepo.seedIssue(emptyDescIssue);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/linear/issues/${testIdentifier}/context`,
+        headers: internalAuthHeader,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { description: string | null; comments: unknown[] };
+      };
+      expect(body.data.description).toBeNull();
+    });
+  });
+
   describe('GET /internal/issues/:issueId/tree', () => {
     it('returns 401 when X-Internal-Auth is missing', async () => {
       const response = await app.inject({

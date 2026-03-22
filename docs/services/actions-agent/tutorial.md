@@ -368,6 +368,21 @@ Code actions dispatch tasks to code-agent (Claude Code). They use interactive Wh
 3. Tap **Approve** to dispatch to code-agent
 4. Receive confirmation and later a completion message with PR/branch details
 
+### Specifying a Worker Type
+
+Include "use {model}" in your message to select a specific worker:
+
+```
+You: "Refactor the payment module, use opus"
+Bot: "Code task: Refactor the payment module, use opus
+      Estimated cost: $1-2
+      Estimated time: 30-60 min
+      Review: ..."
+      [Approve] [Reject] [Convert to Issue]
+```
+
+Available worker types: `opus`, `sonnet`, `minimax`, `glm`, `qwen`, `kimi`. If no worker type is specified, `auto` is used.
+
 ### Two-Phase Code Tasks (INT-628)
 
 Code tasks can operate in two phases: design and implementation. After the design phase completes, you receive a WhatsApp message with a **Proceed to Implementation** button:
@@ -401,21 +416,21 @@ Error codes returned when cancellation fails:
 
 ## Troubleshooting
 
-| Issue                           | Symptom                                 | Solution                                                     |
-| ------------------------------- | --------------------------------------- | ------------------------------------------------------------ |
-| Actions stuck in pending        | No handler processes action             | Check if handler is registered; reminder type has no handler |
-| Pub/Sub delivery failures       | Actions not processed                   | Verify topic name matches `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`  |
-| Type correction not working     | Action stays same type after PATCH      | Ensure action is in `pending` or `awaiting_approval` status  |
-| Batch returns wrong actions     | Actions from other users                | Security check filters by userId; verify correct IDs         |
-| WhatsApp notifications not sent | Action completes silently               | Check `whatsapp-send` topic configuration                    |
-| WhatsApp approval not working   | Text reply ignored, buttons re-sent     | Expected behavior — tap a button instead                     |
-| Race condition errors           | Duplicate notifications                 | System handles this automatically with `updateStatusIf`      |
-| Calendar preview returns null   | No preview available                    | Preview may have failed; check calendar-agent logs           |
-| Code task worker unavailable    | Action marked as failed                 | code-agent has no available workers; retry later             |
-| Duplicate code task             | Already exists message                  | Task was already created (idempotent via approvalEventId)    |
-| Interactive buttons not showing | Plain text message instead of buttons   | WhatsApp client may not support interactive messages         |
-| Action deleted, approval fails  | WhatsApp message: "no longer available" | Action was deleted or expired; this is handled gracefully    |
-| Proceed implementation fails    | Error message about status/labels       | Task must be in designed status with required Linear labels  |
+| Issue                           | Symptom                                 | Solution                                                               |
+| ------------------------------- | --------------------------------------- | ---------------------------------------------------------------------- |
+| Actions stuck in pending        | No handler processes action             | Check if handler is registered; reminder type has no handler           |
+| Pub/Sub delivery failures       | Actions not processed                   | Verify topic name matches `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`            |
+| Type correction not working     | Action stays same type after PATCH      | Ensure action is in `pending`, `awaiting_approval`, or `failed` status |
+| Batch returns wrong actions     | Actions from other users                | Security check filters by userId; verify correct IDs                   |
+| WhatsApp notifications not sent | Action completes silently               | Check `whatsapp-send` topic configuration                              |
+| WhatsApp approval not working   | Text reply ignored, buttons re-sent     | Expected behavior — tap a button instead                               |
+| Race condition errors           | Duplicate notifications                 | System handles this automatically with `updateStatusIf`                |
+| Calendar preview returns null   | No preview available                    | Preview may have failed; check calendar-agent logs                     |
+| Code task worker unavailable    | Action marked as failed                 | code-agent has no available workers; retry later                       |
+| Duplicate code task             | Already exists message                  | Task was already created (idempotent via approvalEventId)              |
+| Interactive buttons not showing | Plain text message instead of buttons   | WhatsApp client may not support interactive messages                   |
+| Action deleted, approval fails  | WhatsApp message: "no longer available" | Action was deleted or expired; this is handled gracefully              |
+| Proceed implementation fails    | Error message about status/labels       | Task must be in designed status with required Linear labels            |
 
 ---
 
