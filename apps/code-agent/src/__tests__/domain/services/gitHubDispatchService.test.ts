@@ -1,6 +1,6 @@
 import { ok, err } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
-import { createWebhookDispatchService } from '../../../domain/services/gitHubDispatchService.js';
+import { createWebhookDispatchService, isStaleTaskError } from '../../../domain/services/gitHubDispatchService.js';
 import type { DispatchContext, WebhookDispatchResult, WebhookDispatchServiceDeps } from '../../../domain/services/gitHubDispatchService.js';
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import type { RuleOutcome } from '../../../domain/services/gitHubWebhookRules.js';
@@ -218,6 +218,89 @@ describe('GitHubDispatchService', () => {
         dispatched: true,
         taskId: 'task-123',
       });
+    });
+
+    it('should fall back to new task when worker returns "Task not found" for stale task', async () => {
+      const staleTask = { id: 'stale-task', userId: 'user-456' };
+      vi.mocked(deps.codeTaskRepo.findLatestNonReviewTaskByPR).mockResolvedValue(ok(staleTask as never));
+      mockedSendTaskMessage.mockResolvedValue(err({ code: 'worker_error' as const, message: 'Task not found' }));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'new-task-fallback' }));
+
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch(context);
+
+      expect(result).toEqual<WebhookDispatchResult>({
+        success: true,
+        dispatched: true,
+        taskId: 'new-task-fallback',
+      });
+      expect(mockedCreateTaskForPR).toHaveBeenCalled();
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ staleTaskId: 'stale-task', prNumber: 42 }),
+        'Existing task is stale on worker, falling back to new task creation'
+      );
+    });
+
+    it('should fall back to new task when sendTaskMessage returns task_not_found code', async () => {
+      const staleTask = { id: 'stale-task', userId: 'user-456' };
+      vi.mocked(deps.codeTaskRepo.findLatestNonReviewTaskByPR).mockResolvedValue(ok(staleTask as never));
+      mockedSendTaskMessage.mockResolvedValue(err({ code: 'task_not_found' as const, message: 'Task stale-task not found' }));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'new-task-fallback-2' }));
+
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch(context);
+
+      expect(result).toEqual<WebhookDispatchResult>({
+        success: true,
+        dispatched: true,
+        taskId: 'new-task-fallback-2',
+      });
+      expect(mockedCreateTaskForPR).toHaveBeenCalled();
+    });
+
+    it('should not fall back to new task when worker fails with a different error', async () => {
+      const existingTask = { id: 'task-123', userId: 'user-456' };
+      vi.mocked(deps.codeTaskRepo.findLatestNonReviewTaskByPR).mockResolvedValue(ok(existingTask as never));
+      mockedSendTaskMessage.mockResolvedValue(err({ code: 'worker_error' as const, message: 'Worker timeout' }));
+
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch(context);
+
+      expect(result).toEqual<WebhookDispatchResult>({
+        success: false,
+        dispatched: false,
+        taskId: 'task-123',
+        error: 'Worker timeout',
+      });
+      expect(mockedCreateTaskForPR).not.toHaveBeenCalled();
+    });
+
+    it('should not fall back when handleExistingTask fails without error message', async () => {
+      const existingTask = { id: 'task-123', userId: 'user-456' };
+      vi.mocked(deps.codeTaskRepo.findLatestNonReviewTaskByPR).mockResolvedValue(ok(existingTask as never));
+      mockedSendTaskMessage.mockResolvedValue(err({ code: 'internal_error' as const, message: '' }));
+
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch(context);
+
+      expect(result.success).toBe(false);
+      expect(mockedCreateTaskForPR).not.toHaveBeenCalled();
+    });
+
+    it('should not fall back when existing task succeeds', async () => {
+      const existingTask = { id: 'task-123', userId: 'user-456', linearIssueId: 'INT-100' };
+      vi.mocked(deps.codeTaskRepo.findLatestNonReviewTaskByPR).mockResolvedValue(ok(existingTask as never));
+      mockedSendTaskMessage.mockResolvedValue(ok({ action: 'queued' }));
+
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch(context);
+
+      expect(result).toEqual<WebhookDispatchResult>({
+        success: true,
+        dispatched: true,
+        taskId: 'task-123',
+      });
+      expect(mockedCreateTaskForPR).not.toHaveBeenCalled();
     });
   });
 
@@ -695,6 +778,32 @@ describe('GitHubDispatchService', () => {
         expect.any(Object),
         expect.objectContaining({ taskId: 'task-nonreview' })
       );
+    });
+  });
+
+  describe('isStaleTaskError', () => {
+    it('should return true for "Task not found" error', () => {
+      expect(isStaleTaskError('Task not found')).toBe(true);
+    });
+
+    it('should return true for "HTTP 404" error', () => {
+      expect(isStaleTaskError('Worker returned HTTP 404')).toBe(true);
+    });
+
+    it('should return true for case-sensitive "not found" in error message', () => {
+      expect(isStaleTaskError('Task stale-task not found')).toBe(true);
+    });
+
+    it('should return false for undefined error', () => {
+      expect(isStaleTaskError(undefined)).toBe(false);
+    });
+
+    it('should return false for unrelated error messages', () => {
+      expect(isStaleTaskError('Worker timeout')).toBe(false);
+    });
+
+    it('should return false for empty string', () => {
+      expect(isStaleTaskError('')).toBe(false);
     });
   });
 });

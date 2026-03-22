@@ -104,7 +104,18 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
           return await handleNewTask(deps, event, logger);
         }
 
-        return await handleExistingTask(deps, event, task, logger);
+        const existingResult = await handleExistingTask(deps, event, task, logger);
+
+        // If the existing task is stale (worker says "not found"), fall back to creating a new task
+        if (!existingResult.success && isStaleTaskError(existingResult.error)) {
+          logger.info(
+            { staleTaskId: task.id, prNumber: event.pullRequestNumber },
+            'Existing task is stale on worker, falling back to new task creation'
+          );
+          return await handleNewTask(deps, event, logger);
+        }
+
+        return existingResult;
       } catch (error) {
         const errorMessage = getErrorMessage(error, 'Unknown error');
         logger.error(
@@ -115,6 +126,16 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
       }
     },
   };
+}
+
+/**
+ * Detect when a dispatch failure indicates the task no longer exists on the worker.
+ * This happens when a task completed/crashed and was cleaned up, but Firestore
+ * still has a record — the worker returns HTTP 404 "Task not found".
+ */
+export function isStaleTaskError(error: string | undefined): boolean {
+  if (error === undefined) return false;
+  return error.includes('not found') || error.includes('HTTP 404');
 }
 
 async function handleNewTask(
