@@ -102,19 +102,18 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                            | Date       |
-| ---------- | ------------------------------------------------------ | ---------- |
-| `c4e3a13c` | Release v3.3.0                                         | 2026-03-15 |
-| `b6524aaa` | Write tests for v8-ignore blocks (INT-786)             | 2026-03-13 |
-| `44ea683a` | Release v3.2.0                                         | 2026-03-07 |
-| `b3f34d85` | Release v3.1.0                                         | 2026-02-22 |
-| `c8a42105` | Release v3.0.0                                         | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability        | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration                    | 2026-02-16 |
-| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local | 2026-02-14 |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)      | 2026-01-31 |
-| `c3198407` | Fix response contract violations across codebase       | 2026-01-30 |
-| `d105688f` | Add RATE_LIMITED error code for Crawl4AI 429 responses | 2026-01-30 |
+| Commit     | Description                                                                 | Date       |
+| ---------- | --------------------------------------------------------------------------- | ---------- |
+| `46245ea8` | Fix infra/summary/index.ts exports — use barrel import (INT-913)            | 2026-03-19 |
+| `d10a0a66` | Standardize v8-ignore to permanent ts-type (INT-986)                        | 2026-03-19 |
+| `bd7f1fa1` | Deduplicate PubSub auth/decode into pubsubHelpers (INT-911)                 | 2026-03-17 |
+| `5e715ce0` | Extract OpenAPI config from server.ts (INT-910)                             | 2026-03-16 |
+| `f1772ebf` | Fix fire-and-forget publishing in createBookmark use-case (INT-909)         | 2026-03-16 |
+| `f9dafc9f` | Move enrich publishing into createBookmark use-case (INT-909)               | 2026-03-16 |
+| `8f554243` | Extract image proxy into port/adapter pattern (INT-908)                     | 2026-03-16 |
+| `ef82a60c` | Add tests for server.ts buildServer + health check (INT-877)                | 2026-03-15 |
+| `810a5274` | Add tests for internalRoutes.ts enrichPublisher + bookmark status (INT-878) | 2026-03-15 |
+| `b07f4750` | Add tests for pubsubRoutes.ts auth + error classification                   | 2026-03-15 |
 
 ## API Endpoints
 
@@ -154,25 +153,25 @@ sequenceDiagram
 
 ### Bookmark
 
-| Field            | Type                              | Description                      |
-| ---------------- | --------------------------------- | -------------------------------- |
-| `id`             | `string`                          | Unique bookmark identifier       |
-| `userId`         | `string`                          | Owner user ID                    |
-| `status`         | `'draft' \                        | 'active'`                        | Draft or active status |
-| `url`            | `string`                          | Bookmark URL                     |
-| `title`          | `string \                         | null`                            | Page title |
-| `description`    | `string \                         | null`                            | Page description |
-| `tags`           | `string[]`                        | User-defined tags                |
-| `ogPreview`      | `OpenGraphPreview \               | null`                            | Fetched metadata |
-| `ogFetchedAt`    | `Date \                           | null`                            | When metadata was fetched |
-| `ogFetchStatus`  | `'pending' \                      | 'processed' \                    | 'failed'` | Metadata fetch status |
-| `aiSummary`      | `string \                         | null`                            | AI-generated summary |
-| `aiSummarizedAt` | `Date \                           | null`                            | When summary was generated |
-| `source`         | `string`                          | Source system (e.g., 'whatsapp') |
-| `sourceId`       | `string`                          | ID in source system              |
-| `archived`       | `boolean`                         | Soft delete flag                 |
-| `createdAt`      | `Date`                            | Creation timestamp               |
-| `updatedAt`      | `Date`                            | Last update timestamp            |
+| Field            | Type                        | Description                |
+| ---------------- | --------------------------- | -------------------------- |
+| `id`             | `string`                    | Unique bookmark identifier |
+| `userId`         | `string`                    | Owner user ID              |
+| `status`         | `BookmarkStatus`            | Draft or active status     |
+| `url`            | `string`                    | Bookmark URL               |
+| `title`          | `string \                   | null`                      | Page title |
+| `description`    | `string \                   | null`                      | Page description |
+| `tags`           | `string[]`                  | User-defined tags          |
+| `ogPreview`      | `OpenGraphPreview \         | null`                      | Fetched metadata |
+| `ogFetchedAt`    | `Date \                     | null`                      | When metadata was fetched |
+| `ogFetchStatus`  | `OgFetchStatus`             | Metadata fetch status      |
+| `aiSummary`      | `string \                   | null`                      | AI-generated summary |
+| `aiSummarizedAt` | `Date \                     | null`                      | When summary was generated |
+| `source`         | `string`                    | Source system              |
+| `sourceId`       | `string`                    | ID in source system        |
+| `archived`       | `boolean`                   | Soft delete flag           |
+| `createdAt`      | `Date`                      | Creation timestamp         |
+| `updatedAt`      | `Date`                      | Last update timestamp      |
 
 ### OpenGraphPreview
 
@@ -311,7 +310,7 @@ All required env vars are validated at startup via `validateRequiredEnv()` in `i
 ## Gotchas
 
 - **Enrichment is async** — `POST /internal/bookmarks` returns immediately with `{ id, url, bookmark }` where `url` is the app deep link (`/#/bookmarks/{id}`); OG data and AI summary populate later via Pub/Sub
-- **Enrichment only triggers on internal create** — The public `POST /bookmarks` endpoint does NOT trigger the enrichment pipeline; only `POST /internal/bookmarks` publishes the `bookmarks.enrich` event
+- **Enrichment only triggers on internal create** — The public `POST /bookmarks` endpoint does NOT trigger the enrichment pipeline; only `POST /internal/bookmarks` publishes the `bookmarks.enrich` event (via `enrichPublisher` dependency on `createBookmark`)
 - **Duplicate detection by userId+url** — Same URL can exist for different users
 - **OG fetch can fail** — Some sites block scrapers; status will be `failed`
 - **WhatsApp delivery is fire-and-forget** — If Pub/Sub publish fails, no retry for WhatsApp notification (summary is still saved)
@@ -321,7 +320,7 @@ All required env vars are validated at startup via `validateRequiredEnv()` in `i
 - **Logging requires Sentry integration** — All loggers use `createAppLogger()` from `@intexuraos/infra-sentry`; never use `pino()` directly
 - **Image proxy has 10-second timeout** — Requests to fetch external images abort after 10 seconds
 - **Image proxy validates content type** — Returns 400 if the proxied URL does not return an `image/*` content type
-- **Pub/Sub auth dual-mode** — Pub/Sub push handlers accept either Google OIDC (`From: noreply@google.com`) or `X-Internal-Auth` header for local development
+- **Pub/Sub auth dual-mode** — Pub/Sub push handlers accept either Google OIDC (`From: noreply@google.com`) or `X-Internal-Auth` header for local development; deduplicated in `pubsubHelpers.ts`
 
 ## File Structure
 
@@ -333,16 +332,18 @@ apps/bookmarks-agent/src/
     ports/
       bookmarkRepository.ts          # Repository interface
       bookmarkSummaryService.ts      # Summary service interface
+      enrichPublisher.ts             # Enrich event publisher interface
+      imageProxy.ts                  # Image proxy port interface
       linkPreviewFetcher.ts          # Link preview interface
       summarizePublisher.ts          # Summarize event publisher interface
     usecases/
-      createBookmark.ts              # Create with duplicate check
+      createBookmark.ts              # Create with duplicate check + optional enrich publish
       getBookmark.ts                 # Get by ID with ownership check
       listBookmarks.ts               # List with filters
       updateBookmark.ts              # User-facing update
       deleteBookmark.ts              # Hard delete with ownership check
-      archiveBookmark.ts             # Soft delete
-      unarchiveBookmark.ts           # Restore from archive
+      archiveBookmark.ts             # Soft delete (idempotent)
+      unarchiveBookmark.ts           # Restore from archive (idempotent)
       enrichBookmark.ts              # OG fetch + trigger summarize
       summarizeBookmark.ts           # AI summary + WhatsApp delivery
       updateBookmarkInternal.ts      # Internal updates (OG, AI)
@@ -350,6 +351,8 @@ apps/bookmarks-agent/src/
   infra/
     firestore/
       firestoreBookmarkRepository.ts # Firestore implementation
+    imageProxy/
+      fetchImageProxy.ts             # Image proxy adapter (fetch-based)
     linkpreview/
       webAgentClient.ts              # Web-agent OG client
     summary/
@@ -359,11 +362,14 @@ apps/bookmarks-agent/src/
       enrichPublisher.ts             # Enrich event publisher
       summarizePublisher.ts          # Summarize event publisher
   routes/
-    bookmarkRoutes.ts                # Public CRUD routes + image proxy
+    bookmarkRoutes.ts                # Public CRUD routes
+    imageProxyRoutes.ts              # Image proxy endpoint
     internalRoutes.ts                # Internal service routes
     pubsubRoutes.ts                  # Pub/Sub push handlers
+    pubsubHelpers.ts                 # Shared PubSub auth + decode logic
   services.ts                        # DI container
   server.ts                          # Fastify setup with Swagger
+  openapi.config.ts                  # OpenAPI/Swagger configuration
   config.ts                          # Configuration loading
   index.ts                           # Entry point
 ```

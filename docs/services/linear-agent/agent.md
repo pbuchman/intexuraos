@@ -324,6 +324,43 @@ interface GetIssueOutput {
 
 ---
 
+### Get Issue Context (Description + Comments)
+
+**Endpoint:** `GET /internal/linear/issues/:identifier/context`
+
+**When to use:** When you need the full issue description and comment thread for context — typically during deep validation or before starting work on an issue. Does not require user scoping.
+
+**Required headers:** `X-Internal-Auth`
+
+**Output Schema:**
+
+```typescript
+interface GetIssueContextOutput {
+  description: string | null;
+  comments: {
+    body: string;
+    createdAt: string;
+  }[];  // Newest-first, max 100, empty bodies filtered
+}
+```
+
+**Example:**
+
+```json
+// GET /internal/linear/issues/ENG-42/context
+
+// Response
+{
+  "description": "The onboarding wizard crashes when company name is skipped on step two.",
+  "comments": [
+    { "body": "Confirmed — reproducible on step 2.", "createdAt": "2026-03-20T14:30:00Z" },
+    { "body": "Looks like a validation issue.", "createdAt": "2026-03-20T10:15:00Z" }
+  ]
+}
+```
+
+---
+
 ### Batch Fetch Issues for Display
 
 **Endpoint:** `POST /internal/linear/issues/display-batch`
@@ -438,8 +475,8 @@ interface SyncOutput {
 **Requires:**
 
 - User must have an active Linear connection (saved API key + team) before any issue operations
-- All `/internal/issues/*` and `/internal/linear/issues/*` endpoints require both `X-Internal-Auth` and `X-User-Id` headers
-- Issue must be synced to local Firestore before `GET /internal/issues/:issueId/tree` will find it — run a full sync if needed
+- All `/internal/issues/*` and `/internal/linear/issues/*` endpoints require both `X-Internal-Auth` and `X-User-Id` headers (except `/context` which only needs `X-Internal-Auth`)
+- Issue must be synced to local Firestore before `GET /internal/issues/:issueId/tree` or `GET /internal/linear/issues/:identifier/context` will find it — run a full sync if needed
 - Linear issue identifier must match format `XXX-123` (uppercase letters, hyphen, digits) for `validateIssue`
 
 ## Usage Patterns
@@ -458,7 +495,7 @@ interface SyncOutput {
 ```
 1. Call GET /internal/linear/issues/:identifier to read current state and comments
 2. Call POST /internal/issues to create sub-tasks as needed
-3. Call PATCH /internal/issues/:issueId/state to advance workflow (in_progress → in_review → done)
+3. Call PATCH /internal/issues/:issueId/state to advance workflow (in_progress -> in_review -> done)
 4. Call POST /internal/linear/issues/:issueId/comments to post progress notes
 5. Call PATCH /internal/linear/issues/:issueId/metadata to update labels/assignee
 ```
@@ -488,6 +525,15 @@ interface SyncOutput {
 2. Traverse descendants array — each item has parentId to reconstruct tree
 3. Use labels array (names) and state to determine current workflow position
 4. No Linear API call is made — operates entirely on local Firestore data
+```
+
+### Pattern 6: Cross-Service Context Retrieval
+
+```
+1. Call GET /internal/linear/issues/:identifier/context with X-Internal-Auth only
+2. Use description + comments array to build context for validation or analysis
+3. Comments are newest-first, capped at 100, empty bodies already filtered
+4. No X-User-Id needed — designed for service-to-service calls
 ```
 
 ## Error Handling

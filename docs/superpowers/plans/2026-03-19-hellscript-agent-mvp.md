@@ -104,63 +104,63 @@ This remains one plan because the MVP only works when all of these ship together
 
 ### Backend service
 
-| Path | Responsibility |
-| --- | --- |
-| `apps/hellscript-agent/package.json` | Workspace package, scripts, dependencies |
-| `apps/hellscript-agent/tsconfig.json` | TypeScript project config |
-| `apps/hellscript-agent/vitest.config.ts` | Local service test config |
-| `apps/hellscript-agent/Dockerfile` | Cloud Run image build |
-| `apps/hellscript-agent/.dockerignore` | Docker exclusions |
-| `apps/hellscript-agent/src/index.ts` | Startup, env validation, Sentry, service init |
-| `apps/hellscript-agent/src/config.ts` | Runtime config loading |
-| `apps/hellscript-agent/src/services.ts` | DI container |
-| `apps/hellscript-agent/src/server.ts` | Fastify setup, auth, CORS, Swagger, route registration |
-| `apps/hellscript-agent/src/domain/models/*` | Buffer, event, draft version, materialized state types |
-| `apps/hellscript-agent/src/domain/ports/*` | Repository, interpreter, draft generator contracts |
-| `apps/hellscript-agent/src/domain/services/applyIntentToState.ts` | Pure state transitions |
-| `apps/hellscript-agent/src/domain/usecases/{imposeOnBuffer,listBuffers,getBufferWorkspace}.ts` | Main backend behavior |
-| `apps/hellscript-agent/src/prompts/{interpret-impose-prompt,generate-draft-prompt}.ts` | Versioned prompt builders |
-| `apps/hellscript-agent/src/infra/firestore/firestoreHellscriptRepository.ts` | Firestore adapter |
-| `apps/hellscript-agent/src/infra/llm/{geminiIntentInterpreter,geminiDraftGenerator}.ts` | Gemini adapters |
-| `apps/hellscript-agent/src/routes/hellscriptRoutes.ts` | Public JWT-protected Hellscript routes |
-| `apps/hellscript-agent/src/__tests__/*` | Config, DI, server, domain, repo, route, and fake-collaborator tests |
+| Path                                                                                           | Responsibility                                                       |
+| ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `apps/hellscript-agent/package.json`                                                           | Workspace package, scripts, dependencies                             |
+| `apps/hellscript-agent/tsconfig.json`                                                          | TypeScript project config                                            |
+| `apps/hellscript-agent/vitest.config.ts`                                                       | Local service test config                                            |
+| `apps/hellscript-agent/Dockerfile`                                                             | Cloud Run image build                                                |
+| `apps/hellscript-agent/.dockerignore`                                                          | Docker exclusions                                                    |
+| `apps/hellscript-agent/src/index.ts`                                                           | Startup, env validation, Sentry, service init                        |
+| `apps/hellscript-agent/src/config.ts`                                                          | Runtime config loading                                               |
+| `apps/hellscript-agent/src/services.ts`                                                        | DI container                                                         |
+| `apps/hellscript-agent/src/server.ts`                                                          | Fastify setup, auth, CORS, Swagger, route registration               |
+| `apps/hellscript-agent/src/domain/models/*`                                                    | Buffer, event, draft version, materialized state types               |
+| `apps/hellscript-agent/src/domain/ports/*`                                                     | Repository, interpreter, draft generator contracts                   |
+| `apps/hellscript-agent/src/domain/services/applyIntentToState.ts`                              | Pure state transitions                                               |
+| `apps/hellscript-agent/src/domain/usecases/{imposeOnBuffer,listBuffers,getBufferWorkspace}.ts` | Main backend behavior                                                |
+| `apps/hellscript-agent/src/prompts/{interpret-impose-prompt,generate-draft-prompt}.ts`         | Versioned prompt builders                                            |
+| `apps/hellscript-agent/src/infra/firestore/firestoreHellscriptRepository.ts`                   | Firestore adapter                                                    |
+| `apps/hellscript-agent/src/infra/llm/{geminiIntentInterpreter,geminiDraftGenerator}.ts`        | Gemini adapters                                                      |
+| `apps/hellscript-agent/src/routes/hellscriptRoutes.ts`                                         | Public JWT-protected Hellscript routes                               |
+| `apps/hellscript-agent/src/__tests__/*`                                                        | Config, DI, server, domain, repo, route, and fake-collaborator tests |
 
 ### Web app
 
-| Path | Responsibility |
-| --- | --- |
-| `apps/web/src/types/hellscript.ts` | Web-facing Hellscript types |
-| `apps/web/src/services/hellscriptAgentApi.ts` | API client for Hellscript endpoints |
-| `apps/web/src/hooks/{useHellscriptBuffers,useHellscriptWorkspace}.ts` | Buffer list + workspace loading/mutation |
-| `apps/web/src/pages/HellscriptBuffersPage.tsx` | Existing buffer list page |
-| `apps/web/src/pages/HellscriptConversationPage.tsx` | Split-pane workspace for `/new` and `/:id` |
-| `apps/web/src/components/hellscript/*` | Buffer row, timeline, composer, draft pane, version selector |
-| `apps/web/src/config.ts` | `hellscriptAgentUrl` |
-| `apps/web/src/App.tsx` | Hellscript routes |
-| `apps/web/src/components/Sidebar.tsx` | `Hellscript` menu section |
-| `apps/web/src/services/__tests__/*` | API client tests and config mock updates |
-| `apps/web/src/hooks/__tests__/*` | Hook tests |
+| Path                                                                  | Responsibility                                               |
+| --------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `apps/web/src/types/hellscript.ts`                                    | Web-facing Hellscript types                                  |
+| `apps/web/src/services/hellscriptAgentApi.ts`                         | API client for Hellscript endpoints                          |
+| `apps/web/src/hooks/{useHellscriptBuffers,useHellscriptWorkspace}.ts` | Buffer list + workspace loading/mutation                     |
+| `apps/web/src/pages/HellscriptBuffersPage.tsx`                        | Existing buffer list page                                    |
+| `apps/web/src/pages/HellscriptConversationPage.tsx`                   | Split-pane workspace for `/new` and `/:id`                   |
+| `apps/web/src/components/hellscript/*`                                | Buffer row, timeline, composer, draft pane, version selector |
+| `apps/web/src/config.ts`                                              | `hellscriptAgentUrl`                                         |
+| `apps/web/src/App.tsx`                                                | Hellscript routes                                            |
+| `apps/web/src/components/Sidebar.tsx`                                 | `Hellscript` menu section                                    |
+| `apps/web/src/services/__tests__/*`                                   | API client tests and config mock updates                     |
+| `apps/web/src/hooks/__tests__/*`                                      | Hook tests                                                   |
 
 ### Infra and docs
 
-| Path | Responsibility |
-| --- | --- |
-| `firestore-collections.json` | Register `hellscript_buffers` owner + subcollections |
-| `migrations/064_hellscript-agent-composite-indexes.mjs` | Composite index for `userId + updatedAt` |
-| `terraform/modules/iam/{main,outputs}.tf` | Service account and outputs |
-| `terraform/environments/dev/main.tf` | Cloud Run service, env vars, URL wiring |
-| `terraform/modules/cloud-build/main.tf` | Include `hellscript-agent` build target |
-| `cloudbuild/cloudbuild.yaml` | Root build/deploy wiring |
-| `apps/hellscript-agent/cloudbuild.yaml` | Per-service build pipeline |
-| `cloudbuild/scripts/deploy-hellscript-agent.sh` | Deploy script |
-| `.github/workflows/deploy.yml` | Deploy workflow registration |
-| `ecosystem.config.cjs` | PM2 local service config |
-| `.envrc.local.example` | Local env var example |
-| `apps/web/vite.config.ts` | `/api/hellscript-agent` proxy |
-| `apps/web/cloudbuild.yaml` | Web build-time service lookup |
-| `apps/api-docs-hub/src/config.ts` | OpenAPI discovery entry after first deploy |
-| `.claude/commands/create-domain-docs.md` | Register Hellscript as a domain-layer service |
-| `tsconfig.json` | Project reference |
+| Path                                                    | Responsibility                                       |
+| ------------------------------------------------------- | ---------------------------------------------------- |
+| `firestore-collections.json`                            | Register `hellscript_buffers` owner + subcollections |
+| `migrations/064_hellscript-agent-composite-indexes.mjs` | Composite index for `userId + updatedAt`             |
+| `terraform/modules/iam/{main,outputs}.tf`               | Service account and outputs                          |
+| `terraform/environments/dev/main.tf`                    | Cloud Run service, env vars, URL wiring              |
+| `terraform/modules/cloud-build/main.tf`                 | Include `hellscript-agent` build target              |
+| `cloudbuild/cloudbuild.yaml`                            | Root build/deploy wiring                             |
+| `apps/hellscript-agent/cloudbuild.yaml`                 | Per-service build pipeline                           |
+| `cloudbuild/scripts/deploy-hellscript-agent.sh`         | Deploy script                                        |
+| `.github/workflows/deploy.yml`                          | Deploy workflow registration                         |
+| `ecosystem.config.cjs`                                  | PM2 local service config                             |
+| `.envrc.local.example`                                  | Local env var example                                |
+| `apps/web/vite.config.ts`                               | `/api/hellscript-agent` proxy                        |
+| `apps/web/cloudbuild.yaml`                              | Web build-time service lookup                        |
+| `apps/api-docs-hub/src/config.ts`                       | OpenAPI discovery entry after first deploy           |
+| `.claude/commands/create-domain-docs.md`                | Register Hellscript as a domain-layer service        |
+| `tsconfig.json`                                         | Project reference                                    |
 
 ---
 

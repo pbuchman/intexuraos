@@ -1,5 +1,83 @@
 # Changelog
 
+## 3.4.0
+
+### Added
+
+- Hellscript Agent with backend service, web UI, and Terraform infrastructure (INT-1032)
+- Cron Agent backend service for scheduled task execution (INT-957)
+- Merge Queue for automatic PR queuing and merging (INT-1020)
+- Review agent plan awareness for requirements validation (INT-1038)
+- Merge conflict detection via dedicated cron reconciliation job (INT-1023)
+- Orchestrator Linear proxy — removed direct dependency via code-agent (INT-1040)
+- Auto-enforcement of code review findings (INT-926)
+- Unified task enqueue service with queue-first dispatch (INT-950)
+- Plan-based review dispatch mode (INT-1039)
+- GitHub Event Log expandable rows with raw webhook payloads (INT-1027)
+- Automatic sub-task creation and dispatch from parent tasks (INT-962)
+- Task archiving and deletion from code task view (INT-959)
+- Code task title display on mobile PWA (INT-1058)
+- Visual indicator for queued code tasks (INT-939)
+- Start code tasks directly from list view (INT-947)
+- Cloud Scheduler trigger for merge queue tick (INT-1049)
+- Worker instruction sections in orchestrator system prompts (INT-972)
+- Selective container preservation by agent type (INT-973)
+- Horizontal scroll for code task logs (INT-948)
+- Compact pipeline labels for mobile layout (INT-976)
+- Filter pills and sorting on GitHub Event Log page (INT-1007)
+- Fetch error cause chain logging in orchestrator (INT-1016)
+- Bypass dedup Layer 3 for merge-conflict tasks (INT-1015)
+- Yes/Cancel buttons replacing text confirmation prompts (INT-933)
+
+### Improved
+
+- Research pages with standardized UX, decomposed components, and consistent layout (INT-992)
+- Research pipeline quality across stages T0 through T6 (INT-981)
+- Review prompts with requirements validation emphasis (INT-1054)
+- Merge queue reliability — GitHub as source of truth, Firestore as cache (INT-1048)
+- Keyword detection for worker type selection in code actions (INT-217)
+- Mobile Notifications list page with sorting and compact rows (INT-1001)
+- Code task queue capacity increased from 10 to 50 (INT-1029)
+- Code task queue TTL extended to 6 hours, execution limit to 3 hours (INT-931)
+- Task group progress tracking with simplified sort options (INT-960)
+- Merge queue sort order and reduced page clutter (INT-1042, INT-1046)
+- Standardized Inbox, WhatsApp Notes, Notes, Visualizations, Composite Feeds, LLM Costs, and Worker Settings pages (INT-998, INT-999, INT-1002, INT-1004, INT-1005, INT-1008, INT-1003)
+
+### Changed
+
+- Redesigned GitHub Event Log to 6-column table layout (INT-1013, INT-1018)
+- Replaced hero terminal on landing page with dashboard and WhatsApp showcase (INT-942)
+- Removed legacy V1 code task view and standardized task URLs (INT-936)
+- Renamed "Task History" to "Battlefield" in sidebar navigation (INT-955)
+- Migrated MiniMax model from M2.5 to M2.7 (INT-1009)
+- Merged duplicate queued review tasks per PR in dispatch queue (INT-1014)
+- Filtered unsupported event types from GitHub Event Log (INT-1025)
+- Simplified WhatsApp queued-task notification message (INT-974)
+
+### Fixed
+
+- GitHub events not displaying on mobile (INT-1061)
+- Complex-task fan-out submission from UI (INT-975)
+- Code task TIME column not updating in real time (INT-941)
+- White screen on task page from missing STATUS_MAP fallback (INT-994)
+- Race condition in PR automation logging causing duplicate comments (INT-925)
+- Review task Linear issue linking via PR body parsing (INT-969)
+- Dispatch Queue Firestore listener permissions (INT-967)
+- Missing `parentId` in `mapSingleIssueWithTeam` causing false subtask rejection (INT-953)
+- Queue position off-by-one and fan-out parent pollution (INT-977)
+- Code task implementation failing with 400 error (INT-954)
+- Merge queue missing header and menu on mobile (INT-1041)
+- PWA toggle failing to enable Merge Queue (INT-1055)
+- Duplicate Linear button in PWA task view (INT-1056)
+- HMAC signature mismatch on task-event webhooks (INT-1010)
+- Base branch fetch before worktree creation (INT-984)
+- Dispatch queue UI failing to display tasks (INT-970)
+- Missing approval button in Actions view modal (INT-944)
+- Code task status showing 'running' when queued or dispatched (INT-961)
+- Missing environment variables after ZAI removal (INT-968)
+- Flexible width for desktop pipeline steps (INT-980)
+- Pill container around pulsing status dot (INT-979)
+
 ## 3.3.0
 
 ### Added

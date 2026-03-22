@@ -36,37 +36,37 @@ The implementation should stay simple:
 
 ### New files
 
-| File                                                                 | Responsibility |
-| -------------------------------------------------------------------- | -------------- |
+| File                                                                 | Responsibility                                                                    |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | `packages/common-core/src/internalServiceCatalog.ts`                 | Shared list of internal services and env vars used by cron-agent and api-docs-hub |
-| `packages/common-core/src/__tests__/internalServiceCatalog.test.ts`  | Covers trimming and blank-value filtering for the shared OpenAPI source builder |
-| `apps/web/src/pages/cron-agent/PreferredToolChips.tsx`              | Shared chip list UI for selected preferred tools |
-| `apps/web/src/pages/cron-agent/toolPromptTemplates.ts`              | Builds inserted tool snippets and manages preferred tool arrays |
-| `apps/web/src/__tests__/CronScheduleNewPage.test.tsx`               | Covers clicking a tool, prompt injection, and request payload shape |
-| `apps/api-docs-hub/src/__tests__/server.test.ts`                    | Smoke test for health + Swagger JSON/UI endpoints |
-| `apps/cron-agent/src/domain/__tests__/types.test.ts`                | Covers schedule-action normalization when `preferredTools` is omitted |
+| `packages/common-core/src/__tests__/internalServiceCatalog.test.ts`  | Covers trimming and blank-value filtering for the shared OpenAPI source builder   |
+| `apps/web/src/pages/cron-agent/PreferredToolChips.tsx`               | Shared chip list UI for selected preferred tools                                  |
+| `apps/web/src/pages/cron-agent/toolPromptTemplates.ts`               | Builds inserted tool snippets and manages preferred tool arrays                   |
+| `apps/web/src/__tests__/CronScheduleNewPage.test.tsx`                | Covers clicking a tool, prompt injection, and request payload shape               |
+| `apps/api-docs-hub/src/__tests__/server.test.ts`                     | Smoke test for health + Swagger JSON/UI endpoints                                 |
+| `apps/cron-agent/src/domain/__tests__/types.test.ts`                 | Covers schedule-action normalization when `preferredTools` is omitted             |
 
 ### Modified files
 
-| File                                                            | Change |
-| --------------------------------------------------------------- | ------ |
-| `apps/cron-agent/src/config.ts`                                 | Build the allowed service list from the shared internal service catalog |
-| `apps/cron-agent/src/domain/types.ts`                           | Add `preferredTools` and normalization helpers |
-| `apps/cron-agent/src/domain/use-cases/manage-schedule.ts`       | Validate and persist `preferredTools` against selected services |
-| `apps/cron-agent/src/domain/use-cases/execute-action.ts`        | Bias tool ordering and prompting toward preferred tools |
-| `apps/cron-agent/src/prompts/execute-action-prompt.ts`          | Explain preferred-tool intent in plain language to the model |
-| `apps/cron-agent/src/infra/openapi-tool-registry.ts`            | Return tool parameter schemas and build tools from the full shared catalog |
-| `apps/cron-agent/src/infra/firestore-schedule-repository.ts`    | Normalize legacy schedules that do not yet store `preferredTools` |
+| File                                                            | Change                                                                       |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `apps/cron-agent/src/config.ts`                                 | Build the allowed service list from the shared internal service catalog      |
+| `apps/cron-agent/src/domain/types.ts`                           | Add `preferredTools` and normalization helpers                               |
+| `apps/cron-agent/src/domain/use-cases/manage-schedule.ts`       | Validate and persist `preferredTools` against selected services              |
+| `apps/cron-agent/src/domain/use-cases/execute-action.ts`        | Bias tool ordering and prompting toward preferred tools                      |
+| `apps/cron-agent/src/prompts/execute-action-prompt.ts`          | Explain preferred-tool intent in plain language to the model                 |
+| `apps/cron-agent/src/infra/openapi-tool-registry.ts`            | Return tool parameter schemas and build tools from the full shared catalog   |
+| `apps/cron-agent/src/infra/firestore-schedule-repository.ts`    | Normalize legacy schedules that do not yet store `preferredTools`            |
 | `apps/cron-agent/src/routes/schedule-routes.ts`                 | Round-trip `preferredTools` and return tool `parameters` in `/cron/services` |
-| `apps/api-docs-hub/src/config.ts`                               | Reuse the shared OpenAPI source catalog |
-| `apps/api-docs-hub/tsconfig.json`                               | Include the shared catalog source in typecheck input |
-| `apps/web/src/types/cronAgent.ts`                               | Add `preferredTools` and tool parameter schema types |
-| `apps/web/src/hooks/useScheduleActions.ts`                      | Send and receive `preferredTools` in create/update flows |
-| `apps/web/src/pages/cron-agent/CronScheduleNewPage.tsx`         | Add preferred-tool state and tool-template injection |
-| `apps/web/src/pages/cron-agent/CronScheduleViewPage.tsx`        | Allow editing preferred tools from the schedule detail page |
-| `apps/web/src/pages/cron-agent/ServiceSelector.tsx`             | Make tools clickable and show the preferred tool chips |
-| `apps/web/src/pages/cron-agent/AvailableToolsPanel.tsx`         | Show selected preferred tools and insertable tool cards |
-| `packages/common-core/src/index.ts`                             | Export the shared internal service catalog |
+| `apps/api-docs-hub/src/config.ts`                               | Reuse the shared OpenAPI source catalog                                      |
+| `apps/api-docs-hub/tsconfig.json`                               | Include the shared catalog source in typecheck input                         |
+| `apps/web/src/types/cronAgent.ts`                               | Add `preferredTools` and tool parameter schema types                         |
+| `apps/web/src/hooks/useScheduleActions.ts`                      | Send and receive `preferredTools` in create/update flows                     |
+| `apps/web/src/pages/cron-agent/CronScheduleNewPage.tsx`         | Add preferred-tool state and tool-template injection                         |
+| `apps/web/src/pages/cron-agent/CronScheduleViewPage.tsx`        | Allow editing preferred tools from the schedule detail page                  |
+| `apps/web/src/pages/cron-agent/ServiceSelector.tsx`             | Make tools clickable and show the preferred tool chips                       |
+| `apps/web/src/pages/cron-agent/AvailableToolsPanel.tsx`         | Show selected preferred tools and insertable tool cards                      |
+| `packages/common-core/src/index.ts`                             | Export the shared internal service catalog                                   |
 
 ## Task 1: Shared Internal Service Catalog
 

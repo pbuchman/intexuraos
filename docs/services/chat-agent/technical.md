@@ -27,7 +27,7 @@ graph TB
         OpenAI[OpenAI<br/>Embeddings API]
         UserService[user-service]
         AppSettings[app-settings-service]
-        LLM[LLM Provider<br/>Gemini / GLM]
+        LLM[LLM Provider<br/>Gemini 2.5 Flash]
     end
 
     WebApp --> Routes
@@ -86,9 +86,11 @@ sequenceDiagram
 
 | Hash       | Description                                                       | Date       |
 | ---------- | ----------------------------------------------------------------- | ---------- |
-| `93aeac4a` | Remove ZAI provider and GLM-4.7 models, finalize GLM-5 (INT-836)  | 2026-03-12 |
-| `78228bcf` | Migrate GLM worker from Z.ai to DashScope                         | 2026-03-12 |
+| `47b1b9e9` | Remove redundant "Say yes to confirm" from system prompt          | 2026-03-17 |
+| `c4e3a13c` | Release v3.3.0                                                    | 2026-03-15 |
 | `cea26781` | Add tests for v8-ignore blocks in generateResponse and chatClient | 2026-03-13 |
+| `93aeac4a` | Remove ZAI provider and GLM-4.7 models, finalize GLM-5            | 2026-03-12 |
+| `78228bcf` | Migrate GLM worker from Z.ai to DashScope                         | 2026-03-12 |
 | `44ea683a` | Release v3.2.0                                                    | 2026-03-07 |
 | `99febe66` | Wire GitHub OAuth integration, update cross-service mocks         | 2026-03-02 |
 | `b3f34d85` | Release v3.1.0                                                    | 2026-02-22 |
@@ -99,9 +101,6 @@ sequenceDiagram
 | `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + Gemini fallback          | 2026-02-15 |
 | `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local            | 2026-02-14 |
 | `0f69a74b` | Add default model selector with platform fallback                 | 2026-02-09 |
-| `63170e4a` | Remove "free" GLM terminology, use createLlmClient                | 2026-02-07 |
-| `996c4179` | Add chat-agent to Cloud Build pipeline                            | 2026-02-06 |
-| `ea6652f7` | Add guest chat sessions with rate limiting                        | 2026-02-06 |
 
 ## API Endpoints
 
@@ -180,41 +179,49 @@ sequenceDiagram
 
 ### ChatMessage
 
-| Field             | Type                         | Description             |
-| ----------------- | ---------------------------- | ----------------------- |
-| `id`              | `string`                     | Unique message ID       |
-| `role`            | `'user' \                    | 'assistant' \           | 'system'` | Message sender role |
-| `content`         | `string`                     | Message text content    |
-| `timestamp`       | `number`                     | Unix timestamp          |
-| `sources`         | `DocSource[]` (optional)     | Documentation citations |
-| `suggestedAction` | `SuggestedAction` (optional) | Proposed command action |
+```typescript
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: number;
+  sources?: DocSource[];
+  suggestedAction?: SuggestedAction;
+}
+```
 
 ### DocChunk (Firestore: `doc_embeddings`)
 
-| Field       | Type                         | Description                            |
-| ----------- | ---------------------------- | -------------------------------------- |
-| `id`        | `string`                     | Firestore document ID                  |
-| `content`   | `string`                     | Chunk text content                     |
-| `embedding` | `number[]`                   | 1536-dimension OpenAI embedding vector |
-| `filePath`  | `string`                     | Source file path                       |
-| `section`   | `string`                     | Section heading within the source file |
-| `docType`   | `'markdown' \                | 'openapi'`                             | Document type |
-| `createdAt` | `Firestore.Timestamp`        | Creation timestamp                     |
+```typescript
+interface DocChunk {
+  id: string;                          // Firestore document ID
+  content: string;                     // Chunk text content
+  embedding: number[];                 // 1536-dimension OpenAI embedding vector
+  filePath: string;                    // Source file path
+  section: string;                     // Section heading within the source file
+  docType: 'markdown' | 'openapi';    // Document type
+  createdAt: Firestore.Timestamp;      // Creation timestamp
+}
+```
 
 ### SuggestedAction
 
-| Field                  | Type                      | Description                           |
-| ---------------------- | ------------------------- | ------------------------------------- |
-| `type`                 | `'create_command'`        | Action type (only command creation)   |
-| `payload`              | `Record<string, unknown>` | Action data (`text`, `source` fields) |
-| `awaitingConfirmation` | `boolean`                 | `true` until user confirms            |
+```typescript
+interface SuggestedAction {
+  type: 'create_command';              // Action type (only command creation)
+  payload: Record<string, unknown>;    // Action data (text, source fields)
+  awaitingConfirmation: boolean;       // true until user confirms
+}
+```
 
 ### ConversationHistory
 
-| Field     | Type                         | Description    |
-| --------- | ---------------------------- | -------------- |
-| `role`    | `'user' \                    | 'assistant'`   | Message sender |
-| `content` | `string`                     | Message text   |
+```typescript
+interface ConversationHistory {
+  role: 'user' | 'assistant';
+  content: string;
+}
+```
 
 ## Pub/Sub Events
 
@@ -227,7 +234,7 @@ Chat-agent does not publish or subscribe to any Pub/Sub topics. All communicatio
 | Service           | Purpose                                              |
 | ----------------- | ---------------------------------------------------- |
 | OpenAI Embeddings | Generate 1536-dim vectors (text-embedding-3-small)   |
-| LLM (Gemini/GLM)  | Generate chat responses                              |
+| LLM (Gemini)      | Generate chat responses via Gemini 2.5 Flash         |
 | Firestore         | Store and search document embeddings (vector search) |
 
 ### Internal Services
@@ -335,6 +342,7 @@ apps/chat-agent/src/
       embeddingRepository.test.ts     # Repository tests
     llm/
       chatClient.ts                   # LLM adapter with action extraction
+      chatClient.test.ts              # Chat client tests
       embeddingClient.ts              # OpenAI embedding client with retry logic
       embeddingClient.test.ts         # Embedding client tests
     rateLimit/

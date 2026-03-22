@@ -115,24 +115,23 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                        | Date       |
-| ---------- | ------------------------------------------------------------------ | ---------- |
-| `93aeac4a` | Remove ZAI provider and GLM-4.7 models, finalize GLM-5 (INT-836)   | 2026-03-12 |
-| `155c2b6b` | Write tests for v8-ignore blocks (INT-787)                         | 2026-03-10 |
-| `99febe66` | Wire GitHub OAuth integration and update cross-service mocks       | 2026-03-02 |
-| `14a4085d` | Pass full user prompt to calendar-agent instead of title only      | 2026-02-24 |
-| `9f80098e` | Address all PR review findings for calendar preview [INT-535]      | 2026-02-23 |
-| `aca56231` | Implement synchronous calendar preview in approval messages        | 2026-02-23 |
-| `5ee70b37` | Link calendar approval to Google Calendar event (htmlLink)         | 2026-02-20 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability                    | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration                                | 2026-02-16 |
-| `e60eafc1` | Standardize API key secrets to APP naming convention               | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add fallbacks             | 2026-02-15 |
-| `0f69a74b` | Add default model selector with platform fallback                  | 2026-02-08 |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)                  | 2026-01-31 |
-| `7ae05245` | Add delete/retry for failed issues and events                      | 2026-01-31 |
-| `d60f2ee6` | Improve calendar extraction with date-only support and repair      | 2026-01-30 |
-| `95468bd9` | Fix Polish date parsing in calendar actions                        | 2026-01-29 |
+| Commit      | Description                                                         | Date       |
+| ----------- | ------------------------------------------------------------------- | ---------- |
+| `f3c35d4f1` | Deduplicate internalRoutes.ts handlers (INT-897)                    | 2026-03-17 |
+| `9cee58adc` | Split calendarRoutes.ts into focused route files (INT-896)          | 2026-03-16 |
+| `93aeac4a`  | Remove ZAI provider and GLM-4.7 models, finalize GLM-5 (INT-836)    | 2026-03-12 |
+| `155c2b6b`  | Write tests for v8-ignore blocks (INT-787)                          | 2026-03-10 |
+| `99febe66`  | Wire GitHub OAuth integration and update cross-service mocks        | 2026-03-02 |
+| `14a4085d`  | Pass full user prompt to calendar-agent instead of title only       | 2026-02-24 |
+| `9f80098e`  | Address all PR review findings for calendar preview [INT-535]       | 2026-02-23 |
+| `aca56231`  | Implement synchronous calendar preview in approval messages         | 2026-02-23 |
+| `5ee70b37`  | Link calendar approval to Google Calendar event (htmlLink)          | 2026-02-20 |
+| `6063175b`  | Add dev-mode log formatting for PM2 readability                     | 2026-02-16 |
+| `a52a6bbc`  | Add Dash0 OpenTelemetry integration                                 | 2026-02-16 |
+| `e60eafc1`  | Standardize API key secrets to APP naming convention                | 2026-02-15 |
+| `c72b7c53`  | Switch default LLM to Gemini 2.5 Flash + add fallbacks              | 2026-02-15 |
+| `0f69a74b`  | Add default model selector with platform fallback                   | 2026-02-08 |
+| `5aa3e1bd`  | Enable strict 100% coverage enforcement (Phase 3)                   | 2026-01-31 |
 
 ## API Endpoints
 
@@ -329,7 +328,7 @@ interface GeneratePreviewMessage {
 
 **Preview cleanup** — Deletion after successful event creation is non-blocking (logs warning on failure).
 
-**Synchronous vs async preview** — `POST /internal/calendar/preview` generates previews synchronously via direct HTTP (used for approval messages). `POST /internal/calendar/generate-preview` is the Pub/Sub push handler for asynchronous generation. Both call the same `generateCalendarPreview` use case.
+**Synchronous vs async preview** — `POST /internal/calendar/preview` generates previews synchronously via direct HTTP (used for approval messages). `POST /internal/calendar/generate-preview` is the Pub/Sub push handler for asynchronous generation. Both call the same `generateCalendarPreview` use case via the shared `callGeneratePreview` helper.
 
 **LLM fallback** — If preview is not ready, processCalendarAction falls back to direct LLM extraction.
 
@@ -386,7 +385,15 @@ apps/calendar-agent/src/
     gemini/
       calendarActionExtractionService.ts # LLM extraction with repair mechanism
   routes/
-    calendarRoutes.ts            # Public endpoints
+    calendarRoutes.ts            # Barrel that registers all public route plugins
+    calendarHelpers.ts           # Shared types and builder functions for routes
+    calendarErrorHandler.ts      # Maps domain errors to HTTP responses
+    eventQueryRoutes.ts          # GET /calendar/events, GET /calendar/events/:eventId
+    eventCreateRoutes.ts         # POST /calendar/events
+    eventUpdateRoutes.ts         # PATCH /calendar/events/:eventId
+    eventDeleteRoutes.ts         # DELETE /calendar/events/:eventId
+    freeBusyRoutes.ts            # POST /calendar/freebusy
+    failedEventRoutes.ts         # GET/DELETE/POST /calendar/failed-events
     internalRoutes.ts            # Internal + Pub/Sub + direct HTTP endpoints
   services.ts                    # DI container
   server.ts                      # Fastify server
@@ -394,4 +401,4 @@ apps/calendar-agent/src/
 
 ---
 
-**Last updated:** 2026-03-07
+**Last updated:** 2026-03-22
