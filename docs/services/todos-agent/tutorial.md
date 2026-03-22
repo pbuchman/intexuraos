@@ -1,6 +1,6 @@
 # Todos Agent — Tutorial
 
-> **Time:** 20–30 minutes
+> **Time:** 20-30 minutes
 > **Prerequisites:** Node.js 20+, GCP project access, valid Auth0 token
 > **You'll learn:** How to create and manage todos, add items, use AI extraction, and handle common errors
 

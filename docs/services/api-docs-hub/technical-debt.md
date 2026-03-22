@@ -1,7 +1,7 @@
 # API Docs Hub — Technical Debt
 
-**Last Updated:** 2026-03-15
-**Analysis Run:** [2026-03-15 entry](../../documentation-runs.md)
+**Last Updated:** 2026-03-22
+**Analysis Run:** [2026-03-22 entry](../../documentation-runs.md)
 
 ---
 
@@ -42,7 +42,11 @@ The `/health` endpoint uses `reply.send()` directly rather than `reply.ok()`. Th
 
 ## Test Coverage Gaps
 
-No test files exist for this service. Coverage is not enforced because the service has no domain logic, no business rules, and no complex branching. All behavior is configuration-driven.
+Tests were added in v3.4.0 (`server.test.ts`) covering:
+- Health endpoint response shape and status
+- Swagger UI serving and OpenAPI spec generation
+
+Coverage is adequate for this service's scope. There are no untested code paths in the current source.
 
 ---
 
@@ -61,7 +65,7 @@ None found in the codebase.
 ## SRP Violations
 
 None. All three files have clear, single responsibilities:
-- `config.ts` — environment variable validation and source loading
+- `config.ts` — environment variable validation and source loading via shared catalog
 - `server.ts` — Fastify setup with Swagger UI and health endpoint
 - `index.ts` — entry point with Sentry initialization
 
@@ -69,7 +73,7 @@ None. All three files have clear, single responsibilities:
 
 ## Code Duplicates
 
-None identified.
+None identified. The v3.4.0 refactor eliminated the primary duplication (hardcoded env var list) by adopting the shared `INTERNAL_API_SERVICE_CATALOG` from `@intexuraos/common-core`.
 
 ---
 
@@ -83,6 +87,9 @@ None.
 
 | Date       | Issue                                             | Resolution                                                                |
 | ---------- | ------------------------------------------------- | ------------------------------------------------------------------------- |
+| 2026-03-22 | Hardcoded 18-service config in config.ts          | Replaced with shared `INTERNAL_API_SERVICE_CATALOG` from common-core      |
+| 2026-03-22 | No test coverage                                  | Added `server.test.ts` with health check and Swagger UI tests             |
+| 2026-03-22 | Missing cron-agent and hellscript-agent specs     | Added via shared catalog (20 services total)                              |
 | 2026-03-15 | Package version bump to 3.3.0                     | Release v3.3.0 — no source changes, package.json version updated          |
 | 2026-03-07 | Package version bump to 3.2.0                     | Release v3.2.0 — no source changes, package.json version updated          |
 | 2026-02-22 | Missing code-agent, linear-agent, web-agent specs | Added 3 new `INTEXURAOS_*_OPENAPI_URL` env vars, bumped spec to 0.0.5     |

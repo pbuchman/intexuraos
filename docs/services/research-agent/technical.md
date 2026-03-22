@@ -2,7 +2,7 @@
 
 ## Overview
 
-Research-agent orchestrates parallel AI research across multiple LLM providers (Claude, GPT, Gemini, Perplexity). It fans out research prompts via Pub/Sub so each model call runs in its own Cloud Run instance, tracks token usage and cost per call, synthesizes results with source attribution, and auto-publishes shareable HTML to GCS. Runs on Cloud Run with auto-scaling.
+Research-agent orchestrates parallel AI research across multiple LLM providers (Claude, GPT, Gemini, Perplexity). It infers structured research context from user prompts, fans out research via Pub/Sub so each model call runs in its own Cloud Run instance, flags low-quality responses, tracks token usage and cost per call, synthesizes results with source attribution, and auto-publishes shareable HTML to GCS. Runs on Cloud Run with auto-scaling.
 
 ## Architecture
 
@@ -77,18 +77,21 @@ sequenceDiagram
     ResearchAgent-->>-Client: 200 { researchId }
 
     PubSub->>+ResearchAgent: POST /internal/llm/pubsub/process-research
-    ResearchAgent->>Firestore: Update status → processing
-    ResearchAgent->>PubSub: Publish llm.call × N models
+    ResearchAgent->>ResearchAgent: inferResearchContext(prompt)
+    ResearchAgent->>Firestore: Update status -> processing, save researchContext
+    ResearchAgent->>PubSub: Publish llm.call x N models
     ResearchAgent-->>-PubSub: 200 ack
 
     loop Per model (parallel)
         PubSub->>+ResearchAgent: POST /internal/llm/pubsub/process-llm-call
-        ResearchAgent->>LlmProvider: research(prompt)
+        ResearchAgent->>ResearchAgent: buildResearchPrompt(prompt, researchContext)
+        ResearchAgent->>LlmProvider: research(builtPrompt)
         LlmProvider-->>ResearchAgent: content + usage
-        ResearchAgent->>Firestore: updateLlmResult (completed)
+        ResearchAgent->>ResearchAgent: Flag low_quality if < 800 chars
+        ResearchAgent->>Firestore: updateLlmResult (completed + qualityFlag)
         ResearchAgent->>ResearchAgent: checkLlmCompletion
         alt all_completed
-            ResearchAgent->>ResearchAgent: runSynthesis
+            ResearchAgent->>ResearchAgent: runSynthesis (low_quality results deprioritized)
             ResearchAgent->>GCS: Upload shareable HTML
             ResearchAgent->>Firestore: Update (synthesizedResult, shareInfo)
         end
@@ -98,18 +101,27 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit      | Description                                                                             | Date       |
-| ----------- | --------------------------------------------------------------------------------------- | ---------- |
-| `c4e3a13c`  | Release v3.3.0                                                                          | 2026-03-15 |
-| `93aeac4a`  | Remove ZAI provider and GLM-4.7 models, finalize GLM-5                                  | 2026-03-12 |
-| `e348b66e`  | Fix silent dispatch failures and nested transaction (INT-810, 811)                      | 2026-03-10 |
-| `7237798d`  | Write tests for v8-ignore blocks                                                        | 2026-03-09 |
-| `99febe66`  | Wire GitHub OAuth integration and update cross-service mocks                            | 2026-03-02 |
-| `e6399f3b`  | Apply code review feedback for semantic checks                                          | 2026-02-28 |
-| `a1a77b95`  | Add semantic checks to input improvement validator                                      | 2026-02-28 |
-| `8fb906699` | Align thumbnail output contract with consumed parser fields (INT-605)                   | 2026-02-26 |
-| `f451d51a`  | Audit and improve 27 prompts across all domains                                         | 2026-02-19 |
-| `c72b7c53`  | Switch default LLM to Gemini 2.5 Flash, add Gemini fallback, increase title gen timeout | 2026-02-13 |
+| Commit      | Description                                                           | Date       |
+| ----------- | --------------------------------------------------------------------- | ---------- |
+| `4129c499`  | Address fifth round of PR review comments (INT-981)                   | 2026-03-19 |
+| `b4acef0b`  | Implement research pipeline quality fixes T0-T6 (INT-981)             | 2026-03-19 |
+| `969f43fa`  | Fix PR automation log race condition                                  | 2026-03-15 |
+| `c4e3a13c`  | Release v3.3.0                                                        | 2026-03-15 |
+| `93aeac4a`  | Remove ZAI provider and GLM-4.7 models, finalize GLM-5                | 2026-03-12 |
+| `e348b66e`  | Fix silent dispatch failures and nested transaction (INT-810, 811)    | 2026-03-10 |
+| `a1a77b95`  | Add semantic checks to input improvement validator                    | 2026-02-28 |
+| `8fb90669`  | Align thumbnail output contract with consumed parser fields (INT-605) | 2026-02-26 |
+| `f451d51a`  | Audit and improve 27 prompts across all domains                       | 2026-02-19 |
+| `c72b7c53`  | Switch default LLM to Gemini 2.5 Flash, add Gemini fallback           | 2026-02-13 |
+
+### v3.4.0 Changes (since v3.3.0)
+
+**Research Pipeline Quality Fixes (INT-981):** Accuracy and completeness improvements across research stages T0 through T6:
+
+- **Context-aware research prompts (T0-T2):** The `LlmResearchProvider.research()` method now accepts an optional `ResearchContext` parameter. All four LLM adapters (Claude, Gemini, GPT, Perplexity) pass the inferred research context through `buildResearchPrompt()` to produce domain-tailored prompts — including language, answer style, source preferences, and safety constraints.
+- **Low-quality response detection (T3):** LLM results below 800 characters are automatically flagged with `qualityFlag: 'low_quality'` on the `LlmResult` model. Flagged results receive a quality warning prefix during synthesis, deprioritizing them as evidence sources.
+- **Language-aware synthesis (T5):** When the research context includes a `language` field, it is passed as `languageOverride` to the synthesis context inferrer, ensuring the final output matches the user's language.
+- **Context inference improvements (T6):** The context inference adapter now recognizes broader domain categories (e.g., `outdoor_recreation`, `fishing`) and supports `user_exclusions` in safety constraints.
 
 ## API Endpoints
 
@@ -158,6 +170,7 @@ sequenceDiagram
 | `status`             | `ResearchStatus`        | Current lifecycle state                                      |
 | `llmResults`         | `LlmResult[]`           | Per-model result records                                     |
 | `inputContexts`      | `InputContext[]?`       | User-provided context documents (max 5, max 60k chars each)  |
+| `researchContext`    | `ResearchContext?`      | Inferred research context (domain, style, sources, safety)   |
 | `synthesizedResult`  | `string?`               | Final synthesized markdown output                            |
 | `synthesisError`     | `string?`               | Error message if synthesis failed                            |
 | `partialFailure`     | `PartialFailure?`       | Partial failure state awaiting user decision                 |
@@ -183,18 +196,19 @@ sequenceDiagram
 
 ### LlmResult
 
-| Field              | Type              | Description                                    |
-| ------------------ | ----------------- | ---------------------------------------------- |
-| `provider`         | `LlmProvider`     | Provider (google, openai, anthropic…)          |
-| `model`            | `string`          | Model name from llm-contract                   |
-| `status`           | `LlmResultStatus` | `pending`, `processing`, `completed`, `failed` |
-| `result`           | `string?`         | Raw markdown from the model                    |
-| `sources`          | `string[]?`       | URLs cited by the model                        |
-| `inputTokens`      | `number?`         | Input token count                              |
-| `outputTokens`     | `number?`         | Output token count                             |
-| `costUsd`          | `number?`         | Cost in USD                                    |
-| `durationMs`       | `number?`         | Wall-clock time for this call                  |
-| `copiedFromSource` | `boolean?`        | True when result reused from source research   |
+| Field              | Type              | Description                                                     |
+| ------------------ | ----------------- | --------------------------------------------------------------- |
+| `provider`         | `LlmProvider`     | Provider (google, openai, anthropic...)                         |
+| `model`            | `string`          | Model name from llm-contract                                    |
+| `status`           | `LlmResultStatus` | `pending`, `processing`, `completed`, `failed`                  |
+| `result`           | `string?`         | Raw markdown from the model                                     |
+| `sources`          | `string[]?`       | URLs cited by the model                                         |
+| `inputTokens`      | `number?`         | Input token count                                               |
+| `outputTokens`     | `number?`         | Output token count                                              |
+| `costUsd`          | `number?`         | Cost in USD                                                     |
+| `durationMs`       | `number?`         | Wall-clock time for this call                                   |
+| `copiedFromSource` | `boolean?`        | True when result reused from source research                    |
+| `qualityFlag`      | `QualityFlag?`    | `'normal'` or `'low_quality'` based on content length threshold |
 
 ### InputContext
 
@@ -217,11 +231,11 @@ sequenceDiagram
 
 ### Subscribed Topics (HTTP Push)
 
-| Endpoint                                       | Event type         | Action                                    |
-| ---------------------------------------------- | ------------------ | ----------------------------------------- |
-| `POST /internal/llm/pubsub/process-research`   | `research.process` | Dispatch individual LLM calls             |
-| `POST /internal/llm/pubsub/process-llm-call`   | `llm.call`         | Execute single LLM call, check completion |
-| `POST /internal/llm/pubsub/report-analytics`   | `llm.report`       | Report LLM usage to user-service          |
+| Endpoint                                       | Event type         | Action                                                                            |
+| ---------------------------------------------- | ------------------ | --------------------------------------------------------------------------------- |
+| `POST /internal/llm/pubsub/process-research`   | `research.process` | Infer research context, dispatch LLM calls                                        |
+| `POST /internal/llm/pubsub/process-llm-call`   | `llm.call`         | Execute single LLM call with context-aware prompt, flag quality, check completion |
+| `POST /internal/llm/pubsub/report-analytics`   | `llm.report`       | Report LLM usage to user-service                                                  |
 
 ## Dependencies
 
@@ -296,6 +310,8 @@ Research Agent loads pricing at startup for all models it uses. Models are split
 - **Notion export timing:** The export must happen after the database save so it reads the updated `shareInfo.coverImageUrl`. An earlier race condition (export before save) was fixed.
 - **Attribution repair:** If synthesis output fails attribution validation, the service automatically calls the synthesizer again to repair it. The repair's cost is tracked in `auxiliaryCostUsd`.
 - **Context labels:** If no label is supplied for an input context, `generateContextLabels` assigns one via LLM inference during synthesis.
+- **Low-quality threshold:** LLM results under 800 characters are flagged `low_quality`. The threshold was chosen empirically — useful research responses are typically 1000+ characters; shorter outputs usually indicate refusals, error messages, or extremely shallow answers.
+- **Research context propagation:** The inferred `ResearchContext` is saved to Firestore during `process-research` and passed to each LLM adapter's `research()` call via `buildResearchPrompt()`. This means the context is inferred once and reused for all models in the research.
 
 ## File Structure
 
@@ -317,7 +333,8 @@ apps/research-agent/src/
 │   ├── gcs/                 # shareStorageAdapter (GCS HTML upload)
 │   ├── image/               # imageServiceClient
 │   ├── llm/                 # ClaudeAdapter, GeminiAdapter, GptAdapter,
-│   │                        # PerplexityAdapter, InputValidationAdapter
+│   │                        # PerplexityAdapter, ContextInferenceAdapter,
+│   │                        # InputValidationAdapter
 │   ├── notification/        # WhatsAppNotificationSender, NoopNotificationSender
 │   ├── notion/              # notionResearchExporter, notionServiceClient
 │   ├── pricing/             # PricingClient

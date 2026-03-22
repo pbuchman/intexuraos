@@ -22,8 +22,9 @@ Built for engineering teams who need autonomous coding agents but cannot — or 
 6. The Execution Agent writes tests first, implements the endpoint, runs the full test suite, performs a mandatory simplification pass on every changed file, executes a zero-tolerance code review loop, and opens a pull request — including which AI model produced the work.
 7. Now the verification pipeline begins. **Stage one:** Gemini evaluates the agent's final output against an agent-specific contract, extracting structured metadata — PR URLs, skill usage proofs, outcome labels — and validating them against strict schemas. Claude's own assessment of its performance is not consulted. If the contract is not met and the attempt limit has not been reached, the orchestrator automatically launches a follow-up attempt with a targeted prompt listing exactly which criteria failed.
 8. **Stage two:** Gemini reads the full session transcript — every tool call, every edit, every decision — fetches the original Linear issue requirements and any referenced plan document, and performs a structured audit. The resulting Deep Validation Report covers claim verification (did the agent actually do what it said it did?), contract compliance, plan-versus-reality comparison, and anomaly detection. This report is posted directly on the pull request with visual severity indicators, so reviewers see an independent, evidence-backed assessment before they read a single line of code.
-9. **Stage three:** A separate code-agent service enforces deterministic rules — Linear issue mutations, label updates, status transitions — that no language model can be trusted to apply consistently.
-10. The CTO reviews a clean pull request with an independent quality report attached. Her source code never left the building.
+9. **Stage three:** A Review Agent — triggered automatically when a plan review is needed — performs an independent code review that cross-references the implementation against the original plan. Every requirement in the plan is classified as implemented, partially implemented, or missing. The review is posted on the pull request as structured inline comments and a requirements coverage summary. This closes the loop: the plan that guided the implementation is the same plan used to verify it.
+10. **Stage four:** A separate code-agent service enforces deterministic rules — Linear issue mutations, label updates, status transitions — that no language model can be trusted to apply consistently.
+11. The CTO reviews a clean pull request with an independent quality report attached and a plan compliance audit confirming every requirement was addressed. Her source code never left the building.
 
 ## How It Helps
 
@@ -45,6 +46,16 @@ The Deep Validator goes further. After the Completion Verifier passes, it reads 
 
 **Example:** A worker completes an API endpoint but skips the test suite. The Completion Verifier catches the missing coverage proof and triggers a second attempt with a prompt that says "test execution evidence was not found in your output." On the second attempt, the worker writes and runs the tests. The Completion Verifier confirms the contract is met. Then the Deep Validator analyzes the full transcript, confirms that both mandatory skills were invoked in the correct order, that all Linear issue requirements are addressed, and that the plan matches the implementation — and posts a clean report on the PR with green pass indicators across every category.
 
+### Review Implementations Against the Original Plan
+
+When a planning agent produces a design document and an execution agent implements it, the Review Agent closes the gap between intent and reality. Dispatched automatically when a plan review is needed, it reads the original plan document, fetches the implementation PR diff, and cross-references every requirement.
+
+Each plan item is classified as implemented, partially implemented, or missing. The results are posted on the pull request as structured inline comments with a requirements coverage summary. The review covers code quality, security, and architecture in separate sections — each with its own verdict — plus a dedicated plan compliance section that maps every plan requirement to the PR diff.
+
+This means the same plan that guided the implementation is used to verify it. A developer who designed the approach in planning can see, at a glance, which parts of the design were faithfully implemented and which were missed or altered — without reading the entire diff themselves.
+
+**Example:** A planning agent designs an API endpoint with five requirements: input validation, database schema migration, error handling, test coverage, and OpenAPI documentation. The execution agent implements four of the five but skips the migration. The Review Agent reads the plan, reads the diff, and posts a review flagging the missing migration as a red finding with the exact plan requirement quoted. The developer sees the gap immediately instead of discovering it during manual review.
+
 ### Isolate Every Task in Its Own World
 
 When a task arrives, the orchestrator creates a fresh copy of the repository on a dedicated branch. It then spawns a Docker container locked to that workspace. Each container runs as a non-root user with all Linux capabilities dropped except the minimum required for network operations. It gets its own mounted workspace, its own credentials directory (read-only), its own resource limits (eight gigabytes of memory, four CPU cores), and its own log stream. Two tasks running simultaneously never see each other's files, credentials, or output.
@@ -57,7 +68,7 @@ The default capacity is two concurrent tasks, configurable based on your hardwar
 
 The orchestrator persists task state atomically to disk after every change — write to a temporary file, then rename. If the machine reboots, the process crashes, or Docker restarts, the orchestrator discovers running containers on startup and re-attaches to them, so tasks continue without interruption. If a container has exited or is unreachable, the platform is notified and the container is cleaned up. Stale containers left behind by previous runs are garbage-collected automatically through periodic cleanup.
 
-Each attempt has a two-hour timeout — with a warning at one hour and fifty-five minutes and a hard kill at two hours — so a stuck task never occupies a worker indefinitely. Corrupted state files are backed up with a timestamp and a fresh state is initialized rather than crashing. The repository manager validates and sanitizes the local clone on every startup, stripping leaked credentials from remote URLs and continuing gracefully when the network is temporarily unavailable. When forensics mode is enabled, the orchestrator captures crash snapshots and core dumps for failed containers, giving you diagnostic data without requiring you to reproduce the failure.
+Each attempt has a three-hour timeout — with a warning at two hours and fifty-five minutes and a hard kill at three hours — so a stuck task never occupies a worker indefinitely. Corrupted state files are backed up with a timestamp and a fresh state is initialized rather than crashing. The repository manager validates and sanitizes the local clone on every startup, stripping leaked credentials from remote URLs and continuing gracefully when the network is temporarily unavailable. When forensics mode is enabled, the orchestrator captures crash snapshots and core dumps for failed containers, giving you diagnostic data without requiring you to reproduce the failure.
 
 **Example:** A thunderstorm knocks out power to the office server running the orchestrator. When power returns and the machine reboots, the orchestrator starts up, discovers one still-running container and adopts it, detects one exited container and cleans it up, notifies the platform about an interrupted task, and resumes accepting new work — all without a human touching the keyboard.
 
@@ -77,6 +88,7 @@ Install the orchestrator on any Unix machine with Docker, set up a Cloudflare tu
 
 - **Your code, your hardware** — Source code never leaves your network; outbound data is limited to task status, logs, and performance metrics
 - **Cross-model trust boundary** — Claude writes the code, Gemini verifies the result, deterministic rules enforce what neither model can be trusted to check — no model ever grades its own work
+- **Plan-aware code review** — The Review Agent cross-references every implementation against the original plan, catching missed requirements before human review begins
 - **Complete task isolation** — Each task gets its own branch, container, credentials, resource limits, and log stream with no cross-task visibility
 - **Self-correcting execution** — Failed verification triggers automatic follow-up attempts with targeted prompts naming exactly which criteria were not met; fatal crashes trigger immediate retries
 - **Crash-resilient by design** — Survives reboots, adopts running containers, cleans up orphaned work, and recovers interrupted resumes without manual intervention
@@ -86,7 +98,7 @@ Install the orchestrator on any Unix machine with Docker, set up a Cloudflare tu
 
 - **Docker required** — The host machine must have Docker installed and running; containers are the isolation boundary, and there is no fallback
 - **Cloudflare tunnel required** — Connectivity to the platform depends on a Cloudflare tunnel for the outbound-only connection
-- **Two-hour attempt ceiling** — Each individual attempt has a maximum runtime of two hours; long-running tasks need to be broken into smaller issues
+- **Three-hour attempt ceiling** — Each individual attempt has a maximum runtime of three hours; long-running tasks need to be broken into smaller issues
 - **Gemini dependency** — Completion verification requires an available Gemini API key at startup; if the verifier is unreachable during a task, that task fails rather than allowing unverified results through
 - **Log volume cap** — Log output is capped at four megabytes per task; extremely verbose builds may see truncated output
 - **Linux metrics only** — Per-task CPU and memory metrics rely on Linux control groups; macOS hosts report zero values for resource consumption

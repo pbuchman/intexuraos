@@ -72,7 +72,7 @@ curl -X POST http://localhost:8124/bookmarks \
 
 ### What Just Happened?
 
-The bookmark was created with `ogFetchStatus: pending` and no metadata. The public API does NOT trigger the enrichment pipeline — it only stores the bookmark. Enrichment is triggered only by the internal create endpoint.
+The bookmark was created with `ogFetchStatus: pending` and no metadata. The public API does NOT trigger the enrichment pipeline — it only stores the bookmark. Enrichment is triggered only by the internal create endpoint, where the `createBookmark` use case receives an `enrichPublisher` dependency.
 
 ---
 
@@ -111,7 +111,7 @@ curl -X POST http://localhost:8124/internal/bookmarks \
 }
 ```
 
-Note the `url` field is the app deep link, not the bookmarked URL. This endpoint also publishes a `bookmarks.enrich` event.
+Note the `url` field is the app deep link, not the bookmarked URL. This endpoint also publishes a `bookmarks.enrich` event via the `enrichPublisher` passed to the `createBookmark` use case.
 
 ### Step 2.2: Wait for enrichment
 
@@ -263,7 +263,7 @@ The proxy:
 1. Bookmark Created (Internal API only)
    |-- POST /internal/bookmarks
    |-- Stored with ogFetchStatus: pending
-   |-- Published: bookmarks.enrich event
+   |-- createBookmark use-case publishes bookmarks.enrich (fire-and-forget)
 
 2. Enrichment (Pub/Sub)
    |-- /internal/bookmarks/pubsub/enrich receives event

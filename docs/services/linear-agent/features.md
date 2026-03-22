@@ -56,6 +56,12 @@ This keeps context where you need it. You do not bounce between IntexuraOS and L
 
 **Example:** An issue card shows "3 comments." You tap in and find a discussion between your designer and your backend engineer about an edge case. You read it, form your opinion, and move on — without ever opening Linear.
 
+### Serve Issue Context to Other Services
+
+Other IntexuraOS services can now fetch an issue's description and comments directly from the Linear Agent's local store — without needing user credentials or calling the Linear API. The orchestrator uses this to read issue context during deep validation, enriching its understanding of what the code task should accomplish before deciding whether to proceed.
+
+**Example:** The code agent's orchestrator needs to validate a task against the full issue description and recent discussion. It calls the Linear Agent's context endpoint, receives the description and the latest comments (newest-first, capped at 100), and feeds that context into its validation prompt — all without requiring the user's Linear API key.
+
 ### Let Your Code Agent Update the Board
 
 The Code Agent — another IntexuraOS service that picks up Linear issues and autonomously writes the code to resolve them — updates your board as it works. It creates related issues when implementation breaks into pieces, moves workflow states forward as each piece progresses, adds comments to track work, and updates labels and assignees. Your board reflects what the Code Agent has done without any manual status updates from you.
@@ -98,6 +104,7 @@ Connect your Linear account through the settings page — you will need your API
 - **Living board** — automatic sync, scheduled reconciliation, webhook fan-out to all team users, and manual refresh keep the local copy current across six workflow columns.
 - **Code agent continuity** — issues move through your workflow as the code agent creates sub-tasks, adds comments, updates labels, and transitions states, visible on your board without manual status changes.
 - **Smart auto-trigger** — assign an issue with a "planning-task" or "code-task" label and the code agent starts working automatically, choosing between enrichment and execution based on the label.
+- **Cross-service context sharing** — other services fetch issue descriptions and comments from the local store without user credentials, enabling richer validation and decision-making.
 - **No lost input** — duplicate detection prevents double-creation, and failed extractions queue for review instead of vanishing.
 
 ## Limitations

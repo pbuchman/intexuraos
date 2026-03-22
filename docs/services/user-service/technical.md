@@ -92,6 +92,8 @@ sequenceDiagram
 
 | Commit     | Description                                                       | Date       |
 | ---------- | ----------------------------------------------------------------- | ---------- |
+| `5d88167`  | Standardize v8-ignore wording across OAuth route files            | 2026-03-19 |
+| `bfaeae3`  | Remove unnecessary v8-ignores and standardize remainder (INT-988) | 2026-03-19 |
 | `c4e3a13c` | Release v3.3.0                                                    | 2026-03-15 |
 | `93aeac4a` | Remove ZAI provider and GLM-4.7 models (INT-836)                  | 2026-03-12 |
 | `3ec78836` | Add tests for v8-ignore blocks in user-service routes (INT-797)   | 2026-03-10 |
@@ -99,15 +101,11 @@ sequenceDiagram
 | `ab863ba5` | Refactor: add isTranscriptionProvider type guard                  | 2026-03-06 |
 | `0fff5af7` | Feat: add transcription preferences to user settings              | 2026-03-06 |
 | `99febe66` | Fix: wire GitHub OAuth integration and update cross-service mocks | 2026-03-02 |
-| `e07de959` | Feat: add GitHub OAuth integration (Stream A, tasks A1–A5)        | 2026-03-01 |
+| `e07de959` | Feat: add GitHub OAuth integration (Stream A, tasks A1-A5)        | 2026-03-01 |
 | `1478b385` | INT-571: log cascade failure + document over-clearing assumption  | 2026-02-22 |
 | `cbd5d845` | INT-571: restrict default model selection to configured API keys  | 2026-02-22 |
 | `b3f34d85` | Release v3.1.0                                                    | 2026-02-22 |
 | `c8a42105` | Release v3.0.0                                                    | 2026-02-19 |
-| `6063175b` | Dev-mode log formatting for PM2 readability                       | 2026-02-16 |
-| `a52a6bbc` | Dash0 OpenTelemetry integration                                   | 2026-02-16 |
-| `d5fbb354` | Fix start:local to use tsx instead of node                        | 2026-02-14 |
-| `45f001c1` | Switch PM2 ecosystem to pnpm --filter                             | 2026-02-14 |
 
 ## API Endpoints
 

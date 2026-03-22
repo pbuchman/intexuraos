@@ -117,7 +117,7 @@ interface Command {
 
 interface CommandClassification {
   type: 'todo' | 'research' | 'note' | 'link' | 'calendar' | 'reminder' | 'linear' | 'code';
-  confidence: number;     // 0–1
+  confidence: number;     // 0--1
   reasoning: string;
   promptVersion: string;  // semver
   classifiedAt: string;
@@ -246,7 +246,7 @@ interface ArchiveCommandBody {
 
 ## Usage Patterns
 
-### Pattern 1: WhatsApp Message → Classify → Action
+### Pattern 1: WhatsApp Message -> Classify -> Action
 
 ```
 1. whatsapp-service receives a WhatsApp message
@@ -259,7 +259,7 @@ interface ArchiveCommandBody {
 8. Response: {commandId, isNew: true}
 ```
 
-### Pattern 2: PWA Share → Classify → Display
+### Pattern 2: PWA Share -> Classify -> Display
 
 ```
 1. User shares text or link from PWA web app
@@ -276,10 +276,10 @@ interface ArchiveCommandBody {
 2. Command saved with status: "pending_classification"
 3. Cloud Scheduler triggers POST /internal/retry-pending
 4. retry-pending fetches all pending_classification commands (limit 100)
-5. For each: attempt getLlmClient → classify → createAction
-6. Success: status → "classified"
+5. For each: attempt getLlmClient -> classify -> createAction
+6. Success: status -> "classified"
    Still no key: skipped (counted in response)
-   Error: status → "failed"
+   Error: status -> "failed"
 ```
 
 ### Pattern 4: Service Lookup

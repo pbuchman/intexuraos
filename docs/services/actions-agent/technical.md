@@ -2,7 +2,7 @@
 
 ## Overview
 
-Actions-agent is the central action lifecycle management service for IntexuraOS. It receives classified commands from commands-agent, maintains action state in Firestore, routes actions to appropriate handlers via Pub/Sub, and tracks execution status. It supports confidence-based auto-execution, WhatsApp interactive button approval, calendar previews, code task dispatch, and type correction tracking.
+Actions-agent is the central action lifecycle management service for IntexuraOS. It receives classified commands from commands-agent, maintains action state in Firestore, routes actions to appropriate handlers via Pub/Sub, and tracks execution status. It supports confidence-based auto-execution, WhatsApp interactive button approval, calendar previews, code task dispatch, worker type detection from natural language, and type correction tracking.
 
 ## Architecture
 
@@ -45,24 +45,50 @@ graph TB
 
 ## Recent Changes
 
-| Commit      | Description                                                                    | Date       |
-| ----------- | ------------------------------------------------------------------------------ | ---------- |
-| `5269c9b3`  | Add tests for v8-ignore blocks and remove coverage exemptions (INT-785)        | 2026-03-13 |
-| `93aeac4a`  | Remove ZAI provider and GLM-4.7 models, finalize GLM-5                         | 2026-03-12 |
-| `0283cd09`  | Update Code Task Status Message Format (INT-813)                               | 2026-03-11 |
-| `a8592532`  | Fix: restore correct WhatsApp notification format for calendar events          | 2026-03-07 |
-| `59872227`  | INT-535: Add rich WhatsApp completion message for calendar events              | 2026-03-04 |
-| `99febe66`  | Fix: wire GitHub OAuth integration and update cross-service mocks              | 2026-03-02 |
-| `d366d33f`  | Feat(INT-628): Enable task progression from WhatsApp                           | 2026-02-25 |
-| `aca56231`  | Feat: implement synchronous calendar preview in approval messages [INT-535]    | 2026-02-22 |
+| Commit      | Description                                                                | Date       |
+| ----------- | -------------------------------------------------------------------------- | ---------- |
+| `62870df9`  | Address PR review comments for worker type detection                       | 2026-03-21 |
+| `784de2ab`  | Detect worker type from message keywords in code actions                   | 2026-03-21 |
+| `fe7b7244`  | Inject logger in commandsAgentHttpClient and fix blank lines               | 2026-03-18 |
+| `1f5d1cad`  | Audit sibling HTTP clients for same optional-logger pattern                | 2026-03-18 |
+| `4fb483d3`  | Make logger required in LinearAgentHttpClientConfig                        | 2026-03-18 |
+| `ab3c016f`  | Condense handleAction template to meet 80-line acceptance criteria         | 2026-03-18 |
+| `fac2d792`  | Address code review feedback for handleAction template                     | 2026-03-18 |
+| `882aa91f`  | Fix leaky abstraction in handleActionTemplate                              | 2026-03-18 |
+| `22018d1b`  | Extract shared handleAction template (INT-887)                             | 2026-03-18 |
+| `eb94ab98`  | Extract auth middleware from internalRoutes.ts (INT-888)                   | 2026-03-17 |
+| `72887a79`  | Add v8 ignore comments for uncovered template branches                     | 2026-03-16 |
+| `0839daab`  | Extract shared executeAction template (INT-885)                            | 2026-03-16 |
+| `a6325fe0`  | Split handleApprovalReply.ts into approval/ modules (INT-884)              | 2026-03-16 |
+| `295a0485`  | Extract PATCH handler business logic to updateActionUseCase (INT-914)      | 2026-03-16 |
 
-### v8 Ignore Test Replacement (INT-785)
+### Shared handleAction Template (INT-887)
 
-Replaced v8 ignore blocks with real tests across multiple infrastructure and route files. New test suites added for: `approvalMessageRepository`, `calendarServiceHttpClient`, `codeAgentHttpClient`, `notesServiceHttpClient`, `todosServiceHttpClient`, `internalRoutes`, and `publicRoutes`. Coverage exemptions removed from 7 production source files. Remaining v8 ignore directives are in `handleApprovalReply.ts` (8 directives, all `ts-type` category for noUncheckedIndexedAccess patterns).
+Extracted common logic (logging, auto-execution, WhatsApp approval notification) from all 7 `handle*Action` use cases into `handleActionTemplate.ts`. Each handler now provides only a `buildMessage` function and optional `extraButtons`/`preProcess`/`onAutoExecuteSuccess` callbacks. Template is under 80 lines. Eliminates duplicated auto-execution gating, WhatsApp publishing, and correlation ID construction.
 
-### Unified Integration for Chinese LLMs via Alibaba Cloud Model Studio (93aeac4a)
+### Shared executeAction Template (INT-885)
 
-Part of the platform-wide migration from ZAI to Alibaba Cloud Model Studio (DashScope). The actions-agent itself does not directly reference LLM providers — it passes `workerType` through to code-agent. The `CodeTaskWorkerType` union now includes `qwen` and `kimi` in addition to the existing `auto`, `opus`, `sonnet`, `minimax`, and `glm` values.
+Extracted common workflow (get action, null check, idempotency for completed actions, status validation, update to processing, call service, handle failure/success, send WhatsApp notification) into `executeActionTemplate.ts`. Used by executeResearchAction, executeTodoAction, executeNoteAction, executeCalendarAction, and executeLinearAction. executeLinkAction and executeCodeAction are not migrated due to significant deviations (URL extraction logic in link, special error handling in code).
+
+### Auth Middleware Extraction (INT-888)
+
+Extracted `validatePubSubOrInternalAuth` into `pubsubAuth.ts` and `decodePubSubMessage` into `decodePubSubMessage.ts`. Removes repeated auth/decode patterns from internalRoutes.ts.
+
+### updateAction Use Case (INT-914)
+
+Extracted PATCH `/actions/:actionId` business logic (action lookup, ownership check, type change delegation, status update) from the route handler into `updateAction.ts` use case. The route handler now calls `updateActionUseCase` and returns its result.
+
+### Approval Module Decomposition (INT-884)
+
+Split `handleApprovalReply.ts` from a single large file into `approval/` submodules: `types.ts`, `handleButtonResponse.ts`, `handleCancelTaskButton.ts`, `handleProceedToImplementationButton.ts`, `executeActionByType.ts`, `executeRejection.ts`. The main file now orchestrates these modules.
+
+### Logger Injection in HTTP Clients (INT-889)
+
+All HTTP client configurations (`commandsAgentHttpClient`, `linearAgentHttpClient`, `calendarServiceHttpClient`, `codeAgentHttpClient`) now require a `logger` parameter. Previously optional or absent.
+
+### Worker Type Detection from Keywords
+
+Added `detectWorkerTypeFromMessage` in `domain/utils/workerTypeDetection.ts`. Scans the user's message for patterns like "use opus", "use sonnet", etc. Automatically builds rules from the `CODE_TASK_WORKER_TYPES` array — adding a new worker type to the array requires no code change in the detection logic. Returns `undefined` if zero or multiple matches (ambiguous).
 
 ## Data Flow
 
@@ -258,14 +284,14 @@ sequenceDiagram
 
 ### CodeActionPayload
 
-| Field              | Type              | Description                                                         |
-| ------------------ | ----------------- | ------------------------------------------------------------------- |
-| `prompt`           | string            | User's request (what they want Claude to do)                        |
-| `workerType`       | enum              | Which model to use: auto, opus, sonnet, minimax, glm, qwen, or kimi |
-| `linearIssueId`    | string (optional) | Existing Linear issue to work on                                    |
-| `linearIssueTitle` | string (optional) | Title of the Linear issue                                           |
-| `approvalEventId`  | string (optional) | UUID for idempotency (set on approval)                              |
-| `resource_url`     | string (optional) | URL of created code task (set by code-agent)                        |
+| Field              | Type               | Description                                                         |
+| ------------------ | ------------------ | ------------------------------------------------------------------- |
+| `prompt`           | string             | User's request (what they want Claude to do)                        |
+| `workerType`       | CodeTaskWorkerType | Which model to use: auto, opus, sonnet, minimax, glm, qwen, or kimi |
+| `linearIssueId`    | string (optional)  | Existing Linear issue to work on                                    |
+| `linearIssueTitle` | string (optional)  | Title of the Linear issue                                           |
+| `approvalEventId`  | string (optional)  | UUID for idempotency (set on approval)                              |
+| `resource_url`     | string (optional)  | URL of created code task (set by code-agent)                        |
 
 ### ActionTransition
 
@@ -283,21 +309,51 @@ sequenceDiagram
 
 ## Key Use Cases
 
+### handleActionTemplate (INT-887)
+
+Shared template factory for all 7 `handle*Action` use cases. Extracts common logic: logging, auto-execution gating via `shouldAutoExecute`, WhatsApp approval notification with interactive buttons.
+
+**Configuration interface:**
+
+```typescript
+interface HandleActionConfig {
+  actionType: string;
+  buildMessage: (event, webAppUrl, preProcessData?) => string;
+  extraButtons?: (event) => WhatsAppInteractiveButton[];
+  preProcess?: (event, deps) => Promise<Record<string, unknown> | undefined>;
+  onAutoExecuteSuccess?: (result, event, logger) => void;
+}
+```
+
+Each handler provides a `buildMessage` function and optional hooks. The template handles auto-execution (if `executeAction` dependency is injected and confidence >= 90%), WhatsApp message construction with `buildApprovalButtons`, and non-fatal notification failure handling.
+
+### executeActionTemplate (INT-885)
+
+Shared template for execute use cases. Handles the common workflow: get action by ID, null check, idempotency for completed actions, status validation, update to processing, call service, handle failure, handle success, send WhatsApp notification if `resourceUrl` exists.
+
+**Not migrated:** `executeLinkAction` (URL extraction logic) and `executeCodeAction` (WORKER_UNAVAILABLE/DUPLICATE error handling) due to significant deviations.
+
 ### handleApprovalReply
 
-Processes WhatsApp button taps for action approval. All approval intents are resolved deterministically via WhatsApp interactive buttons — no LLM classification. The `proceed-implementation` button enables two-phase code task control from WhatsApp.
+Processes WhatsApp button taps for action approval. All approval intents are resolved deterministically via WhatsApp interactive buttons — no LLM classification. Decomposed into `approval/` submodules (INT-884):
+
+- `handleButtonResponse.ts` — Routes button IDs to approve/reject/convert/cancel handlers
+- `handleCancelTaskButton.ts` — Code task cancellation with nonce validation
+- `handleProceedToImplementationButton.ts` — Phase 2 implementation dispatch (INT-628)
+- `executeActionByType.ts` — Dispatches execution to the correct type-specific executor
+- `executeRejection.ts` — Handles action rejection and WhatsApp notification
+- `types.ts` — Shared types (`ApprovalIntent`, `ApprovalReplyResult`)
 
 **Flow:**
 
 1. Receive `action.approval.reply` event from whatsapp-service
 2. If `buttonId` starts with `cancel-task:` — handle code task cancellation (no action lookup needed)
-3. If `buttonId` starts with `view-task:` — send task URL to user (no action lookup needed)
-4. If `buttonId` starts with `proceed-implementation:` — submit task to phase 2 via code-agent (INT-628)
-5. Look up action by `actionId` (from correlationId) or `replyToWamid` (from approval_messages)
-6. If action not found (deleted/expired) — return 200 with WhatsApp notification (prevents Pub/Sub retry)
-7. Verify user ownership and action is not in terminal state
-8. If `buttonId` present — dispatch to `handleButtonResponse` for deterministic intent resolution
-9. If text reply (no button) — re-send approval buttons via WhatsApp
+3. If `buttonId` starts with `proceed-implementation:` — submit task to phase 2 via code-agent (INT-628)
+4. Look up action by `actionId` (from correlationId) or `replyToWamid` (from approval_messages)
+5. If action not found (deleted/expired) — return 200 with WhatsApp notification (prevents Pub/Sub retry)
+6. Verify user ownership and action is not in terminal state
+7. If `buttonId` present — dispatch to `handleButtonResponse` for deterministic intent resolution
+8. If text reply (no button) — re-send approval buttons via WhatsApp
 
 **Race Condition Prevention:**
 
@@ -313,6 +369,10 @@ if (updateResult.outcome === 'status_mismatch') {
   return ok({ matched: true, actionId: action.id });
 }
 ```
+
+### updateAction (INT-914)
+
+Handles the PATCH `/actions/:actionId` business logic. Fetches action, verifies ownership, delegates type changes to `changeActionTypeUseCase`, and persists status changes.
 
 ### handleCalendarAction
 
@@ -341,71 +401,31 @@ Executes calendar actions by delegating to calendar-agent.
 6. Format rich completion message via `formatCalendarCompletionMessage` (event title, date, time, duration, location)
 7. Send WhatsApp notification with CTA button ("View in Calendar" linking to the event URL)
 
-### buildApprovalButtons
-
-Creates WhatsApp interactive buttons for any action type.
-
-```typescript
-// Standard buttons (all action types)
-buildApprovalButtons({ actionId });
-// -> [{ id: 'approve:{actionId}', title: 'Approve' }, { id: 'reject:{actionId}', title: 'Reject' }]
-
-// Code actions (extra "Convert to Issue" button)
-buildApprovalButtons({
-  actionId,
-  extraButtons: [
-    { type: 'reply', reply: { id: `convert:${actionId}`, title: 'Convert to Issue' } },
-  ],
-});
-```
-
 ### shouldAutoExecute
 
 Determines whether an action should be auto-executed based on classification confidence. The threshold is 90% (`>= 0.9`). This function is type-agnostic — any action type can auto-execute. However, auto-execution only occurs when the handler injects an `executeAction` dependency. All types except `linear` and `reminder` support auto-execution.
 
-### handleCodeAction
+### detectWorkerTypeFromMessage
 
-Processes code action creation requests. Sends WhatsApp message with interactive buttons (Approve, Reject, Convert to Issue).
+Scans user message text for "use {workerType}" patterns. Dynamically builds regex rules from the `CODE_TASK_WORKER_TYPES` constant — new worker types are automatically supported with no code change. Returns `undefined` if zero matches or ambiguous (multiple matches).
 
-**Flow:**
+### changeActionType
 
-1. Check if action should be auto-executed via `shouldAutoExecute`
-2. If auto-execute: call `executeCodeAction` directly
-3. Otherwise: send WhatsApp message with Approve / Reject / Convert to Issue buttons
+Allows users to correct AI classification. Validates the action is in a mutable status (`pending`, `awaiting_approval`, `failed`), fetches the original command text from commands-agent, logs the transition to `actions_transitions` for ML training, and updates the action type.
 
-### executeCodeAction
+### retryPendingActions
 
-Executes code actions by dispatching to code-agent.
-
-**Flow:**
-
-1. Retrieve action from repository
-2. Validate action status (must be pending, awaiting_approval, or failed)
-3. Generate `approvalEventId` UUID for idempotency
-4. Call `codeAgentClient.submitTask` with action payload (including `workerType`: auto, opus, sonnet, minimax, glm, qwen, or kimi)
-5. Handle error codes: `WORKER_UNAVAILABLE` (mark failed), `DUPLICATE` (return existing task), network errors
-6. On success: update action to completed with `resource_url` and `approvalEventId`
-7. Send WhatsApp completion notification (best-effort)
+Scheduled by Cloud Scheduler to find and re-process actions stuck in `pending` status for over 1 hour. Re-publishes `action.created` events to trigger handler processing. Skips actions with no registered handler and actions younger than the threshold.
 
 ### createIdempotentActionHandler
 
 Wraps action handlers with idempotency protection to prevent duplicate WhatsApp notifications.
-
-**Pattern:**
 
 ```typescript
 const handler = registerActionHandler(createHandleXxxActionUseCase, deps);
 // Internally calls updateStatusIf(awaiting_approval, [pending, failed])
 // before invoking the wrapped handler
 ```
-
-### retryPendingActions
-
-Scheduled by Cloud Scheduler to find and re-process actions stuck in `pending` status for over 1 hour. Re-publishes `action.created` events to trigger handler processing. Skips actions with no registered handler and actions younger than the threshold.
-
-### changeActionType
-
-Allows users to correct AI classification. Validates the action is in a mutable status (`pending`, `awaiting_approval`, `failed`), fetches the original command text from commands-agent, logs the transition to `actions_transitions` for ML training, and updates the action type.
 
 ## Pub/Sub Events
 
@@ -484,7 +504,7 @@ Allows users to correct AI classification. Validates the action is in a mutable 
 
 **Unified queue routing**: The `/internal/actions/process` endpoint receives all action types and dynamically selects handlers. Unknown types are ignored (action stays pending) rather than failing.
 
-**Pub/Sub authentication**: Pub/Sub push requests use OIDC tokens validated by Cloud Run. Direct service calls use `X-Internal-Auth` header. Both paths are supported.
+**Pub/Sub authentication**: Pub/Sub push requests use OIDC tokens validated by Cloud Run. Direct service calls use `X-Internal-Auth` header. Both paths are supported via `validatePubSubOrInternalAuth` (extracted to `pubsubAuth.ts`).
 
 **Action type correction**: When user changes action type, the old type is logged to `actions_transitions` for ML training data.
 
@@ -514,7 +534,9 @@ Allows users to correct AI classification. Validates the action is in a mutable 
 
 **Proceed-implementation button (INT-628)**: The `proceed-implementation:{taskId}` button submits a task to phase 2 implementation via `codeAgentClient.submitToPhase2`. Error codes include `TASK_NOT_FOUND`, `INVALID_STATUS`, `NO_LINEAR_ISSUE`, `LABEL_NOT_READY`, `ALREADY_IMPLEMENTED`, `ACTIVE_TASK_EXISTS`, `WORKER_NOT_CONFIGURED`, and `NETWORK_ERROR`.
 
-**Worker types**: Code action payload `workerType` supports seven values: `auto`, `opus`, `sonnet`, `minimax`, `glm`, `qwen`, and `kimi`.
+**Worker type detection**: `detectWorkerTypeFromMessage` uses word-boundary regex (`\buse {type}\b`) to prevent false positives. If multiple worker types are mentioned, the function returns `undefined` (ambiguous), falling back to `auto`. Rules are built dynamically from `CODE_TASK_WORKER_TYPES`.
+
+**Worker types**: Code action payload `workerType` supports: `auto`, `opus`, `sonnet`, `minimax`, `glm`, `qwen`, and `kimi`.
 
 **Create action endpoint no longer publishes events**: The `POST /internal/actions` endpoint only creates the action record. Event publishing is the caller's responsibility (commands-agent) to prevent duplicate events.
 
@@ -523,6 +545,8 @@ Allows users to correct AI classification. Validates the action is in a mutable 
 **Response contract enforcement**: All routes use `reply.ok()` / `reply.fail()` exclusively. Raw `reply.send()` is forbidden unless annotated with `@allow-raw-send`.
 
 **OpenAPI description mismatch**: The `server.ts` OpenAPI info still references "Research Agent" in the description field, leftover from the rename from research-agent to actions-agent.
+
+**handleAction template callbacks**: The `preProcess` hook runs before `buildMessage` and passes data through. Used by `handleCalendarAction` to generate the preview synchronously before constructing the approval message. The `onAutoExecuteSuccess` hook enables type-specific logging (e.g., code action failure-despite-success logging).
 
 ## File Structure
 
@@ -545,26 +569,34 @@ apps/actions-agent/src/
       calendarServiceClient.ts  # Calendar-agent client (processAction, getPreview, generatePreview)
       *ServiceClient.ts      # HTTP clients for other services
     usecases/
-      handleApprovalReply.ts     # WhatsApp button tap handling (buttons-only, proceed-implementation)
-      handleCodeAction.ts        # Code action handler with interactive buttons
-      handleCalendarAction.ts    # Calendar action handler with synchronous preview
-      executeCodeAction.ts       # Code action execution via code-agent
-      executeCalendarAction.ts   # Calendar action execution with rich completion messages
-      handle*Action.ts           # Pub/Sub handlers (async, all use buildApprovalButtons)
-      execute*Action.ts          # Direct execution (sync)
+      handleActionTemplate.ts      # Shared template for handle*Action (INT-887)
+      executeActionTemplate.ts     # Shared template for execute*Action (INT-885)
+      handleApprovalReply.ts       # Orchestrates approval/ submodules
+      approval/                    # Decomposed approval handling (INT-884)
+        types.ts                   # ApprovalIntent, ApprovalReplyResult
+        handleButtonResponse.ts    # Button ID routing
+        handleCancelTaskButton.ts  # Code task cancellation
+        handleProceedToImplementationButton.ts  # Phase 2 dispatch (INT-628)
+        executeActionByType.ts     # Type-specific execution dispatch
+        executeRejection.ts        # Rejection handling
+      handleCodeAction.ts          # Code action handler (uses template)
+      handleCalendarAction.ts      # Calendar handler with preview (uses template)
+      handle*Action.ts             # All handlers use handleActionTemplate
+      execute*Action.ts            # Most use executeActionTemplate
       createIdempotentActionHandler.ts  # Idempotency wrapper
-      shouldAutoExecute.ts       # Auto-execution logic (>= 90% confidence, type-agnostic)
-      changeActionType.ts        # Type correction with transition logging
-      retryPendingActions.ts     # Scheduled retry (1-hour threshold)
-      actionHandlerRegistry.ts   # Handler routing
+      shouldAutoExecute.ts         # Auto-execution logic (>= 90% confidence)
+      changeActionType.ts          # Type correction with transition logging
+      updateAction.ts              # PATCH handler business logic (INT-914)
+      retryPendingActions.ts       # Scheduled retry (1-hour threshold)
+      actionHandlerRegistry.ts     # Handler routing
     utils/
       approvalButtons.ts                  # buildApprovalButtons() -- unified button factory
+      workerTypeDetection.ts              # detectWorkerTypeFromMessage (keyword-based)
       formatCalendarApprovalMessage.ts    # Rich calendar approval message formatting
       formatCalendarCompletionMessage.ts  # Rich calendar completion message with CTA button
       calendarMessageFormatting.ts        # Shared date/time formatting utilities
   infra/
     action/
-      commandsAgentClient.ts         # Commands-agent client
       localActionServiceClient.ts    # Local action service client
     firestore/
       actionRepository.ts            # Includes atomic updateStatusIf
@@ -574,9 +606,11 @@ apps/actions-agent/src/
       actionEventPublisher.ts
       config.ts                      # Actions queue topic config
     http/
-      codeAgentHttpClient.ts   # Code-agent HTTP client (submitToPhase2)
-      calendarServiceHttpClient.ts  # Calendar-agent HTTP client (generatePreview)
-      *ServiceHttpClient.ts    # HTTP clients for other services
+      commandsAgentHttpClient.ts     # Commands-agent client (logger required)
+      codeAgentHttpClient.ts         # Code-agent HTTP client (logger required)
+      calendarServiceHttpClient.ts   # Calendar-agent HTTP client (logger required)
+      linearAgentHttpClient.ts       # Linear-agent HTTP client (logger required)
+      *ServiceHttpClient.ts          # HTTP clients for other services
     notification/
       whatsappNotificationSender.ts
     research/
@@ -584,6 +618,8 @@ apps/actions-agent/src/
   routes/
     publicRoutes.ts          # User-facing endpoints (7 endpoints)
     internalRoutes.ts        # Service-to-service + Pub/Sub (6 endpoints)
+    pubsubAuth.ts            # Extracted Pub/Sub/internal auth middleware (INT-888)
+    decodePubSubMessage.ts   # Extracted base64 PubSub decode helper (INT-888)
   services.ts                # DI container
   server.ts                  # Fastify server setup, OpenAPI, health check
 ```

@@ -14,6 +14,7 @@ graph TB
 
     subgraph "image-service"
         API[Fastify Routes]
+        App[Application Layer]
         Domain[Domain Layer]
         Infra[Infrastructure Layer]
     end
@@ -30,8 +31,9 @@ graph TB
     Caller -->|POST /internal/images/prompts/generate| API
     Caller -->|DELETE /internal/images/:id| API
 
-    API --> Domain
-    Domain --> Infra
+    API --> App
+    App --> Domain
+    App --> Infra
 
     Infra -->|getApiKeys| UserSvc
     Infra -->|generateThumbnailPrompt| LLM
@@ -43,7 +45,7 @@ graph TB
     classDef storage fill:#fff4e6
     classDef external fill:#f0f0f0
 
-    class API,Domain,Infra service
+    class API,App,Domain,Infra service
     class Firestore,GCS storage
     class Caller,UserSvc,LLM,ImgGen external
 ```
@@ -56,25 +58,29 @@ graph TB
 sequenceDiagram
     autonumber
     participant Caller as research-agent
-    participant Service as image-service
+    participant Routes as Routes
+    participant UC as GenerateImageUseCase
     participant UserSvc as user-service
     participant ImgGen as Image API
     participant GCS as GCS
     participant Firestore as Firestore
 
-    Caller->>+Service: POST /internal/images/generate
-    Service->>UserSvc: getApiKeys(userId)
-    UserSvc-->>Service: {openai, google} keys
+    Caller->>+Routes: POST /internal/images/generate
+    Routes->>UC: createGenerateImageUseCase(deps, modelConfig)
+    UC->>UserSvc: getApiKeys(userId)
+    UserSvc-->>UC: {openai, google} keys
 
-    Service->>ImgGen: generateImage(prompt)
-    ImgGen-->>Service: base64 image data
+    UC->>ImgGen: generate(prompt, {slug})
+    ImgGen-->>UC: base64 image data
 
-    Service->>GCS: upload(id, imageData)
+    Note right of ImgGen: ImageGenerator uploads to GCS internally
+    UC->>GCS: upload(id, imageData, {slug})
     Note right of GCS: full.png + thumbnail.jpg
-    GCS-->>Service: {thumbnailUrl, fullSizeUrl}
+    GCS-->>UC: {thumbnailUrl, fullSizeUrl}
 
-    Service->>Firestore: save(GeneratedImage)
-    Service-->>-Caller: {id, thumbnailUrl, fullSizeUrl}
+    UC->>Firestore: save(GeneratedImage)
+    UC-->>Routes: {id, thumbnailUrl, fullSizeUrl}
+    Routes-->>-Caller: 200 OK
 ```
 
 ### Prompt Generation
@@ -83,42 +89,54 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant Caller as research-agent
-    participant Service as image-service
+    participant Routes as Routes
+    participant UC as GeneratePromptUseCase
     participant UserSvc as user-service
     participant LLM as LLM API
 
-    Caller->>+Service: POST /internal/images/prompts/generate
-    Service->>UserSvc: getApiKeys(userId)
-    UserSvc-->>Service: {openai, google} keys
+    Caller->>+Routes: POST /internal/images/prompts/generate
+    Routes->>UC: createGeneratePromptUseCase(deps, modelConfig)
+    UC->>UserSvc: getApiKeys(userId)
+    UserSvc-->>UC: {openai, google} keys
 
-    Service->>LLM: generateThumbnailPrompt(text)
-    LLM-->>Service: structured prompt JSON
+    UC->>LLM: generateThumbnailPrompt(text)
+    LLM-->>UC: structured prompt JSON
 
-    Service-->>-Caller: ThumbnailPrompt
+    UC-->>Routes: ThumbnailPrompt
+    Routes-->>-Caller: 200 OK
 ```
 
 ## Recent Changes
 
-| Commit     | Description                                                                  | Date       |
-| ---------- | ---------------------------------------------------------------------------- | ---------- |
-| `c4e3a13c` | Release v3.3.0                                                               | 2026-03-15 |
-| `93aeac4a` | Remove ZAI provider and GLM-4.7 models; ZAI pricing removed from services.ts | 2026-03-12 |
-| `e348b66e` | Fix silent dispatch failures and nested transaction (INT-810/811)            | 2026-03-10 |
-| `44ea683a` | Release v3.2.0 (package.json version bump only)                              | 2026-03-07 |
-| `99febe66` | Wire GitHub OAuth integration, update cross-service mocks                    | 2026-03-02 |
-| `7fbf7668` | Remove stale fields from test fixtures per code review                       | 2026-02-27 |
-| `8fb90669` | Align thumbnail output contract with consumed parser fields (INT-605)        | 2026-02-27 |
-| `b3f34d85` | Release v3.1.0                                                               | 2026-02-22 |
-| `c8a42105` | Release v3.0.0                                                               | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability                              | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration across all services                      | 2026-02-16 |
-| `e60eafc1` | Standardize API key secrets to APP naming convention                         | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash, add Gemini fallback                  | 2026-02-15 |
-| `d5fbb354` | Fix start:local to use tsx instead of node                                   | 2026-02-14 |
-| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local                       | 2026-02-14 |
-| `0f69a74b` | Add default model selector with platform fallback                            | 2026-02-09 |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)                            | 2026-02-01 |
-| `c3198407` | Fix all 132 response contract violations across codebase                     | 2026-01-30 |
+### v3.4.0 (since v3.3.0)
+
+The primary focus of this release was an architectural refactoring — extracting business logic from route handlers into a clean application layer with use cases and port/adapter patterns.
+
+| Commit      | Description                                                                      | Date       |
+| ----------- | -------------------------------------------------------------------------------- | ---------- |
+| `a1655a30`  | Split `services.ts` into `serviceContainer.ts` and `serviceFactory.ts` (INT-900) | 2026-03-16 |
+| `3e0be5c5`  | Move business logic from `internalRoutes.ts` to use-cases (INT-899)              | 2026-03-16 |
+| `9c80ff62`  | Create application-layer use-cases for image-service (INT-898)                   | 2026-03-16 |
+| `9fb00bef`  | Add v8 ignore blocks for env var fallback branches in `serviceFactory.ts`        | 2026-03-16 |
+| `00b44d31`  | Add v8 ignore coverage exemptions for env var fallbacks                          | 2026-03-16 |
+
+**Key architectural changes:**
+- New `application/` layer with three use cases: `generateImage`, `generatePrompt`, `deleteImage`
+- Routes are now thin handlers that delegate to use cases
+- `services.ts` split into `serviceContainer.ts` (DI interface + getServices/setServices) and `serviceFactory.ts` (initialization logic)
+- New `slugify` utility extracted for URL-safe filename generation
+
+### Previous Releases
+
+| Commit      | Description                                                                  | Date       |
+| ----------- | ---------------------------------------------------------------------------- | ---------- |
+| `c4e3a13c`  | Release v3.3.0                                                               | 2026-03-15 |
+| `93aeac4a`  | Remove ZAI provider and GLM-4.7 models; ZAI pricing removed from services.ts | 2026-03-12 |
+| `e348b66e`  | Fix silent dispatch failures and nested transaction (INT-810/811)            | 2026-03-10 |
+| `44ea683a`  | Release v3.2.0 (package.json version bump only)                              | 2026-03-07 |
+| `99febe66`  | Wire GitHub OAuth integration, update cross-service mocks                    | 2026-03-02 |
+| `7fbf7668`  | Remove stale fields from test fixtures per code review                       | 2026-02-27 |
+| `8fb90669`  | Align thumbnail output contract with consumed parser fields (INT-605)        | 2026-02-27 |
 
 ## API Endpoints
 
@@ -170,6 +188,20 @@ sequenceDiagram
 | `framing` | `string`       | LLM-generated framing description                                |
 | `realism` | `RealismStyle` | `"photorealistic"`, `"cinematic illustration"`, `"clean vector"` |
 | `people`  | `string`       | LLM-generated people description                                 |
+
+## Application Layer (Use Cases)
+
+### GeneratePromptUseCase
+
+Resolves user API keys via user-service, selects the appropriate prompt adapter based on model provider, and delegates to the `PromptGenerator` port. Distinguishes `RATE_LIMITED` errors (retryable) from `GENERATION_FAILED` (terminal).
+
+### GenerateImageUseCase
+
+Resolves API keys, generates the image via the `ImageGenerator` port, uploads to GCS via the `ImageStorage` port, persists metadata via `GeneratedImageRepository`. On save failure, performs cleanup by deleting the uploaded GCS object. Derives a slug from the title using `slugify()` for human-readable file paths.
+
+### DeleteImageUseCase
+
+Best-effort deletion — looks up the image record for its slug, deletes from GCS and Firestore independently, logs errors but always returns `{ deleted: true }`. Error type is `never`.
 
 ## Supported Models
 
@@ -253,7 +285,7 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 - With slug: `images/{id}-{slug}.png` / `images/{id}-{slug}-thumb.jpg`
 - Without slug: `images/{id}/full.png` / `images/{id}/thumbnail.jpg`
 
-**Deletion cascade**: When deleting an image, both GCS objects and Firestore record are removed. If GCS deletion fails, the Firestore record is still deleted (best-effort cleanup, no rollback).
+**Deletion cascade**: When deleting an image, both GCS objects and Firestore record are removed independently. If either operation fails, the error is logged but the endpoint still returns `{ deleted: true }` — best-effort cleanup with no rollback.
 
 **API key validation**: The service validates that the user has the required provider API key before generation. If the user lacks a personal key and no platform fallback key is configured, a 400 error with the specific provider name is returned.
 
@@ -277,6 +309,11 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 
 ```
 apps/image-service/src/
+  application/
+    generatePrompt.ts              # GeneratePromptUseCase — API key resolution + prompt generation
+    generateImage.ts               # GenerateImageUseCase — full pipeline: keys, generate, upload, save
+    deleteImage.ts                 # DeleteImageUseCase — best-effort GCS + Firestore cleanup
+    slugify.ts                     # URL-safe slug from title (max 50 chars, NFD normalization)
   domain/
     models/
       ImageGenerationModel.ts      # GPT Image 1, Gemini Flash Image configs
@@ -306,12 +343,22 @@ apps/image-service/src/
     schemas/
       imageSchemas.ts              # Image generation + delete request/response schemas
       promptSchemas.ts             # Prompt generation request/response schemas
-  services.ts                      # DI container with factory functions
+  serviceContainer.ts              # DI container interface (ServiceContainer type + get/set/reset)
+  serviceFactory.ts                # Service initialization with env vars and pricing context
+  services.ts                      # Re-exports from serviceContainer.ts and serviceFactory.ts
   index.ts                         # Entry point with env validation + pricing init
   server.ts                        # Fastify server setup with Swagger, CORS, health
 ```
 
 ## Migration Notes
+
+### v3.4.0: Application Layer Extraction (2026-03-16)
+
+- New `application/` directory with three use cases: `generatePrompt.ts`, `generateImage.ts`, `deleteImage.ts`
+- Business logic extracted from `internalRoutes.ts` — routes are now thin handlers delegating to use cases
+- `services.ts` split into `serviceContainer.ts` (interface + state management) and `serviceFactory.ts` (initialization)
+- `slugify.ts` extracted as a standalone utility from inline logic
+- v8 ignore blocks added to `serviceFactory.ts` for `process.env` fallback branches that cannot be controlled in tests
 
 ### v3.3.0: ZAI Provider Removal (2026-03-12)
 

@@ -2,9 +2,9 @@
 
 ## Overview
 
-API Docs Hub is a lightweight Fastify server that aggregates OpenAPI specifications from all 18 IntexuraOS services into a single Swagger UI instance. It runs on Cloud Run with zero minimum instances and fetches specs client-side from each service's `/openapi.json` endpoint. The service has no database, no domain logic, and no Pub/Sub integration — it exists solely to serve a configured Swagger UI.
+API Docs Hub is a lightweight Fastify server that aggregates OpenAPI specifications from all 20 IntexuraOS services into a single Swagger UI instance. It runs on Cloud Run with zero minimum instances and fetches specs client-side from each service's `/openapi.json` endpoint. The service has no database, no domain logic, and no Pub/Sub integration — it exists solely to serve a configured Swagger UI.
 
-**Versions:** Package `3.3.0` / OpenAPI spec `0.0.5`
+**Versions:** Package `3.4.0` / OpenAPI spec `0.0.5`
 
 ## Architecture
 
@@ -15,7 +15,7 @@ graph LR
 
     Browser -->|fetch /openapi.json| S1[User Service]
     Browser -->|fetch /openapi.json| S2[Research Agent]
-    Browser -->|fetch /openapi.json| SN[... 16 more services]
+    Browser -->|fetch /openapi.json| SN[... 18 more services]
 
     Hub -->|GET /health| Health[Config Validation]
 ```
@@ -40,18 +40,14 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                               | Date       |
-| ---------- | --------------------------------------------------------- | ---------- |
-| `c4e3a13c` | Release v3.3.0 — package version bump                     | 2026-03-15 |
-| `44ea683a` | Release v3.2.0 — package version bump                     | 2026-03-07 |
-| `ed9cdc25` | Add code-agent, linear-agent, web-agent to docs hub       | 2026-02-22 |
-| `b3f34d85` | Release v3.1.0                                            | 2026-02-22 |
-| `c8a42105` | Release v3.0.0                                            | 2026-02-19 |
-| `6063175b` | Dev-mode log formatting for PM2 readability               | 2026-02-16 |
-| `a52a6bbc` | Dash0 OpenTelemetry integration                           | 2026-02-16 |
-| `d5fbb354` | Fix start:local to use tsx instead of experimental flags  | 2026-02-14 |
-| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local    | 2026-02-14 |
-| `40d83a23` | Implement Intex Chat MVP — added Chat Agent spec          | 2026-02-01 |
+| Commit      | Description                                                        | Date       |
+| ----------- | ------------------------------------------------------------------ | ---------- |
+| `fff14842`  | Address Opus code review findings for shared catalog               | 2026-03-20 |
+| `0fc320f9`  | Improve cron tool selection authoring                              | 2026-03-20 |
+| `4c9e4003`  | Implement LLM-driven recurring schedule backend (cron-agent added) | 2026-03-18 |
+| `969f43fa`  | Merge PR #1232 — fix PR automation log race condition              | 2026-03-15 |
+
+**v3.4.0 summary:** The hardcoded 18-service configuration was replaced with a shared internal API catalog from `@intexuraos/common-core`. This refactoring added `@intexuraos/common-core` as a dependency, deleted ~70 lines of duplicated environment variable definitions from `config.ts`, and introduced `buildInternalApiOpenApiSources()` to construct the source list dynamically. Two new services were added to the catalog: Cron Agent and Hellscript Agent, bringing the total from 18 to 20. Tests were also added for the first time (`server.test.ts`).
 
 ## API Endpoints
 
@@ -79,11 +75,11 @@ interface OpenApiSource {
 interface Config {
   port: number;
   host: string;
-  openApiSources: OpenApiSource[];  // Exactly 18 sources required at startup
+  openApiSources: OpenApiSource[];  // Built from shared INTERNAL_API_SERVICE_CATALOG
 }
 ```
 
-## Aggregated Services (18)
+## Aggregated Services (20)
 
 | Display Name                     | Environment Variable                                      |
 | -------------------------------- | --------------------------------------------------------- |
@@ -96,15 +92,17 @@ interface Config {
 | Actions Agent API                | `INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL`                    |
 | Data Insights Agent API          | `INTEXURAOS_DATA_INSIGHTS_AGENT_OPENAPI_URL`              |
 | Image Service API                | `INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL`                    |
+| Application Settings API         | `INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL`             |
 | Notes Agent API                  | `INTEXURAOS_NOTES_AGENT_OPENAPI_URL`                      |
 | Todos Agent API                  | `INTEXURAOS_TODOS_AGENT_OPENAPI_URL`                      |
-| Application Settings API         | `INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL`             |
 | Bookmarks Agent API              | `INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL`                  |
 | Calendar Agent API               | `INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL`                   |
 | Chat Agent API                   | `INTEXURAOS_CHAT_AGENT_OPENAPI_URL`                       |
 | Code Agent API                   | `INTEXURAOS_CODE_AGENT_OPENAPI_URL`                       |
 | Linear Agent API                 | `INTEXURAOS_LINEAR_AGENT_OPENAPI_URL`                     |
 | Web Agent API                    | `INTEXURAOS_WEB_AGENT_OPENAPI_URL`                        |
+| Cron Agent API                   | `INTEXURAOS_CRON_AGENT_OPENAPI_URL`                       |
+| Hellscript Agent API             | `INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL`                 |
 
 ## Pub/Sub
 
@@ -118,6 +116,7 @@ None. This service does not publish or subscribe to any Pub/Sub topics.
 | ---------------------------- | --------------------------------------------------- |
 | `@fastify/swagger`           | OpenAPI 3.1.1 spec generation                       |
 | `@fastify/swagger-ui`        | Swagger UI with multi-spec `urls` support           |
+| `@intexuraos/common-core`    | Shared internal API service catalog                 |
 | `@intexuraos/common-http`    | `intexuraFastifyPlugin`, quiet health check logging |
 | `@intexuraos/http-server`    | `buildHealthResponse`, `HealthCheck` types          |
 | `@intexuraos/infra-sentry`   | Sentry error capture, `createLogStream()`           |
@@ -146,7 +145,7 @@ Health check routes are excluded from request logging via `registerQuietHealthCh
 
 ## Configuration
 
-### Required Environment Variables (18)
+### Required Environment Variables (20)
 
 | Variable                                              | Description                        |
 | ----------------------------------------------------- | ---------------------------------- |
@@ -168,6 +167,8 @@ Health check routes are excluded from request logging via `registerQuietHealthCh
 | `INTEXURAOS_CODE_AGENT_OPENAPI_URL`                   | Code Agent OpenAPI URL             |
 | `INTEXURAOS_LINEAR_AGENT_OPENAPI_URL`                 | Linear Agent OpenAPI URL           |
 | `INTEXURAOS_WEB_AGENT_OPENAPI_URL`                    | Web Agent OpenAPI URL              |
+| `INTEXURAOS_CRON_AGENT_OPENAPI_URL`                   | Cron Agent OpenAPI URL             |
+| `INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL`             | Hellscript Agent OpenAPI URL       |
 
 ### Optional Environment Variables
 
@@ -202,22 +203,24 @@ module "api_docs_hub" {
   # OpenAPI URLs reference other module outputs
   env_vars = {
     INTEXURAOS_USER_SERVICE_OPENAPI_URL = "${module.user_service.service_url}/openapi.json"
-    # ... 17 more service URLs
+    # ... 19 more service URLs
   }
 
   depends_on = [module.user_service, module.notion_service, ...]
 }
 ```
 
-The Terraform module uses `depends_on` for all 18 upstream services to ensure their Cloud Run URLs are available before the hub deploys.
+The Terraform module uses `depends_on` for all 20 upstream services to ensure their Cloud Run URLs are available before the hub deploys.
 
 ## File Structure
 
 ```
 apps/api-docs-hub/src/
-  config.ts         # OpenApiSource[] config + env var validation
+  config.ts         # OpenApiSource[] config via shared catalog + env var validation
   server.ts         # Fastify server, Swagger UI registration, health endpoint
   index.ts          # Entry point: Sentry init, loadConfig(), listen
+  __tests__/
+    server.test.ts  # Health check and Swagger UI integration tests
 ```
 
-This is one of the simplest services in the monorepo — three source files with no domain logic.
+This is one of the simplest services in the monorepo — three source files with no domain logic, plus a test file.
