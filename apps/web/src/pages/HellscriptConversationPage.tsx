@@ -111,11 +111,6 @@ export function HellscriptConversationPage(): React.JSX.Element {
                   </div>
                 </div>
               ) : null}
-              {lastAction === 'update_draft_failed' ? (
-                <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
-                  Draft generation failed. Please try again.
-                </div>
-              ) : null}
               {error !== null ? (
                 <p className="mt-2 text-xs text-red-600 dark:text-red-400">{error}</p>
               ) : null}
