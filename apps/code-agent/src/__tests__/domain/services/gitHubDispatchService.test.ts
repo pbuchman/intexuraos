@@ -198,6 +198,7 @@ describe('GitHubDispatchService', () => {
         dispatched: false,
         taskId: 'task-123',
         error: 'Worker timeout',
+        errorCode: 'worker_error',
       });
       expect(vi.mocked(deps.gitHubPRClient.postPRComment)).not.toHaveBeenCalled();
     });
@@ -271,6 +272,7 @@ describe('GitHubDispatchService', () => {
         dispatched: false,
         taskId: 'task-123',
         error: 'Worker timeout',
+        errorCode: 'worker_error',
       });
       expect(mockedCreateTaskForPR).not.toHaveBeenCalled();
     });
@@ -782,28 +784,36 @@ describe('GitHubDispatchService', () => {
   });
 
   describe('isStaleTaskError', () => {
-    it('should return true for "Task not found" error', () => {
-      expect(isStaleTaskError('Task not found')).toBe(true);
+    it('should return true for task_not_found error code', () => {
+      expect(isStaleTaskError({ success: false, dispatched: false, errorCode: 'task_not_found', error: 'Task X not found' })).toBe(true);
     });
 
-    it('should return true for "HTTP 404" error', () => {
-      expect(isStaleTaskError('Worker returned HTTP 404')).toBe(true);
+    it('should return true for task_not_found regardless of message content', () => {
+      expect(isStaleTaskError({ success: false, dispatched: false, errorCode: 'task_not_found', error: 'anything' })).toBe(true);
     });
 
-    it('should return true for case-sensitive "not found" in error message', () => {
-      expect(isStaleTaskError('Task stale-task not found')).toBe(true);
+    it('should return true for worker_error with "Task not found" message', () => {
+      expect(isStaleTaskError({ success: false, dispatched: false, errorCode: 'worker_error', error: 'Task not found' })).toBe(true);
     });
 
-    it('should return false for undefined error', () => {
-      expect(isStaleTaskError(undefined)).toBe(false);
+    it('should return true for worker_error with "HTTP 404" message', () => {
+      expect(isStaleTaskError({ success: false, dispatched: false, errorCode: 'worker_error', error: 'Worker returned HTTP 404' })).toBe(true);
     });
 
-    it('should return false for unrelated error messages', () => {
-      expect(isStaleTaskError('Worker timeout')).toBe(false);
+    it('should return false for worker_error with unrelated message', () => {
+      expect(isStaleTaskError({ success: false, dispatched: false, errorCode: 'worker_error', error: 'Worker timeout' })).toBe(false);
     });
 
-    it('should return false for empty string', () => {
-      expect(isStaleTaskError('')).toBe(false);
+    it('should return false for other error codes', () => {
+      expect(isStaleTaskError({ success: false, dispatched: false, errorCode: 'internal_error', error: 'not found' })).toBe(false);
+    });
+
+    it('should return false when no error code is set', () => {
+      expect(isStaleTaskError({ success: false, dispatched: false, error: 'Task not found' })).toBe(false);
+    });
+
+    it('should return false for successful results', () => {
+      expect(isStaleTaskError({ success: true, dispatched: true })).toBe(false);
     });
   });
 });

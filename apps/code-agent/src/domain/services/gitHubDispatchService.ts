@@ -34,6 +34,7 @@ export interface WebhookDispatchResult {
   dispatched: boolean;
   taskId?: string;
   error?: string;
+  errorCode?: string;
 }
 
 export interface WebhookDispatchService {
@@ -107,7 +108,7 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
         const existingResult = await handleExistingTask(deps, event, task, logger);
 
         // If the existing task is stale (worker says "not found"), fall back to creating a new task
-        if (!existingResult.success && isStaleTaskError(existingResult.error)) {
+        if (!existingResult.success && isStaleTaskError(existingResult)) {
           logger.info(
             { staleTaskId: task.id, prNumber: event.pullRequestNumber },
             'Existing task is stale on worker, falling back to new task creation'
@@ -132,10 +133,16 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
  * Detect when a dispatch failure indicates the task no longer exists on the worker.
  * This happens when a task completed/crashed and was cleaned up, but Firestore
  * still has a record — the worker returns HTTP 404 "Task not found".
+ *
+ * Checks the structured error code first (preferred), then falls back to message
+ * matching for worker_error responses where the code is generic.
  */
-export function isStaleTaskError(error: string | undefined): boolean {
-  if (error === undefined) return false;
-  return error.includes('not found') || error.includes('HTTP 404');
+export function isStaleTaskError(result: WebhookDispatchResult): boolean {
+  if (result.errorCode === 'task_not_found') return true;
+  if (result.errorCode === 'worker_error' && result.error !== undefined) {
+    return result.error.includes('Task not found') || result.error.includes('HTTP 404');
+  }
+  return false;
 }
 
 async function handleNewTask(
@@ -271,7 +278,7 @@ async function handleExistingTask(
       { taskId: task.id, error: sendResult.error },
       'Failed to send message to task'
     );
-    return { success: false, dispatched: false, taskId: task.id, error: sendResult.error.message };
+    return { success: false, dispatched: false, taskId: task.id, error: sendResult.error.message, errorCode: sendResult.error.code };
   }
 
   deps.automationLog.record(
