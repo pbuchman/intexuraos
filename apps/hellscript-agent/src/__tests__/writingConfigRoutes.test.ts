@@ -119,7 +119,7 @@ describe('writingConfigRoutes', () => {
       const config = await ctx.writingConfigRepository.getStyleConfig('test-user-123');
       expect(config.ok).toBe(true);
       if (config.ok && config.value !== null) {
-        expect(config.value.threads).toBe('&lt;script&gt;alert("xss")&lt;/script&gt;');
+        expect(config.value.threads).toBe('<script>alert("xss")</script>');
       }
     });
 
@@ -337,7 +337,7 @@ describe('writingConfigRoutes', () => {
 
       expect(response.statusCode).toBe(201);
       const body = response.json();
-      expect(body.data.text).toBe('&lt;script&gt;bad&lt;/script&gt;');
+      expect(body.data.text).toBe('<script>bad</script>');
     });
 
     it('returns 500 when repository fails', async () => {

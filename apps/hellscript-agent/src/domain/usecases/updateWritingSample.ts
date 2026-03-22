@@ -1,10 +1,17 @@
 import type { Result } from '@intexuraos/common-core';
 import type { WritingConfigRepository } from '../ports/writingConfigRepository.js';
 import type { WritingCategory } from '../models/writingCategory.js';
-import { escapeXmlTags } from '../services/sanitize.js';
 
 export interface UpdateWritingSampleDeps {
   writingConfigRepository: WritingConfigRepository;
+}
+
+export class SampleNotFoundError extends Error {
+  readonly code = 'SAMPLE_NOT_FOUND' as const;
+  constructor() {
+    super('Sample not found');
+    this.name = 'SampleNotFoundError';
+  }
 }
 
 export async function updateWritingSample(
@@ -15,13 +22,17 @@ export async function updateWritingSample(
   title: string,
   text: string
 ): Promise<Result<void>> {
-  const sanitizedTitle = escapeXmlTags(title);
-  const sanitizedText = escapeXmlTags(text);
-  return await deps.writingConfigRepository.updateSample(
+  const result = await deps.writingConfigRepository.updateSample(
     userId,
     sampleId,
     category,
-    sanitizedTitle,
-    sanitizedText
+    title,
+    text
   );
+
+  if (!result.ok && result.error.message === 'Sample not found') {
+    return { ok: false, error: new SampleNotFoundError() };
+  }
+
+  return result;
 }

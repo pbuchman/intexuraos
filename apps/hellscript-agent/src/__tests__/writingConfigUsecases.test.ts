@@ -56,11 +56,11 @@ describe('writing config use cases', () => {
       }
     });
 
-    it('escapes XML tags in text', async () => {
+    it('stores text verbatim without escaping', async () => {
       await updateStyleInstructions(deps(), 'user-1', 'threads', '<b>bold</b>');
       const config = await repo.getStyleConfig('user-1');
       if (config.ok && config.value !== null) {
-        expect(config.value.threads).toBe('&lt;b&gt;bold&lt;/b&gt;');
+        expect(config.value.threads).toBe('<b>bold</b>');
       }
     });
 
@@ -157,14 +157,14 @@ describe('writing config use cases', () => {
       expect(result.ok).toBe(true);
     });
 
-    it('escapes XML tags in title and text', async () => {
+    it('stores text verbatim without escaping', async () => {
       const result = await createWritingSample(
         deps(), 'user-1', 'general', '<b>Title</b>', '<script>bad</script>'
       );
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.title).toBe('&lt;b&gt;Title&lt;/b&gt;');
-        expect(result.value.text).toBe('&lt;script&gt;bad&lt;/script&gt;');
+        expect(result.value.title).toBe('<b>Title</b>');
+        expect(result.value.text).toBe('<script>bad</script>');
       }
     });
 
@@ -219,7 +219,7 @@ describe('writing config use cases', () => {
       expect(result.ok).toBe(false);
     });
 
-    it('escapes XML tags in title and text', async () => {
+    it('stores text verbatim without escaping', async () => {
       const created = await repo.createSample('user-1', {
         category: 'general',
         title: 'Old',
@@ -234,8 +234,8 @@ describe('writing config use cases', () => {
 
       const sample = await repo.getSample('user-1', created.value.id);
       if (sample.ok && sample.value !== null) {
-        expect(sample.value.title).toBe('&lt;em&gt;Bold&lt;/em&gt;');
-        expect(sample.value.text).toBe('&lt;div&gt;Content&lt;/div&gt;');
+        expect(sample.value.title).toBe('<em>Bold</em>');
+        expect(sample.value.text).toBe('<div>Content</div>');
       }
     });
   });
