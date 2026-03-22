@@ -2,7 +2,7 @@
 
 ## Overview
 
-Linear Agent provides bidirectional integration between IntexuraOS and Linear project management. It enables natural language issue creation through voice messages with AI-powered extraction, real-time webhook synchronization with multi-user fan-out, full issue sync, issue validation, AI title generation, and programmatic issue management for code agents. The service runs on Cloud Run with auto-scaling and uses the `@linear/sdk` for GraphQL API communication. The dashboard reads from local Firestore (populated by webhook sync) for fast, offline-capable issue listing.
+Linear Agent provides bidirectional integration between IntexuraOS and Linear project management. It enables natural language issue creation through voice messages with AI-powered extraction, real-time webhook synchronization with multi-user fan-out, full issue sync, issue validation, AI title generation, cross-service context proxying, and programmatic issue management for code agents. The service runs on Cloud Run with auto-scaling and uses the `@linear/sdk` for GraphQL API communication. The dashboard reads from local Firestore (populated by webhook sync) for fast, offline-capable issue listing.
 
 ## Architecture
 
@@ -34,12 +34,16 @@ graph TB
             UC6[generateIssueTitle]
             UC7[syncCommentFromWebhook]
             UC8[triggerCodeTaskFromAssignment]
+            UC9[processWebhook]
+            UC10[buildIssueTree]
             IM[issueMapper]
             M[Models + WebhookTypes]
         end
 
         subgraph "Infrastructure"
             LAC[Linear API Client]
+            LM[Linear Mappers]
+            RC[Request Cache]
             LES[LLM Extraction Service]
             WV[Webhook Validation]
             CAC[Code Agent HTTP Client]
@@ -73,9 +77,10 @@ graph TB
     IR --> UC4
     IIR --> LAC
     WHR --> WV
-    WHR --> UC3
-    WHR --> UC7
-    WHR --> UC8
+    WHR --> UC9
+    UC9 --> UC3
+    UC9 --> UC7
+    UC9 --> UC8
     UC8 --> CAC
     CAC --> CA
     UC1 --> LAC
@@ -94,6 +99,8 @@ graph TB
     UC5 --> LAC
     UC5 --> CR
     UC6 --> LES
+    LAC --> LM
+    LAC --> RC
     LAC --> Linear
     LES --> GEM
     CR --> FS
@@ -183,37 +190,43 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                                 | Date       |
-| ---------- | --------------------------------------------------------------------------- | ---------- |
-| `42444307` | Add `already_completed` execution outcome label (INT-773)                   | 2026-03-14 |
-| `b8bba98f` | Replace sequential 2N Firestore queries with batched reads in display-batch | 2026-03-13 |
-| `e690e9d9` | Replace v8-ignore blocks with real tests in linear-agent (INT-792)          | 2026-03-13 |
-| `93aeac4a` | Remove ZAI provider and GLM-4.7 models, finalize GLM-5                      | 2026-03-12 |
-| `948fbab9` | Gate shouldTriggerCodeTask on planning-task or code-task label              | 2026-03-09 |
-| `84005b20` | Hydrate code task Linear data live                                          | 2026-03-05 |
-| `d81fc1a3` | Add mandatory Linear issue comments reading to all agent prompts (INT-715)  | 2026-03-04 |
-| `cccafc85` | Multi-user webhook fan-out, comment routing, internal route scoping         | 2026-03-03 |
-| `7f19646f` | Prevent cross-user data overwrite during Linear sync                        | 2026-03-02 |
+| Commit      | Description                                                                   | Date       |
+| ----------- | ----------------------------------------------------------------------------- | ---------- |
+| `5a00c755b` | Address PR review comments (INT-1040, context endpoint)                       | 2026-03-22 |
+| `410915d09` | Remove orchestrator direct Linear dependency via code-agent proxy (INT-1040)  | 2026-03-22 |
+| `86d97f1ac` | Decompose listIssues.ts use-case into domain functions (INT-906)              | 2026-03-19 |
+| `4249c15e9` | Decompose processLinearAction.ts orchestration (INT-907)                      | 2026-03-19 |
+| `e2393b363` | Extract parsing/validation from linearActionExtractionService (INT-905)       | 2026-03-19 |
+| `d2e82eb37` | Remove PENDING v8-ignores with full test coverage (INT-990)                   | 2026-03-19 |
+| `b47d78e66` | Split linearApiClient into client + mappers (INT-904)                         | 2026-03-18 |
+| `8ad2971c4` | Extract webhook handler into use-case (INT-903)                               | 2026-03-17 |
+| `8a3ee273b` | Extract repository calls from linearRoutes to use-cases (INT-902)             | 2026-03-16 |
+| `34b59c697` | Extract domain logic from internalIssuesRoutes (INT-901)                      | 2026-03-16 |
+| `cc70d33c7` | Fix missing parentId in mapSingleIssueWithTeam (INT-953)                      | 2026-03-17 |
 
-### Unified Integration for Chinese LLMs via Alibaba Cloud Model Studio (93aeac4a)
+### Orchestrator Linear Proxy (INT-1040)
 
-Removed GLM-4.7 and GLM-4.7 Flash from the required models list as part of the platform-wide migration from ZAI to Alibaba Cloud Model Studio (DashScope). The linear-agent itself does not directly reference providers — it uses `userServiceClient.getLlmClient()` which abstracts provider selection — so the impact is limited to the startup model validation. Gemini 2.5 Flash and Gemini 2.5 Pro remain as the required models.
+New `GET /internal/linear/issues/:identifier/context` endpoint returns an issue's description and comments directly from local Firestore — no user credentials required. The orchestrator uses this during deep validation to read full issue context without calling the Linear API or needing the user's API key. Comments are filtered (empty bodies removed), sorted newest-first, and capped at 100. This endpoint does not scope by userId since it serves service-to-service calls where user context is unavailable.
 
-### Planning-Task Label Gating (948fbab9)
+### Decomposition Sprint (INT-901 through INT-907)
 
-`shouldTriggerCodeTask` now requires the issue to have either a `planning-task` or `code-task` label before auto-triggering a code task on first assignment. Previously, any first assignment in `backlog` or `unstarted` state would trigger. This prevents accidental code task creation for issues that are not intended for automated processing.
+A focused refactoring sprint decomposed six large modules into smaller, focused units:
 
-### v8 Ignore Test Replacement (INT-792)
+- **INT-901**: Domain logic extracted from `internalIssuesRoutes.ts` into dedicated functions
+- **INT-902**: Repository calls extracted from `linearRoutes.ts` into use-cases (`retryFailedIssue`, `getIssueComments`, `getIssueDetail`)
+- **INT-903**: Webhook handler extracted from route file into `processWebhook` use-case
+- **INT-904**: `linearApiClient.ts` split into `linearApiClient.ts` (client), `linearMappers.ts` (data mapping), and `requestCache.ts` (dedup/caching)
+- **INT-905**: Parsing and validation logic extracted from `linearActionExtractionService` into domain `extractionParser.ts`
+- **INT-906**: `listIssues.ts` decomposed into `issueTreeBuilder.ts`, `issueGrouper.ts`, and `syncedIssueMapper.ts`
+- **INT-907**: `processLinearAction.ts` decomposed with `checkIdempotency.ts` and `descriptionBuilder.ts` extracted
 
-Replaced v8 ignore blocks with real tests across the codebase. Coverage exemption directives dropped from 92 (across 12 files) to 56 (across 8 files). Key areas covered by new tests: `handleLinearError` error paths, `codeAgentHttpClient` error handling, webhook validation edge cases, and internal route error branches.
+### Resolved v8 Ignore Annotations (INT-990)
 
-### Display-Batch Batched Reads (b8bba98f)
+Removed PENDING v8 ignore annotations that had been flagged for replacement with real tests. All removed annotations now have full test coverage.
 
-The `POST /internal/linear/issues/display-batch` handler previously executed 2N sequential Firestore queries (one issue read + one comment list per identifier). It now uses a single batched `getCommentSummaries` call that reads comment counts and last-comment timestamps in one query, reducing Firestore round trips.
+### Missing parentId Fix (INT-953)
 
-### Already-Completed Execution Outcome (INT-773)
-
-Added `done` to the `UpdateStateBody` state union and `Done` to the state name mapping. This enables the code-agent enforcement pipeline to move issues to Done when the work is already completed or merged, completing the `already_completed` outcome flow.
+Fixed `mapSingleIssueWithTeam` to populate the `parentId` field, preventing false subtask rejection during issue validation.
 
 ## API Endpoints
 
@@ -244,20 +257,21 @@ Added `done` to the `UpdateStateBody` state union and `Done` to the state name m
 
 ### Internal Endpoints
 
-| Method | Path                                           | Purpose                             | Auth              |
-| ------ | ---------------------------------------------- | ----------------------------------- | ----------------- |
-| POST   | `/internal/linear/process-action`              | Process action via AI extraction    | X-Internal        |
-| GET    | `/internal/linear/issues/:identifier/validate` | Validate issue identifier           | X-Internal        |
-| POST   | `/internal/linear/issues/generate-title`       | Generate title from description     | X-Internal        |
-| POST   | `/internal/linear/sync`                        | Full sync for a user                | X-Internal        |
-| POST   | `/internal/linear/sync-all`                    | Full sync for all users (Scheduler) | X-Internal / OIDC |
-| POST   | `/internal/issues`                             | Create a Linear issue               | X-Internal        |
-| PATCH  | `/internal/issues/:issueId/state`              | Update issue workflow state         | X-Internal        |
-| POST   | `/internal/linear/issues/:issueId/comments`    | Add comment to issue                | X-Internal        |
-| PATCH  | `/internal/linear/issues/:issueId/metadata`    | Update assignee/labels by name      | X-Internal        |
-| POST   | `/internal/linear/issues/display-batch`        | Get multiple issues for display     | X-Internal        |
-| GET    | `/internal/linear/issues/:identifier`          | Get issue with comment data         | X-Internal        |
-| GET    | `/internal/issues/:issueId/tree`               | Get issue + recursive descendants   | X-Internal        |
+| Method | Path                                           | Purpose                                | Auth              |
+| ------ | ---------------------------------------------- | -------------------------------------- | ----------------- |
+| POST   | `/internal/linear/process-action`              | Process action via AI extraction       | X-Internal        |
+| GET    | `/internal/linear/issues/:identifier/validate` | Validate issue identifier              | X-Internal        |
+| POST   | `/internal/linear/issues/generate-title`       | Generate title from description        | X-Internal        |
+| POST   | `/internal/linear/sync`                        | Full sync for a user                   | X-Internal        |
+| POST   | `/internal/linear/sync-all`                    | Full sync for all users (Scheduler)    | X-Internal / OIDC |
+| POST   | `/internal/issues`                             | Create a Linear issue                  | X-Internal        |
+| PATCH  | `/internal/issues/:issueId/state`              | Update issue workflow state            | X-Internal        |
+| POST   | `/internal/linear/issues/:issueId/comments`    | Add comment to issue                   | X-Internal        |
+| PATCH  | `/internal/linear/issues/:issueId/metadata`    | Update assignee/labels by name         | X-Internal        |
+| POST   | `/internal/linear/issues/display-batch`        | Get multiple issues for display        | X-Internal        |
+| GET    | `/internal/linear/issues/:identifier`          | Get issue with comment data            | X-Internal        |
+| GET    | `/internal/linear/issues/:identifier/context`  | Get issue description + comments       | X-Internal        |
+| GET    | `/internal/issues/:issueId/tree`               | Get issue + recursive descendants      | X-Internal        |
 
 ### GET /linear/issues Response
 
@@ -275,6 +289,20 @@ interface ListIssuesResponse {
   teamName: string;
 }
 ```
+
+### GET /internal/linear/issues/:identifier/context Response
+
+```typescript
+interface IssueContextResponse {
+  description: string | null;
+  comments: {
+    body: string;
+    createdAt: string;
+  }[];  // Newest-first, capped at 100, empty bodies filtered
+}
+```
+
+No userId scoping — service-to-service endpoint used by orchestrator during deep validation.
 
 ### PATCH /internal/linear/issues/:issueId/metadata Request
 
@@ -430,11 +458,15 @@ type DashboardColumn = 'todo' | 'backlog' | 'in_progress' | 'in_review' | 'to_te
 
 ### processLinearAction
 
-Extracts structured issue data from natural language via LLM, creates the issue in Linear, and tracks the action for idempotency. Saves failed extractions for manual review. Checks `processedActionRepository` first — duplicate submissions return the existing result.
+Extracts structured issue data from natural language via LLM, creates the issue in Linear, and tracks the action for idempotency. Saves failed extractions for manual review. Checks `processedActionRepository` first — duplicate submissions return the existing result. Decomposed into focused modules: `checkIdempotency.ts` handles dedup, `descriptionBuilder.ts` assembles the issue body.
 
 ### listIssues
 
-Reads all synced issues from Firestore, builds parent-child relationships in memory, and groups issues by dashboard column using `mapStateToDashboardColumn`. Returns `GroupedIssues` with `archive` for issues older than 7 days. Does **not** call the Linear API.
+Reads all synced issues from Firestore, builds parent-child relationships in memory via `issueTreeBuilder.ts`, and groups issues by dashboard column using `issueGrouper.ts`. The `syncedIssueMapper.ts` handles conversion between SyncedLinearIssue and LinearIssue. Returns `GroupedIssues` with `archive` for issues older than 7 days. Does **not** call the Linear API.
+
+### processWebhook
+
+Top-level orchestrator for all webhook events. Validates the HMAC-SHA256 signature, determines event type (issue or comment), performs multi-user fan-out, and delegates to `syncSingleIssue`, `syncCommentFromWebhook`, or `triggerCodeTaskFromAssignment` as appropriate. Extracted from the webhook route handler into a dedicated use-case (INT-903).
 
 ### generateIssueTitle
 
@@ -474,7 +506,7 @@ Triggered by webhook events when an issue is assigned for the first time. Uses `
 
 ### LLM Extraction Service
 
-Uses the user's configured LLM provider (typically Gemini 2.5 Flash) to parse natural language into structured issue data. Provider selection is abstracted via `userServiceClient.getLlmClient()` — the service does not reference specific providers directly.
+Uses the user's configured LLM provider (typically Gemini 2.5 Flash) to parse natural language into structured issue data. Provider selection is abstracted via `userServiceClient.getLlmClient()` — the service does not reference specific providers directly. Parsing and validation logic lives in domain `extractionParser.ts`, separated from the LLM call infrastructure.
 
 **Prompt Strategy:**
 
@@ -520,7 +552,15 @@ Linear webhooks are verified using HMAC-SHA256 signatures. The raw request body 
 
 Both include safe parsing of state types (defaults to `'unstarted'`) and priority values (defaults to `0`).
 
-## Linear API Client Optimizations
+## Linear API Client
+
+### Architecture (Post INT-904 Split)
+
+The client is split into three focused modules:
+
+- **`linearApiClient.ts`** (~361 lines) — SDK client operations, client instance caching (5-minute TTL)
+- **`linearMappers.ts`** (~241 lines) — Data mapping functions (`mapIssueStateType`, `mapTeam`, `mapLinearError`, `filterIssuesByCompletionDate`, `mapIssuesWithBatchedStates`)
+- **`requestCache.ts`** (~88 lines) — In-flight request deduplication (10-second cache, key format: `{operation}:{apiKeyPrefix}:{params}`)
 
 ### Client Caching
 
@@ -601,7 +641,7 @@ Both include safe parsing of state types (defaults to `'unstarted'`) and priorit
 - Dashboard (`GET /linear/issues`) reads from Firestore; run a full sync if data seems stale
 - `/internal/linear/sync-all` accepts both OIDC Bearer tokens (Cloud Scheduler) and `X-Internal-Auth`
 - Labels are full objects `{ id, name, color }` internally; `validateIssue` HTTP response maps them to `string[]` (names only)
-- Auto-trigger code task fires on first assignment (null → non-null assignee) while state is `backlog` or `unstarted` AND issue has a `planning-task` or `code-task` label
+- Auto-trigger code task fires on first assignment (null -> non-null assignee) while state is `backlog` or `unstarted` AND issue has a `planning-task` or `code-task` label
 - Auto-trigger selects prompt based on label: execution prompt (code-task) or enrichment prompt (planning-task)
 - Webhook fan-out syncs ALL connected users per team — `Promise.allSettled` ensures one user's failure does not block others
 - Comment webhooks determine teamId from the synced issue; issues without a teamId (synced before teamId was added) skip signature validation
@@ -610,6 +650,8 @@ Both include safe parsing of state types (defaults to `'unstarted'`) and priorit
 - The `/internal/linear/issues/:issueId/metadata` endpoint resolves label names to IDs using `listIssueLabels` — unknown label names are silently dropped
 - Both `ASSIGNMENT_PROMPT` and `EXECUTION_PROMPT` in `triggerCodeTaskFromAssignment` instruct the code agent to read all Linear issue comments newest-first before starting work (INT-715)
 - `POST /internal/issues` accepts a `labels` field for future use but does not forward it to Linear on creation
+- `GET /internal/linear/issues/:identifier/context` has no userId scoping — it is designed for service-to-service calls where user context is unavailable (e.g., orchestrator deep validation)
+- The context endpoint caps comments at 100 and filters empty/whitespace bodies to match the old Linear GraphQL `first:100` behavior
 
 ## File Structure
 
@@ -621,17 +663,32 @@ apps/linear-agent/
 │   │   ├── errors.ts             # LinearError definitions
 │   │   ├── ports.ts              # Repository/client interfaces
 │   │   ├── webhookTypes.ts       # LinearWebhookEvent, LinearCommentWebhookEvent
+│   │   ├── webhookTypeGuards.ts  # Type guards for webhook payloads
 │   │   ├── issueMapper.ts        # mapWebhookToSyncedIssue, mapApiIssueToSyncedIssue
+│   │   ├── issueTreeBuilder.ts   # buildIssueHierarchy
+│   │   ├── issueGrouper.ts       # groupIssuesByDashboardColumn
+│   │   ├── issueDisplayMapper.ts # buildIssueDisplayResponse, toCommentSummary
+│   │   ├── syncedIssueMapper.ts  # syncedToLinearIssue conversion
+│   │   ├── stateUtils.ts         # STATE_NAME_MAP, findStateId
+│   │   ├── extractionParser.ts   # parseExtractionResponse
+│   │   ├── descriptionBuilder.ts # buildIssueDescription
 │   │   ├── index.ts              # Domain barrel exports
 │   │   └── useCases/
 │   │       ├── processLinearAction.ts           # AI extraction + issue creation
+│   │       ├── processWebhook.ts                # Top-level webhook orchestrator
 │   │       ├── listIssues.ts                    # Firestore-based dashboard grouping
 │   │       ├── generateIssueTitle.ts            # LLM title generation
 │   │       ├── validateIssue.ts                 # Issue identifier validation
 │   │       ├── syncSingleIssueUseCase.ts        # Webhook event processing
 │   │       ├── syncCommentFromWebhook.ts        # Comment webhook processing
-│   │       ├── triggerCodeTaskFromAssignment.ts # Auto-trigger on assignment
-│   │       └── fullSyncUseCase.ts               # Full issue reconciliation
+│   │       ├── triggerCodeTaskFromAssignment.ts  # Auto-trigger on assignment
+│   │       ├── fullSyncUseCase.ts               # Full issue reconciliation
+│   │       ├── checkIdempotency.ts              # Dedup check for process-action
+│   │       ├── buildIssueTree.ts                # Issue tree BFS traversal
+│   │       ├── resolveLabels.ts                 # Label name-to-ID resolution
+│   │       ├── retryFailedIssue.ts              # Retry failed extraction
+│   │       ├── getIssueComments.ts              # Paginated comment retrieval
+│   │       └── getIssueDetail.ts                # Single issue with comment metadata
 │   ├── infra/
 │   │   ├── firestore/
 │   │   │   ├── linearConnectionRepository.ts
@@ -640,7 +697,9 @@ apps/linear-agent/
 │   │   │   ├── linearIssueRepository.ts   # Composite key: userId_issueId
 │   │   │   └── linearCommentRepository.ts
 │   │   ├── linear/
-│   │   │   └── linearApiClient.ts         # SDK client with caching + dedup
+│   │   │   ├── linearApiClient.ts         # SDK client with caching
+│   │   │   ├── linearMappers.ts           # Data mapping functions
+│   │   │   └── requestCache.ts            # In-flight request dedup
 │   │   ├── http/
 │   │   │   └── codeAgentHttpClient.ts     # Code agent HTTP client (30s timeout)
 │   │   ├── linearWebhookValidation.ts     # HMAC-SHA256 validation
@@ -649,7 +708,7 @@ apps/linear-agent/
 │   ├── routes/
 │   │   ├── linearRoutes.ts          # Public API (14 endpoints)
 │   │   ├── internalRoutes.ts        # Internal: process-action, validate, title, sync
-│   │   ├── internalIssuesRoutes.ts  # Internal: issue CRUD, comments, metadata, tree, batch
+│   │   ├── internalIssuesRoutes.ts  # Internal: issue CRUD, comments, metadata, tree, batch, context
 │   │   └── linearWebhookRoutes.ts   # Webhook receiver with fan-out
 │   ├── services.ts                  # DI container (9 services)
 │   ├── server.ts                    # Fastify setup with raw body parser
@@ -661,4 +720,4 @@ apps/linear-agent/
 
 ---
 
-**Last updated:** 2026-03-15
+**Last updated:** 2026-03-22

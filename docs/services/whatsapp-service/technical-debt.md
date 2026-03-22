@@ -1,7 +1,7 @@
 # WhatsApp Service — Technical Debt
 
-**Last Updated:** 2026-03-15
-**Analysis Run:** v3.3.0 full documentation refresh
+**Last Updated:** 2026-03-22
+**Analysis Run:** v3.4.0 documentation refresh
 
 ---
 
@@ -9,11 +9,11 @@
 
 | Category            | Count | Severity |
 | ------------------- | ----- | -------- |
-| TODO/FIXME Comments | 1     | Low      |
+| TODO/FIXME Comments | 0     | —        |
 | Test Coverage Gaps  | 0     | —        |
 | TypeScript Issues   | 0     | —        |
 | SRP Violations      | 1     | Medium   |
-| Code Duplicates     | 0     | —        |
+| Code Duplicates     | 1     | Low      |
 | Deprecations        | 0     | —        |
 | **Total**           | **2** | —        |
 
@@ -41,15 +41,9 @@ Features that are planned but not yet implemented:
 
 ## Code Smells
 
-### Medium Priority
+### None Significant
 
-| File                      | Issue                                      | Impact                                          |
-| ------------------------- | ------------------------------------------ | ----------------------------------------------- |
-| `routes/webhookRoutes.ts` | processWebhookEvent accepts FastifyRequest | Coupling between Pub/Sub handler and HTTP layer |
-
-**Details:** The `processWebhookEvent` function is exported for use by the Pub/Sub endpoint but still accepts `FastifyRequest` instead of a plain payload object. This creates unnecessary coupling and makes unit testing harder. There is also a TODO comment in the code acknowledging this issue.
-
-**Suggested Fix:** Refactor to accept a typed payload object directly, with the route handler extracting the necessary fields from the request.
+No silent catch blocks, no console.log usage, no module-level state issues. The previous medium-priority code smell (processWebhookEvent coupling to FastifyRequest) was resolved in v3.4.0 by extracting `ProcessWebhookEventUseCase` into the domain layer (INT-880).
 
 ---
 
@@ -61,8 +55,8 @@ All endpoints and use cases have test coverage. The service maintains >95% cover
 
 ### Coverage Areas
 
-- Routes: Fully tested (webhook, message, mapping, pubsub, verification)
-- Use cases: All covered (processAudioMessage, processImageMessage, handleTranscriptionCompleted, extractLinkPreviews)
+- Routes: Fully tested (webhook, message, message media, mapping, pubsub, verification)
+- Use cases: All covered (ProcessWebhookEventUseCase, processAudioMessage, processImageMessage, handleTranscriptionCompleted, extractLinkPreviews)
 - Infrastructure: Tested via routes and dedicated infra tests
 - Approval reply handling, OutboundMessage tracking
 - Phone verification, interactive buttons
@@ -76,7 +70,8 @@ Located in `apps/whatsapp-service/src/__tests__/`:
 - `webhookAsyncProcessing.test.ts` — Async webhook processing including button responses
 - `webhookReceiver.test.ts` — Webhook HMAC signature validation and receipt
 - `webhookVerification.test.ts` — Webhook hub challenge verification
-- `messageRoutes.test.ts` — Message CRUD operations
+- `messageRoutes.test.ts` — Message list operations
+- `messageMediaRoutes.test.ts` — Media URL, thumbnail URL, message deletion
 - `mappingRoutes.test.ts` — User phone number mapping (with verification gate)
 - `pubsubRoutes.test.ts` — Pub/Sub event handlers (including interactive messages, CTA URL, transcription-completed)
 - `verificationRoutes.test.ts` — Phone verification send/confirm/status
@@ -95,7 +90,7 @@ Located in `apps/whatsapp-service/src/__tests__/`:
 
 ### None Detected
 
-No `@ts-ignore`, `@ts-expect-error`, or `any` types found.
+No `@ts-ignore`, `@ts-expect-error`, or `any` types found in production code.
 
 ---
 
@@ -103,27 +98,33 @@ No `@ts-ignore`, `@ts-expect-error`, or `any` types found.
 
 ### Medium Priority
 
-| File                      | Issue                                               | Suggestion                                                 |
-| ------------------------- | --------------------------------------------------- | ---------------------------------------------------------- |
-| `routes/webhookRoutes.ts` | Handles webhook validation, routing, and 5 handlers | Extract handleTextMessage, handleButtonMessage to usecases |
+| File                                                         | Issue                                     | Suggestion                                                                |
+| ------------------------------------------------------------ | ----------------------------------------- | ------------------------------------------------------------------------- |
+| `domain/whatsapp/usecases/processWebhookEventUseCase.ts`     | Handles routing + 4 message type handlers | Extract handleTextMessage and handleButtonMessage into separate use cases |
 
-**Details:** `webhookRoutes.ts` contains:
+**Details:** `processWebhookEventUseCase.ts` contains:
 
-- Webhook validation logic
-- Message type routing (text, image, audio, button/interactive)
-- Text message handling with reply/approval detection
+- Message type validation and routing (text, image, audio, button/interactive, reaction)
+- Text message handling with reply/approval detection and command.ingest publishing
 - Button response handling with intent parsing (7 valid intents)
-- Image and audio message handlers (delegating to usecases)
+- Image and audio message delegation to sub-use cases
+- Read receipt management
 
-**Suggested Fix:** Extract `handleTextMessage` and `handleButtonMessage` into domain usecases for better testability and separation of concerns.
+The image and audio handlers already delegate to dedicated use cases (`ProcessImageMessageUseCase`, `ProcessAudioMessageUseCase`). Extracting text and button handlers into their own use cases would complete the pattern.
+
+**Context:** This was partially addressed in v3.4.0 — INT-880 moved the function from `webhookRoutes.ts` into a proper use case class. The remaining step is splitting the internal handlers.
 
 ---
 
 ## Code Duplicates
 
-### None Significant
+### Low Priority
 
-Minor duplication exists in test setup code across test files (fakes, mocks), which is acceptable for test isolation.
+| Pattern                    | Locations                                                 | Suggestion                              |
+| -------------------------- | --------------------------------------------------------- | --------------------------------------- |
+| Pub/Sub auth detection     | `pubsubRoutes.ts` (4 handlers share identical auth block) | Extract into shared middleware function |
+
+**Details:** Each Pub/Sub handler in `pubsubRoutes.ts` repeats the same `from: noreply@google.com` detection and `validateInternalAuth` fallback logic. This is a minor duplication since the pattern is stable and well-tested, but extracting it into a shared middleware would reduce boilerplate.
 
 ---
 
@@ -168,6 +169,10 @@ No deprecated APIs or dependencies in use. Speechmatics direct dependency was re
 
 | Date       | Issue                                                             | Resolution                                                                  |
 | ---------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| 2026-03-19 | v8-ignore overrides entry for whatsapp-service                    | Standardized format and removed override (INT-989)                          |
+| 2026-03-18 | messageRoutes.ts handled listing, media, and deletion             | Split into messageRoutes.ts and messageMediaRoutes.ts (INT-883)             |
+| 2026-03-17 | Duplicated HTTP patterns in sender.ts                             | Extracted shared request helpers (INT-882)                                  |
+| 2026-03-16 | processWebhookEvent coupled to FastifyRequest                     | Extracted into ProcessWebhookEventUseCase in domain layer (INT-880)         |
 | 2026-03-15 | v8 ignore blocks in sender and pubsub/webhook routes              | Replaced with real tests (INT-858, INT-860)                                 |
 | 2026-03-10 | v8 ignore blocks in sender, repository, routes                    | Replaced with real tests across 5 files (INT-799)                           |
 | 2026-03-10 | Silent dispatch failures swallowed by Pub/Sub publish             | Fixed dispatch error surfacing and nested transaction issue (INT-810/811)   |

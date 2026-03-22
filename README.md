@@ -8,7 +8,7 @@
     <img src="https://img.shields.io/badge/Coverage-100%25-success?style=flat-square&logo=codecov" alt="Coverage">
     <img src="https://img.shields.io/badge/TypeScript-5.7-blue?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
     <img src="https://img.shields.io/badge/AI_Models-14-purple?style=flat-square" alt="AI Models">
-    <img src="https://img.shields.io/badge/Components-48-orange?style=flat-square" alt="Components">
+    <img src="https://img.shields.io/badge/Components-50-orange?style=flat-square" alt="Components">
     <img src="https://img.shields.io/badge/Hooks-26-green?style=flat-square" alt="Hooks">
     <img src="https://img.shields.io/badge/CI_Scripts-27-green?style=flat-square" alt="CI Scripts">
     <img src="https://img.shields.io/badge/Infrastructure-Terraform-623CE4?style=flat-square&logo=terraform&logoColor=white" alt="Terraform">
@@ -316,9 +316,21 @@ You submit tasks while walking, while commuting, while thinking of something els
 ---
 
 <details>
-<summary><h2>What's New in v3.3.0</h2></summary>
+<summary><h2>What's New in v3.4.0</h2></summary>
 
 > See [CHANGELOG.md](CHANGELOG.md) for the complete history.
+
+#### v3.4.0
+
+| Improvement                            | Impact                                                                                          |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| **Hellscript Agent**                   | A new scripting service with backend, web UI, and infrastructure for authoring Hellscript tasks |
+| **Merge Queue**                        | Pull requests are queued and auto-merged in order without conflicts                             |
+| **Review Agent Plan Awareness**        | Code reviews check whether implementation matches the original plan                             |
+| **Cron Agent**                         | Schedule and execute recurring tasks automatically with a dedicated service                     |
+| **Merge Conflict Cron Reconciliation** | Conflict detection moved to a dedicated cron job for reliable, non-blocking operation           |
+
+#### v3.3.0
 
 | Improvement                      | Impact                                                                                                                       |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |

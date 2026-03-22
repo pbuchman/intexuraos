@@ -37,6 +37,7 @@ interface OrchestratorTools {
     continuationPrBranch?: string;
     planningPrBranch?: string;
     planningPrUrl?: string;
+    reviewTypes?: ('code_quality' | 'security' | 'architecture' | 'plan_review')[];
     slug?: string;
     webhookUrl: string;
     webhookSecret: string;
@@ -144,6 +145,7 @@ interface Task {
   continuationPrBranch?: string;
   planningPrBranch?: string;
   planningPrUrl?: string;
+  reviewTypes?: ('code_quality' | 'security' | 'architecture' | 'plan_review')[];
   status: 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
   worktreePath: string;
   containerId: string;
@@ -261,6 +263,8 @@ Review Agent note:
 - Completed review is sent as `status='completed'`
 - Orchestrator flattens review verifier metadata into `review_*` fields on `result`
 - Review Agent does not push code changes — read-only PR review only
+- `reviewTypes` controls which review scopes are included: `code_quality`, `security`, `architecture`, `plan_review`
+- `plan_review` mode cross-references implementation against the original plan document
 
 ### TurnMetrics (sent to code-agent after task completion)
 
@@ -315,13 +319,14 @@ type OAuthState =
 
 ### Outbound (orchestrator -> code-agent)
 
-| Method | Path                            | Auth                       | Purpose                   |
-| ------ | ------------------------------- | -------------------------- | ------------------------- |
-| POST   | `{webhookUrl}`                  | HMAC (X-Request-Signature) | Task completion callback  |
-| POST   | `/internal/logs`                | HMAC + X-Internal-Auth     | Log chunk upload          |
-| POST   | `/internal/code/heartbeat`      | HMAC (X-Request-Signature) | Running task keepalive    |
-| POST   | `/internal/turn-metrics`        | HMAC + X-Internal-Auth     | Per-task resource metrics |
-| POST   | `/internal/webhooks/task-event` | HMAC + X-Internal-Auth     | PR automation log events  |
+| Method | Path                                     | Auth                       | Purpose                       |
+| ------ | ---------------------------------------- | -------------------------- | ----------------------------- |
+| POST   | `{webhookUrl}`                           | HMAC (X-Request-Signature) | Task completion callback      |
+| POST   | `/internal/logs`                         | HMAC + X-Internal-Auth     | Log chunk upload              |
+| POST   | `/internal/code/heartbeat`               | HMAC (X-Request-Signature) | Running task keepalive        |
+| POST   | `/internal/turn-metrics`                 | HMAC + X-Internal-Auth     | Per-task resource metrics     |
+| POST   | `/internal/webhooks/task-event`          | HMAC + X-Internal-Auth     | PR automation log events      |
+| GET    | `/internal/linear/issue-context/:id`     | X-Internal-Auth            | Linear issue context (proxy)  |
 
 ### HMAC Signature Format
 
@@ -371,22 +376,24 @@ Headers: X-Request-Timestamp, X-Request-Signature, X-Internal-Auth
 
 ### Task Execution Flow
 
-1. Create git worktree from `origin/{baseBranch}` (or checkout `continuationPrBranch` for retried tasks)
-2. If `planningPrBranch` is set, merge planning branch into worktree
-3. Validate API key for the target model provider (cached 5 minutes)
-4. Build system prompt (agent-specific: planning/execution/pull_request/review via labels + `agentType`)
-5. Spawn Docker container with Claude Code in interactive mode (2-minute creation timeout)
-6. Write system prompt to container stdin
-7. Stream logs to code-agent via LogForwarder
-8. Monitor container exit (30s polling)
-9. On exit: flush logs, check for PR via `gh pr list` + `gh pr checks`
-10. Detect fatal exit codes (137/139) — skip Gemini verification, trigger immediate retry
-11. Run completion verification (Gemini semantic validation of Claude responses with agent-specific Zod schemas)
-12. If verification **fails** and `attempt < maxAttempts`: resume session with follow-up prompt listing missing criteria
-13. If verification **passes**: run deep validation for execution tasks (full transcript analysis, post PR comment), collect turn metrics, send webhook with result or error
-14. If max attempts reached without passing: send webhook with `TASK_COMPLETION_VERIFICATION_FAILED` error
-15. Clean up token refresher, log forwarder, and task timers
-16. If any queued messages arrived during execution: deliver them immediately as a new session
+1. Create git worktree from `origin/{baseBranch}` (base branch fetched from origin first)
+2. If `continuationPrBranch` is set, checkout existing PR branch for retried tasks
+3. If `planningPrBranch` is set, merge planning branch into worktree
+4. Validate API key for the target model provider (cached 5 minutes)
+5. Build system prompt (agent-specific: planning/execution/pull_request/review via labels + `agentType`)
+6. Pull worker image (15-minute timeout, separated from container creation)
+7. Spawn Docker container with Claude Code in interactive mode (2-minute creation timeout)
+8. Write system prompt to container stdin
+9. Stream logs to code-agent via LogForwarder
+10. Monitor container exit (30s polling)
+11. On exit: flush logs, check for PR via `gh pr list` + `gh pr checks`
+12. Detect fatal exit codes (137/139) — skip Gemini verification, trigger immediate retry
+13. Run completion verification (Gemini semantic validation of Claude responses with agent-specific Zod schemas)
+14. If verification **fails** and `attempt < maxAttempts`: resume session with follow-up prompt listing missing criteria
+15. If verification **passes**: run deep validation for execution tasks (full transcript analysis via code-agent Linear proxy, post PR comment), collect turn metrics, send webhook with result or error
+16. If max attempts reached without passing: send webhook with `TASK_COMPLETION_VERIFICATION_FAILED` error
+17. Clean up token refresher, log forwarder, and task timers
+18. If any queued messages arrived during execution: deliver them immediately as a new session
 
 ### Startup Recovery
 
@@ -407,41 +414,41 @@ On startup, the orchestrator:
 
 | Threshold | Action                                     |
 | --------- | ------------------------------------------ |
-| 1h 55m    | Log warning                                |
-| 2h 0m     | Kill container, send `interrupted` webhook |
+| 2h 55m    | Log warning                                |
+| 3h 0m     | Kill container, send `interrupted` webhook |
 
 ---
 
 ## Environment
 
-| Variable                                       | Required | Default                            |
-| ---------------------------------------------- | -------- | ---------------------------------- |
-| `INTEXURAOS_REPOSITORY_URL`                    | Yes      | -                                  |
-| `INTEXURAOS_CODE_AGENT_URL`                    | Yes      | -                                  |
-| `INTEXURAOS_ORCHESTRATOR_SECRET`               | Yes      | -                                  |
-| `INTEXURAOS_PROJECT_ID`                        | Yes      | -                                  |
-| `INTEXURAOS_GITHUB_APP_ID`                     | Yes      | -                                  |
-| `INTEXURAOS_GITHUB_INSTALLATION_ID`            | Yes      | -                                  |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`               | Yes      | -                                  |
-| `INTEXURAOS_LINEAR_API_KEY`                    | Yes      | -                                  |
-| `INTEXURAOS_SENTRY_AUTH_TOKEN`                 | Yes      | -                                  |
-| `INTEXURAOS_GEMINI_APP_API_KEY`                | Yes      | -                                  |
-| `INTEXURAOS_MINIMAX_APP_API_KEY`               | Yes      | -                                  |
-| `INTEXURAOS_DASHSCOPE_APP_API_KEY`             | Yes      | -                                  |
-| `GOOGLE_APPLICATION_CREDENTIALS`               | Yes      | -                                  |
-| `INTEXURAOS_REPOSITORY_PATH`                   | No       | `~/.claude-orchestrator/repo`      |
-| `INTEXURAOS_WORKER_CAPACITY`                   | No       | `2`                                |
-| `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`           | No       | `3`                                |
-| `INTEXURAOS_PRESERVE_WORKER_CONTAINERS`        | No       | `1`                                |
-| `INTEXURAOS_CLAUDE_WORKER_IMAGE`               | No       | (GCR Artifact Registry)            |
-| `INTEXURAOS_CLAUDE_WORKER_FORENSICS`           | No       | `0`                                |
-| `INTEXURAOS_CLAUDE_WORKER_FORENSICS_PATH`      | No       | `~/.claude-orchestrator/forensics` |
-| `INTEXURAOS_GIT_USER_NAME`                     | No       | (host git config)                  |
-| `INTEXURAOS_GIT_USER_EMAIL`                    | No       | (host git config)                  |
-| `INTEXURAOS_GITHUB_APP_PRIVATE_KEY`            | No       | (Secret Manager)                   |
-| `KEEP_CONTAINERS_ALIVE`                        | No       | `0`                                |
-| `PORT`                                         | No       | `8199`                             |
-| `LOG_LEVEL`                                    | No       | `info`                             |
+| Variable                                  | Required | Default                            |
+| ----------------------------------------- | -------- | ---------------------------------- |
+| `INTEXURAOS_REPOSITORY_URL`               | Yes      | -                                  |
+| `INTEXURAOS_CODE_AGENT_URL`               | Yes      | -                                  |
+| `INTEXURAOS_ORCHESTRATOR_SECRET`          | Yes      | -                                  |
+| `INTEXURAOS_PROJECT_ID`                   | Yes      | -                                  |
+| `INTEXURAOS_GITHUB_APP_ID`                | Yes      | -                                  |
+| `INTEXURAOS_GITHUB_INSTALLATION_ID`       | Yes      | -                                  |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`          | Yes      | -                                  |
+| `INTEXURAOS_LINEAR_API_KEY`               | Yes      | -                                  |
+| `INTEXURAOS_SENTRY_AUTH_TOKEN`            | Yes      | -                                  |
+| `INTEXURAOS_GEMINI_APP_API_KEY`           | Yes      | -                                  |
+| `INTEXURAOS_MINIMAX_APP_API_KEY`          | Yes      | -                                  |
+| `INTEXURAOS_DASHSCOPE_APP_API_KEY`        | Yes      | -                                  |
+| `GOOGLE_APPLICATION_CREDENTIALS`          | Yes      | -                                  |
+| `INTEXURAOS_REPOSITORY_PATH`              | No       | `~/.claude-orchestrator/repo`      |
+| `INTEXURAOS_WORKER_CAPACITY`              | No       | `2`                                |
+| `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`      | No       | `3`                                |
+| `INTEXURAOS_PRESERVE_WORKER_CONTAINERS`   | No       | `1`                                |
+| `INTEXURAOS_CLAUDE_WORKER_IMAGE`          | No       | (GCR Artifact Registry)            |
+| `INTEXURAOS_CLAUDE_WORKER_FORENSICS`      | No       | `0`                                |
+| `INTEXURAOS_CLAUDE_WORKER_FORENSICS_PATH` | No       | `~/.claude-orchestrator/forensics` |
+| `INTEXURAOS_GIT_USER_NAME`                | No       | (host git config)                  |
+| `INTEXURAOS_GIT_USER_EMAIL`               | No       | (host git config)                  |
+| `INTEXURAOS_GITHUB_APP_PRIVATE_KEY`       | No       | (Secret Manager)                   |
+| `KEEP_CONTAINERS_ALIVE`                   | No       | `0`                                |
+| `PORT`                                    | No       | `8199`                             |
+| `LOG_LEVEL`                               | No       | `info`                             |
 
 ---
 
@@ -468,7 +475,7 @@ On startup, the orchestrator:
 ## Constraints
 
 - Maximum concurrent tasks: configurable (default 2, via `INTEXURAOS_WORKER_CAPACITY`)
-- Maximum task duration: 2 hours per attempt (hard timeout); multi-attempt tasks can run longer
+- Maximum task duration: 3 hours per attempt (hard timeout); multi-attempt tasks can run longer
 - Maximum completion attempts: configurable (default 3, via `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`)
 - Maximum message length for `/tasks/:id/message`: 20,000 characters
 - Maximum log size per task: 4 MB
@@ -481,6 +488,7 @@ On startup, the orchestrator:
 - Heartbeat interval: 10 minutes
 - Container memory limit: 8 GB
 - Container CPU limit: 4 cores
+- Image pull timeout: 15 minutes
 - Container creation timeout: 2 minutes
 - Turn metrics: non-fatal; zero values returned when cgroup path unavailable (macOS)
 - Completion verifier: required; verifier failure marks task `failed` (no false positives)
@@ -489,3 +497,5 @@ On startup, the orchestrator:
 - Deep validation: fire-and-forget; does not affect task outcome or webhook delivery
 - Deep validation max transcript: 200,000 characters
 - GitHub comment size limit: 65,536 characters (split across multiple comments if needed)
+- Container preservation: selective by agent type (execution and planning preserved; review and PR cleaned up)
+- Linear issue context: fetched via code-agent proxy, not direct GraphQL

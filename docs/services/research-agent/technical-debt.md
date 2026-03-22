@@ -1,7 +1,7 @@
 # Research Agent — Technical Debt
 
-**Last Updated:** 2026-03-15
-**Analysis Run:** [v3.3.0 documentation refresh](../../documentation-runs.md)
+**Last Updated:** 2026-03-22
+**Analysis Run:** [v3.4.0 documentation refresh](../../documentation-runs.md)
 
 ---
 
@@ -10,10 +10,10 @@
 | Category      | Count | Severity |
 | ------------- | ----- | -------- |
 | Code Smells   | 2     | Medium   |
-| Test Gaps     | 0     | —        |
+| Test Gaps     | 0     | --       |
 | Type Issues   | 1     | Medium   |
 | TODOs         | 1     | Low      |
-| **Total**     | **4** | —        |
+| **Total**     | **4** | --       |
 
 ---
 
@@ -58,7 +58,7 @@ No significant gaps identified. The service maintains high test coverage across 
 
 | File                                               | Comment                                                    | Priority |
 | -------------------------------------------------- | ---------------------------------------------------------- | -------- |
-| `src/domain/research/usecases/runSynthesis.ts:407` | `TODO: define port interface for NotionServiceClient`      | Low      |
+| `src/domain/research/usecases/runSynthesis.ts:414` | `TODO: define port interface for NotionServiceClient`      | Low      |
 
 ---
 

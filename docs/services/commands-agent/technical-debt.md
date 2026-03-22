@@ -1,7 +1,7 @@
 # Commands Agent — Technical Debt
 
-**Last Updated:** 2026-03-15
-**Analysis Run:** [2026-03-15 force refresh — v3.3.0](../../documentation-runs.md)
+**Last Updated:** 2026-03-22
+**Analysis Run:** [2026-03-22 — v3.4.0](../../documentation-runs.md)
 
 ---
 
@@ -24,7 +24,7 @@ Based on code analysis and git history:
 
 1. **Additional language support** — Currently English and Polish; German and Spanish phrases could be added to Step 1 and Step 2 of the classification prompt
 
-2. **Confidence threshold tuning** — Low-confidence commands default to `note`; a user confirmation flow for ambiguous inputs (confidence 0.40–0.60) could reduce silent misclassifications
+2. **Confidence threshold tuning** — Low-confidence commands default to `note`; a user confirmation flow for ambiguous inputs (confidence 0.40--0.60) could reduce silent misclassifications
 
 3. **Structured output mode** — Consider using Gemini function calling or native JSON mode instead of regex JSON extraction, eliminating the fallback-to-note path for malformed responses
 
@@ -126,6 +126,46 @@ Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct servic
 ---
 
 ## Resolved Issues
+
+### Domain port boundaries established for infrastructure clients
+
+**Resolved in:** INT-894 (436dfb5d7, 2026-03-19)
+
+**Previous issue:** Use cases imported infrastructure client types directly from infra packages (`@intexuraos/internal-clients` for user-service, `infra/actionsAgent/client.ts` for actions-agent), violating hexagonal architecture boundaries.
+
+**Solution:** Defined domain-layer port interfaces (`UserServicePort`, `ActionsAgentClient`) in `domain/ports/`. Use cases depend on ports; infrastructure implementations satisfy them. Enables testing with fakes without importing infrastructure code.
+
+### processCommand use-case decomposed into reusable helpers
+
+**Resolved in:** INT-892 / INT-893 (4d9202830, 75ec965bd, 2026-03-19)
+
+**Previous issue:** `processCommand.ts` contained a monolithic `execute()` function with classification, action creation, event publishing, and command finalization all inlined. `retryPendingCommands.ts` duplicated the classification and action-creation logic rather than sharing it.
+
+**Solution:** Extracted four shared helper functions from `processCommand.ts` — `classifyCommand`, `createActionFromClassification`, `publishActionEvent`, and `finalizeClassifiedCommand`. `retryPendingCommands.ts` now imports and reuses these helpers, eliminating all code duplication between the two use cases.
+
+### PubSub handling extracted from internalRoutes
+
+**Resolved in:** INT-891 (e9ddcec50, 2026-03-17)
+
+**Previous issue:** `internalRoutes.ts` mixed HTTP routing concerns with Pub/Sub message decoding, base64 parsing, and event type validation.
+
+**Solution:** Extracted Pub/Sub-specific logic (decoder, types, config) into `infra/pubsub/` modules. Route handler now delegates decoding to `decodePubSubMessage()` and authentication to `authenticateInternalPubSub()`.
+
+### commandSchema extracted from route file
+
+**Resolved in:** INT-895 (d4d01e364, 2026-03-19)
+
+**Previous issue:** The OpenAPI JSON schema for the command entity was defined inline within `commandsRoutes.ts`, making it difficult to reuse across routes and increasing the route file size.
+
+**Solution:** Extracted `commandSchema` into `routes/schemas/commandSchemas.ts` with a barrel export via `routes/schemas/index.ts`.
+
+### Repository calls extracted from commandsRoutes into use-cases
+
+**Resolved in:** af267af6c (2026-03-16)
+
+**Previous issue:** Route handlers in `commandsRoutes.ts` called `commandRepository` directly for list, delete, and archive operations, mixing routing with domain logic.
+
+**Solution:** Created dedicated use-case files (`listCommands.ts`, `deleteCommand.ts`, `archiveCommand.ts`) that encapsulate repository access and business rules. Routes now delegate to use cases via the service container.
 
 ### v8 ignore blocks replaced with real tests in internalRoutes
 

@@ -162,18 +162,18 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                          | Date       |
-| ---------- | -------------------------------------------------------------------- | ---------- |
-| `34fde5ee` | Add tests for commandsRoutes.ts owner auth + status (INT-867)        | 2026-03-15 |
-| `a5a59aaf` | Remove override entry and improve test assertions (INT-790)          | 2026-03-13 |
-| `bc4138e7` | Replace v8-ignore blocks with real tests in internalRoutes (INT-790) | 2026-03-13 |
-| `93aeac4a` | Remove ZAI provider and GLM-4.7 models, finalize GLM-5 (INT-836)     | 2026-03-12 |
-| `e348b66e` | Fix silent dispatch failures and nested transaction (INT-810/811)    | 2026-03-10 |
-| `cc52e50d` | Increase classification title limit to 200 chars                     | 2026-03-07 |
-| `99febe66` | Wire GitHub OAuth integration and update cross-service mocks         | 2026-03-02 |
-| `35abc346` | Persist prompt version with command classification                   | 2026-02-19 |
-| `6063175b` | Dev-mode log formatting via createLogStream()                        | 2026-02-16 |
-| `a52a6bbc` | Dash0 OpenTelemetry integration                                      | 2026-02-16 |
+| Commit      | Description                                                      | Date       |
+| ----------- | ---------------------------------------------------------------- | ---------- |
+| `473a7e193` | Add JSDoc to UserServiceError domain port (INT-894)              | 2026-03-20 |
+| `436dfb5d7` | Define domain port for user service (INT-894)                    | 2026-03-19 |
+| `75ec965bd` | Deduplicate retryPendingCommands with processCommand (INT-893)   | 2026-03-19 |
+| `47dc96f13` | Fix trailing newlines in schema files (INT-895)                  | 2026-03-19 |
+| `d4d01e364` | Extract commandSchema from commandsRoutes (INT-895)              | 2026-03-19 |
+| `4d9202830` | Decompose processCommand.ts use-case (INT-892)                   | 2026-03-19 |
+| `e9ddcec50` | Extract PubSub handling from internalRoutes (INT-891)            | 2026-03-17 |
+| `af267af6c` | Extract repository calls from commandsRoutes into use-cases      | 2026-03-16 |
+| `34fde5ee`  | Add tests for commandsRoutes.ts owner auth + status (INT-867)    | 2026-03-15 |
+| `a5a59aaf`  | Remove override entry and improve test assertions (INT-790)      | 2026-03-13 |
 
 ## API Endpoints
 
@@ -219,19 +219,19 @@ sequenceDiagram
 | Field           | Type          | Description                                                                  |
 | --------------- | ------------- | ---------------------------------------------------------------------------- |
 | `type`          | `CommandType` | `todo`, `research`, `note`, `link`, `calendar`, `linear`, `reminder`, `code` |
-| `confidence`    | `number`      | 0–1 confidence score                                                         |
+| `confidence`    | `number`      | 0--1 confidence score                                                        |
 | `reasoning`     | `string`      | LLM explanation for classification                                           |
 | `promptVersion` | `string`      | Semver version of the prompt that produced this result                       |
 | `classifiedAt`  | `string`      | ISO 8601 classification timestamp                                            |
 
 ### Confidence Semantics
 
-| Range     | Meaning                                         |
-| --------- | ----------------------------------------------- |
-| 0.90+     | Clear match (explicit prefix, multiple signals) |
-| 0.70–0.90 | Strong match (single clear signal)              |
-| 0.50–0.70 | Choosing between 2–3 plausible categories       |
-| <0.50     | Genuinely uncertain, defaults to `note`         |
+| Range      | Meaning                                         |
+| ---------- | ----------------------------------------------- |
+| 0.90+      | Clear match (explicit prefix, multiple signals) |
+| 0.70--0.90 | Strong match (single clear signal)              |
+| 0.50--0.70 | Choosing between 2--3 plausible categories      |
+| <0.50      | Genuinely uncertain, defaults to `note`         |
 
 ## Status Enums
 
@@ -361,11 +361,16 @@ apps/commands-agent/src/
       commandRepository.ts    # Repository interface
       eventPublisher.ts       # PubSub publisher interface
       actionsAgentClient.ts   # actions-agent HTTP client interface
+      userServicePort.ts      # User service port (LLM client retrieval)
     usecases/
-      processCommand.ts       # Main command processing pipeline
-      retryPendingCommands.ts # Retry logic for pending_classification commands
+      processCommand.ts       # Main pipeline + shared helpers (classify, createAction, publish, finalize)
+      retryPendingCommands.ts # Retry logic reusing shared helpers from processCommand
+      listCommands.ts         # List commands by user ID
+      deleteCommand.ts        # Delete unclassified commands
+      archiveCommand.ts       # Archive classified commands
     events/
       actionCreatedEvent.ts   # ActionCreatedEvent type
+      commandEvent.ts         # CommandEvent type (Pub/Sub ingest)
   infra/
     firestore/
       commandRepository.ts    # Firestore implementation of CommandRepository
@@ -374,12 +379,19 @@ apps/commands-agent/src/
     pubsub/
       actionEventPublisher.ts # BasePubSubPublisher implementation
       config.ts               # Topic name helper (INTEXURAOS_PUBSUB_ACTIONS_QUEUE)
+      decoder.ts              # Base64 Pub/Sub message decoder
+      types.ts                # PubSubMessage type
       index.ts
     actionsAgent/
       client.ts               # HTTP client for actions-agent
   routes/
     commandsRoutes.ts         # Public endpoints (GET/POST/DELETE/PATCH /commands)
     internalRoutes.ts         # Internal endpoints (/internal/*)
+    helpers/
+      internalAuth.ts         # PubSub OIDC and Cloud Scheduler auth strategies
+    schemas/
+      commandSchemas.ts       # Extracted OpenAPI schema for command entity
+      index.ts
     index.ts
   services.ts                 # DI container (initServices, getServices, setServices)
   server.ts                   # Fastify server setup

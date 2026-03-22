@@ -1,7 +1,7 @@
 # Actions Agent - Technical Debt
 
-**Last Updated:** 2026-03-15
-**Analysis Run:** v3.3.0 documentation refresh (DashScope migration, v8 ignore test replacement INT-785)
+**Last Updated:** 2026-03-22
+**Analysis Run:** v3.4.0 documentation refresh (shared templates, approval decomposition, logger injection, worker type detection)
 
 ---
 
@@ -12,12 +12,12 @@
 | TODO/FIXME Comments | 0     | -        |
 | Test Coverage Gaps  | 0     | -        |
 | TypeScript Issues   | 4     | Low      |
-| SRP Violations      | 2     | Medium   |
+| SRP Violations      | 1     | Medium   |
 | Code Duplicates     | 1     | Low      |
 | Code Smells         | 1     | Low      |
 | Deprecations        | 0     | -        |
 | Console Logging     | 0     | -        |
-| **Total**           | **8** | —        |
+| **Total**           | **7** | ---      |
 
 ---
 
@@ -40,6 +40,12 @@ The `reminder` action type is defined but has no handler. Actions of this type r
 The `linear` action type is the only remaining type (besides `reminder`) that does not support auto-execution. Adding `executeLinearAction` as a dependency to the handler would enable this.
 
 **Priority:** Low - Linear actions are relatively infrequent and benefit from human review.
+
+### Migrate executeLinkAction and executeCodeAction to Template
+
+`executeLinkAction` and `executeCodeAction` are not migrated to `executeActionTemplate` due to significant deviations (URL extraction logic in link, special error handling like `WORKER_UNAVAILABLE`/`DUPLICATE` in code). They are candidates for future migration if the template is extended to support these patterns.
+
+**Priority:** Low - Both use cases work correctly; migration is a code quality improvement.
 
 ### Proposed Enhancements
 
@@ -74,18 +80,18 @@ Four instances of `as any` in test files for testing unsupported action types:
 
 ### Route Files (Medium Severity)
 
-| File                | Lines | Concern                                                |
-| ------------------- | ----- | ------------------------------------------------------ |
-| `publicRoutes.ts`   | ~806  | Contains 7 endpoints with extensive schema definitions |
-| `internalRoutes.ts` | ~897  | Contains 6 endpoints with Pub/Sub handling             |
+| File                | Concern                                                |
+| ------------------- | ------------------------------------------------------ |
+| `publicRoutes.ts`   | Contains 7 endpoints with extensive schema definitions |
 
-**Severity:** Medium - Files are at the threshold but well-organized.
+**Severity:** Medium - The public routes file is at the threshold but well-organized.
 
 **Recommendation:** Consider extracting route handlers into separate files if adding new endpoints:
 
 - `/routes/public/actions.ts` - CRUD operations
 - `/routes/public/execute.ts` - Execution endpoints
-- `/routes/internal/pubsub.ts` - Pub/Sub handlers
+
+> **Note:** `internalRoutes.ts` was reduced significantly in v3.4.0 by extracting auth middleware (`pubsubAuth.ts`) and PubSub decoding (`decodePubSubMessage.ts`) via INT-888, and business logic to `updateActionUseCase` via INT-914. It is no longer an SRP concern.
 
 ---
 
@@ -93,15 +99,11 @@ Four instances of `as any` in test files for testing unsupported action types:
 
 ### Per-type `executeActionByType` branches (Low Severity)
 
-In `handleApprovalReply.ts`, the `executeActionByType` function contains a `switch` with a near-identical block for
-each action type (note, todo, research, link, calendar, linear, code). Each branch differs only in log message and
-which `execute*Action` function is called.
+In `approval/executeActionByType.ts`, the `executeActionByType` function contains a `switch` with a near-identical block for each action type (note, todo, research, link, calendar, linear, code). Each branch differs only in log message and which `execute*Action` function is called.
 
-**Severity:** Low - The repetition is straightforward and exhaustive matching is intentional for TypeScript
-type narrowing.
+**Severity:** Low - The repetition is straightforward and exhaustive matching is intentional for TypeScript type narrowing.
 
-**Recommendation:** Could be replaced with a handler map if a new action type is added in the future. For now,
-the current pattern provides clarity.
+**Recommendation:** Could be replaced with a handler map if a new action type is added in the future. For now, the current pattern provides clarity.
 
 ---
 
@@ -109,8 +111,7 @@ the current pattern provides clarity.
 
 ### OpenAPI Description Mismatch (Low Severity)
 
-In `server.ts`, the OpenAPI info description still reads "IntexuraOS Research Agent - Processes research action events"
-instead of referencing the actions-agent. This is a leftover from the rename of research-agent to actions-agent.
+In `server.ts`, the OpenAPI info description still reads "IntexuraOS Research Agent - Processes research action events" instead of referencing the actions-agent. This is a leftover from the rename of research-agent to actions-agent.
 
 | File        | Issue                                              | Impact                                  |
 | ----------- | -------------------------------------------------- | --------------------------------------- |
@@ -126,17 +127,7 @@ instead of referencing the actions-agent. This is a leftover from the rename of 
 
 ### Current Status
 
-All endpoints and use cases have test coverage. The `handleApprovalReply` use case has comprehensive tests covering:
-
-- Button-based approval flow with atomic status updates
-- Button-based rejection flow
-- Text reply re-sends buttons
-- Cancel-task and view-task button handling
-- Proceed-implementation button handling (INT-628)
-- Race condition handling (status_mismatch)
-- Terminal state handling (already completed/rejected)
-- Deleted/expired action handling (returns 200, sends WhatsApp notification)
-- User ownership validation
+All endpoints and use cases have test coverage. The shared templates (`handleActionTemplate`, `executeActionTemplate`) are tested through their consuming use cases and have v8 ignore exemptions for branches that cannot be reached in current usage patterns.
 
 ### Coverage Areas
 
@@ -144,10 +135,12 @@ All endpoints and use cases have test coverage. The `handleApprovalReply` use ca
 | ------------------ | -------- | ----------------------------------------------------------------------------------------- |
 | Public routes      | 100%     | All endpoints tested (100% branch enforcement)                                            |
 | Internal routes    | 100%     | Including approval-reply and code action handlers                                         |
-| Use cases          | 100%     | All use cases including code and calendar actions                                         |
+| Use cases          | 100%     | All use cases including shared templates                                                  |
 | Infrastructure     | 100%     | Firestore repos, HTTP clients, and code-agent client                                      |
 | Pub/Sub publishers | 100%     | Event publishing tested                                                                   |
 | Calendar utils     | 100%     | formatCalendarApprovalMessage, formatCalendarCompletionMessage, calendarMessageFormatting |
+| Worker type utils  | 100%     | detectWorkerTypeFromMessage with edge cases (ambiguous, no match)                         |
+| Approval modules   | 100%     | All approval/ submodules tested via handleApprovalReply tests                             |
 
 ---
 
@@ -161,7 +154,55 @@ No deprecated APIs or dependencies in use.
 
 ## Resolved Issues
 
-### v8 Ignore Block Test Replacement (INT-785)
+### Shared handleAction Template Extraction (INT-887)
+
+**Issue:** All 7 `handle*Action` use cases contained duplicated logic for logging, auto-execution gating, WhatsApp approval message publishing, and correlation ID construction.
+
+**Resolution:** Extracted common logic into `handleActionTemplate.ts`. Each handler now provides only a `buildMessage` function and optional callbacks (`extraButtons`, `preProcess`, `onAutoExecuteSuccess`). Template is under 80 lines. All handlers migrated.
+
+**Date Resolved:** 2026-03-18
+
+### Shared executeAction Template Extraction (INT-885)
+
+**Issue:** `executeResearchAction`, `executeTodoAction`, `executeNoteAction`, `executeCalendarAction`, and `executeLinearAction` contained duplicated workflow logic (get action, null check, idempotency, status validation, update to processing, call service, handle failure/success, send WhatsApp notification).
+
+**Resolution:** Extracted common workflow into `executeActionTemplate.ts`. Five use cases migrated. `executeLinkAction` and `executeCodeAction` not migrated due to significant deviations.
+
+**Date Resolved:** 2026-03-16
+
+### Auth Middleware Extraction (INT-888)
+
+**Issue:** PubSub authentication logic and base64 message decoding were duplicated inline in `internalRoutes.ts` across multiple Pub/Sub endpoints.
+
+**Resolution:** Extracted `validatePubSubOrInternalAuth` to `pubsubAuth.ts` and `decodePubSubMessage` to `decodePubSubMessage.ts`. Reduced `internalRoutes.ts` by over 100 lines.
+
+**Date Resolved:** 2026-03-17
+
+### updateAction Use Case Extraction (INT-914)
+
+**Issue:** The PATCH `/actions/:actionId` route handler contained business logic (action lookup, ownership validation, type change delegation, status update) that belonged in the domain layer.
+
+**Resolution:** Extracted business logic into `updateAction.ts` use case. The route handler now calls `updateActionUseCase` and returns its result.
+
+**Date Resolved:** 2026-03-16
+
+### Approval Module Decomposition (INT-884)
+
+**Issue:** `handleApprovalReply.ts` was a single file handling button response routing, cancel-task handling, proceed-implementation handling, action execution by type, and rejection — making it difficult to navigate and test independently.
+
+**Resolution:** Split into `approval/` submodules: `types.ts`, `handleButtonResponse.ts`, `handleCancelTaskButton.ts`, `handleProceedToImplementationButton.ts`, `executeActionByType.ts`, `executeRejection.ts`. Main file now orchestrates these modules.
+
+**Date Resolved:** 2026-03-16
+
+### Logger Injection in HTTP Clients (INT-889)
+
+**Issue:** HTTP clients (`commandsAgentHttpClient`, `linearAgentHttpClient`, `calendarServiceHttpClient`, `codeAgentHttpClient`) had optional or missing logger parameters, making it difficult to trace outbound HTTP requests in logs.
+
+**Resolution:** Made `logger` a required parameter in all HTTP client configurations. Audited sibling clients for the same pattern.
+
+**Date Resolved:** 2026-03-18
+
+### v8 Ignore Test Replacement (INT-785)
 
 **Issue:** Multiple production source files used v8 ignore coverage exemptions for error paths that could be tested with proper fakes and HTTP client mocking.
 
@@ -221,9 +262,7 @@ No deprecated APIs or dependencies in use.
 
 **Issue:** Calendar actions always required manual approval and returned only app-relative URLs, not Google Calendar links.
 
-**Resolution:** Added `executeCalendarAction` as a dependency to `handleCalendarAction`, enabling auto-execution for
-high-confidence calendar actions. Updated `executeCalendarAction` to detect absolute URLs (Google Calendar links)
-returned by calendar-agent and pass them through without prepending `webAppUrl`.
+**Resolution:** Added `executeCalendarAction` as a dependency to `handleCalendarAction`, enabling auto-execution for high-confidence calendar actions. Updated `executeCalendarAction` to detect absolute URLs (Google Calendar links) returned by calendar-agent and pass them through without prepending `webAppUrl`.
 
 **Date Resolved:** 2026-02-20
 
@@ -245,54 +284,41 @@ returned by calendar-agent and pass them through without prepending `webAppUrl`.
 
 ### Unified Interactive Approval Buttons (INT-524)
 
-**Issue:** LLM approval classification added latency and cost on every approval reply. Nonce-based approval
-for code actions created UX friction (4-char code in button title). Per-type approval logic was duplicated
-across 7 handlers, with `handleApprovalReply.ts` growing to 1450 lines.
+**Issue:** LLM approval classification added latency and cost on every approval reply. Nonce-based approval for code actions created UX friction (4-char code in button title). Per-type approval logic was duplicated across 7 handlers, with `handleApprovalReply.ts` growing to 1450 lines.
 
-**Resolution:** Replaced LLM classification and nonce validation with unified deterministic interactive
-buttons (`buildApprovalButtons()`). All 7 action types now use `approve:{actionId}` and `reject:{actionId}`
-buttons. Code actions get an extra `convert:{actionId}` button. Text replies re-send buttons instead of
-calling LLM. Deleted `llmApprovalIntentClassifier.ts`, `approvalIntentClassifierFactory.ts`, `approvalNonce.ts`.
-`handleApprovalReply.ts` shrank from 1450 to 757 lines.
+**Resolution:** Replaced LLM classification and nonce validation with unified deterministic interactive buttons (`buildApprovalButtons()`). All 7 action types now use `approve:{actionId}` and `reject:{actionId}` buttons. Code actions get an extra `convert:{actionId}` button. Text replies re-send buttons instead of calling LLM. Deleted `llmApprovalIntentClassifier.ts`, `approvalIntentClassifierFactory.ts`, `approvalNonce.ts`. `handleApprovalReply.ts` shrank from 1450 to 757 lines.
 
 **Date Resolved:** 2026-02-09
 
 ### Deleted Action Graceful Handling
 
-**Issue:** When an action was deleted between the approval message being sent and the user tapping the
-button, the approval-reply handler returned 500, causing Pub/Sub to retry indefinitely.
+**Issue:** When an action was deleted between the approval message being sent and the user tapping the button, the approval-reply handler returned 500, causing Pub/Sub to retry indefinitely.
 
-**Resolution:** When action not found, return 200 OK + send WhatsApp notification ("This action is no
-longer available"). Clean up orphaned approval_messages. Pub/Sub stops retrying.
+**Resolution:** When action not found, return 200 OK + send WhatsApp notification ("This action is no longer available"). Clean up orphaned approval_messages. Pub/Sub stops retrying.
 
 **Date Resolved:** 2026-02-16
 
 ### Cancel-task Error Code Normalization (#779)
 
-**Issue:** Cancel-task domain error codes used lowercase snake_case (`invalid_nonce`, `nonce_expired`,
-`not_owner`, `task_not_cancellable`), inconsistent with project ErrorCode convention.
+**Issue:** Cancel-task domain error codes used lowercase snake_case (`invalid_nonce`, `nonce_expired`, `not_owner`, `task_not_cancellable`), inconsistent with project ErrorCode convention.
 
-**Resolution:** Normalized to UPPER_CASE. Changed `not_owner` HTTP status from 400 to 403. Updated
-all callers and tests. Silent fallback operators replaced with explicit checks that log protocol mismatches.
+**Resolution:** Normalized to UPPER_CASE. Changed `not_owner` HTTP status from 400 to 403. Updated all callers and tests. Silent fallback operators replaced with explicit checks that log protocol mismatches.
 
 **Date Resolved:** 2026-02-10
 
 ### v3.0.0 Large Use Case File SRP Violation (handleApprovalReply.ts)
 
-**Issue:** `handleApprovalReply.ts` grew to 1450 lines with multiple large helper functions for LLM
-classification, nonce validation, button handling, and text fallback patterns.
+**Issue:** `handleApprovalReply.ts` grew to 1450 lines with multiple large helper functions for LLM classification, nonce validation, button handling, and text fallback patterns.
 
-**Resolution:** Resolved organically via INT-524 — removing the LLM layer and nonces brought the file
-back to 757 lines. Further splitting is not currently warranted.
+**Resolution:** Resolved organically via INT-524 — removing the LLM layer and nonces brought the file back to 757 lines. Further decomposed in v3.4.0 via INT-884 into `approval/` submodules.
 
-**Date Resolved:** 2026-02-09
+**Date Resolved:** 2026-02-09 (initial), 2026-03-16 (further decomposition)
 
 ### v3.0.0 Code Action Type (INT-156)
 
 **Issue:** No support for dispatching code tasks (Claude Code) from the action system.
 
-**Resolution:** Added `code` action type with full lifecycle: `handleCodeAction`, `executeCodeAction`,
-`CodeAgentClient` port and HTTP client, code task buttons.
+**Resolution:** Added `code` action type with full lifecycle: `handleCodeAction`, `executeCodeAction`, `CodeAgentClient` port and HTTP client, code task buttons.
 
 **Date Resolved:** 2026-02-08
 
@@ -358,22 +384,21 @@ back to 757 lines. Further splitting is not currently warranted.
 
 The following design decisions were made recently and should be revisited if issues arise:
 
-1. **Button-only approval, no text fallback** - Text replies re-send buttons. This is simpler and cheaper
-   than LLM classification but requires WhatsApp clients that support interactive buttons.
+1. **Shared templates with callback hooks** - `handleActionTemplate` and `executeActionTemplate` use configuration objects with callback functions rather than class inheritance. This keeps the templates small but means type-specific logic must fit into the callback interface. If a handler needs logic that does not fit the hooks, it cannot use the template.
 
-2. **All action types unified under `buildApprovalButtons()`** - Removes per-type approval complexity but
-   means all types share the same 2-button UI (Approve/Reject), with code actions getting an extra button.
+2. **Button-only approval, no text fallback** - Text replies re-send buttons. This is simpler and cheaper than LLM classification but requires WhatsApp clients that support interactive buttons.
 
-3. **Cancel-task nonce retained** - The `cancel-task:{taskId}:{nonce}` button format still uses nonces
-   because task cancellation is irreversible and warrants one-time-use security tokens.
+3. **All action types unified under `buildApprovalButtons()`** - Removes per-type approval complexity but means all types share the same 2-button UI (Approve/Reject), with code actions getting an extra button.
+
+4. **Cancel-task nonce retained** - The `cancel-task:{taskId}:{nonce}` button format still uses nonces because task cancellation is irreversible and warrants one-time-use security tokens.
+
+5. **Worker type detection from message text** - Keyword matching ("use opus") is simple but brittle if model names appear as common words. Currently safe because all worker type names are distinctive.
 
 ## Early Technical Decisions
 
-1. **Atomic status transitions via Firestore transactions** - Prevents race conditions but adds latency.
-   Monitor for performance issues at scale.
+1. **Atomic status transitions via Firestore transactions** - Prevents race conditions but adds latency. Monitor for performance issues at scale.
 
-2. **Approval message correlation via wamid or actionId** - Two lookup paths exist for backwards
-   compatibility. Consider deprecating wamid lookup once all messages have correlation IDs.
+2. **Approval message correlation via wamid or actionId** - Two lookup paths exist for backwards compatibility. Consider deprecating wamid lookup once all messages have correlation IDs.
 
 ---
 
