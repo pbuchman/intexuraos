@@ -188,8 +188,8 @@ export class FirestoreWritingConfigRepository implements WritingConfigRepository
     userId: string,
     sampleId: string,
     category: WritingCategory,
-    text: string,
-    title: string
+    title: string,
+    text: string
   ): Promise<Result<void>> {
     try {
       const db = getFirestore();
