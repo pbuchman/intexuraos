@@ -160,7 +160,7 @@ describe('FirestoreWritingConfigRepository', () => {
       if (!created.ok) return;
 
       const result = await repository.updateSample(
-        'user-1', created.value.id, 'threads', 'New text', 'New title'
+        'user-1', created.value.id, 'threads', 'New title', 'New text'
       );
       expect(result.ok).toBe(true);
 
@@ -174,7 +174,7 @@ describe('FirestoreWritingConfigRepository', () => {
 
     it('returns error for non-existent sample', async () => {
       const result = await repository.updateSample(
-        'user-1', 'nonexistent', 'threads', 'text', 'title'
+        'user-1', 'nonexistent', 'threads', 'title', 'text'
       );
       expect(result.ok).toBe(false);
     });
@@ -189,7 +189,7 @@ describe('FirestoreWritingConfigRepository', () => {
       if (!created.ok) return;
 
       const result = await repository.updateSample(
-        'user-1', created.value.id, 'linkedin', 'text', 'title'
+        'user-1', created.value.id, 'linkedin', 'title', 'text'
       );
       expect(result.ok).toBe(false);
     });
@@ -316,7 +316,7 @@ describe('FirestoreWritingConfigRepository', () => {
 
     it('returns error from updateSample on Firestore failure', async () => {
       fakeFirestore.configure({ errorToThrow: new Error('Write failed') });
-      const result = await repository.updateSample('user-1', 'some-id', 'threads', 'text', 'title');
+      const result = await repository.updateSample('user-1', 'some-id', 'threads', 'title', 'text');
       expect(result.ok).toBe(false);
     });
 

@@ -118,8 +118,8 @@ export class FakeWritingConfigRepository implements WritingConfigRepository {
     userId: string,
     sampleId: string,
     category: WritingCategory,
-    text: string,
-    title: string
+    title: string,
+    text: string
   ): Promise<Result<void>> {
     const error = this.checkError('updateSample');
     if (error !== null) return { ok: false, error };

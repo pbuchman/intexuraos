@@ -21,7 +21,7 @@ export async function updateWritingSample(
     userId,
     sampleId,
     category,
-    sanitizedText,
-    sanitizedTitle
+    sanitizedTitle,
+    sanitizedText
   );
 }

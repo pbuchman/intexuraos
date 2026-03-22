@@ -21,8 +21,8 @@ export interface WritingConfigRepository {
     userId: string,
     sampleId: string,
     category: WritingCategory,
-    text: string,
-    title: string
+    title: string,
+    text: string
   ): Promise<Result<void>>;
   deleteSample(
     userId: string,
