@@ -2,19 +2,14 @@ import type { Result } from '@intexuraos/common-core';
 import type { WritingConfigRepository } from '../ports/writingConfigRepository.js';
 import type { WritingCategory } from '../models/writingCategory.js';
 import type { WritingSample } from '../models/writingSample.js';
+import { MaxSamplesError } from '../errors.js';
+
+export { MaxSamplesError } from '../errors.js';
 
 const MAX_SAMPLES_PER_CATEGORY = 5;
 
 export interface CreateWritingSampleDeps {
   writingConfigRepository: WritingConfigRepository;
-}
-
-export class MaxSamplesError extends Error {
-  readonly code = 'MAX_SAMPLES' as const;
-  constructor(max: number) {
-    super(`Maximum ${String(max)} samples per category reached`);
-    this.name = 'MaxSamplesError';
-  }
 }
 
 export async function createWritingSample(
