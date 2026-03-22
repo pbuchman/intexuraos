@@ -73,6 +73,7 @@ export const hellscriptRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
       const result = await imposeOnBuffer(
         {
           repository: services.hellscriptRepository,
+          writingConfigRepository: services.writingConfigRepository,
           interpreter: services.intentInterpreter,
           draftGenerator: services.draftGenerator,
           logger: request.log,

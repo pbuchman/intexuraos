@@ -22,7 +22,9 @@ describe('GeminiDraftGenerator', () => {
       });
       const generator = new GeminiDraftGenerator(client);
 
-      const result = await generator.generate(emptyState(), null, 'Write a blog', logger);
+      const result = await generator.generate(
+        emptyState(), null, 'Write a blog', null, [], 'general', logger
+      );
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -38,10 +40,7 @@ describe('GeminiDraftGenerator', () => {
       const generator = new GeminiDraftGenerator(client);
 
       const result = await generator.generate(
-        emptyState(),
-        '# Prior Draft',
-        'Improve it',
-        logger
+        emptyState(), '# Prior Draft', 'Improve it', null, [], 'general', logger
       );
 
       expect(result.ok).toBe(false);
@@ -54,9 +53,30 @@ describe('GeminiDraftGenerator', () => {
       });
       const generator = new GeminiDraftGenerator(client);
 
-      const result = await generator.generate(emptyState(), null, 'Write it', logger);
+      const result = await generator.generate(
+        emptyState(), null, 'Write it', null, [], 'general', logger
+      );
 
       expect(result.ok).toBe(false);
+    });
+
+    it('passes style instructions and samples to prompt', async () => {
+      const client = createMockClient({
+        ok: true,
+        value: { content: '# LinkedIn Post' },
+      });
+      const generator = new GeminiDraftGenerator(client);
+
+      const result = await generator.generate(
+        emptyState(), null, 'Write', 'Be professional', ['Sample text'], 'linkedin', logger
+      );
+
+      expect(result.ok).toBe(true);
+      expect(client.generate).toHaveBeenCalledTimes(1);
+      const prompt = (client.generate as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
+      expect(prompt).toContain('Be professional');
+      expect(prompt).toContain('Sample text');
+      expect(prompt).toContain('LinkedIn');
     });
   });
 });

@@ -1451,6 +1451,9 @@ export type {
   HellscriptImposeResponse,
   HellscriptIntentKind,
   HellscriptInterpretedIntent,
+  WritingCategory,
+  WritingStyleConfig,
+  WritingSample,
 } from './hellscript.js';
 
 // Cron Agent types

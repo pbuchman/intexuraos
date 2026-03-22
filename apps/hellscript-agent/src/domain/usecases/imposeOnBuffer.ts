@@ -3,13 +3,17 @@ import type { Logger } from '@intexuraos/common-core';
 import type { HellscriptRepository } from '../ports/hellscriptRepository.js';
 import type { IntentInterpreter } from '../ports/intentInterpreter.js';
 import type { DraftGenerator } from '../ports/draftGenerator.js';
+import type { WritingConfigRepository } from '../ports/writingConfigRepository.js';
 import type { HellscriptBuffer } from '../models/hellscriptBuffer.js';
 import type { MaterializedBufferState } from '../models/materializedBufferState.js';
+import type { WritingCategory } from '../models/writingCategory.js';
 import { emptyState } from '../models/materializedBufferState.js';
+import { isValidCategory } from '../models/writingCategory.js';
 import { applyIntentToState } from '../services/applyIntentToState.js';
 
 export interface ImposeOnBufferDeps {
   repository: HellscriptRepository;
+  writingConfigRepository: WritingConfigRepository;
   interpreter: IntentInterpreter;
   draftGenerator: DraftGenerator;
   logger: Logger;
@@ -31,7 +35,7 @@ export async function imposeOnBuffer(
   deps: ImposeOnBufferDeps,
   input: ImposeOnBufferInput
 ): Promise<Result<ImposeOnBufferResult>> {
-  const { repository, interpreter, draftGenerator, logger } = deps;
+  const { repository, writingConfigRepository, interpreter, draftGenerator, logger } = deps;
 
   let bufferId = input.bufferId;
   let buffer: HellscriptBuffer;
@@ -90,26 +94,63 @@ export async function imposeOnBuffer(
     const payloadText = intent.payload['text'];
     const requestText = typeof payloadText === 'string' ? payloadText : input.utterance;
 
-    // Use cached version number from buffer doc instead of reading all draft versions
+    // Extract category from intent payload
+    const payloadCategory = intent.payload['category'];
+    const categoryStr = typeof payloadCategory === 'string' ? payloadCategory : '';
+
+    if (!isValidCategory(categoryStr)) {
+      return {
+        ok: true,
+        value: {
+          bufferId,
+          action: 'category_required',
+        },
+      };
+    }
+
+    const category: WritingCategory = categoryStr;
+
+    // Fetch writing config + samples + prior draft in parallel (independent reads)
     const currentVersionNumber = buffer.latestDraftVersionNumber ?? 0;
     const nextVersion = currentVersionNumber + 1;
 
-    // Fetch only the latest draft by ID instead of loading all draft versions
+    const [configResult, samplesResult, priorDraftResult] = await Promise.all([
+      writingConfigRepository.getStyleConfig(input.userId),
+      writingConfigRepository.listSamples(input.userId, category),
+      buffer.latestDraftVersionId !== null
+        ? repository.getDraftVersion(buffer.latestDraftVersionId, bufferId)
+        : Promise.resolve(null),
+    ]);
+
+    let styleInstructions: string | null = null;
+    if (configResult.ok) {
+      styleInstructions = configResult.value?.[category] ?? null;
+    }
+
+    let writingSamples: string[] = [];
+    if (samplesResult.ok) {
+      writingSamples = samplesResult.value.map((s) => s.text);
+    }
+
     let priorDraft: string | null = null;
-    if (buffer.latestDraftVersionId !== null) {
-      const latestDraftResult = await repository.getDraftVersion(
-        buffer.latestDraftVersionId,
-        bufferId
-      );
-      if (!latestDraftResult.ok) {
-        return latestDraftResult;
+    if (priorDraftResult !== null) {
+      if (!priorDraftResult.ok) {
+        return priorDraftResult;
       }
       /* v8 ignore start -- ts-type: noUncheckedIndexedAccess style fallback for optional chaining on Result value @preserve */
-      priorDraft = latestDraftResult.value?.markdown ?? null;
+      priorDraft = priorDraftResult.value?.markdown ?? null;
       /* v8 ignore stop @preserve */
     }
 
-    const generateResult = await draftGenerator.generate(newState, priorDraft, requestText, logger);
+    const generateResult = await draftGenerator.generate(
+      newState,
+      priorDraft,
+      requestText,
+      styleInstructions,
+      writingSamples,
+      category,
+      logger
+    );
     if (!generateResult.ok) {
       logger.error({ bufferId, err: generateResult.error }, 'Draft generation failed');
       return {

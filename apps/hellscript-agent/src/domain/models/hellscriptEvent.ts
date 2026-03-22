@@ -1,8 +1,5 @@
 export type IntentKind =
   | 'append_thought'
-  | 'add_writing_sample'
-  | 'set_style_instructions'
-  | 'set_metadata'
   | 'delete_thought'
   | 'reorder_thoughts'
   | 'update_draft'

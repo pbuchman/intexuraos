@@ -1,11 +1,28 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { getServices, setServices, resetServices, initServices } from '../services.js';
 import { FakeHellscriptRepository } from './fakeHellscriptRepository.js';
+import { FakeWritingConfigRepository } from './fakeWritingConfigRepository.js';
 import { FakeIntentInterpreter } from './fakeIntentInterpreter.js';
 import { FakeDraftGenerator } from './fakeDraftGenerator.js';
 import pino from 'pino';
 
 const logger = pino({ level: 'silent' });
+
+function createContainer(): {
+  hellscriptRepository: FakeHellscriptRepository;
+  writingConfigRepository: FakeWritingConfigRepository;
+  intentInterpreter: FakeIntentInterpreter;
+  draftGenerator: FakeDraftGenerator;
+  logger: typeof logger;
+} {
+  return {
+    hellscriptRepository: new FakeHellscriptRepository(),
+    writingConfigRepository: new FakeWritingConfigRepository(),
+    intentInterpreter: new FakeIntentInterpreter(),
+    draftGenerator: new FakeDraftGenerator(),
+    logger,
+  };
+}
 
 describe('services', () => {
   afterEach(() => {
@@ -20,13 +37,7 @@ describe('services', () => {
     });
 
     it('returns container after setServices', () => {
-      const container = {
-        hellscriptRepository: new FakeHellscriptRepository(),
-        intentInterpreter: new FakeIntentInterpreter(),
-        draftGenerator: new FakeDraftGenerator(),
-        logger,
-      };
-
+      const container = createContainer();
       setServices(container);
 
       const result = getServices();
@@ -36,15 +47,8 @@ describe('services', () => {
 
   describe('resetServices', () => {
     it('resets container to null', () => {
-      setServices({
-        hellscriptRepository: new FakeHellscriptRepository(),
-        intentInterpreter: new FakeIntentInterpreter(),
-        draftGenerator: new FakeDraftGenerator(),
-        logger,
-      });
-
+      setServices(createContainer());
       resetServices();
-
       expect(() => getServices()).toThrow();
     });
   });
@@ -63,6 +67,7 @@ describe('services', () => {
 
       const services = getServices();
       expect(services.hellscriptRepository).toBeDefined();
+      expect(services.writingConfigRepository).toBeDefined();
       expect(services.intentInterpreter).toBeDefined();
       expect(services.draftGenerator).toBeDefined();
       expect(services.logger).toBe(logger);
@@ -71,18 +76,8 @@ describe('services', () => {
 
   describe('setServices', () => {
     it('replaces existing container', () => {
-      const first = {
-        hellscriptRepository: new FakeHellscriptRepository(),
-        intentInterpreter: new FakeIntentInterpreter(),
-        draftGenerator: new FakeDraftGenerator(),
-        logger,
-      };
-      const second = {
-        hellscriptRepository: new FakeHellscriptRepository(),
-        intentInterpreter: new FakeIntentInterpreter(),
-        draftGenerator: new FakeDraftGenerator(),
-        logger,
-      };
+      const first = createContainer();
+      const second = createContainer();
 
       setServices(first);
       setServices(second);
