@@ -54,11 +54,8 @@ export interface HellscriptDraftVersion {
 }
 
 /**
- * Workspace response combining buffer, events, and drafts
- */
-/**
  * Materialized buffer state returned by the backend.
- * Contains the current accumulated thoughts, writing samples, and metadata.
+ * Contains the current accumulated thoughts for a buffer.
  */
 export interface HellscriptMaterializedState {
   thoughts: { id: string; text: string; addedAt: string }[];

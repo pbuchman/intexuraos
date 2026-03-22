@@ -76,8 +76,8 @@ export async function updateWritingSample(
   sampleId: string,
   title: string,
   text: string
-): Promise<WritingSample> {
-  return await apiRequest<WritingSample>(
+): Promise<void> {
+  await apiRequest<undefined>(
     config.hellscriptAgentUrl,
     `/hellscript/writing-config/${encodeURIComponent(category)}/samples/${encodeURIComponent(sampleId)}`,
     accessToken,

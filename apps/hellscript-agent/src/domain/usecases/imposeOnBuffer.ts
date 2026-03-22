@@ -52,7 +52,7 @@ export async function imposeOnBuffer(
     currentState = emptyState();
     logger.info({ bufferId }, 'Created new buffer');
   } else {
-    // Existing buffer — read buffer + state in a single Firestore doc read
+    // Existing buffer — read buffer + state together
     const bufferWithStateResult = await repository.getBufferWithState(bufferId, input.userId);
     if (!bufferWithStateResult.ok) {
       return bufferWithStateResult;
@@ -125,11 +125,15 @@ export async function imposeOnBuffer(
     let styleInstructions: string | null = null;
     if (configResult.ok) {
       styleInstructions = configResult.value?.[category] ?? null;
+    } else {
+      logger.warn({ err: configResult.error }, 'Failed to fetch writing config, proceeding without style instructions');
     }
 
     let writingSamples: string[] = [];
     if (samplesResult.ok) {
       writingSamples = samplesResult.value.map((s) => s.text);
+    } else {
+      logger.warn({ err: samplesResult.error }, 'Failed to fetch writing samples, proceeding without samples');
     }
 
     let priorDraft: string | null = null;
@@ -137,7 +141,7 @@ export async function imposeOnBuffer(
       if (!priorDraftResult.ok) {
         return priorDraftResult;
       }
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess style fallback for optional chaining on Result value @preserve */
+      /* v8 ignore start -- ts-type: getDraftVersion returns T | null but null is unreachable here since latestDraftVersionId is non-null @preserve */
       priorDraft = priorDraftResult.value?.markdown ?? null;
       /* v8 ignore stop @preserve */
     }
