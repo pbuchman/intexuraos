@@ -1,7 +1,7 @@
 # Calendar Agent — Technical Debt
 
-**Last Updated:** 2026-03-15
-**Analysis Run:** post v3.1.0 (INT-535 synchronous preview, INT-621 full prompt text)
+**Last Updated:** 2026-03-22
+**Analysis Run:** post v3.3.0 (INT-896 route split, INT-897 internal route dedup)
 
 ---
 
@@ -14,6 +14,36 @@
 | Type Issues | 0     | -        |
 | TODOs       | 0     | -        |
 | **Total**   | **1** | Low      |
+
+---
+
+## Recent Improvements (v3.3.0 to v3.4.0)
+
+### INT-896: Split Calendar Routes Into Focused Files
+
+**Status:** Complete
+
+Split the monolithic `calendarRoutes.ts` into six focused route files, each responsible for a single resource or operation type:
+
+- `eventQueryRoutes.ts` — GET /calendar/events, GET /calendar/events/:eventId
+- `eventCreateRoutes.ts` — POST /calendar/events
+- `eventUpdateRoutes.ts` — PATCH /calendar/events/:eventId
+- `eventDeleteRoutes.ts` — DELETE /calendar/events/:eventId
+- `freeBusyRoutes.ts` — POST /calendar/freebusy
+- `failedEventRoutes.ts` — GET/DELETE/POST /calendar/failed-events
+
+The original `calendarRoutes.ts` now serves as a barrel file that registers all sub-route plugins. Shared types and builder functions were extracted to `calendarHelpers.ts`, and error handling was extracted to `calendarErrorHandler.ts`.
+
+### INT-897: Deduplicate Internal Route Handlers
+
+**Status:** Complete
+
+Extracted shared logic in `internalRoutes.ts` into reusable helper functions:
+
+- `decodePubSubMessage()` — decodes and parses base64 Pub/Sub message data
+- `callGeneratePreview()` — shared preview generation logic used by both the Pub/Sub handler and the direct HTTP endpoint
+
+This eliminated duplicated Pub/Sub message parsing and preview generation code between the two preview endpoints.
 
 ---
 
@@ -232,26 +262,28 @@ No deprecated API usage detected.
 
 ## Resolved Issues
 
-| Date       | Issue                                             | Resolution                                          |
-| ---------- | ------------------------------------------------- | --------------------------------------------------- |
-| 2026-03-02 | Cross-service mock missing resolveGitHubUsername  | Added method to FakeUserServiceClient               |
-| 2026-02-24 | Auto-execute sent title instead of full prompt    | Added `text` field to process-action endpoint       |
-| 2026-02-23 | Error responses used 500 instead of 502           | Fixed internal endpoint schemas to use 502          |
-| 2026-02-23 | No synchronous preview generation available       | Added POST /internal/calendar/preview endpoint      |
-| 2026-02-20 | processAction returned internal /#/calendar URL   | Now uses Google Calendar htmlLink as resourceUrl    |
-| 2026-02-16 | No distributed tracing across service boundaries  | Added Dash0 OpenTelemetry integration               |
-| 2026-02-15 | API key env vars inconsistently named             | Standardized to APP naming convention               |
-| 2026-03-12 | ZAI provider and GLM-4.7 models in LLM contract   | Removed ZAI; Chinese LLMs now via Alibaba DashScope |
-| 2026-02-15 | Single LLM with no fallback on unavailability     | Added multi-model with Gemini fallback              |
-| 2026-01-31 | Failed extractions could not be dismissed/retried | Added DELETE and POST retry endpoints               |
-| 2026-01-30 | LLM returning invalid JSON caused immediate fail  | Added repair prompt mechanism (1 retry attempt)     |
-| 2026-01-30 | Date-only format rejected for all-day events      | Updated schema to accept YYYY-MM-DD format          |
-| 2026-01-29 | Polish relative dates parsed incorrectly          | Added day of week to currentDate context            |
-| 2026-01-28 | Missing INTEXURAOS_GCP_PROJECT_ID env var         | Added to REQUIRED_ENV array                         |
-| 2026-01-26 | Dual user service clients (local + shared)        | Consolidated to single shared UserServiceClient     |
-| 2026-01-26 | singleEvents not set for time-filtered queries    | Auto-set singleEvents=true with time filters        |
-| 2026-01-24 | Preview cleanup blocking event response           | Changed to non-blocking deletion                    |
-| 2026-01-24 | Missing duration/isAllDay in preview              | Added computed fields                               |
+| Date       | Issue                                                  | Resolution                                                               |
+| ---------- | ------------------------------------------------------ | ------------------------------------------------------------------------ |
+| 2026-03-17 | Duplicated preview generation logic in internal routes | Extracted shared `callGeneratePreview` and `decodePubSubMessage` helpers |
+| 2026-03-16 | Monolithic calendarRoutes.ts with all public endpoints | Split into 6 focused route files + barrel + helpers                      |
+| 2026-03-02 | Cross-service mock missing resolveGitHubUsername       | Added method to FakeUserServiceClient                                    |
+| 2026-02-24 | Auto-execute sent title instead of full prompt         | Added `text` field to process-action endpoint                            |
+| 2026-02-23 | Error responses used 500 instead of 502                | Fixed internal endpoint schemas to use 502                               |
+| 2026-02-23 | No synchronous preview generation available            | Added POST /internal/calendar/preview endpoint                           |
+| 2026-02-20 | processAction returned internal /#/calendar URL        | Now uses Google Calendar htmlLink as resourceUrl                         |
+| 2026-02-16 | No distributed tracing across service boundaries       | Added Dash0 OpenTelemetry integration                                    |
+| 2026-02-15 | API key env vars inconsistently named                  | Standardized to APP naming convention                                    |
+| 2026-03-12 | ZAI provider and GLM-4.7 models in LLM contract        | Removed ZAI; Chinese LLMs now via Alibaba DashScope                      |
+| 2026-02-15 | Single LLM with no fallback on unavailability          | Added multi-model with Gemini fallback                                   |
+| 2026-01-31 | Failed extractions could not be dismissed/retried      | Added DELETE and POST retry endpoints                                    |
+| 2026-01-30 | LLM returning invalid JSON caused immediate fail       | Added repair prompt mechanism (1 retry attempt)                          |
+| 2026-01-30 | Date-only format rejected for all-day events           | Updated schema to accept YYYY-MM-DD format                               |
+| 2026-01-29 | Polish relative dates parsed incorrectly               | Added day of week to currentDate context                                 |
+| 2026-01-28 | Missing INTEXURAOS_GCP_PROJECT_ID env var              | Added to REQUIRED_ENV array                                              |
+| 2026-01-26 | Dual user service clients (local + shared)             | Consolidated to single shared UserServiceClient                          |
+| 2026-01-26 | singleEvents not set for time-filtered queries         | Auto-set singleEvents=true with time filters                             |
+| 2026-01-24 | Preview cleanup blocking event response                | Changed to non-blocking deletion                                         |
+| 2026-01-24 | Missing duration/isAllDay in preview                   | Added computed fields                                                    |
 
 ---
 

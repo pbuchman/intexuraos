@@ -28,6 +28,22 @@ You run a SaaS product and your morning is already full. This is what happens wh
 
 ## How It Helps
 
+### Queue and Auto-Merge Pull Requests
+
+When multiple bot-authored PRs target the same branch, merging them one-by-one invites conflicts. The merge queue watches a base branch, checks each PR's CI status and mergeability, and merges the oldest eligible PR automatically on every tick — driven by Cloud Scheduler. You create a watch from the dashboard, and the system drains PRs in order without conflicts.
+
+If a PR has failing checks, a merge conflict, or a non-eligible author, the merge queue skips it and moves on. When every eligible PR has been merged, the watch drains itself. You see which PRs were merged, which were skipped and why, and what is still pending.
+
+**Example:** You submit three code tasks back-to-back. Each finishes and opens a PR against `development`. Instead of merging each one manually and rebasing the next, you create a merge queue watch. The system merges PRs #1401, #1402, and #1403 in sequence, waiting for CI to pass on each before proceeding to the next. You come back to a clean branch with all three changes integrated.
+
+### Detect and Resolve Merge Conflicts Automatically
+
+When someone pushes to a base branch, the agent checks every bot-authored PR targeting that branch for merge conflicts. If a conflict appears, the system dispatches a resolution task to your worker — the same way it dispatches any other code task. A dedicated cron job reconciles PR state every minute, syncing open/closed status and refreshing conflict information from GitHub into Firestore. Closed PRs are skipped automatically, so the cron does not waste time on stale data.
+
+The reconciliation runs as a separate Cloud Scheduler job, decoupled from the webhook pipeline. This means conflict detection does not block webhook processing, and the state stays consistent even if a webhook is missed.
+
+**Example:** Your co-founder merges a PR to `development` that renames a utility function. Two of your bot-authored PRs import that function. Within a minute, the cron detects the conflict, and the agent dispatches resolution tasks for both PRs. By the time you check the dashboard, the conflicts are resolved and the PRs are ready to merge.
+
 ### Design First, Then Build
 
 Every task moves through two distinct phases. In the first, the agent interprets your request, creates a Linear issue, and produces a design — which files it will change, what approach it will take, and how it plans to verify the result. Then it stops. No code is written. You review the design on your own schedule: over coffee, on the train, between meetings. If the approach looks right, you approve it. If not, you redirect. Only after your explicit approval does the second phase begin — writing code, running tests, and opening a pull request.
@@ -86,7 +102,7 @@ While the agent works, a live terminal view in the dashboard streams its output 
 
 Each completed task includes per-task metrics: processing time, memory consumed, tokens used, and a cost breakdown. A separate Gemini model analyzes the agent's output and writes a three-to-five sentence narrative summary — what was built, which decisions were made, and what was delivered. This summary appears on the task card and in notifications, so you understand the outcome at a glance without reading the full log.
 
-On the GitHub side, every action taken on a pull request — triage decision, task dispatched, task completed, error encountered — is collected into a single chronological comment on the PR itself. Instead of piecing together what happened from scattered notifications, you read one comment that tells the full story. A GitHub event decision log in the dashboard shows every webhook event, which evaluation path it took, and what action resulted — full transparency into the automation pipeline.
+On the GitHub side, every action taken on a pull request — triage decision, task dispatched, task completed, error encountered — is collected into a single chronological comment on the PR itself. Instead of piecing together what happened from scattered notifications, you read one comment that tells the full story. A GitHub event decision log in the dashboard shows every webhook event, which evaluation path it took, and what action resulted. You can expand any row to inspect the full raw webhook payload — full transparency into the automation pipeline.
 
 **Example:** A task has been running for twenty minutes and you want to know if it is stuck. You open the dashboard, see the live log showing the agent midway through the test suite, and close the tab. No guessing, no pinging, no waiting.
 
@@ -96,13 +112,15 @@ Connect a worker machine, link your Linear and GitHub accounts through the dashb
 
 ## Key Benefits
 
+- **Merge queue eliminates manual PR coordination** — Bot-authored PRs merge in order, automatically, with CI checks verified before each merge
+- **Merge conflict resolution runs unattended** — Conflicts are detected by a dedicated cron job and dispatched for resolution without blocking the webhook pipeline
 - **Design before code** — You approve the plan before a single line is written, so no compute is wasted on wrong assumptions
 - **Independent two-provider verification** — Claude writes the code, Gemini independently verifies the result, so no single model grades its own work
 - **Voice note to pull request** — Record a WhatsApp voice note about a bug, and the system transcribes, classifies, designs, codes, tests, and opens a pull request without you touching a keyboard
 - **Your machines, your code** — Source code stays on infrastructure you own, using your own AI subscriptions, with credentials encrypted at rest
 - **PR comments become tasks** — Review feedback on a pull request automatically creates or resumes a task with full context, keeping the loop inside GitHub
 - **Predictable spend** — Per-user limits on concurrency, hourly rate, and monthly cost are enforced before the work begins, not after
-- **Full audit trail** — Live logs, per-task metrics, cost breakdowns, narrative summaries, and a unified PR automation log give you complete visibility
+- **Full audit trail** — Live logs, per-task metrics, cost breakdowns, narrative summaries, expandable webhook payloads, and a unified PR automation log give you complete visibility
 
 ## Limitations
 
@@ -112,6 +130,7 @@ Connect a worker machine, link your Linear and GitHub accounts through the dashb
 - **Mid-task messages arrive at safe pause points** — Instructions sent to a running task are delivered at the next pause, not mid-operation
 - **Retry cooling period** — After a task fails, a mandatory wait prevents runaway retry loops
 - **Planning requires explicit labeling** — Autonomous planning only runs on Linear issues tagged with the designated label
+- **Merge queue watches the `main` branch with a blocked flag** — The `main` branch appears in the branch list for visibility but cannot be used as a merge queue base branch
 
 ---
 

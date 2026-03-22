@@ -45,7 +45,7 @@ curl https://intexuraos-image-service-cj44trunra-lm.a.run.app/health
   "status": "ok",
   "serviceName": "image-service",
   "version": "0.0.4",
-  "timestamp": "2026-03-15T10:00:00.000Z",
+  "timestamp": "2026-03-22T10:00:00.000Z",
   "checks": [
     { "name": "firestore", "status": "ok", "latencyMs": 12 },
     { "name": "secrets", "status": "ok", "latencyMs": 0 }
@@ -332,7 +332,7 @@ The response structure is identical — same `ThumbnailPrompt` shape regardless 
 
 ### Exercise 2: Slug Normalization
 
-A title of `"Résumé & Future Plans! (2026)"` becomes the slug `resume-future-plans-2026` — unicode normalized via NFD decomposition, diacritics stripped, special characters removed, spaces become hyphens, capped at 50 characters.
+A title of `"Resume & Future Plans! (2026)"` becomes the slug `resume-future-plans-2026` — unicode normalized via NFD decomposition, diacritics stripped, special characters removed, spaces become hyphens, capped at 50 characters.
 
 ### Exercise 3: Retry Wrapper
 

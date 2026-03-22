@@ -57,6 +57,8 @@ export interface DispatchRequest {
   planningPrBranch?: string;
   /** PR URL to close after successful execution. */
   planningPrUrl?: string;
+  /** Review types requested for review agent tasks. */
+  reviewTypes?: string[];
 }
 
 /**

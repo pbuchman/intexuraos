@@ -26,6 +26,23 @@ export function extractPrNumber(prUrl: string | undefined): number | undefined {
   return match?.[1] !== undefined ? parseInt(match[1], 10) : undefined;
 }
 
+export async function readPlanFile(
+  worktreePath: string,
+  planPath: string,
+  logger: Logger
+): Promise<string | undefined> {
+  try {
+    return await readFile(join(worktreePath, planPath), 'utf-8');
+  } catch (error) {
+    logger.warn(
+      { worktreePath, planPath, error: getErrorMessage(error) },
+      'Failed to read plan file from worktree'
+    );
+    return undefined;
+  }
+}
+
+/** @deprecated Use readPlanFile with planDocumentPath from code-agent instead (INT-1040) */
 export async function readPlanReferencedInLinearIssue(
   worktreePath: string,
   context: LinearIssueContext,
@@ -33,13 +50,63 @@ export async function readPlanReferencedInLinearIssue(
 ): Promise<string | undefined> {
   const planPath = resolvePlanDocumentPathFromLinearContext(context);
   if (planPath === undefined) return undefined;
+  return await readPlanFile(worktreePath, planPath, logger);
+}
 
+export interface CodeAgentIssueContext {
+  description: string | null;
+  comments: { body: string; createdAt: string }[];
+  planDocumentPath: string | null;
+}
+
+export interface CodeAgentClientConfig {
+  codeAgentUrl: string;
+  internalAuthToken: string;
+  timeoutMs?: number;
+}
+
+export async function fetchLinearIssueContextViaCodeAgent(
+  identifier: string,
+  config: CodeAgentClientConfig,
+  logger: Logger
+): Promise<CodeAgentIssueContext | undefined> {
+  const { codeAgentUrl, internalAuthToken, timeoutMs = 10_000 } = config;
   try {
-    return await readFile(join(worktreePath, planPath), 'utf-8');
+    const url = `${codeAgentUrl}/internal/linear/issue-context/${encodeURIComponent(identifier)}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'X-Internal-Auth': internalAuthToken,
+      },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+
+    if (!response.ok) {
+      logger.warn(
+        { identifier, status: response.status },
+        'Failed to fetch Linear issue context via code-agent'
+      );
+      return undefined;
+    }
+
+    const body = (await response.json()) as {
+      description?: string | null;
+      comments?: { body?: string; createdAt?: string }[];
+      planDocumentPath?: string | null;
+    };
+
+    return {
+      description: body.description ?? null,
+      comments: (body.comments ?? []).map((c) => ({
+        body: c.body ?? '',
+        createdAt: c.createdAt ?? '',
+      })),
+      planDocumentPath: body.planDocumentPath ?? null,
+    };
   } catch (error) {
     logger.warn(
-      { worktreePath, planPath, error: getErrorMessage(error) },
-      'Failed to read plan referenced in Linear issue'
+      { identifier, error: getErrorMessage(error) },
+      'Failed to fetch Linear issue context via code-agent'
     );
     return undefined;
   }
@@ -50,6 +117,7 @@ function getTimestamp(value: string): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+/** @deprecated Use fetchLinearIssueContextViaCodeAgent instead (INT-1040) */
 export async function fetchLinearIssueContext(
   identifier: string,
   apiKey: string,
@@ -136,12 +204,14 @@ export async function fetchLinearIssueContext(
   }
 }
 
+/** @deprecated Use fetchLinearIssueContextViaCodeAgent instead (INT-1040) */
 export async function fetchLinearIssueDescription(
   identifier: string,
   apiKey: string,
   logger: Logger,
   timeoutMs = 10_000
 ): Promise<string | undefined> {
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- both functions are deprecated together (INT-1040)
   const context = await fetchLinearIssueContext(identifier, apiKey, logger, timeoutMs);
   return context?.description;
 }

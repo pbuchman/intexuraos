@@ -193,6 +193,36 @@
       "description": "Technical-Debt documentation for chat-agent"
     },
     {
+      "path": "services/cron-agent/features.md",
+      "title": "Cron Agent",
+      "category": "services",
+      "description": "Features documentation for cron-agent"
+    },
+    {
+      "path": "services/cron-agent/technical.md",
+      "title": "Cron Agent \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for cron-agent"
+    },
+    {
+      "path": "services/cron-agent/tutorial.md",
+      "title": "Cron Agent \u2014 Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for cron-agent"
+    },
+    {
+      "path": "services/cron-agent/agent.md",
+      "title": "cron-agent \u2014 Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for cron-agent"
+    },
+    {
+      "path": "services/cron-agent/technical-debt.md",
+      "title": "Cron Agent \u2014 Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for cron-agent"
+    },
+    {
       "path": "services/claude-worker/features.md",
       "title": "Claude Worker",
       "category": "services",
@@ -311,6 +341,36 @@
       "title": "Data Insights Agent \u2014 Technical Debt",
       "category": "services",
       "description": "Technical-Debt documentation for data-insights-agent"
+    },
+    {
+      "path": "services/hellscript-agent/features.md",
+      "title": "Hellscript Agent",
+      "category": "services",
+      "description": "Features documentation for hellscript-agent"
+    },
+    {
+      "path": "services/hellscript-agent/technical.md",
+      "title": "Hellscript Agent \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for hellscript-agent"
+    },
+    {
+      "path": "services/hellscript-agent/tutorial.md",
+      "title": "Hellscript Agent \u2014 Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for hellscript-agent"
+    },
+    {
+      "path": "services/hellscript-agent/agent.md",
+      "title": "hellscript-agent \u2014 Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for hellscript-agent"
+    },
+    {
+      "path": "services/hellscript-agent/technical-debt.md",
+      "title": "Hellscript Agent \u2014 Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for hellscript-agent"
     },
     {
       "path": "services/image-service/features.md",

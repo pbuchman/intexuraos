@@ -11,13 +11,13 @@
 | Goal      | Accept task requests, dispatch to workers, and return pull request URLs   |
 
 ```yaml
-version: 3.3.0
+version: 3.4.0
 port: 8128
 framework: fastify
 runtime: node22
 deploy: cloud-run
 collections:
-  - code_tasks (subcollections: logs, log_lines, turn_metrics)
+  - code_tasks (subcollections: logs, log_lines, log_entries, turn_metrics)
   - user_spend
   - user_usage
   - code_worker_settings
@@ -29,6 +29,7 @@ collections:
   - github-webhook-audit-events
   - github-event-log-entries
   - pr_automation_comments
+  - merge_queue_watches
 ```
 
 ## Capabilities
@@ -131,7 +132,7 @@ type AgentType = 'planning' | 'execution' | 'pull_request' | 'review';
 
 ### Check Active Task for Linear Issue
 
-**Endpoint:** `GET /internal/code-tasks/linear:linearIssueId/active`
+**Endpoint:** `GET /internal/code-tasks/linear/:linearIssueId/active`
 
 **When to use:** Before creating a new task, check if an active task exists for the same Linear issue
 
@@ -147,6 +148,56 @@ interface ActiveTaskCheckResponse {
   };
 }
 ```
+
+### Linear Issue Context Proxy
+
+**Endpoint:** `GET /internal/linear/issue-context/:identifier`
+
+**When to use:** When orchestrator needs issue description and comments for deep validation without direct Linear API access
+
+**Output Schema:**
+
+```typescript
+interface IssueContextResponse {
+  description: string | null;
+  comments: Array<{ body: string; createdAt: string }>;
+  planDocumentPath: string | null;
+}
+```
+
+### Merge Queue
+
+**Endpoints:**
+- `POST /code/merge-queue/watch` — Create a new merge queue watch
+- `DELETE /code/merge-queue/watch/:watchId` — Cancel a watch
+- `GET /code/merge-queue/watches` — List active watches
+- `GET /code/merge-queue/branches` — List available base branches
+- `GET /code/merge-queue/prs` — List eligible PRs
+- `POST /internal/merge-queue/tick` — Process one merge cycle (Cloud Scheduler)
+
+**When to use:** When multiple bot-authored PRs target the same branch and need ordered merging
+
+```typescript
+type MergeQueueWatchStatus = 'active' | 'drained' | 'cancelled';
+type SkipReason = 'merge_conflict' | 'checks_failing' | 'checks_pending' | 'mergeability_unknown' | 'not_eligible_author';
+
+interface TickResult {
+  watchId: string;
+  owner: string;
+  repo: string;
+  baseBranch: string;
+  action: 'merged' | 'skipped_all' | 'drained' | 'error';
+  mergedPrNumber?: number;
+  remainingPrs: number;
+  skipped: Array<{ prNumber: number; reason: SkipReason }>;
+}
+```
+
+**Constraints:**
+- The `main` branch is blocked as a merge queue base branch
+- One PR is merged per watch per tick
+- PRs must pass CI checks and have no merge conflicts to be eligible
+- Only bot-authored PRs or PRs from the repo owner are eligible
 
 ### GitHub Agent (PR Triage)
 
@@ -223,6 +274,7 @@ interface TaskCompleteWebhook {
     execution_linear_issue_url?: string;
     review_comments_posted?: string;
     review_types?: string;
+    requirements_tracker_updated?: string;
   };
   error?: {
     code: string;
@@ -351,7 +403,7 @@ interface CreateReviewTaskResult {
 // - Active review tasks replaced if newer review requested
 // - Best-effort Linear issue linking for UI grouping
 // - Sets agentType: 'review' on dispatch
-// - Queue support when workers at capacity (v3.3.0)
+// - Queue support when workers at capacity
 ```
 
 ### Worker Settings
@@ -478,12 +530,27 @@ interface WebhookRule {
 ```typescript
 interface MergeConflictDetector {
   detectOnPush(event: GitHubPREvent, logger: Logger): Promise<void>;
+  reconcile(logger: Logger): Promise<ReconcileResult>;
 }
 
-// Triggered on push events to base branches.
+// detectOnPush: Triggered on push events to base branches.
 // Checks bot-authored PRs for merge conflicts.
 // Posts GitHub comment and dispatches resolution task.
 // Bot author remapped to PR owner for correct worker dispatch.
+
+// reconcile: Triggered by Cloud Scheduler every minute.
+// Syncs open/closed state from GitHub into Firestore.
+// Refreshes mergeConflictStatus for open PRs.
+// Skips closed PRs to avoid wasted API calls.
+
+interface ReconcileResult {
+  processed: number;
+  closed: number;
+  reopened: number;
+  mergeConflictRefreshed: number;
+  skipped: number;
+  error: number;
+}
 ```
 
 ## Constraints
@@ -528,6 +595,10 @@ PR comment auto-dispatch only processes comments from:
 
 All other senders are silently ignored. Comments starting with `@claude`, `@codex`, or `@ignore` are also skipped.
 
+### Blocked Merge Queue Branches
+
+The `main` branch cannot be used as a merge queue base branch. It appears in the branch list with `blocked: true` for visibility.
+
 ## Usage Patterns
 
 ### Submit task from actions-agent
@@ -568,6 +639,22 @@ Authorization: Bearer <auth0-jwt>
 -> 429: { "success": false, "error": { "code": "concurrent_limit", "message": "Maximum 3 concurrent tasks" } }
 ```
 
+### Create merge queue watch
+
+```
+POST /code/merge-queue/watch
+Authorization: Bearer <auth0-jwt>
+
+{
+  "owner": "pbuchman",
+  "repo": "intexuraos",
+  "baseBranch": "development"
+}
+
+-> 200: { "success": true, "data": { "watchId": "uuid", "status": "active" } }
+-> 400: { "success": false, "error": { "code": "INVALID_REQUEST", "message": "Cannot create merge queue watch for blocked branch: main" } }
+```
+
 ### List tasks
 
 ```
@@ -600,7 +687,7 @@ Authorization: Bearer <auth0-jwt>
 -> 200: {
   "success": true,
   "data": {
-    "entries": [{
+    "rows": [{
       "id": "uuid",
       "githubEventName": "pull_request",
       "eventType": "pull_request",
@@ -609,51 +696,21 @@ Authorization: Bearer <auth0-jwt>
       "pullRequestNumber": 42,
       "decisionState": "completed",
       "decisionOutcome": "request_review",
-      "authPassedAt": "2026-03-15T10:00:00.000Z"
+      "authPassedAt": "2026-03-22T10:00:00.000Z"
     }],
-    "nextCursor": "2026-03-15T09:55:00.000Z"
+    "nextCursor": "2026-03-22T09:55:00.000Z"
   }
 }
 ```
 
-### Hydrate event log rows
+### Get raw webhook payload
 
 ```
-POST /code/github-event-log/rows
+GET /code/github-event-log/:id/payload
 Authorization: Bearer <auth0-jwt>
 
-{ "ids": ["uuid-1", "uuid-2"] }
-
--> 200: {
-  "success": true,
-  "data": {
-    "rows": [{
-      "entry": { ... },
-      "audit": { ... },       // Full webhook payload
-      "decision": { ... }     // LLM reasoning, tool calls, cost
-    }]
-  }
-}
-```
-
-### GitHub PR summaries (list view)
-
-```
-GET /code/github-pr-summaries
-Authorization: Bearer <auth0-jwt>
-
--> 200: {
-  "success": true,
-  "data": {
-    "prs": [{
-      "repository": "org/repo",
-      "pullRequestNumber": 42,
-      "title": "Add cursor-based pagination",
-      "status": "open" | "closed" | "merged",
-      "lastActivityAt": "2026-03-15T10:00:00.000Z"
-    }]
-  }
-}
+-> 200: { "success": true, "data": { "payload": { ... } } }
+-> 404: { "success": false, "error": { "code": "NOT_FOUND", "message": "Audit event not found" } }
 ```
 
 ### Send message to task
@@ -707,6 +764,17 @@ X-Webhook-Signature: sha256=<hmac>
 -> 200: { "received": true }
 ```
 
+### Get issue context for orchestrator (proxy)
+
+```
+GET /internal/linear/issue-context/:identifier
+X-Internal-Auth: <token>
+
+-> 200: { "description": "Issue description...", "comments": [...], "planDocumentPath": "/docs/plans/INT-123.md" }
+-> 404: { "success": false, "error": { "code": "NOT_FOUND", "message": "Issue INT-999 not found" } }
+-> 502: { "success": false, "error": { "code": "DOWNSTREAM_ERROR", "message": "linear-agent error: ..." } }
+```
+
 ## Error Handling
 
 ### Error Response Format
@@ -734,6 +802,7 @@ All errors follow the IntexuraOS contract:
 | 404  | `NOT_FOUND`        | Task or worker not found                    |
 | 409  | `CONFLICT`         | Deduplication triggered                     |
 | 429  | `RATE_LIMITED`     | Rate limit exceeded (see code for type)     |
+| 502  | `DOWNSTREAM_ERROR` | Upstream service error (e.g., linear-agent) |
 | 503  | `MISCONFIGURED`    | Worker unavailable or no workers configured |
 | 500  | `INTERNAL_ERROR`   | Unexpected server error                     |
 
@@ -758,6 +827,8 @@ All errors follow the IntexuraOS contract:
 | GitHub API    | `PATCH /repos/{owner}/{repo}/pulls/{number}`          | PR title update            |
 | GitHub API    | `GET /repos/{owner}/{repo}/pulls/{number}/files`      | PR file list (triage)      |
 | GitHub API    | `POST /repos/{owner}/{repo}/issues/{number}/comments` | Automation log comment     |
+| GitHub API    | `PUT /repos/{owner}/{repo}/pulls/{number}/merge`      | Merge queue auto-merge     |
+| GitHub API    | `GET /repos/{owner}/{repo}/commits/{sha}/status`      | CI check status            |
 | Gemini API    | Tool-calling inference                                | PR triage evaluation       |
 
 ### Outgoing Pub/Sub

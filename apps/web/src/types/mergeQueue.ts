@@ -1,6 +1,7 @@
 export interface MergeQueueBranch {
   name: string;
   openPrCount: number;
+  blocked: boolean;
 }
 
 export interface MergeQueuePr {

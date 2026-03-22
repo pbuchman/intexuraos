@@ -12,6 +12,7 @@ import {
   deleteCodeTask,
   getGitHubEventLog,
   hydrateGitHubEventLogRows,
+  getGitHubEventLogPayload,
   startImplementation,
   getDispatchQueue,
 } from '../codeAgentApi.js';
@@ -212,6 +213,36 @@ describe('codeAgentApi', () => {
         }
       );
       expect(result).toEqual(mockResponse);
+    });
+  });
+
+  describe('getGitHubEventLogPayload', () => {
+    it('fetches payload for a specific event log entry', async () => {
+      const { apiRequest } = await import('../apiClient.js');
+      const mockResponse = { payload: { action: 'opened', number: 42 } };
+      vi.mocked(apiRequest).mockResolvedValue(mockResponse);
+
+      const result = await getGitHubEventLogPayload(mockAccessToken, 'delivery-abc');
+
+      expect(apiRequest).toHaveBeenCalledWith(
+        'https://code-agent.test',
+        '/code/github-event-log/delivery-abc/payload',
+        mockAccessToken
+      );
+      expect(result).toEqual(mockResponse);
+    });
+
+    it('encodes special characters in the id', async () => {
+      const { apiRequest } = await import('../apiClient.js');
+      vi.mocked(apiRequest).mockResolvedValue({ payload: null });
+
+      await getGitHubEventLogPayload(mockAccessToken, 'id/with special');
+
+      expect(apiRequest).toHaveBeenCalledWith(
+        'https://code-agent.test',
+        '/code/github-event-log/id%2Fwith%20special/payload',
+        mockAccessToken
+      );
     });
   });
 

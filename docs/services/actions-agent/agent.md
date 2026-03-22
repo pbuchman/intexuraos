@@ -77,7 +77,7 @@ interface ListActionsResponse {
 ```typescript
 interface UpdateActionParams {
   status?: 'processing' | 'rejected' | 'archived';
-  type?: ActionType; // Only for pending/awaiting_approval actions
+  type?: ActionType; // Only for pending/awaiting_approval/failed actions
 }
 ```
 
@@ -402,7 +402,7 @@ if (preview?.status === 'ready') {
 | POST   | `/internal/actions/process`          | Process action from Pub/Sub (unified)       |
 | POST   | `/internal/actions/:actionType`      | Process action from Pub/Sub (type-specific) |
 | POST   | `/internal/actions/retry-pending`    | Retry stuck actions (Cloud Scheduler)       |
-| POST   | `/internal/actions/approval-reply`   | Handle WhatsApp button taps (v2.0.0)        |
+| POST   | `/internal/actions/approval-reply`   | Handle WhatsApp button taps                 |
 | PATCH  | `/internal/actions/:actionId/status` | Update resource status from code-agent      |
 
 ---
@@ -514,4 +514,4 @@ whatsapp-service -> action.approval.reply (buttonId: "approve:{actionId}")
 
 ---
 
-**Last updated:** 2026-03-07
+**Last updated:** 2026-03-22

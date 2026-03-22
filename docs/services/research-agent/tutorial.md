@@ -1,6 +1,6 @@
 # Research Agent — Tutorial
 
-> **Time:** 20–30 minutes
+> **Time:** 20-30 minutes
 > **Prerequisites:** Node.js 20+, valid Auth0 access token, at least one LLM provider API key configured in user-service
 > **You'll learn:** How to submit research, poll for completion, understand partial failures, and enhance existing results
 
@@ -79,7 +79,7 @@ export RESEARCH_ID="res_abc123"
 
 ### What Just Happened?
 
-Research Agent saved the research to Firestore with status `pending` and published a `research.process` event to Pub/Sub. The processing runs asynchronously — the response comes back immediately without waiting for LLM calls.
+Research Agent saved the research to Firestore with status `pending` and published a `research.process` event to Pub/Sub. The processing runs asynchronously — the response comes back immediately without waiting for LLM calls. During processing, the service infers a structured research context from your prompt (domain, answer style, source preferences) and uses it to build tailored prompts for each model.
 
 ---
 
@@ -97,9 +97,9 @@ curl -s "$BASE_URL/research/$RESEARCH_ID" \
 The status progresses through this lifecycle:
 
 ```
-pending → processing → synthesizing → completed
-                     ↘ awaiting_confirmation (partial failure)
-                     ↘ failed (all models failed)
+pending -> processing -> synthesizing -> completed
+                      \-> awaiting_confirmation (partial failure)
+                      \-> failed (all models failed)
 ```
 
 ### Step 2.2: Simple Poll Loop
@@ -307,8 +307,8 @@ With `skipSynthesis: true`, the research reaches `completed` after the single mo
 
 Configure one model with no API key by temporarily removing it from user-service. Submit a two-model research. When `awaiting_confirmation` appears, test:
 
-- `"decision": "proceed"` → synthesizes with the successful model
-- `"decision": "retry"` → re-queues the failed model; status goes to `retrying`
-- `"decision": "cancel"` → status transitions to `failed`
+- `"decision": "proceed"` -> synthesizes with the successful model
+- `"decision": "retry"` -> re-queues the failed model; status goes to `retrying`
+- `"decision": "cancel"` -> status transitions to `failed`
 
 </details>

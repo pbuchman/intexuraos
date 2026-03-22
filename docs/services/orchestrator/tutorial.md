@@ -108,7 +108,7 @@ Expected response:
   "capacity": 2,
   "running": 0,
   "available": 2,
-  "githubTokenExpiresAt": "2026-03-15T15:30:00.000Z",
+  "githubTokenExpiresAt": "2026-03-22T15:30:00.000Z",
   "anthropicOAuth": { "status": "active", "expiresInMinutes": 45, "subscriptionType": "max" },
   "dockerHealthy": true,
   "diskHealthy": true
@@ -249,7 +249,28 @@ BODY='{
 }'
 ```
 
-### Step 6: Monitor the task
+### Step 6: Submit a plan review task
+
+To dispatch a review that validates an implementation against its plan:
+
+```bash
+BODY='{
+  "taskId": "plan-review-001",
+  "workerType": "auto",
+  "prompt": "Review PR #42 — validate implementation against the approved plan",
+  "agentType": "review",
+  "reviewTypes": ["plan_review"],
+  "linearIssueId": "INT-500",
+  "linearIssueLabels": [],
+  "hasChildren": false,
+  "webhookUrl": "http://localhost:3001/webhook",
+  "webhookSecret": "test-secret-123"
+}'
+```
+
+The `reviewTypes` field accepts an array of: `code_quality`, `security`, `architecture`, `plan_review`. When `plan_review` is included, the Review Agent reads the plan document from the worktree and cross-references every requirement against the PR diff.
+
+### Step 7: Monitor the task
 
 Check task status:
 
@@ -269,7 +290,7 @@ View orchestrator health:
 curl http://localhost:8199/health | jq
 ```
 
-### Step 7: Send a message to a running task
+### Step 8: Send a message to a running task
 
 Messages can be sent to running, completed, or failed tasks. For running tasks, the message is queued and delivered when the current attempt finishes. For completed or failed tasks, the task is resumed with a new worker session.
 
@@ -288,7 +309,7 @@ curl -X POST http://localhost:8199/tasks/test-task-001/message \
 
 The message field supports up to 20,000 characters.
 
-### Step 8: Cancel a task
+### Step 9: Cancel a task
 
 ```bash
 curl -X DELETE http://localhost:8199/tasks/test-task-001
@@ -422,4 +443,4 @@ curl -H "CF-Access-Client-Id: <client-id>" \
 | `INTEXURAOS_DASHSCOPE_APP_API_KEY not set`        | Missing DashScope API key            | Required if dispatching `glm`, `qwen`, or `kimi` worker type tasks; add to `.envrc.local`                                                         |
 | Task adopted on restart but fails immediately     | Container state drift                | Container was running but in a bad state; check Docker logs for the container before it was adopted                                               |
 | `503 docker_unavailable`                          | Docker daemon not responding         | Check Docker Desktop is running; the health gate rejects tasks when Docker is unreachable                                                         |
-| Container creation timeout                        | Docker pull or create taking > 2min  | Check network connectivity for image pull; check Docker disk space                                                                                |
+| Container creation timeout                        | Docker pull or create taking > 2min  | Check network connectivity for image pull; check Docker disk space; image pull now has separate 15-minute timeout                                 |

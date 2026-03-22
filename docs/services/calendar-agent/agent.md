@@ -337,4 +337,4 @@ interface ServiceFeedback {
 
 ---
 
-**Last updated:** 2026-03-15 (v3.3.0 - removed ZAI provider, GLM-4.7 models; Chinese LLMs now via Alibaba Cloud Model Studio)
+**Last updated:** 2026-03-22 (v3.4.0 — route file split, internal route dedup)

@@ -14,7 +14,7 @@ You are setting up a new integration and need to know how the platform handles W
 
 The assistant pulls the most relevant documentation, explains the steps and setup involved, and cites the exact sections it drew from — each linked so you can verify the details yourself. You follow up: "What about attachments?" No need to repeat the context. The assistant picks up where you left off and walks you through the attachment workflow.
 
-Then you decide to act on what you learned. You say: "Create a command to send a weekly status update every Monday at 9am." The assistant proposes the command with the exact text and parameters. You say "yes," and the command is created. No forms, no field hunting, no context switch.
+Then you decide to act on what you learned. You say: "Create a command to send a weekly status update every Monday at 9am." The assistant proposes the command with the exact text and parameters. You confirm with a simple "yes" — and the command is created. No forms, no field hunting, no context switch.
 
 You never left the conversation.
 

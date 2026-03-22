@@ -530,4 +530,131 @@ describe('executeCodeAction usecase', () => {
       expect(result.error.message).toContain('Cannot execute action with status: archived');
     }
   });
+
+  describe('keyword-based worker type detection', () => {
+    it('detects worker type from prompt keyword when workerType not in payload', async () => {
+      const action = createAction({
+        status: 'pending',
+        payload: {
+          prompt: 'use opus to refactor the auth module',
+        },
+      });
+      await fakeActionRepo.save(action);
+
+      const mockLogger = createMockLogger();
+      const usecase = createExecuteCodeActionUseCase({
+        actionRepository: fakeActionRepo,
+        codeAgentClient: fakeCodeClient,
+        whatsappPublisher: fakeWhatsappPublisher,
+        webAppUrl: 'https://app.intexuraos.com',
+        logger: mockLogger,
+      });
+
+      await usecase('action-123');
+
+      const submittedTasks = fakeCodeClient.getSubmittedTasks();
+      expect(submittedTasks).toHaveLength(1);
+      expect(submittedTasks[0]?.payload.workerType).toBe('opus');
+    });
+
+    it('detects kimi worker type from prompt keyword', async () => {
+      const action = createAction({
+        status: 'pending',
+        payload: {
+          prompt: 'use kimi to investigate the bug',
+        },
+      });
+      await fakeActionRepo.save(action);
+
+      const mockLogger = createMockLogger();
+      const usecase = createExecuteCodeActionUseCase({
+        actionRepository: fakeActionRepo,
+        codeAgentClient: fakeCodeClient,
+        whatsappPublisher: fakeWhatsappPublisher,
+        webAppUrl: 'https://app.intexuraos.com',
+        logger: mockLogger,
+      });
+
+      await usecase('action-123');
+
+      const submittedTasks = fakeCodeClient.getSubmittedTasks();
+      expect(submittedTasks).toHaveLength(1);
+      expect(submittedTasks[0]?.payload.workerType).toBe('kimi');
+    });
+
+    it('falls back to auto when no keyword matches', async () => {
+      const action = createAction({
+        status: 'pending',
+        payload: {
+          prompt: 'add a new endpoint for users',
+        },
+      });
+      await fakeActionRepo.save(action);
+
+      const mockLogger = createMockLogger();
+      const usecase = createExecuteCodeActionUseCase({
+        actionRepository: fakeActionRepo,
+        codeAgentClient: fakeCodeClient,
+        whatsappPublisher: fakeWhatsappPublisher,
+        webAppUrl: 'https://app.intexuraos.com',
+        logger: mockLogger,
+      });
+
+      await usecase('action-123');
+
+      const submittedTasks = fakeCodeClient.getSubmittedTasks();
+      expect(submittedTasks).toHaveLength(1);
+      expect(submittedTasks[0]?.payload.workerType).toBe('auto');
+    });
+
+    it('explicit workerType in payload takes precedence over keyword detection', async () => {
+      const action = createAction({
+        status: 'pending',
+        payload: {
+          prompt: 'use opus to refactor the auth module',
+          workerType: 'sonnet',
+        },
+      });
+      await fakeActionRepo.save(action);
+
+      const mockLogger = createMockLogger();
+      const usecase = createExecuteCodeActionUseCase({
+        actionRepository: fakeActionRepo,
+        codeAgentClient: fakeCodeClient,
+        whatsappPublisher: fakeWhatsappPublisher,
+        webAppUrl: 'https://app.intexuraos.com',
+        logger: mockLogger,
+      });
+
+      await usecase('action-123');
+
+      const submittedTasks = fakeCodeClient.getSubmittedTasks();
+      expect(submittedTasks).toHaveLength(1);
+      expect(submittedTasks[0]?.payload.workerType).toBe('sonnet');
+    });
+
+    it('detects worker type from action.title when prompt is missing', async () => {
+      const action = createAction({
+        status: 'pending',
+        title: 'use opus to refactor the auth module',
+        payload: {},
+      });
+      await fakeActionRepo.save(action);
+
+      const mockLogger = createMockLogger();
+      const usecase = createExecuteCodeActionUseCase({
+        actionRepository: fakeActionRepo,
+        codeAgentClient: fakeCodeClient,
+        whatsappPublisher: fakeWhatsappPublisher,
+        webAppUrl: 'https://app.intexuraos.com',
+        logger: mockLogger,
+      });
+
+      await usecase('action-123');
+
+      const submittedTasks = fakeCodeClient.getSubmittedTasks();
+      expect(submittedTasks).toHaveLength(1);
+      expect(submittedTasks[0]?.payload.workerType).toBe('opus');
+    });
+  });
 });

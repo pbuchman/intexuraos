@@ -1,7 +1,7 @@
 # Bookmarks Agent — Technical Debt
 
-**Last Updated:** 2026-03-15
-**Analysis Run:** [2026-03-15 documentation-runs.md entry](../../documentation-runs.md)
+**Last Updated:** 2026-03-22
+**Analysis Run:** [2026-03-22 documentation-runs.md entry](../../documentation-runs.md)
 
 ---
 
@@ -13,10 +13,10 @@
 | Test Coverage Gaps  | 0     | —        |
 | TypeScript Issues   | 0     | —        |
 | TODO/FIXME Comments | 0     | —        |
-| SRP Violations      | 1     | Low      |
+| SRP Violations      | 0     | —        |
 | Code Duplicates     | 1     | Low      |
 | Deprecations        | 0     | —        |
-| **Total**           | **2** | Low      |
+| **Total**           | **1** | Low      |
 
 ---
 
@@ -43,25 +43,13 @@ Features that are planned but not yet implemented:
 
 ---
 
-## SRP Violations
-
-### Low Priority
-
-| File                | Issue                                          | Suggestion                                  |
-| ------------------- | ---------------------------------------------- | ------------------------------------------- |
-| `bookmarkRoutes.ts` | CRUD routes + image proxy + schema definitions | Extract image proxy to separate routes file |
-
-The `bookmarkRoutes.ts` file handles 7 CRUD endpoints plus the image proxy endpoint, with inline JSON schema definitions for each. While still readable, the image proxy is a distinct concern that could be extracted to `imageRoutes.ts`.
-
----
-
 ## Code Duplicates
 
 ### Low Priority
 
-| Pattern                     | Locations                                | Suggestion                                                  |
-| --------------------------- | ---------------------------------------- | ----------------------------------------------------------- |
-| `formatBookmark()` function | `bookmarkRoutes.ts`, `internalRoutes.ts` | Extract to shared utility in `domain/` or `routes/shared/`  |
+| Pattern                     | Locations                                | Suggestion                                                 |
+| --------------------------- | ---------------------------------------- | ---------------------------------------------------------- |
+| `formatBookmark()` function | `bookmarkRoutes.ts`, `internalRoutes.ts` | Extract to shared utility in `domain/` or `routes/shared/` |
 
 Both route files define an identical `formatBookmark()` function that converts domain `Bookmark` objects to JSON-serializable response objects. This could be a single shared function.
 
@@ -82,7 +70,9 @@ All endpoints and use cases have test coverage. The 100% branch coverage thresho
 | Routes (Pub/Sub)   | Tested | Unit tests with mocked publishers, transient retry tests    |
 | Use cases          | Tested | Unit tests with dependency injection, transient error paths |
 | WhatsApp publisher | Tested | Mocked in summarizeBookmark tests                           |
+| Image proxy        | Tested | Port/adapter pattern with dedicated tests                   |
 | Infrastructure     | Tested | Tested via route integration tests                          |
+| Server setup       | Tested | buildServer + health check tests                            |
 
 ---
 
@@ -119,6 +109,10 @@ No deprecated APIs or dependencies in use.
 ---
 
 ## Architecture Considerations
+
+### Enrichment Publishing in createBookmark
+
+The `createBookmark` use case accepts an optional `enrichPublisher` dependency. When provided (internal create), it publishes a `bookmarks.enrich` event using a fire-and-forget pattern. When omitted (public create), no enrichment is triggered. This keeps the enrichment decision at the dependency injection boundary rather than requiring callers to publish separately.
 
 ### WhatsApp Delivery Pattern
 
@@ -166,6 +160,10 @@ The public `POST /bookmarks` endpoint does not trigger enrichment — only the i
 
 | Issue   | Description                                 | Resolution                                                  | Date       |
 | ------- | ------------------------------------------- | ----------------------------------------------------------- | ---------- |
+| INT-908 | Image proxy mixed into bookmarkRoutes.ts    | Extracted to imageProxyRoutes.ts + port/adapter pattern     | 2026-03-16 |
+| INT-909 | Enrich publish separate from create         | Moved into createBookmark use-case as optional dependency   | 2026-03-16 |
+| INT-910 | OpenAPI config inline in server.ts          | Extracted to openapi.config.ts                              | 2026-03-16 |
+| INT-911 | Duplicated PubSub auth/decode in routes     | Deduplicated into pubsubHelpers.ts                          | 2026-03-17 |
 | INT-786 | v8-ignore blocks missing test coverage      | Added tests for v8-ignore exemption branches                | 2026-03-13 |
 | INT-198 | Transient summary errors silently dropped   | Pub/Sub retry via HTTP 503 + transient error classification | 2026-01-28 |
 | INT-427 | Branch coverage below 100%                  | Added v8 ignore exemptions with valid categories            | 2026-01-31 |
@@ -176,7 +174,18 @@ The public `POST /bookmarks` endpoint does not trigger enrichment — only the i
 | INT-172 | Enrichment pipeline test coverage gaps      | Added comprehensive tests                                   | 2026-01-20 |
 | —       | OG fetch and summarization were synchronous | Split into async Pub/Sub pipeline                           | 2026-01-15 |
 
-### Recent Improvements (v3.0.0–v3.3.0)
+### Recent Improvements (v3.3.0–v3.4.0)
+
+| Improvement                                              | Description                                                             | Date       |
+| -------------------------------------------------------- | ----------------------------------------------------------------------- | ---------- |
+| Image proxy port/adapter extraction (INT-908)            | Separated image proxy into dedicated routes file and port interface     | 2026-03-16 |
+| Enrichment publishing in use-case (INT-909)              | createBookmark now optionally publishes enrich event directly           | 2026-03-16 |
+| OpenAPI config extraction (INT-910)                      | Moved Swagger configuration to dedicated openapi.config.ts              | 2026-03-16 |
+| PubSub helpers deduplication (INT-911)                   | Shared auth + decode logic extracted to pubsubHelpers.ts                | 2026-03-17 |
+| v8-ignore standardization (INT-986)                      | Standardized PENDING v8-ignore annotations to permanent ts-type         | 2026-03-19 |
+| Test coverage close (INT-876, INT-877, INT-878, INT-879) | Added tests for server.ts, internalRoutes, pubsubRoutes, bookmarkRoutes | 2026-03-15 |
+
+### Previous Improvements (v3.0.0–v3.3.0)
 
 | Improvement                       | Description                                                        | Date       |
 | --------------------------------- | ------------------------------------------------------------------ | ---------- |
