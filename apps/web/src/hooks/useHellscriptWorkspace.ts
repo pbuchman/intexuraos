@@ -14,10 +14,11 @@ interface UseHellscriptWorkspaceResult {
   error: string | null;
   impose: (utterance: string) => Promise<void>;
   imposing: boolean;
+  lastAction: string | null;
 }
 
 export function useHellscriptWorkspace(
-  bufferId: string | undefined
+  bufferId: string | undefined // @allow-undefined-type -- function parameter, not optional property
 ): UseHellscriptWorkspaceResult {
   const { getAccessToken } = useAuth();
   const navigate = useNavigate();
@@ -25,6 +26,7 @@ export function useHellscriptWorkspace(
   const [loading, setLoading] = useState(bufferId !== undefined);
   const [error, setError] = useState<string | null>(null);
   const [imposing, setImposing] = useState(false);
+  const [lastAction, setLastAction] = useState<string | null>(null);
 
   const fetchWorkspace = useCallback(
     async (id: string): Promise<void> => {
@@ -54,6 +56,7 @@ export function useHellscriptWorkspace(
     async (utterance: string): Promise<void> => {
       setImposing(true);
       setError(null);
+      setLastAction(null);
 
       try {
         const token = await getAccessToken();
@@ -61,6 +64,7 @@ export function useHellscriptWorkspace(
           ? { bufferId, utterance }
           : { utterance };
         const response = await imposeApi(token, request);
+        setLastAction(response.action);
 
         // For new conversations, navigate to the created buffer
         if (bufferId === undefined) {
@@ -84,5 +88,6 @@ export function useHellscriptWorkspace(
     error,
     impose,
     imposing,
+    lastAction,
   };
 }

@@ -12,7 +12,7 @@ import type { HellscriptDraftVersion } from '@/types';
 
 export function HellscriptConversationPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
-  const { workspace, loading, error, impose, imposing } = useHellscriptWorkspace(id);
+  const { workspace, loading, error, impose, imposing, lastAction } = useHellscriptWorkspace(id);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
 
   const versions = useMemo<HellscriptDraftVersion[]>(
@@ -65,6 +65,11 @@ export function HellscriptConversationPage(): React.JSX.Element {
                 <HellscriptTimeline events={workspace?.events ?? []} />
               </div>
               <HellscriptComposer onSubmit={impose} disabled={imposing} />
+              {lastAction === 'category_required' ? (
+                <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+                  Please specify which platform you want the draft for: <strong>Threads</strong>, <strong>LinkedIn</strong>, or <strong>General</strong>.
+                </div>
+              ) : null}
               {error !== null ? (
                 <p className="mt-2 text-xs text-red-600 dark:text-red-400">{error}</p>
               ) : null}

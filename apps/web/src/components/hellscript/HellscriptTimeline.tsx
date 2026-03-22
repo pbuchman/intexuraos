@@ -9,12 +9,6 @@ interface HellscriptTimelineProps {
 const INTENT_BADGE_STYLES: Record<HellscriptIntentKind, string> = {
   append_thought:
     'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  add_writing_sample:
-    'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
-  set_style_instructions:
-    'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
-  set_metadata:
-    'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
   delete_thought:
     'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
   reorder_thoughts:

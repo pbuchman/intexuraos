@@ -6,7 +6,7 @@ import { emptyState } from '../domain/models/materializedBufferState.js';
 describe('interpretImposePrompt', () => {
   it('has correct metadata', () => {
     expect(interpretImposePrompt.name).toBe('interpret-impose');
-    expect(interpretImposePrompt.version).toBe('1.2.0');
+    expect(interpretImposePrompt.version).toBe('2.0.0');
     expect(interpretImposePrompt.description).toBeDefined();
   });
 
@@ -45,55 +45,38 @@ describe('interpretImposePrompt', () => {
     expect(result).toContain('(none)');
   });
 
-  it('includes writing samples when present', () => {
-    const state = {
-      ...emptyState(),
-      writingSamples: ['Sample text here'],
-    };
-
+  it('does not include writing samples, style, audience, or content goal sections', () => {
     const result = interpretImposePrompt.build({
       utterance: 'test',
-      currentState: state,
+      currentState: emptyState(),
     });
 
-    expect(result).toContain('Sample text here');
+    expect(result).not.toContain('buffer_writing_samples');
+    expect(result).not.toContain('buffer_style_instructions');
+    expect(result).not.toContain('buffer_audience');
+    expect(result).not.toContain('buffer_content_goal');
+    expect(result).not.toContain('add_writing_sample');
+    expect(result).not.toContain('set_style_instructions');
+    expect(result).not.toContain('set_metadata');
   });
 
-  it('includes style instructions when present', () => {
-    const state = {
-      ...emptyState(),
-      styleInstructions: 'Write casually',
-    };
-
+  it('includes category in update_draft intent description', () => {
     const result = interpretImposePrompt.build({
       utterance: 'test',
-      currentState: state,
+      currentState: emptyState(),
     });
 
-    expect(result).toContain('Write casually');
-  });
-
-  it('includes audience and content goal when present', () => {
-    const state = {
-      ...emptyState(),
-      audience: 'Developers',
-      contentGoal: 'Tutorial',
-    };
-
-    const result = interpretImposePrompt.build({
-      utterance: 'test',
-      currentState: state,
-    });
-
-    expect(result).toContain('Developers');
-    expect(result).toContain('Tutorial');
+    expect(result).toContain('"category"');
+    expect(result).toContain('"threads"');
+    expect(result).toContain('"linkedin"');
+    expect(result).toContain('"general"');
   });
 });
 
 describe('generateDraftPrompt', () => {
   it('has correct metadata', () => {
     expect(generateDraftPrompt.name).toBe('generate-draft');
-    expect(generateDraftPrompt.version).toBe('1.1.0');
+    expect(generateDraftPrompt.version).toBe('2.0.0');
     expect(generateDraftPrompt.description).toBeDefined();
   });
 
@@ -109,6 +92,9 @@ describe('generateDraftPrompt', () => {
       state,
       priorDraft: null,
       requestText: 'Write it',
+      styleInstructions: null,
+      writingSamples: [],
+      category: 'general',
     });
 
     expect(result).toContain('Idea one');
@@ -120,6 +106,9 @@ describe('generateDraftPrompt', () => {
       state: emptyState(),
       priorDraft: null,
       requestText: 'Generate',
+      styleInstructions: null,
+      writingSamples: [],
+      category: 'general',
     });
 
     expect(result).toContain('(no thoughts yet)');
@@ -130,6 +119,9 @@ describe('generateDraftPrompt', () => {
       state: emptyState(),
       priorDraft: '# Old Draft\n\nOld content',
       requestText: 'Improve it',
+      styleInstructions: null,
+      writingSamples: [],
+      category: 'general',
     });
 
     expect(result).toContain('# Old Draft');
@@ -141,72 +133,90 @@ describe('generateDraftPrompt', () => {
       state: emptyState(),
       priorDraft: null,
       requestText: 'Write',
+      styleInstructions: null,
+      writingSamples: [],
+      category: 'general',
     });
 
     expect(result).not.toContain('prior_draft');
   });
 
-  it('includes writing samples', () => {
-    const state = {
-      ...emptyState(),
-      writingSamples: ['My writing style example'],
-    };
-
+  it('includes writing samples from config', () => {
     const result = generateDraftPrompt.build({
-      state,
+      state: emptyState(),
       priorDraft: null,
       requestText: 'Write',
+      styleInstructions: null,
+      writingSamples: ['My writing style example'],
+      category: 'general',
     });
 
     expect(result).toContain('My writing style example');
-    expect(result).toContain('user_writing_samples');
+    expect(result).toContain('writing_samples');
   });
 
-  it('includes style instructions', () => {
-    const state = {
-      ...emptyState(),
-      styleInstructions: 'Be formal',
-    };
-
+  it('includes style instructions from config', () => {
     const result = generateDraftPrompt.build({
-      state,
+      state: emptyState(),
       priorDraft: null,
       requestText: 'Write',
+      styleInstructions: 'Be formal',
+      writingSamples: [],
+      category: 'general',
     });
 
-    expect(result).toContain('user_style_instructions');
+    expect(result).toContain('style_instructions');
     expect(result).toContain('Be formal');
   });
 
-  it('includes audience', () => {
-    const state = {
-      ...emptyState(),
-      audience: 'Executives',
-    };
-
+  it('includes target platform', () => {
     const result = generateDraftPrompt.build({
-      state,
+      state: emptyState(),
       priorDraft: null,
       requestText: 'Write',
+      styleInstructions: null,
+      writingSamples: [],
+      category: 'linkedin',
     });
 
-    expect(result).toContain('user_audience');
-    expect(result).toContain('Executives');
+    expect(result).toContain('target_platform');
+    expect(result).toContain('LinkedIn');
   });
 
-  it('includes content goal', () => {
+  it('does not include old user_audience or user_content_goal sections', () => {
+    const result = generateDraftPrompt.build({
+      state: emptyState(),
+      priorDraft: null,
+      requestText: 'Write',
+      styleInstructions: null,
+      writingSamples: [],
+      category: 'general',
+    });
+
+    expect(result).not.toContain('user_audience');
+    expect(result).not.toContain('user_content_goal');
+    expect(result).not.toContain('user_writing_samples');
+    expect(result).not.toContain('user_style_instructions');
+  });
+
+  it('escapes XML tags in user input', () => {
     const state = {
       ...emptyState(),
-      contentGoal: 'Whitepaper',
+      thoughts: [
+        { id: 't1', text: '<script>alert("xss")</script>', addedAt: '2024-01-01T00:00:00.000Z' },
+      ],
     };
 
     const result = generateDraftPrompt.build({
       state,
       priorDraft: null,
       requestText: 'Write',
+      styleInstructions: null,
+      writingSamples: [],
+      category: 'general',
     });
 
-    expect(result).toContain('user_content_goal');
-    expect(result).toContain('Whitepaper');
+    expect(result).toContain('&lt;script&gt;');
+    expect(result).not.toContain('<script>');
   });
 });

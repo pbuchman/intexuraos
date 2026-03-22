@@ -16,9 +16,6 @@ export interface HellscriptBufferSummary {
  */
 export type HellscriptIntentKind =
   | 'append_thought'
-  | 'add_writing_sample'
-  | 'set_style_instructions'
-  | 'set_metadata'
   | 'delete_thought'
   | 'reorder_thoughts'
   | 'update_draft'
@@ -65,10 +62,24 @@ export interface HellscriptDraftVersion {
  */
 export interface HellscriptMaterializedState {
   thoughts: { id: string; text: string; addedAt: string }[];
-  writingSamples: string[];
-  styleInstructions: string | null;
-  audience: string | null;
-  contentGoal: string | null;
+}
+
+export type WritingCategory = 'threads' | 'linkedin' | 'general';
+
+export interface WritingStyleConfig {
+  threads: string | null;
+  linkedin: string | null;
+  general: string | null;
+  updatedAt: string;
+}
+
+export interface WritingSample {
+  id: string;
+  category: WritingCategory;
+  title: string;
+  text: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface HellscriptWorkspaceResponse {

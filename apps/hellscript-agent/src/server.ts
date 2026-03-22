@@ -17,6 +17,7 @@ import {
 } from '@intexuraos/http-server';
 import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { hellscriptRoutes } from './routes/hellscriptRoutes.js';
+import { writingConfigRoutes } from './routes/writingConfigRoutes.js';
 
 const SERVICE_NAME = 'hellscript-agent';
 const SERVICE_VERSION = '1.0.0';
@@ -168,6 +169,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   });
 
   await app.register(hellscriptRoutes);
+  await app.register(writingConfigRoutes);
 
   app.get(
     '/openapi.json',
