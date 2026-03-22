@@ -5,6 +5,7 @@ import { FakeIntentInterpreter } from './fakeIntentInterpreter.js';
 import { FakeDraftGenerator } from './fakeDraftGenerator.js';
 import { FakeWritingConfigRepository } from './fakeWritingConfigRepository.js';
 import { imposeOnBuffer } from '../domain/usecases/imposeOnBuffer.js';
+import { BufferNotFoundError, DraftGenerationError } from '../domain/errors.js';
 const logger = pino({ level: 'silent' });
 
 describe('imposeOnBuffer', () => {
@@ -85,6 +86,7 @@ describe('imposeOnBuffer', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
+        expect(result.error).toBeInstanceOf(BufferNotFoundError);
         expect(result.error.message).toBe('Buffer not found');
       }
     });
@@ -469,6 +471,7 @@ describe('imposeOnBuffer', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
+        expect(result.error).toBeInstanceOf(DraftGenerationError);
         expect(result.error.message).toBe('Draft generation failed');
       }
     });

@@ -4,6 +4,7 @@ import { FakeHellscriptRepository } from './fakeHellscriptRepository.js';
 import { listBuffers } from '../domain/usecases/listBuffers.js';
 import { getBufferWorkspace } from '../domain/usecases/getBufferWorkspace.js';
 import { emptyState } from '../domain/models/materializedBufferState.js';
+import { BufferNotFoundError } from '../domain/errors.js';
 
 const logger = pino({ level: 'silent' });
 
@@ -96,6 +97,7 @@ describe('getBufferWorkspace', () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
+      expect(result.error).toBeInstanceOf(BufferNotFoundError);
       expect(result.error.message).toBe('Buffer not found');
     }
   });
@@ -113,6 +115,7 @@ describe('getBufferWorkspace', () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
+      expect(result.error).toBeInstanceOf(BufferNotFoundError);
       expect(result.error.message).toBe('Buffer not found');
     }
   });
