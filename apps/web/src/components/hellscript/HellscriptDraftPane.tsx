@@ -1,3 +1,4 @@
+import { MarkdownContent } from '@/components/MarkdownContent';
 import type { HellscriptDraftVersion } from '@/types';
 
 interface HellscriptDraftPaneProps {
@@ -25,9 +26,7 @@ export function HellscriptDraftPane({ draft }: HellscriptDraftPaneProps): React.
         </span>
       </div>
       <div className="flex-1 overflow-y-auto">
-        <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-slate-800 dark:text-slate-200">
-          {draft.markdown}
-        </pre>
+        <MarkdownContent content={draft.markdown} />
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Pencil, Trash2 } from 'lucide-react';
 import { Layout } from '@/components';
 import { useWritingSamples } from '@/hooks/useWritingSamples';
@@ -10,7 +11,13 @@ const CATEGORIES: { key: WritingCategory; label: string }[] = [
   { key: 'general', label: 'General' },
 ];
 
+const VALID_TABS = new Set<string>(['threads', 'linkedin', 'general']);
+
 const MAX_SAMPLES = 5;
+
+function isValidTab(value: string | null): value is WritingCategory {
+  return value !== null && VALID_TABS.has(value);
+}
 
 function SampleForm({
   initialTitle,
@@ -36,12 +43,14 @@ function SampleForm({
         type="text"
         className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-500"
         placeholder="Sample title"
+        maxLength={200}
         value={title}
         onChange={(e) => { setTitle(e.target.value); }}
       />
       <textarea
         className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-500"
         rows={4}
+        maxLength={10000}
         placeholder="Sample text..."
         value={text}
         onChange={(e) => { setText(e.target.value); }}
@@ -78,6 +87,11 @@ function SampleRow({
   onEdit: (sample: WritingSample) => void;
   onDelete: (sampleId: string) => Promise<void>;
 }): React.JSX.Element {
+  const handleDelete = useCallback(async () => {
+    if (!window.confirm(`Delete sample "${sample.title}"?`)) return;
+    await onDelete(sample.id);
+  }, [sample.id, sample.title, onDelete]);
+
   return (
     <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
       <div className="min-w-0 flex-1">
@@ -100,7 +114,7 @@ function SampleRow({
           type="button"
           className="rounded p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
           disabled={saving}
-          onClick={() => void onDelete(sample.id)}
+          onClick={() => void handleDelete()}
           title="Delete sample"
         >
           <Trash2 className="h-4 w-4" />
@@ -192,8 +206,30 @@ function CategorySamplesPanel({
   );
 }
 
+function useTabCounts(): Record<WritingCategory, number> {
+  const threadsSamples = useWritingSamples('threads');
+  const linkedinSamples = useWritingSamples('linkedin');
+  const generalSamples = useWritingSamples('general');
+
+  return {
+    threads: threadsSamples.samples.length,
+    linkedin: linkedinSamples.samples.length,
+    general: generalSamples.samples.length,
+  };
+}
+
 export function HellscriptSamplesPage(): React.JSX.Element {
-  const [activeTab, setActiveTab] = useState<WritingCategory>('threads');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const activeTab: WritingCategory = isValidTab(tabParam) ? tabParam : 'threads';
+  const counts = useTabCounts();
+
+  const setActiveTab = useCallback(
+    (tab: WritingCategory) => {
+      setSearchParams({ tab }, { replace: true });
+    },
+    [setSearchParams]
+  );
 
   return (
     <Layout>
@@ -207,7 +243,6 @@ export function HellscriptSamplesPage(): React.JSX.Element {
           </p>
         </div>
 
-        {/* Category tabs */}
         <div className="mb-4 flex gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1 dark:border-slate-700 dark:bg-slate-800">
           {CATEGORIES.map(({ key, label }) => (
             <button
@@ -220,7 +255,7 @@ export function HellscriptSamplesPage(): React.JSX.Element {
               }`}
               onClick={() => { setActiveTab(key); }}
             >
-              {label}
+              {label} ({String(counts[key])})
             </button>
           ))}
         </div>

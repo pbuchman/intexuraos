@@ -50,7 +50,7 @@ const styleBodySchema = {
   type: 'object',
   required: ['text'],
   properties: {
-    text: { type: 'string', minLength: 1 },
+    text: { type: 'string', minLength: 1, maxLength: 5000 },
   },
 } as const;
 
@@ -59,7 +59,7 @@ const sampleBodySchema = {
   required: ['title', 'text'],
   properties: {
     title: { type: 'string', minLength: 1, maxLength: 200 },
-    text: { type: 'string', minLength: 1 },
+    text: { type: 'string', minLength: 1, maxLength: 10000 },
   },
 } as const;
 

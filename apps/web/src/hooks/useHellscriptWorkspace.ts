@@ -15,6 +15,7 @@ interface UseHellscriptWorkspaceResult {
   impose: (utterance: string) => Promise<void>;
   imposing: boolean;
   lastAction: string | null;
+  clearLastAction: () => void;
 }
 
 export function useHellscriptWorkspace(
@@ -56,7 +57,6 @@ export function useHellscriptWorkspace(
     async (utterance: string): Promise<void> => {
       setImposing(true);
       setError(null);
-      setLastAction(null);
 
       try {
         const token = await getAccessToken();
@@ -82,6 +82,10 @@ export function useHellscriptWorkspace(
     [getAccessToken, bufferId, navigate, fetchWorkspace]
   );
 
+  const clearLastAction = useCallback(() => {
+    setLastAction(null);
+  }, []);
+
   return {
     workspace,
     loading,
@@ -89,5 +93,6 @@ export function useHellscriptWorkspace(
     impose,
     imposing,
     lastAction,
+    clearLastAction,
   };
 }
