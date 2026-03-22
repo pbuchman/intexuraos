@@ -139,6 +139,50 @@ describe('hellscriptRoutes', () => {
       expect(body.error.code).toBe('INTERNAL_ERROR');
       expect(body.error.message).toBe('Draft generation failed. Please try again.');
     });
+
+    it('passes explicit category to use case when provided', async () => {
+      ctx.intentInterpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'write a post', category: null },
+      });
+      ctx.draftGenerator.setNextMarkdown('# Post');
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/hellscript/impose',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+        },
+        payload: { utterance: 'write a post', category: 'linkedin' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.data.action).toBe('update_draft');
+    });
+
+    it('ignores invalid category in request body', async () => {
+      ctx.intentInterpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'write something', category: null },
+      });
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/hellscript/impose',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+        },
+        payload: { utterance: 'write something', category: 'twitter' },
+      });
+
+      // Fastify schema validation rejects invalid enum value with 400
+      expect(response.statusCode).toBe(400);
+    });
   });
 
   describe('GET /hellscript/buffers', () => {

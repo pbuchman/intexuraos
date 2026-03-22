@@ -256,6 +256,34 @@ describe('imposeOnBuffer', () => {
       }
     });
 
+    it('does not save event when category_required is returned', async () => {
+      const createResult = await repository.createBuffer('user-1', 'Buffer');
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'Write something', category: null },
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        bufferId: createResult.value.id,
+        utterance: 'Write something',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('category_required');
+      }
+
+      const events = await repository.getEvents(createResult.value.id);
+      expect(events.ok).toBe(true);
+      if (events.ok) {
+        expect(events.value).toHaveLength(0);
+      }
+    });
+
     it('returns category_required when category is missing', async () => {
       interpreter.setNextIntent({
         kind: 'update_draft',
@@ -288,6 +316,60 @@ describe('imposeOnBuffer', () => {
       if (result.ok) {
         expect(result.value.action).toBe('category_required');
       }
+    });
+
+    it('uses explicit category from input over intent payload', async () => {
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'Write a post', category: null },
+      });
+      draftGenerator.setNextMarkdown('# LinkedIn Post');
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'Write a post',
+        category: 'linkedin',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('update_draft');
+        expect(result.value.latestDraftVersionId).toBeDefined();
+      }
+
+      const calls = draftGenerator.getCalls();
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.category).toBe('linkedin');
+    });
+
+    it('returns error when saveEvent fails in update_draft path', async () => {
+      repository.simulateMethodError('saveEvent', new Error('Write failed'));
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'draft', category: 'general' },
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'draft',
+      });
+
+      expect(result.ok).toBe(false);
+    });
+
+    it('returns error when updateBufferState fails in update_draft path', async () => {
+      repository.simulateMethodError('updateBufferState', new Error('Write failed'));
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'draft', category: 'general' },
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'draft',
+      });
+
+      expect(result.ok).toBe(false);
     });
 
     it('fetches style instructions and samples for the category', async () => {

@@ -24,6 +24,7 @@ export interface ImposeOnBufferInput {
   userId: string;
   bufferId?: string | undefined;
   utterance: string;
+  category?: WritingCategory | undefined;
 }
 
 export interface ImposeOnBufferResult {
@@ -67,39 +68,15 @@ export async function imposeOnBuffer(
 
   const intent = await interpreter.interpret(input.utterance, currentState, logger);
 
-  const eventResult = await repository.saveEvent({
-    bufferId,
-    rawUtterance: input.utterance,
-    intent,
-    createdAt: new Date().toISOString(),
-  });
-  if (!eventResult.ok) {
-    return eventResult;
-  }
-
-  const newState = applyIntentToState(currentState, intent);
-
-  // Use cached event count from buffer doc instead of reading all events
-  const newEventCount = buffer.eventCount + 1;
-
-  const updateStateResult = await repository.updateBufferState(
-    bufferId,
-    newState,
-    newEventCount
-  );
-  if (!updateStateResult.ok) {
-    return updateStateResult;
-  }
-
+  // For update_draft, validate category BEFORE saving the event.
+  // This avoids phantom timeline entries when category_required is returned.
   if (intent.kind === 'update_draft') {
-    const payloadText = intent.payload['text'];
-    const requestText = typeof payloadText === 'string' ? payloadText : input.utterance;
-
-    // Extract category from intent payload
     const payloadCategory = intent.payload['category'];
-    const categoryStr = typeof payloadCategory === 'string' ? payloadCategory : '';
+    const intentCategoryStr = typeof payloadCategory === 'string' ? payloadCategory : '';
+    const resolvedCategory: WritingCategory | null =
+      input.category ?? (isValidCategory(intentCategoryStr) ? intentCategoryStr : null);
 
-    if (!isValidCategory(categoryStr)) {
+    if (resolvedCategory === null) {
       return {
         ok: true,
         value: {
@@ -109,7 +86,31 @@ export async function imposeOnBuffer(
       };
     }
 
-    const category: WritingCategory = categoryStr;
+    const payloadText = intent.payload['text'];
+    const requestText = typeof payloadText === 'string' ? payloadText : input.utterance;
+    const category: WritingCategory = resolvedCategory;
+
+    const eventResult = await repository.saveEvent({
+      bufferId,
+      rawUtterance: input.utterance,
+      intent,
+      createdAt: new Date().toISOString(),
+    });
+    if (!eventResult.ok) {
+      return eventResult;
+    }
+
+    const newState = applyIntentToState(currentState, intent);
+    const newEventCount = buffer.eventCount + 1;
+
+    const updateStateResult = await repository.updateBufferState(
+      bufferId,
+      newState,
+      newEventCount
+    );
+    if (!updateStateResult.ok) {
+      return updateStateResult;
+    }
 
     // Fetch writing config + samples + prior draft in parallel (independent reads)
     const currentVersionNumber = buffer.latestDraftVersionNumber ?? 0;
@@ -191,6 +192,29 @@ export async function imposeOnBuffer(
         latestDraftVersionId: draftResult.value.id,
       },
     };
+  }
+
+  // Non-draft intent — save event and apply state
+  const eventResult = await repository.saveEvent({
+    bufferId,
+    rawUtterance: input.utterance,
+    intent,
+    createdAt: new Date().toISOString(),
+  });
+  if (!eventResult.ok) {
+    return eventResult;
+  }
+
+  const newState = applyIntentToState(currentState, intent);
+  const newEventCount = buffer.eventCount + 1;
+
+  const updateStateResult = await repository.updateBufferState(
+    bufferId,
+    newState,
+    newEventCount
+  );
+  if (!updateStateResult.ok) {
+    return updateStateResult;
   }
 
   logger.info({ bufferId, action: intent.kind }, 'Intent applied');

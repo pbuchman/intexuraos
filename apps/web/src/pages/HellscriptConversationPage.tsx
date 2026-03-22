@@ -37,12 +37,10 @@ export function HellscriptConversationPage(): React.JSX.Element {
   }, [versions, selectedVersionId]);
 
   const handleCategorySelect = useCallback(
-    (category: WritingCategory) => {
-      const utterance = pendingUtterance !== null
-        ? `[${category}] ${pendingUtterance}`
-        : `Generate a ${category} draft`;
+    (selectedCategory: WritingCategory) => {
+      const utterance = pendingUtterance ?? `Generate a ${selectedCategory} draft`;
       setPendingUtterance(null);
-      void impose(utterance);
+      void impose(utterance, selectedCategory);
     },
     [impose, pendingUtterance]
   );

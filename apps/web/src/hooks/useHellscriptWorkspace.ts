@@ -6,13 +6,13 @@ import {
   getHellscriptWorkspace as getWorkspaceApi,
   imposeOnBuffer as imposeApi,
 } from '@/services/hellscriptAgentApi';
-import type { HellscriptWorkspaceResponse } from '@/types';
+import type { HellscriptWorkspaceResponse, WritingCategory } from '@/types';
 
 interface UseHellscriptWorkspaceResult {
   workspace: HellscriptWorkspaceResponse | null;
   loading: boolean;
   error: string | null;
-  impose: (utterance: string) => Promise<void>;
+  impose: (utterance: string, category?: WritingCategory) => Promise<void>;
   imposing: boolean;
   lastAction: string | null;
   clearLastAction: () => void;
@@ -54,15 +54,15 @@ export function useHellscriptWorkspace(
   }, [bufferId, fetchWorkspace]);
 
   const impose = useCallback(
-    async (utterance: string): Promise<void> => {
+    async (utterance: string, category?: WritingCategory): Promise<void> => {
       setImposing(true);
       setError(null);
 
       try {
         const token = await getAccessToken();
         const request = bufferId !== undefined
-          ? { bufferId, utterance }
-          : { utterance };
+          ? { bufferId, utterance, ...(category !== undefined ? { category } : {}) }
+          : { utterance, ...(category !== undefined ? { category } : {}) };
         const response = await imposeApi(token, request);
         setLastAction(response.action);
 
