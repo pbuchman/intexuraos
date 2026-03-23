@@ -25,7 +25,11 @@ The user's assumption that **only Orchestrator and Code-Agent** have excluded V8
 | `PENDING-packages-internal-clients`  | packages/internal-clients | 1 file   | 0 blocks (stale) |
 | `INT-900`                            | apps/image-service        | 1 file   | 2 blocks         |
 
-**Stale entries** (0 remaining blocks): `packages/internal-clients` (already cleaned up but override not removed). Additionally, some individual files within active override groups have 0 blocks remaining (e.g., `workers/orchestrator/src/services/api-key-validator.ts`, `apps/code-agent/src/infra/http/linearAgentHttpClient.ts`) — these are cleaned up automatically when the override key is removed.
+**Stale entries** (0 remaining blocks): `packages/internal-clients` (already cleaned up but override not removed). Additionally, some individual files within active override groups have 0 remaining blocks but are still listed in the overrides:
+- **Orchestrator:** `workers/orchestrator/src/services/api-key-validator.ts` (0 blocks)
+- **Code-Agent:** `apps/code-agent/src/infra/http/linearAgentHttpClient.ts` (0 blocks), `apps/code-agent/src/domain/usecases/submitToExecutionAgent.ts` (0 blocks), `apps/code-agent/src/infra/repositories/firestoreLogLineRepository.ts` (0 blocks), `apps/code-agent/src/routes/code/github-pr-summaries.ts` (0 blocks)
+
+These stale file-level entries are cleaned up automatically when their parent override key is removed.
 
 **Small residual entries** (1-3 blocks): `todos-agent` (1), `whatsapp-service` (3), `image-service` (2) = 6 blocks total across 3 services.
 
@@ -38,6 +42,8 @@ The user's assumption that **only Orchestrator and Code-Agent** have excluded V8
 ### V8 Ignore Category Breakdown
 
 **Orchestrator (118 blocks across 17 files):**
+
+> **Scope note:** The override entry (`PENDING-workers-orchestrator`) lists 12 files, but 5 additional files (`credential-monitor.ts`, `token-refresher.ts`, `system-prompt.ts`, `webhook-client.ts`, `completion-verifier.ts`) have v8 ignore blocks that already pass static validation with proper categories. The task scope covers ALL 17 files — the goal is zero v8 ignore comments in the service, not just removing overrides.
 
 | Category       | Count | Test Strategy                                                                                                   |
 | -------------- | ----- | --------------------------------------------------------------------------------------------------------------- |
@@ -181,7 +187,7 @@ Use `vi.useFakeTimers()` to control `sendMessage`/`recoverPendingResumeTask` tim
 
 - [ ] **Step 1:** Read all 17 source files, catalog each V8 ignore block with its line range and category.
 - [ ] **Step 2:** For each file, write failing tests that target the ignored branches. Start with the simplest category (`ts-type`) to build momentum.
-- [ ] **Step 3:** Run tests to confirm they fail (the branches are now tested but V8 ignore comments are still present — tests should pass once ignores are removed and branches are hit).
+- [ ] **Step 3:** Run tests to confirm they pass and that coverage now includes the previously-ignored branches (V8 ignore exempts from coverage counting, not from test success).
 - [ ] **Step 4:** Remove V8 ignore start/stop comment pairs from source files.
 - [ ] **Step 5:** Run `pnpm run verify:workspace:tracked -- orchestrator` to verify 100% branch coverage.
 - [ ] **Step 6:** Fix any coverage gaps by adding more targeted tests.
