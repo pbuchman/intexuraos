@@ -25,9 +25,13 @@ The user's assumption that **only Orchestrator and Code-Agent** have excluded V8
 | `PENDING-packages-internal-clients`  | packages/internal-clients | 1 file   | 0 blocks (stale) |
 | `INT-900`                            | apps/image-service        | 1 file   | 2 blocks         |
 
-**Stale entries** (0 remaining blocks): `packages/internal-clients` (already cleaned up but override not removed).
+**Stale entries** (0 remaining blocks): `packages/internal-clients` (already cleaned up but override not removed). Additionally, some individual files within active override groups have 0 blocks remaining (e.g., `workers/orchestrator/src/services/api-key-validator.ts`, `apps/code-agent/src/infra/http/linearAgentHttpClient.ts`) — these are cleaned up automatically when the override key is removed.
 
 **Small residual entries** (1-3 blocks): `todos-agent` (1), `whatsapp-service` (3), `image-service` (2) = 6 blocks total across 3 services.
+
+**Duplicate JSON key:** `PENDING-apps-whatsapp-service` appears twice in `v8-ignore-overrides.json` (lines 34 and 42) with identical content. `JSON.parse` silently drops the first occurrence. The cleanup should edit the raw file to remove both entries.
+
+**Parallel execution note:** Both subtasks modify `v8-ignore-overrides.json`. Since they touch non-overlapping keys, there is no logical dependency, but whichever subtask commits second must rebase to resolve the merge conflict on this file.
 
 **Recommendation:** The 6 residual blocks in other services and the stale entries should be cleaned up as part of these two tasks. The orchestrator task should clean up stale overrides; the code-agent task should address the 6 small residual blocks in other services since they follow identical patterns (ts-type, upstream categories).
 
