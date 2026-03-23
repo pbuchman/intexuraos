@@ -26,7 +26,7 @@ function githubHeaders(token: string): Record<string, string> {
 }
 
 function getUserId(request: FastifyRequest): string {
-  /* v8 ignore start -- ts-type: FastifyRequest type lacks user.userId augmentation; JWT hook always sets it on authenticated routes @preserve */
+  /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
   return (request as unknown as { user?: { userId?: string } }).user?.userId ?? '';
   /* v8 ignore stop @preserve */
 }
@@ -54,7 +54,7 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
     fastify.addHook('onRequest', jwtValidator);
     fastify.addHook('onRequest', async (request, reply) => {
       const userId = getUserId(request);
-      /* v8 ignore start -- ts-type: getUserId fallback to empty string is unreachable when JWT hook sets user.userId @preserve */
+      /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
       if (userId === '') {
         return await reply.fail('UNAUTHORIZED', 'Missing user identity');
       }

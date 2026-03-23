@@ -173,6 +173,32 @@ describe('phoneVerificationRepository', () => {
         expect(result.error.code).toBe('PERSISTENCE_ERROR');
       }
     });
+
+    it('returns null when snapshot is non-empty but docs[0] is undefined', async () => {
+      // Create a corrupt Firestore mock where empty is false but docs array is empty
+      const corruptSnapshot = { empty: false, docs: [] as unknown[] };
+      interface Chainable {
+        where: () => Chainable;
+        orderBy: () => Chainable;
+        limit: () => Chainable;
+        get: () => Promise<typeof corruptSnapshot>;
+      }
+      const chainable: Chainable = {
+        where: (): Chainable => chainable,
+        orderBy: (): Chainable => chainable,
+        limit: (): Chainable => chainable,
+        get: (): Promise<typeof corruptSnapshot> => Promise.resolve(corruptSnapshot),
+      };
+      const corruptDb = { collection: (): Chainable => chainable };
+      setFirestore(corruptDb as unknown as Parameters<typeof setFirestore>[0]);
+
+      const result = await findPendingByUserAndPhone('user-123', '15551234567');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
   });
 
   describe('isPhoneVerified', () => {
@@ -593,6 +619,59 @@ describe('phoneVerificationRepository', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('PERSISTENCE_ERROR');
+      }
+    });
+
+    it('returns PERSISTENCE_ERROR when pending snapshot is non-empty but docs[0] is undefined', async () => {
+      // Create a mock Firestore where the pending query returns a corrupt snapshot
+      let queryCount = 0;
+      const corruptPendingSnapshot = { empty: false, docs: [] as unknown[], size: 0 };
+      const emptySnapshot = { empty: true, docs: [] as unknown[], size: 0 };
+
+      type MockSnapshot = typeof corruptPendingSnapshot;
+      interface MockChainable {
+        where: () => MockChainable;
+        orderBy: () => MockChainable;
+        limit: () => MockChainable;
+        doc: (id?: string) => { set: () => Promise<void> };
+      }
+      const chainable: MockChainable = {
+        where: (): MockChainable => chainable,
+        orderBy: (): MockChainable => chainable,
+        limit: (): MockChainable => chainable,
+        doc: (): { set: () => Promise<void> } => ({ set: (): Promise<void> => Promise.resolve() }),
+      };
+
+      const transaction = {
+        get: (): Promise<MockSnapshot> => {
+          queryCount++;
+          // Query 1: verified check → empty (no verified records)
+          // Query 2: pending check → corrupt (non-empty but no docs)
+          if (queryCount === 2) {
+            return Promise.resolve(corruptPendingSnapshot);
+          }
+          return Promise.resolve(emptySnapshot);
+        },
+        set: (): void => {
+          // No-op
+        },
+      };
+
+      const mockDb = {
+        collection: (): MockChainable => chainable,
+        runTransaction: async <T>(fn: (t: typeof transaction) => Promise<T>): Promise<T> => {
+          return fn(transaction);
+        },
+      };
+
+      setFirestore(mockDb as unknown as Parameters<typeof setFirestore>[0]);
+
+      const result = await createVerificationWithChecks(baseParams);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PERSISTENCE_ERROR');
+        expect(result.error.message).toBe('Unexpected undefined doc');
       }
     });
   });

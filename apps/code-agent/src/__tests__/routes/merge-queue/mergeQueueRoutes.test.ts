@@ -290,6 +290,25 @@ describe('Merge queue JWT routes', () => {
       expect(body.error.code).toBe('UNAUTHORIZED');
     });
 
+    it('should return 401 when JWT has no sub (empty userId)', async () => {
+      mockedJwtVerify.mockResolvedValueOnce({
+        payload: { email: 'test@example.com' },
+        protectedHeader: new Uint8Array(),
+      } as never);
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/merge-queue/watch',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'development' },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
     it('should create watch successfully', async () => {
       // Mock GitHub user resolution
       nock('https://api.github.com')

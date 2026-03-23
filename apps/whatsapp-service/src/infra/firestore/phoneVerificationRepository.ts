@@ -69,9 +69,7 @@ export async function findPendingByUserAndPhone(
 
     if (snapshot.empty) return ok(null);
     const doc = snapshot.docs[0];
-    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires undefined guard despite snapshot.empty check guaranteeing docs[0] exists @preserve */
     if (!doc) return ok(null);
-    /* v8 ignore stop @preserve */
     return ok(doc.data() as PhoneVerification);
   } catch (error) {
     return err({
@@ -252,11 +250,9 @@ export async function createVerificationWithChecks(
 
       if (!pendingSnapshot.empty) {
         const pendingDoc = pendingSnapshot.docs[0];
-        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires undefined guard despite snapshot.empty check guaranteeing docs[0] exists @preserve */
         if (pendingDoc === undefined) {
           return err({ code: 'PERSISTENCE_ERROR', message: 'Unexpected undefined doc' });
         }
-        /* v8 ignore stop @preserve */
         const pending = pendingDoc.data() as PhoneVerification;
         const createdAtTime = new Date(pending.createdAt).getTime();
         const cooldownEnd = createdAtTime + params.cooldownSeconds * 1000;

@@ -1634,6 +1634,20 @@ describe('formatLogChunk', () => {
       const result = formatLogChunk(toolResult(arr), 0, ts());
       expect(result[0]?.text).toBe('  \u2192 [67 items]');
     });
+
+    it('non-array JSON object (>200 chars) parsed by summarizeJsonArray returns undefined', () => {
+      // JSON.parse succeeds but the result is NOT an array — covers !Array.isArray(arr) branch
+      const obj = JSON.stringify({ key: 'x'.repeat(200) });
+      const result = formatLogChunk(toolResult(obj), 0, ts());
+      // Not summarized as array — falls through to object summarization
+      expect(result[0]?.text).not.toContain('items');
+    });
+
+    it('long array-like string (>200 chars) starting with [ but invalid JSON passes through', () => {
+      const badArray = '[' + 'x'.repeat(250);
+      const result = formatLogChunk(toolResult(badArray), 0, ts());
+      expect(result[0]?.text).toContain('  \u2192 [');
+    });
   });
 
   describe('diff tool result summarization', () => {
@@ -1716,6 +1730,14 @@ describe('formatLogChunk', () => {
       const result = formatLogChunk(toolResult(content), 0, ts());
       expect(result[0]?.text).toContain('diff: 1 file changed (+0, -0)');
       expect(result[0]?.text).toMatch(/M src\/file\.ts$/m);
+    });
+
+    it('shortens deeply nested paths (>6 segments)', () => {
+      // A path with >6 segments triggers shortenPath, which uses parts[parts.length - 1] ?? ''
+      const deepPath = 'a/b/c/d/e/f/g/deep-file.ts';
+      const diff = `diff --git a/${deepPath} b/${deepPath}\n--- a/${deepPath}\n+++ b/${deepPath}\n@@ -1 +1 @@\n-old\n+new`;
+      const result = formatLogChunk(toolResult(diff), 0, ts());
+      expect(result[0]?.text).toContain('a/b/c/d/.../deep-file.ts');
     });
   });
 

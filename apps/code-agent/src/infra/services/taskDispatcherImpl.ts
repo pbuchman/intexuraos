@@ -145,11 +145,9 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     if (request.planningPrUrl !== undefined) {
       taskRequest.planningPrUrl = request.planningPrUrl;
     }
-    /* v8 ignore start -- ts-type: conditional assignment for exact optional property types @preserve */
     if (request.reviewTypes !== undefined) {
       taskRequest.reviewTypes = request.reviewTypes;
     }
-    /* v8 ignore stop @preserve */
 
     const body = JSON.stringify(taskRequest);
     const timestamp = Date.now();

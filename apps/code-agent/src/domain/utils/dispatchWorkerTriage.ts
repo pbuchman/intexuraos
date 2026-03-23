@@ -31,8 +31,8 @@ export function extractDispatchWorkerType(commentBody: string): WorkerType | und
   const match = WORKER_PATTERN.exec(commentBody);
   if (match === null) return undefined;
 
-  /* v8 ignore start -- ts-type: regex always captures group when match succeeds @preserve */
   const typeStr = match[1];
+  /* v8 ignore start -- ts-type: regex capture group ?? fallback unreachable — exec always populates groups on match @preserve */
   if (typeStr === undefined) return undefined;
   /* v8 ignore stop @preserve */
 

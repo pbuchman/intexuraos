@@ -40,9 +40,7 @@ export function extractEventUrl(eventType: string, payload: unknown): string | n
         const repo = payload['repository'];
         if (isObject(repo)) {
           const fullName = getString(repo, 'full_name');
-          /* v8 ignore start -- ts-type: defensive null check on webhook payload field @preserve */
           if (fullName !== null) {
-            /* v8 ignore stop @preserve */
             return `https://github.com/${fullName}/compare/${before}...${after}`;
           }
         }

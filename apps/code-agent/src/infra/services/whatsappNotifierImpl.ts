@@ -81,16 +81,12 @@ Error: ${error.message}${remedation}`;
 }
 
 function formatStartedMessage(title: string, _task: CodeTask, linearIssueId?: string): string {
-  /* v8 ignore start -- test-infra: notifyTaskStarted only called via drainTaskQueue which mocks WhatsAppNotifier @preserve */
   const idPrefix = linearIssueId !== undefined ? `${linearIssueId} | ` : '';
-  /* v8 ignore stop @preserve */
   return `🚀 ${idPrefix}${title}`;
 }
 
 function formatResumedMessage(title: string, _task: CodeTask, linearIssueId?: string): string {
-  /* v8 ignore start -- ts-type: ternary branch requires task with linearIssueId for testing @preserve */
   const idPrefix = linearIssueId !== undefined ? `${linearIssueId} | ` : '';
-  /* v8 ignore stop @preserve */
   return `🔄 ${idPrefix}${title}`;
 }
 
@@ -115,9 +111,7 @@ function formatDesignCompleteMessage(
 ): string {
   const idPrefix = linearIssueId !== undefined ? `${linearIssueId} | ` : '';
   const result = task.result;
-  /* v8 ignore start -- ts-type: defensive null check for optional result summary @preserve */
   const summary = result?.summary ?? 'Design completed and ready for implementation.';
-  /* v8 ignore stop @preserve */
 
   const buttonPrompt = includeButtonPrompt
     ? '\n\nReady to implement? Click the button below to start Phase 2.'
@@ -353,9 +347,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       position: number
     ): Promise<Result<void, NotificationError>> {
       const title = await resolveTaskTitle(linearAgentClient, userId, task);
-      /* v8 ignore start -- ts-type: ternary branch requires task with linearIssueId for testing @preserve */
       const idPrefix = task.linearIssueId !== undefined ? `${task.linearIssueId} | ` : '';
-      /* v8 ignore stop @preserve */
       const message = `🕐 ${idPrefix}${title}
 Queued. Position: ${String(position)}`;
 
@@ -381,9 +373,7 @@ Queued. Position: ${String(position)}`;
       task: CodeTask
     ): Promise<Result<void, NotificationError>> {
       const title = await resolveTaskTitle(linearAgentClient, userId, task);
-      /* v8 ignore start -- ts-type: ternary branch requires task with linearIssueId for testing @preserve */
       const idPrefix = task.linearIssueId !== undefined ? `${task.linearIssueId} | ` : '';
-      /* v8 ignore stop @preserve */
       const message = `⏰ ${idPrefix}${title}
 
 Workers were still busy and the task timed out. Please retry when workers are available.`;

@@ -216,7 +216,6 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.webhookSecret !== undefined) {
           taskData.webhookSecret = input.webhookSecret;
         }
-        /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
         if (input.retriedFrom !== undefined) {
           taskData.retriedFrom = input.retriedFrom;
         }
@@ -247,7 +246,6 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.reviewTypes !== undefined) {
           taskData.reviewTypes = input.reviewTypes;
         }
-        /* v8 ignore stop @preserve */
 
         const docRef = collection.doc(taskId);
         transaction.set(docRef, taskData);
@@ -371,11 +369,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.statusSummary !== undefined) {
           updateData['statusSummary'] = input.statusSummary;
         }
-        /* v8 ignore start -- test-infra: workerLocation set by drainTaskQueue which mocks CodeTaskRepository @preserve */
         if (input.workerLocation !== undefined) {
           updateData['workerLocation'] = input.workerLocation;
         }
-        /* v8 ignore stop @preserve */
         if (input.callbackReceived !== undefined) {
           updateData['callbackReceived'] = input.callbackReceived;
         }
@@ -391,11 +387,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.logChunksDropped !== undefined) {
           updateData['logChunksDropped'] = input.logChunksDropped;
         }
-        /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
         if (input.lastHeartbeat !== undefined) {
           updateData['lastHeartbeat'] = Timestamp.fromDate(input.lastHeartbeat);
         }
-        /* v8 ignore stop @preserve */
         if (input.cancelNonce !== undefined) {
           updateData['cancelNonce'] = input.cancelNonce === null
             ? FieldValue.delete()
@@ -475,12 +469,12 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
         // Only set nextCursor when there are actually more results
         if (hasMore && resultDocs.length > 0) {
-          /* v8 ignore start -- ts-type: array last element check @preserve */
           const lastDoc = resultDocs[resultDocs.length - 1];
+          /* v8 ignore start -- ts-type: FakeFirestore always returns non-sparse arrays from queries @preserve */
           if (lastDoc !== undefined) {
-          /* v8 ignore stop @preserve */
             output.nextCursor = lastDoc.id;
           }
+          /* v8 ignore stop @preserve */
         }
 
         return ok(output);
@@ -626,11 +620,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
             }
           }
 
-          /* v8 ignore start -- test-infra: FakeFirestore batch commit not tracked by v8 coverage @preserve */
           if (batchCount > 0) {
             await batch.commit();
           }
-          /* v8 ignore stop @preserve */
         }
 
         const logLinesRef = taskRef.collection('log_lines');
@@ -651,11 +643,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
             }
           }
 
-          /* v8 ignore start -- test-infra: FakeFirestore batch commit not tracked by v8 coverage @preserve */
           if (linesBatchCount > 0) {
             await linesBatch.commit();
           }
-          /* v8 ignore stop @preserve */
         }
 
         const logEntriesRef = taskRef.collection('log_entries');
@@ -676,11 +666,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
             }
           }
 
-          /* v8 ignore start -- test-infra: FakeFirestore batch commit not tracked by v8 coverage @preserve */
           if (entriesBatchCount > 0) {
             await entriesBatch.commit();
           }
-          /* v8 ignore stop @preserve */
         }
 
         const turnMetricsRef = taskRef.collection('turn_metrics');
@@ -701,11 +689,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
             }
           }
 
-          /* v8 ignore start -- test-infra: FakeFirestore batch commit not tracked by v8 coverage @preserve */
           if (metricsBatchCount > 0) {
             await metricsBatch.commit();
           }
-          /* v8 ignore stop @preserve */
         }
 
         const totalLogCount = logCount + logLinesSnapshot.docs.length + logEntriesSnapshot.docs.length + turnMetricsSnapshot.docs.length;
@@ -927,14 +913,12 @@ export const createFirestoreCodeTaskRepository = (deps: {
           }
         }
 
-        /* v8 ignore start -- test-infra: FakeFirestore limit(50) requires inserting 50 documents to trigger this observability warning @preserve */
         if (snapshot.docs.length === 50) {
           logger.warn(
             { repository, prNumber, docsScanned: 50 },
             'findLatestNonReviewTaskByPR exhausted 50-doc window without finding a non-review task',
           );
         }
-        /* v8 ignore stop @preserve */
 
         return ok(null);
       } catch (error) {
@@ -974,10 +958,10 @@ export const createFirestoreCodeTaskRepository = (deps: {
 };
 
 function getErrorMessage(error: unknown): string {
-  /* v8 ignore start -- ts-type: instanceof check creates type narrowing branch @preserve */
+  /* v8 ignore start -- upstream: catch blocks in this module always throw Error instances @preserve */
   if (error instanceof Error) {
     return error.message;
   }
-  /* v8 ignore stop @preserve */
   return String(error);
+  /* v8 ignore stop @preserve */
 }

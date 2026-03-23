@@ -127,6 +127,32 @@ describe('userMappingRepository', () => {
         expect(result.value).toBeNull();
       }
     });
+
+    it('returns null when snapshot is non-empty but docs[0] is undefined', async () => {
+      // Create a corrupt Firestore mock where empty is false but docs array is empty
+      const corruptSnapshot = { empty: false, docs: [] as unknown[] };
+      interface Chainable {
+        where: () => Chainable;
+        orderBy: () => Chainable;
+        limit: () => Chainable;
+        get: () => Promise<typeof corruptSnapshot>;
+      }
+      const chainable: Chainable = {
+        where: (): Chainable => chainable,
+        orderBy: (): Chainable => chainable,
+        limit: (): Chainable => chainable,
+        get: (): Promise<typeof corruptSnapshot> => Promise.resolve(corruptSnapshot),
+      };
+      const corruptDb = { collection: (): Chainable => chainable };
+      setFirestore(corruptDb as unknown as Parameters<typeof setFirestore>[0]);
+
+      const result = await findUserByPhoneNumber('15551234567');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
   });
 
   describe('disconnectUserMapping', () => {

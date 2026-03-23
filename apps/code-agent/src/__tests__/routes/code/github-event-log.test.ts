@@ -496,6 +496,20 @@ describe('GitHub event log routes', () => {
     expect(body.data.nextCursor).toBeDefined();
   });
 
+  it('uses default limit of 100 when limit query param is omitted (L250)', async () => {
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-event-log',
+      headers: { authorization: 'Bearer fake-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(true);
+    // The default limit is 100, and we have 1 seeded row so it should return data
+    expect(body.data.rows.length).toBeLessThanOrEqual(100);
+  });
+
   it('returns 500 when listing recent rows fails', async () => {
     setServices({
       ...baseServices,

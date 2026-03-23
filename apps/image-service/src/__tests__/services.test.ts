@@ -129,6 +129,19 @@ describe('services', () => {
       expect(generator.generate).toBeDefined();
     });
 
+    it('uses fallback values when env vars are missing', () => {
+      delete process.env['INTEXURAOS_IMAGE_BUCKET'];
+      delete process.env['INTEXURAOS_IMAGE_PUBLIC_BASE_URL'];
+      delete process.env['INTEXURAOS_USER_SERVICE_URL'];
+      delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+
+      initializeServices(fakePricingContext);
+
+      const services = getServices();
+      expect(services.generatedImageRepository).toBeDefined();
+      expect(services.userServiceClient).toBeDefined();
+    });
+
     it('generateId returns a UUID', () => {
       initializeServices(fakePricingContext);
 
