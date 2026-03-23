@@ -225,7 +225,7 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
         { taskId: input.taskId, reason: reportSections.reason },
         'Deep validation response rejected'
       );
-      onProgress?.('response rejected, skipping PR comment');
+      onProgress?.(`response rejected: ${reportSections.reason}, skipping PR comment`);
       return false;
     }
 
@@ -235,7 +235,7 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
         { taskId: input.taskId, reason: commentBodies.reason },
         'Deep validation response rejected'
       );
-      onProgress?.('response rejected, skipping PR comment');
+      onProgress?.(`response rejected: ${commentBodies.reason}, skipping PR comment`);
       return false;
     }
 
