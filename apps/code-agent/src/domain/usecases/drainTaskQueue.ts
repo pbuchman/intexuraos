@@ -107,7 +107,7 @@ export async function drainTaskQueue(
       // Sort by createdAt descending (newest first), cancel older ones
       group.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
       const newest = group[0];
-      /* v8 ignore start -- ts-type: newest is always defined after sort given group.length > 1 @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — group.length > 1 guarantees group[0] defined @preserve */
       if (newest === undefined) continue;
       /* v8 ignore stop @preserve */
       const toCancel = group.slice(1);
@@ -336,9 +336,7 @@ export async function drainTaskQueue(
       ...(task.planningPrUrl !== undefined && { planningPrUrl: task.planningPrUrl }),
       ...(task.trackingCommentId !== undefined && { trackingCommentId: task.trackingCommentId }),
       ...(task.retriedFrom !== undefined && { retriedFrom: task.retriedFrom }),
-      /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
       ...(task.reviewTypes !== undefined && { reviewTypes: task.reviewTypes }),
-      /* v8 ignore stop @preserve */
     });
 
     if (!dispatchResult.ok) {

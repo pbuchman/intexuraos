@@ -142,14 +142,12 @@ export async function retryTask(
     let completedAtTime: number;
 
     // completedAt can be Date or Timestamp - narrow to extract time
-    /* v8 ignore start -- ts-type: instanceof check creates type narrowing branch @preserve */
     if (completedAt instanceof Date) {
       completedAtTime = completedAt.getTime();
     } else {
       // Must be Timestamp with toDate() method
       completedAtTime = completedAt.toDate().getTime();
     }
-    /* v8 ignore stop @preserve */
 
     const timeSinceFailure = now - completedAtTime;
 
@@ -354,12 +352,10 @@ ${additionalContext.trim()}
 
     // Step 10: Add comment to Linear issue
     // Sanitize additionalContext before embedding in Linear comment to prevent secret leakage
-    /* v8 ignore start -- ts-type: ternary operator with optional check creates type narrowing branch @preserve */
     const additionalContextSection =
       additionalContext !== undefined && additionalContext.trim().length > 0
         ? `\n\n**Additional context provided:** ${sanitizePrompt(additionalContext.trim())}`
         : '';
-    /* v8 ignore stop @preserve */
 
     const commentBody = `Retrying ${originalTask.status} task **${originalTaskId}**.
 

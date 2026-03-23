@@ -130,7 +130,7 @@ export async function sendTaskMessage(
   // Find the worker matching the task's workerLocation
   const worker = enabledWorkers.find((w) => w.name === task.workerLocation) ?? enabledWorkers[0];
 
-  /* v8 ignore start -- ts-type: array access with nullish coalescing creates type narrowing branch @preserve */
+  /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — enabledWorkers.length > 0 check above guarantees find() ?? [0] defined @preserve */
   if (worker === undefined) {
     return err({ code: 'worker_not_configured', message: 'No workers configured' });
   }

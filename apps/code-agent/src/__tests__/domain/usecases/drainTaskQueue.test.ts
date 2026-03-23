@@ -812,6 +812,25 @@ describe('drainTaskQueue', () => {
     }
   });
 
+  it('includes reviewTypes in dispatch when task has them', async () => {
+    const task = createMockTask({ reviewTypes: ['code_quality', 'architecture'] });
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    setupWorkerSettings();
+
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      ok({ dispatched: true, workerLocation: 'home-mac' })
+    );
+    mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+    await drainTaskQueue(createDeps());
+
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reviewTypes: ['code_quality', 'architecture'],
+      })
+    );
+  });
+
   it('uses agentType from task when available', async () => {
     const task = createMockTask({ agentType: 'execution' });
     mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));

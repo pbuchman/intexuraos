@@ -132,11 +132,9 @@ export function createFirestoreMergeQueueWatchRepository(deps: {
         }
 
         const doc = snapshot.docs[0];
-        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard; snapshot.empty check above guarantees docs[0] exists @preserve */
         if (doc === undefined) {
           return ok(null);
         }
-        /* v8 ignore stop @preserve */
 
         const data = doc.data() as Omit<MergeQueueWatch, 'id'>;
         return ok({
