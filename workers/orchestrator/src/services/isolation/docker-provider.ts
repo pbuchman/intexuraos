@@ -487,8 +487,8 @@ export class DockerProvider implements IsolationProvider {
               config.gcpSaKeyPath,
               path.join(taskSecretsPath, 'gcp-sa.json')
             );
-            /* v8 ignore stop @preserve */
           }
+          /* v8 ignore stop @preserve */
 
           const handle: WorkerHandle = {
             taskId,

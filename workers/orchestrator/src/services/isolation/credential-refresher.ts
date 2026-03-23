@@ -63,7 +63,7 @@ export class CredentialRefresher {
         const output = logs.toString('utf-8').slice(0, 500);
         this.logger.debug({ output }, 'Credential refresh container output');
       } catch {
-        // Log retrieval can fail after container exit
+        // intentional no-op
       }
 
       if (waitResult.StatusCode === 0) {
@@ -90,7 +90,7 @@ export class CredentialRefresher {
         try {
           await container.remove({ force: true });
         } catch {
-          // Container removal can fail during cleanup
+          // intentional no-op
         }
       }
     }
