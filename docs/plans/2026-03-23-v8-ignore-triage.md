@@ -56,6 +56,8 @@ These stale file-level entries are cleaned up automatically when their parent ov
 
 **Code-Agent (198 blocks across 39 files):**
 
+> **Scope note:** The override entry (`PENDING-apps-code-agent`) lists 21 files, but 18 additional files have v8 ignore blocks that already pass static validation with proper categories. The task scope covers ALL 39 files — the goal is zero v8 ignore comments in the service, not just removing overrides.
+
 | Category       | Count | Test Strategy                                                                                  |
 | -------------- | ----- | ---------------------------------------------------------------------------------------------- |
 | `ts-type`      | 145   | Cover type-narrowing branches: pass `undefined` for optional fields, empty arrays, null values |
