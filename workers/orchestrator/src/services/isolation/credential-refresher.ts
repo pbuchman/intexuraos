@@ -63,8 +63,7 @@ export class CredentialRefresher {
         const output = logs.toString('utf-8').slice(0, 500);
         this.logger.debug({ output }, 'Credential refresh container output');
       } catch {
-        /* v8 ignore start -- upstream: log retrieval failure after container exit @preserve */
-        /* v8 ignore stop @preserve */
+        // Log retrieval can fail after container exit
       }
 
       if (waitResult.StatusCode === 0) {
@@ -82,9 +81,7 @@ export class CredentialRefresher {
       return false;
     } catch (error) {
       this.logger.error(
-        /* v8 ignore start -- ts-type: catch always receives Error instances @preserve */
         { error: error instanceof Error ? error : new Error(String(error)) },
-        /* v8 ignore stop @preserve */
         'Credential refresh container failed'
       );
       return false;
@@ -93,8 +90,7 @@ export class CredentialRefresher {
         try {
           await container.remove({ force: true });
         } catch {
-          /* v8 ignore start -- upstream: container removal failure during cleanup @preserve */
-          /* v8 ignore stop @preserve */
+          // Container removal can fail during cleanup
         }
       }
     }

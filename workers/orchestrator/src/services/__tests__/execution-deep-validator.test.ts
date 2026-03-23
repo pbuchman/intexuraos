@@ -744,6 +744,58 @@ describe('OrchestratorExecutionDeepValidator', () => {
     expect(progressCalls).toContain('PR comment failed (see server logs)');
   });
 
+  it('logs stderr when PR comment posting fails with execFile-style error', async () => {
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: { content: markdownResponse, usage: { costUsd: 0.042 } },
+    });
+    execFileMock.mockImplementation(
+      (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null) => void) => {
+        const error = new Error('gh failed') as Error & { stderr: string };
+        error.stderr = 'fatal: authentication required';
+        cb(error);
+      }
+    );
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const result = await validator.validate(defaultInput);
+
+    expect(result).toBe(false);
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task_abc',
+        error: 'gh failed',
+        stderr: 'fatal: authentication required',
+      }),
+      'Failed to post deep validation PR comment'
+    );
+  });
+
+  it('logs undefined stderr when PR comment posting fails with plain Error', async () => {
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: { content: markdownResponse, usage: { costUsd: 0.042 } },
+    });
+    execFileMock.mockImplementation(
+      (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null) => void) => {
+        cb(new Error('plain error'));
+      }
+    );
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const result = await validator.validate(defaultInput);
+
+    expect(result).toBe(false);
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task_abc',
+        error: 'plain error',
+        stderr: undefined,
+      }),
+      'Failed to post deep validation PR comment'
+    );
+  });
+
   it('works without onProgress callback', async () => {
     generateMock.mockResolvedValue({
       ok: true,
