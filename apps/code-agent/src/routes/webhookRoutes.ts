@@ -293,7 +293,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
 
           if (isComplex) {
-            /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — planning_subtask_urls is optional but always defined on success @preserve */
+            /* v8 ignore start -- ts-type: result field ?? fallback for optional webhook payload fields @preserve */
             const subtaskUrls = (planningResult.planning_subtask_urls ?? '')
             /* v8 ignore stop @preserve */
               .split(',')
@@ -341,7 +341,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 }
               }
 
-              /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — planning_pr_url is optional but ?? provides fallback @preserve */
+              /* v8 ignore start -- ts-type: result field ?? fallback for optional webhook payload fields @preserve */
               const planningPrUrl = planningResult.planning_pr_url ?? '';
               /* v8 ignore stop @preserve */
               if (planningPrUrl !== '') {
@@ -398,7 +398,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 }
               }
 
-              /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — planning_pr_url is optional but ?? provides fallback @preserve */
+              /* v8 ignore start -- ts-type: result field ?? fallback for optional webhook payload fields @preserve */
               const planningPrUrl = planningResult.planning_pr_url ?? '';
               /* v8 ignore stop @preserve */
               if (planningPrUrl !== '') {
@@ -429,7 +429,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return { ok: true };
         }
 
-        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — planning_unclear_clarification is optional but ?? provides fallback @preserve */
+        /* v8 ignore start -- ts-type: result field ?? fallback for optional webhook payload fields @preserve */
         const clarificationMessage =
           planningResult.planning_unclear_clarification ??
           taskErrorForUnclear?.message ??
@@ -1247,8 +1247,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.send({ received: true });
       }
 
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — status === 'cancelled' is unreachable after prior status checks return @preserve */
+      /* v8 ignore start -- schema: webhook status enum is exhaustive — cancelled is the last branch, false path unreachable @preserve */
       if (status === 'cancelled') {
+      /* v8 ignore stop @preserve */
         const updateResult = await codeTaskRepo.update(taskId, {
           status: 'cancelled',
           completedAt,
@@ -1258,7 +1259,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           },
           callbackReceived: true,
         });
-      /* v8 ignore stop @preserve */
 
         if (!updateResult.ok) {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as cancelled');
@@ -1299,12 +1299,10 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           });
         }
 
-        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — status === 'cancelled' continuation after fire-and-forget metrics @preserve */
         request.log.info({ taskId }, 'Task marked as cancelled');
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
-      /* v8 ignore stop @preserve */
 
       // Should not reach here, but TypeScript needs it
       return reply.fail('INVALID_REQUEST', 'Unknown task status');

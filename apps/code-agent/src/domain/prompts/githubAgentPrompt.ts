@@ -29,7 +29,7 @@ export interface GitHubAgentPromptInput {
 export const githubAgentPrompt: PromptBuilder<GitHubAgentPromptInput> = {
   name: 'github-agent',
   description: 'System prompt for GitHub Agent that evaluates PR and comment events',
-  version: '5.1.0',
+  version: '5.1.1',
   build(input: GitHubAgentPromptInput): string {
     const sections: string[] = [
       'You are a GitHub webhook evaluation agent for the IntexuraOS project.',

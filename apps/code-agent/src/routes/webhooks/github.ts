@@ -393,7 +393,7 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
 
       // Best-effort: record webhook_received in the automation log when we have PR context
       if (repositoryDetails.repository !== null && pullRequestDetails.pullRequestNumber !== null && pullRequestDetails.pullRequestNumber !== 0) {
-        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — typeof check provides fallback for already-validated header values @preserve */
+        /* v8 ignore start -- ts-type: typeof string check ?? fallback for already-validated header @preserve */
         const resolvedDeliveryId = typeof deliveryId === 'string' ? deliveryId : 'unknown';
         const resolvedEventType = typeof eventType === 'string' ? eventType : 'unknown';
         /* v8 ignore stop @preserve */
@@ -423,7 +423,7 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
             {
               type: 'webhook_received',
               eventType: resolvedEventType,
-              /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — action and sender ?? fallbacks for optional webhook fields @preserve */
+              /* v8 ignore start -- ts-type: action ?? and sender ?? fallbacks for optional webhook fields @preserve */
               action: request.body.action ?? 'unknown',
               sender: senderDetails.senderLogin ?? 'unknown',
               deliveryId: resolvedDeliveryId,

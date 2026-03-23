@@ -197,7 +197,7 @@ export async function processCodeAction(
       sanitizedPrompt: sanitizedPromptText,
       systemPromptHash: SYSTEM_PROMPT_HASH_PLACEHOLDER,
       workerType: effectiveWorkerType,
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — enabledWorkers.length > 0 check above guarantees [0] defined @preserve */
+      /* v8 ignore start -- ts-type: Array filter always returns dense array — cannot produce sparse result @preserve */
       workerLocation: enabledWorkers[0]?.name ?? 'unknown',
       /* v8 ignore stop @preserve */
       repository: repository ?? 'pbuchman/intexuraos',
@@ -313,7 +313,7 @@ export async function processCodeAction(
     sanitizedPrompt: sanitizedPromptText,
     systemPromptHash: SYSTEM_PROMPT_HASH_PLACEHOLDER,
     workerType: effectiveWorkerType,
-    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — enabledWorkers.length > 0 check above guarantees [0] defined @preserve */
+    /* v8 ignore start -- ts-type: Array filter always returns dense array — cannot produce sparse result @preserve */
     workerLocation: enabledWorkers[0]?.name ?? 'unknown', // Use first worker as default
     /* v8 ignore stop @preserve */
     repository: repository ?? 'pbuchman/intexuraos',
