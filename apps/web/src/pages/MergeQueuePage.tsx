@@ -47,13 +47,15 @@ export function MergeQueuePage(): React.JSX.Element {
     return counts;
   }, [prs]);
 
-  // Find watch for selected branch — prefer active over drained so a newly
-  // created watch is picked up even when a stale drained watch still exists.
+  // Find watch for selected branch — prefer active, then most-recently-created
+  // drained watch so history shows the latest execution, not the oldest.
   const currentWatch = useMemo(() => {
     if (selectedBranch === null) return null;
     const branchWatches = watches.filter((w) => w.baseBranch === selectedBranch);
     return branchWatches.find((w) => w.status === 'active')
-      ?? branchWatches.find((w) => w.status === 'drained')
+      ?? branchWatches
+          .filter((w) => w.status === 'drained')
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
       ?? null;
   }, [watches, selectedBranch]);
 
