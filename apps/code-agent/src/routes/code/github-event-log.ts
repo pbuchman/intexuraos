@@ -247,7 +247,7 @@ const githubEventLogRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
           return await reply.fail('INTERNAL_ERROR', 'GitHub event log repository is not configured');
         }
 
-        /* v8 ignore start -- schema: Fastify query schema default always populates limit, so nullish fallback is not reachable at runtime @preserve */
+        /* v8 ignore start -- ts-type: Fastify schema injects default — ?? fallback unreachable @preserve */
         const limit = request.query.limit ?? 100;
         /* v8 ignore stop @preserve */
         const cursor = request.query.cursor;

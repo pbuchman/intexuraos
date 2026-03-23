@@ -490,6 +490,24 @@ describe('submitTaskFeedback', () => {
       }
     });
 
+    it('includes actionId and approvalEventId in create input when original task has them', async () => {
+      const taskWithIds = createMockCompletedTask({
+        actionId: 'action-999',
+        approvalEventId: 'approval-888',
+      });
+      mockCodeTaskRepo.findByIdForUser = vi.fn().mockResolvedValue(ok(taskWithIds));
+
+      const result = await submitTaskFeedback(deps, mockRequest);
+
+      expect(result.ok).toBe(true);
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actionId: 'action-999',
+          approvalEventId: 'approval-888',
+        }),
+      );
+    });
+
     it('handles enqueue failure by returning error', async () => {
       mockTaskEnqueueService.enqueue = vi.fn().mockResolvedValue(
         err({ code: 'queue_full', message: 'Queue is full' })

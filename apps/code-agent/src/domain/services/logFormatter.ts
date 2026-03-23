@@ -76,14 +76,14 @@ export function formatLogChunk(
 
   // Prepend buffered partial line from previous chunk
   if (s.partialLine !== undefined && lines.length > 0) {
-    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard; lines[0] always exists when length > 0 @preserve */
+    /* v8 ignore start -- ts-type: String.split always returns dense array — cannot produce sparse result @preserve */
     lines[0] = s.partialLine + (lines[0] ?? '');
     /* v8 ignore stop @preserve */
     delete s.partialLine;
   }
 
   for (let i = 0; i < lines.length; i++) {
-    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard; i is bounded by lines.length @preserve */
+    /* v8 ignore start -- ts-type: Array indexing within bounds always returns defined for dense arrays @preserve */
     const line = lines[i] ?? '';
     /* v8 ignore stop @preserve */
     const trimmed = line.trim();
@@ -96,7 +96,7 @@ export function formatLogChunk(
     let body = trimmed;
     if (tsMatch !== null) {
       prefix = `${String(tsMatch[1])} `;
-      /* v8 ignore start -- regex: capture group 2 always exists when regex matches @preserve */
+      /* v8 ignore start -- ts-type: regex capture group ?? fallback unreachable — exec always populates groups on match @preserve */
       body = tsMatch[2] ?? trimmed;
       /* v8 ignore stop @preserve */
     }
@@ -318,7 +318,7 @@ function summarizeJsonArray(content: string): string | undefined {
   } catch {
     return undefined;
   }
-  /* v8 ignore start -- ts-type: JSON.parse of bracket-prefixed content always produces an array; empty array is <200 chars so filtered earlier @preserve */
+  /* v8 ignore start -- ts-type: JSON.parse of bracket-prefixed content returns array — cannot inject non-array JSON @preserve */
   if (!Array.isArray(arr) || arr.length === 0) return undefined;
   /* v8 ignore stop @preserve */
 
@@ -337,7 +337,7 @@ function summarizeJsonArray(content: string): string | undefined {
   // PR review comments — gh api .../comments (review-level)
   if ('pull_request_review_id' in el && 'path' in el) {
     const login = extractLogin(el);
-    /* v8 ignore start -- ts-type: split('/').pop() on non-empty string always returns a value; ?? fallback is unreachable @preserve */
+    /* v8 ignore start -- ts-type: String.split always returns ≥1 element — cannot produce empty split result @preserve */
     const path = typeof el['path'] === 'string' ? el['path'].split('/').pop() ?? el['path'] : '?';
     /* v8 ignore stop @preserve */
     const line = typeof el['line'] === 'number' ? `:${String(el['line'])}` : '';
@@ -417,7 +417,7 @@ function summarizeDiff(text: string): string | undefined {
 function shortenPath(p: string): string {
   const parts = p.split('/');
   if (parts.length <= 6) return p;
-  /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard, parts.length > 6 guaranteed @preserve */
+  /* v8 ignore start -- ts-type: String.split always returns dense array — cannot produce sparse result @preserve */
   const file = parts[parts.length - 1] ?? '';
   /* v8 ignore stop @preserve */
   return [...parts.slice(0, 4), '...', file].join('/');

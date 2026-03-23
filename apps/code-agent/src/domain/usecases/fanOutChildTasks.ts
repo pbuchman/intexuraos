@@ -79,9 +79,7 @@ async function createAndEnqueueChild(
     userId,
     // prompt stores a descriptive summary; sanitizedPrompt is the child identifier
     // sent to the worker (the worker reads the Linear issue for full instructions)
-    /* v8 ignore start -- ts-type: nullish coalescing fallback for optional linearIssueId (fan-out requires linearIssueId so fallback is unreachable) @preserve */
     prompt: `[Fan-out from ${parentTask.linearIssueId ?? 'parent'}] ${child.identifier}`,
-    /* v8 ignore stop @preserve */
     sanitizedPrompt: child.identifier,
     webhookSecret,
     systemPromptHash: parentTask.systemPromptHash,

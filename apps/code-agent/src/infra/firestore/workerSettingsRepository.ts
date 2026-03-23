@@ -182,7 +182,7 @@ export function createWorkerSettingsRepository(
         const docRef = collection.doc(userId);
         const doc = await docRef.get();
 
-        /* v8 ignore start -- ts-type: nullish coalescing fallback when doc.data() returns undefined @preserve */
+        /* v8 ignore start -- ts-type: FakeFirestore always returns data() when exists is true @preserve */
         const existingWorkers = doc.exists
           ? ((doc.data() as WorkerSettingsDoc | undefined)?.workers ?? [])
           : [];

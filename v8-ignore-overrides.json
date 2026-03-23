@@ -1,52 +1,6 @@
 {
   "_comment": "Blocks that fail tightened validation but have planned fixes. Keyed by Linear task ID.",
   "overrides": {
-    "PENDING-apps-code-agent": {
-      "files": [
-        "apps/code-agent/src/domain/services/logFormatter.ts",
-        "apps/code-agent/src/domain/usecases/processCodeAction.ts",
-        "apps/code-agent/src/domain/usecases/retryTask.ts",
-        "apps/code-agent/src/domain/usecases/sendTaskMessage.ts",
-        "apps/code-agent/src/domain/usecases/submitTaskFeedback.ts",
-        "apps/code-agent/src/domain/usecases/submitToExecutionAgent.ts",
-        "apps/code-agent/src/infra/firestore/gitHubPREventsRepository.ts",
-        "apps/code-agent/src/infra/firestore/gitHubPRSummariesRepository.ts",
-        "apps/code-agent/src/infra/firestore/userUsageFirestoreRepository.ts",
-        "apps/code-agent/src/infra/firestore/workerSettingsRepository.ts",
-        "apps/code-agent/src/infra/http/linearAgentHttpClient.ts",
-        "apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts",
-        "apps/code-agent/src/infra/repositories/firestoreLogLineRepository.ts",
-        "apps/code-agent/src/infra/services/taskDispatcherImpl.ts",
-        "apps/code-agent/src/infra/services/whatsappNotifierImpl.ts",
-        "apps/code-agent/src/routes/code/github-pr-summaries.ts",
-        "apps/code-agent/src/routes/code/github-pre-events.ts",
-        "apps/code-agent/src/routes/codeRoutes.ts",
-        "apps/code-agent/src/routes/webhookRoutes.ts",
-        "apps/code-agent/src/routes/webhooks/github.ts",
-        "apps/code-agent/src/routes/workerSettingsRoutes.ts"
-      ],
-      "description": "Write tests for tightened v8 ignore blocks in apps/code-agent"
-    },
-    "PENDING-apps-todos-agent": {
-      "files": ["apps/todos-agent/src/domain/usecases/reorderTodoItems.ts"],
-      "description": "Write tests for tightened v8 ignore blocks in apps/todos-agent"
-    },
-    "PENDING-apps-whatsapp-service": {
-      "files": [
-        "apps/whatsapp-service/src/infra/firestore/phoneVerificationRepository.ts",
-        "apps/whatsapp-service/src/infra/firestore/userMappingRepository.ts",
-        "apps/whatsapp-service/src/infra/whatsapp/sender.ts"
-      ],
-      "description": "Real Firestore transaction and HTTP sender code — requires integration tests or emulator to cover"
-    },
-    "PENDING-apps-whatsapp-service": {
-      "files": [
-        "apps/whatsapp-service/src/infra/firestore/phoneVerificationRepository.ts",
-        "apps/whatsapp-service/src/infra/firestore/userMappingRepository.ts",
-        "apps/whatsapp-service/src/infra/whatsapp/sender.ts"
-      ],
-      "description": "Real Firestore transaction and HTTP sender code — requires integration tests or emulator to cover"
-    },
     "INT-1071": {
       "files": [
         "workers/orchestrator/src/services/isolation/docker-provider.ts",
@@ -55,10 +9,6 @@
         "workers/orchestrator/src/start.ts"
       ],
       "description": "Remaining orchestrator v8 ignore triage: branches uncovered by unit tests require integration-level testing or are dead code from type narrowing"
-    },
-    "INT-900": {
-      "files": ["apps/image-service/src/serviceFactory.ts"],
-      "description": "Environment variable fallback branches - testable only via integration tests that control process.env"
     }
   }
 }

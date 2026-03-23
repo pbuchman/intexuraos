@@ -156,8 +156,8 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
         );
 
         // Fail closed for explicit @review commands - do not fallback dispatch
+        /* v8 ignore start -- upstream: FakeEventSource always provides body — cannot simulate undefined body on issue_comment @preserve */
         if (event.eventType === 'issue_comment' && isReviewCommandComment(event.body ?? '')) {
-          /* v8 ignore start -- ts-type: defensive null coalescing, body is truthy when isReviewCommandComment passes @preserve */
           const workerType = extractReviewWorkerType(event.body ?? '');
           /* v8 ignore stop @preserve */
 
@@ -209,9 +209,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
           decision: 'dispatch',
           reason: `LLM dispatch: ${triage.template}`,
           llmCostUsd: usage.costUsd,
-          /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
           ...(usage.model !== undefined && { llmModel: usage.model }),
-          /* v8 ignore stop @preserve */
           llmToolCalls: usage.toolCalls,
           llmReasoning: reasoning,
           dispatchSuccess: llmDispatchResult.success,
@@ -233,9 +231,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
             ...(event.title !== null && { prTitle: event.title }),
             ...(event.eventType === 'pull_request' && event.body !== null && { prBody: event.body }),
             ...(event.eventType === 'issue_comment' && event.body !== null && { reviewComment: event.body }),
-            /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
             ...(event.baseBranch !== null && { baseBranch: event.baseBranch }),
-            /* v8 ignore stop @preserve */
           },
         );
 
@@ -258,9 +254,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
             decision: 'skip',
             reason: `review_task_failed: ${reviewResult.error.message}`,
             llmCostUsd: usage.costUsd,
-            /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
             ...(usage.model !== undefined && { llmModel: usage.model }),
-            /* v8 ignore stop @preserve */
             llmToolCalls: usage.toolCalls,
             llmReasoning: reasoning,
           }, startTime, logger);
@@ -289,9 +283,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
             workerType: reviewResult.value.workerType,
           }, // @allow-result-access -- narrowed by !reviewResult.ok above
           llmCostUsd: usage.costUsd,
-          /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
           ...(usage.model !== undefined && { llmModel: usage.model }),
-          /* v8 ignore stop @preserve */
           llmToolCalls: usage.toolCalls,
           llmReasoning: reasoning,
         }, startTime, logger);
@@ -316,9 +308,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
         decision: 'skip',
         reason: `LLM skip: ${triage.reason}`,
         llmCostUsd: usage.costUsd,
-        /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
         ...(usage.model !== undefined && { llmModel: usage.model }),
-        /* v8 ignore stop @preserve */
         llmToolCalls: usage.toolCalls,
         llmReasoning: reasoning,
       }, startTime, logger);
@@ -429,9 +419,7 @@ async function recordDecision(
     repository: event.repository,
     pullRequestNumber: event.pullRequestNumber,
     eventType: event.eventType,
-    /* v8 ignore start -- ts-type: null coalescing for GitHubPRAction | null @preserve */
     eventAction: event.action ?? 'unknown',
-    /* v8 ignore stop @preserve */
     senderLogin: event.senderLogin,
     decidedBy: fields.decidedBy,
     decision: fields.decision,
@@ -439,9 +427,7 @@ async function recordDecision(
     ...(fields.dispatchAction !== undefined && { dispatchAction: fields.dispatchAction }),
     ...(fields.dispatchParams !== undefined && { dispatchParams: fields.dispatchParams }),
     ...(fields.llmCostUsd !== undefined && { llmCostUsd: fields.llmCostUsd }),
-    /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
     ...(fields.llmModel !== undefined && { llmModel: fields.llmModel }),
-    /* v8 ignore stop @preserve */
     ...(fields.llmToolCalls !== undefined && { llmToolCalls: fields.llmToolCalls }),
     ...(fields.llmReasoning !== undefined && { llmReasoning: fields.llmReasoning }),
     ...(fields.dispatchSuccess !== undefined && { dispatchSuccess: fields.dispatchSuccess }),

@@ -419,6 +419,34 @@ describe('fanOutChildTasks', () => {
       );
     });
 
+    it('uses "parent" fallback in prompt when parentTask has no linearIssueId', async () => {
+      // Remove linearIssueId from parent — exercises parentTask.linearIssueId ?? 'parent'
+      const parentTask = createParentTask();
+      const parentRecord = parentTask as unknown as Record<string, unknown>;
+      delete parentRecord['linearIssueId'];
+
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({ id: parentUuid, identifier: 'INT-956', title: 'Parent', url: '', labels: ['code-task'], childCount: 1, parentId: null }),
+      );
+      mockLinearAgentClient.fetchIssueTree.mockResolvedValue(
+        ok({ root: { id: parentUuid, identifier: 'INT-956', url: '', parentId: null, labels: ['code-task'], assigneeId: null, state: 'Backlog' }, descendants: [childNode1] }),
+      );
+      mockCodeTaskRepo.create.mockResolvedValue(ok(createParentTask({ id: 'child-task-1' })));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createParentTask({ status: 'implemented' })));
+
+      await fanOutChildTasks(createDeps(), {
+        parentTask,
+        userId: 'user-456',
+        linearIssueId: 'INT-956',
+      });
+
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: expect.stringContaining('[Fan-out from parent]'),
+        }),
+      );
+    });
+
     it('passes parent workerType, repository, and baseBranch to child tasks', async () => {
       const parentTask = createParentTask({
         prompt: 'Custom parent prompt',

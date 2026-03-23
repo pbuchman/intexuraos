@@ -290,10 +290,8 @@ export async function createTaskForPR(
         prNumber,
         webhookSecret,
         agentType: 'pull_request',
-        /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
         ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
         ...(request.trackingCommentId !== undefined && { trackingCommentId: request.trackingCommentId }),
-        /* v8 ignore stop @preserve */
       };
 
       // Pass the outer transaction to avoid nested transactions

@@ -29,7 +29,7 @@ export interface GitHubAgentPromptInput {
 export const githubAgentPrompt: PromptBuilder<GitHubAgentPromptInput> = {
   name: 'github-agent',
   description: 'System prompt for GitHub Agent that evaluates PR and comment events',
-  version: '5.1.0',
+  version: '5.1.1',
   build(input: GitHubAgentPromptInput): string {
     const sections: string[] = [
       'You are a GitHub webhook evaluation agent for the IntexuraOS project.',
@@ -54,9 +54,7 @@ export const githubAgentPrompt: PromptBuilder<GitHubAgentPromptInput> = {
 };
 
 function buildPRSection(input: GitHubAgentPromptInput): string[] {
-  /* v8 ignore start -- ts-type: null coalescing fallback for optional array @preserve */
   const files = input.files ?? [];
-  /* v8 ignore stop @preserve */
   const fileList = files
     .map((f) => `  - ${f.filename} (${f.status}, +${String(f.additions)}/-${String(f.deletions)})`)
     .join('\n');
@@ -65,15 +63,11 @@ function buildPRSection(input: GitHubAgentPromptInput): string[] {
     '',
     '### PR Description',
     '',
-    /* v8 ignore start -- schema: template conditional for empty PR body @preserve */
     input.prBody !== '' ? input.prBody : '(no description)',
-    /* v8 ignore stop @preserve */
     '',
     '### Changed Files',
     '',
-    /* v8 ignore start -- schema: template conditional for empty file list @preserve */
     fileList !== '' ? fileList : '  (no files)',
-    /* v8 ignore stop @preserve */
     '',
     '## Instructions',
     '',
@@ -125,11 +119,9 @@ function buildPRSection(input: GitHubAgentPromptInput): string[] {
 
 function buildCommentSection(input: GitHubAgentPromptInput): string[] {
   const triageSection = buildIssueCommentTriageSection({
-    /* v8 ignore start -- ts-type: null coalescing for optional prompt inputs @preserve */
     commentBody: input.commentBody ?? '',
     isEdit: input.isEdit ?? false,
     isBotSender: input.isBotSender ?? false,
-    /* v8 ignore stop @preserve */
     senderLogin: input.senderLogin,
   });
 

@@ -550,6 +550,78 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.followUpReason).toBe('pr_comment');
     });
 
+    it('stores planningPrBranch when provided in create input', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput({
+        planningPrBranch: 'planning/INT-200',
+      });
+
+      const result = await repo.create(input);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.planningPrBranch).toBe('planning/INT-200');
+    });
+
+    it('stores planningPrUrl when provided in create input', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput({
+        planningPrUrl: 'https://github.com/test/repo/pull/99',
+      });
+
+      const result = await repo.create(input);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.planningPrUrl).toBe('https://github.com/test/repo/pull/99');
+    });
+
+    it('stores trackingCommentId when provided in create input', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput({
+        trackingCommentId: '98765',
+      });
+
+      const result = await repo.create(input);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.trackingCommentId).toBe('98765');
+    });
+
+    it('stores reviewTypes when provided in create input', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput({
+        reviewTypes: ['code_quality', 'security'],
+      });
+
+      const result = await repo.create(input);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.reviewTypes).toEqual(['code_quality', 'security']);
+    });
+
     it('stores agentType when provided in create input', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -1533,6 +1605,49 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.implementationTaskId).toBeUndefined();
     });
 
+    it('updates workerLocation when provided in update input', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const result = await repo.update(created.value.id, {
+        workerLocation: 'cloud',
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.workerLocation).toBe('cloud');
+    });
+
+    it('updates lastHeartbeat when provided in update input', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const heartbeatDate = new Date('2025-06-15T10:30:00Z');
+      const result = await repo.update(created.value.id, {
+        lastHeartbeat: heartbeatDate,
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      if (result.value.lastHeartbeat !== undefined) {
+        expect(result.value.lastHeartbeat.toDate()).toEqual(heartbeatDate);
+      }
+    });
+
     it('updates logChunksDropped when provided in update input', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -2274,6 +2389,82 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.value).toBeNull();
+    });
+  });
+
+  describe('archiveTaskLogs with exact batch boundary', () => {
+    it('does not commit remainder when subcollection docs divide evenly into batches', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      // Seed exactly 2 logs (matching batchSize=2 so remainder is 0)
+      const logsCollection = fakeFirestore.collection(`code_tasks/${created.value.id}/logs`);
+      for (let i = 1; i <= 2; i++) {
+        await logsCollection.doc(`log-${i}`).set({ content: `log entry ${i}` });
+      }
+
+      // Seed exactly 2 log_lines
+      const logLinesCollection = fakeFirestore.collection(`code_tasks/${created.value.id}/log_lines`);
+      for (let i = 1; i <= 2; i++) {
+        await logLinesCollection.doc(`line-${i}`).set({ content: `line ${i}` });
+      }
+
+      // Seed exactly 2 log_entries
+      const logEntriesCollection = fakeFirestore.collection(`code_tasks/${created.value.id}/log_entries`);
+      for (let i = 1; i <= 2; i++) {
+        await logEntriesCollection.doc(`entry-${i}`).set({ message: `entry ${i}` });
+      }
+
+      // Seed exactly 2 turn_metrics
+      const turnMetricsCollection = fakeFirestore.collection(`code_tasks/${created.value.id}/turn_metrics`);
+      for (let i = 1; i <= 2; i++) {
+        await turnMetricsCollection.doc(`metric-${i}`).set({ tokens: i * 100 });
+      }
+
+      // batchSize=2 with exactly 2 docs: all commit in loop, remainder=0 skips the if
+      const result = await repo.archiveTaskLogs(created.value.id, 2);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.logCount).toBe(8);
+    });
+  });
+
+  describe('findLatestNonReviewTaskByPR 50-doc exhaustion warning', () => {
+    it('logs warning when 50 docs are scanned without finding a non-review task', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create 50 review tasks for the same PR to exhaust the 50-doc window
+      for (let i = 0; i < 50; i++) {
+        await repo.create(createTaskInput({
+          id: `task-review-${i}`,
+          userId: `user-${i}`,
+          repository: 'test/repo',
+          prNumber: 789,
+          agentType: 'review',
+          prompt: `Review task ${i}`,
+          sanitizedPrompt: `review task ${i}`,
+        }));
+      }
+
+      const result = await repo.findLatestNonReviewTaskByPR('test/repo', 789);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toBeNull();
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ repository: 'test/repo', prNumber: 789, docsScanned: 50 }),
+        'findLatestNonReviewTaskByPR exhausted 50-doc window without finding a non-review task',
+      );
     });
   });
 });

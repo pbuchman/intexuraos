@@ -250,7 +250,7 @@ function formatCost(dollars: number): string {
 
 function extractPrNumber(prUrl: string): string {
   const parts = prUrl.split('/');
-  /* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires fallback despite split always returning non-empty array @preserve */
+  /* v8 ignore start -- ts-type: String.split always returns ≥1 element — cannot produce empty split result @preserve */
   return parts[parts.length - 1] ?? '?';
   /* v8 ignore stop @preserve */
 }
