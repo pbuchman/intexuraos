@@ -269,7 +269,7 @@ export class TurnMetricsCollector {
     for (let i = 0; i < timestamped.length - 1; i++) {
       const current = timestamped[i];
       const next = timestamped[i + 1];
-      /* v8 ignore start -- ts-type: loop bounds guarantee both exist @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess undefined check; loop bounds guarantee i and i+1 are valid @preserve */
       if (current === undefined || next === undefined) continue;
       /* v8 ignore stop @preserve */
       const gapSec =
