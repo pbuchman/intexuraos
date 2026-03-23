@@ -6197,6 +6197,914 @@ describe('TaskDispatcher', () => {
     });
   });
 
+  describe('runningCount guard prevents negative on double-decrement', () => {
+    it('worktree creation failure decrements runningCount to zero', async () => {
+      vi.mocked(mockWorktreeManager.createWorktree).mockRejectedValueOnce(
+        new Error('Failed to create worktree')
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'guard-worktree-fail',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      const result = await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(result.ok).toBe(true);
+      // runningCount was 0 before submitTask incremented it to 1; worktree failure decrements it back to 0
+      expect(dispatcher.getRunningCount()).toBe(0);
+    });
+
+    it('API key validation failure decrements runningCount to zero', async () => {
+      const invalidValidator = {
+        validate: vi.fn(async () => ({ valid: false, errorMessage: 'bad key' })),
+      } as unknown as ApiKeyValidator;
+      const localIsolation: IsolationConfig = {
+        ...mockIsolationConfig,
+        apiKeyValidator: invalidValidator,
+      };
+      const localDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        localIsolation,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'guard-apikey-fail',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await localDispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(localDispatcher.getRunningCount()).toBe(0);
+    });
+
+    it('worker start failure decrements runningCount to zero', async () => {
+      vi.mocked(mockIsolationProvider.createWorker).mockRejectedValueOnce(
+        new Error('Container failed')
+      );
+
+      const cleanupWorktreeManager = {
+        ...mockWorktreeManager,
+        removeWorktree: vi.fn(async () => ({ ok: true, value: undefined })),
+      } as unknown as WorktreeManager;
+
+      const localDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        cleanupWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'guard-worker-fail',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await localDispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(localDispatcher.getRunningCount()).toBe(0);
+    });
+
+    it('generic setup error decrements runningCount to zero', async () => {
+      const errorDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      vi.spyOn(statePersistence, 'modify').mockRejectedValueOnce(new Error('DB error'));
+
+      const request: CreateTaskRequest = {
+        taskId: 'guard-generic-error',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await errorDispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(errorDispatcher.getRunningCount()).toBe(0);
+    });
+
+    it('cancelTask decrements runningCount to zero', { timeout: 15000 }, async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'guard-cancel-test',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+      expect(dispatcher.getRunningCount()).toBe(1);
+
+      await dispatcher.cancelTask('guard-cancel-test');
+      expect(dispatcher.getRunningCount()).toBe(0);
+    });
+
+    it('timeout kill decrements runningCount to zero', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const timeoutState = createStatePersistence();
+      const timeoutDispatcher = new TaskDispatcher(
+        mockConfig,
+        timeoutState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'guard-timeout-kill',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await timeoutDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(timeoutDispatcher.getRunningCount()).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      expect(timeoutDispatcher.getRunningCount()).toBe(0);
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('finalizeTask decrements runningCount to zero', async () => {
+      vi.useFakeTimers();
+      const finalizeState = createStatePersistence();
+      const finalizeDispatcher = new TaskDispatcher(
+        mockConfig,
+        finalizeState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'guard-finalize-test',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await finalizeDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(finalizeDispatcher.getRunningCount()).toBe(1);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(finalizeDispatcher.getRunningCount()).toBe(0);
+      vi.useRealTimers();
+    });
+  });
+
+  describe('conditional spread for optional properties', () => {
+    it('should include reviewTypes on task when provided', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'review-types-present',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'review',
+        reviewTypes: ['code_quality', 'requirements'],
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const task = await dispatcher.getTask('review-types-present');
+      expect(task?.reviewTypes).toEqual(['code_quality', 'requirements']);
+    });
+
+    it('should not include reviewTypes on task when not provided', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'review-types-absent',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const task = await dispatcher.getTask('review-types-absent');
+      expect(task?.reviewTypes).toBeUndefined();
+    });
+
+    it('should pass reviewTypes to system prompt when task has reviewTypes', async () => {
+      vi.mocked(mockIsolationProvider.createWorker).mockClear();
+      const request: CreateTaskRequest = {
+        taskId: 'review-types-sysprompt',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'review',
+        reviewTypes: ['code_quality'],
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls[0];
+      expect(createWorkerCall).toBeDefined();
+      const config = createWorkerCall?.[0];
+      expect(config?.systemPrompt).toBeDefined();
+    });
+  });
+
+  describe('agent label and description ternary branches', () => {
+    const getInstructionsLog = (): string | undefined =>
+      vi
+        .mocked(mockLogForwarder.appendChunk)
+        .mock.calls.find(
+          (call) => typeof call[1] === 'string' && call[1].includes('[instructions]')
+        )?.[1] as string | undefined;
+
+    it('logs Review Agent for agentType=review', async () => {
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+      const request: CreateTaskRequest = {
+        taskId: 'agent-label-review',
+        workerType: 'auto',
+        prompt: 'Test review agent label',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'review',
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const log = getInstructionsLog();
+      expect(log).toBeDefined();
+      expect(log).toContain('Review Agent');
+      expect(log).toContain('read-only PR review');
+    });
+
+    it('logs Execution Agent for agentType=execution', async () => {
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+      const request: CreateTaskRequest = {
+        taskId: 'agent-label-execution',
+        workerType: 'auto',
+        prompt: 'Test execution agent label',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'execution',
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const log = getInstructionsLog();
+      expect(log).toBeDefined();
+      expect(log).toContain('Execution Agent');
+      expect(log).toContain('implement autonomously');
+    });
+
+    it('logs Planning Agent for agentType=planning', async () => {
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+      const request: CreateTaskRequest = {
+        taskId: 'agent-label-planning',
+        workerType: 'auto',
+        prompt: 'Test planning agent label',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'planning',
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const log = getInstructionsLog();
+      expect(log).toBeDefined();
+      expect(log).toContain('Planning Agent');
+      expect(log).toContain('create planning artifacts');
+    });
+
+    it('logs Pull Request Agent for agentType=pull_request', async () => {
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+      const request: CreateTaskRequest = {
+        taskId: 'agent-label-pr',
+        workerType: 'auto',
+        prompt: 'Test pull_request agent label',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'pull_request',
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const log = getInstructionsLog();
+      expect(log).toBeDefined();
+      expect(log).toContain('Pull Request Agent');
+      expect(log).toContain('respond to PR comment/review');
+    });
+
+    it('logs Pull Request Agent for pr-comment label', async () => {
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+      const request: CreateTaskRequest = {
+        taskId: 'agent-label-pr-comment',
+        workerType: 'auto',
+        prompt: 'Test pr-comment label',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['pr-comment'],
+        hasChildren: false,
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const log = getInstructionsLog();
+      expect(log).toBeDefined();
+      expect(log).toContain('Pull Request Agent');
+    });
+
+    it('logs Execution Agent for code-task label fallback', async () => {
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+      const request: CreateTaskRequest = {
+        taskId: 'agent-label-code-task',
+        workerType: 'auto',
+        prompt: 'Test code-task label fallback',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const log = getInstructionsLog();
+      expect(log).toBeDefined();
+      expect(log).toContain('Execution Agent');
+    });
+
+    it('logs Planning Agent when no agent type and no code-task label', async () => {
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+      const request: CreateTaskRequest = {
+        taskId: 'agent-label-default-planning',
+        workerType: 'auto',
+        prompt: 'Test default planning',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['bug'],
+        hasChildren: false,
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const log = getInstructionsLog();
+      expect(log).toBeDefined();
+      expect(log).toContain('Planning Agent');
+    });
+  });
+
+  describe('sendMessage', () => {
+    it('queues message for running task', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-running-task',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const result = await dispatcher.sendMessage('msg-running-task', 'Hello from user');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({
+          action: 'queued',
+          pendingMessages: ['Hello from user'],
+        });
+      }
+    });
+
+    it('returns not_found for nonexistent task', async () => {
+      const result = await dispatcher.sendMessage('nonexistent', 'Hello');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('not_found');
+      }
+    });
+
+    it('returns invalid_status for cancelled task', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-cancelled-task',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const state = await statePersistence.load();
+      const task = state.tasks['msg-cancelled-task'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'cancelled';
+      await statePersistence.save(state);
+
+      const result = await dispatcher.sendMessage('msg-cancelled-task', 'Hello');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('invalid_status');
+      }
+    });
+
+    it('resumes completed task with user message', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-completed-task',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const state = await statePersistence.load();
+      const task = state.tasks['msg-completed-task'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      await statePersistence.save(state);
+
+      const result = await dispatcher.sendMessage('msg-completed-task', 'Follow-up');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'resumed' });
+      }
+
+      const resumedTask = await dispatcher.getTask('msg-completed-task');
+      expect(resumedTask?.status).toBe('running');
+      expect(resumedTask?.resumedAfterSuccess).toBe(true);
+      expect(resumedTask?.pendingResumeStart).toBeDefined();
+    });
+
+    it('resumes failed task with user message', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-failed-task',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const state = await statePersistence.load();
+      const task = state.tasks['msg-failed-task'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'failed';
+      await statePersistence.save(state);
+
+      const result = await dispatcher.sendMessage('msg-failed-task', 'Retry please');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'resumed' });
+      }
+
+      const resumedTask = await dispatcher.getTask('msg-failed-task');
+      expect(resumedTask?.status).toBe('running');
+      expect(resumedTask?.resumedAfterSuccess).toBeUndefined();
+    });
+
+    it('resumes interrupted task with user message', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-interrupted-task',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const state = await statePersistence.load();
+      const task = state.tasks['msg-interrupted-task'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'interrupted';
+      await statePersistence.save(state);
+
+      const result = await dispatcher.sendMessage('msg-interrupted-task', 'Continue');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'resumed' });
+      }
+    });
+
+    it('returns service_error when state persistence fails', async () => {
+      vi.spyOn(statePersistence, 'load').mockRejectedValueOnce(new Error('load fail'));
+
+      const result = await dispatcher.sendMessage('any-task', 'Hello');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('service_error');
+      }
+    });
+  });
+
+  describe('resumeTaskWithUserMessage pendingResumeStart guard', () => {
+    it('fails the task if pendingResumeStart.prompt is undefined', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'guard-prompt-undefined',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const state = await statePersistence.load();
+      const task = state.tasks['guard-prompt-undefined'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'running';
+      task.pendingResumeStart = {
+        prompt: undefined as unknown as string,
+        acceptedAt: new Date().toISOString(),
+      };
+      await statePersistence.save(state);
+
+      // Call resumeTaskWithUserMessage directly through the internal type
+      const internal = dispatcher as unknown as {
+        resumeTaskWithUserMessage: (task: Task) => Promise<void>;
+      };
+      // Delete the prompt to simulate mutation clearing it
+      delete (task.pendingResumeStart as unknown as Record<string, unknown>)['prompt'];
+      await internal.resumeTaskWithUserMessage(task);
+
+      // The task should be finalized as failed
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'RESUME_ATTEMPT_FAILED',
+              message: expect.stringContaining('missing the persisted startup prompt'),
+            }),
+          }),
+        })
+      );
+    });
+  });
+
+  describe('scheduleTimeoutWarning and scheduleTimeoutKill callbacks', () => {
+    it('scheduleTimeoutWarning logs warning for running task at 2h55m', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const warnState = createStatePersistence();
+      const warnDispatcher = new TaskDispatcher(
+        mockConfig,
+        warnState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'warn-timer-test',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await warnDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const warnSpy = vi.spyOn(mockLogger, 'warn');
+      await vi.advanceTimersByTimeAsync(175 * 60 * 1000);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        { taskId: 'warn-timer-test' },
+        'Task approaching 3-hour timeout'
+      );
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('scheduleTimeoutWarning handles error in callback gracefully', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const errorState = createStatePersistence();
+      const errorDispatcher = new TaskDispatcher(
+        mockConfig,
+        errorState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'warn-error-test',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await errorDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Make getTask always reject — this will cause both the monitor and the
+      // warning callback to error, but we specifically check the warning message.
+      vi.spyOn(errorDispatcher, 'getTask').mockRejectedValue(new Error('DB error'));
+      const errorSpy = vi.spyOn(mockLogger, 'error');
+
+      await vi.advanceTimersByTimeAsync(175 * 60 * 1000);
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        { taskId: 'warn-error-test', error: expect.any(Error) },
+        'Error in timeout warning callback'
+      );
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('scheduleTimeoutKill handles error in callback gracefully', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const killErrorState = createStatePersistence();
+      const killErrorDispatcher = new TaskDispatcher(
+        mockConfig,
+        killErrorState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'kill-error-test',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await killErrorDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockIsolationProvider.destroyWorker).mockRejectedValueOnce(
+        new Error('destroy failed')
+      );
+      const errorSpy = vi.spyOn(mockLogger, 'error');
+
+      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        { taskId: 'kill-error-test', error: expect.any(Error) },
+        'Error in timeout kill callback'
+      );
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('scheduleTimeoutKill flushes logs and handles flush failure', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const flushFailState = createStatePersistence();
+      const flushFailDispatcher = new TaskDispatcher(
+        mockConfig,
+        flushFailState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'kill-flush-fail-test',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await flushFailDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockLogForwarder.flushAndStop).mockRejectedValueOnce(new Error('flush failed'));
+
+      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        { taskId: 'kill-flush-fail-test', error: expect.any(Error) },
+        'Failed to flush logs during timeout kill'
+      );
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+  });
+
+  describe('closePlanningPr gh CLI error handling', () => {
+    it('extracts Error.message on gh CLI failure', async () => {
+      const task: Task = {
+        taskId: 'close-pr-gh-error',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running',
+        startedAt: new Date().toISOString(),
+        attemptCount: 1,
+        maxAttempts: 1,
+        verificationHistory: [],
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'execution',
+        planningPrUrl: 'https://github.com/org/repo/pull/42',
+        repository: 'test/repo',
+        baseBranch: 'development',
+        worktreePath: '/tmp/worktrees/close-pr-gh-error',
+        containerId: 'container-close-pr-gh-error',
+      };
+
+      const internal = dispatcher as unknown as {
+        finalizeTaskWithResult: (t: Task, agentType: string, result: TaskResult) => Promise<void>;
+      };
+
+      await internal.finalizeTaskWithResult(task, 'execution', {});
+
+      // gh CLI fails in test env with Error, so the message is extracted
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prUrl: 'https://github.com/org/repo/pull/42',
+          taskId: 'close-pr-gh-error',
+          error: expect.any(String),
+        }),
+        'Failed to close planning PR (best-effort)'
+      );
+    });
+  });
+
+  describe('checkForResult array access and type narrowing branches', () => {
+    it('handles PR list with open PR and rebase result', async () => {
+      vi.useFakeTimers();
+      const prState = createStatePersistence();
+      const prDispatcher = new TaskDispatcher(
+        mockConfig,
+        prState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'pr-rebase-test',
+        workerType: 'auto',
+        prompt: 'Test PR with rebase',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await prDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await prDispatcher.getTask('pr-rebase-test');
+      expect(task?.status).not.toBe('running');
+
+      vi.useRealTimers();
+    });
+  });
+
   describe('clearTaskTimers', () => {
     it('should handle clearing timers when no timers are registered for the task', async () => {
       // Submit a task so it's in state, then cancel it (which calls clearTaskTimers internally)

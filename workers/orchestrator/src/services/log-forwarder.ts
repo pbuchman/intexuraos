@@ -76,11 +76,9 @@ export class LogForwarder {
    */
   async flushAndStop(taskId: string): Promise<void> {
     const state = this.forwarders.get(taskId);
-    /* v8 ignore start -- test-infra: early return when task not registered, only happens in error scenarios @preserve */
     if (state === undefined) {
       return;
     }
-    /* v8 ignore stop @preserve */
 
     this.drainPartialLine(state);
 
@@ -88,7 +86,7 @@ export class LogForwarder {
     await this.flushBuffer(taskId, true);
 
     // Stop timer
-    /* v8 ignore start -- test-infra: cannot set timer to non-null to test else branch without breaking startForwarding @preserve */
+    /* v8 ignore start -- ts-type: timer null check after startForwarding always sets it @preserve */
     if (state.timer !== null) {
       clearInterval(state.timer);
     }
@@ -155,23 +153,17 @@ export class LogForwarder {
     this.logger.info({ taskId }, 'Stopping log forwarding');
 
     // Clear timers
-    /* v8 ignore start -- test-infra: cannot set timer to non-null to test else branch without breaking startForwarding @preserve */
     if (state.timer) {
       clearInterval(state.timer);
       state.timer = null;
     }
-    /* v8 ignore stop @preserve */
 
-    /* v8 ignore start -- test-infra: cannot set pollTimer to non-null to test else branch without breaking startForwarding @preserve */
     if (state.pollTimer) {
       clearInterval(state.pollTimer);
       state.pollTimer = null;
     }
-    /* v8 ignore stop @preserve */
 
-    /* v8 ignore start -- test-infra: partialLine only set via appendChunk (Docker mode), stopForwarding tests use file-based mode @preserve */
     this.drainPartialLine(state);
-    /* v8 ignore stop @preserve */
 
     // Flush remaining buffer
     await this.flushBuffer(taskId);
@@ -191,7 +183,6 @@ export class LogForwarder {
    * Append a chunk of log content directly (for Docker mode where logs come via callbacks).
    * Creates the forwarding state if it doesn't exist.
    */
-  /* v8 ignore start -- test-infra: Docker-only method, Docker isolation branch tested separately @preserve */
   appendChunk(taskId: string, content: string): void {
     let state = this.forwarders.get(taskId);
 
@@ -239,7 +230,6 @@ export class LogForwarder {
       void this.flushBuffer(taskId);
     }
   }
-  /* v8 ignore stop @preserve */
 
   private readNewContent(taskId: string, logFilePath: string, state: ForwardingState): void {
     // Check if file exists before reading
@@ -260,11 +250,9 @@ export class LogForwarder {
       if (state.buffer.length >= MAX_CHUNK_SIZE) {
         void this.flushBuffer(taskId);
       }
-      /* v8 ignore start -- test-infra: error handling for fs.readFile failures @preserve */
     } catch (error) {
       this.logger.error({ taskId, error }, 'Failed to read log file');
     }
-    /* v8 ignore stop @preserve */
   }
 
   private async flushBuffer(taskId: string, force = false): Promise<void> {
@@ -272,7 +260,6 @@ export class LogForwarder {
     if (!state || state.buffer.length === 0) return;
 
     // Check size limit (skipped when force=true, e.g. final flush from flushAndStop)
-    /* v8 ignore start -- test-infra: requires sending 4MB of log data to trigger, impractical in unit tests @preserve */
     if (!force && state.totalBytes >= MAX_TOTAL_LOG_SIZE) {
       this.logger.warn(
         { taskId, totalBytes: state.totalBytes },
@@ -282,7 +269,6 @@ export class LogForwarder {
       state.buffer = '';
       return;
     }
-    /* v8 ignore stop @preserve */
 
     // Split buffer into chunks
     const chunks = this.splitIntoChunks(state.buffer);
@@ -327,7 +313,6 @@ export class LogForwarder {
     return chunks;
   }
 
-  /* v8 ignore start -- upstream: early return for small chunks is the happy path @preserve */
   private async sendBatch(taskId: string, chunks: string[], state: ForwardingState): Promise<void> {
     const now = Date.now();
     const chunkPayloads = chunks.map((chunk, index) => {
@@ -357,7 +342,6 @@ export class LogForwarder {
       );
     }
   }
-  /* v8 ignore stop @preserve */
 
   private async sendWithRetry(
     payload: {
@@ -404,18 +388,14 @@ export class LogForwarder {
           'Log upload failed, retrying'
         );
       } catch (error) {
-        /* v8 ignore start -- ts-type: error type narrowing for non-Error throwables @preserve */
         const errorInfo =
           error instanceof Error
             ? { name: error.name, message: error.message, cause: getErrorCauseChain(error) }
             : { error };
-        /* v8 ignore stop @preserve */
-        /* v8 ignore start -- test-infra: log statement that executes but branch coverage sees as untested @preserve */
         this.logger.warn(
           { taskId: payload.taskId, attempt: i + 1, url, ...errorInfo },
           'Log upload failed, retrying'
         );
-        /* v8 ignore stop @preserve */
       }
 
       if (i < 2) {
@@ -440,9 +420,7 @@ export class LogForwarder {
     const ts = `${h}:${m}:${s}.${ms}`;
 
     return text.replace(/^(.+)$/gm, (line) => {
-      /* v8 ignore start -- test-infra: timestamp-prefixed lines only appear from orchestrator log injection @preserve */
       if (/^\d{2}:\d{2}:\d{2}\.\d{3} /.test(line)) return line;
-      /* v8 ignore stop @preserve */
       return `${ts} ${line}`;
     });
   }
@@ -462,11 +440,8 @@ export class LogForwarder {
   }
 
   private enforceChunkSize(chunk: string): string {
-    /* v8 ignore start -- upstream: early return for normal-sized chunks is the happy path @preserve */
     if (chunk.length <= MAX_CHUNK_SIZE) return chunk;
-    /* v8 ignore stop @preserve */
 
-    /* v8 ignore start -- upstream: truncation path for oversized chunks, normal path returns early @preserve */
     const tailSize = 1024;
     const marker = '\n[... TRUNCATED ...]\n';
     const headSize = MAX_CHUNK_SIZE - tailSize - marker.length;
@@ -474,7 +449,6 @@ export class LogForwarder {
     const tail = chunk.slice(-tailSize);
 
     return head + marker + tail;
-    /* v8 ignore stop @preserve */
   }
 
   async flush(taskId: string): Promise<void> {

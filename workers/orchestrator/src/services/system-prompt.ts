@@ -42,7 +42,6 @@ export const planningPrompt: PromptBuilder<SystemPromptParams> = {
   version: '3.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
-    /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
     return `[SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
 [WORKER-MODE]
@@ -178,7 +177,6 @@ After this block, stop. Do not append any other checklist or schema payload.
 
 Note: For complex planned outcomes, you MUST include explicit proof of the parallel breakdown. This means showing exactly how each subissue's boundaries are defined — what types/interfaces each subissue owns, what contracts it exposes, and how agents can work on each subissue independently without coordination.`;
   },
-  /* v8 ignore stop @preserve */
 };
 
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
@@ -211,7 +209,6 @@ Push and create PR ONLY after code review completes with zero issues:
       ? `AFTER review completes with ZERO issues: push updates to the existing PR branch as the LAST step with \`git push origin HEAD:${continuationPrBranch}\`.`
       : 'AFTER review completes with ZERO issues: push and create PR as the LAST step.';
 
-    /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
     return `[SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
 [WORKER-MODE]
@@ -325,7 +322,6 @@ EXECUTION_AGENT_FINAL:
 
 After this block, stop. Do not append any other checklist or schema payload.`;
   },
-  /* v8 ignore stop @preserve */
 };
 
 export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
@@ -343,7 +339,6 @@ export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
       trackingCommentId,
     } = params;
 
-    /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
     return `[SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
 [WORKER-MODE]
@@ -460,7 +455,6 @@ PULL_REQUEST_AGENT_FINAL:
 
 After this block, stop. Do not append any other checklist or schema payload.`;
   },
-  /* v8 ignore stop @preserve */
 };
 
 export const prReviewOverlayPrompt: PromptBuilder<SystemPromptParams> = {
@@ -469,7 +463,6 @@ export const prReviewOverlayPrompt: PromptBuilder<SystemPromptParams> = {
   version: '3.0.0',
   build(params: SystemPromptParams): string {
     const { taskUrl } = params;
-    /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
     return `
 
 [PR REVIEW MODE — CONDITIONAL]
@@ -556,7 +549,6 @@ PULL_REQUEST_AGENT_FINAL:
 
 After this block, stop. Do not append any other checklist or schema payload.`;
   },
-  /* v8 ignore stop @preserve */
 };
 
 const REVIEW_TYPE_SECTIONS: Record<string, string> = {
@@ -577,13 +569,13 @@ const REVIEW_TYPE_SECTIONS: Record<string, string> = {
 
 function buildReviewStructureSection(reviewTypes: string[] | undefined): string {
   const types = reviewTypes ?? Object.keys(REVIEW_TYPE_SECTIONS);
-  /* v8 ignore start -- ts-type: nullish coalescing fallback is unreachable after filter but required by noUncheckedIndexedAccess @preserve */
   const typeSections = types
     .filter((t) => REVIEW_TYPE_SECTIONS[t] !== undefined)
+    /* v8 ignore start -- ts-type: preceding filter guarantees key exists so fallback is dead code but noUncheckedIndexedAccess requires it @preserve */
     .map((t) => REVIEW_TYPE_SECTIONS[t] ?? '');
+  /* v8 ignore stop @preserve */
 
   if (typeSections.length === 0) return '';
-  /* v8 ignore stop @preserve */
 
   const typeLabel = types.join(', ');
 
@@ -614,12 +606,11 @@ Rules:
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '6.1.0',
+  version: '6.1.1',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
       params;
 
-    /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
     return `[SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
 [WORKER-MODE]
@@ -819,7 +810,6 @@ REVIEW_AGENT_FINAL:
 
 After this block, stop. Do not append any other checklist or schema payload.`;
   },
-  /* v8 ignore stop @preserve */
 };
 
 export function buildSystemPrompt(params: SystemPromptParams): string {

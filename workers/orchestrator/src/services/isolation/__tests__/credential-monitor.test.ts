@@ -102,6 +102,25 @@ describe('CredentialMonitor', () => {
       );
     });
 
+    it('wraps non-Error thrown value during parsing', () => {
+      mockExistsSync.mockReturnValue(true);
+      const nonError = 'string-parse-error';
+      mockReadFileSync.mockImplementation(() => {
+        throw nonError;
+      });
+
+      const result = monitor.loadCredentials();
+
+      expect(result).toBe(false);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.objectContaining({ message: 'string-parse-error' }),
+          path: expect.any(String),
+        }),
+        expect.stringContaining('parse')
+      );
+    });
+
     it('returns false when claudeAiOauth field missing', () => {
       mockExistsSync.mockReturnValue(true);
       mockReadFileSync.mockReturnValue(JSON.stringify({ mcpOAuth: {} }));

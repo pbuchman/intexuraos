@@ -53,7 +53,6 @@ export async function validateRepository(
   }
 
   // Check .git is a directory (not a file - worktrees have .git as a file)
-  /* v8 ignore start -- test-infra: statSync race condition after existsSync is not testable @preserve */
   let stat: ReturnType<typeof statSync>;
   try {
     stat = statSync(gitPath);
@@ -61,7 +60,6 @@ export async function validateRepository(
     const message = error instanceof Error ? error.message : 'Unknown error';
     throw new Error(`Failed to stat .git directory at ${gitPath}: ${message}`);
   }
-  /* v8 ignore stop @preserve */
   if (!stat.isDirectory()) {
     throw new Error(`REPOSITORY_PATH ${path} appears to be a worktree, not a main clone`);
   }
@@ -97,9 +95,7 @@ export async function validateRepository(
       const content = readFileSync(packageJsonPath, 'utf-8');
       pkg = JSON.parse(content) as { name?: string };
     } catch (error: unknown) {
-      /* v8 ignore start -- ts-type: ternary for non-Error objects never reached in tests @preserve */
       const message = error instanceof Error ? error.message : 'Unknown error';
-      /* v8 ignore stop @preserve */
       throw new Error(`Failed to read or parse package.json at ${packageJsonPath}: ${message}`);
     }
     if (pkg.name !== 'intexuraos') {
@@ -121,7 +117,6 @@ export async function cloneRepository(url: string, path: string, logger: Logger)
   // Ensure parent directory exists
   const parentDir = dirname(path);
   if (!existsSync(parentDir)) {
-    /* v8 ignore start -- test-infra: mkdirSync failure requires disk-full or permission-denied conditions @preserve */
     try {
       mkdirSync(parentDir, { recursive: true });
     } catch (error: unknown) {
@@ -130,7 +125,6 @@ export async function cloneRepository(url: string, path: string, logger: Logger)
         `Failed to create parent directory ${parentDir} for repository clone: ${message}`
       );
     }
-    /* v8 ignore stop @preserve */
   }
 
   try {
