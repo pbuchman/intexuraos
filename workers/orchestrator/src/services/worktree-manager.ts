@@ -119,11 +119,9 @@ export class WorktreeManager {
         }
 
         // git worktree add outputs to stderr even on success
-        /* v8 ignore start -- test-infra: git worktree add outputs to stderr on success (e @preserve */
         if (stderr && !stderr.includes('Preparing worktree')) {
           throw new Error(`Failed to create worktree: ${stderr}`);
         }
-        /* v8 ignore stop @preserve */
 
         // Copy MCP config template if provided
         if (this.config.mcpConfigTemplatePath && existsSync(this.config.mcpConfigTemplatePath)) {
@@ -146,9 +144,7 @@ export class WorktreeManager {
         this.logger.info({ taskId, worktreePath }, 'Worktree created');
         return worktreePath;
       } catch (error: unknown) {
-        /* v8 ignore start -- test-infra: worktree creation failure requires git worktree state manipulation @preserve */
         const message = error instanceof Error ? error.message : 'Unknown error';
-        /* v8 ignore stop @preserve */
         throw new Error(`Failed to create worktree: ${message}`);
       }
     });
@@ -169,16 +165,12 @@ export class WorktreeManager {
           cwd: this.config.repositoryPath,
         });
 
-        /* v8 ignore start -- test-infra: similar to create worktree - requires git worktree remove failure simulation @preserve */
         if (stderr) {
           throw new Error(`Failed to remove worktree: ${stderr}`);
         }
-        /* v8 ignore stop @preserve */
         this.logger.info({ taskId }, 'Worktree removed');
       } catch (error: unknown) {
-        /* v8 ignore start -- test-infra: worktree removal failure requires git worktree state manipulation @preserve */
         const message = error instanceof Error ? error.message : 'Unknown error';
-        /* v8 ignore stop @preserve */
         throw new Error(`Failed to remove worktree: ${message}`);
       }
     });
@@ -193,7 +185,6 @@ export class WorktreeManager {
       const lines = stdout.split('\n').filter((line) => line.length > 0);
       const worktreePaths: string[] = [];
 
-      /* v8 ignore start -- test-infra: filtering by worktree base path requires specific git worktree setup @preserve */
       for (const line of lines) {
         if (line.startsWith('worktree ')) {
           const path = line.slice('worktree '.length);
@@ -203,7 +194,6 @@ export class WorktreeManager {
           }
         }
       }
-      /* v8 ignore stop @preserve */
 
       return worktreePaths;
     } catch (error) {
@@ -262,10 +252,8 @@ export class WorktreeManager {
       }
 
       // Substitute environment variables
-      /* v8 ignore start -- ts-type: nullish coalescing on env vars creates type narrowing branches @preserve */
       const config = template
         .replace(/\{\{LINEAR_API_KEY\}\}/g, linearKey ?? '')
-        /* v8 ignore stop @preserve */
         .replace(/\{\{SENTRY_AUTH_TOKEN\}\}/g, sentryToken ?? '');
 
       // Ensure target directory exists
@@ -278,12 +266,10 @@ export class WorktreeManager {
       // Atomic rename
       await (await import('node:fs/promises')).rename(tempPath, targetPath);
     } catch (error: unknown) {
-      /* v8 ignore start -- ts-type: catch block error handling @preserve */
+      /* v8 ignore start -- ts-type: catch block error type narrowing for non-Error throwables @preserve */
       const message = error instanceof Error ? error.message : 'Unknown error';
       /* v8 ignore stop @preserve */
-      /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
       throw new Error(`Failed to copy MCP config: ${message}`);
-      /* v8 ignore stop @preserve */
     }
   }
 
@@ -295,7 +281,7 @@ export class WorktreeManager {
       await mkdir(dirname(targetPath), { recursive: true });
       await writeFile(targetPath, content, 'utf-8');
     } catch (error: unknown) {
-      /* v8 ignore start -- ts-type: catch block error handling @preserve */
+      /* v8 ignore start -- ts-type: catch block error type narrowing for non-Error throwables @preserve */
       const message = error instanceof Error ? error.message : 'Unknown error';
       /* v8 ignore stop @preserve */
       throw new Error(`Failed to copy settings.local.json: ${message}`);

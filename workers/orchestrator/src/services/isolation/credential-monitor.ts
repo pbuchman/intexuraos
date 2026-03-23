@@ -52,12 +52,10 @@ export class CredentialMonitor {
       return true;
     } catch (error) {
       this.logger.error(
-        /* v8 ignore start -- ts-type: catch always receives Error instances @preserve */
         {
           error: error instanceof Error ? error : new Error(String(error)),
           path: this.config.credentialsPath,
         },
-        /* v8 ignore stop @preserve */
         'Failed to parse credentials file'
       );
       return false;
