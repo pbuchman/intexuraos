@@ -208,6 +208,83 @@ describe('WebhookClient', () => {
       vi.useRealTimers();
     });
 
+    it('should use fallback delay when RETRY_DELAYS array index is out of bounds', async () => {
+      vi.useFakeTimers();
+
+      // Fail all attempts with a network error - this exercises the delay path
+      // including the ?? 5000 fallback for out-of-bounds array access
+      mockFetch.mockRejectedValue(new Error('connection refused'));
+
+      const statePersistence = createStatePersistence();
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
+
+      const payload: WebhookPayload = {
+        taskId: 'task-fallback-delay',
+        status: 'completed',
+        duration: 1000,
+      };
+
+      const resultPromise = client.send({
+        url: 'https://example.com/webhook',
+        secret: 'test-secret',
+        payload,
+        taskId: 'task-fallback-delay',
+      });
+
+      // Advance through all retry delays
+      await vi.advanceTimersByTimeAsync(70000);
+      await vi.runAllTimersAsync();
+
+      const result = await resultPromise;
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('network');
+      }
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+
+      vi.useRealTimers();
+    });
+
+    it('should return lastError after all retries fail', async () => {
+      vi.useFakeTimers();
+
+      mockFetch.mockRejectedValue(new Error('persistent failure'));
+
+      const statePersistence = createStatePersistence();
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
+
+      const payload: WebhookPayload = {
+        taskId: 'task-all-fail',
+        status: 'failed',
+        duration: 2000,
+      };
+
+      const resultPromise = client.send({
+        url: 'https://example.com/webhook',
+        secret: 'test-secret',
+        payload,
+        taskId: 'task-all-fail',
+      });
+
+      await vi.advanceTimersByTimeAsync(70000);
+      await vi.runAllTimersAsync();
+
+      const result = await resultPromise;
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('network');
+        expect(result.error.message).toContain('persistent failure');
+      }
+
+      // Should have been queued for pending
+      const state = await statePersistence.load();
+      expect(state.pendingWebhooks).toHaveLength(1);
+
+      vi.useRealTimers();
+    });
+
     it('should succeed on 2nd attempt and stop retrying', async () => {
       let attemptCount = 0;
       mockFetch.mockImplementation(async () => {

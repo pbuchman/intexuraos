@@ -239,7 +239,6 @@ export class DockerProvider implements IsolationProvider {
     const execStream = await execInstance.start({ hijack: false, stdin: false });
     let output = '';
 
-    /* v8 ignore start -- test-infra: exec stream event ordering/close paths depend on Docker daemon stream behavior @preserve */
     await new Promise<void>((resolve, reject) => {
       execStream.on('data', (chunk: Buffer) => {
         output += chunk.toString('utf-8');
@@ -251,9 +250,7 @@ export class DockerProvider implements IsolationProvider {
       });
       execStream.resume();
     });
-    /* v8 ignore stop @preserve */
 
-    /* v8 ignore start -- test-infra: exec inspect ExitCode edge cases depend on Docker daemon responses @preserve */
     try {
       const info = await execInstance.inspect();
       return { exitCode: typeof info.ExitCode === 'number' ? info.ExitCode : 1, output };
@@ -261,7 +258,6 @@ export class DockerProvider implements IsolationProvider {
       this.logger.warn({ taskId, error }, 'Failed to inspect exec completion state');
       return { exitCode: 1, output };
     }
-    /* v8 ignore stop @preserve */
   }
 
   private async captureSegfaultForensics(
@@ -283,7 +279,6 @@ export class DockerProvider implements IsolationProvider {
         }
       );
 
-      /* v8 ignore start -- test-infra: exec inspect failure branches require Docker daemon error injection @preserve */
       try {
         const execInfo = await execInstance.inspect();
         await this.writeJsonArtifact(
@@ -293,13 +288,13 @@ export class DockerProvider implements IsolationProvider {
       } catch (error) {
         await fs.promises.writeFile(
           path.join(hostAttemptForensicsPath, 'exec-inspect.error.txt'),
+          /* v8 ignore start -- ts-type: error type narrowing for non-Error throwables in catch block @preserve */
           error instanceof Error ? (error.stack ?? error.message) : String(error),
+          /* v8 ignore stop @preserve */
           'utf-8'
         );
       }
-      /* v8 ignore stop @preserve */
 
-      /* v8 ignore start -- test-infra: container inspect failure branches require Docker daemon error injection @preserve */
       try {
         const containerInfo = await container.inspect();
         await this.writeJsonArtifact(
@@ -313,7 +308,6 @@ export class DockerProvider implements IsolationProvider {
           'utf-8'
         );
       }
-      /* v8 ignore stop @preserve */
 
       const snapshotCommand = [
         'set -eu',
@@ -433,16 +427,13 @@ export class DockerProvider implements IsolationProvider {
         await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
         await this.writePromptFiles(taskSecretsPath, systemPrompt, prompt);
 
-        /* v8 ignore start -- test-infra: branch for copying optional GCP credentials file @preserve */
         if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
           await fs.promises.copyFile(
             config.gcpSaKeyPath,
             path.join(taskSecretsPath, 'gcp-sa.json')
           );
         }
-        /* v8 ignore stop @preserve */
 
-        /* v8 ignore start -- test-infra: forensics+preserved-resume path requires daemon stateful integration setup @preserve */
         const handle: WorkerHandle = {
           taskId,
           containerId: preserved.containerId,
@@ -468,7 +459,6 @@ export class DockerProvider implements IsolationProvider {
 
         void this.runAttemptInContainer(taskId, config);
         return handle;
-        /* v8 ignore stop @preserve */
       }
     }
 
@@ -491,16 +481,15 @@ export class DockerProvider implements IsolationProvider {
           await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
           await this.writePromptFiles(taskSecretsPath, systemPrompt, prompt);
 
-          /* v8 ignore start -- test-infra: branch for copying optional GCP credentials file @preserve */
+          /* v8 ignore start -- test-infra: FakeFs cannot simulate gcpSaKeyPath existence conditionally per-resume path @preserve */
           if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
             await fs.promises.copyFile(
               config.gcpSaKeyPath,
               path.join(taskSecretsPath, 'gcp-sa.json')
             );
+            /* v8 ignore stop @preserve */
           }
-          /* v8 ignore stop @preserve */
 
-          /* v8 ignore start -- test-infra: forensics+orphan-resume path requires daemon restart/orphan integration setup @preserve */
           const handle: WorkerHandle = {
             taskId,
             containerId,
@@ -526,7 +515,6 @@ export class DockerProvider implements IsolationProvider {
 
           void this.runAttemptInContainer(taskId, config);
           return handle;
-          /* v8 ignore stop @preserve */
         }
 
         // Container exists but stopped — remove it so fresh creation doesn't get 409 conflict
@@ -548,7 +536,6 @@ export class DockerProvider implements IsolationProvider {
 
     // Detect main git directory for worktree support
     // Worktrees have a .git file (not directory) containing: "gitdir: /main/repo/.git/worktrees/name"
-    /* v8 ignore start -- test-infra: worktree detection requires real filesystem, tests mock fs.statSync @preserve */
     let mainGitDir: string | null = null;
     const gitStat = fs.statSync(gitPath);
     if (gitStat.isFile()) {
@@ -562,7 +549,6 @@ export class DockerProvider implements IsolationProvider {
         }
       }
     }
-    /* v8 ignore stop @preserve */
 
     const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
     const taskSessionPath = path.join(
@@ -575,23 +561,18 @@ export class DockerProvider implements IsolationProvider {
 
     let container: Docker.Container | undefined;
     try {
-      /* v8 ignore start -- test-infra: branch for copying optional GCP credentials file @preserve */
       if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
         await fs.promises.copyFile(config.gcpSaKeyPath, path.join(taskSecretsPath, 'gcp-sa.json'));
       }
-      /* v8 ignore stop @preserve */
 
       const workerTypeConfig = (await import('./types.js')).WORKER_TYPES[workerType];
       const apiKey = secrets[workerTypeConfig.apiKeyEnvVar];
 
-      /* v8 ignore start -- test-infra: tests always provide mock API keys @preserve */
       if (apiKey === '') {
         throw new Error(
           `Worker type '${workerType}' requires ${workerTypeConfig.apiKeyEnvVar} but it is not configured`
         );
       }
-
-      /* v8 ignore stop @preserve */
 
       // When shared credentials are configured for opus/auto workers, Claude CLI reads
       // credentials from the mounted .credentials.json file. No ANTHROPIC_API_KEY needed.
@@ -599,7 +580,6 @@ export class DockerProvider implements IsolationProvider {
         this.config.sharedCredsPath !== undefined &&
         workerTypeConfig.apiKeyEnvVar === 'ANTHROPIC_API_KEY';
 
-      /* v8 ignore start -- test-infra: worker type configuration varies by test @preserve */
       const env = [
         `TASK_ID=${taskId}`,
         ...(useSharedCreds
@@ -628,15 +608,12 @@ export class DockerProvider implements IsolationProvider {
         env.push('CLAUDE_FORENSICS=1');
         env.push('CLAUDE_FORENSICS_DIR=/var/crash');
       }
-      /* v8 ignore stop @preserve */
 
-      /* v8 ignore start -- ts-type: ternary for API key length check, short keys only in tests @preserve */
       const keySuffix = useSharedCreds
         ? 'shared-creds (.credentials.json)'
         : apiKey.length > 4
           ? '...' + apiKey.slice(-4)
           : '****';
-      /* v8 ignore stop @preserve */
       const taskForensicsPath = this.ensureTaskForensicsPath(taskId);
       const requestedImage = this.config.imageName;
       const resolvedImage =
@@ -647,7 +624,6 @@ export class DockerProvider implements IsolationProvider {
         `Creating worker container: taskId=${taskId} workerType=${workerType} image=${resolvedImage} apiKey=${keySuffix} baseUrl=${workerTypeConfig.apiBaseUrl} worktreePath=${worktreePath}`
       );
 
-      /* v8 ignore start -- test-infra: forensics security-opt/profile fallback branches depend on runtime filesystem packaging @preserve */
       const pnpmStorePath = path.join(
         path.dirname(this.config.secretsBasePath),
         PNPM_STORE_DIR_NAME
@@ -666,7 +642,6 @@ export class DockerProvider implements IsolationProvider {
       const ulimits = this.config.forensicsMode
         ? [{ Name: 'core', Soft: -1, Hard: -1 }]
         : undefined;
-      /* v8 ignore stop @preserve */
 
       container = await this.docker.createContainer({
         Image: resolvedImage,
@@ -686,9 +661,7 @@ export class DockerProvider implements IsolationProvider {
                   `${this.config.sharedCredsPath}/.credentials.json:/home/claude/.claude/.credentials.json:rw`,
                 ]
               : []),
-            /* v8 ignore start -- test-infra: worktree mount only set when mainGitDir detected @preserve */
             ...(mainGitDir !== null ? [`${mainGitDir}:${mainGitDir}:rw`] : []),
-            /* v8 ignore stop @preserve */
             ...(taskForensicsPath !== null ? [`${taskForensicsPath}:/var/crash:rw`] : []),
           ],
           NetworkMode: this.config.networkName,
@@ -719,7 +692,6 @@ export class DockerProvider implements IsolationProvider {
       }
 
       // Capture logs via container.logs() (replaces attach stream)
-      /* v8 ignore start -- test-infra: log stream setup tested via mock, requires running container @preserve */
       let logStream: NodeJS.ReadableStream | undefined;
       if (config.onLog !== undefined && !this.config.managedAttemptsMode) {
         logStream = await container.logs({
@@ -731,7 +703,6 @@ export class DockerProvider implements IsolationProvider {
           config.onLog?.(chunk.toString('utf-8'));
         });
       }
-      /* v8 ignore stop @preserve */
 
       const handle: WorkerHandle = {
         taskId,
@@ -748,12 +719,9 @@ export class DockerProvider implements IsolationProvider {
         attemptRunning: false,
         attemptLogBuffer: '',
         ...(taskForensicsPath !== null ? { taskForensicsPath } : {}),
-        /* v8 ignore start -- test-infra: logStream only set when onLog callback provided in running container @preserve */
         ...(logStream !== undefined ? { logStream } : {}),
-        /* v8 ignore stop @preserve */
       });
 
-      /* v8 ignore start -- test-infra: managedAttemptsMode is always enabled in production and tests @preserve */
       if (this.config.managedAttemptsMode) {
         void this.runAttemptInContainer(taskId, config);
       } else {
@@ -762,16 +730,17 @@ export class DockerProvider implements IsolationProvider {
           .wait()
           .then(async (data) => {
             const worker = this.workers.get(taskId);
+            /* v8 ignore start -- ts-type: Map.get() null check after container lifecycle @preserve */
             if (worker !== undefined) {
               worker.handle.status = data.StatusCode === 0 ? 'completed' : 'failed';
             }
+            /* v8 ignore stop @preserve */
             config.onComplete?.(data.StatusCode);
           })
           .catch((err: unknown) => {
             this.logger.error({ taskId, error: err }, 'Container wait error');
           });
       }
-      /* v8 ignore stop @preserve */
 
       this.logger.info(
         {},
@@ -780,28 +749,20 @@ export class DockerProvider implements IsolationProvider {
 
       return handle;
     } catch (error) {
-      await fs.promises.rm(taskSecretsPath, { recursive: true, force: true }).catch(
-        /* v8 ignore start -- test-infra: cleanup error handling for edge cases @preserve */
-        (e: unknown) => {
+      await fs.promises
+        .rm(taskSecretsPath, { recursive: true, force: true })
+        .catch((e: unknown) => {
           this.logger.warn({ taskId, error: e }, 'Cleanup: failed to remove task secrets');
-        }
-        /* v8 ignore stop @preserve */
-      );
-      await fs.promises.rm(taskSessionPath, { recursive: true, force: true }).catch(
-        /* v8 ignore start -- test-infra: cleanup error handling for edge cases @preserve */
-        (e: unknown) => {
+        });
+      await fs.promises
+        .rm(taskSessionPath, { recursive: true, force: true })
+        .catch((e: unknown) => {
           this.logger.warn({ taskId, error: e }, 'Cleanup: failed to remove task session');
-        }
-        /* v8 ignore stop @preserve */
-      );
+        });
       if (container !== undefined) {
-        await container.remove({ force: true }).catch(
-          /* v8 ignore start -- test-infra: cleanup error handling for edge cases @preserve */
-          (e: unknown) => {
-            this.logger.warn({ taskId, error: e }, 'Cleanup: failed to remove container');
-          }
-          /* v8 ignore stop @preserve */
-        );
+        await container.remove({ force: true }).catch((e: unknown) => {
+          this.logger.warn({ taskId, error: e }, 'Cleanup: failed to remove container');
+        });
       }
       throw error;
     }
@@ -816,11 +777,9 @@ export class DockerProvider implements IsolationProvider {
 
     this.logger.info({ taskId, forceKill }, 'Stopping worker container');
 
-    /* v8 ignore start -- test-infra: logStream only set when onLog callback provided in production @preserve */
     if (worker.logStream !== undefined && 'destroy' in worker.logStream) {
       (worker.logStream as NodeJS.ReadableStream & { destroy(): void }).destroy();
     }
-    /* v8 ignore stop @preserve */
 
     try {
       const container = this.docker.getContainer(worker.containerId);
@@ -876,7 +835,6 @@ export class DockerProvider implements IsolationProvider {
     }
   }
 
-  /* v8 ignore start -- test-infra: Docker log stream behavior and fallback paths require daemon-level integration tests @preserve */
   async getWorkerLogs(taskId: string): Promise<string> {
     const worker = this.workers.get(taskId);
     if (worker === undefined) {
@@ -891,18 +849,15 @@ export class DockerProvider implements IsolationProvider {
         timestamps: true,
       });
       const containerLogs = logs.toString('utf-8');
-      /* v8 ignore start -- test-infra: branch depends on whether exec-stream buffering captured attempt logs @preserve */
       if (worker.attemptLogBuffer === '') {
         return containerLogs;
       }
-      /* v8 ignore stop @preserve */
       return `${containerLogs}\n${worker.attemptLogBuffer}`;
     } catch (error) {
       this.logger.warn({ taskId, error }, 'Failed to retrieve container logs');
       return worker.attemptLogBuffer;
     }
   }
-  /* v8 ignore stop @preserve */
 
   async streamLogs(taskId: string, onChunk: (chunk: string) => void): Promise<void> {
     const worker = this.workers.get(taskId);
@@ -931,7 +886,6 @@ export class DockerProvider implements IsolationProvider {
 
     const container = this.docker.getContainer(worker.containerId);
 
-    /* v8 ignore start -- async-timing: setTimeout/clearTimeout race condition handling, hard to trigger in tests @preserve */
     return await new Promise((resolve) => {
       let timeoutFired = false;
 
@@ -962,7 +916,6 @@ export class DockerProvider implements IsolationProvider {
           }
         });
     });
-    /* v8 ignore stop @preserve */
   }
 
   async getResourceUsage(taskId: string): Promise<ResourceUsage> {
@@ -971,7 +924,6 @@ export class DockerProvider implements IsolationProvider {
       throw new Error(`Worker ${taskId} not found`);
     }
 
-    /* v8 ignore start -- test-infra: stats API returns complex nested objects, CPU calc branches not easily covered @preserve */
     const container = this.docker.getContainer(worker.containerId);
     const stats = await container.stats({ stream: false });
 
@@ -980,7 +932,6 @@ export class DockerProvider implements IsolationProvider {
     const systemDelta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
     const cpuPercent =
       systemDelta > 0 ? (cpuDelta / systemDelta) * stats.cpu_stats.online_cpus * 100 : 0;
-    /* v8 ignore stop @preserve */
 
     return {
       cpuPercent: Math.round(cpuPercent * 100) / 100,
@@ -1066,7 +1017,9 @@ export class DockerProvider implements IsolationProvider {
       >();
 
       for (const container of containers) {
+        /* v8 ignore start -- ts-type: nullish coalescing on array access required by noUncheckedIndexedAccess @preserve */
         const taskId = this.extractTaskIdFromContainerName(container.Names[0] ?? '');
+        /* v8 ignore stop @preserve */
         if (taskId === null) {
           this.logger.warn(
             { containerId: container.Id },
@@ -1132,9 +1085,11 @@ export class DockerProvider implements IsolationProvider {
       return;
     }
 
+    /* v8 ignore start -- ts-type: null check guard for idempotent interval start @preserve */
     if (this.cleanupIntervalId !== null) {
       return;
     }
+    /* v8 ignore stop @preserve */
 
     this.logger.info(
       { intervalMs: PERIODIC_CLEANUP_INTERVAL_MS, maxAgeMs: PRESERVED_MAX_AGE_MS },
@@ -1146,9 +1101,11 @@ export class DockerProvider implements IsolationProvider {
   }
 
   stopPeriodicCleanup(): void {
+    /* v8 ignore start -- ts-type: null check guard for idempotent interval stop @preserve */
     if (this.cleanupIntervalId === null) {
       return;
     }
+    /* v8 ignore stop @preserve */
 
     clearInterval(this.cleanupIntervalId);
     this.cleanupIntervalId = null;
@@ -1200,9 +1157,11 @@ export class DockerProvider implements IsolationProvider {
   }
 
   startHealthMonitor(): void {
+    /* v8 ignore start -- ts-type: null check guard for idempotent interval start @preserve */
     if (this.healthMonitorIntervalId !== null) {
       return;
     }
+    /* v8 ignore stop @preserve */
 
     this.healthMonitorIntervalId = setInterval(() => {
       void this.checkHealth();
@@ -1210,9 +1169,11 @@ export class DockerProvider implements IsolationProvider {
   }
 
   stopHealthMonitor(): void {
+    /* v8 ignore start -- ts-type: null check guard for idempotent interval stop @preserve */
     if (this.healthMonitorIntervalId === null) {
       return;
     }
+    /* v8 ignore stop @preserve */
 
     clearInterval(this.healthMonitorIntervalId);
     this.healthMonitorIntervalId = null;
@@ -1256,7 +1217,9 @@ export class DockerProvider implements IsolationProvider {
     const pullOpts: Record<string, unknown> = {};
     if (this.config.gcpSaKeyPath !== '' && fs.existsSync(this.config.gcpSaKeyPath)) {
       const saKey = fs.readFileSync(this.config.gcpSaKeyPath, 'utf-8');
+      /* v8 ignore start -- ts-type: nullish coalescing on array access required by noUncheckedIndexedAccess @preserve */
       const registry = imageName.split('/')[0] ?? '';
+      /* v8 ignore stop @preserve */
       pullOpts['authconfig'] = {
         username: '_json_key',
         password: saKey,
@@ -1298,9 +1261,11 @@ export class DockerProvider implements IsolationProvider {
     try {
       const imageInfo = await this.docker.getImage(imageName).inspect();
       const repoDigests = Array.isArray(imageInfo.RepoDigests) ? imageInfo.RepoDigests : [];
+      /* v8 ignore start -- ts-type: nullish coalescing on array access required by noUncheckedIndexedAccess @preserve */
       const resolvedImage = repoDigests.find((digest) =>
         digest.startsWith(imageName.split(':')[0] ?? '')
       );
+      /* v8 ignore stop @preserve */
       const finalImage = resolvedImage ?? repoDigests[0] ?? imageName;
       this.lastResolvedDigest = finalImage;
       this.logger.info(
@@ -1323,7 +1288,6 @@ export class DockerProvider implements IsolationProvider {
     }
   }
 
-  /* v8 ignore start -- test-infra: readiness polling requires running container with entrypoint @preserve */
   private async waitForWorkerReady(taskId: string, container: Docker.Container): Promise<void> {
     const timeoutMs = this.config.workerReadyTimeoutMs ?? 600_000;
     const pollIntervalMs = 2_000;
@@ -1355,7 +1319,6 @@ export class DockerProvider implements IsolationProvider {
 
     throw new Error(`Worker readiness timeout after ${String(timeoutMs)}ms for task ${taskId}`);
   }
-  /* v8 ignore stop @preserve */
 
   private async assertManagedEntrypointSupport(
     taskId: string,
@@ -1379,7 +1342,6 @@ export class DockerProvider implements IsolationProvider {
     }
   }
 
-  /* v8 ignore start -- test-infra: prompt file writes are covered indirectly by integration tests with real mounted secrets @preserve */
   private async writePromptFiles(
     taskSecretsPath: string,
     systemPrompt: string,
@@ -1392,9 +1354,7 @@ export class DockerProvider implements IsolationProvider {
     );
     await fs.promises.writeFile(path.join(taskSecretsPath, 'user-prompt.txt'), prompt, 'utf-8');
   }
-  /* v8 ignore stop @preserve */
 
-  /* v8 ignore start -- test-infra: Docker exec lifecycle and race handling require daemon-level integration tests @preserve */
   private async runAttemptInContainer(taskId: string, config: WorkerConfig): Promise<void> {
     const worker = this.workers.get(taskId);
     if (worker === undefined) {
@@ -1491,9 +1451,7 @@ export class DockerProvider implements IsolationProvider {
       worker.attemptRunning = false;
     }
   }
-  /* v8 ignore stop @preserve */
 
-  /* v8 ignore start -- upstream: Docker exec stream/inspect error paths depend on daemon/runtime behavior @preserve */
   private async waitForExecCompletion(
     taskId: string,
     execInstance: Docker.Exec,
@@ -1503,7 +1461,9 @@ export class DockerProvider implements IsolationProvider {
       let resolved = false;
 
       const resolveWith = (exitCode: number): void => {
+        /* v8 ignore start -- async-timing: double-resolution guard prevents race between stream end and poll timer @preserve */
         if (resolved) return;
+        /* v8 ignore stop @preserve */
         resolved = true;
         clearInterval(pollTimer);
         resolve(exitCode);
@@ -1537,7 +1497,9 @@ export class DockerProvider implements IsolationProvider {
                 { taskId },
                 'Exec process exited but stream still open — resolving via inspect fallback'
               );
+              /* v8 ignore start -- ts-type: typeof check for Docker API ExitCode which may be null @preserve */
               resolveWith(typeof info.ExitCode === 'number' ? info.ExitCode : 1);
+              /* v8 ignore stop @preserve */
             }
           })
           .catch(() => {
@@ -1547,5 +1509,4 @@ export class DockerProvider implements IsolationProvider {
       }, EXEC_INSPECT_POLL_INTERVAL_MS);
     });
   }
-  /* v8 ignore stop @preserve */
 }

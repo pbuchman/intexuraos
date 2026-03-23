@@ -19,6 +19,34 @@ let mockExecFileAsyncImpl: (
   options?: { cwd?: string }
 ) => Promise<{ stdout: string; stderr: string }>;
 
+// Overridable fs hooks for statSync and mkdirSync — default to real implementations
+let statSyncOverride: ((path: string) => ReturnType<typeof import('node:fs').statSync>) | null =
+  null;
+let mkdirSyncOverride:
+  | ((path: string, options?: { recursive?: boolean }) => string | undefined)
+  | null = null;
+
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  return {
+    ...actual,
+    statSync: (...args: Parameters<typeof actual.statSync>): ReturnType<typeof actual.statSync> => {
+      if (statSyncOverride !== null) {
+        return statSyncOverride(String(args[0]));
+      }
+      return actual.statSync(...args);
+    },
+    mkdirSync: (
+      ...args: Parameters<typeof actual.mkdirSync>
+    ): ReturnType<typeof actual.mkdirSync> => {
+      if (mkdirSyncOverride !== null) {
+        return mkdirSyncOverride(String(args[0]), args[1] as { recursive?: boolean } | undefined);
+      }
+      return actual.mkdirSync(...args);
+    },
+  };
+});
+
 vi.mock('node:util', async () => {
   const actual = await vi.importActual<typeof import('node:util')>('node:util');
   return {
@@ -49,6 +77,8 @@ describe('RepoManager', () => {
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'repo-manager-test-'));
     vi.clearAllMocks();
+    statSyncOverride = null;
+    mkdirSyncOverride = null;
 
     // Default mock implementation - successful git commands
     mockExecFileAsyncImpl = async (
@@ -186,6 +216,41 @@ describe('RepoManager', () => {
       ).rejects.toThrow('appears to be a worktree');
     });
 
+    it('should throw when statSync fails after existsSync returns true (race condition)', async () => {
+      const { validateRepository } = await loadRepoManager();
+      const repoPath = join(tempDir, 'stat-race');
+      mkdirSync(join(repoPath, '.git'), { recursive: true });
+
+      // Override statSync to throw when .git is accessed
+      statSyncOverride = (p: string): never => {
+        if (p.endsWith('.git')) {
+          throw new Error('ENOENT: file removed between existsSync and statSync');
+        }
+        throw new Error('unexpected path');
+      };
+
+      await expect(
+        validateRepository(repoPath, 'https://github.com/pbuchman/intexuraos.git', mockLogger)
+      ).rejects.toThrow('Failed to stat .git directory');
+    });
+
+    it('should include "Unknown error" when statSync throws a non-Error value', async () => {
+      const { validateRepository } = await loadRepoManager();
+      const repoPath = join(tempDir, 'stat-non-error');
+      mkdirSync(join(repoPath, '.git'), { recursive: true });
+
+      statSyncOverride = (p: string): never => {
+        if (p.endsWith('.git')) {
+          throw 'string rejection' as unknown as Error;
+        }
+        throw new Error('unexpected path');
+      };
+
+      await expect(
+        validateRepository(repoPath, 'https://github.com/pbuchman/intexuraos.git', mockLogger)
+      ).rejects.toThrow('Unknown error');
+    });
+
     it('should throw when remote origin does not match expected URL', async () => {
       const { validateRepository } = await loadRepoManager();
       const repoPath = join(tempDir, 'wrong-remote');
@@ -241,6 +306,28 @@ describe('RepoManager', () => {
       ).rejects.toThrow('does not appear to be IntexuraOS');
     });
 
+    it('should include "Unknown error" when package.json parsing throws a non-Error value', async () => {
+      const { validateRepository } = await loadRepoManager();
+      const repoPath = join(tempDir, 'non-error-pkg');
+      mkdirSync(join(repoPath, '.git'), { recursive: true });
+      // Write valid JSON so readFileSync succeeds, then mock JSON.parse to throw non-Error
+      writeFileSync(join(repoPath, 'package.json'), '{"name":"intexuraos"}');
+
+      const originalParse = JSON.parse;
+      vi.spyOn(JSON, 'parse').mockImplementation((text: string, ...args: unknown[]): unknown => {
+        if (typeof text === 'string' && text.includes('"name"')) {
+          throw 42 as unknown as Error;
+        }
+        return originalParse(text, ...(args as [undefined]));
+      });
+
+      await expect(
+        validateRepository(repoPath, 'https://github.com/pbuchman/intexuraos.git', mockLogger)
+      ).rejects.toThrow('Unknown error');
+
+      vi.mocked(JSON.parse).mockRestore();
+    });
+
     it('should throw when package.json is malformed', async () => {
       const { validateRepository } = await loadRepoManager();
       const repoPath = join(tempDir, 'malformed-package');
@@ -294,6 +381,33 @@ describe('RepoManager', () => {
       expect(cloneArgs[0]).toBe('clone');
       expect(cloneArgs[1]).toBe('https://github.com/pbuchman/intexuraos.git');
       expect(cloneArgs[2]).toBe(repoPath);
+    });
+
+    it('should throw when mkdirSync fails while creating parent directory', async () => {
+      const { cloneRepository } = await loadRepoManager();
+      // Use a nested path so parent doesn't exist and mkdirSync is called
+      const repoPath = join(tempDir, 'no-parent', 'deep', 'repo');
+
+      mkdirSyncOverride = (): never => {
+        throw new Error('EACCES: permission denied');
+      };
+
+      await expect(
+        cloneRepository('https://github.com/pbuchman/intexuraos.git', repoPath, mockLogger)
+      ).rejects.toThrow('Failed to create parent directory');
+    });
+
+    it('should include "Unknown error" when mkdirSync throws a non-Error value', async () => {
+      const { cloneRepository } = await loadRepoManager();
+      const repoPath = join(tempDir, 'no-parent2', 'deep', 'repo');
+
+      mkdirSyncOverride = (): never => {
+        throw 'string rejection' as unknown as Error;
+      };
+
+      await expect(
+        cloneRepository('https://github.com/pbuchman/intexuraos.git', repoPath, mockLogger)
+      ).rejects.toThrow('Unknown error');
     });
 
     it('should handle clone failure gracefully', async () => {

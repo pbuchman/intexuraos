@@ -188,11 +188,9 @@ export class TurnMetricsCollector {
         }
         const quota = parseInt(match[1], 10);
         const period = parseInt(match[2], 10);
-        /* v8 ignore start -- test-infra: cgroup mock always provides non-zero period @preserve */
         if (period > 0) {
           return quota / period;
         }
-        /* v8 ignore stop @preserve */
       }
       return availableParallelism();
     } catch {
