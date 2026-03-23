@@ -51,8 +51,6 @@
       "files": [
         "workers/orchestrator/src/services/isolation/docker-provider.ts",
         "workers/orchestrator/src/services/task-dispatcher.ts",
-        "workers/orchestrator/src/services/turn-metrics-collector.ts",
-        "workers/orchestrator/src/services/webhook-client.ts",
         "workers/orchestrator/src/services/worktree-manager.ts",
         "workers/orchestrator/src/start.ts"
       ],
