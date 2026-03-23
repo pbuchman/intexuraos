@@ -186,6 +186,7 @@ export function createFirestoreMergeQueueWatchRepository(deps: {
           .where('userId', '==', userId)
           .where('owner', '==', owner)
           .where('repo', '==', repo)
+          .orderBy('createdAt', 'desc')
           .get();
 
         const watches: MergeQueueWatch[] = snapshot.docs.map((doc) => {
