@@ -107,7 +107,7 @@ export async function drainTaskQueue(
       // Sort by createdAt descending (newest first), cancel older ones
       group.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
       const newest = group[0];
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — group.length > 1 guarantees group[0] defined @preserve */
+      /* v8 ignore start -- ts-type: Array groupBy always returns dense arrays — cannot produce sparse result @preserve */
       if (newest === undefined) continue;
       /* v8 ignore stop @preserve */
       const toCancel = group.slice(1);

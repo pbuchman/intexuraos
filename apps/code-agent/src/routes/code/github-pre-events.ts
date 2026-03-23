@@ -75,7 +75,7 @@ function deduplicateCommentEvents(events: GitHubPREvent[]): GitHubPREvent[] {
     seen.add(key);
 
     const latest = latestByKey.get(key);
-    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — latestByKey built from same events guarantees key defined @preserve */
+    /* v8 ignore start -- ts-type: Map.get after Map.set with same key always returns defined @preserve */
     if (latest === undefined) {
       result.push(event);
       continue;

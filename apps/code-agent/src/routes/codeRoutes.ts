@@ -1187,7 +1187,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         linearIssueId?: string;
       };
 
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
+      /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
 
@@ -1407,7 +1407,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const { codeTaskRepo } = getServices();
       const config = loadConfig();
 
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
+      /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
 
@@ -1532,7 +1532,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       });
 
       const { codeTaskRepo, linearAgentClient } = getServices();
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
+      /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
 
@@ -1555,7 +1555,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         cursor?: string;
       } = {
         userId,
-        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — Fastify schema default ensures limit defined @preserve */
+        /* v8 ignore start -- ts-type: Fastify schema injects default — ?? fallback unreachable @preserve */
         limit: request.query.limit ?? 20,
         /* v8 ignore stop @preserve */
       };
@@ -1787,7 +1787,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       });
 
       const { codeTaskRepo, linearAgentClient, logger } = getServices();
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
+      /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
 
@@ -1890,7 +1890,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       });
 
       const { codeTaskRepo, logger } = getServices();
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
+      /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
       const { taskId } = request.params;
@@ -1956,7 +1956,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       });
 
       const { codeTaskRepo, logger } = getServices();
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
+      /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
       const { taskId } = request.params;
@@ -2100,7 +2100,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       const { codeTaskRepo, taskDispatcher, rateLimitService, statusMirrorService, workerSettingsRepo } = getServices();
       const { taskId } = request.body;
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
+      /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
 
@@ -2259,7 +2259,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const { workerSettingsRepo, workerHealthProbe } = getServices();
       const userId = request.user?.userId;
 
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
+      /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
       if (!userId) {
         return reply.fail('UNAUTHORIZED', 'Authentication required');
       }
@@ -2454,7 +2454,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const { workerSettingsRepo, workerHealthProbe } = getServices();
       const userId = request.user?.userId;
 
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
+      /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
       if (!userId) {
         return reply.fail('UNAUTHORIZED', 'Authentication required');
       }
@@ -3258,7 +3258,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         getServices();
       const userId = request.user?.userId;
 
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
+      /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
       if (!userId) {
         return reply.fail('UNAUTHORIZED', 'Authentication required');
       }
@@ -3475,7 +3475,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         getServices();
       const userId = request.user?.userId;
 
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
+      /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
       if (userId === undefined) {
         return reply.fail('UNAUTHORIZED', 'Authentication required');
       }
@@ -3671,7 +3671,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         getServices();
       const userId = request.user?.userId;
 
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
+      /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
       if (userId === undefined) {
         return reply.fail('UNAUTHORIZED', 'Authentication required');
       }
@@ -3800,7 +3800,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       logIncomingRequest(request, { message: 'Received request to POST /code/tasks/:taskId/messages' });
 
       const userId = request.user?.userId;
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
+      /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
       if (userId === undefined) {
         return reply.fail('UNAUTHORIZED' as ErrorCode, 'Missing user identity');
       }

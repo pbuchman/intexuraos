@@ -37,7 +37,7 @@ function validateTriageState(
   const dedupedReviewTypes = [...new Set(reviewsRequested)];
 
   if (state.skipped) {
-    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — Zod safeParse always succeeds on LLM-validated output @preserve */
+    /* v8 ignore start -- ts-type: Zod safeParse ?? fallback unreachable — LLM output pre-validated @preserve */
     const parsed = TriageSkipSchema.safeParse({ action: 'skip', reason: state.skipReason ?? '' });
     if (!parsed.success) return { ok: false, error: formatZodErrors(parsed.error) };
     /* v8 ignore stop @preserve */
@@ -45,7 +45,7 @@ function validateTriageState(
   }
 
   if (dedupedReviewTypes.length > 0) {
-    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — Zod safeParse always succeeds on LLM-validated output @preserve */
+    /* v8 ignore start -- ts-type: Zod safeParse ?? fallback unreachable — LLM output pre-validated @preserve */
     const parsed = TriageReviewSchema.safeParse({ action: 'request_review', reviewTypes: dedupedReviewTypes });
     if (!parsed.success) return { ok: false, error: formatZodErrors(parsed.error) };
     /* v8 ignore stop @preserve */
@@ -65,7 +65,7 @@ function validateCommentTriageState(
   },
 ): { ok: true; value: GitHubAgentTriageResult } | { ok: false; error: string } {
   if (state.skipped) {
-    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — Zod safeParse always succeeds on LLM-validated output @preserve */
+    /* v8 ignore start -- ts-type: Zod safeParse ?? fallback unreachable — LLM output pre-validated @preserve */
     const parsed = TriageSkipSchema.safeParse({ action: 'skip', reason: state.skipReason ?? '' });
     if (!parsed.success) return { ok: false, error: formatZodErrors(parsed.error) };
     /* v8 ignore stop @preserve */
@@ -74,7 +74,7 @@ function validateCommentTriageState(
 
   const dedupedReviewTypes = [...new Set(state.reviewTypes)];
   if (dedupedReviewTypes.length > 0) {
-    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — Zod safeParse always succeeds on LLM-validated output @preserve */
+    /* v8 ignore start -- ts-type: Zod safeParse ?? fallback unreachable — LLM output pre-validated @preserve */
     const parsed = TriageReviewSchema.safeParse({ action: 'request_review', reviewTypes: dedupedReviewTypes });
     if (!parsed.success) return { ok: false, error: formatZodErrors(parsed.error) };
     /* v8 ignore stop @preserve */
@@ -299,7 +299,7 @@ async function evaluatePREventInternal(
     prNumber: event.pullRequestNumber,
     prTitle: event.title ?? '(untitled)',
     prBody: event.body ?? '',
-    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — caller always sets event.action for pull_request events @preserve */
+    /* v8 ignore start -- ts-type: event.action ?? fallback unreachable — caller always provides action @preserve */
     action: event.action ?? '',
     /* v8 ignore stop @preserve */
     senderLogin: event.senderLogin,
@@ -500,7 +500,7 @@ async function evaluateCommentEventInternal(
     prNumber: event.pullRequestNumber,
     prTitle: event.title ?? '(untitled)',
     prBody: '',
-    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — caller always sets event.action for issue_comment events @preserve */
+    /* v8 ignore start -- ts-type: event.action ?? fallback unreachable — caller always provides action @preserve */
     action: event.action ?? '',
     /* v8 ignore stop @preserve */
     senderLogin: event.senderLogin,

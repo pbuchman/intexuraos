@@ -7,7 +7,7 @@ import { githubAgentPrompt } from '../../../domain/prompts/githubAgentPrompt.js'
 
 describe('githubAgentPrompt', () => {
   it('has version 5.0.0', () => {
-    expect(githubAgentPrompt.version).toBe('5.1.0');
+    expect(githubAgentPrompt.version).toBe('5.1.1');
   });
 
   describe('PR section', () => {

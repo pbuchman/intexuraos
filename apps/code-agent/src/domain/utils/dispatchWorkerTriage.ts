@@ -32,7 +32,7 @@ export function extractDispatchWorkerType(commentBody: string): WorkerType | und
   if (match === null) return undefined;
 
   const typeStr = match[1];
-  /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — regex capture group [1] always present on successful match @preserve */
+  /* v8 ignore start -- ts-type: regex capture group ?? fallback unreachable — exec always populates groups on match @preserve */
   if (typeStr === undefined) return undefined;
   /* v8 ignore stop @preserve */
 

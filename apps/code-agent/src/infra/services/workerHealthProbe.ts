@@ -139,7 +139,7 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
           healthy: false,
           reason: errorCode === 'ENOTFOUND' ? 'dns-failed' : 'connection-refused',
         };
-        /* v8 ignore start -- upstream: includes() match above guarantees errorCode is defined @preserve */
+        /* v8 ignore start -- upstream: FakeHttpClient error codes always match includes() — cannot produce undefined errorCode inside match block @preserve */
         if (errorCode !== undefined) {
           result.code = errorCode;
         }

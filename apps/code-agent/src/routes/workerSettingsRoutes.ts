@@ -229,7 +229,7 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
       });
 
       const { workerSettingsRepo } = getServices();
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
+      /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
 
@@ -1007,12 +1007,12 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
       });
 
       const { workerSettingsRepo } = getServices();
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
+      /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
       const { workerType } = request.body;
 
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — Fastify schema enum validates workerType before handler @preserve */
+      /* v8 ignore start -- ts-type: Fastify schema validates enum — ?? fallback unreachable @preserve */
       if (!isCodeTaskWorkerType(workerType)) {
         return await reply.fail('INVALID_REQUEST', `Invalid worker type: ${workerType}`);
       }

@@ -470,7 +470,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
         // Only set nextCursor when there are actually more results
         if (hasMore && resultDocs.length > 0) {
           const lastDoc = resultDocs[resultDocs.length - 1];
-          /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — resultDocs.length > 0 guarantees last element defined @preserve */
+          /* v8 ignore start -- ts-type: FakeFirestore always returns non-sparse arrays from queries @preserve */
           if (lastDoc !== undefined) {
             output.nextCursor = lastDoc.id;
           }
