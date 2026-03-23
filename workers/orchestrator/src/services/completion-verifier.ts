@@ -536,7 +536,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
     }
 
     const pricing = VERIFIER_PRICING[config.model];
-    /* v8 ignore start -- upstream: model guard above guarantees Gemini pricing entry exists @preserve */
+    /* v8 ignore start -- upstream: model guard above guarantees pricing entry exists @preserve */
     if (pricing === undefined) {
       throw new Error(`Missing completion verifier pricing entry for model: ${config.model}`);
     }

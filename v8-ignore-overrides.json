@@ -1,22 +1,14 @@
 {
   "_comment": "Blocks that fail tightened validation but have planned fixes. Keyed by Linear task ID.",
   "overrides": {
-    "PENDING-workers-orchestrator": {
+    "INT-1071": {
       "files": [
-        "workers/orchestrator/src/github/token-service.ts",
-        "workers/orchestrator/src/routes.ts",
-        "workers/orchestrator/src/services/api-key-validator.ts",
-        "workers/orchestrator/src/services/execution-deep-validator.ts",
-        "workers/orchestrator/src/services/isolation/credential-refresher.ts",
         "workers/orchestrator/src/services/isolation/docker-provider.ts",
-        "workers/orchestrator/src/services/log-forwarder.ts",
-        "workers/orchestrator/src/services/repo-manager.ts",
         "workers/orchestrator/src/services/task-dispatcher.ts",
-        "workers/orchestrator/src/services/turn-metrics-collector.ts",
         "workers/orchestrator/src/services/worktree-manager.ts",
         "workers/orchestrator/src/start.ts"
       ],
-      "description": "Write tests for tightened v8 ignore blocks in workers/orchestrator"
+      "description": "Remaining orchestrator v8 ignore triage: branches uncovered by unit tests require integration-level testing or are dead code from type narrowing"
     }
   }
 }

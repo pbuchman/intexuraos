@@ -76,13 +76,11 @@ export class TokenRefresher {
       );
       return data.token;
     } catch (error) {
-      /* v8 ignore start -- ts-type: catch block type narrowing on unknown error @preserve */
       const cause =
         error instanceof Error && error.cause instanceof Error ? error.cause : undefined;
       this.logger.error(
         {
           errorMessage: error instanceof Error ? error.message : String(error),
-          /* v8 ignore stop @preserve */
           causeMessage: cause?.message,
           causeCode: (cause as NodeJS.ErrnoException | undefined)?.code,
           causeSyscall: (cause as NodeJS.ErrnoException | undefined)?.syscall,
