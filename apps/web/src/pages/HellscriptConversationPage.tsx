@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useState, useMemo, useCallback } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import { PenTool, X } from 'lucide-react';
 import { Layout } from '@/components';
 import {
   HellscriptTimeline,
@@ -8,12 +9,14 @@ import {
   HellscriptVersionSelector,
 } from '@/components/hellscript/index.js';
 import { useHellscriptWorkspace } from '@/hooks';
-import type { HellscriptDraftVersion } from '@/types';
+import type { HellscriptDraftVersion, WritingCategory } from '@/types';
+import { WRITING_CATEGORIES } from '@/types';
 
 export function HellscriptConversationPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
-  const { workspace, loading, error, impose, imposing } = useHellscriptWorkspace(id);
+  const { workspace, loading, error, impose, imposing, lastAction, clearLastAction } = useHellscriptWorkspace(id);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [pendingUtterance, setPendingUtterance] = useState<string | null>(null);
 
   const versions = useMemo<HellscriptDraftVersion[]>(
     () => workspace?.draftVersions ?? [],
@@ -33,17 +36,33 @@ export function HellscriptConversationPage(): React.JSX.Element {
     return sorted[0] ?? null;
   }, [versions, selectedVersionId]);
 
+  const handleCategorySelect = useCallback(
+    (selectedCategory: WritingCategory) => {
+      const utterance = pendingUtterance ?? `Generate a ${selectedCategory} draft`;
+      setPendingUtterance(null);
+      void impose(utterance, selectedCategory);
+    },
+    [impose, pendingUtterance]
+  );
+
   const isNewConversation = id === undefined;
 
   return (
     <Layout>
       <div className="mx-auto max-w-7xl">
-        <div className="mb-4">
+        <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
             {isNewConversation
               ? 'New Conversation'
               : workspace?.buffer.title ?? 'Loading...'}
           </h2>
+          <Link
+            to="/hellscript/voice"
+            className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+          >
+            <PenTool className="h-3.5 w-3.5" />
+            Writing voice
+          </Link>
         </div>
 
         {loading ? (
@@ -64,7 +83,40 @@ export function HellscriptConversationPage(): React.JSX.Element {
               <div className="flex-1 overflow-y-auto">
                 <HellscriptTimeline events={workspace?.events ?? []} />
               </div>
-              <HellscriptComposer onSubmit={impose} disabled={imposing} />
+              <HellscriptComposer onSubmit={(utterance: string) => {
+                setPendingUtterance(utterance);
+                return impose(utterance);
+              }} disabled={imposing} />
+              {lastAction === 'category_required' ? (
+                <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-900/20">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-sm text-amber-800 dark:text-amber-300">
+                      Which platform is this draft for?
+                    </span>
+                    <button
+                      type="button"
+                      onClick={clearLastAction}
+                      className="rounded p-0.5 text-amber-400 transition-colors hover:text-amber-600 dark:hover:text-amber-200"
+                      aria-label="Dismiss"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    {WRITING_CATEGORIES.map(({ key, label }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        disabled={imposing}
+                        onClick={() => { handleCategorySelect(key); }}
+                        className="rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-amber-700 disabled:opacity-50 dark:bg-amber-500 dark:hover:bg-amber-600"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               {error !== null ? (
                 <p className="mt-2 text-xs text-red-600 dark:text-red-400">{error}</p>
               ) : null}

@@ -223,6 +223,11 @@
       "owner": "hellscript-agent",
       "description": "Hellscript thought buffers with materialized state",
       "subcollections": ["events", "draft_versions"]
+    },
+    "hellscript_writing_config": {
+      "owner": "hellscript-agent",
+      "description": "User-level writing configuration with style instructions per category",
+      "subcollections": ["writing_samples"]
     }
   }
 }

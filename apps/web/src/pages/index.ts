@@ -38,3 +38,5 @@ export { WorkerSettingsPage } from './WorkerSettingsPage.js';
 export { CronSchedulesPage, CronScheduleViewPage, CronScheduleNewPage, CronExecutionsPage } from './cron-agent/index.js';
 export { HellscriptBuffersPage } from './HellscriptBuffersPage.js';
 export { HellscriptConversationPage } from './HellscriptConversationPage.js';
+export { HellscriptStylePage } from './HellscriptStylePage.js';
+export { HellscriptSamplesPage } from './HellscriptSamplesPage.js';

@@ -31,6 +31,8 @@ import {
   MergeQueuePage,
   HellscriptBuffersPage,
   HellscriptConversationPage,
+  HellscriptStylePage,
+  HellscriptSamplesPage,
   CompositeFeedFormPage,
   CompositeFeedsListPage,
   DataInsightsPage,
@@ -256,6 +258,22 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <HellscriptConversationPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/hellscript/voice"
+        element={
+          <ProtectedRoute>
+            <HellscriptStylePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/hellscript/scriptures"
+        element={
+          <ProtectedRoute>
+            <HellscriptSamplesPage />
           </ProtectedRoute>
         }
       />

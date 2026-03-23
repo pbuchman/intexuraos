@@ -22,12 +22,6 @@ export function applyIntentToState(
   switch (intent.kind) {
     case 'append_thought':
       return appendThought(state, extractString(intent.payload, 'text'));
-    case 'add_writing_sample':
-      return addWritingSample(state, extractString(intent.payload, 'text'));
-    case 'set_style_instructions':
-      return setStyleInstructions(state, extractString(intent.payload, 'instructions'));
-    case 'set_metadata':
-      return setMetadata(state, intent.payload);
     case 'delete_thought':
       return deleteThought(state, extractString(intent.payload, 'thoughtId'));
     case 'reorder_thoughts':
@@ -48,36 +42,6 @@ function appendThought(state: MaterializedBufferState, text: string): Materializ
   return {
     ...state,
     thoughts: [...state.thoughts, entry],
-  };
-}
-
-function addWritingSample(state: MaterializedBufferState, text: string): MaterializedBufferState {
-  return {
-    ...state,
-    writingSamples: [...state.writingSamples, text],
-  };
-}
-
-function setStyleInstructions(
-  state: MaterializedBufferState,
-  instructions: string
-): MaterializedBufferState {
-  return {
-    ...state,
-    styleInstructions: instructions,
-  };
-}
-
-function setMetadata(
-  state: MaterializedBufferState,
-  payload: Record<string, unknown>
-): MaterializedBufferState {
-  return {
-    ...state,
-    ...(payload['audience'] !== undefined ? { audience: extractString(payload, 'audience') } : {}),
-    ...(payload['contentGoal'] !== undefined
-      ? { contentGoal: extractString(payload, 'contentGoal') }
-      : {}),
   };
 }
 
