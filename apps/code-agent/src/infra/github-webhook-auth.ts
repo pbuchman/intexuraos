@@ -72,8 +72,8 @@ export function verifyGitHubSignature(
   hmac.update(payload);
   const expectedDigest = hmac.digest();
 
-  /* v8 ignore start -- upstream: defensive length check for timing-safe comparison @preserve */
   // Timing-safe comparison
+  /* v8 ignore start -- upstream: HMAC-SHA256 digest and hex-parsed buffer are always 32 bytes @preserve */
   if (receivedDigest.length !== expectedDigest.length) {
     return false;
   }

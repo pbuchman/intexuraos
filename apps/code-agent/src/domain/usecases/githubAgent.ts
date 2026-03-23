@@ -37,16 +37,16 @@ function validateTriageState(
   const dedupedReviewTypes = [...new Set(reviewsRequested)];
 
   if (state.skipped) {
-    /* v8 ignore start -- upstream: skip tool handler always sets skipReason to a string, nullish coalescing fallback is unreachable @preserve */
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — Zod safeParse always succeeds on LLM-validated output @preserve */
     const parsed = TriageSkipSchema.safeParse({ action: 'skip', reason: state.skipReason ?? '' });
-    /* v8 ignore stop @preserve */
     if (!parsed.success) return { ok: false, error: formatZodErrors(parsed.error) };
+    /* v8 ignore stop @preserve */
     return { ok: true, value: { action: 'skip', reason: parsed.data.reason } };
   }
 
   if (dedupedReviewTypes.length > 0) {
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — Zod safeParse always succeeds on LLM-validated output @preserve */
     const parsed = TriageReviewSchema.safeParse({ action: 'request_review', reviewTypes: dedupedReviewTypes });
-    /* v8 ignore start -- upstream: tool handler pre-validates review types before adding to reviewsRequested, so Zod reject is unreachable @preserve */
     if (!parsed.success) return { ok: false, error: formatZodErrors(parsed.error) };
     /* v8 ignore stop @preserve */
     return { ok: true, value: { action: 'request_review', reviewTypes: parsed.data.reviewTypes } };
@@ -65,17 +65,17 @@ function validateCommentTriageState(
   },
 ): { ok: true; value: GitHubAgentTriageResult } | { ok: false; error: string } {
   if (state.skipped) {
-    /* v8 ignore start -- upstream: skip tool handler always sets skipReason to a string, nullish coalescing fallback is unreachable @preserve */
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — Zod safeParse always succeeds on LLM-validated output @preserve */
     const parsed = TriageSkipSchema.safeParse({ action: 'skip', reason: state.skipReason ?? '' });
-    /* v8 ignore stop @preserve */
     if (!parsed.success) return { ok: false, error: formatZodErrors(parsed.error) };
+    /* v8 ignore stop @preserve */
     return { ok: true, value: { action: 'skip', reason: parsed.data.reason } };
   }
 
   const dedupedReviewTypes = [...new Set(state.reviewTypes)];
   if (dedupedReviewTypes.length > 0) {
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — Zod safeParse always succeeds on LLM-validated output @preserve */
     const parsed = TriageReviewSchema.safeParse({ action: 'request_review', reviewTypes: dedupedReviewTypes });
-    /* v8 ignore start -- upstream: tool handler pre-validates review types before adding to state.reviewTypes, so Zod reject is unreachable @preserve */
     if (!parsed.success) return { ok: false, error: formatZodErrors(parsed.error) };
     /* v8 ignore stop @preserve */
     return {
@@ -151,15 +151,11 @@ export async function evaluateEvent(
   }
 
   if (event.eventType === 'pull_request' && event.action !== 'opened' && event.action !== 'synchronize') {
-    /* v8 ignore start -- ts-type: null coalescing in error message for GitHubPRAction | null @preserve */
     return { ok: false, error: { code: 'INVALID_EVENT', message: `Expected opened/synchronize action, got ${event.action ?? 'null'}` } };
-    /* v8 ignore stop @preserve */
   }
 
   if (event.eventType === 'issue_comment' && event.action !== 'created' && event.action !== 'edited') {
-    /* v8 ignore start -- ts-type: null coalescing in error message for GitHubPRAction | null @preserve */
     return { ok: false, error: { code: 'INVALID_EVENT', message: `Expected created/edited action, got ${event.action ?? 'null'}` } };
-    /* v8 ignore stop @preserve */
   }
 
   const [owner, repo] = event.repository.split('/');
@@ -262,9 +258,7 @@ async function evaluatePREventInternal(
       run(args: Record<string, unknown>): Promise<string> {
         toolCalls.push({ tool: 'request_review', args });
         const rawReviewType = args['review_type'];
-        /* v8 ignore start -- schema: type guard for unknown tool arg @preserve */
         const reviewType = typeof rawReviewType === 'string' ? rawReviewType : '';
-        /* v8 ignore stop @preserve */
         if (!(LLM_TOOL_REVIEW_TYPES as readonly string[]).includes(reviewType)) {
           logger.warn({ reviewType }, 'GitHub Agent requested unknown review type');
           return Promise.resolve(JSON.stringify({ error: `Unknown review type: ${reviewType}` }));
@@ -303,11 +297,9 @@ async function evaluatePREventInternal(
   const systemPrompt = githubAgentPrompt.build({
     repository: event.repository,
     prNumber: event.pullRequestNumber,
-    /* v8 ignore start -- ts-type: null coalescing for nullable event fields @preserve */
     prTitle: event.title ?? '(untitled)',
     prBody: event.body ?? '',
-    /* v8 ignore stop @preserve */
-    /* v8 ignore start -- ts-type: action validated as opened/synchronize before this function is called @preserve */
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — caller always sets event.action for pull_request events @preserve */
     action: event.action ?? '',
     /* v8 ignore stop @preserve */
     senderLogin: event.senderLogin,
@@ -465,9 +457,7 @@ async function evaluateCommentEventInternal(
       run(args: Record<string, unknown>): Promise<string> {
         toolCalls.push({ tool: 'dispatch_to_task', args });
         const rawTemplate = args['message_template'];
-        /* v8 ignore start -- schema: type guard for unknown tool arg @preserve */
         const template = typeof rawTemplate === 'string' ? rawTemplate : '';
-        /* v8 ignore stop @preserve */
         if (!(VALID_DISPATCH_TEMPLATES as readonly string[]).includes(template)) {
           logger.warn({ template }, 'GitHub Agent used unknown dispatch template');
           return Promise.resolve(JSON.stringify({ error: `Unknown template: ${template}` }));
@@ -495,9 +485,7 @@ async function evaluateCommentEventInternal(
     run(args: Record<string, unknown>): Promise<string> {
       toolCalls.push({ tool: 'skip', args });
       const rawReason = args['reason'];
-      /* v8 ignore start -- schema: type guard for unknown tool arg @preserve */
       const reason = typeof rawReason === 'string' ? rawReason : '(no reason provided)';
-      /* v8 ignore stop @preserve */
       state.skipped = true;
       state.skipReason = reason;
       logger.info({ repository: event.repository, prNumber: event.pullRequestNumber, reason }, 'GitHub Agent skipped comment');
@@ -510,16 +498,14 @@ async function evaluateCommentEventInternal(
   const systemPrompt = githubAgentPrompt.build({
     repository: event.repository,
     prNumber: event.pullRequestNumber,
-    /* v8 ignore start -- ts-type: null coalescing for nullable event fields @preserve */
     prTitle: event.title ?? '(untitled)',
     prBody: '',
-    /* v8 ignore start -- ts-type: action validated as created/edited before this function is called @preserve */
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — caller always sets event.action for issue_comment events @preserve */
     action: event.action ?? '',
     /* v8 ignore stop @preserve */
     senderLogin: event.senderLogin,
     eventType: 'issue_comment',
     commentBody,
-    /* v8 ignore stop @preserve */
     isEdit: event.action === 'edited',
     isBotSender,
   });

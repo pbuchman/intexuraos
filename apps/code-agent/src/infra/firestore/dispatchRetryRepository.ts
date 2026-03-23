@@ -80,7 +80,7 @@ export function createFirestoreDispatchRetryRepository(deps: {
         }
 
         const doc = snapshot.docs[0];
-        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard; snapshot.empty check above guarantees docs[0] exists @preserve */
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — !snapshot.empty guarantees docs[0] defined @preserve */
         if (doc === undefined) {
           return ok(null);
         }

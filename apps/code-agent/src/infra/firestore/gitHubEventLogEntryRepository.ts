@@ -148,7 +148,7 @@ export function createFirestoreGitHubEventLogEntryRepository(deps: {
         };
         if (hasMore && entries.length > 0) {
           const lastEntry = entries[entries.length - 1];
-          /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes lastEntry possibly undefined despite entries.length > 0 guard @preserve */
+          /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — entries.length > 0 guarantees last element defined @preserve */
           if (lastEntry !== undefined) {
             output.nextCursor = lastEntry.authPassedAt.toISOString();
           }

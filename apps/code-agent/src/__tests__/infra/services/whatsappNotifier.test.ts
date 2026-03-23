@@ -1321,4 +1321,68 @@ describe('WhatsAppNotifier', () => {
       }
     });
   });
+
+  describe('linearIssueId prefix in notification messages', () => {
+    it('notifyTaskStarted includes linearIssueId prefix when set', async () => {
+      const task = createMockTask({
+        linearIssueId: 'INT-200',
+        linearIssueTitle: 'Add feature X',
+        status: 'running',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyTaskStarted('user-123', task);
+
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('INT-200 | Add feature X');
+    });
+
+    it('notifyTaskResumed includes linearIssueId prefix when set', async () => {
+      const task = createMockTask({
+        linearIssueId: 'INT-201',
+        linearIssueTitle: 'Fix auth',
+        status: 'running',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyTaskResumed('user-123', task);
+
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('INT-201 | Fix auth');
+    });
+
+    it('notifyTaskQueued includes linearIssueId prefix when set', async () => {
+      const task = createMockTask({
+        linearIssueId: 'INT-202',
+        linearIssueTitle: 'Add tests',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyTaskQueued('user-123', task, 3);
+
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('INT-202 | Add tests');
+    });
+
+    it('notifyTaskQueueExpired includes linearIssueId prefix when set', async () => {
+      const task = createMockTask({
+        linearIssueId: 'INT-203',
+        linearIssueTitle: 'Refactor module',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyTaskQueueExpired('user-123', task);
+
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('INT-203 | Refactor module');
+    });
+  });
 });

@@ -301,6 +301,35 @@ describe('createFirestoreMergeQueueWatchRepository', () => {
       }
     });
 
+    it('should return null when snapshot is non-empty but docs[0] is undefined (corrupt snapshot)', async () => {
+      const mockSnapshot = {
+        empty: false,
+        docs: [] as unknown[],
+      };
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(mockSnapshot),
+      };
+
+      const mockCollection = {
+        where: vi.fn().mockReturnValue(mockQuery),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn().mockReturnValue(mockCollection),
+      } as never);
+
+      const repo = createFirestoreMergeQueueWatchRepository({ logger: mockLogger });
+      const result = await repo.findActiveByUserAndBranch('user_123', 'intexuraos', 'test-repo', 'main');
+
+      expect(result.ok).toBe(true);
+      if (result.ok === true) {
+        expect(result.value).toBeNull();
+      }
+    });
+
     it('should return null when no active watch found', async () => {
       const mockSnapshot = {
         empty: true,

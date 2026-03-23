@@ -314,42 +314,20 @@ function taskToApiResponse(task: {
     status: task.status,
     dedupKey: task.dedupKey,
     callbackReceived: task.callbackReceived,
-    /* v8 ignore start -- ts-type: timestamp nullish coalescing @preserve */
     createdAt: timestampToIso(task.createdAt as { toDate: () => Date } | string | undefined) ?? '',
-    /* v8 ignore stop @preserve */
     updatedAt: timestampToIso(task.updatedAt as { toDate: () => Date } | string | undefined) ?? '',
-    /* v8 ignore start -- ts-type: spread operators create type narrowing branches @preserve */
     ...(task.dispatchedAt !== undefined && { dispatchedAt: timestampToIso(task.dispatchedAt as { toDate: () => Date } | string | undefined) as string }),
-    /* v8 ignore stop @preserve */
-    /* v8 ignore start -- ts-type: spread operators create type narrowing branches @preserve */
     ...(task.actionId !== undefined && { actionId: task.actionId }),
-    /* v8 ignore stop @preserve */
-    /* v8 ignore start -- ts-type: optional property spread @preserve */
     ...(task.approvalEventId !== undefined && { approvalEventId: task.approvalEventId }),
-    /* v8 ignore stop @preserve */
-    /* v8 ignore start -- ts-type: optional property spread @preserve */
     ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
-    /* v8 ignore stop @preserve */
-    /* v8 ignore start -- ts-type: optional property spread @preserve */
     ...(task.agentType !== undefined && { agentType: task.agentType }),
-    /* v8 ignore stop @preserve */
-    /* v8 ignore start -- ts-type: optional property spread @preserve */
     ...(task.implementationTaskId !== undefined && { implementationTaskId: task.implementationTaskId }),
-    /* v8 ignore stop @preserve */
-    /* v8 ignore start -- ts-type: optional property spread @preserve */
     ...(task.parentTaskId !== undefined && { parentTaskId: task.parentTaskId }),
-    /* v8 ignore stop @preserve */
-    /* v8 ignore start -- ts-type: optional property spread @preserve */
     ...(task.followUpReason !== undefined && { followUpReason: task.followUpReason }),
-    /* v8 ignore stop @preserve */
     ...(task.result !== undefined && { result: task.result }),
-    /* v8 ignore start -- ts-type: optional property spread @preserve */
     ...(task.error !== undefined && { error: task.error }),
-    /* v8 ignore stop @preserve */
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
   };
 }
-/* v8 ignore stop @preserve */
 
 export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opts, done) => {
   const { jwtValidator } = opts;
@@ -587,39 +565,23 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         );
 
         // Handle specific error codes
-        /* v8 ignore start -- ts-type: string literal comparison creates type narrowing branch @preserve */
         if (error.code === 'duplicate_approval' || error.code === 'duplicate_action') {
-        /* v8 ignore stop @preserve */
-          /* v8 ignore start -- ts-type: error code nullish coalescing @preserve */
           return await reply.fail('CONFLICT', `Duplicate: ${error.existingTaskId ?? ''}`);
-          /* v8 ignore stop @preserve */
         }
 
-        /* v8 ignore start -- ts-type: string literal comparison creates type narrowing branch @preserve */
         if (error.code === 'duplicate_prompt') {
-        /* v8 ignore stop @preserve */
-          /* v8 ignore start -- ts-type: error existingTaskId nullish coalescing @preserve */
           return await reply.fail('CONFLICT', `Similar task submitted in last 5 minutes: ${error.existingTaskId ?? ''}`);
-          /* v8 ignore stop @preserve */
         }
 
-        /* v8 ignore start -- ts-type: string literal comparison creates type narrowing branch @preserve */
         if (error.code === 'active_task_exists') {
-        /* v8 ignore stop @preserve */
-          /* v8 ignore start -- ts-type: error existingTaskId nullish coalescing @preserve */
           return await reply.fail('CONFLICT', `Active task already exists for this Linear issue: ${error.existingTaskId ?? ''}`);
-          /* v8 ignore stop @preserve */
         }
 
-        /* v8 ignore start -- ts-type: error code comparison @preserve */
         if (error.code === 'worker_not_configured') {
-        /* v8 ignore stop @preserve */
           return await reply.fail('WORKER_NOT_CONFIGURED', error.message);
         }
 
-        /* v8 ignore start -- ts-type: string literal comparison creates type narrowing branch @preserve */
         if (error.code === 'validation_error') {
-        /* v8 ignore stop @preserve */
           return await reply.fail('INVALID_REQUEST', error.message);
         }
 
@@ -847,24 +809,16 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       request.log.info({ taskId, body }, 'Updating code task');
 
       const result = await codeTaskRepo.update(taskId, {
-        /* v8 ignore start -- ts-type: spread operators create type narrowing branches @preserve */
         ...(body.status !== undefined && { status: body.status }),
-        /* v8 ignore stop @preserve */
         ...(body.result !== undefined && { result: body.result }),
-        /* v8 ignore start -- ts-type: optional property spread @preserve */
         ...(body.error !== undefined && { error: body.error }),
-        /* v8 ignore stop @preserve */
-        /* v8 ignore start -- ts-type: optional property spread @preserve */
         ...(body.statusSummary !== undefined && {
-        /* v8 ignore stop @preserve */
           statusSummary: {
             ...body.statusSummary,
             updatedAt: Timestamp.fromDate(new Date()),
           },
         }),
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
         ...(body.callbackReceived !== undefined && { callbackReceived: body.callbackReceived }),
-        /* v8 ignore stop @preserve */
       });
 
       if (!result.ok) {
@@ -874,9 +828,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       // Record task completion for rate limiting (decrement concurrent, update cost)
       // Do this for terminal states: completed, failed, cancelled, interrupted
-      /* v8 ignore start -- ts-type: optional chaining and array includes create type narrowing branches @preserve */
       if (body.status !== undefined && TERMINAL_STATUSES.includes(body.status)) {
-      /* v8 ignore stop @preserve */
         const userId = result.value.userId; // @allow-result-access -- .ok checked at line 736
         // Fire and forget - don't await to avoid delaying response
         // Note: Currently we don't receive actual cost from orchestrator, so we pass undefined
@@ -1235,7 +1187,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         linearIssueId?: string;
       };
 
-      /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
 
@@ -1304,9 +1256,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       };
 
       // Save linearIssueId if available (linking to existing issue)
-      /* v8 ignore start -- ts-type: undefined check creates type narrowing branch @preserve */
       if (issueResult.linearIssueId !== undefined) {
-      /* v8 ignore stop @preserve */
         createInput.linearIssueId = issueResult.linearIssueId;
       }
       const createResult = await codeTaskRepo.create(createInput);
@@ -1314,20 +1264,12 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       if (!createResult.ok) {
         request.log.warn({ error: createResult.error }, 'Failed to create code task');
 
-        /* v8 ignore start -- ts-type: string literal comparison creates type narrowing branch @preserve */
         if (createResult.error.code === 'DUPLICATE_PROMPT') {
-        /* v8 ignore stop @preserve */
-          /* v8 ignore start -- ts-type: error existingTaskId nullish coalescing @preserve */
           return await reply.fail('CONFLICT', `Similar task submitted in last 5 minutes: ${createResult.error.existingTaskId ?? ''}`);
-          /* v8 ignore stop @preserve */
         }
 
-        /* v8 ignore start -- ts-type: string literal comparison creates type narrowing branch @preserve */
         if (createResult.error.code === 'ACTIVE_TASK_EXISTS') {
-        /* v8 ignore stop @preserve */
-          /* v8 ignore start -- ts-type: error existingTaskId nullish coalescing @preserve */
           return await reply.fail('CONFLICT', `Active task already exists for this Linear issue: ${createResult.error.existingTaskId ?? ''}`);
-          /* v8 ignore stop @preserve */
         }
 
         return await reply.fail('INTERNAL_ERROR', createResult.error.message);
@@ -1349,9 +1291,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       // Build worker credentials from user's settings
       // Only include enabled workers, in the user's priority order
-      /* v8 ignore start -- ts-type: nullish coalescing for when settings is null @preserve */
       const enabledWorkers = settings?.workers.filter((w) => w.enabled) ?? [];
-      /* v8 ignore stop @preserve */
 
       // Fail if no workers configured
       if (enabledWorkers.length === 0) {
@@ -1467,7 +1407,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const { codeTaskRepo } = getServices();
       const config = loadConfig();
 
-      /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
 
@@ -1485,9 +1425,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         linearIssueId: task.linearIssueId,
         workerType: task.workerType,
         agentType: task.agentType,
-        /* v8 ignore start -- ts-type: queuedAt is always set by TaskEnqueueService before task enters queue @preserve */
         queuedAt: task.queuedAt !== undefined ? task.queuedAt.toDate().toISOString() : task.createdAt.toDate().toISOString(),
-        /* v8 ignore stop @preserve */
         createdAt: task.createdAt.toDate().toISOString(),
         position: index + 1,
       }));
@@ -1594,7 +1532,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       });
 
       const { codeTaskRepo, linearAgentClient } = getServices();
-      /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
 
@@ -1617,20 +1555,16 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         cursor?: string;
       } = {
         userId,
-        /* v8 ignore start -- ts-type: nullish coalescing creates type narrowing branch @preserve */
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — Fastify schema default ensures limit defined @preserve */
         limit: request.query.limit ?? 20,
         /* v8 ignore stop @preserve */
       };
 
-      /* v8 ignore start -- ts-type: undefined check creates type narrowing branch @preserve */
       if (statusFilter !== undefined && statusFilter.length > 0) {
-      /* v8 ignore stop @preserve */
         listInput.status = statusFilter;
       }
 
-      /* v8 ignore start -- ts-type: undefined check creates type narrowing branch @preserve */
       if (request.query.cursor !== undefined) {
-      /* v8 ignore stop @preserve */
         listInput.cursor = request.query.cursor;
       }
 
@@ -1686,9 +1620,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             ? { linearIssue: hydratedIssuesByIdentifier.get(task.linearIssueId) }
             : {}),
         })),
-        /* v8 ignore start -- ts-type: spread operator with optional property creates type narrowing branch @preserve */
         ...(listResult.value.nextCursor !== undefined && { nextCursor: listResult.value.nextCursor }),
-        /* v8 ignore stop @preserve */
       });
     }
   );
@@ -1855,7 +1787,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       });
 
       const { codeTaskRepo, linearAgentClient, logger } = getServices();
-      /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
 
@@ -1864,9 +1796,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const getResult = await codeTaskRepo.findByIdForUser(request.params.taskId, userId);
 
       if (!getResult.ok) {
-        /* v8 ignore start -- ts-type: string literal comparison creates type narrowing branch @preserve */
         if (getResult.error.code === 'NOT_FOUND') {
-        /* v8 ignore stop @preserve */
           logger.warn({ taskId: request.params.taskId, userId }, 'Code task not found');
           return await reply.fail('NOT_FOUND', `Task ${request.params.taskId} not found`);
         }
@@ -1903,16 +1833,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         {
           taskId: request.params.taskId,
           status: task.status,
-          /* v8 ignore start -- ts-type: optional chaining creates type narrowing branch @preserve */
           hasResult: task.result !== undefined,
-          /* v8 ignore stop @preserve */
-          /* v8 ignore start -- ts-type: ternary operator creates type narrowing branch @preserve */
           resultKeys: task.result ? Object.keys(task.result) : [],
-          /* v8 ignore stop @preserve */
           apiResponseHasResult: apiResponse.result !== undefined,
-          /* v8 ignore start -- ts-type: ternary operator creates type narrowing branch @preserve */
           apiResponseResultKeys: apiResponse.result ? Object.keys(apiResponse.result) : [],
-          /* v8 ignore stop @preserve */
           hasLinearIssue: linearIssue !== undefined,
         },
         'Returning task for GET /code/tasks/:taskId'
@@ -1966,7 +1890,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       });
 
       const { codeTaskRepo, logger } = getServices();
-      /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
       const { taskId } = request.params;
@@ -1976,9 +1900,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const deleteResult = await codeTaskRepo.deleteTask(taskId, userId);
 
       if (!deleteResult.ok) {
-        /* v8 ignore start -- ts-type: string literal comparison creates type narrowing branch @preserve */
         if (deleteResult.error.code === 'NOT_FOUND') {
-        /* v8 ignore stop @preserve */
           return await reply.fail('NOT_FOUND', `Task ${taskId} not found`);
         }
         logger.error({ error: deleteResult.error, taskId }, 'Failed to delete code task');
@@ -2034,7 +1956,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       });
 
       const { codeTaskRepo, logger } = getServices();
-      /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
       const { taskId } = request.params;
@@ -2044,9 +1966,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const findResult = await codeTaskRepo.findByIdForUser(taskId, userId);
 
       if (!findResult.ok) {
-        /* v8 ignore start -- ts-type: string literal comparison creates type narrowing branch @preserve */
         if (findResult.error.code === 'NOT_FOUND') {
-        /* v8 ignore stop @preserve */
           return await reply.fail('NOT_FOUND', `Task ${taskId} not found`);
         }
         logger.error({ error: findResult.error, taskId }, 'Failed to find code task for archiving');
@@ -2054,20 +1974,16 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
 
       const task = findResult.value;
-      /* v8 ignore start -- ts-type: array includes check creates type narrowing branch @preserve */
       if (!TERMINAL_STATUSES.includes(task.status)) {
-      /* v8 ignore stop @preserve */
         return await reply.fail('INVALID_REQUEST', `Cannot archive task with status '${task.status}'`);
       }
 
       const updateResult = await codeTaskRepo.update(taskId, { status: 'archived' });
 
-      /* v8 ignore start -- upstream: FakeFirestore update never returns error in tests @preserve */
       if (!updateResult.ok) {
         logger.error({ error: updateResult.error, taskId }, 'Failed to archive code task');
         return await reply.fail('INTERNAL_ERROR', updateResult.error.message);
       }
-      /* v8 ignore stop @preserve */
 
       logger.info({ userId, taskId }, 'Code task archived');
       return await reply.ok({ archived: true });
@@ -2184,7 +2100,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       const { codeTaskRepo, taskDispatcher, rateLimitService, statusMirrorService, workerSettingsRepo } = getServices();
       const { taskId } = request.body;
-      /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
 
@@ -2230,7 +2146,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         // Fetch user's worker credentials for the cancellation request
         const settingsResult = await workerSettingsRepo.getSettings(userId);
         let workerCreds = undefined;
-        /* v8 ignore start -- ts-type: optional worker config checks for cancellation @preserve */
         if (settingsResult.ok && settingsResult.value !== null) {
           const settings = settingsResult.value;
           const workerConfig = settings.workers.find((w) => w.name === task.workerLocation);
@@ -2242,7 +2157,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             };
           }
         }
-        /* v8 ignore stop @preserve */
         await taskDispatcher.cancelOnWorker(taskId, task.workerLocation, workerCreds);
       } catch (error) {
         request.log.warn({ taskId, error }, 'Failed to notify worker of cancellation');
@@ -2345,7 +2259,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const { workerSettingsRepo, workerHealthProbe } = getServices();
       const userId = request.user?.userId;
 
-      /* v8 ignore start -- test-infra: test setup always has userId @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
       if (!userId) {
         return reply.fail('UNAUTHORIZED', 'Authentication required');
       }
@@ -2540,7 +2454,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const { workerSettingsRepo, workerHealthProbe } = getServices();
       const userId = request.user?.userId;
 
-      /* v8 ignore start -- test-infra: requires authenticated user @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
       if (!userId) {
         return reply.fail('UNAUTHORIZED', 'Authentication required');
       }
@@ -2927,13 +2841,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             task_not_cancellable: 'TASK_NOT_CANCELLABLE',
           };
           const mappedCode = codeMap[error.code];
-          /* v8 ignore start -- upstream: Domain guarantees all error codes are mapped, this is defensive @preserve */
           if (mappedCode === undefined) {
             // This should never happen - all domain error codes must be mapped
             request.log.error({ taskId, errorCode: error.code }, 'Unmapped domain error code in cancel-with-nonce');
             return await reply.fail('INTERNAL_ERROR', 'Unable to process error code');
           }
-          /* v8 ignore stop @preserve */
           return await reply.fail(mappedCode, error.message);
         }
       }
@@ -3012,7 +2924,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       request.log.info({ taskId, userId }, 'Processing submit-phase2 request');
 
       // Call existing submitToExecutionAgent use case
-      /* v8 ignore start -- test-infra: submitToExecutionAgent use case has its own tests @preserve */
       const result = await submitToExecutionAgent(
         {
           logger: services.logger,
@@ -3025,9 +2936,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         },
         { originalTaskId: taskId, userId }
       );
-      /* v8 ignore stop @preserve */
 
-      /* v8 ignore start -- test-infra: error handling branches covered by submitToExecutionAgent tests @preserve */
       if (!result.ok) {
         const error = result.error;
         request.log.warn({ taskId, errorCode: error.code, errorMessage: error.message }, 'Submit-phase2 failed');
@@ -3057,7 +2966,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             return await reply.fail('INTERNAL_ERROR', error.message);
         }
       }
-      /* v8 ignore stop @preserve */
 
       request.log.info({ taskId, phase2TaskId: result.value.codeTaskId }, 'Phase 2 submitted successfully'); // @allow-result-access -- .ok checked above in the v8-ignore block
       return await reply.ok(result.value); // @allow-result-access -- .ok checked above in the v8-ignore block
@@ -3350,7 +3258,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         getServices();
       const userId = request.user?.userId;
 
-      /* v8 ignore start -- test-infra: requires authenticated user @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
       if (!userId) {
         return reply.fail('UNAUTHORIZED', 'Authentication required');
       }
@@ -3401,7 +3309,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         if (error.code === 'task_not_found') {
           return reply.fail('NOT_FOUND', error.message);
         }
-        /* v8 ignore start -- ts-type: complex error code comparison creates type narrowing branch @preserve */
         if (error.code === 'invalid_status' || error.code === 'too_soon' || error.code === 'worker_not_configured') {
           // Use BAD_REQUEST for client-side errors with additional data
           // @allow-raw-send: Returning retryAfterMs which is not supported by reply.fail()
@@ -3414,7 +3321,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             },
           });
         }
-        /* v8 ignore stop @preserve */
 
         // Internal error
         request.log.error({ error }, 'Task retry failed');
@@ -3569,7 +3475,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         getServices();
       const userId = request.user?.userId;
 
-      /* v8 ignore start -- test-infra: requires authenticated user @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
       if (userId === undefined) {
         return reply.fail('UNAUTHORIZED', 'Authentication required');
       }
@@ -3601,16 +3507,13 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         }
       );
 
-      /* v8 ignore start -- test-infra: error handling paths covered by use case tests @preserve */
       if (!result.ok) {
         const error = result.error;
 
         // Map error codes to response codes
         if (error.code === 'task_not_found') {
-          /* v8 ignore stop @preserve */
           return reply.fail('NOT_FOUND', error.message);
         }
-        /* v8 ignore start -- ts-type: complex error code comparison creates type narrowing branch @preserve */
         if (error.code === 'invalid_status' || error.code === 'worker_not_configured') {
           // Use BAD_REQUEST for client-side errors
           // @allow-raw-send: Returning application-specific error codes not supported by reply.fail()
@@ -3622,7 +3525,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             },
           });
         }
-        /* v8 ignore stop @preserve */
 
         // Internal error
         request.log.error({ error }, 'Task feedback submission failed');
@@ -3769,7 +3671,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         getServices();
       const userId = request.user?.userId;
 
-      /* v8 ignore start -- test-infra: requires authenticated user @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
       if (userId === undefined) {
         return reply.fail('UNAUTHORIZED', 'Authentication required');
       }
@@ -3811,7 +3713,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         executionAgentRequest
       );
 
-      /* v8 ignore start -- test-infra: error handling paths covered by use case tests @preserve */
       if (!result.ok) {
         const error = result.error;
         switch (error.code) {
@@ -3840,7 +3741,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             return reply.fail('INTERNAL_ERROR', error.message);
         }
       }
-      /* v8 ignore stop @preserve */
 
       // Record task start for rate limiting
       await rateLimitService.recordTaskStart(userId);
@@ -3899,8 +3799,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     async (request, reply) => {
       logIncomingRequest(request, { message: 'Received request to POST /code/tasks/:taskId/messages' });
 
-      /* v8 ignore start -- test-infra: JWT validator sets request.user, guards against missing identity @preserve */
       const userId = request.user?.userId;
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — JWT onRequest hook guarantees userId defined @preserve */
       if (userId === undefined) {
         return reply.fail('UNAUTHORIZED' as ErrorCode, 'Missing user identity');
       }
@@ -3924,7 +3824,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         { taskId, userId, message }
       );
 
-      /* v8 ignore start -- test-infra: error code branches require task in specific states and worker configuration scenarios @preserve */
       if (!result.ok) {
         const { error } = result;
         if (error.code === 'task_not_found') {
@@ -3941,7 +3840,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         }
         return reply.fail('INTERNAL_ERROR' as ErrorCode, error.message);
       }
-      /* v8 ignore stop @preserve */
 
       return reply.ok(result.value); // @allow-result-access -- narrowed by !result.ok guard above
     }

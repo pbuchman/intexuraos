@@ -249,13 +249,11 @@ ${feedback.trim()}
     webhookSecret,
     parentTaskId: originalTask.id,
     followUpReason: 'user_feedback' as const,
-    /* v8 ignore start -- ts-type: optional field spread operators create type narrowing branches @preserve */
     ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
     ...(originalTask.actionId !== undefined && { actionId: originalTask.actionId }),
     ...(originalTask.approvalEventId !== undefined && { approvalEventId: originalTask.approvalEventId }),
     ...(continuationPr !== null && { prNumber: continuationPr.prNumber }),
     ...(continuationPr !== null && { prBranch: continuationPr.prBranch }),
-    /* v8 ignore stop @preserve */
     agentType,
   };
 

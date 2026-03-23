@@ -33,7 +33,7 @@ export function createFirestorePRAutomationCommentRepository(_deps: {
       }
 
       const data = snapshot.data() as Record<string, unknown> | undefined;
-      /* v8 ignore start -- test-infra: FakeFirestore cannot produce undefined data() when exists===true @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — snapshot.exists check above guarantees data() defined @preserve */
       if (data === undefined) {
         return undefined;
       }

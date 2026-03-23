@@ -1126,6 +1126,34 @@ describe('UnifiedEvaluator', () => {
       );
     });
 
+    it('records llmModel when createReviewTask fails and usage.model is defined', async () => {
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'request_review', reviewTypes: ['code_quality'] },
+          usage: { costUsd: 0.002, model: 'claude-opus-4', toolCalls: [] },
+          reasoning: 'Needs review.',
+        })),
+        createReviewTask: vi.fn().mockResolvedValue(
+          err({ code: 'task_creation_failed' as const, message: 'Firestore unavailable' })
+        ),
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({ eventType: 'pull_request', action: 'opened' });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decidedBy: 'github_agent',
+          decision: 'skip',
+          llmModel: 'claude-opus-4',
+        })
+      );
+    });
+
     it('passes llmReasoning to recordDecision on review task failure', async () => {
       const deps = createFakeDeps({
         webhookRules: {

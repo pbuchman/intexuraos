@@ -3022,6 +3022,270 @@ describe('POST /webhooks/github', () => {
       );
     });
 
+    it('skips automation log for repository_out_of_scope without PR context (L496)', async () => {
+      const pushPayload = {
+        action: 'completed',
+        repository: {
+          id: 456,
+          name: 'other-repo',
+          full_name: 'other-org/other-repo',
+          owner: { login: 'other-org', id: 789 },
+        },
+        sender: { login: 'testuser', id: 999, type: 'User' },
+      };
+
+      const { payload, signature } = signPayload(pushPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'push',
+          'x-github-delivery': 'delivery-no-pr-scope',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Wait a tick for detached async
+      await waitForSettlement();
+
+      // Only webhook_received should NOT be recorded because push has PR=0
+      const recordCalls = vi.mocked(mockServices.automationLog.record).mock.calls;
+      const skippedCall = recordCalls.find((c) => (c[1] as { type: string }).type === 'skipped');
+      // Since pullRequestNumber is 0, skipped event should NOT be in automation log
+      expect(skippedCall).toBeUndefined();
+    });
+
+    it('skips automation log for duplicate_delivery without PR context (L531)', async () => {
+      // First request to create the event
+      const pushPayload = createPullRequestPayload({
+        pull_request: undefined,
+      } as never);
+      delete (pushPayload as Record<string, unknown>)['pull_request'];
+
+      const { payload, signature } = signPayload(pushPayload);
+
+      await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'push',
+          'x-github-delivery': 'delivery-dup-no-pr',
+        },
+        body: payload,
+      });
+
+      // Send duplicate - mock save to return DUPLICATE_EVENT
+      mockEventRepo.save = vi.fn().mockResolvedValue(
+        err({ code: 'DUPLICATE_EVENT' as const, message: 'Duplicate' })
+      );
+      setServices({ ...mockServices, gitHubPREventRepo: mockEventRepo });
+
+      const { payload: payload2, signature: signature2 } = signPayload(pushPayload);
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature2,
+          'x-github-event': 'push',
+          'x-github-delivery': 'delivery-dup-no-pr',
+        },
+        body: payload2,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForSettlement();
+
+      // skipped event should NOT be in automation log since pullRequestNumber is 0
+      const recordCalls = vi.mocked(mockServices.automationLog.record).mock.calls;
+      const skippedCall = recordCalls.find((c) => (c[1] as { reason?: string }).reason === 'duplicate_delivery');
+      expect(skippedCall).toBeUndefined();
+    });
+
+    it('records webhook_received with null sender (L403/L423 fallback)', async () => {
+      const prPayload = createPullRequestPayload();
+      delete (prPayload as Record<string, unknown>)['sender'];
+
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-no-sender',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForDetachedAsync(() => vi.mocked(mockServices.automationLog.record).mock.calls.length >= 1);
+
+      const recordCalls = vi.mocked(mockServices.automationLog.record).mock.calls;
+      const webhookReceivedCall = recordCalls.find((c) => (c[1] as { type: string }).type === 'webhook_received');
+      expect(webhookReceivedCall).toBeDefined();
+      if (webhookReceivedCall !== undefined) {
+        expect((webhookReceivedCall[1] as { sender: string }).sender).toBe('unknown');
+      }
+    });
+
+    it('records webhook_received with null resolved user (L409)', async () => {
+      vi.mocked(mockServices.userServiceClient.resolveGitHubUsername).mockResolvedValue(
+        ok(null)
+      );
+
+      const prPayload = createPullRequestPayload();
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-null-user',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForDetachedAsync(() => vi.mocked(mockServices.automationLog.record).mock.calls.length >= 1);
+
+      // tokenUserId should be undefined since resolvedUser is null
+      expect(mockServices.automationLog.record).toHaveBeenCalledWith(
+        { repository: 'pbuchman/intexuraos', prNumber: 123 },
+        expect.objectContaining({
+          type: 'webhook_received',
+        }),
+        undefined,
+      );
+    });
+
+    it('records webhook_received without action field (L422 fallback)', async () => {
+      const prPayload = createPullRequestPayload();
+      delete (prPayload as Record<string, unknown>)['action'];
+
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-no-action',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForDetachedAsync(() => vi.mocked(mockServices.automationLog.record).mock.calls.length >= 1);
+
+      const recordCalls = vi.mocked(mockServices.automationLog.record).mock.calls;
+      const webhookReceivedCall = recordCalls.find((c) => (c[1] as { type: string }).type === 'webhook_received');
+      expect(webhookReceivedCall).toBeDefined();
+      if (webhookReceivedCall !== undefined) {
+        expect((webhookReceivedCall[1] as { action: string }).action).toBe('unknown');
+      }
+    });
+
+    it('records webhook_received without eventUrl when not available (L425)', async () => {
+      // push events don't have an extractable event URL
+      const pushPayload = {
+        action: 'pushed',
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'pbuchman/intexuraos',
+          owner: { login: 'pbuchman', id: 789 },
+        },
+        pull_request: {
+          id: 101,
+          number: 123,
+          title: 'Test PR',
+          body: 'Test description',
+          state: 'open',
+          merged_at: null,
+        },
+        sender: { login: 'testuser', id: 999, type: 'User' },
+      };
+
+      const { payload, signature } = signPayload(pushPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'push',
+          'x-github-delivery': 'delivery-no-eventurl',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForDetachedAsync(() => vi.mocked(mockServices.automationLog.record).mock.calls.length >= 1);
+
+      const recordCalls = vi.mocked(mockServices.automationLog.record).mock.calls;
+      const webhookReceivedCall = recordCalls.find((c) => (c[1] as { type: string }).type === 'webhook_received');
+      expect(webhookReceivedCall).toBeDefined();
+      if (webhookReceivedCall !== undefined) {
+        // eventUrl should not be in the record since extractEventUrl returns null for push
+        expect((webhookReceivedCall[1] as Record<string, unknown>)['eventUrl']).toBeUndefined();
+      }
+    });
+
+    it('persists fallback decision when findByEventIds is undefined on eventDecisionRepo (L230)', async () => {
+      setServices({
+        ...mockServices,
+        eventDecisionRepo: {
+          save: mockEventDecisionRepo.save,
+          // findByEventIds intentionally omitted (undefined)
+        } as import('../../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository,
+        unifiedEvaluator: {
+          evaluate: vi.fn().mockRejectedValue(new Error('evaluation crashed')),
+        },
+      });
+
+      const { payload, signature } = signPayload(createPullRequestPayload());
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'eval-no-findByEventIds',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // The fallback decision should have been saved since findByEventIds is undefined
+      // and the code skips the duplicate check
+      await vi.waitFor(() => {
+        expect(mockEventDecisionRepo.save).toHaveBeenCalled();
+      });
+    });
+
     it('records skipped event for normalized_event_save_failed with PR context', async () => {
       mockEventRepo.save = vi.fn().mockResolvedValue(
         err({ code: 'FIRESTORE_ERROR' as const, message: 'Firestore unavailable' })

@@ -264,6 +264,57 @@ describe('Worker Settings Routes', () => {
       expect(body.data.workers[0]?.enabled).toBe(true);
     });
 
+    it('should include test result fields in GET response after worker test', async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+
+      // Add a worker
+      await workerSettingsRepo.addWorker('test-user-id', {
+        name: 'tested-worker',
+        url: 'https://tested-worker.example.com',
+        cfAccessClientId: 'test-client-id',
+        cfAccessClientSecret: 'test-client-secret',
+        dispatchSigningSecret: 'test-signing',
+      });
+
+      // Mock the health endpoint for worker test
+      nock('https://tested-worker.example.com')
+        .get('/health')
+        .reply(200, { status: 'ok' });
+
+      // Test the worker to populate testStatus/testMessage/lastTestedAt
+      await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers/tested-worker/test',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      // GET settings and verify test fields are included in masked response
+      const response = await app.inject({
+        method: 'GET',
+        url: '/code/worker-settings',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          workers: {
+            name: string;
+            testStatus?: string;
+            testMessage?: string;
+            lastTestedAt?: string;
+          }[];
+        };
+      };
+      expect(body.success).toBe(true);
+      const worker = body.data.workers.find((w) => w.name === 'tested-worker');
+      expect(worker).toBeDefined();
+      expect(worker?.testStatus).toBe('success');
+      expect(worker?.testMessage).toBe('Connection successful');
+      expect(worker?.lastTestedAt).toBeDefined();
+    });
+
     it('should mask short secrets (≤3 chars) as three bullets', async () => {
       const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
 
@@ -1229,6 +1280,26 @@ describe('Worker Settings Routes', () => {
       expect(response.statusCode).toBe(400);
     });
 
+    it('should return 500 when updateDefaultReviewWorkerType fails', async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+      vi.spyOn(workerSettingsRepo, 'updateDefaultReviewWorkerType').mockResolvedValueOnce(
+        err({ code: 'internal_error' as const, message: 'Firestore write failed' })
+      );
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/code/worker-settings/default-review-worker-type',
+        headers: { Authorization: 'Bearer valid-token' },
+        payload: { workerType: 'opus' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toContain('Firestore write failed');
+    });
+
     it('should not include defaultReviewWorkerType in GET when not set', async () => {
       const response = await app.inject({
         method: 'GET',
@@ -1255,5 +1326,6 @@ describe('Worker Settings Routes', () => {
       expect(response.statusCode).toBe(401);
     });
   });
+
 
 });

@@ -25,16 +25,12 @@ type PayloadObject = Record<string, unknown>;
  * deduplicate created → edited sequences for the same comment.
  */
 function extractCommentKey(eventType: string, payload: unknown): string | null {
-  /* v8 ignore start -- ts-type: defensive guard on unknown webhook payload @preserve */
   if (typeof payload !== 'object' || payload === null) return null;
-  /* v8 ignore stop @preserve */
   const p = payload as PayloadObject;
 
   if (eventType === 'issue_comment' || eventType === 'pull_request_review_comment') {
     const comment = p['comment'];
-    /* v8 ignore start -- ts-type: defensive type narrowing on webhook payload field @preserve */
     if (typeof comment === 'object' && comment !== null) {
-      /* v8 ignore stop @preserve */
       const id = (comment as PayloadObject)['id'];
       if (typeof id === 'number') return `${eventType}:${String(id)}`;
     }
@@ -44,9 +40,7 @@ function extractCommentKey(eventType: string, payload: unknown): string | null {
     const review = p['review'];
     if (typeof review === 'object' && review !== null) {
       const id = (review as PayloadObject)['id'];
-      /* v8 ignore start -- ts-type: defensive type check on review id field @preserve */
       if (typeof id === 'number') return `${eventType}:${String(id)}`;
-      /* v8 ignore stop @preserve */
     }
   }
 
@@ -81,7 +75,7 @@ function deduplicateCommentEvents(events: GitHubPREvent[]): GitHubPREvent[] {
     seen.add(key);
 
     const latest = latestByKey.get(key);
-    /* v8 ignore start -- ts-type: latest is always defined since key came from the same map @preserve */
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — latestByKey built from same events guarantees key defined @preserve */
     if (latest === undefined) {
       result.push(event);
       continue;

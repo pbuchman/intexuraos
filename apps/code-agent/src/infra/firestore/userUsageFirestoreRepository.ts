@@ -18,11 +18,9 @@ const COLLECTION = 'user_usage';
  * Handles both real Firestore Timestamp objects and plain Date objects from fake Firestore.
  */
 function toTimestamp(value: unknown): Timestamp {
-  /* v8 ignore start -- ts-type: instanceof check creates type narrowing branch @preserve */
   if (value instanceof Timestamp) {
     return value;
   }
-  /* v8 ignore stop @preserve */
   if (value instanceof Date) {
     return Timestamp.fromDate(value);
   }
@@ -89,21 +87,17 @@ export function createUserUsageFirestoreRepository(
    * Normalize a UserUsage object from Firestore, ensuring all Timestamp fields are actual Timestamps.
    */
   function normalizeUsage(data: Record<string, unknown>): UserUsage {
-    /* v8 ignore start -- ts-type: nullish coalescing operators create type narrowing branches @preserve */
     return {
       userId: String(data['userId']),
       concurrentTasks: Number(data['concurrentTasks'] ?? 0),
       tasksThisHour: Number(data['tasksThisHour'] ?? 0),
       hourStartedAt: toTimestamp(data['hourStartedAt']),
       costToday: Number(data['costToday'] ?? 0),
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
       costThisMonth: Number(data['costThisMonth'] ?? 0),
-      /* v8 ignore stop @preserve */
       dayStartedAt: toTimestamp(data['dayStartedAt']),
       monthStartedAt: toTimestamp(data['monthStartedAt']),
       updatedAt: toTimestamp(data['updatedAt']),
     };
-    /* v8 ignore stop @preserve */
   }
 
   return {
