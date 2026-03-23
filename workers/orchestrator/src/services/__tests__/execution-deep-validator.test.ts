@@ -296,6 +296,11 @@ describe('buildDeepValidationPrompt', () => {
   });
 });
 
+function expectProgressRejection(onProgress: ReturnType<typeof vi.fn>, reason: string): void {
+  expect(onProgress).toHaveBeenCalledWith(expect.stringContaining('response rejected: '));
+  expect(onProgress).toHaveBeenCalledWith(expect.stringContaining(reason));
+}
+
 describe('OrchestratorExecutionDeepValidator', () => {
   it('posts markdown comment via body-file and returns true on valid LLM response', async () => {
     generateMock.mockResolvedValue({
@@ -425,7 +430,8 @@ describe('OrchestratorExecutionDeepValidator', () => {
     });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
-    const result = await validator.validate(defaultInput);
+    const onProgress = vi.fn();
+    const result = await validator.validate(defaultInput, onProgress);
 
     expect(result).toBe(false);
     expect(execFileMock).not.toHaveBeenCalled();
@@ -436,6 +442,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
       }),
       'Deep validation response rejected'
     );
+    expectProgressRejection(onProgress, 'bullet lists');
   });
 
   it('rejects reports with a preamble before the first heading', async () => {
@@ -448,7 +455,8 @@ describe('OrchestratorExecutionDeepValidator', () => {
     });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
-    const result = await validator.validate(defaultInput);
+    const onProgress = vi.fn();
+    const result = await validator.validate(defaultInput, onProgress);
 
     expect(result).toBe(false);
     expect(execFileMock).not.toHaveBeenCalled();
@@ -456,6 +464,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
       expect.objectContaining({ reason: expect.stringContaining('no preamble') }),
       'Deep validation response rejected'
     );
+    expectProgressRejection(onProgress, 'no preamble');
   });
 
   it('rejects reports with required headings out of order', async () => {
@@ -493,7 +502,8 @@ describe('OrchestratorExecutionDeepValidator', () => {
     });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
-    const result = await validator.validate(defaultInput);
+    const onProgress = vi.fn();
+    const result = await validator.validate(defaultInput, onProgress);
 
     expect(result).toBe(false);
     expect(execFileMock).not.toHaveBeenCalled();
@@ -501,6 +511,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
       expect.objectContaining({ reason: expect.stringContaining('out of order') }),
       'Deep validation response rejected'
     );
+    expectProgressRejection(onProgress, 'out of order');
   });
 
   it('rejects reports missing required sections', async () => {
@@ -518,7 +529,8 @@ describe('OrchestratorExecutionDeepValidator', () => {
     });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
-    const result = await validator.validate(defaultInput);
+    const onProgress = vi.fn();
+    const result = await validator.validate(defaultInput, onProgress);
 
     expect(result).toBe(false);
     expect(execFileMock).not.toHaveBeenCalled();
@@ -526,6 +538,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
       expect.objectContaining({ reason: expect.stringContaining('out of order') }),
       'Deep validation response rejected'
     );
+    expectProgressRejection(onProgress, 'out of order');
   });
 
   it('rejects sections without a table data row', async () => {
@@ -540,7 +553,8 @@ describe('OrchestratorExecutionDeepValidator', () => {
     });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
-    const result = await validator.validate(defaultInput);
+    const onProgress = vi.fn();
+    const result = await validator.validate(defaultInput, onProgress);
 
     expect(result).toBe(false);
     expect(execFileMock).not.toHaveBeenCalled();
@@ -548,6 +562,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
       expect.objectContaining({ reason: expect.stringContaining('at least one data row') }),
       'Deep validation response rejected'
     );
+    expectProgressRejection(onProgress, 'at least one data row');
   });
 
   it('rejects sections that include prose lines outside the table', async () => {
@@ -567,7 +582,8 @@ describe('OrchestratorExecutionDeepValidator', () => {
     });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
-    const result = await validator.validate(defaultInput);
+    const onProgress = vi.fn();
+    const result = await validator.validate(defaultInput, onProgress);
 
     expect(result).toBe(false);
     expect(execFileMock).not.toHaveBeenCalled();
@@ -575,6 +591,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
       expect.objectContaining({ reason: expect.stringContaining('no list or prose lines') }),
       'Deep validation response rejected'
     );
+    expectProgressRejection(onProgress, 'no list or prose lines');
   });
 
   it('rejects sections with an invalid markdown table separator row', async () => {
@@ -589,7 +606,8 @@ describe('OrchestratorExecutionDeepValidator', () => {
     });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
-    const result = await validator.validate(defaultInput);
+    const onProgress = vi.fn();
+    const result = await validator.validate(defaultInput, onProgress);
 
     expect(result).toBe(false);
     expect(execFileMock).not.toHaveBeenCalled();
@@ -597,6 +615,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
       expect.objectContaining({ reason: expect.stringContaining('header separator row') }),
       'Deep validation response rejected'
     );
+    expectProgressRejection(onProgress, 'header separator row');
   });
 
   it('splits long valid responses into multiple comments without breaking tables', async () => {
@@ -657,7 +676,8 @@ describe('OrchestratorExecutionDeepValidator', () => {
     });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
-    const result = await validator.validate(defaultInput);
+    const onProgress = vi.fn();
+    const result = await validator.validate(defaultInput, onProgress);
 
     expect(result).toBe(false);
     expect(execFileMock).not.toHaveBeenCalled();
@@ -668,6 +688,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
       }),
       'Deep validation response rejected'
     );
+    expectProgressRejection(onProgress, 'single section');
   });
 
   it('fails when a later single section still exceeds the limit after splitting starts', async () => {
@@ -686,7 +707,8 @@ describe('OrchestratorExecutionDeepValidator', () => {
     });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
-    const result = await validator.validate(defaultInput);
+    const onProgress = vi.fn();
+    const result = await validator.validate(defaultInput, onProgress);
 
     expect(result).toBe(false);
     expect(execFileMock).not.toHaveBeenCalled();
@@ -694,6 +716,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
       expect.objectContaining({ reason: expect.stringContaining('single section') }),
       'Deep validation response rejected'
     );
+    expectProgressRejection(onProgress, 'single section');
   });
 
   it('returns false when PR comment posting fails', async () => {
