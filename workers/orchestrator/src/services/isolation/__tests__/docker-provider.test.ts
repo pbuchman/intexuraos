@@ -2032,8 +2032,8 @@ describe('DockerProvider', () => {
         inspect: vi.fn().mockResolvedValue({ ExitCode: 0 }),
       };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await expect(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (provider as any).runExecAndCapture('test-task', mockExecInstance)
       ).rejects.toThrow('stream broke');
     });
@@ -2050,8 +2050,8 @@ describe('DockerProvider', () => {
         inspect: vi.fn().mockResolvedValue({ ExitCode: 0 }),
       };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await expect(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (provider as any).runExecAndCapture('test-task', mockExecInstance)
       ).rejects.toThrow('string-error');
     });
