@@ -274,12 +274,10 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
       );
       return true;
     } catch (error) {
-      /* v8 ignore start -- upstream: stderr property only exists on execFile errors, not testable with promisify mock @preserve */
       const stderr =
         error instanceof Error && 'stderr' in error
           ? String((error as Record<string, unknown>)['stderr'])
           : undefined;
-      /* v8 ignore stop @preserve */
       this.logger.error(
         { taskId: input.taskId, error: getErrorMessage(error), stderr },
         'Failed to post deep validation PR comment'
@@ -296,7 +294,7 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
       throw new Error('Deep validator must use model gemini-2.5-flash');
     }
     const pricing = DEEP_VALIDATOR_PRICING[config.model];
-    /* v8 ignore start -- upstream: model guard above guarantees Gemini pricing entry exists @preserve */
+    /* v8 ignore start -- upstream: model guard above guarantees pricing entry exists @preserve */
     if (pricing === undefined) {
       throw new Error(`Missing deep validator pricing for model: ${config.model}`);
     }

@@ -145,6 +145,133 @@ describe('system-prompt', () => {
     expect(result).toContain('- Model: `default`');
   });
 
+  it('planning prompt omits Linear Issue line when linearIssueId is undefined', () => {
+    const { linearIssueId: _, ...paramsWithoutLinear } = baseParams;
+    const result = planningPrompt.build({
+      ...paramsWithoutLinear,
+      linearIssueLabels: ['bug'],
+    });
+
+    expect(result).not.toContain('Linear Issue: INT-123');
+    expect(result).toContain('[AGENT:PLANNING]');
+  });
+
+  it('execution prompt omits Linear Issue line when linearIssueId is undefined', () => {
+    const { linearIssueId: _, ...paramsWithoutLinear } = baseParams;
+    const result = executionPrompt.build({
+      ...paramsWithoutLinear,
+      linearIssueLabels: ['code-task'],
+    });
+
+    expect(result).not.toContain('Linear Issue: INT-123');
+    expect(result).toContain('[AGENT:EXECUTION]');
+  });
+
+  it('pull request prompt omits Linear Issue line when linearIssueId is undefined', () => {
+    const { linearIssueId: _, ...paramsWithoutLinear } = baseParams;
+    const result = pullRequestPrompt.build({
+      ...paramsWithoutLinear,
+      linearIssueLabels: ['code-task', 'pr-comment'],
+    });
+
+    expect(result).not.toContain('Linear Issue: INT-123');
+    expect(result).toContain('[AGENT:PULL_REQUEST]');
+  });
+
+  it('review prompt omits Linear Issue line when linearIssueId is undefined', () => {
+    const { linearIssueId: _, ...paramsWithoutLinear } = baseParams;
+    const result = reviewPrompt.build({
+      ...paramsWithoutLinear,
+      agentType: 'review',
+    });
+
+    expect(result).not.toContain('Linear Issue: INT-123');
+    expect(result).toContain('[AGENT:REVIEW]');
+  });
+
+  it('execution prompt renders linearIssueTitle in PR Description when provided', () => {
+    const result = executionPrompt.build({
+      ...baseParams,
+      linearIssueLabels: ['code-task'],
+      linearIssueTitle: 'Fix login bug',
+    });
+
+    expect(result).toContain('[INT-123 Fix login bug]');
+  });
+
+  it('pull request prompt renders linearIssueTitle in PR Description when provided', () => {
+    const result = pullRequestPrompt.build({
+      ...baseParams,
+      linearIssueLabels: ['code-task', 'pr-comment'],
+      linearIssueTitle: 'Fix login bug',
+    });
+
+    expect(result).toContain('[INT-123 Fix login bug]');
+  });
+
+  it('planning prompt uses workerType fallback when workerType is undefined', () => {
+    const { workerType: _, ...paramsWithoutWorkerType } = baseParams;
+    const result = planningPrompt.build({
+      ...paramsWithoutWorkerType,
+      linearIssueLabels: ['bug'],
+    });
+
+    expect(result).toContain('`<auto|opus|sonnet|minimax|glm|qwen|kimi>`');
+  });
+
+  it('execution prompt uses workerType fallback when workerType is undefined', () => {
+    const { workerType: _, ...paramsWithoutWorkerType } = baseParams;
+    const result = executionPrompt.build({
+      ...paramsWithoutWorkerType,
+      linearIssueLabels: ['code-task'],
+    });
+
+    expect(result).toContain('`<auto|opus|sonnet|minimax|glm|qwen|kimi>`');
+  });
+
+  it('pull request prompt uses workerType fallback when workerType is undefined', () => {
+    const { workerType: _, ...paramsWithoutWorkerType } = baseParams;
+    const result = pullRequestPrompt.build({
+      ...paramsWithoutWorkerType,
+      linearIssueLabels: ['code-task', 'pr-comment'],
+    });
+
+    expect(result).toContain('`<auto|opus|sonnet|minimax|glm|qwen|kimi>`');
+  });
+
+  it('review prompt renders linearIssueTitle in PR Description when provided', () => {
+    const result = reviewPrompt.build({
+      ...baseParams,
+      agentType: 'review',
+      linearIssueTitle: 'Fix login bug',
+    });
+
+    expect(result).toContain('[INT-123 Fix login bug]');
+  });
+
+  it('review prompt uses workerType fallback when workerType is undefined', () => {
+    const { workerType: _, ...paramsWithoutWorkerType } = baseParams;
+    const result = reviewPrompt.build({
+      ...paramsWithoutWorkerType,
+      agentType: 'review',
+    });
+
+    expect(result).toContain('`<auto|opus|sonnet|minimax|glm|qwen|kimi>`');
+  });
+
+  it('review prompt renders taskUrl in View in IntexuraOS link and code task line', () => {
+    const result = reviewPrompt.build({
+      ...baseParams,
+      agentType: 'review',
+      taskUrl: 'https://intexuraos.cloud/#/code-tasks/task-456',
+    });
+
+    expect(result).toContain(
+      '[View in IntexuraOS](https://intexuraos.cloud/#/code-tasks/task-456)'
+    );
+    expect(result).toContain('[View task](https://intexuraos.cloud/#/code-tasks/task-456)');
+  });
+
   it('includes mandatory Worker Type and Model emphasis in all prompt types', () => {
     const planningResult = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
     const executionResult = buildSystemPrompt({
@@ -796,6 +923,27 @@ describe('system-prompt', () => {
     expect(result).not.toContain('🔍 Code Quality');
     expect(result).not.toContain('🔒 Security');
     expect(result).not.toContain('🏗️ Architecture');
+  });
+
+  it('omits Per-Type Review Structure section when all reviewTypes are unknown', () => {
+    const result = reviewPrompt.build({ ...baseParams, reviewTypes: ['nonexistent_type'] });
+    expect(result).not.toContain('### Per-Type Review Structure (MANDATORY)');
+    expect(result).not.toContain('🔍 Code Quality');
+    expect(result).not.toContain('🔒 Security');
+    expect(result).not.toContain('🏗️ Architecture');
+    expect(result).not.toContain('📐 Plan Review');
+  });
+
+  it('filters out unknown reviewTypes and includes only valid ones', () => {
+    const result = reviewPrompt.build({
+      ...baseParams,
+      reviewTypes: ['nonexistent', 'security', 'also_invalid'],
+    });
+    expect(result).toContain('### Per-Type Review Structure (MANDATORY)');
+    expect(result).toContain('🔒 Security');
+    expect(result).not.toContain('🔍 Code Quality');
+    expect(result).not.toContain('🏗️ Architecture');
+    expect(result).not.toContain('📐 Plan Review');
   });
 
   it('REVIEW_AGENT_FINAL block includes requirements_tracker_updated field', () => {

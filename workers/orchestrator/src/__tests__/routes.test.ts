@@ -152,6 +152,53 @@ describe('Routes', () => {
       );
     });
 
+    it('should pass all optional fields through to dispatcher', async () => {
+      const taskPayload = {
+        taskId: 'test-all-optional',
+        workerType: 'auto',
+        prompt: 'Full payload test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        repository: 'org/repo',
+        baseBranch: 'develop',
+        linearIssueId: 'INT-999',
+        linearIssueTitle: 'Test issue title',
+        slug: 'test-slug',
+        actionId: 'action-123',
+        agentType: 'execution',
+        continuationPrNumber: 42,
+        continuationPrBranch: 'feature/continue',
+        planningPrBranch: 'plan/my-feature',
+        planningPrUrl: 'https://github.com/org/repo/pull/42',
+      };
+
+      const { headers, body } = createSignedRequest(taskPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/tasks',
+        headers,
+        body,
+      });
+
+      expect(response.statusCode).toBe(202);
+      expect(dispatcher.submitTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          repository: 'org/repo',
+          baseBranch: 'develop',
+          linearIssueId: 'INT-999',
+          linearIssueTitle: 'Test issue title',
+          slug: 'test-slug',
+          actionId: 'action-123',
+          agentType: 'execution',
+          continuationPrNumber: 42,
+          continuationPrBranch: 'feature/continue',
+          planningPrBranch: 'plan/my-feature',
+          planningPrUrl: 'https://github.com/org/repo/pull/42',
+        })
+      );
+    });
+
     it('should accept task without planningPr fields', async () => {
       const taskPayload = {
         taskId: 'test-no-planning-pr',

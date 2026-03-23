@@ -76,12 +76,12 @@ export class WebhookClient {
         }
 
         // Wait before retry (exponential backoff)
-        /* v8 ignore start -- ts-type: nullish coalescing on array access creates type narrowing branch @preserve */
         if (attempt < MAX_RETRIES - 1) {
+          /* v8 ignore start -- ts-type: nullish coalescing on array access creates type narrowing branch @preserve */
           const delay = RETRY_DELAYS[attempt] ?? 5000;
+          /* v8 ignore stop @preserve */
           await new Promise((resolve) => setTimeout(resolve, delay));
         }
-        /* v8 ignore stop @preserve */
       }
     }
 
@@ -97,7 +97,7 @@ export class WebhookClient {
 
     this.logger.warn({ taskId }, 'Webhook delivery failed, queued for retry');
 
-    /* v8 ignore start -- upstream: `lasterror` variable is set in every iteration of the for... @preserve */
+    /* v8 ignore start -- ts-type: loop always executes so lastError is never null @preserve */
     if (lastError === null) {
       return { ok: false, error: { type: 'network', message: 'Unknown error' } };
     }
@@ -155,12 +155,12 @@ export class WebhookClient {
             break; // Don't retry 4xx
           }
 
-          /* v8 ignore start -- ts-type: nullish coalescing on array access creates type narrowing branch @preserve */
           if (attempt < MAX_RETRIES - 1) {
+            /* v8 ignore start -- ts-type: nullish coalescing on array access creates type narrowing branch @preserve */
             const delay = RETRY_DELAYS[attempt] ?? 5000;
+            /* v8 ignore stop @preserve */
             await new Promise((resolve) => setTimeout(resolve, delay));
           }
-          /* v8 ignore stop @preserve */
         }
       }
 

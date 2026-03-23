@@ -142,7 +142,6 @@ export function registerRoutes(
     }
     const parsed = parseResult.data;
 
-    /* v8 ignore start -- ts-type: spread operators create type-narrowing branches for optional properties @preserve */
     const body: CreateTaskRequest = {
       taskId: parsed.taskId,
       workerType: parsed.workerType,
@@ -152,15 +151,9 @@ export function registerRoutes(
       linearIssueLabels: parsed.linearIssueLabels,
       hasChildren: parsed.hasChildren,
       ...(parsed.repository !== undefined && { repository: parsed.repository }),
-      /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
       ...(parsed.baseBranch !== undefined && { baseBranch: parsed.baseBranch }),
-      /* v8 ignore stop @preserve */
-      /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
       ...(parsed.linearIssueId !== undefined && { linearIssueId: parsed.linearIssueId }),
-      /* v8 ignore stop @preserve */
-      /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
       ...(parsed.linearIssueTitle !== undefined && { linearIssueTitle: parsed.linearIssueTitle }),
-      /* v8 ignore stop @preserve */
       ...(parsed.slug !== undefined && { slug: parsed.slug }),
       ...(parsed.actionId !== undefined && { actionId: parsed.actionId }),
       ...(parsed.agentType !== undefined && { agentType: parsed.agentType }),
@@ -173,7 +166,6 @@ export function registerRoutes(
       ...(parsed.planningPrBranch !== undefined && { planningPrBranch: parsed.planningPrBranch }),
       ...(parsed.planningPrUrl !== undefined && { planningPrUrl: parsed.planningPrUrl }),
     };
-    /* v8 ignore stop @preserve */
 
     logger.info(
       { taskId: body.taskId, workerType: body.workerType, linearIssueId: body.linearIssueId },
@@ -284,12 +276,16 @@ export function registerRoutes(
     const running = dispatcher.getRunningCount();
     const capacity = dispatcher.getCapacity();
     const tokenExpiry = tokenService.getExpiresAt();
+    /* v8 ignore start -- ts-type: nullish coalescing fallback for optional credentialMonitor parameter @preserve */
     const oauthState = credentialMonitor?.getState() ?? {
       status: 'not_configured' as const,
       message: 'Credential monitor not initialized',
     };
+    /* v8 ignore stop @preserve */
 
+    /* v8 ignore start -- ts-type: nullish coalescing fallback for optional isolationProvider parameter @preserve */
     const healthDetails = isolationProvider?.getHealthDetails?.() ?? { docker: true, disk: true };
+    /* v8 ignore stop @preserve */
 
     reply.send({
       status: getStatus?.() ?? 'ready',
