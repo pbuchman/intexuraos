@@ -483,6 +483,7 @@ describe('createFirestoreMergeQueueWatchRepository', () => {
 
       const mockQuery = {
         where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
         get: vi.fn().mockResolvedValue(mockSnapshot),
       };
 
@@ -505,9 +506,33 @@ describe('createFirestoreMergeQueueWatchRepository', () => {
       }
     });
 
+    it('should order results by createdAt descending', async () => {
+      const mockSnapshot = { docs: [] };
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(mockSnapshot),
+      };
+
+      const mockCollection = {
+        where: vi.fn().mockReturnValue(mockQuery),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn().mockReturnValue(mockCollection),
+      } as never);
+
+      const repo = createFirestoreMergeQueueWatchRepository({ logger: mockLogger });
+      await repo.findByUserAndRepo('user_123', 'intexuraos', 'test-repo');
+
+      expect(mockQuery.orderBy).toHaveBeenCalledWith('createdAt', 'desc');
+    });
+
     it('should return FIRESTORE_ERROR on failure', async () => {
       const mockQuery = {
         where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
         get: vi.fn().mockRejectedValue(new Error('Query failed')),
       };
 
