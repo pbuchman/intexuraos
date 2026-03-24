@@ -66,6 +66,7 @@ const BLOCKER_KEYWORDS = [
   'always returns',
   'always succeeds',
   'always provides',
+  'always provided',
   'always has',
   'always include',
   'always defined',
@@ -80,6 +81,9 @@ const BLOCKER_KEYWORDS = [
   'unreachable',
   'guarantees',
   'guaranteed',
+  'guard',
+  'narrowing',
+  'narrows',
   'fallback',
   'defensive',
   'false positive',
@@ -89,12 +93,12 @@ const BLOCKER_KEYWORDS = [
 
 // Category-specific keywords accepted in addition to universal keywords
 const CATEGORY_SPECIFIC_KEYWORDS = {
-  'ts-type': ['narrowing', 'narrows', 'type narrowing', 'type guard'],
-  'module-init': ['cold start', 'bootstrap', 'entry point'],
-  'source-map': ['source map', 'coverage tooling'],
-  upstream: ['guard', 'upstream guard', 'prior check', 'early return'],
+  'ts-type': ['type narrowing', 'type guard', 'type check', 'null check', 'undefined check'],
+  'module-init': ['cold start', 'bootstrap', 'entry point', 'module load', 'startup'],
+  'source-map': ['source map', 'coverage tooling', 'alignment', 'misattributed'],
+  upstream: ['upstream guard', 'prior check', 'early return', 'validated', 'passthrough'],
   schema: ['schema validation', 'Zod', 'safeParse'],
-  regex: ['capture group', 'exec', 'match'],
+  regex: ['capture group', 'regex exec', 'regex match'],
 };
 
 function buildKeywordPattern(keywords) {

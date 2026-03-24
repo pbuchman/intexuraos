@@ -58,6 +58,7 @@ The `--` explanation MUST contain at least one blocker keyword proving the branc
 | `always returns`             | FakeAuth always returns valid user                     |
 | `always succeeds`            | FakePubSub always succeeds, no error path              |
 | `always provides`            | FakeAuthPlugin always provides userId                  |
+| `always provided`            | auth token always provided by middleware               |
 | `always has`                 | upstream guard always has non-null value               |
 | `always include`             | nock mocks always include required fields              |
 | `always defined`             | Zod parse guarantees field always defined              |
@@ -72,6 +73,9 @@ The `--` explanation MUST contain at least one blocker keyword proving the branc
 | `unreachable`                | ?? fallback unreachable after upstream guard           |
 | `guarantees`                 | regex .+ capture group guarantees non-empty string     |
 | `guaranteed`                 | loop bound guaranteed by prior length check            |
+| `guard`                      | upstream guard makes branch unreachable                |
+| `narrowing`                  | TypeScript narrowing makes branch dead                 |
+| `narrows`                    | type check narrows away undefined branch               |
 | `fallback`                   | noUncheckedIndexedAccess fallback                      |
 | `defensive`                  | defensive check for raw JS callers                     |
 | `false positive`             | coverage false positive from source map alignment      |
@@ -80,14 +84,14 @@ The `--` explanation MUST contain at least one blocker keyword proving the branc
 
 **Category-specific keywords** (accepted only for the listed category):
 
-| Category      | Additional keywords                                      |
-| ------------- | -------------------------------------------------------- |
-| `ts-type`     | `narrowing`, `narrows`, `type narrowing`, `type guard`   |
-| `module-init` | `cold start`, `bootstrap`, `entry point`                 |
-| `source-map`  | `source map`, `coverage tooling`                         |
-| `upstream`    | `guard`, `upstream guard`, `prior check`, `early return` |
-| `schema`      | `schema validation`, `Zod`, `safeParse`                  |
-| `regex`       | `capture group`, `exec`, `match`                         |
+| Category      | Additional keywords                                                           |
+| ------------- | ----------------------------------------------------------------------------- |
+| `ts-type`     | `type narrowing`, `type guard`, `type check`, `null check`, `undefined check` |
+| `module-init` | `cold start`, `bootstrap`, `entry point`, `module load`, `startup`            |
+| `source-map`  | `source map`, `coverage tooling`, `alignment`, `misattributed`                |
+| `upstream`    | `upstream guard`, `prior check`, `early return`, `validated`, `passthrough`   |
+| `schema`      | `schema validation`, `Zod`, `safeParse`                                       |
+| `regex`       | `capture group`, `regex exec`, `regex match`                                  |
 
 **Validation:** `node scripts/verify-v8-ignore.mjs` reports warnings for missing keywords (Phase B-1). Will become a hard error once all explanations are updated. Canonical keyword list maintained in `scripts/verify-v8-ignore.mjs`.
 
