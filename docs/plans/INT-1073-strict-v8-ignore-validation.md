@@ -35,17 +35,19 @@ Add a new validation phase between Phase B (syntax) and Phase C (pattern) that c
 - `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`
 - `narrows`, `narrowing`
 
-**Category-specific expanded keywords** (these are valid ONLY for the listed category):
+**Category-specific expanded keywords** (these are valid ONLY for the listed category, in addition to the universal list above):
 - `ts-type`: Also accepts `type check`, `type narrowing`, `undefined check`, `null check`, `type system`, `nullish coalescing`, `optional property`, `spread`, `conditional`, `ternary`
 - `module-init`: Also accepts `bootstrap`, `entry point`, `cold start`, `module load`, `startup`, `initialized at`, `ESM import`
-- `source-map`: Also accepts `alignment`, `misattributed`, `false positive`
-- `upstream`: Also accepts `defensive`, `prior check`, `early return`, `validated`, `passthrough`
+- `source-map`: Also accepts `alignment`, `misattributed`
+- `upstream`: Also accepts `prior check`, `early return`, `validated`, `passthrough`
 - `schema`: Also accepts `Zod`, `Fastify schema`, `validation`
 - `regex`: Also accepts `capture group`, `match`
 
+Note: `false positive` and `defensive` are already in the universal list — do not duplicate in category-specific lists.
+
 ### Detector Tightening
 
-1. **`schema` detector**: Remove overly broad patterns `body.`, `request.`, `params.` — these match almost any route handler. Keep only: `.safeParse(`, `.parse(`, `/schema/i`, `/zod/i`, `/validate/i`
+1. **`schema` detector**: Remove overly broad patterns `.data.`, `body.`, `request.`, `params.` — these match almost any route handler and provide no schema-specific signal. Keep only: `.safeParse(`, `.parse(`, `/schema/i`, `/zod/i`, `/validate/i`
 2. **`test-infra` detector**: No changes — the existing detector already requires genuine test-infra patterns (requireAuth, FakeAuth, FakeFirestore, etc.). The blocker keyword enforcement in Phase B-1 provides the additional explanation quality check
 
 ### NEVER-Valid Pattern Additions
@@ -69,7 +71,8 @@ Descoped — the existing NEVER-valid patterns (catch blocks, `!result.ok`, stat
 
 **Input:** Current `scripts/verify-v8-ignore.mjs` (1191 lines, 6 phases A through F)
 **Output:** Updated script with Phase B-1 added, tightened detectors, updated docs
-**Verification:** `node scripts/verify-v8-ignore.mjs` must still pass (existing comments must not be broken by detector tightening — the new Phase B-1 will initially be added in `--strict` mode only, then enabled by default after Subtask 2 fixes all explanations)
+**Verification:** `node scripts/verify-v8-ignore.mjs` must still pass. Phase B-1 runs unconditionally — the 193 explanations must be fixed (by Subtask 2) before this branch merges. Both subtasks execute in parallel on separate branches; they merge together so CI never sees a broken state.
+**Testing:** Add inline test assertions for `validateBlockerKeywords()` that run as part of the script's self-test mode (`--self-test` flag). Tests must cover: (a) universal keyword match, (b) category-specific keyword acceptance, (c) rejection when no keyword present, (d) `stop` comment skipping.
 
 ### Task 1.1: Add Phase B-1 Blocker Keyword Check
 
@@ -102,8 +105,8 @@ const CATEGORY_SPECIFIC_KEYWORDS = {
               'conditional', 'ternary'],
   'module-init': ['bootstrap', 'entry point', 'cold start', 'module load',
                   'startup', 'initialized at', 'ESM import'],
-  'source-map': ['alignment', 'misattributed', 'false positive'],
-  'upstream': ['defensive', 'prior check', 'early return', 'validated', 'passthrough'],
+  'source-map': ['alignment', 'misattributed'],
+  'upstream': ['prior check', 'early return', 'validated', 'passthrough'],
   'schema': ['Zod', 'Fastify schema', 'validation'],
   'regex': ['capture group', 'match'],
 };
@@ -169,6 +172,72 @@ git add scripts/verify-v8-ignore.mjs
 git commit -m "feat: add Phase B-1 blocker keyword enforcement to v8 ignore validation"
 ```
 
+### Task 1.1b: Add Self-Test for validateBlockerKeywords
+
+**Files:**
+- Modify: `scripts/verify-v8-ignore.mjs` (append self-test section at end of file, before `main()` call)
+
+- [ ] **Step 1: Add self-test function**
+
+Add a `--self-test` CLI flag that runs inline assertions for the new function:
+
+```javascript
+async function selfTest() {
+  console.log('Running self-tests for validateBlockerKeywords...');
+
+  // Test: universal keyword match
+  const result1 = validateBlockerKeywords([
+    { type: 'start', category: 'ts-type', explanation: 'TypeScript cannot narrow this type', file: 'test.ts', line: 1 }
+  ]);
+  console.assert(result1.errors.length === 0, 'universal keyword "cannot" should pass');
+
+  // Test: category-specific keyword accepted
+  const result2 = validateBlockerKeywords([
+    { type: 'start', category: 'ts-type', explanation: 'type narrowing for overloaded signature', file: 'test.ts', line: 1 }
+  ]);
+  console.assert(result2.errors.length === 0, 'ts-type keyword "type narrowing" should pass');
+
+  // Test: rejection when no keyword present
+  const result3 = validateBlockerKeywords([
+    { type: 'start', category: 'ts-type', explanation: 'some random description', file: 'test.ts', line: 1 }
+  ]);
+  console.assert(result3.errors.length === 1, 'no blocker keyword should fail');
+
+  // Test: stop comments skipped
+  const result4 = validateBlockerKeywords([
+    { type: 'stop', file: 'test.ts', line: 2 }
+  ]);
+  console.assert(result4.errors.length === 0, 'stop comments should be skipped');
+
+  // Test: category-specific keyword rejected for wrong category
+  const result5 = validateBlockerKeywords([
+    { type: 'start', category: 'upstream', explanation: 'type narrowing makes branch dead', file: 'test.ts', line: 1 }
+  ]);
+  console.assert(result5.errors.length === 0, '"narrowing" is a universal keyword');
+
+  console.log('All self-tests passed ✅');
+}
+
+// Wire into CLI
+if (process.argv.includes('--self-test')) {
+  selfTest().then(() => process.exit(0));
+} else {
+  main();
+}
+```
+
+- [ ] **Step 2: Run self-tests**
+
+Run: `node scripts/verify-v8-ignore.mjs --self-test`
+Expected: `All self-tests passed ✅`
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add scripts/verify-v8-ignore.mjs
+git commit -m "test: add self-test assertions for validateBlockerKeywords"
+```
+
 ### Task 1.2: Tighten Schema Detector
 
 **Files:**
@@ -176,7 +245,7 @@ git commit -m "feat: add Phase B-1 blocker keyword enforcement to v8 ignore vali
 
 - [ ] **Step 1: Remove overly broad patterns from schema detector**
 
-Replace the `schema` detector's patterns array. Remove `body.`, `request.`, `params.` — keep only genuine schema validation patterns:
+Replace the `schema` detector's patterns array. Remove `.data.`, `body.`, `request.`, `params.` — keep only genuine schema validation patterns:
 
 ```javascript
 const patterns = [
@@ -198,7 +267,7 @@ Check that no existing `schema` category comments now fail pattern validation. I
 
 ```bash
 git add scripts/verify-v8-ignore.mjs
-git commit -m "fix: tighten schema detector to remove overly broad body/request/params patterns"
+git commit -m "fix: tighten schema detector to remove overly broad data/body/request/params patterns"
 ```
 
 ### Task 1.3: Update Coverage Exemptions Documentation
@@ -221,8 +290,8 @@ The validation script (Phase B-1) enforces that every v8 ignore explanation cont
 **Category-specific keywords** (accepted only for the listed category):
 - `ts-type`: `type check`, `type narrowing`, `undefined check`, `null check`, `type system`, `nullish coalescing`, `optional property`, `spread`, `conditional`, `ternary`
 - `module-init`: `bootstrap`, `entry point`, `cold start`, `module load`, `startup`, `initialized at`, `ESM import`
-- `source-map`: `alignment`, `misattributed`
-- `upstream`: `prior check`, `early return`, `validated`, `passthrough`
+- `source-map`: `alignment`, `misattributed` (note: `false positive` already in universal list)
+- `upstream`: `prior check`, `early return`, `validated`, `passthrough` (note: `defensive` already in universal list)
 - `schema`: `Zod`, `Fastify schema`, `validation`
 - `regex`: `capture group`, `match`
 ```
