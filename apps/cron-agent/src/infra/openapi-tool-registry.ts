@@ -13,6 +13,10 @@ export class OpenApiToolRegistry implements ToolRegistry {
     logger: Logger;
   }) {
     this.serviceMap = new Map(deps.allowedServices.map((s) => [s.key, s]));
+    deps.logger.info(
+      { serviceCount: this.serviceMap.size, serviceKeys: [...this.serviceMap.keys()] },
+      'OpenApiToolRegistry initialized',
+    );
   }
 
   async getToolsForService(serviceKey: string): Promise<ToolDefinition[]> {
@@ -64,6 +68,10 @@ export class OpenApiToolRegistry implements ToolRegistry {
   }
 
   private async fetchAndGenerateTools(service: ServiceDefinition): Promise<ToolDefinition[]> {
+    this.deps.logger.info(
+      { service: service.key, openapiUrl: service.openapiUrl },
+      'Fetching OpenAPI spec for service',
+    );
     try {
       const response = await fetch(service.openapiUrl);
       if (!response.ok) {
