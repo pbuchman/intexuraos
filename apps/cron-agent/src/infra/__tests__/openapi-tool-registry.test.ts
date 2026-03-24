@@ -309,6 +309,26 @@ describe('OpenApiToolRegistry', () => {
     expect(tools).toEqual([]);
   });
 
+  it('warns when OpenAPI spec has no paths field', async () => {
+    const spyLogger = createSpyLogger();
+    const spyRegistry = new OpenApiToolRegistry({
+      allowedServices: [testService],
+      internalAuthToken: 'test-token',
+      logger: spyLogger as unknown as Logger,
+    });
+
+    nock('http://code-agent:8128')
+      .get('/openapi.json')
+      .reply(200, { openapi: '3.1.1', info: { title: 'Empty', version: '1.0.0' } });
+
+    await spyRegistry.getToolsForService('code-agent');
+
+    expect(spyLogger.warn).toHaveBeenCalledWith(
+      { service: 'code-agent' },
+      'OpenAPI spec has no paths — service may be misconfigured',
+    );
+  });
+
   it('handles spec with empty paths', async () => {
     nock('http://code-agent:8128')
       .get('/openapi.json')
