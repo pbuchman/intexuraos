@@ -7,6 +7,7 @@ import { type ModelPricing } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 
 const TEST_MODEL = 'or:deepseek/deepseek-v3-0324';
+const EXPECTED_RAW_MODEL = 'deepseek/deepseek-v3-0324';
 
 const mockResearch = vi.fn();
 const mockGenerate = vi.fn();
@@ -62,7 +63,27 @@ describe('OpenRouterAdapter', () => {
 
       expect(mockCreateOpenRouterClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
-        model: TEST_MODEL,
+        model: EXPECTED_RAW_MODEL,
+        userId: 'test-user-id',
+        pricing: testPricing,
+        logger: mockLogger,
+      });
+    });
+
+    it('passes non-OpenRouter model directly without stripping prefix', () => {
+      mockCreateOpenRouterClient.mockClear();
+      const nonOpenRouterModel = 'google/gemini-2.0-flash';
+      new OpenRouterAdapter(
+        'test-key',
+        nonOpenRouterModel,
+        'test-user-id',
+        testPricing,
+        mockLogger
+      );
+
+      expect(mockCreateOpenRouterClient).toHaveBeenCalledWith({
+        apiKey: 'test-key',
+        model: nonOpenRouterModel,
         userId: 'test-user-id',
         pricing: testPricing,
         logger: mockLogger,

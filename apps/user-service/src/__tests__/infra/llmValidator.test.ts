@@ -278,7 +278,7 @@ describe('LlmValidatorImpl', () => {
         expect(result.ok).toBe(true);
         expect(createOpenRouterClient).toHaveBeenCalledWith({
           apiKey: 'or-test-key',
-          model: 'or:qwen/qwen3.5-flash-02-23',
+          model: 'qwen/qwen3.5-flash-02-23',
           userId: testUserId,
           pricing: testPricing.openrouter,
           logger: mockLogger,
