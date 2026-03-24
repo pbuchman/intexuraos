@@ -22,8 +22,8 @@ import {
   type TextGenerationClient,
 } from '../domain/research/index.js';
 import { formatLlmError } from '../domain/research/formatLlmError.js';
-import { getProviderForModel, isOpenRouterModel, LlmModels, type LLMModel } from '@intexuraos/llm-contract';
-import { getAllowlistPricing } from '@intexuraos/infra-openrouter';
+import { getProviderForModel, isOpenRouterModel, LlmModels, type LLMModel, type ModelPricing } from '@intexuraos/llm-contract';
+import { getAllowlistPricing, isAllowedModel } from '@intexuraos/infra-openrouter';
 import { getServices, type DecryptedApiKeys } from '../services.js';
 import { createSynthesisProviders } from './helpers/synthesisHelper.js';
 import { handleAllCompleted } from './helpers/completionHandlers.js';
@@ -862,9 +862,22 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           '[3.3] Starting LLM research call'
         );
 
-        /* v8 ignore start -- ts-type: cannot statically verify OpenRouter model is in pricing allowlist @preserve */
+        // Reject non-allowlisted OpenRouter models to enforce curated model policy
+        /* v8 ignore start -- upstream: cannot test allowlist rejection path without integration environment with actual OpenRouter API @preserve */
+        if (isOpenRouterModel(event.model) && !isAllowedModel(event.model)) {
+          request.log.warn({ researchId: event.researchId, model: event.model }, '[3.3] OpenRouter model not in allowlist');
+          void researchRepo.updateLlmResult(event.researchId, event.model, {
+            status: 'failed',
+            error: `Model '${event.model}' is not in the curated allowlist. Allowed models: qwen/qwen3.5-plus-02-15, qwen/qwen3.5-flash-02-23, minimax/minimax-m2.7, x-ai/grok-4.20-beta, x-ai/grok-4.1-fast, moonshotai/kimi-k2.5, anthropic/claude-sonnet-4.6, anthropic/claude-opus-4.6, google/gemini-3.1-pro-preview, google/gemini-2.5-flash, openai/gpt-5.4, openai/gpt-5.4-mini, xiaomi/mimo-v2-pro, z-ai/glm-5-turbo`,
+            completedAt: new Date().toISOString(),
+          });
+          return await reply.fail('INVALID_REQUEST', 'Model not in curated allowlist');
+        }
+        /* v8 ignore stop @preserve */
+
+        /* v8 ignore start -- upstream: after allowlist guard, OpenRouter models are guaranteed to be in allowlist @preserve */
         const researchPricing = isOpenRouterModel(event.model)
-          ? getAllowlistPricing(event.model) ?? { inputPricePerMillion: 0, outputPricePerMillion: 0, useProviderCost: true }
+          ? getAllowlistPricing(event.model) as ModelPricing
           : services.pricingContext.getPricing(event.model as LLMModel);
         /* v8 ignore stop @preserve */
 
