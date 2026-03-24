@@ -22,7 +22,7 @@ import {
   type TextGenerationClient,
 } from '../domain/research/index.js';
 import { formatLlmError } from '../domain/research/formatLlmError.js';
-import { getProviderForModel, isOpenRouterModel, LlmModels, type LLMModel, type ModelPricing } from '@intexuraos/llm-contract';
+import { getProviderForModel, isOpenRouterModel, getOpenRouterRawId, LlmModels, type LLMModel, type ModelPricing } from '@intexuraos/llm-contract';
 import { getAllowlistPricing, isAllowedModel } from '@intexuraos/infra-openrouter';
 import { getServices, type DecryptedApiKeys } from '../services.js';
 import { createSynthesisProviders } from './helpers/synthesisHelper.js';
@@ -864,7 +864,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         // Reject non-allowlisted OpenRouter models to enforce curated model policy
         /* v8 ignore start -- upstream: cannot test allowlist rejection path without integration environment with actual OpenRouter API @preserve */
-        if (isOpenRouterModel(event.model) && !isAllowedModel(event.model)) {
+        if (isOpenRouterModel(event.model) && !isAllowedModel(getOpenRouterRawId(event.model))) {
           request.log.warn({ researchId: event.researchId, model: event.model }, '[3.3] OpenRouter model not in allowlist');
           void researchRepo.updateLlmResult(event.researchId, event.model, {
             status: 'failed',
@@ -877,7 +877,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         /* v8 ignore start -- upstream: after allowlist guard, OpenRouter models are guaranteed to be in allowlist @preserve */
         const researchPricing = isOpenRouterModel(event.model)
-          ? getAllowlistPricing(event.model) as ModelPricing
+          ? getAllowlistPricing(getOpenRouterRawId(event.model)) as ModelPricing
           : services.pricingContext.getPricing(event.model as LLMModel);
         /* v8 ignore stop @preserve */
 
