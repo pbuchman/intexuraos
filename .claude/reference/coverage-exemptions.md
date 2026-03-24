@@ -44,7 +44,25 @@ The `--` explanation must name WHY testing is impossible, not WHAT the code does
 
 Rule: If you can write a mock/fake to trigger the branch, it's not a valid v8 ignore.
 
-**Blocker keywords** — explanation should contain at least one: `cannot`, `unable`, `impossible`, `always returns`, `always succeeds`, `no support`, `not mockable`, `not reachable`, `never triggered`, `no way to`, `does not expose`.
+### Blocker Keyword Enforcement (CI-enforced)
+
+The `--` explanation MUST contain at least one blocker keyword proving the branch is genuinely untestable:
+
+| Keyword | Example usage |
+| --- | --- |
+| `cannot` | FakeHttpClient cannot simulate AbortError |
+| `unable` | unable to mock internal SDK property getter |
+| `impossible` | impossible to trigger race condition in unit test |
+| `always returns` | FakeAuth always returns valid user |
+| `always succeeds` | FakePubSub always succeeds, no error path |
+| `no support` | nock has no support for streaming responses |
+| `not mockable` | SDK getter property not mockable via fake |
+| `not reachable` | branch not reachable after upstream guard |
+| `never triggered` | callback never triggered during test teardown |
+| `no way to` | no way to simulate partial write in FakeFirestore |
+| `does not expose` | SDK does not expose error state for testing |
+
+**Validation:** `node scripts/verify-v8-ignore.mjs` reports warnings for missing keywords (Phase B-1). Will become a hard error once all explanations are updated.
 
 ## Override Mechanism
 

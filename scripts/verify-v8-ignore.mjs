@@ -55,6 +55,24 @@ const VALID_CATEGORIES = [
 const V8_LEGACY_KEYWORDS = ['next', 'start', 'stop'];
 
 // ============================================================================
+// BLOCKER KEYWORD ENFORCEMENT
+// ============================================================================
+
+const BLOCKER_KEYWORDS = [
+  'cannot',
+  'unable',
+  'impossible',
+  'always returns',
+  'always succeeds',
+  'no support',
+  'not mockable',
+  'not reachable',
+  'never triggered',
+  'no way to',
+  'does not expose',
+];
+
+// ============================================================================
 // CATEGORY DETECTORS
 // ============================================================================
 
@@ -364,13 +382,10 @@ const CATEGORY_DETECTORS = {
       const patterns = [
         /\.safeParse\s*\(/,
         /\.parse\s*\(/,
-        /schema/i,
-        /zod/i,
-        /validate/i,
-        /\.data\./,
-        /body\./,
-        /request\./,
-        /params\./,
+        /\bschema\b/i,
+        /\bzod\b/i,
+        /ZodError/,
+        /\bvalidat(?:e|ion|or)\s*\(/i,
       ];
 
       for (const pattern of patterns) {
@@ -578,6 +593,40 @@ function validateSyntax(comments) {
   }
 
   return { errors, validComments };
+}
+
+// ============================================================================
+// PHASE B-1: Blocker Keyword Enforcement (warnings until explanations updated)
+// ============================================================================
+
+function validateBlockerKeywords(comments, overriddenFiles, taskMap) {
+  const warnings = [];
+  const overrideSkips = [];
+
+  const keywordPattern = new RegExp(
+    BLOCKER_KEYWORDS.map((kw) => kw.replace(/\s+/g, '\\s+')).join('|'),
+    'i'
+  );
+
+  for (const comment of comments) {
+    if (!comment.explanation) continue;
+
+    if (!keywordPattern.test(comment.explanation)) {
+      if (checkOverride(comment, overriddenFiles, taskMap, overrideSkips)) continue;
+
+      warnings.push({
+        file: comment.file,
+        line: comment.line,
+        category: comment.category,
+        explanation: comment.explanation,
+        message:
+          `Explanation lacks a blocker keyword. ` +
+          `Must contain one of: ${BLOCKER_KEYWORDS.join(', ')}`,
+      });
+    }
+  }
+
+  return { warnings, overrideSkips };
 }
 
 // ============================================================================
@@ -1048,6 +1097,10 @@ async function main() {
   // Load overrides
   const { overriddenFiles, taskMap } = loadOverrides();
 
+  // Phase B-1: Blocker keyword enforcement (warnings only)
+  const { warnings: blockerWarnings, overrideSkips: blockerOverrideSkips } =
+    validateBlockerKeywords(Array.from(validComments), overriddenFiles, taskMap);
+
   // Phase C: Pattern validation
   const { errors: patternErrors, overrideSkips: patternOverrideSkips } = validatePatterns(
     Array.from(validComments),
@@ -1104,12 +1157,23 @@ async function main() {
   const blockCount = startComments.length;
 
   // Report override skips
-  const allOverrideSkips = [...patternOverrideSkips, ...neverValidOverrideSkips];
+  const allOverrideSkips = [...patternOverrideSkips, ...neverValidOverrideSkips, ...blockerOverrideSkips];
   if (allOverrideSkips.length > 0) {
     console.log(`\n⏭ ${allOverrideSkips.length} block(s) skipped via overrides:`);
     for (const skip of allOverrideSkips) {
       console.log(`  ⏭ OVERRIDE: ${skip.file}:${skip.line} (${skip.taskId})`);
     }
+  }
+
+  // Report blocker keyword warnings
+  if (blockerWarnings.length > 0) {
+    console.log(`\n⚠ ${blockerWarnings.length} comment(s) missing blocker keywords:\n`);
+    blockerWarnings.forEach((w) => {
+      console.log(`  ${w.file}:${w.line} [${w.category}]: ${w.explanation}`);
+    });
+    console.log(
+      `\n  Required keywords: ${BLOCKER_KEYWORDS.join(', ')}`
+    );
   }
 
   console.log(`\n✓ ${validCount} v8 ignore comments validated`);
