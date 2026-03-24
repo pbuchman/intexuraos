@@ -971,6 +971,7 @@ describe('system-prompt', () => {
     expect(result).not.toContain('🔒 Security');
     expect(result).not.toContain('🏗️ Architecture');
     expect(result).not.toContain('📐 Plan Review');
+    expect(result).toContain('code_quality, test_quality');
   });
 
   it('includes all types including test_quality when reviewTypes is undefined', () => {
