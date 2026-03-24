@@ -970,12 +970,12 @@ describe('system-prompt', () => {
     expect(result).toContain('bucket');
   });
 
-  it('review agent prompt places GH Actions check between PR context and posting review', () => {
+  it('review agent prompt places GH Actions check as last step before posting review', () => {
     const result = reviewPrompt.build(baseParams);
-    const gatheringIndex = result.indexOf('Gathering PR Context');
+    const repoAccessIndex = result.indexOf('Full Repository Access');
     const ghActionsIndex = result.indexOf('Check GitHub Actions Status');
     const postingIndex = result.indexOf('Posting Review Comments');
-    expect(gatheringIndex).toBeLessThan(ghActionsIndex);
+    expect(repoAccessIndex).toBeLessThan(ghActionsIndex);
     expect(ghActionsIndex).toBeLessThan(postingIndex);
   });
 

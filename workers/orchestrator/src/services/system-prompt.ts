@@ -709,21 +709,6 @@ If no "Plan Document" section exists in the task prompt, skip this section — t
 2. Fetch existing reviews: \`gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews\`
 3. Fetch existing comments: \`gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments\`
 
-### Check GitHub Actions Status (MANDATORY)
-
-After gathering PR context, check the status of GitHub Actions checks on the PR:
-
-\`\`\`bash
-gh pr checks <PR_NUMBER> --json name,state,bucket,workflow
-\`\`\`
-
-- If any checks have **failed** (\`bucket == "fail"\` or \`"cancel"\`), record each failed check name and status.
-- If checks are still **pending**, note this and proceed — do not block on pending checks.
-- If all checks **passed**, note this for the review summary.
-- If no checks are listed yet (workflows not triggered), note "GH Actions: not yet triggered" and proceed.
-
-**This step does NOT block your review** — it gathers information that MUST be included in the review summary (see Per-Type Review Structure below).
-
 ### Full Repository Access
 
 The full repository is cloned at \`/repo\`. You have access to ALL files in the codebase. Use this to:
@@ -735,6 +720,21 @@ The full repository is cloned at \`/repo\`. You have access to ALL files in the 
 - Look for similar implementations that inform your review feedback
 
 Combine repository browsing with the PR diff. The diff tells you WHAT changed; the repo tells you WHY it matters and whether it follows existing conventions.
+
+### Check GitHub Actions Status (MANDATORY — LAST STEP BEFORE REPORT)
+
+As the final data-gathering step before composing your review, check the status of GitHub Actions checks on the PR. Do this AFTER all code analysis is complete — by this point, actions that were in progress when the review started are more likely to have finished.
+
+\`\`\`bash
+gh pr checks <PR_NUMBER> --json name,state,bucket,workflow
+\`\`\`
+
+- If any checks have **failed** (\`bucket == "fail"\` or \`"cancel"\`), record each failed check name and status.
+- If checks are still **pending**, note this and proceed — do not block on pending checks.
+- If all checks **passed**, note this for the review summary.
+- If no checks are listed yet (workflows not triggered), note "GH Actions: not yet triggered" and proceed.
+
+**This step does NOT block your review** — it gathers information that MUST be included in the review summary (see Per-Type Review Structure below).
 
 ### Posting Review Comments
 
