@@ -180,12 +180,13 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
           return { success: true, fixTaskCreated: false, skipped: true, skipReason: 'no_original_task' };
         }
 
-        // Check loop prevention: has a ci_failure follow-up already been created?
-        // Check if parentTaskId chain depth > 1 for ci_failure follow-ups
-        if (originalTask.followUpReason === 'ci_failure' || originalTask.parentTaskId !== undefined) {
+        // Check loop prevention: only skip if this task was already a CI failure follow-up.
+        // If it's a pr_comment or other follow-up whose PR failed CI, we should still
+        // create a ci_failure follow-up (that's a different failure, not a loop).
+        if (originalTask.followUpReason === 'ci_failure') {
           logger.info(
             { taskId: originalTask.id, prNumber: event.pullRequestNumber },
-            'CI failure follow-up already exists or task is already a follow-up, skipping'
+            'CI failure follow-up already exists, skipping to prevent loop'
           );
           return { success: true, fixTaskCreated: false, skipped: true, skipReason: 'already_follow_up' };
         }
@@ -196,7 +197,6 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
         const headBranch = event.baseBranch ?? 'unknown';
         const headSha = typeof payload?.['headSha'] === 'string' ? payload['headSha'] : 'unknown';
         const checkSuiteId = typeof payload?.['checkSuiteId'] === 'number' ? payload['checkSuiteId'] : 0;
-        const checkRunUrl = typeof payload?.['checkRunUrl'] === 'string' ? payload['checkRunUrl'] : undefined;
 
         // Record ci_failure_detected in automation log
         const prUrl = `https://github.com/${event.repository}/pull/${String(event.pullRequestNumber)}`;
@@ -228,7 +228,7 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
 
         // Create follow-up task
         const createInput: {
-          id: string;
+          id?: string;
           userId: string;
           prompt: string;
           sanitizedPrompt: string;
@@ -246,11 +246,10 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
           prBranch?: string;
           linearIssueId?: string;
         } = {
-          id: `fix-${String(Date.now())}-${Math.random().toString(36).slice(2, 8)}`,
           userId: originalTask.userId,
           prompt: fixPrompt,
           sanitizedPrompt: fixPrompt,
-          systemPromptHash: 'ci-fix-task',
+          systemPromptHash: 'ci-failure-fix',
           workerType: originalTask.workerType,
           workerLocation: originalTask.workerLocation,
           repository: event.repository,
@@ -304,7 +303,6 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
           checkName,
           branch: headBranch,
           taskId: originalTask.id,
-          ...(checkRunUrl !== undefined && { runUrl: checkRunUrl }),
         }).catch((error: unknown) => {
           logger.warn({ error }, 'Failed to send CI failure WhatsApp notification');
         });
