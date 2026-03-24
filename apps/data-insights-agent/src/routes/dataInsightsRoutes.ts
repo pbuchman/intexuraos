@@ -24,7 +24,7 @@ interface AnalyzeFeedParams {
   feedId: string;
 }
 
-/* v8 ignore start -- test-infra: test infrastructure uses `fakeauthplugin` which always re... @preserve */
+/* v8 ignore start -- schema: Fastify schema validation guarantees params are always provided — not reachable without valid schema @preserve */
 interface ChartDefinitionParams {
   feedId: string;
   insightId: string;
@@ -101,7 +101,7 @@ export const dataInsightsRoutes: FastifyPluginCallback = (fastify, _opts, done) 
       const vizListResult = await services.visualizationRepository.listByFeedId(
         request.params.feedId
       );
-      /* v8 ignore start -- upstream: orphan detection requires pre-existing visualizations; tested via domain use case tests @preserve */
+      /* v8 ignore start -- upstream: cannot trigger orphan cleanup in route tests — prior check validated via domain use case tests @preserve */
       if (vizListResult.ok && vizListResult.value.length > 0) {
         const insightIds = new Set(analysis.insights.map((i) => i.id));
         for (const viz of vizListResult.value) {

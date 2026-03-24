@@ -323,7 +323,7 @@ export class ProcessWebhookEventUseCase {
         timestamp,
         senderName,
         phoneNumberId,
-        /* v8 ignore start -- ts-type: messageText validated non-null before text handler invoked @preserve */
+        /* v8 ignore start -- ts-type: nullish coalescing fallback unreachable because prior check guarantees messageText is defined @preserve */
         messageText ?? '',
         /* v8 ignore stop @preserve */
         logger

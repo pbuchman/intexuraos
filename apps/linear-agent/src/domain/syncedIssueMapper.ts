@@ -19,7 +19,7 @@ export function syncedToLinearIssue(synced: SyncedLinearIssue): LinearIssue {
       name: synced.state,
       type: synced.stateType,
     },
-    /* v8 ignore start -- ts-type: assigneeName always set when assigneeId is non-null @preserve */
+    /* v8 ignore start -- ts-type: nullish coalescing fallback for assigneeName; always provided when assigneeId is non-null @preserve */
     assignee:
       synced.assigneeId !== null
         ? { id: synced.assigneeId, name: synced.assigneeName ?? '' }

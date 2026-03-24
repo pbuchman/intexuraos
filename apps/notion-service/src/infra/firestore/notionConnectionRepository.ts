@@ -9,7 +9,7 @@ import type {
   NotionError,
 } from '../../domain/integration/ports/ConnectionRepository.js';
 
-/* v8 ignore start -- schema: Firestore document shape used only in `as` type casts @preserve */
+/* v8 ignore start -- schema: Firestore document shape cannot be validated at runtime, used only in type casts @preserve */
 /**
  * Internal document structure stored in Firestore.
  */

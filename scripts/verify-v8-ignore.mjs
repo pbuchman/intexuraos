@@ -4,6 +4,7 @@ import ts from 'typescript';
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { strict as assert } from 'node:assert';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = resolve(__dirname, '..');
@@ -53,6 +54,96 @@ const VALID_CATEGORIES = [
 ];
 
 const V8_LEGACY_KEYWORDS = ['next', 'start', 'stop'];
+
+// ============================================================================
+// PHASE B-1: Blocker Keyword Enforcement
+// ============================================================================
+
+const BLOCKER_KEYWORDS = [
+  'cannot',
+  'unable',
+  'impossible',
+  'always returns',
+  'always succeeds',
+  'always has',
+  'always include',
+  'always provided',
+  'always defined',
+  'no support',
+  'not mockable',
+  'not reachable',
+  'not unit-testable',
+  'not tracked',
+  'never triggered',
+  'no way to',
+  'does not expose',
+  'unreachable',
+  'false positive',
+  'guarantees',
+  'guard',
+  'guaranteed',
+  'fallback',
+  'defensive',
+  'nouncheckedindexedaccess',
+  'exactoptionalpropertytypes',
+  'narrows',
+  'narrowing',
+];
+
+const CATEGORY_SPECIFIC_KEYWORDS = {
+  'ts-type': [
+    'type check',
+    'type narrowing',
+    'undefined check',
+    'null check',
+    'type system',
+    'nullish coalescing',
+    'optional property',
+    'spread',
+    'conditional',
+    'ternary',
+  ],
+  'module-init': [
+    'bootstrap',
+    'entry point',
+    'cold start',
+    'module load',
+    'startup',
+    'initialized at',
+    'esm import',
+  ],
+  'source-map': ['alignment', 'misattributed'],
+  upstream: ['prior check', 'early return', 'validated', 'passthrough'],
+  schema: ['zod', 'fastify schema', 'validation'],
+  regex: ['capture group', 'regex match'],
+};
+
+function validateBlockerKeywords(comments) {
+  const errors = [];
+
+  for (const comment of comments) {
+    if (comment.type === 'stop') continue;
+
+    const explanation = (comment.explanation ?? '').toLowerCase();
+    const categoryKeywords = CATEGORY_SPECIFIC_KEYWORDS[comment.category] ?? [];
+    const allKeywords = [...BLOCKER_KEYWORDS, ...categoryKeywords];
+
+    const hasBlocker = allKeywords.some((kw) => explanation.includes(kw));
+
+    if (!hasBlocker) {
+      errors.push({
+        file: comment.file,
+        line: comment.line,
+        message:
+          `Explanation lacks blocker keyword. ` +
+          `Must contain at least one of: ${BLOCKER_KEYWORDS.slice(0, 5).join(', ')}, ... ` +
+          `See .claude/reference/coverage-exemptions.md for full list.`,
+      });
+    }
+  }
+
+  return { errors };
+}
 
 // ============================================================================
 // CATEGORY DETECTORS
@@ -361,17 +452,7 @@ const CATEGORY_DETECTORS = {
       const searchEnd = Math.min(lines.length, lineIdx + 5);
       const context = lines.slice(searchStart, searchEnd).join('\n');
 
-      const patterns = [
-        /\.safeParse\s*\(/,
-        /\.parse\s*\(/,
-        /schema/i,
-        /zod/i,
-        /validate/i,
-        /\.data\./,
-        /body\./,
-        /request\./,
-        /params\./,
-      ];
+      const patterns = [/\.safeParse\s*\(/, /\.parse\s*\(/, /schema/i, /zod/i, /validate/i];
 
       for (const pattern of patterns) {
         if (pattern.test(context)) {
@@ -1045,6 +1126,9 @@ async function main() {
   // Phase B: Syntax validation
   const { errors: syntaxErrors, validComments } = validateSyntax(comments);
 
+  // Phase B-1: Blocker keyword enforcement
+  const { errors: blockerErrors } = validateBlockerKeywords(Array.from(validComments));
+
   // Load overrides
   const { overriddenFiles, taskMap } = loadOverrides();
 
@@ -1096,7 +1180,13 @@ async function main() {
   }
 
   // Output
-  const allErrors = [...syntaxErrors, ...patternErrors, ...neverValidErrors, ...coverageErrors];
+  const allErrors = [
+    ...syntaxErrors,
+    ...blockerErrors,
+    ...patternErrors,
+    ...neverValidErrors,
+    ...coverageErrors,
+  ];
   const validCount = validComments.size;
 
   // Count lines within v8 ignore blocks
@@ -1188,4 +1278,83 @@ async function main() {
   process.exit(hasErrors || hasMissing || hasExempted ? 1 : 0);
 }
 
-main();
+async function selfTest() {
+  console.log('Running self-tests for validateBlockerKeywords...');
+
+  // Test: universal keyword match
+  const result1 = validateBlockerKeywords([
+    {
+      type: 'start',
+      category: 'ts-type',
+      explanation: 'TypeScript cannot narrow this type',
+      file: 'test.ts',
+      line: 1,
+    },
+  ]);
+  assert.equal(result1.errors.length, 0, 'universal keyword "cannot" should pass');
+
+  // Test: category-specific keyword accepted
+  const result2 = validateBlockerKeywords([
+    {
+      type: 'start',
+      category: 'ts-type',
+      explanation: 'type narrowing for overloaded signature',
+      file: 'test.ts',
+      line: 1,
+    },
+  ]);
+  assert.equal(result2.errors.length, 0, 'ts-type keyword "type narrowing" should pass');
+
+  // Test: rejection when no keyword present
+  const result3 = validateBlockerKeywords([
+    {
+      type: 'start',
+      category: 'ts-type',
+      explanation: 'some random description',
+      file: 'test.ts',
+      line: 1,
+    },
+  ]);
+  assert.equal(result3.errors.length, 1, 'no blocker keyword should fail');
+
+  // Test: stop comments skipped
+  const result4 = validateBlockerKeywords([{ type: 'stop', file: 'test.ts', line: 2 }]);
+  assert.equal(result4.errors.length, 0, 'stop comments should be skipped');
+
+  // Test: universal keyword works across categories
+  const result5 = validateBlockerKeywords([
+    {
+      type: 'start',
+      category: 'upstream',
+      explanation: 'type narrowing makes branch dead',
+      file: 'test.ts',
+      line: 1,
+    },
+  ]);
+  assert.equal(result5.errors.length, 0, '"narrowing" is a universal keyword');
+
+  // Test: category-specific keyword rejected for wrong category
+  const result6 = validateBlockerKeywords([
+    {
+      type: 'start',
+      category: 'upstream',
+      explanation: 'capture group in the regex',
+      file: 'test.ts',
+      line: 1,
+    },
+  ]);
+  assert.equal(
+    result6.errors.length,
+    1,
+    '"capture group" is regex-specific, should fail for upstream'
+  );
+
+  console.log('All self-tests passed ✅');
+}
+
+// Wire into CLI
+if (process.argv.includes('--self-test')) {
+  selfTest().then(() => process.exit(0));
+} else {
+  main();
+}

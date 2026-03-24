@@ -44,7 +44,23 @@ The `--` explanation must name WHY testing is impossible, not WHAT the code does
 
 Rule: If you can write a mock/fake to trigger the branch, it's not a valid v8 ignore.
 
-**Blocker keywords** — explanation should contain at least one: `cannot`, `unable`, `impossible`, `always returns`, `always succeeds`, `no support`, `not mockable`, `not reachable`, `never triggered`, `no way to`, `does not expose`.
+**Blocker keywords** — explanation must contain at least one keyword from the enforced list. See "Blocker Keyword Enforcement" section below for the complete specification.
+
+## Blocker Keyword Enforcement (CI-enforced)
+
+The validation script (Phase B-1) enforces that every v8 ignore explanation contains at least one blocker keyword. This prevents descriptions that merely describe code behavior instead of naming the testing blocker.
+
+**Universal blocker keywords** (accepted for all categories):
+`cannot`, `unable`, `impossible`, `always returns`, `always succeeds`, `always has`, `always include`, `always provided`, `always defined`, `no support`, `not mockable`, `not reachable`, `not unit-testable`, `not tracked`, `never triggered`, `no way to`, `does not expose`, `unreachable`, `false positive`, `guarantees`, `guard`, `guaranteed`, `fallback`, `defensive`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `narrows`, `narrowing`
+
+**Category-specific keywords** (accepted only for the listed category):
+
+- `ts-type`: `type check`, `type narrowing`, `undefined check`, `null check`, `type system`, `nullish coalescing`, `optional property`, `spread`, `conditional`, `ternary`
+- `module-init`: `bootstrap`, `entry point`, `cold start`, `module load`, `startup`, `initialized at`, `ESM import`
+- `source-map`: `alignment`, `misattributed` (note: `false positive` already in universal list)
+- `upstream`: `prior check`, `early return`, `validated`, `passthrough` (note: `defensive` already in universal list)
+- `schema`: `Zod`, `Fastify schema`, `validation`
+- `regex`: `capture group`, `regex match`
 
 ## Override Mechanism
 
