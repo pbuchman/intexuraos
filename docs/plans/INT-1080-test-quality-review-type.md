@@ -111,7 +111,7 @@ Add the following test inside the existing `describe('PR section', () => {...})`
 ```typescript
 it('includes test_quality in review type guidelines for PR events', () => {
   const result = githubAgentPrompt.build({
-    repository: 'test/repo',
+    repository: 'owner/repo',
     prNumber: 1,
     prTitle: 'Test PR',
     prBody: 'body',
