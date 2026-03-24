@@ -1,8 +1,25 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import nock from 'nock';
 import { OpenApiToolRegistry } from '../openapi-tool-registry.js';
 import type { ServiceDefinition } from '../../config.js';
 import { createTestLogger } from './test-helpers.js';
+
+function createSpyLogger(): {
+  info: ReturnType<typeof vi.fn>;
+  warn: ReturnType<typeof vi.fn>;
+  error: ReturnType<typeof vi.fn>;
+  debug: ReturnType<typeof vi.fn>;
+  child: () => ReturnType<typeof createSpyLogger>;
+} {
+  const logger: ReturnType<typeof createSpyLogger> = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    child: () => createSpyLogger(),
+  };
+  return logger;
+}
 
 const TEST_OPENAPI_SPEC = {
   openapi: '3.1.1',
@@ -566,6 +583,39 @@ describe('OpenApiToolRegistry', () => {
     const result = await getTasks.run({});
     expect(result).toContain('Error: Request to code-agent failed');
     expect(result).not.toContain('http://code-agent:8128');
+  });
+
+  it('logs allowed services at construction time', () => {
+    const spyLogger = createSpyLogger();
+    new OpenApiToolRegistry({
+      allowedServices: [testService],
+      internalAuthToken: 'test-token',
+      logger: spyLogger as never,
+    });
+    expect(spyLogger.info).toHaveBeenCalledWith(
+      { serviceCount: 1, serviceKeys: ['code-agent'] },
+      'OpenApiToolRegistry initialized',
+    );
+  });
+
+  it('logs before fetching OpenAPI spec for a service', async () => {
+    const spyLogger = createSpyLogger();
+    const spyRegistry = new OpenApiToolRegistry({
+      allowedServices: [testService],
+      internalAuthToken: 'test-token',
+      logger: spyLogger as never,
+    });
+
+    nock('http://code-agent:8128')
+      .get('/openapi.json')
+      .reply(200, TEST_OPENAPI_SPEC);
+
+    await spyRegistry.getToolsForService('code-agent');
+
+    expect(spyLogger.info).toHaveBeenCalledWith(
+      { service: 'code-agent', openapiUrl: 'http://code-agent:8128/openapi.json' },
+      'Fetching OpenAPI spec for service',
+    );
   });
 
   it('handles parameter without schema', async () => {
