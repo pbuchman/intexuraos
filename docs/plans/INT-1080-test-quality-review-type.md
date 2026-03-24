@@ -207,7 +207,12 @@ First, update the existing test `'includes all review type sections when reviewT
 expect(result).toContain('🧪 Test Quality');
 ```
 
-Then add the following new tests to `workers/orchestrator/src/services/__tests__/system-prompt.test.ts`, in the review prompt test suite (after existing reviewTypes tests around line 935):
+Also update the existing test `'includes only requested review type sections when reviewTypes is specified'` (around line 902, using `['code_quality', 'security']`) to add:
+```typescript
+expect(result).not.toContain('🧪 Test Quality');
+```
+
+Then add the following new tests to `workers/orchestrator/src/services/__tests__/system-prompt.test.ts`, in the review prompt test suite (insert before the `'REVIEW_AGENT_FINAL block'` test, around line 949):
 
 ```typescript
 it('includes only test_quality section when reviewTypes is ["test_quality"]', () => {
@@ -252,7 +257,7 @@ reviewTypes: z
 
 - [ ] **Step 4: Add `test_quality` to `REVIEW_TYPE_SECTIONS`**
 
-Modify `workers/orchestrator/src/services/system-prompt.ts`, add a new entry to `REVIEW_TYPE_SECTIONS` (after `plan_review`, around line 567):
+Modify `workers/orchestrator/src/services/system-prompt.ts`, add a new entry to `REVIEW_TYPE_SECTIONS` (after `plan_review`, around lines 554–568):
 
 ```typescript
 test_quality: `### 🧪 Test Quality
