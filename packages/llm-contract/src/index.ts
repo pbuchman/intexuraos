@@ -26,6 +26,9 @@ export {
   getProviderForModel,
   isFastModel,
   isValidModel,
+  isOpenRouterModel,
+  createOpenRouterModelId,
+  getOpenRouterRawId,
   LlmModels,
   LlmProviders,
 } from './supportedModels.js';
@@ -53,11 +56,13 @@ export type {
   Sonar,
   SonarPro,
   SonarDeepResearch,
+  OpenRouterModelId,
   // Individual provider types
   Google,
   OpenAI,
   Anthropic,
   Perplexity,
+  OpenRouter,
 } from './supportedModels.js';
 
 export type { ImageSize, ModelPricing, ProviderPricing, CostCalculator } from './pricing.js';
