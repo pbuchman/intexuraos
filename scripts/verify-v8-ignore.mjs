@@ -390,8 +390,9 @@ const CATEGORY_DETECTORS = {
         /\.parse\s*\(/,
         /\bschema\b/i,
         /\bzod\b/i,
-        /ZodError/,
-        /\bvalidat(?:e|ion|or)\s*\(/i,
+        /\bZodError\b/,
+        /\bvalidate\s*\(/i,
+        /\bvalidat(?:ion|or)\b/i,
       ];
 
       for (const pattern of patterns) {
