@@ -958,7 +958,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
 };
 
 function getErrorMessage(error: unknown): string {
-  /* v8 ignore start -- upstream: catch blocks in this module always throw Error instances @preserve */
+  /* v8 ignore start -- upstream: catch blocks always throw Error instances — non-Error branch is unreachable @preserve */
   if (error instanceof Error) {
     return error.message;
   }

@@ -77,7 +77,7 @@ export async function getIssueDetail(
     description: issue.description,
     state: { name: issue.state, type: issue.stateType },
     priority: issue.priority,
-    /* v8 ignore start -- ts-type: assigneeName always set when assigneeId is non-null @preserve */
+    /* v8 ignore start -- ts-type: nullish coalescing fallback for assigneeName; always provided when assigneeId is non-null @preserve */
     assignee: issue.assigneeId !== null ? { id: issue.assigneeId, name: issue.assigneeName ?? '' } : null,
     /* v8 ignore stop @preserve */
     labels: issue.labels.map((label) => ({ id: label.id, name: label.name, color: label.color })),

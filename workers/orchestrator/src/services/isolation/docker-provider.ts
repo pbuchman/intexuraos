@@ -1497,7 +1497,7 @@ export class DockerProvider implements IsolationProvider {
                 { taskId },
                 'Exec process exited but stream still open — resolving via inspect fallback'
               );
-              /* v8 ignore start -- ts-type: typeof check for Docker API ExitCode which may be null @preserve */
+              /* v8 ignore start -- ts-type: null check for Docker API ExitCode which narrows nullable number @preserve */
               resolveWith(typeof info.ExitCode === 'number' ? info.ExitCode : 1);
               /* v8 ignore stop @preserve */
             }

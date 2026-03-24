@@ -92,7 +92,7 @@ function readRepoGitConfig(repoPath: string, key: string): string | undefined {
 /**
  * Validate GCP credentials are properly configured
  */
-/* v8 ignore start -- test-infra: process.exit() in validation function @preserve */
+/* v8 ignore start -- test-infra: cannot test startup validation that calls process.exit() @preserve */
 function validateGcpCredentials(gcpSaKeyPath: string, projectId: string): void {
   // Check if credentials file exists
   if (!existsSync(gcpSaKeyPath)) {
@@ -125,7 +125,7 @@ function validateGcpCredentials(gcpSaKeyPath: string, projectId: string): void {
 /**
  * Check if a port is available (synchronous check using lsof)
  */
-/* v8 ignore start -- test-infra: process.exit() in validation function @preserve */
+/* v8 ignore start -- test-infra: cannot test startup validation that calls process.exit() @preserve */
 function validatePortAvailable(port: number): void {
   try {
     // Use lsof to check if port is in use
@@ -153,7 +153,7 @@ function validatePortAvailable(port: number): void {
  * Validates Anthropic OAuth credentials and third-party API keys.
  * Warns (does not exit) so tasks of one type can still run if the other fails.
  */
-/* v8 ignore start -- test-infra: startup validation with network call @preserve */
+/* v8 ignore start -- test-infra: cannot test startup bootstrap that makes live network calls @preserve */
 async function fetchWithRetry(
   input: string,
   init: RequestInit & { signal?: AbortSignal },
@@ -297,7 +297,7 @@ function ensureDirectoryExists(path: string): void {
  * Get GitHub private key from Secret Manager or cached file.
  * The key is multiline (PEM format) so it can't be in .envrc.
  */
-/* v8 ignore start -- test-infra: process.exit() in catch block terminates the process @preserve */
+/* v8 ignore start -- test-infra: cannot test bootstrap function that calls process.exit() on failure @preserve */
 function getGitHubPrivateKey(projectId: string, cachePath: string, gcpSaKeyPath: string): string {
   // Check env var first (for testing or manual override)
   const envKey = process.env['INTEXURAOS_GITHUB_APP_PRIVATE_KEY'];

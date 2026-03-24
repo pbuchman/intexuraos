@@ -156,7 +156,7 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
 
         // Get raw body for signature validation
         const rawBody =
-          /* v8 ignore start -- ts-type: Fastify inject() does not populate rawBody property @preserve */
+          /* v8 ignore start -- ts-type: Fastify inject() does not expose rawBody, fallback unreachable in tests @preserve */
           (request as unknown as { rawBody?: string }).rawBody ?? JSON.stringify(request.body);
           /* v8 ignore stop @preserve */
 

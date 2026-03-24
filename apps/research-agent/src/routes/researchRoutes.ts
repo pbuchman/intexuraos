@@ -723,14 +723,14 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
-      /* v8 ignore start -- upstream: getResearch returns null only when Firestore doc missing; route test always seeds the document @preserve */
+      /* v8 ignore start -- upstream: prior check validated result.ok; null branch is not reachable when test always seeds document @preserve */
       if (result.value === null) {
       /* v8 ignore stop @preserve */
         return await reply.fail('NOT_FOUND', 'Research not found');
       }
 
       // Check ownership
-      /* v8 ignore start -- upstream: result.value === null check above ensures value exists; ownership mismatch requires multi-user test setup @preserve */
+      /* v8 ignore start -- upstream: prior check ensures value is not null; ownership mismatch not reachable without multi-user test setup @preserve */
       if (result.value.userId !== user.userId) {
       /* v8 ignore stop @preserve */
         return await reply.fail('FORBIDDEN', 'Access denied');
@@ -985,10 +985,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               message: 'Synthesis completed successfully',
             });
           }
-          /* v8 ignore start -- ts-type: error type has message field but TypeScript can't narrow after !ok check @preserve */
+          /* v8 ignore start -- ts-type: type narrowing cannot prove error is defined after !ok check @preserve */
           return await reply.fail('INTERNAL_ERROR', synthesisResult.error ?? 'Synthesis failed');
           /* v8 ignore stop @preserve */
-        /* v8 ignore start -- ts-type: error type has message field but TypeScript can't narrow after !ok check @preserve */
+        /* v8 ignore start -- ts-type: unreachable closing brace — type narrowing cannot prove exhaustiveness @preserve */
         }
         /* v8 ignore stop @preserve */
 
@@ -1005,15 +1005,15 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           if (retryResult.ok) {
             return await reply.ok({
               action: 'retry',
-              /* v8 ignore start -- ts-type: retriedModels is array but TypeScript can't narrow after ok check @preserve */
+              /* v8 ignore start -- ts-type: noUncheckedIndexedAccess nullish coalescing fallback for retriedModels @preserve */
               message: `Retrying failed models: ${(retryResult.retriedModels ?? []).join(', ')}`,
               /* v8 ignore stop @preserve */
             });
           }
-          /* v8 ignore start -- ts-type: error type has message field but TypeScript can't narrow after !ok check @preserve */
+          /* v8 ignore start -- ts-type: type narrowing cannot prove error is defined after !ok check @preserve */
           return await reply.fail('INTERNAL_ERROR', retryResult.error ?? 'Retry failed');
           /* v8 ignore stop @preserve */
-        /* v8 ignore start -- ts-type: error type has message field but TypeScript can't narrow after !ok check @preserve */
+        /* v8 ignore start -- ts-type: unreachable closing brace — type narrowing cannot prove exhaustiveness @preserve */
         }
         /* v8 ignore stop @preserve */
 
@@ -1131,15 +1131,15 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (retryResult.error?.startsWith('Cannot retry from status') === true) {
           return await reply.fail('CONFLICT', retryResult.error);
         }
-        /* v8 ignore start -- ts-type: error type has message field but TypeScript can't narrow after !ok check @preserve */
+        /* v8 ignore start -- ts-type: type narrowing cannot prove error is defined after !ok check @preserve */
         return await reply.fail('INTERNAL_ERROR', retryResult.error ?? 'Retry failed');
         /* v8 ignore stop @preserve */
-      /* v8 ignore start -- ts-type: error type has message field but TypeScript can't narrow after !ok check @preserve */
+      /* v8 ignore start -- ts-type: unreachable closing brace — type narrowing cannot prove exhaustiveness @preserve */
       }
       /* v8 ignore stop @preserve */
 
       const messages: Record<string, string> = {
-        /* v8 ignore start -- ts-type: retriedModels is array but TypeScript can't narrow after ok check @preserve */
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess nullish coalescing fallback for retriedModels @preserve */
         retried_llms: `Retrying failed models: ${(retryResult.retriedModels ?? []).join(', ')}`,
         /* v8 ignore stop @preserve */
         retried_synthesis: 'Re-running synthesis',
@@ -1205,7 +1205,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (!sourceResult.ok) {
         return await reply.fail('INTERNAL_ERROR', 'Failed to fetch source research');
       }
-      /* v8 ignore start -- upstream: sourceResult.ok check above ensures result is valid; null branch requires Firestore doc to not exist @preserve */
+      /* v8 ignore start -- upstream: prior check validated result.ok; null branch is not reachable when Firestore doc always exists in tests @preserve */
       if (sourceResult.value === null) {
       /* v8 ignore stop @preserve */
         return await reply.fail('NOT_FOUND', 'Source research not found');
@@ -1383,10 +1383,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (result.error === 'Research is not shared') {
           return await reply.fail('CONFLICT', result.error);
         }
-        /* v8 ignore start -- ts-type: error type has message field but TypeScript can't narrow @preserve */
+        /* v8 ignore start -- ts-type: type narrowing cannot prove error is defined after !ok check @preserve */
         return await reply.fail('INTERNAL_ERROR', result.error ?? 'Failed to unshare');
         /* v8 ignore stop @preserve */
-      /* v8 ignore start -- ts-type: error type has message field but TypeScript can't narrow @preserve */
+      /* v8 ignore start -- ts-type: unreachable closing brace — type narrowing cannot prove exhaustiveness @preserve */
       }
       /* v8 ignore stop @preserve */
 

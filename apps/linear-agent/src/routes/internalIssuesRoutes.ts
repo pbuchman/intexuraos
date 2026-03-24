@@ -618,14 +618,14 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
       const identifierOrder = new Map(
         request.body.identifiers.map((id, idx) => [id, idx])
       );
-      /* v8 ignore start -- ts-type: Map.get() returns T | undefined but all found issues have identifiers in the input map @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess forces undefined check; Map.get() always returns a value because all found issues have identifiers in the input map @preserve */
       const sortedIssues = [...foundIssues].sort(
         (a, b) => (identifierOrder.get(a.identifier) ?? 0) - (identifierOrder.get(b.identifier) ?? 0)
       );
       /* v8 ignore stop @preserve */
 
       const issues: IssueDisplayResponse[] = sortedIssues.map((issue) => {
-        /* v8 ignore start -- ts-type: Map.get() returns T | undefined but getCommentSummaries returns entry for every issueId @preserve */
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess forces undefined check; Map.get() always returns a value because getCommentSummaries guarantees an entry for every issueId @preserve */
         const summary = summaryMap.get(issue.id) ?? { commentCount: 0, lastCommentAt: null };
         /* v8 ignore stop @preserve */
         return buildIssueDisplayResponse(issue, summary);

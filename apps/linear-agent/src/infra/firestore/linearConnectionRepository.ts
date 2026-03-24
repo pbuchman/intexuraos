@@ -188,7 +188,7 @@ export async function findUserIdsByTeamId(teamId: string): Promise<Result<string
       .where('teamId', '==', teamId)
       .get();
 
-    /* v8 ignore start -- test-infra: Firestore integration requires real database mock @preserve */
+    /* v8 ignore start -- test-infra: cannot reach non-empty snapshot branch; FakeLinearConnectionRepository returns canned results without Firestore queries @preserve */
     if (snapshot.empty) return ok([]);
     const userIds = snapshot.docs.map((doc) => doc.id);
     return ok(userIds);
@@ -213,7 +213,7 @@ export async function findWebhookSecretByTeamId(
       .limit(1)
       .get();
 
-    /* v8 ignore start -- test-infra: Firestore integration requires real database mock @preserve */
+    /* v8 ignore start -- test-infra: cannot reach snapshot branches; FakeLinearConnectionRepository returns canned results without Firestore queries @preserve */
     if (snapshot.empty) return ok(null);
     const doc = snapshot.docs[0];
     if (!doc) return ok(null); // Defensive check
