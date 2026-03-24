@@ -1193,8 +1193,19 @@ async function main() {
   const startComments = comments.filter((c) => c.type === 'start');
   const blockCount = startComments.length;
 
-  // Report override skips
-  const allOverrideSkips = [...patternOverrideSkips, ...neverValidOverrideSkips];
+  // Report override skips (deduplicate by file:line)
+  const allOverrideSkipsRaw = [
+    ...blockerOverrideSkips,
+    ...patternOverrideSkips,
+    ...neverValidOverrideSkips,
+  ];
+  const seenOverrides = new Set();
+  const allOverrideSkips = allOverrideSkipsRaw.filter((skip) => {
+    const key = `${skip.file}:${skip.line}`;
+    if (seenOverrides.has(key)) return false;
+    seenOverrides.add(key);
+    return true;
+  });
   if (allOverrideSkips.length > 0) {
     console.log(`\n⏭ ${allOverrideSkips.length} block(s) skipped via overrides:`);
     for (const skip of allOverrideSkips) {
