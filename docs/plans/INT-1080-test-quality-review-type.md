@@ -144,9 +144,18 @@ Modify `apps/code-agent/src/domain/prompts/githubAgentPrompt.ts`, in the `buildP
 '- **test_quality**: Test quality review. Request when PR has significant test file changes (.test.ts, .spec.ts). Checks for false positives, testing granularity, v8 ignore legitimacy, and test design.',
 ```
 
+Also add Example 4 after the existing Example 3 (around line 115):
+
+```typescript
+'Example 4 — PR with significant test file changes:',
+'1. Call `request_review({"review_type":"code_quality"})`',
+'2. Call `request_review({"review_type":"test_quality"})`',
+'3. Respond: "Requested code_quality and test_quality reviews for test-heavy PR."',
+```
+
 Also bump the prompt version from `'5.1.1'` to `'5.2.0'` (minor: new enum value added).
 
-**Note:** If an existing test asserts the prompt version (e.g., `expect(version).toBe('5.1.1')`), update that assertion to `'5.2.0'`.
+**Note:** If an existing test asserts the prompt version (e.g., `expect(version).toBe('5.1.1')`), update that assertion to `'5.2.0'` and fix the misleading test description (e.g., `it('has version 5.0.0', ...)` should be updated to `it('has version 5.2.0', ...)`).
 
 - [ ] **Step 8: Run test to verify it passes**
 
@@ -201,6 +210,13 @@ it('includes test_quality alongside other types when both are requested', () => 
   expect(result).toContain('🔍 Code Quality');
   expect(result).toContain('🧪 Test Quality');
   expect(result).not.toContain('🔒 Security');
+});
+
+it('includes test_quality in the review scope description', () => {
+  const result = reviewPrompt.build(baseParams);
+  expect(result).toContain('**test_quality**');
+  expect(result).toContain('False positives');
+  expect(result).toContain('v8 ignore legitimacy');
 });
 ```
 
