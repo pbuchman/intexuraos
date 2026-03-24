@@ -58,7 +58,7 @@ This string literal is the contract. Each service owns its own validation and re
 
 - [ ] **Step 1: Write test for reviewTypes constant**
 
-Create `apps/code-agent/src/__tests__/domain/constants/reviewTypes.test.ts`:
+Create `apps/code-agent/src/__tests__/domain/constants/reviewTypes.test.ts` (note: the `__tests__/domain/constants/` directory does not exist yet — create it first with `mkdir -p`):
 
 ```typescript
 import { describe, it, expect } from 'vitest';
