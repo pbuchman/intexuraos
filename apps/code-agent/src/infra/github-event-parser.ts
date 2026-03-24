@@ -638,19 +638,11 @@ export function parseCheckSuiteEvent(
 
   const createdAt = p['created_at'] ?? new Date().toISOString();
 
-  // Extract check runs if available (for check name)
-  const checkRuns = cs['check_runs'];
-  let checkName: string | undefined;
-  let checkRunUrl: string | undefined;
-  if (Array.isArray(checkRuns) && checkRuns.length > 0) {
-    const firstRun = checkRuns[0] as Record<string, unknown>;
-    if (typeof firstRun['name'] === 'string') {
-      checkName = firstRun['name'];
-    }
-    if (typeof firstRun['html_url'] === 'string') {
-      checkRunUrl = firstRun['html_url'];
-    }
-  }
+  // Note: check_runs are NOT included in check_suite webhook payloads.
+  // To get individual check names, we would need to either:
+  // 1. Use check_run events instead (each fires with name, conclusion, html_url)
+  // 2. Fetch via REST API: GET /repos/{owner}/{repo}/check-suites/{id}/check-runs
+  // For now, checkName will be 'Unknown Check' in the dispatch service.
 
   // Store check_suite metadata in payload for later extraction
   const enrichedPayload: Record<string, unknown> = {
@@ -660,12 +652,6 @@ export function parseCheckSuiteEvent(
     conclusion,
     originalPayload: payload,
   };
-  if (checkName !== undefined) {
-    enrichedPayload['checkName'] = checkName;
-  }
-  if (checkRunUrl !== undefined) {
-    enrichedPayload['checkRunUrl'] = checkRunUrl;
-  }
 
   return ok({
     githubEventId: (p as { id?: number })['id'] ?? Date.now(),

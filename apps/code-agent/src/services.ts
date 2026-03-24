@@ -363,8 +363,11 @@ export function initServices(config: ServiceConfig): void {
     // both intexuraos/* and */intexuraos patterns. Adding it here would be
     // redundant and risks scope mismatch (see PR #997 review).
     new CodeWorkerOutputRule(CODE_WORKER_BOTS),
-    new ActionableEventRule(ALLOWED_BOTS),
+    // CIFailureRule must come BEFORE ActionableEventRule to catch check_suite
+    // events before ActionableEventRule short-circuits with "skip" (check_suite
+    // is not in ActionableEventRule's list of known event types).
     new CIFailureRule(),
+    new ActionableEventRule(ALLOWED_BOTS),
     new ProtectedBaseBranchRule(),
     new SenderWhitelistRule(ALLOWED_BOTS),
     new SkipPrefixRule(['@claude', '@codex', '@ignore']),
