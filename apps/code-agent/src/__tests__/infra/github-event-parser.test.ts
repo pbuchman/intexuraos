@@ -10,6 +10,7 @@ import {
   parseIssueCommentEvent,
   parsePushEvent,
   parseGitHubWebhookEvent,
+  parseCheckSuiteEvent,
   shouldProcessRepository,
 } from '../../infra/github-event-parser.js';
 
@@ -2011,6 +2012,220 @@ describe('github-event-parser', () => {
       if (result.ok && result.value !== null) {
         expect(result.value.createdAt).toBeInstanceOf(Date); // @allow-result-access -- narrowed by result.ok && result.value !== null
         expect(result.value.createdAt).toEqual(createdDate); // @allow-result-access -- Date instance passed through
+      }
+    });
+  });
+
+  describe('parseCheckSuiteEvent', () => {
+    const validCheckSuiteFailurePayload = {
+      action: 'completed',
+      check_suite: {
+        id: 123,
+        head_branch: 'task_abc123',
+        head_sha: 'abc123def456',
+        conclusion: 'failure',
+        pull_requests: [
+          {
+            id: 101,
+            number: 42,
+            title: 'Fix the bug',
+            body: 'Description',
+            state: 'open',
+          },
+        ],
+      },
+      repository: {
+        id: 456,
+        full_name: 'intexuraos/code-agent',
+      },
+      sender: {
+        login: 'testuser',
+        id: 111,
+        type: 'User',
+      },
+    };
+
+    it('should parse check_suite event with failure conclusion', () => {
+      const result = parseCheckSuiteEvent(validCheckSuiteFailurePayload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).not.toBeNull(); // @allow-result-access -- narrowed by result.ok
+        if (result.value !== null) {
+          expect(result.value.eventType).toBe('check_suite');
+          expect(result.value.action).toBe('completed');
+          expect(result.value.repository).toBe('intexuraos/code-agent');
+          expect(result.value.pullRequestNumber).toBe(42);
+          expect(result.value.baseBranch).toBe('task_abc123');
+        }
+      }
+    });
+
+    it('should return null for success conclusion', () => {
+      const successPayload = {
+        ...validCheckSuiteFailurePayload,
+        check_suite: {
+          ...validCheckSuiteFailurePayload.check_suite,
+          conclusion: 'success',
+        },
+      };
+
+      const result = parseCheckSuiteEvent(successPayload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('should return null for neutral conclusion', () => {
+      const neutralPayload = {
+        ...validCheckSuiteFailurePayload,
+        check_suite: {
+          ...validCheckSuiteFailurePayload.check_suite,
+          conclusion: 'neutral',
+        },
+      };
+
+      const result = parseCheckSuiteEvent(neutralPayload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('should return error for invalid payload', () => {
+      const result = parseCheckSuiteEvent(null);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_PAYLOAD');
+        expect(result.error.message).toBe('Payload is not an object');
+      }
+    });
+
+    it('should return null for missing action (only processes completed)', () => {
+      const payloadWithoutAction = {
+        check_suite: {
+          id: 123,
+          head_branch: 'task_abc123',
+          head_sha: 'abc123def456',
+          conclusion: 'failure',
+          pull_requests: [{ id: 101, number: 42 }],
+        },
+        repository: {
+          id: 456,
+          full_name: 'intexuraos/code-agent',
+        },
+        sender: {
+          login: 'testuser',
+          id: 111,
+          type: 'User',
+        },
+      };
+
+      const result = parseCheckSuiteEvent(payloadWithoutAction);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('should return error for missing check_suite', () => {
+      const payloadWithoutCheckSuite = {
+        action: 'completed',
+        repository: {
+          id: 456,
+          full_name: 'intexuraos/code-agent',
+        },
+        sender: {
+          login: 'testuser',
+          id: 111,
+          type: 'User',
+        },
+      };
+
+      const result = parseCheckSuiteEvent(payloadWithoutCheckSuite);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_PAYLOAD');
+      }
+    });
+
+    it('should return null when check_suite has no pull_requests', () => {
+      const payloadWithoutPRs = {
+        action: 'completed',
+        check_suite: {
+          id: 123,
+          head_branch: 'task_abc123',
+          head_sha: 'abc123def456',
+          conclusion: 'failure',
+          pull_requests: [],
+        },
+        repository: {
+          id: 456,
+          full_name: 'intexuraos/code-agent',
+        },
+        sender: {
+          login: 'testuser',
+          id: 111,
+          type: 'User',
+        },
+      };
+
+      const result = parseCheckSuiteEvent(payloadWithoutPRs);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('should return null when action is not completed', () => {
+      const payloadWithInProgressAction = {
+        ...validCheckSuiteFailurePayload,
+        action: 'in_progress',
+      };
+
+      const result = parseCheckSuiteEvent(payloadWithInProgressAction);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('should handle check_suite without head_branch', () => {
+      const payloadWithoutBranch = {
+        action: 'completed',
+        check_suite: {
+          id: 123,
+          head_sha: 'abc123def456',
+          conclusion: 'failure',
+          pull_requests: [{ id: 101, number: 42 }],
+        },
+        repository: {
+          id: 456,
+          full_name: 'intexuraos/code-agent',
+        },
+        sender: {
+          login: 'testuser',
+          id: 111,
+          type: 'User',
+        },
+      };
+
+      const result = parseCheckSuiteEvent(payloadWithoutBranch);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).not.toBeNull();
+        if (result.value !== null) {
+          expect(result.value.baseBranch).toBeNull();
+        }
       }
     });
   });

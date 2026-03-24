@@ -12,7 +12,7 @@ import type { GitHubPREvent } from '../models/gitHubPREvent.js';
 import type { CreateEventDecisionInput } from '../models/eventDecision.js';
 import type { EventDecisionReviewType } from '../models/eventDecision.js';
 import type { WebhookRulesService, RuleOutcome } from './gitHubWebhookRules.js';
-import type { WebhookDispatchService } from './gitHubDispatchService.js';
+import type { WebhookDispatchService, CIFailureDispatchService } from './gitHubDispatchService.js';
 import { resolveLoginForTaskCreation } from './gitHubDispatchService.js';
 import type { EventDecisionRepository } from '../repositories/eventDecisionRepository.js';
 import type { GitHubAgentEvalResult, GitHubAgentError } from '../usecases/githubAgent.js';
@@ -28,6 +28,7 @@ import type { AutomationLog } from '../ports/automationLog.js';
 export interface UnifiedEvaluatorDeps {
   webhookRules: WebhookRulesService;
   dispatchService: WebhookDispatchService;
+  ciFailureDispatchService?: CIFailureDispatchService;
   eventDecisionRepo: EventDecisionRepository;
   gitHubEventLogEntryRepo?: GitHubEventLogEntryRepository;
   evaluateEvent?: ((event: GitHubPREvent, correctionContext?: string) => Promise<Result<GitHubAgentEvalResult, GitHubAgentError>>) | undefined;
@@ -97,6 +98,38 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
             }, startTime, logger);
             return;
           }
+        }
+
+        // Special handling for CI failures on agent-created PRs
+        if (ruleOutcome.reason === 'CHECK_SUITE_TASK_BRANCH' && deps.ciFailureDispatchService !== undefined) {
+          const ciResult = await deps.ciFailureDispatchService.dispatchCIFailure({ event, logger });
+
+          if (ciResult.skipped === true) {
+            // Record automation log: ci_failure_skip
+            const skipEvent: { type: 'ci_failure_skip'; reason: string; headBranch?: string } = {
+              type: 'ci_failure_skip',
+              reason: ciResult.skipReason ?? 'unknown',
+              ...(event.baseBranch !== null && { headBranch: event.baseBranch }),
+            };
+            recordLog(event, skipEvent);
+
+            await recordDecision(deps, event, {
+              decidedBy: 'hard_rules',
+              decision: 'skip',
+              reason: `ci_failure_skipped: ${ciResult.skipReason ?? 'unknown'}`,
+            }, startTime, logger);
+          } else {
+            await recordDecision(deps, event, {
+              decidedBy: 'hard_rules',
+              decision: 'dispatch',
+              reason: 'ci_failure_fix_dispatched',
+              dispatchSuccess: ciResult.success,
+              dispatchAction: 'create_task',
+              dispatchParams: ciResult.fixTaskId !== undefined ? { taskId: ciResult.fixTaskId } : undefined,
+              ...(ciResult.error !== undefined && { dispatchError: ciResult.error }),
+            }, startTime, logger);
+          }
+          return;
         }
 
         await dispatchAndRecord(deps, event, ruleOutcome, startTime, logger);

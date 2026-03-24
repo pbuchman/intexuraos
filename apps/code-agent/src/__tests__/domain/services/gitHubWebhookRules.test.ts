@@ -8,6 +8,7 @@ import {
   BotReviewEditRule,
   CodeWorkerOutputRule,
   GitHubWebhookRules,
+  CIFailureRule,
 } from '../../../domain/services/gitHubWebhookRules.js';
 import { isPlanFile, evaluatePlanFiles } from '../../../domain/utils/planDetection.js';
 
@@ -906,6 +907,87 @@ describe('GitHubWebhookRules', () => {
         new SenderWhitelistRule(new Set(['test-user']))
       ]);
       expect(() => service.evaluate(partialEvent)).not.toThrow();
+    });
+  });
+
+  describe('CIFailureRule', () => {
+    it('should dispatch for check_suite event on task_ branch', () => {
+      const event = {
+        ...mockEvent,
+        eventType: 'check_suite' as const,
+        action: 'completed' as const,
+        baseBranch: 'task_abc123',
+      };
+      const rule = new CIFailureRule();
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({
+        action: 'dispatch',
+        reason: 'CHECK_SUITE_TASK_BRANCH',
+        context: { headBranch: 'task_abc123' }
+      });
+    });
+
+    it('should skip check_suite event on non-task branch', () => {
+      const event = {
+        ...mockEvent,
+        eventType: 'check_suite' as const,
+        action: 'completed' as const,
+        baseBranch: 'main',
+      };
+      const rule = new CIFailureRule();
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({
+        action: 'skip',
+        reason: 'CHECK_SUITE_NON_TASK_BRANCH',
+        context: { headBranch: 'main' }
+      });
+    });
+
+    it('should skip check_suite event with null baseBranch', () => {
+      const event = {
+        ...mockEvent,
+        eventType: 'check_suite' as const,
+        action: 'completed' as const,
+        baseBranch: null,
+      };
+      const rule = new CIFailureRule();
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({
+        action: 'skip',
+        reason: 'CHECK_SUITE_NO_BRANCH_INFO'
+      });
+    });
+
+    it('should pass through non-check_suite events', () => {
+      const event = {
+        ...mockEvent,
+        eventType: 'pull_request' as const,
+        action: 'opened' as const,
+      };
+      const rule = new CIFailureRule();
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({
+        action: 'dispatch',
+        reason: 'NOT_A_CHECK_SUITE_EVENT'
+      });
+    });
+
+    it('should dispatch for check_suite on feature branch with task_ prefix', () => {
+      const event = {
+        ...mockEvent,
+        eventType: 'check_suite' as const,
+        action: 'completed' as const,
+        baseBranch: 'task_123-feature-x',
+      };
+      const rule = new CIFailureRule();
+      const result = rule.evaluate(event);
+
+      expect(result.action).toBe('dispatch');
+      expect(result.reason).toBe('CHECK_SUITE_TASK_BRANCH');
     });
   });
 });

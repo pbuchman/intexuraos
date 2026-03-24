@@ -106,6 +106,28 @@ export type AutomationEvent =
       type: 'review_replaced';
       replacedTaskId: string;
       replacedWorkerType?: string;
+    }
+
+  // Phase 7: CI Failure handling (INT-853)
+  | {
+      type: 'ci_failure_detected';
+      checkName: string;
+      conclusion: string;
+      headBranch: string;
+      headSha: string;
+      checkSuiteId: number;
+      prUrl?: string;
+    }
+  | {
+      type: 'fix_task_dispatched';
+      parentTaskId: string;
+      fixTaskId: string;
+      checkName: string;
+    }
+  | {
+      type: 'ci_failure_skip';
+      reason: string;
+      headBranch?: string;
     };
 
 export interface AutomationLog {

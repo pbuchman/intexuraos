@@ -51,8 +51,8 @@ import { createGitHubPRHttpClient } from './infra/http/gitHubPRHttpClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { createUserServiceClient } from '@intexuraos/internal-clients';
 import { createGitHubUsernameResolver } from './infra/services/gitHubUsernameResolverImpl.js';
-import { CodeWorkerOutputRule, ActionableEventRule, ProtectedBaseBranchRule, SenderWhitelistRule, SkipPrefixRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
-import { createWebhookDispatchService, type WebhookDispatchService } from './domain/services/gitHubDispatchService.js';
+import { CodeWorkerOutputRule, ActionableEventRule, ProtectedBaseBranchRule, SenderWhitelistRule, SkipPrefixRule, CIFailureRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
+import { createWebhookDispatchService, type WebhookDispatchService, type CIFailureDispatchService } from './domain/services/gitHubDispatchService.js';
 import { createWebhookMessageBuilder } from './domain/services/gitHubMessageBuilder.js';
 import { ALLOWED_BOTS, CODE_WORKER_BOTS } from './routes/webhooks/github.js';
 import { createToolCallingClient } from '@intexuraos/llm-factory';
@@ -364,6 +364,7 @@ export function initServices(config: ServiceConfig): void {
     // redundant and risks scope mismatch (see PR #997 review).
     new CodeWorkerOutputRule(CODE_WORKER_BOTS),
     new ActionableEventRule(ALLOWED_BOTS),
+    new CIFailureRule(),
     new ProtectedBaseBranchRule(),
     new SenderWhitelistRule(ALLOWED_BOTS),
     new SkipPrefixRule(['@claude', '@codex', '@ignore']),
@@ -412,7 +413,7 @@ export function initServices(config: ServiceConfig): void {
     orchestratorSecret: config.orchestratorSecret,
   });
 
-  const dispatchService = createWebhookDispatchService({
+  const dispatchServiceResult = createWebhookDispatchService({
     gitHubPREventRepo,
     codeTaskRepo,
     logLineRepo,
@@ -434,12 +435,15 @@ export function initServices(config: ServiceConfig): void {
     automationLog,
   });
 
+  const dispatchService: WebhookDispatchService & CIFailureDispatchService = dispatchServiceResult;
+
   const mergeQueueWatchRepo = createFirestoreMergeQueueWatchRepository({ logger });
   const eventDecisionRepo = createFirestoreEventDecisionRepository({ logger });
 
   const unifiedEvaluator = createUnifiedEvaluator({
     webhookRules,
     dispatchService,
+    ciFailureDispatchService: dispatchService,
     eventDecisionRepo,
     gitHubEventLogEntryRepo,
     evaluateEvent: toolCallingClient !== undefined
