@@ -118,31 +118,34 @@ const CATEGORY_SPECIFIC_KEYWORDS = {
   regex: ['capture group', 'regex match'],
 };
 
-function validateBlockerKeywords(comments) {
+const BLOCKER_KEYWORD_HINT = `Must contain at least one of: ${BLOCKER_KEYWORDS.slice(0, 5).join(', ')}, ... See .claude/reference/coverage-exemptions.md for full list.`;
+
+function validateBlockerKeywords(comments, overriddenFiles, taskMap) {
   const errors = [];
+  const overrideSkips = [];
 
   for (const comment of comments) {
     if (comment.type === 'stop') continue;
 
     const explanation = (comment.explanation ?? '').toLowerCase();
     const categoryKeywords = CATEGORY_SPECIFIC_KEYWORDS[comment.category] ?? [];
-    const allKeywords = [...BLOCKER_KEYWORDS, ...categoryKeywords];
 
-    const hasBlocker = allKeywords.some((kw) => explanation.includes(kw));
+    const hasBlocker =
+      BLOCKER_KEYWORDS.some((kw) => explanation.includes(kw)) ||
+      categoryKeywords.some((kw) => explanation.includes(kw));
 
     if (!hasBlocker) {
+      if (checkOverride(comment, overriddenFiles, taskMap, overrideSkips)) continue;
+
       errors.push({
         file: comment.file,
         line: comment.line,
-        message:
-          `Explanation lacks blocker keyword. ` +
-          `Must contain at least one of: ${BLOCKER_KEYWORDS.slice(0, 5).join(', ')}, ... ` +
-          `See .claude/reference/coverage-exemptions.md for full list.`,
+        message: `Explanation lacks blocker keyword. ${BLOCKER_KEYWORD_HINT}`,
       });
     }
   }
 
-  return { errors };
+  return { errors, overrideSkips };
 }
 
 // ============================================================================
@@ -1126,11 +1129,15 @@ async function main() {
   // Phase B: Syntax validation
   const { errors: syntaxErrors, validComments } = validateSyntax(comments);
 
-  // Phase B-1: Blocker keyword enforcement
-  const { errors: blockerErrors } = validateBlockerKeywords(Array.from(validComments));
-
   // Load overrides
   const { overriddenFiles, taskMap } = loadOverrides();
+
+  // Phase B-1: Blocker keyword enforcement
+  const { errors: blockerErrors, overrideSkips: blockerOverrideSkips } = validateBlockerKeywords(
+    Array.from(validComments),
+    overriddenFiles,
+    taskMap
+  );
 
   // Phase C: Pattern validation
   const { errors: patternErrors, overrideSkips: patternOverrideSkips } = validatePatterns(
