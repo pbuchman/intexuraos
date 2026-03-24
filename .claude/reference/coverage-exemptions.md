@@ -48,21 +48,48 @@ Rule: If you can write a mock/fake to trigger the branch, it's not a valid v8 ig
 
 The `--` explanation MUST contain at least one blocker keyword proving the branch is genuinely untestable:
 
-| Keyword | Example usage |
-| --- | --- |
-| `cannot` | FakeHttpClient cannot simulate AbortError |
-| `unable` | unable to mock internal SDK property getter |
-| `impossible` | impossible to trigger race condition in unit test |
-| `always returns` | FakeAuth always returns valid user |
-| `always succeeds` | FakePubSub always succeeds, no error path |
-| `no support` | nock has no support for streaming responses |
-| `not mockable` | SDK getter property not mockable via fake |
-| `not reachable` | branch not reachable after upstream guard |
-| `never triggered` | callback never triggered during test teardown |
-| `no way to` | no way to simulate partial write in FakeFirestore |
-| `does not expose` | SDK does not expose error state for testing |
+**Universal keywords** (accepted for all categories):
 
-**Validation:** `node scripts/verify-v8-ignore.mjs` reports warnings for missing keywords (Phase B-1). Will become a hard error once all explanations are updated.
+| Keyword                      | Example usage                                          |
+| ---------------------------- | ------------------------------------------------------ |
+| `cannot`                     | FakeHttpClient cannot simulate AbortError              |
+| `unable`                     | unable to mock internal SDK property getter            |
+| `impossible`                 | impossible to trigger race condition in unit test      |
+| `always returns`             | FakeAuth always returns valid user                     |
+| `always succeeds`            | FakePubSub always succeeds, no error path              |
+| `always provides`            | FakeAuthPlugin always provides userId                  |
+| `always has`                 | upstream guard always has non-null value               |
+| `always include`             | nock mocks always include required fields              |
+| `always defined`             | Zod parse guarantees field always defined              |
+| `no support`                 | nock has no support for streaming responses            |
+| `not mockable`               | SDK getter property not mockable via fake              |
+| `not reachable`              | branch not reachable after upstream guard              |
+| `not unit-testable`          | entry point bootstrapping not unit-testable            |
+| `not tracked`                | coverage not tracked for generated code                |
+| `never triggered`            | callback never triggered during test teardown          |
+| `no way to`                  | no way to simulate partial write in FakeFirestore      |
+| `does not expose`            | SDK does not expose error state for testing            |
+| `unreachable`                | ?? fallback unreachable after upstream guard           |
+| `guarantees`                 | regex .+ capture group guarantees non-empty string     |
+| `guaranteed`                 | loop bound guaranteed by prior length check            |
+| `fallback`                   | noUncheckedIndexedAccess fallback                      |
+| `defensive`                  | defensive check for raw JS callers                     |
+| `false positive`             | coverage false positive from source map alignment      |
+| `noUncheckedIndexedAccess`   | noUncheckedIndexedAccess requires fallback             |
+| `exactOptionalPropertyTypes` | exactOptionalPropertyTypes requires explicit undefined |
+
+**Category-specific keywords** (accepted only for the listed category):
+
+| Category      | Additional keywords                                      |
+| ------------- | -------------------------------------------------------- |
+| `ts-type`     | `narrowing`, `narrows`, `type narrowing`, `type guard`   |
+| `module-init` | `cold start`, `bootstrap`, `entry point`                 |
+| `source-map`  | `source map`, `coverage tooling`                         |
+| `upstream`    | `guard`, `upstream guard`, `prior check`, `early return` |
+| `schema`      | `schema validation`, `Zod`, `safeParse`                  |
+| `regex`       | `capture group`, `exec`, `match`                         |
+
+**Validation:** `node scripts/verify-v8-ignore.mjs` reports warnings for missing keywords (Phase B-1). Will become a hard error once all explanations are updated. Canonical keyword list maintained in `scripts/verify-v8-ignore.mjs`.
 
 ## Override Mechanism
 

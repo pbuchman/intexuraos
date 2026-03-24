@@ -65,17 +65,49 @@ const BLOCKER_KEYWORDS = [
   'impossible',
   'always returns',
   'always succeeds',
+  'always provides',
+  'always has',
+  'always include',
+  'always defined',
   'no support',
   'not mockable',
   'not reachable',
+  'not unit-testable',
+  'not tracked',
   'never triggered',
   'no way to',
   'does not expose',
+  'unreachable',
+  'guarantees',
+  'guaranteed',
+  'fallback',
+  'defensive',
+  'false positive',
+  'noUncheckedIndexedAccess',
+  'exactOptionalPropertyTypes',
 ];
 
-const BLOCKER_KEYWORD_PATTERN = new RegExp(
-  BLOCKER_KEYWORDS.map((kw) => kw.replace(/\s+/g, '\\s+')).join('|'),
-  'i'
+// Category-specific keywords accepted in addition to universal keywords
+const CATEGORY_SPECIFIC_KEYWORDS = {
+  'ts-type': ['narrowing', 'narrows', 'type narrowing', 'type guard'],
+  'module-init': ['cold start', 'bootstrap', 'entry point'],
+  'source-map': ['source map', 'coverage tooling'],
+  upstream: ['guard', 'upstream guard', 'prior check', 'early return'],
+  schema: ['schema validation', 'Zod', 'safeParse'],
+  regex: ['capture group', 'exec', 'match'],
+};
+
+function buildKeywordPattern(keywords) {
+  return new RegExp(keywords.map((kw) => kw.replace(/\s+/g, '\\s+')).join('|'), 'i');
+}
+
+const BLOCKER_KEYWORD_PATTERN = buildKeywordPattern(BLOCKER_KEYWORDS);
+
+const CATEGORY_KEYWORD_PATTERNS = Object.fromEntries(
+  Object.entries(CATEGORY_SPECIFIC_KEYWORDS).map(([cat, kws]) => [
+    cat,
+    buildKeywordPattern([...BLOCKER_KEYWORDS, ...kws]),
+  ])
 );
 
 // ============================================================================
@@ -604,6 +636,7 @@ function validateSyntax(comments) {
 
 // ============================================================================
 // PHASE B-1: Blocker Keyword Enforcement (warnings until explanations updated)
+// TODO(INT-1073): promote to hard error once Subtask 2 merges
 // ============================================================================
 
 function validateBlockerKeywords(comments, overriddenFiles, taskMap) {
@@ -613,7 +646,10 @@ function validateBlockerKeywords(comments, overriddenFiles, taskMap) {
   for (const comment of comments) {
     if (!comment.explanation) continue;
 
-    if (!BLOCKER_KEYWORD_PATTERN.test(comment.explanation)) {
+    // Use category-specific pattern if available, otherwise universal
+    const pattern = CATEGORY_KEYWORD_PATTERNS[comment.category] ?? BLOCKER_KEYWORD_PATTERN;
+
+    if (!pattern.test(comment.explanation)) {
       if (checkOverride(comment, overriddenFiles, taskMap, overrideSkips)) continue;
 
       warnings.push({
