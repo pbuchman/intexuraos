@@ -1,26 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import nock from 'nock';
 import { OpenApiToolRegistry } from '../openapi-tool-registry.js';
 import type { ServiceDefinition } from '../../config.js';
 import type { Logger } from '@intexuraos/common-core';
-import { createTestLogger } from './test-helpers.js';
-
-function createSpyLogger(): {
-  info: ReturnType<typeof vi.fn>;
-  warn: ReturnType<typeof vi.fn>;
-  error: ReturnType<typeof vi.fn>;
-  debug: ReturnType<typeof vi.fn>;
-  child: () => ReturnType<typeof createSpyLogger>;
-} {
-  const logger: ReturnType<typeof createSpyLogger> = {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    child: () => createSpyLogger(),
-  };
-  return logger;
-}
+import { createTestLogger, createSpyLogger } from './test-helpers.js';
 
 const TEST_OPENAPI_SPEC = {
   openapi: '3.1.1',
