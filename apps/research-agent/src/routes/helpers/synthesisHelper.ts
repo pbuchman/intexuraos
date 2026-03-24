@@ -2,7 +2,7 @@
  * Synthesis helper functions for creating synthesis providers.
  */
 
-import { getProviderForModel, isOpenRouterModel, LlmModels, type LLMModel, type ModelPricing } from '@intexuraos/llm-contract';
+import { getProviderForModel, isOpenRouterModel, getOpenRouterRawId, LlmModels, type LLMModel, type ModelPricing } from '@intexuraos/llm-contract';
 import { getAllowlistPricing, isAllowedModel } from '@intexuraos/infra-openrouter';
 import type { ResearchModel } from '../../domain/research/index.js';
 import type { ServiceContainer, DecryptedApiKeys } from '../../services.js';
@@ -29,7 +29,7 @@ export function createSynthesisProviders(
 
   // Reject non-allowlisted OpenRouter models to enforce curated model policy
   /* v8 ignore start -- upstream: prior check for OpenRouter model validity ensures this fallback is never reached in unit tests @preserve */
-  if (isOpenRouterModel(synthesisModel) && !isAllowedModel(synthesisModel)) {
+  if (isOpenRouterModel(synthesisModel) && !isAllowedModel(getOpenRouterRawId(synthesisModel))) {
     throw new Error(
       `OpenRouter model '${synthesisModel}' is not in the curated allowlist. ` +
         'Allowed models: qwen/qwen3.5-plus-02-15, qwen/qwen3.5-flash-02-23, minimax/minimax-m2.7, ' +
@@ -42,7 +42,7 @@ export function createSynthesisProviders(
 
   /* v8 ignore start -- upstream: prior check for isAllowedModel validates model is in allowlist; getAllowlistPricing passthrough is guaranteed @preserve */
   const synthesisPricing = isOpenRouterModel(synthesisModel)
-    ? getAllowlistPricing(synthesisModel) as ModelPricing
+    ? getAllowlistPricing(getOpenRouterRawId(synthesisModel)) as ModelPricing
     : pricingContext.getPricing(synthesisModel as LLMModel);
   /* v8 ignore stop @preserve */
 
