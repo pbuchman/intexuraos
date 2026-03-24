@@ -594,6 +594,9 @@ const REVIEW_TYPE_SECTIONS: Record<string, string> = {
   plan_review: `### 📐 Plan Review
 **Verdict:** Ready / Gaps found / Needs rework
 - Finding 1...`,
+  test_quality: `### 🧪 Test Quality
+**Verdict:** Thorough / Minor gaps / Needs rework
+- Finding 1...`,
 };
 
 function buildReviewStructureSection(reviewTypes: string[] | undefined): string {
@@ -643,7 +646,7 @@ Rules:
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '7.0.0',
+  version: '7.1.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
       params;
@@ -687,6 +690,7 @@ You have been dispatched to review a pull request. The review types requested ar
 - **security**: Injection vulnerabilities (SQL, XSS, command), authentication/authorization issues, secrets exposure, OWASP top 10
 - **architecture**: Separation of concerns, dependency direction, API design, scalability, coupling/cohesion
 - **plan_review**: Plan document validation. Read the plan file carefully. Validate task decomposition, TDD discipline, file path accuracy, missing steps. Validate against the codebase: do referenced files exist? Do patterns match? Are interfaces correct? Flag over-engineering, missing error handling, incorrect assumptions about existing code. Do NOT review for code_quality/security/architecture — there is no code to review.
+- **test_quality**: (1) False positives — tests that pass but don't verify behavior (2) Testing granularity — too coarse or too fine (3) v8 ignore legitimacy — validate category, explanation names blocker not code, branch is genuinely untestable (4) Test isolation — state leaks, execution order deps (5) Assertion quality — weak assertions, missing edge cases
 
 ${
   linearIssueId !== undefined
