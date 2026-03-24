@@ -612,7 +612,7 @@ describe('OpenApiToolRegistry', () => {
 
     await spyRegistry.getToolsForService('code-agent');
 
-    expect(spyLogger.info).toHaveBeenCalledWith(
+    expect(spyLogger.debug).toHaveBeenCalledWith(
       { service: 'code-agent', openapiUrl: 'http://code-agent:8128/openapi.json' },
       'Fetching OpenAPI spec for service',
     );

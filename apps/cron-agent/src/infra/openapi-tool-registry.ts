@@ -68,7 +68,7 @@ export class OpenApiToolRegistry implements ToolRegistry {
   }
 
   private async fetchAndGenerateTools(service: ServiceDefinition): Promise<ToolDefinition[]> {
-    this.deps.logger.info(
+    this.deps.logger.debug(
       { service: service.key, openapiUrl: service.openapiUrl },
       'Fetching OpenAPI spec for service',
     );
