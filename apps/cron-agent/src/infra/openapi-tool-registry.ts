@@ -147,7 +147,7 @@ export class OpenApiToolRegistry implements ToolRegistry {
 
     if (tools.length === 0) {
       this.deps.logger.warn(
-        { service: service.key },
+        { service: service.key, toolCount: 0 },
         'Service produced zero tools — check operationId on /internal/* routes',
       );
     } else {

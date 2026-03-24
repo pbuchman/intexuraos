@@ -44,11 +44,6 @@ async function main(): Promise<void> {
   const config = loadConfig();
   const logger = createAppLogger({ name: 'cron-agent' });
 
-  logger.info(
-    { serviceCount: config.allowedServices.length, serviceKeys: config.allowedServices.map((s) => s.key) },
-    'Allowed services configured for cron-agent',
-  );
-
   const toolRegistry = new OpenApiToolRegistry({
     allowedServices: config.allowedServices,
     internalAuthToken: config.internalAuthToken,
