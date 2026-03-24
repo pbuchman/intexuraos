@@ -556,6 +556,146 @@ export function parsePushEvent(
 }
 
 /**
+ * Parse a check_suite event payload.
+ * Only processes events with conclusion: 'failure'.
+ * Returns null for non-failure conclusions (success, neutral, etc.)
+ */
+export function parseCheckSuiteEvent(
+  payload: unknown
+): Result<CreateGitHubPREventInput | null, { code: 'INVALID_PAYLOAD'; message: string }> {
+  if (!payload || typeof payload !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Payload is not an object' });
+  }
+
+  const p = payload as Record<string, unknown>;
+
+  // Check for action
+  const action = p['action'];
+  if (typeof action !== 'string' || action !== 'completed') {
+    return ok(null);
+  }
+
+  // Check for check_suite
+  const checkSuite = p['check_suite'];
+  if (!checkSuite || typeof checkSuite !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Missing or invalid check_suite' });
+  }
+
+  const cs = checkSuite as Record<string, unknown>;
+
+  // Only process failures
+  const conclusion = cs['conclusion'];
+  if (typeof conclusion !== 'string' || conclusion !== 'failure') {
+    return ok(null);
+  }
+
+  // Extract sender information
+  const senderResult = extractSender(payload);
+  if (!senderResult.ok) {
+    return senderResult;
+  }
+
+  // Extract repository
+  const repository = p['repository'];
+  if (!repository || typeof repository !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Missing repository' });
+  }
+
+  const repo = repository as Record<string, unknown>;
+  const repoName = repo['full_name'];
+  const repoId = repo['id'];
+
+  if (typeof repoName !== 'string' || typeof repoId !== 'number') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Invalid repository data' });
+  }
+
+  // Extract check suite details
+  const checkSuiteId = cs['id'];
+  const headBranch = typeof cs['head_branch'] === 'string' ? cs['head_branch'] : null;
+  const headSha = typeof cs['head_sha'] === 'string' ? cs['head_sha'] : null;
+
+  // Extract pull requests array - check_suite includes associated PRs
+  const pullRequests = cs['pull_requests'];
+  if (!Array.isArray(pullRequests) || pullRequests.length === 0) {
+    // No PRs associated with this check suite - can't correlate to a task
+    return ok(null);
+  }
+
+  // Use the first PR for the event (check_suite events fire per-check-run, not per-PR)
+  const firstPr = pullRequests[0] as Record<string, unknown>;
+  const prNumber = firstPr['number'];
+  const prId = firstPr['id'];
+  const prBody = firstPr['body'] ?? null;
+  const prState = firstPr['state'] ?? null;
+  const prMergedAt = firstPr['merged_at'];
+
+  if (typeof prNumber !== 'number' || typeof prId !== 'number') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Invalid pull_request data in check_suite' });
+  }
+
+  // Build a descriptive title from check suite info
+  const title = `CI Check Failed: ${typeof headBranch === 'string' ? headBranch : 'unknown branch'}`;
+
+  const createdAt = p['created_at'] ?? new Date().toISOString();
+
+  // Extract check runs if available (for check name)
+  const checkRuns = cs['check_runs'];
+  let checkName: string | undefined;
+  let checkRunUrl: string | undefined;
+  if (Array.isArray(checkRuns) && checkRuns.length > 0) {
+    const firstRun = checkRuns[0] as Record<string, unknown>;
+    if (typeof firstRun['name'] === 'string') {
+      checkName = firstRun['name'];
+    }
+    if (typeof firstRun['html_url'] === 'string') {
+      checkRunUrl = firstRun['html_url'];
+    }
+  }
+
+  // Store check_suite metadata in payload for later extraction
+  const enrichedPayload: Record<string, unknown> = {
+    checkSuiteId: typeof checkSuiteId === 'number' ? checkSuiteId : null,
+    headBranch,
+    headSha,
+    conclusion,
+    originalPayload: payload,
+  };
+  if (checkName !== undefined) {
+    enrichedPayload['checkName'] = checkName;
+  }
+  if (checkRunUrl !== undefined) {
+    enrichedPayload['checkRunUrl'] = checkRunUrl;
+  }
+
+  return ok({
+    githubEventId: (p as { id?: number })['id'] ?? Date.now(),
+    deliveryId: null,
+    repository: repoName,
+    repositoryId: repoId,
+    pullRequestNumber: prNumber,
+    pullRequestId: prId,
+    eventType: 'check_suite' as GitHubEventType,
+    action: 'completed' as const,
+    senderLogin: senderResult.value.login,
+    senderId: senderResult.value.id,
+    senderType: senderResult.value.type,
+    prAuthorLogin: null,
+    title,
+    body: typeof prBody === 'string' ? prBody : null,
+    state: typeof prState === 'string' ? prState : null,
+    baseBranch: headBranch,
+    mergedAt:
+      prMergedAt && typeof prMergedAt === 'string'
+        ? new Date(prMergedAt)
+        : prMergedAt instanceof Date
+          ? prMergedAt
+          : null,
+    createdAt: createdAt instanceof Date ? createdAt : new Date(String(createdAt)),
+    payload: enrichedPayload,
+  });
+}
+
+/**
  * Parse a GitHub webhook event based on the event type.
  */
 export function parseGitHubWebhookEvent(
@@ -573,6 +713,8 @@ export function parseGitHubWebhookEvent(
       return parseIssueCommentEvent(payload);
     case 'push':
       return parsePushEvent(payload);
+    case 'check_suite':
+      return parseCheckSuiteEvent(payload);
     case 'ping':
       // Ping events don't need to be stored
       return ok(null);
