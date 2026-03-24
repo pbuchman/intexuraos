@@ -254,7 +254,7 @@ Use the exact string from the "Reviewer Prompt Reference" section above. The tri
 
 **Change 3 — Bump version** from `'5.1.1'` to `'6.0.0'` (major bump: new review type changes LLM decision-making behavior per CLAUDE.md prompt versioning rules). Change `version: '5.1.1'` to `version: '6.0.0'` on the version property of the `githubAgentPrompt` object (around line 32).
 
-- [ ] **Step 7b: Update version test assertion and description**
+- [ ] **Step 8: Update version test assertion and description**
 
 In `apps/code-agent/src/__tests__/domain/prompts/githubAgentPrompt.test.ts`, find the existing version test. It currently reads:
 ```typescript
@@ -269,22 +269,22 @@ it('has version 6.0.0', () => {
 });
 ```
 
-- [ ] **Step 8: Run test to verify it passes**
+- [ ] **Step 9: Run test to verify it passes**
 
 Run: `cd /repo && pnpm vitest run apps/code-agent/src/__tests__/domain/prompts/githubAgentPrompt.test.ts`
 Expected: PASS
 
-- [ ] **Step 9: Run code-agent workspace verification**
+- [ ] **Step 10: Run code-agent workspace verification**
 
 Run: `cd /repo && pnpm run verify:workspace:tracked -- code-agent`
 Expected: All tests pass, coverage met.
 
-- [ ] **Step 10: Run full CI gate**
+- [ ] **Step 11: Run full CI gate**
 
 Run: `cd /repo && pnpm run ci:tracked`
 Expected: ALL checks pass. This is the mandatory Commit Gate per CLAUDE.md — do NOT commit until this passes.
 
-- [ ] **Step 11: Commit**
+- [ ] **Step 12: Commit**
 
 ```bash
 git add apps/code-agent/src/domain/constants/reviewTypes.ts \
