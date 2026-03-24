@@ -1,7 +1,7 @@
 import { Firestore } from '@google-cloud/firestore';
 import type { TurnMetrics } from '../services/turn-metrics-collector.js';
 
-/* v8 ignore start -- module-init: standalone CLI script not imported by tests @preserve */
+/* v8 ignore start -- module-init: standalone CLI entry point, not reachable from test imports @preserve */
 const RESET = '\x1b[0m';
 const BOLD = '\x1b[1m';
 const DIM = '\x1b[2m';

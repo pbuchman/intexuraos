@@ -31,7 +31,7 @@ function recordTaskFailed(params: {
       taskId: params.taskId,
       error: params.error,
       errorCode: params.errorCode,
-      /* v8 ignore start -- test-infra: FakeFirestore task doc lacks dispatchedAt Timestamp in task_failed scenarios @preserve */
+      /* v8 ignore start -- test-infra: FakeFirestore cannot simulate Firestore Timestamp for dispatchedAt in task_failed scenarios @preserve */
       ...(params.task.dispatchedAt !== undefined && {
         duration: params.completedAt.getTime() - new Date(params.task.dispatchedAt.toDate()).getTime(),
       }),

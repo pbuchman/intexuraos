@@ -97,7 +97,7 @@ export class WebhookClient {
 
     this.logger.warn({ taskId }, 'Webhook delivery failed, queued for retry');
 
-    /* v8 ignore start -- ts-type: loop always executes so lastError is never null @preserve */
+    /* v8 ignore start -- ts-type: unreachable — retry loop always executes so lastError is guaranteed defined @preserve */
     if (lastError === null) {
       return { ok: false, error: { type: 'network', message: 'Unknown error' } };
     }

@@ -57,7 +57,7 @@ export async function findCommentById(
   try {
     const db = getFirestore();
     const doc = await db.collection(COLLECTION_NAME).doc(id).get();
-    /* v8 ignore start -- test-infra: findCommentById not called by any route handler @preserve */
+    /* v8 ignore start -- test-infra: not reachable via route handlers; findCommentById is unused in current request paths @preserve */
     if (!doc.exists) return ok(null);
     /* v8 ignore stop @preserve */
 
