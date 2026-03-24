@@ -1101,6 +1101,7 @@ export function createDetectMergeConflictsOnPush(
       let closed = 0;
       let reopened = 0;
       let mergeConflictRefreshed = 0;
+      let conflictWorkflowsTriggered = 0;
       let skipped = 0;
       let error = 0;
 
@@ -1219,7 +1220,8 @@ export function createDetectMergeConflictsOnPush(
               existingSummary.pullRequestNumber
             );
             if (detailsResult.ok) {
-              const newStatus = classifyMergeConflictStatus(detailsResult.value.mergeable);
+              const details = detailsResult.value;
+              const newStatus = classifyMergeConflictStatus(details.mergeable);
               const previousStatus = existingSummary.mergeConflictStatus;
               if (newStatus !== 'unknown' && newStatus !== previousStatus) {
                 logger.info(
@@ -1231,19 +1233,117 @@ export function createDetectMergeConflictsOnPush(
                   },
                   'Refreshing mergeConflictStatus during reconcile'
                 );
-                await upsertSummary(
-                  deps.gitHubPRSummaryRepo,
-                  {
-                    repository,
-                    pullRequestNumber: existingSummary.pullRequestNumber,
-                    lastActivityAt: existingSummary.lastActivityAt,
-                    firstSeenAt: existingSummary.firstSeenAt,
-                    mergeConflictStatus: newStatus,
-                    lastConflictCheckedAt: new Date(),
-                  },
-                  logger
-                );
-                mergeConflictRefreshed++;
+
+                const needsConflictWorkflow = newStatus === 'conflicting' && previousStatus !== 'conflicting';
+                const needsResolveWorkflow = newStatus === 'clean' && previousStatus === 'conflicting';
+
+                if (needsConflictWorkflow || needsResolveWorkflow) {
+                  // Resolve per-summary access context for task ownership
+                  const summaryAccessContext = await resolveGitHubAccessContext(
+                    {
+                      userServiceClient: deps.userServiceClient,
+                      gitHubPREventRepo: deps.gitHubPREventRepo,
+                      allowedBots: deps.allowedBots,
+                    },
+                    existingSummary,
+                    logger
+                  );
+
+                  if (summaryAccessContext !== null) {
+                    let taskResolution: ExistingConflictTaskResolution = {
+                      latestTask: null,
+                      reusableTask: null,
+                      staleSummaryTaskId: false,
+                    };
+
+                    if (shouldResolveTaskState(newStatus, existingSummary)) {
+                      const resolutionResult = await resolveExistingConflictTask(
+                        deps.codeTaskRepo,
+                        existingSummary,
+                        repository,
+                        existingSummary.pullRequestNumber,
+                        logger
+                      );
+                      if (resolutionResult.ok) {
+                        taskResolution = resolutionResult.value;
+                      }
+                    }
+
+                    const eventId = `reconcile-${String(Date.now())}`;
+                    const workflowParams: ConflictWorkflowParams = {
+                      deps,
+                      logger,
+                      repository,
+                      parsedRepository,
+                      eventId,
+                      existingSummary,
+                      details,
+                      accessContext: summaryAccessContext,
+                      taskResolution,
+                    };
+
+                    let workflowResult = buildInitialWorkflowResult(existingSummary, taskResolution);
+                    let workflowExecuted = false;
+                    if (needsConflictWorkflow) {
+                      workflowResult = await executeConflictWorkflow(workflowParams);
+                      workflowExecuted = true;
+                    } else if (needsResolveWorkflow && existingSummary.managedConflictCommentId !== null) {
+                      workflowResult = await resolveConflictWorkflow(workflowParams);
+                      workflowExecuted = true;
+                    }
+
+                    await upsertSummary(
+                      deps.gitHubPRSummaryRepo,
+                      buildSummaryUpdateInput({
+                        repository,
+                        lastActivityAt: existingSummary.lastActivityAt,
+                        existingSummary,
+                        details,
+                        status: newStatus,
+                        workflowResult,
+                      }),
+                      logger
+                    );
+                    mergeConflictRefreshed++;
+                    if (workflowExecuted) {
+                      conflictWorkflowsTriggered++;
+                    }
+                  } else {
+                    // No per-summary access context — fall back to status-only upsert
+                    logger.warn(
+                      { repository, prNumber: existingSummary.pullRequestNumber, newStatus },
+                      'Skipping conflict workflow in reconcile — no per-summary OAuth user'
+                    );
+                    await upsertSummary(
+                      deps.gitHubPRSummaryRepo,
+                      {
+                        repository,
+                        pullRequestNumber: existingSummary.pullRequestNumber,
+                        lastActivityAt: existingSummary.lastActivityAt,
+                        firstSeenAt: existingSummary.firstSeenAt,
+                        mergeConflictStatus: newStatus,
+                        lastConflictCheckedAt: new Date(),
+                      },
+                      logger
+                    );
+                    mergeConflictRefreshed++;
+                  }
+                } else {
+                  // Status changed but no workflow needed (e.g., null → clean)
+                  await upsertSummary(
+                    deps.gitHubPRSummaryRepo,
+                    {
+                      repository,
+                      pullRequestNumber: existingSummary.pullRequestNumber,
+                      lastActivityAt: existingSummary.lastActivityAt,
+                      firstSeenAt: existingSummary.firstSeenAt,
+                      mergeConflictStatus: newStatus,
+                      lastConflictCheckedAt: new Date(),
+                    },
+                    logger
+                  );
+                  mergeConflictRefreshed++;
+                }
               }
             } else {
               logger.warn(
@@ -1262,11 +1362,11 @@ export function createDetectMergeConflictsOnPush(
       }
 
       logger.info(
-        { processed, closed, reopened, mergeConflictRefreshed, skipped, error },
+        { processed, closed, reopened, mergeConflictRefreshed, conflictWorkflowsTriggered, skipped, error },
         'PR state reconciliation complete'
       );
 
-      return { processed, closed, reopened, mergeConflictRefreshed, skipped, error };
+      return { processed, closed, reopened, mergeConflictRefreshed, conflictWorkflowsTriggered, skipped, error };
     },
   };
 }
