@@ -23,7 +23,7 @@ const VALIDATION_MODELS = {
   [LlmProviders.OpenAI]: LlmModels.GPT4oMini,
   [LlmProviders.Anthropic]: LlmModels.ClaudeHaiku35,
   [LlmProviders.Perplexity]: LlmModels.Sonar,
-  [LlmProviders.OpenRouter]: 'or:qwen/qwen3.5-flash-02-23',
+  [LlmProviders.OpenRouter]: 'qwen/qwen3.5-flash-02-23',
 } as const;
 
 /**
