@@ -65,6 +65,7 @@ export async function handlePrMerge(deps: HandlePrMergeDeps, input: HandlePrMerg
   }
 
   // --- Discovery method 2: INT-XXX / Linear URL from PR body/title ---
+  // Note: extractIntIssueId captures only the first INT-XXX per field (by design).
 
   const bodyIssueId = extractIntIssueId(prBody ?? undefined);
   const titleIssueId = extractIntIssueId(prTitle ?? undefined);
@@ -110,11 +111,13 @@ export async function handlePrMerge(deps: HandlePrMergeDeps, input: HandlePrMerg
     return;
   }
 
-  for (const [linearIssueId, userId] of issueMap) {
-    logger.info(
-      { linearIssueId, userId, repository, prNumber },
-      'Transitioning Linear issue to QA on PR merge'
-    );
-    await linearIssueService.markQa(userId, linearIssueId);
-  }
+  await Promise.all(
+    [...issueMap].map(([linearIssueId, userId]) => {
+      logger.info(
+        { linearIssueId, userId, repository, prNumber },
+        'Transitioning Linear issue to QA on PR merge'
+      );
+      return linearIssueService.markQa(userId, linearIssueId);
+    })
+  );
 }
