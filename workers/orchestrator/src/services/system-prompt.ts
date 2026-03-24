@@ -592,8 +592,6 @@ ${typeSections.join('\n\n')}
 - **CI:** ✅ Passed / ❌ FAILED — [check name]: [status]
 - **Other checks:** [status summary]
 
-When GitHub Actions have failures, this section MUST use ❌ and list each failed check by name and status. This ensures the reviewer sees CI failures prominently and nitpicker-nuker can act on them.
-
 ### 📋 Requirements Coverage
 | Requirement | Status |
 | --- | --- |
@@ -606,7 +604,8 @@ When GitHub Actions have failures, this section MUST use ❌ and list each faile
 Rules:
 - Include ONLY the sections listed above. Do NOT add sections for review types that were not requested.
 - Every included type section MUST have a \`**Verdict:**\` line.
-- The \`### 📋 Requirements Coverage\` and \`### Overall Assessment\` sections are ALWAYS required.`;
+- The \`### ⚙️ GitHub Actions Status\`, \`### 📋 Requirements Coverage\`, and \`### Overall Assessment\` sections are ALWAYS required.
+- When GitHub Actions have failures, the GH Actions section MUST use ❌ and list each failed check by name and status. This ensures the reviewer sees CI failures prominently and nitpicker-nuker can act on them.`;
 }
 
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
