@@ -218,12 +218,12 @@ it('includes test_quality in review type guidelines for PR events', () => {
     files: [],
   });
   expect(result).toContain('test_quality');
-  expect(result).toContain('false positives');
-  expect(result).toContain('v8 ignore');
+  expect(result).toContain('coverage exemption legitimacy');
+  expect(result).toContain('DI patterns');
 });
 ```
 
-**Note on test assertions:** The test checks for `'false positives'` and `'v8 ignore'` because the triage guideline mentions these as examples of what the review evaluates — but in the triage prompt these are just signal words for the LLM, not the exhaustive scope. The full review scope is defined in the orchestrator's review prompt (Task 2).
+**Note on test assertions:** The assertions check for keywords that appear in the verbatim triage guideline from the "Reviewer Prompt Reference" section: `'coverage exemption legitimacy'` and `'DI patterns'`. These are exact substrings of the guideline text to be inserted. The full detailed review criteria live in the orchestrator's review prompt (Task 2), not the triage hint.
 
 - [ ] **Step 6: Run test to verify it fails**
 
@@ -256,13 +256,13 @@ Use the exact string from the "Reviewer Prompt Reference" section above. The tri
 
 - [ ] **Step 7b: Update version test assertion and description**
 
-In `apps/code-agent/src/__tests__/domain/prompts/githubAgentPrompt.test.ts`, find the existing version test (line 9):
+In `apps/code-agent/src/__tests__/domain/prompts/githubAgentPrompt.test.ts`, find the existing version test. It currently reads:
 ```typescript
-it('has version 5.0.0', () => {          // ← misleading description
-  expect(githubAgentPrompt.version).toBe('5.1.1');  // ← stale after bump
+it('has version 5.0.0', () => {
+  expect(githubAgentPrompt.version).toBe('5.1.1');
 });
 ```
-Update both the description and assertion:
+The description text `'has version 5.0.0'` is stale and the assertion `'5.1.1'` will be wrong after the version bump. Update both:
 ```typescript
 it('has version 6.0.0', () => {
   expect(githubAgentPrompt.version).toBe('6.0.0');
@@ -279,7 +279,12 @@ Expected: PASS
 Run: `cd /repo && pnpm run verify:workspace:tracked -- code-agent`
 Expected: All tests pass, coverage met.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 10: Run full CI gate**
+
+Run: `cd /repo && pnpm run ci:tracked`
+Expected: ALL checks pass. This is the mandatory Commit Gate per CLAUDE.md — do NOT commit until this passes.
+
+- [ ] **Step 11: Commit**
 
 ```bash
 git add apps/code-agent/src/domain/constants/reviewTypes.ts \
@@ -425,7 +430,12 @@ Expected: PASS
 Run: `cd /repo && pnpm run verify:workspace:tracked -- orchestrator`
 Expected: All tests pass, coverage met.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 9: Run full CI gate**
+
+Run: `cd /repo && pnpm run ci:tracked`
+Expected: ALL checks pass. This is the mandatory Commit Gate per CLAUDE.md — do NOT commit until this passes.
+
+- [ ] **Step 10: Commit**
 
 ```bash
 git add workers/orchestrator/src/types/schemas.ts \
