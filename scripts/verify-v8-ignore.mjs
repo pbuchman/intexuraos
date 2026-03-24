@@ -56,6 +56,7 @@ const V8_LEGACY_KEYWORDS = ['next', 'start', 'stop'];
 
 // ============================================================================
 // BLOCKER KEYWORD ENFORCEMENT
+// Keep in sync with .claude/reference/coverage-exemptions.md
 // ============================================================================
 
 const BLOCKER_KEYWORDS = [
