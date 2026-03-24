@@ -57,7 +57,7 @@ export function createExecuteNoteActionUseCase(
         sourceId: prepared['sourceId'] as string,
       }),
     buildCompletionMessage: (_action: Action, response) =>
-      /* v8 ignore start -- ts-type: template literal branch when resourceUrl is undefined @preserve */
+      /* v8 ignore start -- ts-type: nullish coalescing fallback guard for undefined resourceUrl @preserve */
       `✨ ${response.message} View it here: ${webAppUrl}${response.resourceUrl ?? ''}`,
     /* v8 ignore stop @preserve */
     correlationPrefix: 'note-complete',

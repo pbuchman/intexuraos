@@ -137,7 +137,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
-    /* v8 ignore start -- module-init: Fastify logger stream requires real Sentry transport unavailable in tests @preserve */
+    /* v8 ignore start -- module-init: bootstrap logger cannot be tested — Sentry transport not mockable in unit tests @preserve */
     logger:
       process.env['NODE_ENV'] === 'test'
         ? false

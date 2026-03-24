@@ -83,7 +83,7 @@ export function createCodeAgentHttpClient(
 
         return ok({ codeTaskId: body.data.taskId });
       } catch (error) {
-        /* v8 ignore start -- async-timing: AbortError fires in setTimeout callback; clearTimeout in finally cancels it before tests can trigger @preserve */
+        /* v8 ignore start -- upstream: cannot trigger AbortError — clearTimeout in finally always cancels the timeout before tests can observe it @preserve */
         if (error instanceof Error && error.name === 'AbortError') {
           logger.error({ timeoutMs }, 'code-agent request timed out');
           return err({ code: 'UNAVAILABLE', message: 'Request timed out' });

@@ -164,7 +164,7 @@ export async function runSynthesis(
     });
     if (contextResult.ok) {
       synthesisContext = contextResult.value.context;
-      /* v8 ignore start -- ts-type: costUsd should be defined but TypeScript can't prove it @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess nullish coalescing fallback for costUsd @preserve */
       additionalCostUsd += contextResult.value.usage.costUsd ?? 0;
       /* v8 ignore stop @preserve */
       logger.info(
@@ -172,10 +172,10 @@ export async function runSynthesis(
         `[4.2.2] Synthesis context inferred successfully (costUsd: ${String(contextResult.value.usage.costUsd)})`
       );
     } else {
-      /* v8 ignore start -- ts-type: checking for nested usage property @preserve */
+      /* v8 ignore start -- ts-type: undefined check for optional property on error type @preserve */
       if (contextResult.error.usage !== undefined) {
       /* v8 ignore stop @preserve */
-        /* v8 ignore start -- ts-type: costUsd should be defined but TypeScript can't prove it @preserve */
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess nullish coalescing fallback for costUsd @preserve */
         additionalCostUsd += contextResult.error.usage.costUsd ?? 0;
         /* v8 ignore stop @preserve */
         logger.error(
@@ -239,7 +239,7 @@ export async function runSynthesis(
       if (revalidation.valid) {
         processedContent = repairResult.value.content;
         attributionStatus = 'repaired';
-        /* v8 ignore start -- ts-type: costUsd should be defined but TypeScript can't prove it @preserve */
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess nullish coalescing fallback for costUsd @preserve */
         additionalCostUsd += repairResult.value.usage.costUsd ?? 0;
         /* v8 ignore stop @preserve */
         logger.info(
@@ -247,7 +247,7 @@ export async function runSynthesis(
           `[4.3.3c] Attribution repair succeeded (costUsd: ${String(repairResult.value.usage.costUsd)})`
         );
       } else {
-        /* v8 ignore start -- ts-type: costUsd should be defined but TypeScript can't prove it @preserve */
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess nullish coalescing fallback for costUsd @preserve */
         additionalCostUsd += repairResult.value.usage.costUsd ?? 0;
         /* v8 ignore stop @preserve */
         logger.info({}, '[4.3.3c] Attribution repair did not fix all issues');
@@ -451,7 +451,7 @@ function selectImageModel(
 
   if (preferOpenAi) {
     if (hasOpenAiKey) return LlmModels.GPTImage1;
-    /* v8 ignore start -- upstream: v8 coverage does not trace this branch through runSynthesis→generateCoverImage→selectImageModel async call chain; tested in runSynthesis.test.ts @preserve */
+    /* v8 ignore start -- upstream: prior check for preferOpenAi guarantees this fallback is not reachable in unit test call chain @preserve */
     if (hasGoogleKey) return LlmModels.Gemini25FlashImage;
     /* v8 ignore stop @preserve */
   } else {

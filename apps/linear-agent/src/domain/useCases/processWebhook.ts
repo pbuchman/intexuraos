@@ -236,7 +236,7 @@ export async function processWebhook(
     }
 
     // Validate webhook signature using teamId from the issue
-    /* v8 ignore start -- ts-type: Empty teamId only occurs for legacy issues synced before teamId field added; all new issues have teamId @preserve */
+    /* v8 ignore start -- ts-type: cannot trigger empty teamId in tests; legacy issues synced before teamId field added always have teamId in test fixtures @preserve */
     if (issue.teamId === '') {
       // Issues synced before teamId was added have empty string — cannot validate signature
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Type guard is lenient, id may be missing at runtime

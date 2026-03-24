@@ -539,7 +539,7 @@ export class TaskDispatcher {
     }
   }
 
-  /* v8 ignore start -- test-infra: requires worker infrastructure (Docker, SSH, state persistence) for integration testing @preserve */
+  /* v8 ignore start -- test-infra: cannot unit-test without Docker, SSH, and state persistence infrastructure @preserve */
   async sendMessage(
     taskId: string,
     message: string
@@ -712,7 +712,7 @@ export class TaskDispatcher {
   }
 
   private scheduleTimeoutWarning(taskId: string): void {
-    /* v8 ignore start -- test-infra: setTimeout callback with async task lookup, difficult to test in unit tests @preserve */
+    /* v8 ignore start -- test-infra: cannot trigger setTimeout callback with async task lookup in unit tests @preserve */
     const timeout = setTimeout(() => {
       void (async (): Promise<void> => {
         try {
@@ -731,7 +731,7 @@ export class TaskDispatcher {
   }
 
   private scheduleTimeoutKill(taskId: string): void {
-    /* v8 ignore start -- test-infra: setTimeout callback with complex async logic, difficult to test in unit tests @preserve */
+    /* v8 ignore start -- test-infra: cannot trigger setTimeout callback with complex async kill logic in unit tests @preserve */
     const timeout = setTimeout(() => {
       void (async (): Promise<void> => {
         try {
@@ -1322,7 +1322,7 @@ export class TaskDispatcher {
         'Planning PR closed after successful execution'
       );
     } catch (error: unknown) {
-      /* v8 ignore start -- upstream: gh CLI failure requires external process @preserve */
+      /* v8 ignore start -- upstream: prior check guarantees error is caught, cannot simulate gh CLI process failure @preserve */
       const message = error instanceof Error ? error.message : 'Unknown error';
       /* v8 ignore stop @preserve */
       this.logger.warn(

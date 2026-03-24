@@ -80,7 +80,7 @@ export function createFirestoreDispatchRetryRepository(deps: {
         }
 
         const doc = snapshot.docs[0];
-        /* v8 ignore start -- test-infra: FakeFirestore always pairs empty:false with non-empty docs array @preserve */
+        /* v8 ignore start -- test-infra: FakeFirestore cannot return empty docs array when empty is false — noUncheckedIndexedAccess guard @preserve */
         if (doc === undefined) {
           return ok(null);
         }
