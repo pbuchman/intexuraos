@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import nock from 'nock';
 import { OpenApiToolRegistry } from '../openapi-tool-registry.js';
 import type { ServiceDefinition } from '../../config.js';
+import type { Logger } from '@intexuraos/common-core';
 import { createTestLogger } from './test-helpers.js';
 
 function createSpyLogger(): {
@@ -69,7 +70,7 @@ describe('OpenApiToolRegistry', () => {
     registry = new OpenApiToolRegistry({
       allowedServices: [testService],
       internalAuthToken: 'test-token',
-      logger: createTestLogger() as never,
+      logger: createTestLogger() as unknown as Logger,
     });
   });
 
@@ -246,7 +247,7 @@ describe('OpenApiToolRegistry', () => {
     const filteredRegistry = new OpenApiToolRegistry({
       allowedServices: [serviceWithFilter],
       internalAuthToken: 'test-token',
-      logger: createTestLogger() as never,
+      logger: createTestLogger() as unknown as Logger,
     });
 
     nock('http://code-agent:8128')
@@ -590,7 +591,7 @@ describe('OpenApiToolRegistry', () => {
     new OpenApiToolRegistry({
       allowedServices: [testService],
       internalAuthToken: 'test-token',
-      logger: spyLogger as never,
+      logger: spyLogger as unknown as Logger,
     });
     expect(spyLogger.info).toHaveBeenCalledWith(
       { serviceCount: 1, serviceKeys: ['code-agent'] },
@@ -603,7 +604,7 @@ describe('OpenApiToolRegistry', () => {
     const spyRegistry = new OpenApiToolRegistry({
       allowedServices: [testService],
       internalAuthToken: 'test-token',
-      logger: spyLogger as never,
+      logger: spyLogger as unknown as Logger,
     });
 
     nock('http://code-agent:8128')
@@ -623,7 +624,7 @@ describe('OpenApiToolRegistry', () => {
     const spyRegistry = new OpenApiToolRegistry({
       allowedServices: [testService],
       internalAuthToken: 'test-token',
-      logger: spyLogger as never,
+      logger: spyLogger as unknown as Logger,
     });
 
     const emptySpec = {
@@ -643,7 +644,7 @@ describe('OpenApiToolRegistry', () => {
     await spyRegistry.getToolsForService('code-agent');
 
     expect(spyLogger.warn).toHaveBeenCalledWith(
-      { service: 'code-agent' },
+      { service: 'code-agent', toolCount: 0 },
       'Service produced zero tools — check operationId on /internal/* routes',
     );
   });
