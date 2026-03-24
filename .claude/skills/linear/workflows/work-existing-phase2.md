@@ -28,6 +28,7 @@ Execute the task autonomously. The issue has been prepared (Phase 1) and is read
 🔗 PR: Created PR #XXX
 🔍 GH ACTIONS: Checking GitHub Actions status on PR...
 ✅ GH ACTIONS: All checks passed  (or)
+⏳ GH ACTIONS: Checks pending — proceeding  (or)
 ❌ GH ACTIONS: 1 check failed — CI: FAILURE
 🔍 REVIEW: Running dual code review — opus + sonnet (iteration 1)...
 🔧 FIXES: Addressing combined review findings...
@@ -155,12 +156,14 @@ gh pr create --base development \
 After creating the PR, check the status of GitHub Actions checks:
 
 ```bash
-gh pr checks <PR_NUMBER> --json name,state,conclusion,workflowName
+gh pr checks <PR_NUMBER> --json name,state,bucket,workflow
 ```
 
-- If any checks have **failed** (`conclusion == "FAILURE"`, `"CANCELLED"`, or `"TIMED_OUT"`), log the failures and carry them forward into the code review comment (Step 10b).
+- If any checks have **failed** (`bucket == "fail"` or `"cancel"`), log the failures and carry them forward into the code review comment (Step 10b).
 - If checks are still **pending**, note this and proceed — do not block on pending checks.
 - If all checks **passed**, note this for the review comment.
+
+- If no checks are listed yet (workflows not triggered), note "GH Actions: not yet triggered" and proceed.
 
 **This step does NOT block execution** — it gathers information for the review summary.
 
@@ -274,8 +277,8 @@ PHASE2_FINAL:
 **Turn summary format:** Exactly ~5 short statements separated by `|`, summarizing what happened during this execution turn. This will be sent as a WhatsApp notification to the user, so write it as a concise human-readable status update. Examples:
 
 ```
-- Turn summary: Planned 3-file refactor for auth middleware | Wrote 12 tests covering edge cases | Implemented token refresh logic | Code review clean after 2 iterations | PR #487 ready for human review
-- Turn summary: Fixed Firestore query timeout bug | Added composite index migration | 100% branch coverage achieved | Review found missing error log — fixed | PR #501 merged-ready
+- Turn summary: Planned 3-file refactor for auth middleware | Wrote 12 tests covering edge cases | Implemented token refresh logic | GH Actions: all checks passed | Code review clean after 2 iterations | PR #487 ready
+- Turn summary: Fixed Firestore query timeout bug | Added composite index migration | 100% branch coverage | GH Actions: CI failed — flagged in review | PR #501 merged-ready
 ```
 
 **MANDATORY:** One of the ~5 statements MUST report GitHub Actions status. Examples:
@@ -283,13 +286,6 @@ PHASE2_FINAL:
 - `GH Actions: all checks passed`
 - `GH Actions: CI failed — flagged in review comment`
 - `GH Actions: 2 checks pending at completion`
-
-Updated examples with GH Actions status included:
-
-```
-- Turn summary: Implemented auth token rotation | 100% coverage | GH Actions: all checks passed | Code review clean after 1 iteration | PR #512 ready
-- Turn summary: Fixed rate limiter bug | Added retry tests | GH Actions: CI failed — noted in review | Review clean after 2 iterations | PR #513 needs CI fix
-```
 
 ---
 
@@ -302,7 +298,7 @@ The completion-validator hook checks:
 - [ ] Linear updated to "In Review" mentioned
 - [ ] Review iterations count present
 - [ ] Turn summary present (~5 statements)
-- [ ] GitHub Actions status checked and reported in review comment
+- [ ] GitHub Actions status checked and reported in review comment (self-check)
 
 ---
 
