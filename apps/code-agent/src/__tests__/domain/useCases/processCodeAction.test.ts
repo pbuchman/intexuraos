@@ -975,6 +975,7 @@ describe('processCodeAction', () => {
         }),
         markInProgress: vi.fn(),
         markInReview: vi.fn(),
+        markQa: vi.fn(),
       } as unknown as LinearIssueService;
 
       const result = await processCodeAction(
@@ -1014,6 +1015,7 @@ describe('processCodeAction', () => {
         }),
         markInProgress: vi.fn(),
         markInReview: vi.fn(),
+        markQa: vi.fn(),
       } as unknown as LinearIssueService;
 
       vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
