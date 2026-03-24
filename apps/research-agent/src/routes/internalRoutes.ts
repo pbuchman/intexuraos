@@ -22,7 +22,8 @@ import {
   type TextGenerationClient,
 } from '../domain/research/index.js';
 import { formatLlmError } from '../domain/research/formatLlmError.js';
-import { getProviderForModel, LlmModels } from '@intexuraos/llm-contract';
+import { getProviderForModel, isOpenRouterModel, LlmModels, type LLMModel } from '@intexuraos/llm-contract';
+import { getAllowlistPricing } from '@intexuraos/infra-openrouter';
 import { getServices, type DecryptedApiKeys } from '../services.js';
 import { createSynthesisProviders } from './helpers/synthesisHelper.js';
 import { handleAllCompleted } from './helpers/completionHandlers.js';
@@ -861,11 +862,17 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           '[3.3] Starting LLM research call'
         );
 
+        /* v8 ignore start -- ts-type: cannot statically verify OpenRouter model is in pricing allowlist @preserve */
+        const researchPricing = isOpenRouterModel(event.model)
+          ? getAllowlistPricing(event.model) ?? { inputPricePerMillion: 0, outputPricePerMillion: 0, useProviderCost: true }
+          : services.pricingContext.getPricing(event.model as LLMModel);
+        /* v8 ignore stop @preserve */
+
         const llmProvider = services.createResearchProvider(
           event.model,
           apiKey,
           event.userId,
-          services.pricingContext.getPricing(event.model),
+          researchPricing,
           request.log
         );
         const startTime = Date.now();

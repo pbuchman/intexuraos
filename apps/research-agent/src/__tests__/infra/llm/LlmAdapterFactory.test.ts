@@ -5,7 +5,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { TEST_PRICING } from '@intexuraos/llm-pricing';
 import type { Logger } from '@intexuraos/common-core';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LlmModels, type ResearchModel } from '@intexuraos/llm-contract';
 
 const testPricing = TEST_PRICING;
 const mockLogger: Logger = {
@@ -75,6 +75,21 @@ vi.mock('../../../infra/llm/PerplexityAdapter.js', () => ({
   },
 }));
 
+vi.mock('../../../infra/llm/OpenRouterAdapter.js', () => ({
+  OpenRouterAdapter: class MockOpenRouterAdapter {
+    apiKey: string;
+    model: string;
+    userId: string;
+    logger: Logger;
+    constructor(apiKey: string, model: string, userId: string, _pricing: unknown, _logger: Logger) {
+      this.apiKey = apiKey;
+      this.model = model;
+      this.userId = userId;
+      this.logger = _logger;
+    }
+  },
+}));
+
 const { createSynthesizer, createTitleGenerator, createResearchProvider } =
   await import('../../../infra/llm/LlmAdapterFactory.js');
 
@@ -131,6 +146,20 @@ describe('LlmAdapterFactory', () => {
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('perplexity-key');
       expect((provider as unknown as { model: string }).model).toBe(LlmModels.SonarPro);
     });
+
+    it('creates OpenRouterAdapter for openrouter model', () => {
+      const openRouterModel = 'or:deepseek/deepseek-v3-0324';
+      const provider = createResearchProvider(
+        openRouterModel as ResearchModel,
+        'openrouter-key',
+        'test-user-id',
+        testPricing,
+        mockLogger
+      );
+
+      expect((provider as unknown as { apiKey: string }).apiKey).toBe('openrouter-key');
+      expect((provider as unknown as { model: string }).model).toBe(openRouterModel);
+    });
   });
 
   describe('createSynthesizer', () => {
@@ -172,6 +201,20 @@ describe('LlmAdapterFactory', () => {
       expect(() =>
         createSynthesizer(LlmModels.SonarPro, 'perplexity-key', 'test-user-id', testPricing, mockLogger)
       ).toThrow('Perplexity does not support synthesis');
+    });
+
+    it('creates OpenRouterAdapter for openrouter model', () => {
+      const openRouterModel = 'or:deepseek/deepseek-v3-0324';
+      const synthesizer = createSynthesizer(
+        openRouterModel as ResearchModel,
+        'openrouter-key',
+        'test-user-id',
+        testPricing,
+        mockLogger
+      );
+
+      expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('openrouter-key');
+      expect((synthesizer as unknown as { model: string }).model).toBe(openRouterModel);
     });
   });
 

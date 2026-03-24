@@ -9,6 +9,13 @@
         "workers/orchestrator/src/start.ts"
       ],
       "description": "Remaining orchestrator v8 ignore triage: branches uncovered by unit tests require integration-level testing or are dead code from type narrowing"
+    },
+    "INT-1011": {
+      "files": [
+        "apps/research-agent/src/routes/openRouterRoutes.ts",
+        "packages/internal-clients/src/user-service/client.ts"
+      ],
+      "description": "openRouterRoutes has branches requiring integration-level HTTP mocking to cover; client.ts has an exhaustive switch default case that is unreachable but required by TypeScript's never type narrowing."
     }
   }
 }

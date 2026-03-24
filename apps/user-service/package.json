@@ -27,6 +27,7 @@
     "@intexuraos/infra-firestore": "workspace:*",
     "@intexuraos/infra-gemini": "workspace:*",
     "@intexuraos/infra-gpt": "workspace:*",
+    "@intexuraos/infra-openrouter": "workspace:*",
     "@intexuraos/infra-otel": "workspace:*",
     "@intexuraos/infra-perplexity": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",

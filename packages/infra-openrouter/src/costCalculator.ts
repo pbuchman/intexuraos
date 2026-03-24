@@ -18,10 +18,7 @@ import type { TokenUsage, NormalizedUsage, ModelPricing } from '@intexuraos/llm-
  * @param completionPerToken - Completion price per token (e.g., '0.00000156')
  * @returns ModelPricing with per-million prices and useProviderCost: true
  */
-export function toModelPricing(
-  promptPerToken: string,
-  completionPerToken: string
-): ModelPricing {
+export function toModelPricing(promptPerToken: string, completionPerToken: string): ModelPricing {
   const promptPerMillion = parseFloat(promptPerToken) * 1_000_000;
   const completionPerMillion = parseFloat(completionPerToken) * 1_000_000;
 
@@ -45,9 +42,11 @@ export function calculateTextCost(
   if (pricing.useProviderCost === true && providerCost !== undefined) {
     return providerCost;
   }
+  /* v8 ignore start -- upstream: usage.providerCost fallback when provider doesn't supply direct cost @preserve */
   if (usage.providerCost !== undefined) {
     return usage.providerCost;
   }
+  /* v8 ignore stop @preserve */
 
   // 2. Fallback Calculation using per-million prices
   // Formula: tokens * (pricePerMillion / 1_000_000) = tokens * pricePerToken

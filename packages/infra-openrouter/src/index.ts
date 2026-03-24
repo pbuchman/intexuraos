@@ -7,11 +7,7 @@
 
 export { createOpenRouterClient, type OpenRouterClient } from './client.js';
 export { OPENROUTER_ALLOWED_MODELS, isAllowedModel, getAllowlistPricing } from './allowlist.js';
-export {
-  calculateTextCost,
-  normalizeUsage,
-  toModelPricing,
-} from './costCalculator.js';
+export { calculateTextCost, normalizeUsage, toModelPricing } from './costCalculator.js';
 export type {
   OpenRouterConfig,
   OpenRouterError,
