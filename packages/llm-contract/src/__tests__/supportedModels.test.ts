@@ -17,7 +17,6 @@ import {
   type ImageModel,
   type ValidationModel,
   type FastModel,
-  type OpenRouterModelId,
 } from '../supportedModels.js';
 
 describe('OpenRouter model helpers', () => {
@@ -262,6 +261,12 @@ describe('supportedModels', () => {
       const fastModel: FastModel = 'gpt-4o-mini';
       const llmModel: LLMModel = fastModel;
       expect(llmModel).toBe('gpt-4o-mini');
+    });
+
+    it('allows OpenRouterModelId where ResearchModel is expected', () => {
+      const openRouterModel = createOpenRouterModelId('anthropic/claude-sonnet-4.6');
+      const researchModel: ResearchModel = openRouterModel;
+      expect(researchModel).toBe('or:anthropic/claude-sonnet-4.6');
     });
   });
 });

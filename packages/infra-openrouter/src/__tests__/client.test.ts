@@ -79,24 +79,63 @@ describe('createOpenRouterClient', () => {
       await client.research('Test prompt');
 
       // Verify :online suffix was appended for research
-      expect(capturedBody?.model).toBe(`${TEST_MODEL}:online`);
+      expect(capturedBody?.['model']).toBe(`${TEST_MODEL}:online`);
+    });
+
+    it('does not double-append :online suffix if model already ends with :online', async () => {
+      let capturedBody: Record<string, unknown> | undefined;
+
+      nock(API_BASE_URL)
+        .post('/chat/completions', (body) => {
+          capturedBody = body as Record<string, unknown>;
+          return true;
+        })
+        .reply(200, {
+          id: 'test-id',
+          model: `${TEST_MODEL}:online`,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'Research findings.', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: `${TEST_MODEL}:online`, // Model already has :online suffix
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      await client.research('Test prompt');
+
+      // Verify :online suffix was NOT double-appended
+      expect(capturedBody?.['model']).toBe(`${TEST_MODEL}:online`);
     });
 
     it('returns research result with content and usage', async () => {
-      nock(API_BASE_URL).post('/chat/completions').reply(200, {
-        id: 'test-id',
-        model: `${TEST_MODEL}:online`,
-        created: Date.now(),
-        object: 'chat.completion',
-        choices: [
-          {
-            index: 0,
-            message: { content: 'Research findings about AI.', role: 'assistant' },
-            finish_reason: 'stop',
-          },
-        ],
-        usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
-      });
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: `${TEST_MODEL}:online`,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'Research findings about AI.', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+        });
 
       const client = createOpenRouterClient({
         apiKey: 'test-key',
@@ -121,22 +160,92 @@ describe('createOpenRouterClient', () => {
       }
     });
 
-    it('extracts annotations as sources', async () => {
-      nock(API_BASE_URL).post('/chat/completions').reply(200, {
-        id: 'test-id',
-        model: `${TEST_MODEL}:online`,
-        created: Date.now(),
-        object: 'chat.completion',
-        choices: [
-          {
-            index: 0,
-            message: { content: 'Research content', role: 'assistant' },
-            finish_reason: 'stop',
-          },
-        ],
-        usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
-        annotations: ['https://source1.com', 'https://source2.com'],
+    it('handles missing choices gracefully with empty content', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: `${TEST_MODEL}:online`,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [], // Empty choices
+          usage: { prompt_tokens: 100, completion_tokens: 0, total_tokens: 100 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
       });
+
+      const result = await client.research('Test prompt');
+
+      // Should return empty content when choices is empty
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.content).toBe('');
+      }
+    });
+
+    it('extracts object annotations with url field', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: `${TEST_MODEL}:online`,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'Research content', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+          annotations: [
+            { url: 'https://example.com/article1', title: 'Example 1' },
+            { url: 'https://example.com/article2', title: 'Example 2' },
+          ],
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.sources).toContain('https://example.com/article1');
+        expect(result.value.sources).toContain('https://example.com/article2');
+      }
+    });
+
+    it('extracts annotations as sources', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: `${TEST_MODEL}:online`,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'Research content', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+          annotations: ['https://source1.com', 'https://source2.com'],
+        });
 
       const client = createOpenRouterClient({
         apiKey: 'test-key',
@@ -156,20 +265,22 @@ describe('createOpenRouterClient', () => {
     });
 
     it('logs usage on success', async () => {
-      nock(API_BASE_URL).post('/chat/completions').reply(200, {
-        id: 'test-id',
-        model: `${TEST_MODEL}:online`,
-        created: Date.now(),
-        object: 'chat.completion',
-        choices: [
-          {
-            index: 0,
-            message: { content: 'Content', role: 'assistant' },
-            finish_reason: 'stop',
-          },
-        ],
-        usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
-      });
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: `${TEST_MODEL}:online`,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'Content', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+        });
 
       const client = createOpenRouterClient({
         apiKey: 'test-key',
@@ -344,24 +455,26 @@ describe('createOpenRouterClient', () => {
       await client.generate('Write something');
 
       // Verify NO :online suffix for synthesis
-      expect(capturedBody?.model).toBe(TEST_MODEL);
+      expect(capturedBody?.['model']).toBe(TEST_MODEL);
     });
 
     it('returns generate result with content and usage', async () => {
-      nock(API_BASE_URL).post('/chat/completions').reply(200, {
-        id: 'test-id',
-        model: TEST_MODEL,
-        created: Date.now(),
-        object: 'chat.completion',
-        choices: [
-          {
-            index: 0,
-            message: { content: 'Generated text.', role: 'assistant' },
-            finish_reason: 'stop',
-          },
-        ],
-        usage: { prompt_tokens: 50, completion_tokens: 100, total_tokens: 150 },
-      });
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'Generated text.', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 50, completion_tokens: 100, total_tokens: 150 },
+        });
 
       const client = createOpenRouterClient({
         apiKey: 'test-key',
@@ -387,20 +500,22 @@ describe('createOpenRouterClient', () => {
     });
 
     it('logs usage with generate callType', async () => {
-      nock(API_BASE_URL).post('/chat/completions').reply(200, {
-        id: 'test-id',
-        model: TEST_MODEL,
-        created: Date.now(),
-        object: 'chat.completion',
-        choices: [
-          {
-            index: 0,
-            message: { content: 'Generated text.', role: 'assistant' },
-            finish_reason: 'stop',
-          },
-        ],
-        usage: { prompt_tokens: 50, completion_tokens: 100, total_tokens: 150 },
-      });
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'Generated text.', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 50, completion_tokens: 100, total_tokens: 150 },
+        });
 
       const client = createOpenRouterClient({
         apiKey: 'test-key',
@@ -439,6 +554,82 @@ describe('createOpenRouterClient', () => {
       }
     });
 
+    it('handles 401 unauthorized error', async () => {
+      nock(API_BASE_URL).post('/chat/completions').reply(401, 'Invalid API key');
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      const result = await client.generate('Write something');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_KEY');
+      }
+    });
+
+    it('handles 429 rate limit error', async () => {
+      nock(API_BASE_URL).post('/chat/completions').reply(429, 'Rate limited');
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      const result = await client.generate('Write something');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('RATE_LIMITED');
+      }
+    });
+
+    it('handles 503 overloaded error', async () => {
+      nock(API_BASE_URL).post('/chat/completions').reply(503, 'Service overloaded');
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      const result = await client.generate('Write something');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('OVERLOADED');
+      }
+    });
+
+    it('handles timeout error', async () => {
+      nock(API_BASE_URL).post('/chat/completions').replyWithError(new Error('Request timeout'));
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      const result = await client.generate('Write something');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('TIMEOUT');
+      }
+    });
+
     it('handles network error', async () => {
       nock(API_BASE_URL).post('/chat/completions').replyWithError({ message: 'Connection error' });
 
@@ -459,20 +650,22 @@ describe('createOpenRouterClient', () => {
     });
 
     it('handles empty content', async () => {
-      nock(API_BASE_URL).post('/chat/completions').reply(200, {
-        id: 'test-id',
-        model: TEST_MODEL,
-        created: Date.now(),
-        object: 'chat.completion',
-        choices: [
-          {
-            index: 0,
-            message: { content: '', role: 'assistant' },
-            finish_reason: 'stop',
-          },
-        ],
-        usage: { prompt_tokens: 50, completion_tokens: 0, total_tokens: 50 },
-      });
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: '', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 50, completion_tokens: 0, total_tokens: 50 },
+        });
 
       const client = createOpenRouterClient({
         apiKey: 'test-key',
@@ -484,6 +677,35 @@ describe('createOpenRouterClient', () => {
 
       const result = await client.generate('Write something');
 
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.content).toBe('');
+      }
+    });
+
+    it('handles empty choices array in generate', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [], // Empty choices array
+          usage: { prompt_tokens: 50, completion_tokens: 0, total_tokens: 50 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      const result = await client.generate('Write something');
+
+      // Should return empty content when choices is empty
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.content).toBe('');

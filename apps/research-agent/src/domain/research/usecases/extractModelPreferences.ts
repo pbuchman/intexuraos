@@ -66,6 +66,36 @@ const MODEL_DISPLAY_NAMES: Record<ResearchModel, string> = {
 };
 
 /**
+ * Get model display name, generating one for OpenRouter models.
+ */
+function getModelDisplayName(model: ResearchModel): string {
+  const staticModel = model as string;
+  /* v8 ignore start -- ts-type: cannot statically verify dynamic OpenRouter model ID is in static type union @preserve */
+  if (staticModel in MODEL_DISPLAY_NAMES) {
+    return MODEL_DISPLAY_NAMES[staticModel as ResearchModel] ?? 'Unknown Model';
+  }
+  // OpenRouter model - extract name from ID (e.g., 'anthropic/claude-sonnet-4.6' -> 'Claude Sonnet 4.6')
+  const parts = staticModel.split('/');
+  const namePart = parts[1]?.replace(/-/g, ' ') ?? staticModel;
+  return namePart.charAt(0).toUpperCase() + namePart.slice(1);
+  /* v8 ignore stop @preserve */
+}
+
+/**
+ * Get model keywords, using default for OpenRouter models.
+ */
+function getModelKeywords(model: ResearchModel): string[] {
+  const staticModel = model as string;
+  /* v8 ignore start -- ts-type: cannot statically verify dynamic OpenRouter model ID is in static type union @preserve */
+  if (staticModel in MODEL_KEYWORDS) {
+    return MODEL_KEYWORDS[staticModel as ResearchModel] ?? ['openrouter'];
+  }
+  // OpenRouter model - return generic keyword
+  return ['openrouter'];
+  /* v8 ignore stop @preserve */
+}
+
+/**
  * Get API key field name for a provider.
  * Provider is always one of the known values from getProviderForModel.
  */
@@ -96,8 +126,8 @@ function buildAvailableModels(keys: ApiKeyStore): AvailableModelInfo[] {
       available.push({
         id: model,
         provider,
-        displayName: MODEL_DISPLAY_NAMES[model],
-        keywords: MODEL_KEYWORDS[model],
+        displayName: getModelDisplayName(model),
+        keywords: getModelKeywords(model),
         isProviderDefault,
       });
     }

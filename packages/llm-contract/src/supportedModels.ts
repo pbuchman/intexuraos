@@ -247,7 +247,7 @@ export const FAST_MODEL_DISPLAY_NAMES: Record<FastModel, string> = {
 /**
  * Get provider for a model.
  */
-export function getProviderForModel(model: ResearchModel): LlmProvider {
+export function getProviderForModel(model: string): LlmProvider {
   if (isOpenRouterModel(model)) {
     return LlmProviders.OpenRouter;
   }
@@ -258,7 +258,7 @@ export function getProviderForModel(model: ResearchModel): LlmProvider {
 /**
  * Check if a string is an OpenRouter model ID (prefixed with 'or:').
  */
-export function isOpenRouterModel(model: string): model is `${string}` & { __brand: 'OpenRouterModelId' } {
+export function isOpenRouterModel(model: string): model is OpenRouterModelId {
   return model.startsWith('or:');
 }
 

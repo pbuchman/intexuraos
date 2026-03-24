@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OPENROUTER_ALLOWED_MODELS, isAllowedModel, getAllowlistPricing } from '../allowlist.js';
+import { LlmModels } from '@intexuraos/llm-contract';
 
 describe('allowlist', () => {
   describe('OPENROUTER_ALLOWED_MODELS', () => {
@@ -47,7 +48,7 @@ describe('allowlist', () => {
 
     it('returns false for unknown model IDs', () => {
       expect(isAllowedModel('unknown/model')).toBe(false);
-      expect(isAllowedModel('gemini-2.5-pro')).toBe(false);
+      expect(isAllowedModel(LlmModels.Gemini25Pro)).toBe(false);
       expect(isAllowedModel('')).toBe(false);
     });
 
@@ -59,11 +60,12 @@ describe('allowlist', () => {
   describe('getAllowlistPricing', () => {
     it('returns pricing for known model', () => {
       const pricing = getAllowlistPricing('anthropic/claude-sonnet-4.6');
-      expect(pricing).toBeDefined();
-      expect(pricing!.useProviderCost).toBe(true);
+      expect(pricing).not.toBeUndefined();
+      if (pricing === undefined) return;
+      expect(pricing.useProviderCost).toBe(true);
       // Claude Sonnet 4.6: $3.0/million prompt, $15.0/million completion
-      expect(pricing!.inputPricePerMillion).toBeCloseTo(3.0, 2);
-      expect(pricing!.outputPricePerMillion).toBeCloseTo(15.0, 2);
+      expect(pricing.inputPricePerMillion).toBeCloseTo(3.0, 2);
+      expect(pricing.outputPricePerMillion).toBeCloseTo(15.0, 2);
     });
 
     it('returns undefined for unknown model', () => {
@@ -74,10 +76,11 @@ describe('allowlist', () => {
     it('returns valid pricing for all allowlisted models', () => {
       for (const model of OPENROUTER_ALLOWED_MODELS) {
         const pricing = getAllowlistPricing(model.id);
-        expect(pricing).toBeDefined();
-        expect(pricing!.inputPricePerMillion).toBeGreaterThan(0);
-        expect(pricing!.outputPricePerMillion).toBeGreaterThan(0);
-        expect(pricing!.useProviderCost).toBe(true);
+        expect(pricing).not.toBeUndefined();
+        if (pricing === undefined) return;
+        expect(pricing.inputPricePerMillion).toBeGreaterThan(0);
+        expect(pricing.outputPricePerMillion).toBeGreaterThan(0);
+        expect(pricing.useProviderCost).toBe(true);
       }
     });
   });

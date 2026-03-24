@@ -46,6 +46,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   openai: { type: 'string', nullable: true },
                   anthropic: { type: 'string', nullable: true },
                   perplexity: { type: 'string', nullable: true },
+                  openrouter: { type: 'string', nullable: true },
                 },
               },
               diagnostics: { $ref: 'Diagnostics#' },
@@ -93,6 +94,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           openai: null,
           anthropic: null,
           perplexity: null,
+          openrouter: null,
         });
       }
 
@@ -114,6 +116,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         openai: getDecryptedKey('openai'),
         anthropic: getDecryptedKey('anthropic'),
         perplexity: getDecryptedKey('perplexity'),
+        openrouter: getDecryptedKey('openrouter'),
       });
     }
   );
