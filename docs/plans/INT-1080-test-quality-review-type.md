@@ -192,7 +192,14 @@ git commit -m "feat(code-agent): add test_quality review type and GitHub Agent d
 
 - [ ] **Step 1: Write test for test_quality review type rendering**
 
-Add to `workers/orchestrator/src/services/__tests__/system-prompt.test.ts`, in the review prompt test suite (after existing reviewTypes tests around line 935):
+First, update the existing test `'includes all review type sections when reviewTypes is undefined'` (around line 892) to also assert the new type:
+
+```typescript
+// Add this line after the existing expect(result).toContain('📐 Plan Review') assertion:
+expect(result).toContain('🧪 Test Quality');
+```
+
+Then add the following new tests to `workers/orchestrator/src/services/__tests__/system-prompt.test.ts`, in the review prompt test suite (after existing reviewTypes tests around line 935):
 
 ```typescript
 it('includes only test_quality section when reviewTypes is ["test_quality"]', () => {
