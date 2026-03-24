@@ -41,9 +41,9 @@ Add a new validation phase between Phase B (syntax) and Phase C (pattern) that c
 - `source-map`: Also accepts `alignment`, `misattributed`
 - `upstream`: Also accepts `prior check`, `early return`, `validated`, `passthrough`
 - `schema`: Also accepts `Zod`, `Fastify schema`, `validation`
-- `regex`: Also accepts `capture group`, `match`
+- `regex`: Also accepts `capture group`, `regex match`
 
-Note: `false positive` and `defensive` are already in the universal list — do not duplicate in category-specific lists.
+Note: `false positive` and `defensive` are already in the universal list — do not duplicate in category-specific lists. Short keywords like `match` alone should be avoided — use multi-word keywords like `regex match` to prevent false positives from substring matching (`mismatched`, `unmatched`, etc.).
 
 ### Detector Tightening
 
@@ -108,7 +108,7 @@ const CATEGORY_SPECIFIC_KEYWORDS = {
   'source-map': ['alignment', 'misattributed'],
   'upstream': ['prior check', 'early return', 'validated', 'passthrough'],
   'schema': ['Zod', 'Fastify schema', 'validation'],
-  'regex': ['capture group', 'match'],
+  'regex': ['capture group', 'regex match'],
 };
 
 function validateBlockerKeywords(comments) {
@@ -209,11 +209,17 @@ async function selfTest() {
   ]);
   console.assert(result4.errors.length === 0, 'stop comments should be skipped');
 
-  // Test: category-specific keyword rejected for wrong category
+  // Test: universal keyword works across categories
   const result5 = validateBlockerKeywords([
     { type: 'start', category: 'upstream', explanation: 'type narrowing makes branch dead', file: 'test.ts', line: 1 }
   ]);
   console.assert(result5.errors.length === 0, '"narrowing" is a universal keyword');
+
+  // Test: category-specific keyword rejected for wrong category
+  const result6 = validateBlockerKeywords([
+    { type: 'start', category: 'upstream', explanation: 'capture group in the regex', file: 'test.ts', line: 1 }
+  ]);
+  console.assert(result6.errors.length === 1, '"capture group" is regex-specific, should fail for upstream');
 
   console.log('All self-tests passed ✅');
 }
@@ -293,7 +299,7 @@ The validation script (Phase B-1) enforces that every v8 ignore explanation cont
 - `source-map`: `alignment`, `misattributed` (note: `false positive` already in universal list)
 - `upstream`: `prior check`, `early return`, `validated`, `passthrough` (note: `defensive` already in universal list)
 - `schema`: `Zod`, `Fastify schema`, `validation`
-- `regex`: `capture group`, `match`
+- `regex`: `capture group`, `regex match`
 ```
 
 - [ ] **Step 2: Commit**
