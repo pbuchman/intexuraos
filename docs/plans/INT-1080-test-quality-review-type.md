@@ -58,7 +58,7 @@ This string literal is the contract. Each service owns its own validation and re
 
 - [ ] **Step 1: Write test for reviewTypes constant**
 
-Create `apps/code-agent/src/__tests__/domain/constants/reviewTypes.test.ts` (note: the `__tests__/domain/constants/` directory does not exist yet — create it first with `mkdir -p`):
+Create `apps/code-agent/src/__tests__/domain/constants/reviewTypes.test.ts` (note: the `__tests__/domain/constants/` directory does not exist yet — the Write tool creates parent directories automatically):
 
 ```typescript
 import { describe, it, expect } from 'vitest';
@@ -106,28 +106,23 @@ Expected: PASS
 
 - [ ] **Step 5: Write test for GitHub Agent prompt containing test_quality**
 
-Add to the test file for `githubAgentPrompt` (create if needed at `apps/code-agent/src/__tests__/domain/prompts/githubAgentPrompt.test.ts`):
+Add the following test inside the existing `describe('PR section', () => {...})` block in `apps/code-agent/src/__tests__/domain/prompts/githubAgentPrompt.test.ts` (do NOT create a new top-level `describe('githubAgentPrompt', ...)`):
 
 ```typescript
-import { describe, it, expect } from 'vitest';
-import { githubAgentPrompt } from '../../../domain/prompts/githubAgentPrompt.js';
-
-describe('githubAgentPrompt', () => {
-  it('includes test_quality in review type guidelines for PR events', () => {
-    const result = githubAgentPrompt.build({
-      repository: 'test/repo',
-      prNumber: 1,
-      prTitle: 'Test PR',
-      prBody: 'body',
-      action: 'opened',
-      senderLogin: 'user',
-      eventType: 'pull_request',
-      files: [],
-    });
-    expect(result).toContain('test_quality');
-    expect(result).toContain('false positives');
-    expect(result).toContain('v8 ignore');
+it('includes test_quality in review type guidelines for PR events', () => {
+  const result = githubAgentPrompt.build({
+    repository: 'test/repo',
+    prNumber: 1,
+    prTitle: 'Test PR',
+    prBody: 'body',
+    action: 'opened',
+    senderLogin: 'user',
+    eventType: 'pull_request',
+    files: [],
   });
+  expect(result).toContain('test_quality');
+  expect(result).toContain('false positives');
+  expect(result).toContain('v8 ignore');
 });
 ```
 
@@ -155,7 +150,20 @@ Also add Example 4 after the existing Example 3 (around line 115):
 
 Also bump the prompt version from `'5.1.1'` to `'5.2.0'` (minor: new enum value added).
 
-**Note:** If an existing test asserts the prompt version (e.g., `expect(version).toBe('5.1.1')`), update that assertion to `'5.2.0'` and fix the misleading test description (e.g., `it('has version 5.0.0', ...)` should be updated to `it('has version 5.2.0', ...)`).
+- [ ] **Step 7b: Update version test assertion and description**
+
+In `apps/code-agent/src/__tests__/domain/prompts/githubAgentPrompt.test.ts`, find the existing version test (line 9):
+```typescript
+it('has version 5.0.0', () => {          // ← misleading description
+  expect(githubAgentPrompt.version).toBe('5.1.1');  // ← stale after bump
+});
+```
+Update both the description and assertion:
+```typescript
+it('has version 5.2.0', () => {
+  expect(githubAgentPrompt.version).toBe('5.2.0');
+});
+```
 
 - [ ] **Step 8: Run test to verify it passes**
 
