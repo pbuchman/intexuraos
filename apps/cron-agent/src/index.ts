@@ -45,7 +45,7 @@ async function main(): Promise<void> {
   const logger = createAppLogger({ name: 'cron-agent' });
 
   logger.info(
-    { count: config.allowedServices.length, services: config.allowedServices.map((s) => s.key) },
+    { serviceCount: config.allowedServices.length, serviceKeys: config.allowedServices.map((s) => s.key) },
     'Allowed services configured for cron-agent',
   );
 

@@ -612,9 +612,39 @@ describe('OpenApiToolRegistry', () => {
 
     await spyRegistry.getToolsForService('code-agent');
 
-    expect(spyLogger.debug).toHaveBeenCalledWith(
+    expect(spyLogger.info).toHaveBeenCalledWith(
       { service: 'code-agent', openapiUrl: 'http://code-agent:8128/openapi.json' },
       'Fetching OpenAPI spec for service',
+    );
+  });
+
+  it('warns when a service produces zero tools', async () => {
+    const spyLogger = createSpyLogger();
+    const spyRegistry = new OpenApiToolRegistry({
+      allowedServices: [testService],
+      internalAuthToken: 'test-token',
+      logger: spyLogger as never,
+    });
+
+    const emptySpec = {
+      openapi: '3.1.1',
+      info: { title: 'Empty', version: '1.0.0' },
+      paths: {
+        '/internal/items': {
+          get: { summary: 'No operationId here' },
+        },
+      },
+    };
+
+    nock('http://code-agent:8128')
+      .get('/openapi.json')
+      .reply(200, emptySpec);
+
+    await spyRegistry.getToolsForService('code-agent');
+
+    expect(spyLogger.warn).toHaveBeenCalledWith(
+      { service: 'code-agent' },
+      'Service produced zero tools — check operationId on /internal/* routes',
     );
   });
 

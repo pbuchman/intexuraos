@@ -68,7 +68,7 @@ export class OpenApiToolRegistry implements ToolRegistry {
   }
 
   private async fetchAndGenerateTools(service: ServiceDefinition): Promise<ToolDefinition[]> {
-    this.deps.logger.debug(
+    this.deps.logger.info(
       { service: service.key, openapiUrl: service.openapiUrl },
       'Fetching OpenAPI spec for service',
     );
@@ -145,10 +145,17 @@ export class OpenApiToolRegistry implements ToolRegistry {
       }
     }
 
-    this.deps.logger.info(
-      { service: service.key, toolCount: tools.length },
-      'Generated tools from OpenAPI spec',
-    );
+    if (tools.length === 0) {
+      this.deps.logger.warn(
+        { service: service.key },
+        'Service produced zero tools — check operationId on /internal/* routes',
+      );
+    } else {
+      this.deps.logger.info(
+        { service: service.key, toolCount: tools.length },
+        'Generated tools from OpenAPI spec',
+      );
+    }
 
     return tools;
   }
