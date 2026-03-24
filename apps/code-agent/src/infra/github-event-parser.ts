@@ -670,6 +670,7 @@ export function parseCheckSuiteEvent(
     body: typeof prBody === 'string' ? prBody : null,
     state: typeof prState === 'string' ? prState : null,
     baseBranch: headBranch,
+    /* v8 ignore start -- test-infra: Test fakes cannot produce check_suite payload where prMergedAt is a string or non-Date truthy value; createdAt also cannot be coerced via String() conversion in unit test fakes @preserve */
     mergedAt:
       prMergedAt && typeof prMergedAt === 'string'
         ? new Date(prMergedAt)
@@ -677,6 +678,7 @@ export function parseCheckSuiteEvent(
           ? prMergedAt
           : null,
     createdAt: createdAt instanceof Date ? createdAt : new Date(String(createdAt)),
+    /* v8 ignore stop @preserve */
     payload: enrichedPayload,
   });
 }

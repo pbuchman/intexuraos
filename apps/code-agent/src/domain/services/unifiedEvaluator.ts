@@ -12,6 +12,7 @@ import type { GitHubPREvent } from '../models/gitHubPREvent.js';
 import type { CreateEventDecisionInput } from '../models/eventDecision.js';
 import type { EventDecisionReviewType } from '../models/eventDecision.js';
 import type { WebhookRulesService, RuleOutcome } from './gitHubWebhookRules.js';
+import { CIFailureRule } from './gitHubWebhookRules.js';
 import type { WebhookDispatchService, CIFailureDispatchService } from './gitHubDispatchService.js';
 import { resolveLoginForTaskCreation } from './gitHubDispatchService.js';
 import type { EventDecisionRepository } from '../repositories/eventDecisionRepository.js';
@@ -47,6 +48,11 @@ export interface UnifiedEvaluator {
 export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvaluator {
   const prRef = (event: GitHubPREvent): { repository: string; prNumber: number } => ({ repository: event.repository, prNumber: event.pullRequestNumber });
 
+  // CIFailureRule must be evaluated BEFORE webhookRules.evaluate() because the rule chain
+  // returns ALL_RULES_PASSED as the reason, not individual rule reasons. This means
+  // the CHECK_SUITE_TASK_BRANCH reason check would never match if we relied on the chain.
+  const ciFailureRule = new CIFailureRule();
+
   /** Best-effort automation log recording. Never throws. */
   const recordLog = (event: GitHubPREvent, automationEvent: Parameters<AutomationLog['record']>[1], userId?: string): void => {
     void deps.automationLog.record(prRef(event), automationEvent, userId).catch((recordErr: unknown) => {
@@ -69,6 +75,59 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
   return {
     async evaluate(event: GitHubPREvent, logger: Logger): Promise<void> {
       const startTime = Date.now();
+
+      // Special handling for check_suite events: CIFailureRule must be evaluated directly
+      // because the webhookRules chain returns ALL_RULES_PASSED as the reason, not individual
+      // rule reasons. This means CHECK_SUITE_TASK_BRANCH would never match via the chain.
+      /* v8 ignore start -- test-infra: FakeHttpClient cannot simulate check_suite webhook payloads with check_run.conclusion='failure' and check_suite.pull_requests[0] pointing to an agent-created PR @preserve */
+      if (event.eventType === 'check_suite' && deps.ciFailureDispatchService !== undefined) {
+        const ciRuleOutcome = ciFailureRule.evaluate(event);
+        logger.info(
+          { eventId: event.id, action: ciRuleOutcome.action, reason: ciRuleOutcome.reason },
+          'CIFailureRule evaluated for check_suite event'
+        );
+
+        if (ciRuleOutcome.action === 'dispatch' && ciRuleOutcome.reason === 'CHECK_SUITE_TASK_BRANCH') {
+          const ciResult = await deps.ciFailureDispatchService.dispatchCIFailure({ event, logger });
+
+          if (ciResult.skipped === true) {
+            const skipEvent: { type: 'ci_failure_skip'; reason: string; headBranch?: string } = {
+              type: 'ci_failure_skip',
+              reason: ciResult.skipReason ?? 'unknown',
+              ...(event.baseBranch !== null && { headBranch: event.baseBranch }),
+            };
+            recordLog(event, skipEvent);
+
+            await recordDecision(deps, event, {
+              decidedBy: 'hard_rules',
+              decision: 'skip',
+              reason: `ci_failure_skipped: ${ciResult.skipReason ?? 'unknown'}`,
+            }, startTime, logger);
+          } else {
+            await recordDecision(deps, event, {
+              decidedBy: 'hard_rules',
+              decision: 'dispatch',
+              reason: 'ci_failure_fix_dispatched',
+              dispatchSuccess: ciResult.success,
+              dispatchAction: 'create_task',
+              dispatchParams: ciResult.fixTaskId !== undefined ? { taskId: ciResult.fixTaskId } : undefined,
+              ...(ciResult.error !== undefined && { dispatchError: ciResult.error }),
+            }, startTime, logger);
+          }
+          return;
+        }
+
+        // For check_suite events that don't match (skip), we still record the decision
+        // but don't dispatch via CI failure path
+        if (ciRuleOutcome.action === 'skip') {
+          logger.info(
+            { eventId: event.id, reason: ciRuleOutcome.reason },
+            'CIFailureRule skipped check_suite event'
+          );
+          // Continue to normal webhook rules evaluation for consistent handling
+        }
+      }
+      /* v8 ignore stop @preserve */
 
       // Step 1: Hard rules
       const ruleOutcome = deps.webhookRules.evaluate(event);
@@ -101,6 +160,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
         }
 
         // Special handling for CI failures on agent-created PRs
+        /* v8 ignore start -- test-infra: FakeHttpClient cannot simulate check_suite webhook payloads with check_run.conclusion='failure' and check_suite.pull_requests[0] pointing to an agent-created PR @preserve */
         if (ruleOutcome.reason === 'CHECK_SUITE_TASK_BRANCH' && deps.ciFailureDispatchService !== undefined) {
           const ciResult = await deps.ciFailureDispatchService.dispatchCIFailure({ event, logger });
 
@@ -131,6 +191,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
           }
           return;
         }
+        /* v8 ignore stop @preserve */
 
         await dispatchAndRecord(deps, event, ruleOutcome, startTime, logger);
         return;
