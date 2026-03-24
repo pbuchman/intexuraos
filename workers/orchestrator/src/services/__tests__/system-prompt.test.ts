@@ -896,6 +896,7 @@ describe('system-prompt', () => {
     expect(result).toContain('🔒 Security');
     expect(result).toContain('🏗️ Architecture');
     expect(result).toContain('📐 Plan Review');
+    expect(result).toContain('🧪 Test Quality');
     expect(result).toContain('Verdict:');
   });
 
@@ -906,6 +907,7 @@ describe('system-prompt', () => {
     expect(result).toContain('🔒 Security');
     expect(result).not.toContain('🏗️ Architecture');
     expect(result).not.toContain('📐 Plan Review');
+    expect(result).not.toContain('🧪 Test Quality');
     expect(result).toContain('code_quality, security');
   });
 
@@ -915,6 +917,7 @@ describe('system-prompt', () => {
     expect(result).not.toContain('🔍 Code Quality');
     expect(result).not.toContain('🔒 Security');
     expect(result).not.toContain('📐 Plan Review');
+    expect(result).not.toContain('🧪 Test Quality');
   });
 
   it('includes only plan_review section when reviewTypes is ["plan_review"]', () => {
@@ -923,6 +926,7 @@ describe('system-prompt', () => {
     expect(result).not.toContain('🔍 Code Quality');
     expect(result).not.toContain('🔒 Security');
     expect(result).not.toContain('🏗️ Architecture');
+    expect(result).not.toContain('🧪 Test Quality');
   });
 
   it('omits Per-Type Review Structure section when all reviewTypes are unknown', () => {
@@ -932,6 +936,7 @@ describe('system-prompt', () => {
     expect(result).not.toContain('🔒 Security');
     expect(result).not.toContain('🏗️ Architecture');
     expect(result).not.toContain('📐 Plan Review');
+    expect(result).not.toContain('🧪 Test Quality');
   });
 
   it('filters out unknown reviewTypes and includes only valid ones', () => {
@@ -944,6 +949,44 @@ describe('system-prompt', () => {
     expect(result).not.toContain('🔍 Code Quality');
     expect(result).not.toContain('🏗️ Architecture');
     expect(result).not.toContain('📐 Plan Review');
+    expect(result).not.toContain('🧪 Test Quality');
+  });
+
+  it('includes only test_quality section when reviewTypes is ["test_quality"]', () => {
+    const result = reviewPrompt.build({ ...baseParams, reviewTypes: ['test_quality'] });
+    expect(result).toContain('🧪 Test Quality');
+    expect(result).not.toContain('🔍 Code Quality');
+    expect(result).not.toContain('🔒 Security');
+    expect(result).not.toContain('🏗️ Architecture');
+    expect(result).not.toContain('📐 Plan Review');
+  });
+
+  it('includes both sections when reviewTypes is ["code_quality", "test_quality"]', () => {
+    const result = reviewPrompt.build({
+      ...baseParams,
+      reviewTypes: ['code_quality', 'test_quality'],
+    });
+    expect(result).toContain('🔍 Code Quality');
+    expect(result).toContain('🧪 Test Quality');
+    expect(result).not.toContain('🔒 Security');
+    expect(result).not.toContain('🏗️ Architecture');
+    expect(result).not.toContain('📐 Plan Review');
+  });
+
+  it('includes all types including test_quality when reviewTypes is undefined', () => {
+    const result = reviewPrompt.build(baseParams);
+    expect(result).toContain('🧪 Test Quality');
+    expect(result).toContain('🔍 Code Quality');
+    expect(result).toContain('🔒 Security');
+    expect(result).toContain('🏗️ Architecture');
+    expect(result).toContain('📐 Plan Review');
+  });
+
+  it('review scope description contains test_quality criteria', () => {
+    const result = reviewPrompt.build(baseParams);
+    expect(result).toContain('**test_quality**');
+    expect(result).toContain('False positives');
+    expect(result).toContain('v8 ignore legitimacy');
   });
 
   it('REVIEW_AGENT_FINAL block includes requirements_tracker_updated field', () => {
