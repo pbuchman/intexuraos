@@ -99,6 +99,10 @@ export class OpenApiToolRegistry implements ToolRegistry {
   ): ToolDefinition[] {
     const paths = spec['paths'] as Record<string, Record<string, Record<string, unknown>>> | undefined;
     if (paths === undefined) {
+      this.deps.logger.warn(
+        { service: service.key },
+        'OpenAPI spec has no paths — service may be misconfigured',
+      );
       return [];
     }
 
