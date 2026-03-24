@@ -604,7 +604,10 @@ ${typeSections.join('\n\n')}
 Rules:
 - Include ONLY the sections listed above. Do NOT add sections for review types that were not requested.
 - Every included type section MUST have a \`**Verdict:**\` line.
-- The \`### ⚙️ GitHub Actions Status\`, \`### 📋 Requirements Coverage\`, and \`### Overall Assessment\` sections are ALWAYS required.
+- The following sections are ALWAYS required (never omit):
+  - \`### ⚙️ GitHub Actions Status\`
+  - \`### 📋 Requirements Coverage\`
+  - \`### Overall Assessment\`
 - When GitHub Actions have failures, the GH Actions section MUST use ❌ and list each failed check by name and status. This ensures the reviewer sees CI failures prominently and nitpicker-nuker can act on them.`;
 }
 
