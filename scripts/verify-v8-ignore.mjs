@@ -72,6 +72,11 @@ const BLOCKER_KEYWORDS = [
   'does not expose',
 ];
 
+const BLOCKER_KEYWORD_PATTERN = new RegExp(
+  BLOCKER_KEYWORDS.map((kw) => kw.replace(/\s+/g, '\\s+')).join('|'),
+  'i'
+);
+
 // ============================================================================
 // CATEGORY DETECTORS
 // ============================================================================
@@ -603,15 +608,10 @@ function validateBlockerKeywords(comments, overriddenFiles, taskMap) {
   const warnings = [];
   const overrideSkips = [];
 
-  const keywordPattern = new RegExp(
-    BLOCKER_KEYWORDS.map((kw) => kw.replace(/\s+/g, '\\s+')).join('|'),
-    'i'
-  );
-
   for (const comment of comments) {
     if (!comment.explanation) continue;
 
-    if (!keywordPattern.test(comment.explanation)) {
+    if (!BLOCKER_KEYWORD_PATTERN.test(comment.explanation)) {
       if (checkOverride(comment, overriddenFiles, taskMap, overrideSkips)) continue;
 
       warnings.push({
@@ -619,9 +619,6 @@ function validateBlockerKeywords(comments, overriddenFiles, taskMap) {
         line: comment.line,
         category: comment.category,
         explanation: comment.explanation,
-        message:
-          `Explanation lacks a blocker keyword. ` +
-          `Must contain one of: ${BLOCKER_KEYWORDS.join(', ')}`,
       });
     }
   }
@@ -1157,7 +1154,11 @@ async function main() {
   const blockCount = startComments.length;
 
   // Report override skips
-  const allOverrideSkips = [...patternOverrideSkips, ...neverValidOverrideSkips, ...blockerOverrideSkips];
+  const allOverrideSkips = [
+    ...patternOverrideSkips,
+    ...neverValidOverrideSkips,
+    ...blockerOverrideSkips,
+  ];
   if (allOverrideSkips.length > 0) {
     console.log(`\n⏭ ${allOverrideSkips.length} block(s) skipped via overrides:`);
     for (const skip of allOverrideSkips) {
@@ -1171,9 +1172,7 @@ async function main() {
     blockerWarnings.forEach((w) => {
       console.log(`  ${w.file}:${w.line} [${w.category}]: ${w.explanation}`);
     });
-    console.log(
-      `\n  Required keywords: ${BLOCKER_KEYWORDS.join(', ')}`
-    );
+    console.log(`\n  Required keywords: ${BLOCKER_KEYWORDS.join(', ')}`);
   }
 
   console.log(`\n✓ ${validCount} v8 ignore comments validated`);
