@@ -148,7 +148,7 @@ Also add Example 4 after the existing Example 3 (around line 115):
 '3. Respond: "Requested code_quality and test_quality reviews for test-heavy PR."',
 ```
 
-Also bump the prompt version from `'5.1.1'` to `'5.2.0'` (minor: new enum value added).
+Also bump the prompt version from `'5.1.1'` to `'6.0.0'` (major: new review type changes LLM decision-making behavior per CLAUDE.md versioning rules).
 
 - [ ] **Step 7b: Update version test assertion and description**
 
@@ -160,8 +160,8 @@ it('has version 5.0.0', () => {          // ← misleading description
 ```
 Update both the description and assertion:
 ```typescript
-it('has version 5.2.0', () => {
-  expect(githubAgentPrompt.version).toBe('5.2.0');
+it('has version 6.0.0', () => {
+  expect(githubAgentPrompt.version).toBe('6.0.0');
 });
 ```
 
@@ -275,7 +275,7 @@ In the same file, find the review scope section in `reviewPrompt.build()` (aroun
 
 - [ ] **Step 6: Bump `reviewPrompt` version**
 
-In `workers/orchestrator/src/services/system-prompt.ts`, change the reviewPrompt version from `'6.1.1'` to `'6.2.0'` (minor: new review type added).
+In `workers/orchestrator/src/services/system-prompt.ts`, change the reviewPrompt version from `'6.1.1'` to `'7.0.0'` (major: new review type changes reviewer behavior per CLAUDE.md versioning rules).
 
 - [ ] **Step 7: Run test to verify it passes**
 
