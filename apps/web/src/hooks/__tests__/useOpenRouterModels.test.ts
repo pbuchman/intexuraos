@@ -111,4 +111,32 @@ describe('useOpenRouterModels', () => {
 
     expect(mockRequest).toHaveBeenCalledTimes(1);
   });
+
+  it('re-fetches after unconfigure and reconfigure', async () => {
+    mockRequest.mockResolvedValue({
+      models: MOCK_MODELS,
+      cachedAt: '2026-03-25T00:00:00Z',
+    });
+
+    let isConfigured = true;
+    const { result, rerender } = renderHook(() => useOpenRouterModels(isConfigured));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+    expect(mockRequest).toHaveBeenCalledTimes(1);
+
+    // Unconfigure
+    isConfigured = false;
+    rerender();
+    expect(result.current.models).toEqual([]);
+
+    // Reconfigure — should trigger a new fetch
+    isConfigured = true;
+    rerender();
+
+    await waitFor(() => {
+      expect(mockRequest).toHaveBeenCalledTimes(2);
+    });
+  });
 });
