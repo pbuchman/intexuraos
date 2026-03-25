@@ -986,6 +986,26 @@ describe('system-prompt', () => {
     expect(decisionLogIdx).toBeLessThan(skillOrderIdx);
   });
 
+  it('Comment-Driven Decision Log includes skip-when-empty instruction', () => {
+    const planningResult = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const executionResult = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+
+    for (const result of [planningResult, executionResult]) {
+      expect(result).toContain(
+        'If no comments exist or no comments influenced decisions, skip this section entirely'
+      );
+    }
+  });
+
+  it('Comment-Driven Decision Log specifies timing for Linear acknowledgment comment', () => {
+    const planningResult = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const executionResult = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+
+    for (const result of [planningResult, executionResult]) {
+      expect(result).toContain('after implementation, before creating the PR');
+    }
+  });
+
   it('planning prompt version is 3.1.0', () => {
     expect(planningPrompt.version).toBe('3.1.0');
   });

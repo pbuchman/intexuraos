@@ -31,7 +31,7 @@ decisions, or implementation choices, you MUST:
    - Which comment drove it (author + timestamp)
    - How it affected the outcome
 
-2. **Post a Linear acknowledgment comment** on the issue listing all comment-driven decisions:
+2. **Post a Linear acknowledgment comment** on the issue (after implementation, before creating the PR) listing all comment-driven decisions:
    Format:
    📋 **Comment-Driven Decisions:**
    - Implementing [decision] per @[author]'s comment ([timestamp])
