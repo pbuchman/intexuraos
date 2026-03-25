@@ -285,9 +285,11 @@ describe('evaluateEvent', () => {
       );
     });
 
-    it('returns skip when no tool is called for PR event', async () => {
+    it('returns skip with warn log when no tool is called for PR event', async () => {
+      const logger = createFakeLogger();
       const deps = createDeps({
         toolCallingClient: createFakeToolCallingClient({ callTools: false }),
+        logger,
       });
       const event = createFakePREvent();
       const result = await evaluateEvent(deps, event);
@@ -298,6 +300,10 @@ describe('evaluateEvent', () => {
           reason: 'No tool called',
         });
       }
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ prNumber: event.pullRequestNumber }),
+        'GitHub Agent PR triage completed without calling any tool — defaulting to skip',
+      );
     });
 
     it('handles multiple review types', async () => {
@@ -630,9 +636,11 @@ describe('evaluateEvent', () => {
       }
     });
 
-    it('returns skip when no tool is called for comment event', async () => {
+    it('returns skip with warn log when no tool is called for comment event', async () => {
+      const logger = createFakeLogger();
       const deps = createDeps({
         toolCallingClient: createFakeToolCallingClient({ callTools: false }),
+        logger,
       });
       const event = createFakePREvent({
         eventType: 'issue_comment',
@@ -649,6 +657,10 @@ describe('evaluateEvent', () => {
           reason: 'No tool called',
         });
       }
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ prNumber: event.pullRequestNumber }),
+        'GitHub Agent comment triage completed without calling any tool — defaulting to skip',
+      );
     });
 
     it('returns reasoning from LLM content for comment events', async () => {
