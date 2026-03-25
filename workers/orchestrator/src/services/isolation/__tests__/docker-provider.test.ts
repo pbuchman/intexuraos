@@ -1098,6 +1098,26 @@ describe('DockerProvider', () => {
       expect(modelEntry).toBe('ANTHROPIC_MODEL=MiniMax-M2.7');
     });
 
+    it('sets CLAUDE_CODE_EFFORT_LEVEL for opus worker', async () => {
+      const config = createTestConfig({ workerType: 'opus' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const effortEntry = envArr.find((e: string) => e.startsWith('CLAUDE_CODE_EFFORT_LEVEL='));
+      expect(effortEntry).toBe('CLAUDE_CODE_EFFORT_LEVEL=high');
+    });
+
+    it('does not set CLAUDE_CODE_EFFORT_LEVEL for sonnet worker', async () => {
+      const config = createTestConfig({ workerType: 'sonnet' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const effortEntry = envArr.find((e: string) => e.startsWith('CLAUDE_CODE_EFFORT_LEVEL='));
+      expect(effortEntry).toBeUndefined();
+    });
+
     it('uses per-task session path with credential file overlay for sonnet workers', async () => {
       const config = createTestConfig({ workerType: 'sonnet' });
       await sharedCredsProvider.createWorker(config);
