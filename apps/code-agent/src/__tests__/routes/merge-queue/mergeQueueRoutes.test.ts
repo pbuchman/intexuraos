@@ -557,6 +557,45 @@ describe('Merge queue JWT routes', () => {
       );
     });
 
+    it('silently defaults excludedPrNumbers to empty array when invalid', async () => {
+      nock('https://api.github.com')
+        .get('/user').reply(200, { login: 'testuser' })
+        .get('/repos/testorg/testrepo').reply(200, { permissions: { push: true } });
+
+      vi.mocked(mockMergeQueueWatchRepo.create).mockResolvedValue(
+        ok({
+          id: 'watch_new',
+          userId: 'test-user-id',
+          gitHubUsername: 'testuser',
+          owner: 'testorg',
+          repo: 'testrepo',
+          baseBranch: 'development',
+          status: 'active',
+          mergedPrs: [],
+          skippedPrs: [],
+          excludedPrNumbers: [],
+          lastError: null,
+          lastErrorAt: null,
+          createdAt: new Date(),
+          lastTickAt: null,
+          drainedAt: null,
+          cancelledAt: null,
+        } as never)
+      );
+
+      const res = await server.inject({
+        method: 'POST',
+        url: '/code/merge-queue/watch',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: { owner: 'testorg', repo: 'testrepo', baseBranch: 'development', excludedPrNumbers: 'not-an-array' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(mockMergeQueueWatchRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ excludedPrNumbers: [] })
+      );
+    });
+
     it('should return error when user lacks push access', async () => {
       nock('https://api.github.com')
         .get('/user')

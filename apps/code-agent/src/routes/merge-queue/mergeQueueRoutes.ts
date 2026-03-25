@@ -119,7 +119,7 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           });
         }
 
-        // Parse optional excludedPrNumbers
+        // Lenient parse: invalid excludedPrNumbers silently defaults to [] (creation is lenient; PUT is strict)
         const rawExcluded = body?.excludedPrNumbers;
         const excludedPrNumbers: number[] = Array.isArray(rawExcluded) && rawExcluded.every((n): n is number => typeof n === 'number')
           ? rawExcluded

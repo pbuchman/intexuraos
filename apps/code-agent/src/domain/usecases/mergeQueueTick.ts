@@ -148,8 +148,8 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
     }
 
     // Filter out excluded PRs (after drain check to avoid premature drain)
-    const excludedSet = watch.excludedPrNumbers.length > 0 ? new Set(watch.excludedPrNumbers) : null;
-    const prsToProcess = excludedSet !== null
+    const excludedSet = new Set(watch.excludedPrNumbers);
+    const prsToProcess = excludedSet.size > 0
       ? eligiblePrs.filter((pr) => !excludedSet.has(pr.number))
       : eligiblePrs;
 
