@@ -455,7 +455,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/code-agent/src/routes/merge-queue/serializeWatch.ts apps/code-agent/src/__tests__/routes/merge-queue/mergeQueueRoutes.test.ts
+git add apps/code-agent/src/routes/merge-queue/serializeWatch.ts apps/code-agent/src/__tests__/routes/merge-queue/serializeWatch.test.ts apps/code-agent/src/__tests__/routes/merge-queue/mergeQueueRoutes.test.ts
 git commit -m "feat(code-agent): include excludedPrNumbers in merge queue watch API response"
 ```
 
@@ -1021,6 +1021,7 @@ const handleToggleExclusion = useCallback((prNumber: number): void => {
     (w) => w.baseBranch === selectedBranchRef.current && w.status === 'active'
   );
   if (activeWatch !== undefined) {
+    setExclusionInFlight(true);
     void (async (): Promise<void> => {
       try {
         const token = await getAccessToken();
@@ -1030,13 +1031,15 @@ const handleToggleExclusion = useCallback((prNumber: number): void => {
         setExcludedPrNumbers(prev);
         setExclusionError(err instanceof Error ? err.message : 'Failed to update exclusion');
         setTimeout(() => { setExclusionError(null); }, 3000);
+      } finally {
+        setExclusionInFlight(false);
       }
     })();
   }
 }, [getAccessToken]);
 ```
 
-Note: This requires an `excludedPrNumbersRef` (similar to `watchesRef`):
+Note: This requires an `excludedPrNumbersRef` (similar to `watchesRef`) — declare once, used by both toggle and watch creation:
 
 ```typescript
 const excludedPrNumbersRef = useRef(excludedPrNumbers);
@@ -1057,6 +1060,7 @@ const handleSelectAll = useCallback((): void => {
     (w) => w.baseBranch === selectedBranchRef.current && w.status === 'active'
   );
   if (activeWatch !== undefined) {
+    setExclusionInFlight(true);
     void (async (): Promise<void> => {
       try {
         const token = await getAccessToken();
@@ -1065,6 +1069,8 @@ const handleSelectAll = useCallback((): void => {
         setExcludedPrNumbers(prev);
         setExclusionError(err instanceof Error ? err.message : 'Failed to update exclusions');
         setTimeout(() => { setExclusionError(null); }, 3000);
+      } finally {
+        setExclusionInFlight(false);
       }
     })();
   }
@@ -1079,6 +1085,7 @@ const handleDeselectAll = useCallback((eligiblePrNumbers: number[]): void => {
     (w) => w.baseBranch === selectedBranchRef.current && w.status === 'active'
   );
   if (activeWatch !== undefined) {
+    setExclusionInFlight(true);
     void (async (): Promise<void> => {
       try {
         const token = await getAccessToken();
@@ -1087,6 +1094,8 @@ const handleDeselectAll = useCallback((eligiblePrNumbers: number[]): void => {
         setExcludedPrNumbers(prev);
         setExclusionError(err instanceof Error ? err.message : 'Failed to update exclusions');
         setTimeout(() => { setExclusionError(null); }, 3000);
+      } finally {
+        setExclusionInFlight(false);
       }
     })();
   }
@@ -1101,16 +1110,9 @@ In the existing `doToggleWatch` function, update the `createWatch` call:
 await createWatch(token, owner, repo, branch, [...excludedPrNumbers]);
 ```
 
-(This requires adding `excludedPrNumbers` to the dependency array — but since it's read via the state setter's `prev` value, it's accessed from the current state.)
+Read via the `excludedPrNumbersRef` already declared in Step 3 (do NOT re-declare it here — it's the same ref used by the toggle/bulk handlers).
 
-Actually, read it via a ref for the same pattern used elsewhere. Add:
-
-```typescript
-const excludedPrNumbersRef = useRef(excludedPrNumbers);
-excludedPrNumbersRef.current = excludedPrNumbers;
-```
-
-Then in `doToggleWatch`:
+In `doToggleWatch`:
 
 ```typescript
 await createWatch(token, owner, repo, branch, [...excludedPrNumbersRef.current]);
