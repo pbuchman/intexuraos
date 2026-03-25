@@ -975,6 +975,7 @@ describe('processCodeAction', () => {
         }),
         markInProgress: vi.fn(),
         markInReview: vi.fn(),
+        markTodo: vi.fn(),
         markQa: vi.fn(),
       } as unknown as LinearIssueService;
 
@@ -1015,6 +1016,7 @@ describe('processCodeAction', () => {
         }),
         markInProgress: vi.fn(),
         markInReview: vi.fn(),
+        markTodo: vi.fn(),
         markQa: vi.fn(),
       } as unknown as LinearIssueService;
 
