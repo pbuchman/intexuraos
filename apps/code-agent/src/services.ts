@@ -486,7 +486,7 @@ export function initServices(config: ServiceConfig): void {
       if (token === null) return;
       await gitHubPRClient.postPRComment(
         token, parsed.owner, parsed.repo, event.pullRequestNumber,
-        `⚠️ Only the repository owner can trigger worker commands. This event from \`${event.senderLogin}\` has been ignored.`,
+        `⚠️ Only the repository owner and authorized bots can trigger worker commands. This event from \`${event.senderLogin}\` has been ignored.`,
       );
     },
   });
