@@ -26,12 +26,6 @@ Addresses: [INT-XXX](LINEAR_ISSUE_URL)
 - Decision 1: <reason>
 - Decision 2: <reason>
 
-### Decision Log
-
-| Decision | Source | Impact |
-|----------|--------|--------|
-| [what was decided] | @[comment author] ([timestamp]) | [how it affected implementation] |
-
 ## Testing
 
 - [ ] Manual testing completed
@@ -56,7 +50,6 @@ Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 | Reasoning        | Yes      | Explains the "why" behind decisions |
 | Investigation    | If any   | Data collected during investigation |
 | Key Decisions    | If any   | Important choices made              |
-| Decision Log     | If any   | Tracks comment-driven decisions with attribution |
 | Testing          | Yes      | Verification checklist              |
 | Cross-References | Yes      | Links to all related systems        |
 | Co-Authored-By   | Yes      | Attribution for AI assistance       |
