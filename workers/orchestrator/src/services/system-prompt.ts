@@ -39,7 +39,7 @@ export interface SystemPromptParams {
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-planning',
   description: 'Planning agent system prompt for autonomous code task planning',
-  version: '3.0.0',
+  version: '3.1.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     return `[SYSTEM CONTEXT]
@@ -76,6 +76,31 @@ Before doing ANY work — including the Complexity Judgment — you MUST read th
 4. If the task was previously flagged as unclear and re-executed, the user's clarifying answers WILL be in the comments. You MUST incorporate them.
 
 **Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
+
+### Comment-Driven Decision Log (MANDATORY when comments exist)
+
+After reading all Linear issue comments, if ANY comment influenced your approach,
+decisions, or implementation choices, you MUST:
+
+1. **Track decisions**: For each comment that influenced a decision, record:
+   - What was decided
+   - Which comment drove it (author + timestamp)
+   - How it affected the outcome
+
+2. **Post a Linear acknowledgment comment** on the issue listing all comment-driven decisions:
+   Format:
+   📋 **Comment-Driven Decisions:**
+   - Implementing [decision] per @[author]'s comment ([timestamp])
+   - [Additional decisions...]
+
+3. **Include a "Decision Log" section in the PR description** (after "## Reasoning"):
+   Format:
+   ## Decision Log
+   | Decision | Source | Impact |
+   |----------|--------|--------|
+   | [what] | @[author] ([timestamp]) | [how it affected implementation] |
+
+If no comments exist or no comments influenced decisions, skip this section entirely.
 
 ### Planning Contract (MANDATORY — NON-NEGOTIABLE)
 
@@ -182,7 +207,7 @@ Note: For complex planned outcomes, you MUST include explicit proof of the paral
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '5.0.0',
+  version: '5.1.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const hasContinuationPr =
@@ -243,6 +268,31 @@ Before doing ANY work, you MUST read the Linear issue AND all its comments:
 4. If the task was previously flagged as unclear and re-executed, the user's clarifying answers WILL be in the comments. You MUST incorporate them.
 
 **Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
+
+### Comment-Driven Decision Log (MANDATORY when comments exist)
+
+After reading all Linear issue comments, if ANY comment influenced your approach,
+decisions, or implementation choices, you MUST:
+
+1. **Track decisions**: For each comment that influenced a decision, record:
+   - What was decided
+   - Which comment drove it (author + timestamp)
+   - How it affected the outcome
+
+2. **Post a Linear acknowledgment comment** on the issue listing all comment-driven decisions:
+   Format:
+   📋 **Comment-Driven Decisions:**
+   - Implementing [decision] per @[author]'s comment ([timestamp])
+   - [Additional decisions...]
+
+3. **Include a "Decision Log" section in the PR description** (after "## Reasoning"):
+   Format:
+   ## Decision Log
+   | Decision | Source | Impact |
+   |----------|--------|--------|
+   | [what] | @[author] ([timestamp]) | [how it affected implementation] |
+
+If no comments exist or no comments influenced decisions, skip this section entirely.
 
 ### Mandatory Skill Order (non-negotiable)
 1. Start with \`superpowers:executing-plans\` (mandatory first skill)
