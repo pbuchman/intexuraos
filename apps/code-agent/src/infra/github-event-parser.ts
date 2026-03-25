@@ -673,6 +673,9 @@ export function parseCheckSuiteEvent(
     title,
     body: typeof prBody === 'string' ? prBody : null,
     state: typeof prState === 'string' ? prState : null,
+    // NOTE: For check_suite events, baseBranch stores headBranch (the source/head branch of the PR).
+    // This is the opposite semantic of other event types where baseBranch = target/merge-into branch.
+    // CIFailureRule.evaluate() reads event.baseBranch expecting the source branch.
     baseBranch: headBranch,
     /* v8 ignore start -- test-infra: Test fakes cannot produce check_suite payload where prMergedAt is a string or non-Date truthy value; createdAt also cannot be coerced via String() conversion in unit test fakes @preserve */
     mergedAt:
