@@ -1665,4 +1665,221 @@ describe('LLM retry for pull_request events', () => {
       expect(deps.dispatchService.dispatch).toHaveBeenCalled();
     });
   });
+
+  describe('check_suite CI failure path', () => {
+    function createCheckSuiteEvent(overrides: Partial<GitHubPREvent> = {}): GitHubPREvent {
+      return createFakeEvent({
+        eventType: 'check_suite',
+        action: 'completed',
+        baseBranch: 'task_abc123',
+        ...overrides,
+      });
+    }
+
+    it('dispatches CI failure fix when check_suite matches task branch', async () => {
+      const mockCIDispatch = {
+        dispatchCIFailure: vi.fn().mockResolvedValue({
+          success: true,
+          fixTaskCreated: true,
+          fixTaskId: 'task-fix-1',
+        }),
+      };
+      const deps = createFakeDeps({
+        ciFailureDispatchService: mockCIDispatch,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createCheckSuiteEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(mockCIDispatch.dispatchCIFailure).toHaveBeenCalledWith({ event, logger });
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decidedBy: 'hard_rules',
+          decision: 'dispatch',
+          reason: 'ci_failure_fix_dispatched',
+          dispatchAction: 'create_task',
+          dispatchParams: { taskId: 'task-fix-1' },
+        }),
+      );
+      // Should NOT fall through to normal webhook rules
+      expect(deps.dispatchService.dispatch).not.toHaveBeenCalled();
+    });
+
+    it('records skip decision when CI failure dispatch is skipped', async () => {
+      const mockCIDispatch = {
+        dispatchCIFailure: vi.fn().mockResolvedValue({
+          success: false,
+          fixTaskCreated: false,
+          skipped: true,
+          skipReason: 'no_parent_task',
+        }),
+      };
+      const deps = createFakeDeps({
+        ciFailureDispatchService: mockCIDispatch,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createCheckSuiteEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decidedBy: 'hard_rules',
+          decision: 'skip',
+          reason: 'ci_failure_skipped: no_parent_task',
+        }),
+      );
+      expect(deps.dispatchService.dispatch).not.toHaveBeenCalled();
+    });
+
+    it('records automation log for CI failure skip with headBranch', async () => {
+      const mockCIDispatch = {
+        dispatchCIFailure: vi.fn().mockResolvedValue({
+          success: false,
+          fixTaskCreated: false,
+          skipped: true,
+          skipReason: 'no_parent_task',
+        }),
+      };
+      const deps = createFakeDeps({
+        ciFailureDispatchService: mockCIDispatch,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createCheckSuiteEvent({ baseBranch: 'task_xyz789' });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.automationLog.record).toHaveBeenCalledWith(
+        { repository: 'intexuraos/intexuraos', prNumber: 42 },
+        expect.objectContaining({
+          type: 'ci_failure_skip',
+          reason: 'no_parent_task',
+          headBranch: 'task_xyz789',
+        }),
+        undefined,
+      );
+    });
+
+    it('falls through to normal rules when check_suite has no task branch', async () => {
+      const mockCIDispatch = {
+        dispatchCIFailure: vi.fn(),
+      };
+      const deps = createFakeDeps({
+        ciFailureDispatchService: mockCIDispatch,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createCheckSuiteEvent({ baseBranch: 'feature/some-branch' });
+
+      await evaluator.evaluate(event, logger);
+
+      // CIFailureRule returns skip for non-task branches, so it falls through
+      expect(mockCIDispatch.dispatchCIFailure).not.toHaveBeenCalled();
+      // Normal webhook rules should still run
+      expect(deps.webhookRules.evaluate).toHaveBeenCalled();
+    });
+
+    it('falls through to normal rules when ciFailureDispatchService is not provided', async () => {
+      const deps = createFakeDeps();
+      // Ensure no ciFailureDispatchService
+      delete (deps as unknown as Record<string, unknown>)['ciFailureDispatchService'];
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createCheckSuiteEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      // Should fall through to normal webhook rules
+      expect(deps.webhookRules.evaluate).toHaveBeenCalled();
+    });
+
+    it('records dispatch with error when CI failure dispatch fails', async () => {
+      const mockCIDispatch = {
+        dispatchCIFailure: vi.fn().mockResolvedValue({
+          success: false,
+          fixTaskCreated: false,
+          error: 'Worker unavailable',
+        }),
+      };
+      const deps = createFakeDeps({
+        ciFailureDispatchService: mockCIDispatch,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createCheckSuiteEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decidedBy: 'hard_rules',
+          decision: 'dispatch',
+          reason: 'ci_failure_fix_dispatched',
+          dispatchSuccess: false,
+          dispatchError: 'Worker unavailable',
+        }),
+      );
+    });
+
+    it('records dispatch without dispatchParams when fixTaskId is undefined', async () => {
+      const mockCIDispatch = {
+        dispatchCIFailure: vi.fn().mockResolvedValue({
+          success: true,
+          fixTaskCreated: true,
+        }),
+      };
+      const deps = createFakeDeps({
+        ciFailureDispatchService: mockCIDispatch,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createCheckSuiteEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      const savedInput = vi.mocked(deps.eventDecisionRepo.save).mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+      expect(savedInput).toBeDefined();
+      expect(savedInput?.['decidedBy']).toBe('hard_rules');
+      expect(savedInput?.['decision']).toBe('dispatch');
+      expect(savedInput?.['reason']).toBe('ci_failure_fix_dispatched');
+      expect(savedInput?.['dispatchParams']).toBeUndefined();
+    });
+
+    it('handles check_suite skip with null baseBranch via CIFailureRule', async () => {
+      const mockCIDispatch = {
+        dispatchCIFailure: vi.fn(),
+      };
+      const deps = createFakeDeps({
+        ciFailureDispatchService: mockCIDispatch,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createCheckSuiteEvent({ baseBranch: null });
+
+      await evaluator.evaluate(event, logger);
+
+      // CIFailureRule returns skip for null branch, falls through
+      expect(mockCIDispatch.dispatchCIFailure).not.toHaveBeenCalled();
+      expect(deps.webhookRules.evaluate).toHaveBeenCalled();
+    });
+
+    it('defaults skipReason to unknown when not provided', async () => {
+      const mockCIDispatch = {
+        dispatchCIFailure: vi.fn().mockResolvedValue({
+          success: false,
+          fixTaskCreated: false,
+          skipped: true,
+        }),
+      };
+      const deps = createFakeDeps({
+        ciFailureDispatchService: mockCIDispatch,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createCheckSuiteEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reason: 'ci_failure_skipped: unknown',
+        }),
+      );
+    });
+  });
 });

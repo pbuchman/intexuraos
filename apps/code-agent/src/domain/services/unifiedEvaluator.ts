@@ -81,7 +81,6 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
       // Special handling for check_suite events: CIFailureRule must be evaluated directly
       // because the webhookRules chain returns ALL_RULES_PASSED as the reason, not individual
       // rule reasons. This means CHECK_SUITE_TASK_BRANCH would never match via the chain.
-      /* v8 ignore start -- test-infra: FakeHttpClient cannot simulate check_suite webhook payloads with check_run.conclusion='failure' and check_suite.pull_requests[0] pointing to an agent-created PR @preserve */
       if (event.eventType === 'check_suite' && deps.ciFailureDispatchService !== undefined) {
         const ciRuleOutcome = ciFailureRule.evaluate(event);
         logger.info(
@@ -121,7 +120,9 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
 
         // For check_suite events that don't match (skip), we still record the decision
         // but don't dispatch via CI failure path
+        /* v8 ignore start -- upstream: CIFailureRule only returns dispatch(CHECK_SUITE_TASK_BRANCH) or skip for check_suite events — false branch unreachable @preserve */
         if (ciRuleOutcome.action === 'skip') {
+        /* v8 ignore stop @preserve */
           logger.info(
             { eventId: event.id, reason: ciRuleOutcome.reason },
             'CIFailureRule skipped check_suite event'
@@ -129,7 +130,6 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
           // Continue to normal webhook rules evaluation for consistent handling
         }
       }
-      /* v8 ignore stop @preserve */
 
       // Step 1: Hard rules
       const ruleOutcome = deps.webhookRules.evaluate(event);
