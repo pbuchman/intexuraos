@@ -33,6 +33,16 @@ export function PrRow({ pr, isNextToMerge, isExcluded, onToggleExclusion }: PrRo
     ? CONFLICT_LABEL[pr.mergeConflictStatus] ?? 'Unknown'
     : 'Unknown';
 
+  const exclusionCheckbox = onToggleExclusion !== null ? (
+    <input
+      type="checkbox"
+      checked={!isExcluded}
+      onChange={(): void => { onToggleExclusion(pr.number); }}
+      className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700"
+      aria-label={isExcluded ? `Include PR #${String(pr.number)} in merge queue` : `Exclude PR #${String(pr.number)} from merge queue`}
+    />
+  ) : null;
+
   return (
     <div
       className={`rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800 ${ACCENT_SHADOW[status]} ${
@@ -42,15 +52,7 @@ export function PrRow({ pr, isNextToMerge, isExcluded, onToggleExclusion }: PrRo
       {/* Desktop layout */}
       <div className="hidden items-center gap-2 lg:grid lg:grid-cols-[32px_60px_1fr_120px_100px_100px]">
         <div className="flex items-center justify-center">
-          {onToggleExclusion !== null ? (
-            <input
-              type="checkbox"
-              checked={!isExcluded}
-              onChange={(): void => { onToggleExclusion(pr.number); }}
-              className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700"
-              aria-label={isExcluded ? `Include PR #${String(pr.number)} in merge queue` : `Exclude PR #${String(pr.number)} from merge queue`}
-            />
-          ) : null}
+          {exclusionCheckbox}
         </div>
         <div className="flex items-center gap-1">
           {isNextToMerge ? <span className="h-2 w-2 rounded-full bg-blue-500" /> : null}
@@ -84,15 +86,7 @@ export function PrRow({ pr, isNextToMerge, isExcluded, onToggleExclusion }: PrRo
       {/* Mobile layout */}
       <div className="flex flex-col gap-2 lg:hidden">
         <div className="flex items-center gap-2">
-          {onToggleExclusion !== null ? (
-            <input
-              type="checkbox"
-              checked={!isExcluded}
-              onChange={(): void => { onToggleExclusion(pr.number); }}
-              className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700"
-              aria-label={isExcluded ? `Include PR #${String(pr.number)} in merge queue` : `Exclude PR #${String(pr.number)} from merge queue`}
-            />
-          ) : null}
+          {exclusionCheckbox}
           {isNextToMerge ? <span className="h-2 w-2 rounded-full bg-blue-500" /> : null}
           <a
             href={pr.htmlUrl}
