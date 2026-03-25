@@ -1,7 +1,13 @@
 import { Link } from 'react-router-dom';
 import { AlertTriangle, ChevronDown, Loader2 } from 'lucide-react';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders, createOpenRouterModelId } from '@intexuraos/llm-contract';
 import type { LlmProvider, SupportedModel } from '@/services/researchAgentApi.types';
+import type { OpenRouterModelInfo } from '@/services/researchAgentApi.types';
+import { OpenRouterModelSelector } from './OpenRouterModelSelector.js';
+
+function noopStringArray(_ids: string[]): void {
+  // Default handler when onOpenRouterChange is not provided
+}
 
 interface ModelOption {
   id: SupportedModel;
@@ -58,6 +64,11 @@ export interface ModelSelectorProps {
   failedProviders?: Map<LlmProvider, string>;
   loading?: boolean;
   disabled?: boolean | undefined;
+  openRouterModels?: OpenRouterModelInfo[];
+  selectedOpenRouterModels?: string[];
+  onOpenRouterChange?: (ids: string[]) => void;
+  openRouterLoading?: boolean;
+  isOpenRouterConfigured?: boolean;
 }
 
 export function ModelSelector({
@@ -68,6 +79,11 @@ export function ModelSelector({
   failedProviders,
   loading = false,
   disabled = false,
+  openRouterModels,
+  selectedOpenRouterModels,
+  onOpenRouterChange,
+  openRouterLoading,
+  isOpenRouterConfigured,
 }: ModelSelectorProps): React.JSX.Element {
   return (
     <div className="space-y-3">
@@ -166,12 +182,32 @@ export function ModelSelector({
           </div>
         );
       })}
+      {isOpenRouterConfigured === true && (
+        <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-700">
+          <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+            OpenRouter Models
+            {selectedOpenRouterModels !== undefined && selectedOpenRouterModels.length > 0 && (
+              <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full dark:bg-blue-900/40 dark:text-blue-300">
+                {String(selectedOpenRouterModels.length)} selected
+              </span>
+            )}
+          </h4>
+          <OpenRouterModelSelector
+            availableModels={openRouterModels ?? []}
+            selectedModelIds={selectedOpenRouterModels ?? []}
+            onChange={onOpenRouterChange ?? noopStringArray}
+            loading={openRouterLoading ?? false}
+            disabled={disabled}
+          />
+        </div>
+      )}
     </div>
   );
 }
 
 export function getSelectedModelsList(
-  selections: Map<LlmProvider, SupportedModel | null>
+  selections: Map<LlmProvider, SupportedModel | null>,
+  openRouterModelIds?: string[]
 ): SupportedModel[] {
   const models: SupportedModel[] = [];
   for (const model of selections.values()) {
@@ -179,7 +215,10 @@ export function getSelectedModelsList(
       models.push(model);
     }
   }
-  return models;
+  const orModels: SupportedModel[] = (openRouterModelIds ?? []).map(
+    (id) => createOpenRouterModelId(id)
+  );
+  return [...models, ...orModels];
 }
 
 export { PROVIDER_MODELS };
