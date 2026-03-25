@@ -65,6 +65,31 @@ export function getAgentTypeLabel(agentType: string): string {
   return agentType.charAt(0).toUpperCase() + agentType.slice(1);
 }
 
+/** Normalize a label name: trim, lowercase, replace underscores/spaces with hyphens. */
+function normalizeLabel(label: string): string {
+  return label.trim().toLowerCase().replaceAll('_', '-').replaceAll(' ', '-');
+}
+
+/**
+ * Checks if a task's Linear labels indicate it's ready for implementation.
+ *
+ * Returns true (show Implement button) when:
+ * - `ready-to-implement` label exists (new gated behavior)
+ * - `code-task` label exists (backward compat for pre-existing planned tasks)
+ * - labels are undefined or empty (graceful fallback when Linear hydration fails or issue has no labels)
+ *
+ * Returns false (hide Implement button) when:
+ * - labels array has items but contains neither `ready-to-implement` nor `code-task`
+ */
+export function hasImplementationReadyLabel(labels: { name: string }[] | undefined): boolean {
+  if (labels === undefined || labels.length === 0) {
+    return true;
+  }
+  return labels.some(
+    (l) => normalizeLabel(l.name) === 'ready-to-implement' || normalizeLabel(l.name) === 'code-task',
+  );
+}
+
 function deriveStepState(status: CodeTaskStatus): StepState {
   if (status === 'planned' || status === 'implemented' || status === 'reviewed') {
     return 'completed';
@@ -109,13 +134,16 @@ function derivePipeline(tasks: CodeTask[]): PipelineState {
 
   const steps = entries.map((e) => e.step);
 
-  // Actionable logic: if planning completed, no execution step exists, and no implementationTaskId
+  // Actionable logic: if planning completed, no execution step exists, no implementationTaskId,
+  // AND the Linear issue has a ready-to-implement or code-task label (backward compat).
+  // Falls back to allowing actionable if label data is unavailable.
   const planningEntry = stepMap.get('planning');
   const executionEntry = stepMap.get('execution');
   if (
     planningEntry?.step.state === 'completed' &&
     executionEntry === undefined &&
-    planningEntry.task.implementationTaskId === undefined
+    planningEntry.task.implementationTaskId === undefined &&
+    hasImplementationReadyLabel(planningEntry.task.linearIssue?.labels)
   ) {
     // Insert synthetic execution step right after planning
     const planningIndex = steps.findIndex((s) => s.agentType === 'planning');
