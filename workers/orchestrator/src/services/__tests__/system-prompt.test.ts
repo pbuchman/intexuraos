@@ -1001,8 +1001,25 @@ describe('system-prompt', () => {
     const planningResult = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
     const executionResult = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
 
+    // Verifies the ack comment has explicit ordering relative to PR creation
     for (const result of [planningResult, executionResult]) {
-      expect(result).toContain('after implementation, before creating the PR');
+      expect(result).toContain('before creating the PR');
+    }
+  });
+
+  it('Comment-Driven Decision Log is absent from non-planning/non-execution prompts', () => {
+    const prResult = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task', 'pr-comment'],
+    });
+    const reviewResult = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+    });
+    const overlayResult = prReviewOverlayPrompt.build(baseParams);
+
+    for (const result of [prResult, reviewResult, overlayResult]) {
+      expect(result).not.toContain('Comment-Driven Decision Log');
     }
   });
 
