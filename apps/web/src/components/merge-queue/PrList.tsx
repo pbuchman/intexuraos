@@ -30,9 +30,9 @@ export function PrList({ prs, activeFilters, isLoading, excludedPrNumbers, onTog
 
   const filteredPrs = prs.filter((pr) => activeFilters.has(getPrStatus(pr)));
 
-  // First mergeable + eligible PR is "next to merge"
+  // First mergeable + eligible + not-excluded PR is "next to merge"
   const nextToMergeNumber = filteredPrs.find(
-    (pr) => getPrStatus(pr) === 'mergeable' && pr.authorIsEligible
+    (pr) => getPrStatus(pr) === 'mergeable' && pr.authorIsEligible && !excludedPrNumbers.has(pr.number)
   )?.number ?? null;
 
   // Use full prs array (pre-filter) so counter is stable across filter changes
