@@ -28,20 +28,16 @@ export function createSynthesisProviders(
   const synthesisKey = apiKeys[synthesisProvider];
 
   // Reject non-allowlisted OpenRouter models to enforce curated model policy
-  /* v8 ignore start -- upstream: prior check for OpenRouter model validity ensures this fallback is never reached in unit tests @preserve */
   if (isOpenRouterModel(synthesisModel) && !isAllowedModel(getOpenRouterRawId(synthesisModel))) {
     throw new Error(
       `OpenRouter model '${synthesisModel}' is not in the curated allowlist. ` +
         `Allowed models: ${allowlistModelIds()}`
     );
   }
-  /* v8 ignore stop @preserve */
 
-  /* v8 ignore start -- upstream: prior check for isAllowedModel validates model is in allowlist; getAllowlistPricing passthrough is guaranteed @preserve */
   const synthesisPricing = isOpenRouterModel(synthesisModel)
     ? getAllowlistPricing(getOpenRouterRawId(synthesisModel)) as ModelPricing
     : pricingContext.getPricing(synthesisModel as LLMModel);
-  /* v8 ignore stop @preserve */
 
   if (synthesisKey === undefined || synthesisKey === '') {
     throw new Error(`No API key configured for provider '${synthesisProvider}'`);

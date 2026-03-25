@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { createSynthesisProviders } from '../../../routes/helpers/synthesisHelper.js';
 import type { DecryptedApiKeys, ServiceContainer } from '../../../services.js';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import type { ResearchModel } from '../../../domain/research/index.js';
 
 const mockLogger = {
   info: () => {},
@@ -101,5 +102,43 @@ describe('createSynthesisProviders', () => {
 
     expect(result.synthesizer).toBeDefined();
     expect(result.contextInferrer).toBeUndefined();
+  });
+
+  it('throws when OpenRouter model is not in the curated allowlist', () => {
+    const apiKeys: DecryptedApiKeys = {
+      openrouter: 'test-or-key',
+    };
+
+    // Use a non-allowlisted OpenRouter model ID (or: prefix with unknown model)
+    const invalidModel = 'or:unknown-provider/not-in-allowlist' as ResearchModel;
+
+    expect(() =>
+      createSynthesisProviders(
+        invalidModel,
+        apiKeys,
+        'user-123',
+        mockServices,
+        mockLogger as never
+      )
+    ).toThrow("OpenRouter model 'or:unknown-provider/not-in-allowlist' is not in the curated allowlist");
+  });
+
+  it('uses allowlist pricing for valid OpenRouter models', () => {
+    const apiKeys: DecryptedApiKeys = {
+      openrouter: 'test-or-key',
+    };
+
+    // Use a valid allowlisted OR model
+    const validOrModel = 'or:anthropic/claude-sonnet-4.6' as ResearchModel;
+
+    const result = createSynthesisProviders(
+      validOrModel,
+      apiKeys,
+      'user-123',
+      mockServices,
+      mockLogger as never
+    );
+
+    expect(result.synthesizer).toBeDefined();
   });
 });

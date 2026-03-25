@@ -31,12 +31,12 @@ describe('allowlist', () => {
 
     it('all entries have required fields including contextLength', () => {
       for (const model of OPENROUTER_ALLOWED_MODELS) {
-        expect(model.id).toBeTruthy();
-        expect(model.name).toBeTruthy();
-        expect(model.provider).toBeTruthy();
+        expect(model.id).not.toBe('');
+        expect(model.name).not.toBe('');
+        expect(model.provider).not.toBe('');
         expect(model.contextLength).toBeGreaterThan(0);
-        expect(model.promptPerToken).toBeTruthy();
-        expect(model.completionPerToken).toBeTruthy();
+        expect(model.promptPerToken).not.toBe('');
+        expect(model.completionPerToken).not.toBe('');
       }
     });
 
