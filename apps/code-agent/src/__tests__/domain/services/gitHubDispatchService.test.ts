@@ -129,6 +129,38 @@ function createMockDeps(overrides: Partial<WebhookDispatchServiceDeps> = {}): We
   };
 }
 
+// Creates a deps object with properly typed mocks for dispatchCIFailure tests
+function createMockDepsForCIFailure(): WebhookDispatchServiceDeps {
+  return {
+    ...createMockDeps(),
+    codeTaskRepo: {
+      findByPR: vi.fn().mockResolvedValue(ok(null)),
+      findLatestNonReviewTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      create: vi.fn(),
+      findById: vi.fn(),
+      findByIdForUser: vi.fn(),
+      update: vi.fn(),
+      list: vi.fn(),
+      hasActiveTaskForLinearIssue: vi.fn(),
+      findZombieTasks: vi.fn(),
+      countByUserToday: vi.fn(),
+      findArchivableTasks: vi.fn(),
+      archiveTaskLogs: vi.fn(),
+      deleteTask: vi.fn(),
+      listQueuedByAge: vi.fn(),
+      listQueued: vi.fn(),
+      countQueued: vi.fn(),
+    } as never,
+    automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
+    taskEnqueueService: {
+      enqueue: vi.fn().mockResolvedValue(undefined),
+    } as never,
+    whatsappNotifier: {
+      notifyCIFailure: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
+    } as never,
+  };
+}
+
 describe('GitHubDispatchService', () => {
   let deps: WebhookDispatchServiceDeps;
   let context: DispatchContext;
@@ -814,6 +846,207 @@ describe('GitHubDispatchService', () => {
 
     it('should return false for successful results', () => {
       expect(isStaleTaskError({ success: true, dispatched: true })).toBe(false);
+    });
+  });
+
+  describe('dispatchCIFailure', () => {
+    function createMockEvent(overrides: Partial<GitHubPREvent> = {}): GitHubPREvent {
+      return {
+        id: 'event-cifailure-123',
+        githubEventId: 456,
+        deliveryId: null,
+        repository: 'test-owner/test-repo',
+        repositoryId: 54321,
+        pullRequestNumber: 42,
+        pullRequestId: 12345,
+        eventType: 'check_suite',
+        action: 'completed',
+        senderLogin: 'test-sender',
+        senderId: 999,
+        senderType: 'User',
+        prAuthorLogin: null,
+        title: 'CI Check Failed',
+        body: null,
+        state: 'open',
+        baseBranch: 'task_abc123',
+        mergedAt: null,
+        createdAt: new Date('2026-03-03T10:00:00Z'),
+        processedAt: new Date('2026-03-03T10:00:00Z'),
+        payload: {},
+        ...overrides,
+      };
+    }
+
+    it('should skip when no original task is found', async () => {
+      const deps = createMockDepsForCIFailure();
+      vi.mocked(deps.codeTaskRepo.findLatestNonReviewTaskByPR).mockResolvedValue(ok(null as never));
+
+      const service = createWebhookDispatchService(deps);
+      const event = createMockEvent();
+      const result = await service.dispatchCIFailure({ event, logger: mockLogger });
+
+      expect(result.success).toBe(true);
+      expect(result.skipped).toBe(true);
+      expect(result.skipReason).toBe('no_original_task');
+      expect(result.fixTaskCreated).toBe(false);
+    });
+
+    it('should skip when original task is already a CI failure follow-up', async () => {
+      const deps = createMockDepsForCIFailure();
+      const existingTask = {
+        id: 'task_existing',
+        userId: 'user-123',
+        followUpReason: 'ci_failure' as const,
+        workerType: 'opus' as const,
+        workerLocation: 'cloud' as const,
+      };
+      vi.mocked(deps.codeTaskRepo.findLatestNonReviewTaskByPR).mockResolvedValue(ok(existingTask as never));
+
+      const service = createWebhookDispatchService(deps);
+      const event = createMockEvent();
+      const result = await service.dispatchCIFailure({ event, logger: mockLogger });
+
+      expect(result.success).toBe(true);
+      expect(result.skipped).toBe(true);
+      expect(result.skipReason).toBe('already_follow_up');
+      expect(result.fixTaskCreated).toBe(false);
+    });
+
+    it('should return error when findLatestNonReviewTaskByPR fails', async () => {
+      const deps = createMockDepsForCIFailure();
+      vi.mocked(deps.codeTaskRepo.findLatestNonReviewTaskByPR).mockResolvedValue(
+        err({ code: 'INTERNAL_ERROR', message: 'Database unavailable' } as never)
+      );
+
+      const service = createWebhookDispatchService(deps);
+      const event = createMockEvent();
+      const result = await service.dispatchCIFailure({ event, logger: mockLogger });
+
+      expect(result.success).toBe(false);
+      expect(result.fixTaskCreated).toBe(false);
+      expect(result.error).toContain('Failed to find task');
+    });
+
+    it('should create fix task and return success when original task found', async () => {
+      const deps = createMockDepsForCIFailure();
+      const existingTask = {
+        id: 'task_original',
+        userId: 'user-123',
+        followUpReason: undefined as string | undefined,
+        workerType: 'opus' as const,
+        workerLocation: 'cloud' as const,
+        baseBranch: 'main',
+      };
+      vi.mocked(deps.codeTaskRepo.findLatestNonReviewTaskByPR).mockResolvedValue(ok(existingTask as never));
+      vi.mocked(deps.codeTaskRepo.create).mockResolvedValue(ok({ id: 'task_fix123' } as never));
+
+      const service = createWebhookDispatchService(deps);
+      const event = createMockEvent({
+        payload: {
+          checkName: 'ESLint',
+          headSha: 'abc123',
+          checkSuiteId: 789,
+        },
+      });
+      const result = await service.dispatchCIFailure({ event, logger: mockLogger });
+
+      expect(result.success).toBe(true);
+      expect(result.fixTaskCreated).toBe(true);
+      expect(result.fixTaskId).toBe('task_fix123');
+      expect(result.skipped).toBeUndefined();
+    });
+
+    it('should return error when task creation fails', async () => {
+      const deps = createMockDepsForCIFailure();
+      const existingTask = {
+        id: 'task_original',
+        userId: 'user-123',
+        followUpReason: undefined as string | undefined,
+        workerType: 'opus' as const,
+        workerLocation: 'cloud' as const,
+        baseBranch: 'main',
+      };
+      vi.mocked(deps.codeTaskRepo.findLatestNonReviewTaskByPR).mockResolvedValue(ok(existingTask as never));
+      vi.mocked(deps.codeTaskRepo.create).mockResolvedValue(
+        err({ code: 'INTERNAL_ERROR', message: 'Failed to create task' } as never)
+      );
+
+      const service = createWebhookDispatchService(deps);
+      const event = createMockEvent();
+      const result = await service.dispatchCIFailure({ event, logger: mockLogger });
+
+      expect(result.success).toBe(false);
+      expect(result.fixTaskCreated).toBe(false);
+      expect(result.error).toContain('Failed to create task');
+    });
+
+    it('should handle event without payload gracefully', async () => {
+      const deps = createMockDepsForCIFailure();
+      const existingTask = {
+        id: 'task_original',
+        userId: 'user-123',
+        followUpReason: undefined as string | undefined,
+        workerType: 'opus' as const,
+        workerLocation: 'cloud' as const,
+        baseBranch: 'main',
+      };
+      vi.mocked(deps.codeTaskRepo.findLatestNonReviewTaskByPR).mockResolvedValue(ok(existingTask as never));
+      vi.mocked(deps.codeTaskRepo.create).mockResolvedValue(ok({ id: 'task_fix456' } as never));
+
+      const service = createWebhookDispatchService(deps);
+      const event = createMockEvent({ payload: null });
+      const result = await service.dispatchCIFailure({ event, logger: mockLogger });
+
+      expect(result.success).toBe(true);
+      expect(result.fixTaskCreated).toBe(true);
+      expect(result.fixTaskId).toBe('task_fix456');
+    });
+
+    it('should use baseBranch fallback when event.baseBranch is null', async () => {
+      const deps = createMockDepsForCIFailure();
+      const existingTask = {
+        id: 'task_original',
+        userId: 'user-123',
+        followUpReason: undefined as string | undefined,
+        workerType: 'opus' as const,
+        workerLocation: 'cloud' as const,
+        baseBranch: 'main',
+      };
+      vi.mocked(deps.codeTaskRepo.findLatestNonReviewTaskByPR).mockResolvedValue(ok(existingTask as never));
+      vi.mocked(deps.codeTaskRepo.create).mockResolvedValue(ok({ id: 'task_fix789' } as never));
+
+      const service = createWebhookDispatchService(deps);
+      const event = createMockEvent({ baseBranch: null });
+      const result = await service.dispatchCIFailure({ event, logger: mockLogger });
+
+      expect(result.success).toBe(true);
+      expect(result.fixTaskCreated).toBe(true);
+    });
+
+    it('should include linearIssueId in fix task when original task has it', async () => {
+      const deps = createMockDepsForCIFailure();
+      const existingTask = {
+        id: 'task_original',
+        userId: 'user-123',
+        followUpReason: undefined as string | undefined,
+        workerType: 'opus' as const,
+        workerLocation: 'cloud' as const,
+        baseBranch: 'main',
+        linearIssueId: 'INT-123',
+      };
+      vi.mocked(deps.codeTaskRepo.findLatestNonReviewTaskByPR).mockResolvedValue(ok(existingTask as never));
+      vi.mocked(deps.codeTaskRepo.create).mockResolvedValue(ok({ id: 'task_fix789' } as never));
+
+      const service = createWebhookDispatchService(deps);
+      const event = createMockEvent();
+      const result = await service.dispatchCIFailure({ event, logger: mockLogger });
+
+      expect(result.success).toBe(true);
+      expect(result.fixTaskCreated).toBe(true);
+
+      // Verify create was called with linearIssueId
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0]?.[0];
+      expect(createCall).toHaveProperty('linearIssueId', 'INT-123');
     });
   });
 });
