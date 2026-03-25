@@ -66,6 +66,7 @@ export interface ReviewAgentData {
   review_comments_posted: string;
   review_types: string;
   requirements_tracker_updated: string;
+  gh_actions_status: string;
   summary: string;
 }
 
@@ -114,6 +115,7 @@ export const REVIEW_SCHEMA = z.object({
     .regex(/^\d+$/, 'review_comments_posted must be a numeric string'),
   review_types: z.string().trim().min(1, 'review_types must not be empty'),
   requirements_tracker_updated: z.string().optional().default(''),
+  gh_actions_status: z.string().optional().default(''),
   summary: z.string(),
 });
 

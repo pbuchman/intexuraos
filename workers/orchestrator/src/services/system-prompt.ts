@@ -21,6 +21,31 @@ For production code tasks (\`intexuraos.cloud\`), use the debug-code-task skill:
 - Fetch script: \`.claude/skills/debug-code-task/scripts/fetch-task.cjs\`
 - Usage: \`node .claude/skills/debug-code-task/scripts/fetch-task.cjs <taskId> [--logs] [--logs-only]\``;
 
+const COMMENT_DRIVEN_DECISION_LOG = `### Comment-Driven Decision Log (MANDATORY when comments exist)
+
+After reading all Linear issue comments, if ANY comment influenced your approach,
+decisions, or implementation choices, you MUST:
+
+1. **Track decisions**: For each comment that influenced a decision, record:
+   - What was decided
+   - Which comment drove it (author + timestamp)
+   - How it affected the outcome
+
+2. **Post a Linear acknowledgment comment** on the issue (after implementation, before creating the PR) listing all comment-driven decisions:
+   Format:
+   📋 **Comment-Driven Decisions:**
+   - Implementing [decision] per @[author]'s comment ([timestamp])
+   - [Additional decisions...]
+
+3. **Include a "Decision Log" section in the PR description** (after "### Key Decisions"):
+   Format:
+   ### Decision Log
+   | Decision | Source | Impact |
+   |----------|--------|--------|
+   | [what] | @[author] ([timestamp]) | [how it affected implementation] |
+
+If no comments exist or no comments influenced decisions, skip this section entirely.`;
+
 export interface SystemPromptParams {
   taskId: string;
   linearIssueId?: string;
@@ -39,7 +64,7 @@ export interface SystemPromptParams {
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-planning',
   description: 'Planning agent system prompt for autonomous code task planning',
-  version: '3.0.0',
+  version: '3.1.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     return `[SYSTEM CONTEXT]
@@ -76,6 +101,8 @@ Before doing ANY work — including the Complexity Judgment — you MUST read th
 4. If the task was previously flagged as unclear and re-executed, the user's clarifying answers WILL be in the comments. You MUST incorporate them.
 
 **Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
+
+${COMMENT_DRIVEN_DECISION_LOG}
 
 ### Planning Contract (MANDATORY — NON-NEGOTIABLE)
 
@@ -182,7 +209,7 @@ Note: For complex planned outcomes, you MUST include explicit proof of the paral
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '5.0.0',
+  version: '5.1.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const hasContinuationPr =
@@ -243,6 +270,8 @@ Before doing ANY work, you MUST read the Linear issue AND all its comments:
 4. If the task was previously flagged as unclear and re-executed, the user's clarifying answers WILL be in the comments. You MUST incorporate them.
 
 **Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
+
+${COMMENT_DRIVEN_DECISION_LOG}
 
 ### Mandatory Skill Order (non-negotiable)
 1. Start with \`superpowers:executing-plans\` (mandatory first skill)
@@ -588,6 +617,10 @@ Each requested review type MUST get its own dedicated section in the review body
 
 ${typeSections.join('\n\n')}
 
+### ⚙️ GitHub Actions Status
+- **CI:** ✅ Passed / ❌ FAILED — [check name]: [status]
+- **Other checks:** [status summary]
+
 ### 📋 Requirements Coverage
 | Requirement | Status |
 | --- | --- |
@@ -600,13 +633,17 @@ ${typeSections.join('\n\n')}
 Rules:
 - Include ONLY the sections listed above. Do NOT add sections for review types that were not requested.
 - Every included type section MUST have a \`**Verdict:**\` line.
-- The \`### 📋 Requirements Coverage\` and \`### Overall Assessment\` sections are ALWAYS required.`;
+- The following sections are ALWAYS required (never omit):
+  - \`### ⚙️ GitHub Actions Status\`
+  - \`### 📋 Requirements Coverage\`
+  - \`### Overall Assessment\`
+- When GitHub Actions have failures, the GH Actions section MUST use ❌ and list each failed check by name and status. This ensures the reviewer sees CI failures prominently and nitpicker-nuker can act on them.`;
 }
 
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '6.1.1',
+  version: '7.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
       params;
@@ -715,6 +752,21 @@ The full repository is cloned at \`/repo\`. You have access to ALL files in the 
 
 Combine repository browsing with the PR diff. The diff tells you WHAT changed; the repo tells you WHY it matters and whether it follows existing conventions.
 
+### Check GitHub Actions Status (MANDATORY — LAST STEP BEFORE REPORT)
+
+As the final data-gathering step before composing your review, check the status of GitHub Actions checks on the PR. Do this AFTER all code analysis is complete — by this point, actions that were in progress when the review started are more likely to have finished.
+
+\`\`\`bash
+gh pr checks <PR_NUMBER> --json name,state,bucket,workflow
+\`\`\`
+
+- If any checks have **failed** (\`bucket == "fail"\` or \`"cancel"\`), record each failed check name and status.
+- If checks are still **pending**, note this and proceed — do not block on pending checks.
+- If all checks **passed**, note this for the review summary.
+- If no checks are listed yet (workflows not triggered), note "GH Actions: not yet triggered" and proceed.
+
+**This step does NOT block your review** — it gathers information that MUST be included in the review summary (see Per-Type Review Structure below).
+
 ### Posting Review Comments
 
 Submit your review summary and ALL inline comments in a SINGLE \`POST /reviews\` API call. NEVER post the summary and inline comments as separate API calls — this creates duplicate reviews on the PR.
@@ -805,6 +857,7 @@ REVIEW_AGENT_FINAL:
 - review_comments_posted: <number of review comments posted>
 - review_types: <comma-separated list of review types performed>
 - requirements_tracker_updated: <yes|no — whether the requirements tracker comment was created/updated>
+- gh_actions_status: <all passed|N failed|pending|not yet triggered — GitHub Actions check result>
 - Summary: <3-5 sentences on one line: what you reviewed, key findings, overall quality assessment>
 \`\`\`
 
