@@ -64,7 +64,7 @@ describe('useOpenRouterModels', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(result.current.models).toEqual(MOCK_MODELS);
+    expect(result.current.models).toStrictEqual(MOCK_MODELS);
     expect(result.current.error).toBeNull();
     expect(mockRequest).toHaveBeenCalledWith(
       'http://test-research-agent',
@@ -75,7 +75,7 @@ describe('useOpenRouterModels', () => {
   it('returns empty array and does not fetch when isConfigured is false', () => {
     const { result } = renderHook(() => useOpenRouterModels(false));
 
-    expect(result.current.models).toEqual([]);
+    expect(result.current.models).toStrictEqual([]);
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
     expect(mockRequest).not.toHaveBeenCalled();
@@ -90,7 +90,7 @@ describe('useOpenRouterModels', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(result.current.models).toEqual([]);
+    expect(result.current.models).toStrictEqual([]);
     expect(result.current.error).toBe('Network error');
   });
 
@@ -129,7 +129,7 @@ describe('useOpenRouterModels', () => {
     // Unconfigure
     isConfigured = false;
     rerender();
-    expect(result.current.models).toEqual([]);
+    expect(result.current.models).toStrictEqual([]);
 
     // Reconfigure — should trigger a new fetch
     isConfigured = true;
@@ -137,6 +137,10 @@ describe('useOpenRouterModels', () => {
 
     await waitFor(() => {
       expect(mockRequest).toHaveBeenCalledTimes(2);
+    });
+
+    await waitFor(() => {
+      expect(result.current.models).toStrictEqual(MOCK_MODELS);
     });
   });
 
@@ -152,7 +156,7 @@ describe('useOpenRouterModels', () => {
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
     });
-    expect(result.current.models).toEqual(MOCK_MODELS);
+    expect(result.current.models).toStrictEqual(MOCK_MODELS);
     expect(mockRequest).toHaveBeenCalledTimes(1);
 
     // Call refresh to trigger a new fetch
@@ -161,6 +165,6 @@ describe('useOpenRouterModels', () => {
     });
 
     expect(mockRequest).toHaveBeenCalledTimes(2);
-    expect(result.current.models).toEqual(updatedModels);
+    expect(result.current.models).toStrictEqual(updatedModels);
   });
 });

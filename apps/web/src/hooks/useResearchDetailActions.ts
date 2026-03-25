@@ -64,6 +64,7 @@ export function useResearchDetailActions(
   const { getAccessToken } = useAuth();
   const { keys, loading: keysLoading } = useLlmKeys();
   const isOpenRouterConfigured = keys !== null && keys.openrouter !== null;
+  // TODO: rewire to lazy-fetch when EnhanceModal OpenRouter integration lands — currently eagerly fetches on every detail page load
   const { models: openRouterModels, loading: openRouterLoading } = useOpenRouterModels(isOpenRouterConfigured);
 
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
