@@ -88,13 +88,30 @@ pull_request.synchronize event arrives
 ```
 
 **Detection heuristic:** A remediation task is considered the source of a synchronize event if:
-- `agentType=remediation` AND `prNumber` matches AND task was active (status `running` or `implemented`) within the last 10 minutes
+- `agentType=remediation` AND `prNumber` matches AND task has `status=running` or was completed within the last 60 minutes
+- Primary signal is `status=running` (task is actively pushing); the 60-minute window catches tasks that completed moments before the synchronize event arrives
+- Previous 10-minute window was insufficient — CI + remediation routinely takes 15-20+ minutes
 
 **The `requiresReReview` field:**
 - Boolean field on the `code_tasks` document
-- Set by the remediation task BEFORE pushing code (enforced in the remediation prompt)
+- Set by the remediation task BEFORE pushing code via a new internal API endpoint (see below)
 - Read by the synchronize interception logic in the unified evaluator / LLM triage path
 - Default when not set: `true` (safe — trigger re-review)
+
+**Write mechanism — `PATCH /internal/tasks/:id/remediation-status`:**
+
+A new internal endpoint on code-agent allows the remediation agent to set `requiresReReview` before pushing code. This is necessary because:
+1. The field must be written *before* the push, so the synchronize event handler can read it when the push webhook arrives
+2. Agent output/summary is only available after task completion, which is too late
+3. Direct Firestore writes from the container would violate the single-owner collection model
+
+Endpoint spec:
+- **Route:** `PATCH /internal/tasks/:id/remediation-status`
+- **Auth:** `X-Internal-Auth` header (same as other internal endpoints)
+- **Body:** `{ requiresReReview: boolean }`
+- **Validation:** Task must exist, must have `agentType=remediation`, caller task ID must match
+- **Effect:** Updates `requiresReReview` field on the `code_tasks` document
+- **Consumed by:** The remediation agent's Claude Code session via `curl` or the agent's HTTP tools
 
 ### Remediation Task Prompt
 
@@ -122,7 +139,9 @@ The remediation agent receives a purpose-built system prompt that includes:
 
 ### Created
 
-None (remediation tasks use the existing task creation and dispatch infrastructure).
+#### `PATCH /internal/tasks/:id/remediation-status`
+
+Internal endpoint for remediation agents to set `requiresReReview` before pushing code. Accepts `{ requiresReReview: boolean }`. Validates that the task exists, has `agentType=remediation`, and the caller's task ID matches. Authenticated via `X-Internal-Auth`.
 
 ### Modified
 
@@ -145,10 +164,10 @@ All other endpoints.
 
 ### `code_tasks` collection
 
-| Field              | Type       | Description                                                                           |
-| ------------------ | ---------- | ------------------------------------------------------------------------------------- |
-| `agentType`        | `string`   | Add `'remediation'` to allowed values (existing: `'execution'`, `'review'`, `'plan'`) |
-| `requiresReReview` | `boolean \ | undefined`                                                                            | Set by remediation tasks before pushing. Read by synchronize interception. Only meaningful for `agentType=remediation`. |
+| Field              | Type       | Description                                                                                                 |
+| ------------------ | ---------- | ----------------------------------------------------------------------------------------------------------- |
+| `agentType`        | `string`   | Add `'remediation'` to allowed values (existing: `'planning'`, `'execution'`, `'pull_request'`, `'review'`) |
+| `requiresReReview` | `boolean \ | undefined`                                                                                                  | Set by remediation tasks before pushing. Read by synchronize interception. Only meaningful for `agentType=remediation`. |
 
 ### `github_pr_summaries` collection
 
@@ -157,6 +176,45 @@ All other endpoints.
 | `lastReviewedCommitSha` | `string \ | null`         | HEAD commit SHA at the time the most recent review task completed. Updated by review task completion handler. Used to construct diff range for re-review prompts. |
 
 ## Implementation Notes
+
+### `createRemediationTask` Use Case
+
+A dedicated `createRemediationTask` use case (analogous to `createReviewTask`) encapsulates remediation-specific task creation. Neither `createTaskForPR` nor `createReviewTask` is suitable:
+- `createTaskForPR` uses `messageBuilder.build()` for PR review event templates, doesn't accept a Linear issue ID override, and applies comment-as-prompt routing
+- `createReviewTask` applies review-specific dedup logic (cancels active reviews) and sets `agentType=review`
+
+**Interface:**
+
+```typescript
+interface CreateRemediationTaskInput {
+  prNumber: number;
+  repoFullName: string;
+  installationId: number;
+  triggerComment?: { id: number; body: string; author: string };  // @worker/@model comment
+  reviewBody?: string;     // code-worker review body that triggered remediation
+  inlineComments?: Array<{ path: string; line: number; body: string }>;  // inline review findings
+  workerType: string;      // from @worker directive or user default
+  linearIssueId?: string;  // resolved from existing execution task, NOT from PR title/body triage
+}
+```
+
+**Behavior:**
+1. Constructs a purpose-built remediation prompt (not reusing message builder templates)
+2. Sets `agentType=remediation`
+3. Resolves Linear issue ID from the existing execution task for the PR (if any), preserving issue grouping
+4. No dedup behavior — multiple remediation tasks can coexist (each addresses different review findings)
+5. Creates a fresh container with the requested `workerType`
+
+### `findLatestNonReviewTaskByPR` Semantics
+
+Once remediation tasks exist, `findLatestNonReviewTaskByPR` must also exclude `agentType=remediation`. The method should be renamed or documented to clarify that only `execution` tasks are valid routing targets for `handleExistingTask()`:
+
+```typescript
+// Before: findLatestNonReviewTaskByPR (excludes review)
+// After:  findLatestExecutionTaskByPR (excludes review AND remediation)
+```
+
+Plain comments with no `@` annotations are the ONLY events routed to `handleExistingTask()`. The `execution` agent type is the only valid destination for existing-task message routing.
 
 ### Dispatch Service Changes
 
@@ -168,14 +226,15 @@ For the remediation agent, the dispatch logic becomes:
 
 ```
 if (event is code-worker review OR comment has @worker/@model):
-  → ALWAYS create new remediation task (even if execution task exists)
+  → ALWAYS call createRemediationTask (even if execution task exists)
   → Pass workerType from @worker directive (or from user's worker settings)
   → Link to same Linear issue as existing execution task
 else if (plain comment, no annotations):
   → existing behavior: handleExistingTask() or handleNewTask()
+  → findLatestExecutionTaskByPR (excludes review AND remediation tasks)
 ```
 
-This means `handleExistingTask()` is only used for plain, unannotated comments. All other dispatch paths create fresh tasks.
+This means `handleExistingTask()` is only used for plain, unannotated comments targeting `execution` tasks. All other dispatch paths create fresh tasks.
 
 ### Message Builder Changes
 
@@ -183,9 +242,12 @@ The `CodeWorkerNitpickNukerTemplate` in `gitHubMessageBuilder.ts` is no longer u
 
 ### Review Task Completion Handler
 
-When a review task transitions to `reviewed` status, the completion handler must:
-1. Update `lastReviewedCommitSha` on the PR summary with the current HEAD of the PR branch
-2. This SHA is used by subsequent re-review prompts to construct the diff range
+When a review task transitions to `reviewed` status, the existing task completion handler (the same handler that updates task status and posts completion comments) must additionally:
+1. Fetch the current HEAD of the PR branch via GitHub API
+2. Update `lastReviewedCommitSha` on the `github_pr_summaries` document
+3. This SHA is used by subsequent re-review prompts to construct the diff range
+
+**Trigger mechanism:** The existing `updateTaskStatus` flow in code-agent already handles task completion events. The `lastReviewedCommitSha` update is added as a post-completion side effect when `agentType=review` and new status is `reviewed`.
 
 ### Detecting Re-reviews
 
