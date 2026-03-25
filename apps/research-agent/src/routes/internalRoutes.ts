@@ -23,7 +23,7 @@ import {
 } from '../domain/research/index.js';
 import { formatLlmError } from '../domain/research/formatLlmError.js';
 import { getProviderForModel, isOpenRouterModel, getOpenRouterRawId, LlmModels, type LLMModel, type ModelPricing } from '@intexuraos/llm-contract';
-import { getAllowlistPricing, isAllowedModel } from '@intexuraos/infra-openrouter';
+import { getAllowlistPricing, isAllowedModel, allowlistModelIds } from '@intexuraos/infra-openrouter';
 import { getServices, type DecryptedApiKeys } from '../services.js';
 import { createSynthesisProviders } from './helpers/synthesisHelper.js';
 import { handleAllCompleted } from './helpers/completionHandlers.js';
@@ -868,7 +868,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           request.log.warn({ researchId: event.researchId, model: event.model }, '[3.3] OpenRouter model not in allowlist');
           void researchRepo.updateLlmResult(event.researchId, event.model, {
             status: 'failed',
-            error: `Model '${event.model}' is not in the curated allowlist. Allowed models: qwen/qwen3.5-plus-02-15, qwen/qwen3.5-flash-02-23, minimax/minimax-m2.7, x-ai/grok-4.20-beta, x-ai/grok-4.1-fast, moonshotai/kimi-k2.5, anthropic/claude-sonnet-4.6, anthropic/claude-opus-4.6, google/gemini-3.1-pro-preview, google/gemini-2.5-flash, openai/gpt-5.4, openai/gpt-5.4-mini, xiaomi/mimo-v2-pro, z-ai/glm-5-turbo`,
+            error: `Model '${event.model}' is not in the curated allowlist. Allowed models: ${allowlistModelIds()}`,
             completedAt: new Date().toISOString(),
           });
           return await reply.fail('INVALID_REQUEST', 'Model not in curated allowlist');

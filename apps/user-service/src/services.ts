@@ -26,7 +26,7 @@ import {
   loadAuth0Config as loadAuth0ConfigFromInfra,
 } from './infra/auth0/index.js';
 import { LlmValidatorImpl } from './infra/llm/index.js';
-import { getAllowlistPricing } from '@intexuraos/infra-openrouter';
+import { getAllowlistPricing, OPENROUTER_VALIDATION_MODEL } from '@intexuraos/infra-openrouter';
 import { GoogleOAuthClientImpl } from './infra/google/index.js';
 import { GitHubOAuthClientImpl } from './infra/github/index.js';
 
@@ -110,7 +110,7 @@ export function initializeServices(pricingContext?: PricingContext, logger: Logg
 
   let llmValidator: LlmValidator | null = null;
   if (!isTestEnv && pricingContext !== undefined) {
-    const openrouterPricing = getAllowlistPricing('qwen/qwen3.5-flash-02-23');
+    const openrouterPricing = getAllowlistPricing(OPENROUTER_VALIDATION_MODEL);
     const validationPricing = {
       google: pricingContext.getPricing(LlmModels.Gemini20Flash),
       openai: pricingContext.getPricing(LlmModels.GPT4oMini),

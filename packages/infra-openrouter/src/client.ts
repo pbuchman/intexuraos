@@ -1,5 +1,5 @@
 /**
- * OpenRouter client implementation using OpenAI SDK.
+ * OpenRouter client implementation using native fetch.
  *
  * OpenRouter (openrouter.ai) provides access to multiple frontier models
  * from various providers through a unified OpenAI-compatible API.
@@ -27,8 +27,8 @@
  * // Research with web search (append :online to model ID)
  * const research = await client.research('Latest AI developments');
  * if (research.ok) {
- *   console.log(research.data.content);
- *   console.log('Sources:', research.data.sources);
+ *   console.log(research.value.content);
+ *   console.log('Sources:', research.value.sources);
  * }
  *
  * // Synthesis without web search
@@ -120,10 +120,11 @@ class OpenRouterApiError extends Error {
 /**
  * Create an OpenRouter client.
  *
- * The client wraps the OpenAI SDK with OpenRouter-specific configuration:
- * - Custom base URL pointing to openrouter.ai
+ * The client uses native fetch with OpenRouter-specific configuration:
+ * - Custom base URL pointing to openrouter.ai/api/v1
  * - HTTP-Referer and X-Title headers for API identification
- * - Error mapping to our LLMError codes
+ * - Timeout via AbortController (default 14 minutes)
+ * - Error mapping to LLMError codes
  */
 export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClient {
   const { apiKey, model, userId, pricing, timeoutMs = DEFAULT_TIMEOUT_MS, logger } = config;

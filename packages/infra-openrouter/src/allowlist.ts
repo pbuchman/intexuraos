@@ -12,6 +12,7 @@
 
 import type { ModelPricing } from '@intexuraos/llm-contract';
 import { toModelPricing } from './costCalculator.js';
+import type { OpenRouterModelInfo } from './types.js';
 
 /**
  * Individual allowlist entry with fallback pricing.
@@ -23,6 +24,8 @@ export interface AllowedOpenRouterModel {
   name: string;
   /** Provider name */
   provider: string;
+  /** Context window size in tokens (used as fallback when live API data is unavailable) */
+  contextLength: number;
   /** Fallback prompt price per token (as string from OpenRouter API) */
   promptPerToken: string;
   /** Fallback completion price per token (as string from OpenRouter API) */
@@ -39,6 +42,7 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
     id: 'qwen/qwen3.5-plus-02-15',
     name: 'Qwen 3.5 Plus',
     provider: 'Qwen',
+    contextLength: 1_000_000,
     promptPerToken: '0.00000026',
     completionPerToken: '0.00000156',
   },
@@ -46,6 +50,7 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
     id: 'qwen/qwen3.5-flash-02-23',
     name: 'Qwen 3.5 Flash',
     provider: 'Qwen',
+    contextLength: 1_000_000,
     promptPerToken: '0.00000007',
     completionPerToken: '0.00000026',
   },
@@ -54,6 +59,7 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
     id: 'minimax/minimax-m2.7',
     name: 'MiniMax M2.7',
     provider: 'MiniMax',
+    contextLength: 205_000,
     promptPerToken: '0.0000003',
     completionPerToken: '0.0000012',
   },
@@ -62,6 +68,7 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
     id: 'x-ai/grok-4.20-beta',
     name: 'Grok 4.20 Beta',
     provider: 'xAI',
+    contextLength: 2_000_000,
     promptPerToken: '0.000002',
     completionPerToken: '0.000006',
   },
@@ -69,6 +76,7 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
     id: 'x-ai/grok-4.1-fast',
     name: 'Grok 4.1 Fast',
     provider: 'xAI',
+    contextLength: 2_000_000,
     promptPerToken: '0.0000002',
     completionPerToken: '0.0000005',
   },
@@ -77,6 +85,7 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
     id: 'moonshotai/kimi-k2.5',
     name: 'Kimi K2.5',
     provider: 'Moonshot',
+    contextLength: 262_000,
     promptPerToken: '0.00000045',
     completionPerToken: '0.0000022',
   },
@@ -85,6 +94,7 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
     id: 'anthropic/claude-sonnet-4.6',
     name: 'Claude Sonnet 4.6',
     provider: 'Anthropic',
+    contextLength: 1_000_000,
     promptPerToken: '0.000003',
     completionPerToken: '0.000015',
   },
@@ -92,6 +102,7 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
     id: 'anthropic/claude-opus-4.6',
     name: 'Claude Opus 4.6',
     provider: 'Anthropic',
+    contextLength: 1_000_000,
     promptPerToken: '0.000005',
     completionPerToken: '0.000025',
   },
@@ -100,6 +111,7 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
     id: 'google/gemini-3.1-pro-preview',
     name: 'Gemini 3.1 Pro',
     provider: 'Google',
+    contextLength: 1_000_000,
     promptPerToken: '0.000002',
     completionPerToken: '0.000012',
   },
@@ -107,6 +119,7 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
     id: 'google/gemini-2.5-flash',
     name: 'Gemini 2.5 Flash',
     provider: 'Google',
+    contextLength: 1_000_000,
     promptPerToken: '0.0000003',
     completionPerToken: '0.0000025',
   },
@@ -115,6 +128,7 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
     id: 'openai/gpt-5.4',
     name: 'GPT-5.4',
     provider: 'OpenAI',
+    contextLength: 1_000_000,
     promptPerToken: '0.0000025',
     completionPerToken: '0.000015',
   },
@@ -122,6 +136,7 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
     id: 'openai/gpt-5.4-mini',
     name: 'GPT-5.4 Mini',
     provider: 'OpenAI',
+    contextLength: 400_000,
     promptPerToken: '0.00000075',
     completionPerToken: '0.0000045',
   },
@@ -130,6 +145,7 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
     id: 'xiaomi/mimo-v2-pro',
     name: 'MiMo V2 Pro',
     provider: 'Xiaomi',
+    contextLength: 1_000_000,
     promptPerToken: '0.000001',
     completionPerToken: '0.000003',
   },
@@ -138,6 +154,7 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
     id: 'z-ai/glm-5-turbo',
     name: 'GLM 5 Turbo',
     provider: 'Z.ai',
+    contextLength: 203_000,
     promptPerToken: '0.00000096',
     completionPerToken: '0.0000032',
   },
@@ -160,4 +177,55 @@ export function getAllowlistPricing(rawModelId: string): ModelPricing | undefine
     return undefined;
   }
   return toModelPricing(model.promptPerToken, model.completionPerToken);
+}
+
+/**
+ * Model used for key validation and test requests.
+ * Exported so consumers can reference it by name instead of hardcoding IDs.
+ */
+export const OPENROUTER_VALIDATION_MODEL = 'qwen/qwen3.5-flash-02-23' as const;
+
+/**
+ * Comma-separated list of allowlisted model IDs for use in error messages.
+ * Avoids hardcoding model lists that go stale when the allowlist is updated.
+ */
+export function allowlistModelIds(): string {
+  return OPENROUTER_ALLOWED_MODELS.map((m) => m.id).join(', ');
+}
+
+/**
+ * Catalog data resolved from the live OpenRouter API for a single model.
+ */
+export interface CatalogEntry {
+  pricing: { inputPricePerMillion: number; outputPricePerMillion: number };
+  contextLength: number;
+}
+
+/**
+ * Build OpenRouterModelInfo from an allowlist entry, enriched with live catalog data.
+ * When catalog data is unavailable, falls back to the allowlist's own pricing and context length.
+ */
+export function buildModelInfo(
+  entry: AllowedOpenRouterModel,
+  catalogEntry?: CatalogEntry
+): OpenRouterModelInfo {
+  return {
+    id: entry.id,
+    name: entry.name,
+    provider: entry.provider,
+    contextLength: catalogEntry?.contextLength ?? entry.contextLength,
+    pricing: catalogEntry
+      ? {
+          inputPricePerMillion: catalogEntry.pricing.inputPricePerMillion,
+          outputPricePerMillion: catalogEntry.pricing.outputPricePerMillion,
+          useProviderCost: true,
+        }
+      : {
+          inputPricePerMillion: parseFloat(entry.promptPerToken) * 1_000_000,
+          outputPricePerMillion: parseFloat(entry.completionPerToken) * 1_000_000,
+          useProviderCost: true,
+        },
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+  };
 }

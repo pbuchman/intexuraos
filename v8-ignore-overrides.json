@@ -16,7 +16,7 @@
         "packages/internal-clients/src/user-service/client.ts",
         "packages/infra-openrouter/src/client.ts"
       ],
-      "description": "openRouterRoutes has branches requiring integration-level HTTP mocking to cover; client.ts has an exhaustive switch default case that is unreachable but required by TypeScript's never type narrowing; validateKey uses live HTTP calls that cannot be unit tested."
+      "description": "openRouterRoutes has branches requiring live OpenRouter API responses (non-200 status, missing pricing, cache hits) that cannot be simulated with nock; client.ts has upstream API response branches (empty choices array, annotation URL structures, 503 OVERLOADED status, undefined usage) that vary by provider response; internal-clients/client.ts has nullish response field guards for the openrouter key field."
     },
     "INT-1085": {
       "files": [
