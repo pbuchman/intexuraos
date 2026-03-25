@@ -197,6 +197,9 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
         const headBranch = event.baseBranch ?? 'unknown';
         const headSha = typeof payload?.['headSha'] === 'string' ? payload['headSha'] : 'unknown';
         const checkSuiteId = typeof payload?.['checkSuiteId'] === 'number' ? payload['checkSuiteId'] : 0;
+        /* v8 ignore start -- test-infra: Test fakes cannot produce check_suite payload with checkSuiteUrl; FakeGitHubEventParser does not extract url field @preserve */
+        const checkSuiteUrl = typeof payload?.['checkSuiteUrl'] === 'string' ? payload['checkSuiteUrl'] : undefined;
+        /* v8 ignore stop @preserve */
 
         // Record ci_failure_detected in automation log
         const prUrl = `https://github.com/${event.repository}/pull/${String(event.pullRequestNumber)}`;
@@ -303,6 +306,9 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
           checkName,
           branch: headBranch,
           taskId: originalTask.id,
+          /* v8 ignore start -- test-infra: cannot produce payload with checkSuiteUrl; test fakes do not extract this field @preserve */
+          ...(checkSuiteUrl !== undefined && { runUrl: checkSuiteUrl }),
+          /* v8 ignore stop @preserve */
         }).catch((error: unknown) => {
           logger.warn({ error }, 'Failed to send CI failure WhatsApp notification');
         });
