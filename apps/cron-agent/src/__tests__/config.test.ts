@@ -90,6 +90,16 @@ describe('loadConfig', () => {
     expect(config.allowedServices[0]?.openapiUrl).toBe('https://code-agent.example.com/openapi.json');
   });
 
+  it('uses explicit OpenAPI URL when provided for a configured service', () => {
+    process.env['INTEXURAOS_CODE_AGENT_URL'] = 'https://code-agent.example.com';
+    process.env['INTEXURAOS_CODE_AGENT_OPENAPI_URL'] = 'https://docs.example.com/code-agent/openapi.json';
+
+    const config = loadConfig();
+
+    expect(config.allowedServices).toHaveLength(1);
+    expect(config.allowedServices[0]?.openapiUrl).toBe('https://docs.example.com/code-agent/openapi.json');
+  });
+
   it('populates allowedServices for every configured internal service url', () => {
     process.env['INTEXURAOS_USER_SERVICE_URL'] = 'https://user-service.example.com';
     process.env['INTEXURAOS_CODE_AGENT_URL'] = 'https://code-agent.example.com';
