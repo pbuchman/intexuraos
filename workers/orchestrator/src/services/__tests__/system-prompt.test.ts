@@ -952,6 +952,85 @@ describe('system-prompt', () => {
     expect(result).toContain('REVIEW_AGENT_FINAL');
   });
 
+  it('planning prompt includes Comment-Driven Decision Log section after Reading section', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('### Comment-Driven Decision Log (MANDATORY when comments exist)');
+    expect(result).toContain('Track decisions');
+    expect(result).toContain('Post a Linear acknowledgment comment');
+    expect(result).toContain('📋 **Comment-Driven Decisions:**');
+    expect(result).toContain('Decision Log');
+
+    // Must appear after Reading section and before Planning Contract
+    const readingIdx = result.indexOf('### Reading the Linear Issue');
+    const decisionLogIdx = result.indexOf('### Comment-Driven Decision Log');
+    const planningContractIdx = result.indexOf('### Planning Contract');
+    expect(decisionLogIdx).toBeGreaterThan(readingIdx);
+    expect(decisionLogIdx).toBeLessThan(planningContractIdx);
+  });
+
+  it('execution prompt includes Comment-Driven Decision Log section after Reading section', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+
+    expect(result).toContain('### Comment-Driven Decision Log (MANDATORY when comments exist)');
+    expect(result).toContain('Track decisions');
+    expect(result).toContain('Post a Linear acknowledgment comment');
+    expect(result).toContain('📋 **Comment-Driven Decisions:**');
+    expect(result).toContain('Decision Log');
+
+    // Must appear after Reading section and before Mandatory Skill Order
+    const readingIdx = result.indexOf('### Reading the Linear Issue');
+    const decisionLogIdx = result.indexOf('### Comment-Driven Decision Log');
+    const skillOrderIdx = result.indexOf('### Mandatory Skill Order');
+    expect(decisionLogIdx).toBeGreaterThan(readingIdx);
+    expect(decisionLogIdx).toBeLessThan(skillOrderIdx);
+  });
+
+  it('Comment-Driven Decision Log includes skip-when-empty instruction', () => {
+    const planningResult = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const executionResult = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+
+    for (const result of [planningResult, executionResult]) {
+      expect(result).toContain(
+        'If no comments exist or no comments influenced decisions, skip this section entirely'
+      );
+    }
+  });
+
+  it('Comment-Driven Decision Log specifies timing for Linear acknowledgment comment', () => {
+    const planningResult = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const executionResult = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+
+    // Verifies the ack comment has explicit ordering relative to PR creation
+    for (const result of [planningResult, executionResult]) {
+      expect(result).toContain('before creating the PR');
+    }
+  });
+
+  it('Comment-Driven Decision Log is absent from non-planning/non-execution prompts', () => {
+    const prResult = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task', 'pr-comment'],
+    });
+    const reviewResult = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+    });
+    const overlayResult = prReviewOverlayPrompt.build(baseParams);
+
+    for (const result of [prResult, reviewResult, overlayResult]) {
+      expect(result).not.toContain('Comment-Driven Decision Log');
+    }
+  });
+
+  it('planning prompt version is 3.1.0', () => {
+    expect(planningPrompt.version).toBe('3.1.0');
+  });
+
+  it('execution prompt version is 5.1.0', () => {
+    expect(executionPrompt.version).toBe('5.1.0');
+  });
+
   it('review agent prompt includes Linear section when linearIssueId is provided', () => {
     const result = buildSystemPrompt({
       ...baseParams,
