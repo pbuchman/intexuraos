@@ -73,13 +73,13 @@ export async function evaluateEvent(
   }
 
   if (event.eventType === 'pull_request' && event.action !== 'opened' && event.action !== 'synchronize') {
-    /* v8 ignore start -- ts-type: null coalescing in error message for GitHubPRAction | null @preserve */
+    /* v8 ignore start -- ts-type: null coalescing fallback is impossible to reach — preceding !== checks already narrow action to non-null @preserve */
     return { ok: false, error: { code: 'INVALID_EVENT', message: `Expected opened/synchronize action, got ${event.action ?? 'null'}` } };
     /* v8 ignore stop @preserve */
   }
 
   if (event.eventType === 'issue_comment' && event.action !== 'created' && event.action !== 'edited') {
-    /* v8 ignore start -- ts-type: null coalescing in error message for GitHubPRAction | null @preserve */
+    /* v8 ignore start -- ts-type: null coalescing fallback is impossible to reach — preceding !== checks already narrow action to non-null @preserve */
     return { ok: false, error: { code: 'INVALID_EVENT', message: `Expected created/edited action, got ${event.action ?? 'null'}` } };
     /* v8 ignore stop @preserve */
   }
@@ -204,11 +204,11 @@ async function evaluatePREventInternal(
   const systemPrompt = githubAgentPrompt.build({
     repository: event.repository,
     prNumber: event.pullRequestNumber,
-    /* v8 ignore start -- ts-type: null coalescing for nullable event fields @preserve */
+    /* v8 ignore start -- ts-type: FakeGitHubPREvent always provides non-null title/body — unable to simulate null from validated webhook @preserve */
     prTitle: event.title ?? '(untitled)',
     prBody: event.body ?? '',
     /* v8 ignore stop @preserve */
-    /* v8 ignore start -- ts-type: action validated as opened/synchronize before this function is called @preserve */
+    /* v8 ignore start -- ts-type: caller always validates action as opened/synchronize — impossible to reach null fallback @preserve */
     action: event.action ?? '',
     /* v8 ignore stop @preserve */
     senderLogin: event.senderLogin,
@@ -236,7 +236,7 @@ async function evaluatePREventInternal(
     'GitHub Agent evaluation complete'
   );
 
-  /* v8 ignore start -- ts-type: null coalescing for optional skip reason @preserve */
+  /* v8 ignore start -- ts-type: skipReason is always set when skipped is true — unable to reach undefined fallback in normal flow @preserve */
   const skipReason = state.skipReason ?? '(no reason)';
   /* v8 ignore stop @preserve */
   const dedupedReviewTypes = [...new Set(reviewsRequested)];
@@ -327,10 +327,10 @@ async function evaluateCommentEventInternal(
   const systemPrompt = githubAgentPrompt.build({
     repository: event.repository,
     prNumber: event.pullRequestNumber,
-    /* v8 ignore start -- ts-type: null coalescing for nullable event fields @preserve */
+    /* v8 ignore start -- ts-type: FakeGitHubPREvent always provides non-null title — unable to simulate null from validated webhook @preserve */
     prTitle: event.title ?? '(untitled)',
     prBody: '',
-    /* v8 ignore start -- ts-type: action validated as created/edited before this function is called @preserve */
+    /* v8 ignore start -- ts-type: caller always validates action as created/edited — impossible to reach null fallback @preserve */
     action: event.action ?? '',
     /* v8 ignore stop @preserve */
     senderLogin: event.senderLogin,
@@ -361,7 +361,7 @@ async function evaluateCommentEventInternal(
     'GitHub Agent comment evaluation complete'
   );
 
-  /* v8 ignore start -- ts-type: null coalescing for optional skip reason @preserve */
+  /* v8 ignore start -- ts-type: skipReason is always set when skipped is true — unable to reach undefined fallback in normal flow @preserve */
   const commentSkipReason = state.skipReason ?? '(no reason)';
   /* v8 ignore stop @preserve */
   const triage: GitHubAgentTriageResult = state.skipped
