@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/context';
-import { listBranches, listPrs, listWatches, createWatch, cancelWatch } from '@/services/mergeQueueApi';
+import { listBranches, listPrs, listWatches, createWatch, cancelWatch, updateExclusions } from '@/services/mergeQueueApi';
 import type { MergeQueueBranch, MergeQueuePr, MergeQueueWatch } from '@/types';
 
 const WATCH_POLL_MS = 30000;
@@ -20,6 +20,11 @@ interface UseMergeQueueResult {
   toggleError: string | null;
   fetchInitialData: () => Promise<void>;
   handleToggleWatch: () => void;
+  excludedPrNumbers: Set<number>;
+  exclusionError: string | null;
+  handleToggleExclusion: (prNumber: number) => void;
+  handleSelectAll: () => void;
+  handleDeselectAll: (eligiblePrNumbers: number[]) => void;
 }
 
 export function useMergeQueue(owner: string, repo: string): UseMergeQueueResult {
@@ -35,12 +40,19 @@ export function useMergeQueue(owner: string, repo: string): UseMergeQueueResult 
   const [error, setError] = useState<string | null>(null);
   const [prsLoading, setPrsLoading] = useState(false);
   const [prsError, setPrsError] = useState<string | null>(null);
+  const [excludedPrNumbers, setExcludedPrNumbers] = useState<Set<number>>(new Set());
+  const [exclusionError, setExclusionError] = useState<string | null>(null);
+  const [exclusionInFlight, setExclusionInFlight] = useState(false);
+  const [syncCooldown, setSyncCooldown] = useState(false);
 
   const selectedBranchRef = useRef(selectedBranch);
   selectedBranchRef.current = selectedBranch;
 
   const watchesRef = useRef(watches);
   watchesRef.current = watches;
+
+  const excludedPrNumbersRef = useRef(excludedPrNumbers);
+  excludedPrNumbersRef.current = excludedPrNumbers;
 
   // Fetch branches and watches on mount
   const fetchInitialData = useCallback(async (): Promise<void> => {
@@ -148,6 +160,19 @@ export function useMergeQueue(owner: string, repo: string): UseMergeQueueResult 
     };
   }, [getAccessToken, owner, repo]);
 
+  // Sync exclusion state from active watch (skips while API call is in-flight or during cooldown)
+  useEffect(() => {
+    if (exclusionInFlight || syncCooldown) return;
+    const activeWatch = watches.find(
+      (w) => w.baseBranch === selectedBranch && w.status === 'active'
+    );
+    if (activeWatch !== undefined) {
+      setExcludedPrNumbers(new Set(activeWatch.excludedPrNumbers));
+    } else {
+      setExcludedPrNumbers(new Set());
+    }
+  }, [watches, selectedBranch, exclusionInFlight, syncCooldown]);
+
   // Toggle watch handler — reads watches via ref to avoid re-creation on every poll
   const doToggleWatch = useCallback(async (): Promise<void> => {
     const branch = selectedBranchRef.current;
@@ -163,7 +188,7 @@ export function useMergeQueue(owner: string, repo: string): UseMergeQueueResult 
       if (activeWatch !== undefined) {
         await cancelWatch(token, activeWatch.watchId);
       } else {
-        await createWatch(token, owner, repo, branch);
+        await createWatch(token, owner, repo, branch, [...excludedPrNumbersRef.current]);
       }
 
       // Refetch watches immediately
@@ -180,6 +205,95 @@ export function useMergeQueue(owner: string, repo: string): UseMergeQueueResult 
     void doToggleWatch();
   }, [doToggleWatch]);
 
+  const handleToggleExclusion = useCallback((prNumber: number): void => {
+    setExclusionError(null);
+
+    const prev = excludedPrNumbersRef.current;
+    const next = new Set(prev);
+    if (next.has(prNumber)) {
+      next.delete(prNumber);
+    } else {
+      next.add(prNumber);
+    }
+
+    setExcludedPrNumbers(next);
+
+    const activeWatch = watchesRef.current.find(
+      (w) => w.baseBranch === selectedBranchRef.current && w.status === 'active'
+    );
+    if (activeWatch !== undefined) {
+      setExclusionInFlight(true);
+      void (async (): Promise<void> => {
+        try {
+          const token = await getAccessToken();
+          await updateExclusions(token, activeWatch.watchId, [...next]);
+        } catch (err) {
+          setExcludedPrNumbers(prev);
+          setExclusionError(err instanceof Error ? err.message : 'Failed to update exclusion');
+          setTimeout(() => { setExclusionError(null); }, 3000);
+        } finally {
+          setExclusionInFlight(false);
+          setSyncCooldown(true);
+          setTimeout(() => { setSyncCooldown(false); }, 2000);
+        }
+      })();
+    }
+  }, [getAccessToken]);
+
+  const handleSelectAll = useCallback((): void => {
+    const prev = excludedPrNumbersRef.current;
+    const next = new Set<number>();
+    setExcludedPrNumbers(next);
+
+    const activeWatch = watchesRef.current.find(
+      (w) => w.baseBranch === selectedBranchRef.current && w.status === 'active'
+    );
+    if (activeWatch !== undefined) {
+      setExclusionInFlight(true);
+      void (async (): Promise<void> => {
+        try {
+          const token = await getAccessToken();
+          await updateExclusions(token, activeWatch.watchId, []);
+        } catch (err) {
+          setExcludedPrNumbers(prev);
+          setExclusionError(err instanceof Error ? err.message : 'Failed to update exclusions');
+          setTimeout(() => { setExclusionError(null); }, 3000);
+        } finally {
+          setExclusionInFlight(false);
+          setSyncCooldown(true);
+          setTimeout(() => { setSyncCooldown(false); }, 2000);
+        }
+      })();
+    }
+  }, [getAccessToken]);
+
+  const handleDeselectAll = useCallback((eligiblePrNumbers: number[]): void => {
+    const prev = excludedPrNumbersRef.current;
+    const next = new Set(eligiblePrNumbers);
+    setExcludedPrNumbers(next);
+
+    const activeWatch = watchesRef.current.find(
+      (w) => w.baseBranch === selectedBranchRef.current && w.status === 'active'
+    );
+    if (activeWatch !== undefined) {
+      setExclusionInFlight(true);
+      void (async (): Promise<void> => {
+        try {
+          const token = await getAccessToken();
+          await updateExclusions(token, activeWatch.watchId, [...next]);
+        } catch (err) {
+          setExcludedPrNumbers(prev);
+          setExclusionError(err instanceof Error ? err.message : 'Failed to update exclusions');
+          setTimeout(() => { setExclusionError(null); }, 3000);
+        } finally {
+          setExclusionInFlight(false);
+          setSyncCooldown(true);
+          setTimeout(() => { setSyncCooldown(false); }, 2000);
+        }
+      })();
+    }
+  }, [getAccessToken]);
+
   return {
     branches,
     selectedBranch,
@@ -194,5 +308,10 @@ export function useMergeQueue(owner: string, repo: string): UseMergeQueueResult 
     toggleError,
     fetchInitialData,
     handleToggleWatch,
+    excludedPrNumbers,
+    exclusionError,
+    handleToggleExclusion,
+    handleSelectAll,
+    handleDeselectAll,
   };
 }
