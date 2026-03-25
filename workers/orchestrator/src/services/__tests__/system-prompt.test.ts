@@ -955,6 +955,7 @@ describe('system-prompt', () => {
   it('includes only test_quality section when reviewTypes is ["test_quality"]', () => {
     const result = reviewPrompt.build({ ...baseParams, reviewTypes: ['test_quality'] });
     expect(result).toContain('🧪 Test Quality');
+    expect(result).toContain('Verdict:');
     expect(result).not.toContain('🔍 Code Quality');
     expect(result).not.toContain('🔒 Security');
     expect(result).not.toContain('🏗️ Architecture');
