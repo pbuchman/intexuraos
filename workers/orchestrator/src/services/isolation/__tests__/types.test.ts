@@ -28,6 +28,14 @@ describe('WORKER_TYPES configuration', () => {
     expect(WORKER_TYPES.auto.model).toBeUndefined();
   });
 
+  it('sets effort to high for opus worker type', () => {
+    expect(WORKER_TYPES.opus.effort).toBe('high');
+  });
+
+  it('does not set effort for auto worker type', () => {
+    expect(WORKER_TYPES.auto.effort).toBeUndefined();
+  });
+
   it('routes opus workers to the Anthropic API', () => {
     expect(WORKER_TYPES.opus.apiBaseUrl).toBe('https://api.anthropic.com');
     expect(WORKER_TYPES.opus.apiKeyEnvVar).toBe('ANTHROPIC_API_KEY');

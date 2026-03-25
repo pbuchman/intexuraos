@@ -27,6 +27,7 @@ export interface WorkerTypeConfig {
   apiBaseUrl: string;
   apiKeyEnvVar: 'ANTHROPIC_API_KEY' | 'MINIMAX_API_KEY' | 'DASHSCOPE_API_KEY';
   model?: string;
+  effort?: 'low' | 'medium' | 'high' | 'max';
 }
 
 export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
@@ -38,6 +39,7 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     apiBaseUrl: 'https://api.anthropic.com',
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
     model: 'opus',
+    effort: 'high',
   },
   sonnet: {
     apiBaseUrl: 'https://api.anthropic.com',
