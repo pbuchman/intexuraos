@@ -220,11 +220,7 @@ export function buildModelInfo(
           outputPricePerMillion: catalogEntry.pricing.outputPricePerMillion,
           useProviderCost: true,
         }
-      : {
-          inputPricePerMillion: parseFloat(entry.promptPerToken) * 1_000_000,
-          outputPricePerMillion: parseFloat(entry.completionPerToken) * 1_000_000,
-          useProviderCost: true,
-        },
+      : toModelPricing(entry.promptPerToken, entry.completionPerToken),
     inputModalities: ['text'],
     outputModalities: ['text'],
   };

@@ -104,6 +104,7 @@ const PROVIDER_KEY_MAP: Record<string, keyof ApiKeyStore> = {
   openai: 'openai',
   anthropic: 'anthropic',
   perplexity: 'perplexity',
+  openrouter: 'openrouter',
 };
 
 function providerToKeyField(provider: string): keyof ApiKeyStore {

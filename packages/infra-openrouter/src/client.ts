@@ -381,9 +381,7 @@ function mapOpenRouterError(error: unknown): OpenRouterError {
     const message = error.message;
     if (error.status === 401) return { code: 'INVALID_KEY', message };
     if (error.status === 429) return { code: 'RATE_LIMITED', message };
-    /* v8 ignore start -- upstream: cannot verify 503 OVERLOADED status is unreachable @preserve */
     if (error.status === 503) return { code: 'OVERLOADED', message };
-    /* v8 ignore stop @preserve */
     return { code: 'API_ERROR', message };
   }
   const message = getErrorMessage(error);
