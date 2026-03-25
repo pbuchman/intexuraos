@@ -12,6 +12,7 @@ export interface CreateWatchInput {
   owner: string;
   repo: string;
   baseBranch: string;
+  excludedPrNumbers?: number[];
 }
 
 export interface UpdateWatchInput {
@@ -22,6 +23,7 @@ export interface UpdateWatchInput {
   status?: MergeQueueWatch['status'];
   drainedAt?: Date | null;
   cancelledAt?: Date | null;
+  excludedPrNumbers?: number[];
 }
 
 export interface MergeQueueWatchRepository {

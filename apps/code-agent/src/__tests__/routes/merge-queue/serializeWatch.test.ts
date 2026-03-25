@@ -82,6 +82,7 @@ describe('serializeWatch', () => {
           mergedAt: makeTimestamp('2026-01-04T00:00:00.000Z'),
         },
       ],
+      excludedPrNumbers: [42, 55],
     } as unknown as MergeQueueWatch;
 
     const result = serializeWatch(watch);
@@ -106,6 +107,7 @@ describe('serializeWatch', () => {
           mergedAt: '2026-01-04T00:00:00.000Z',
         },
       ],
+      excludedPrNumbers: [42, 55],
     });
   });
 
@@ -162,4 +164,29 @@ describe('serializeWatch', () => {
     expect(result['lastErrorAt']).toBeNull();
     expect(result['drainedAt']).toBeNull();
   });
+
+  it('should include excludedPrNumbers in serialized output', () => {
+    const watch = {
+      id: 'watch-excl',
+      userId: 'u',
+      gitHubUsername: 'g',
+      owner: 'org',
+      repo: 'repo',
+      baseBranch: 'main',
+      status: 'active' as const,
+      lastError: null,
+      createdAt: makeTimestamp('2026-01-01T00:00:00.000Z'),
+      lastTickAt: null,
+      lastErrorAt: null,
+      drainedAt: null,
+      cancelledAt: null,
+      skippedPrs: [],
+      mergedPrs: [],
+      excludedPrNumbers: [42, 99],
+    } as unknown as MergeQueueWatch;
+
+    const result = serializeWatch(watch);
+    expect(result['excludedPrNumbers']).toStrictEqual([42, 99]);
+  });
+
 });
