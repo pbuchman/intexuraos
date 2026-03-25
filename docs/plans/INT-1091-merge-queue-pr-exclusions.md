@@ -602,28 +602,19 @@ fastify.put(
     const findResult = await mergeQueueWatchRepo.findById(watchId);
     if (!findResult.ok) {
       if (findResult.error.code === 'NOT_FOUND') {
-        return await reply.code(404).send({
-          success: false,
-          error: { code: 'NOT_FOUND', message: findResult.error.message },
-        });
+        return await reply.fail('NOT_FOUND', findResult.error.message);
       }
       return await reply.fail('INTERNAL_ERROR', findResult.error.message);
     }
 
     // Authorization check
     if (findResult.value.userId !== userId) {
-      return await reply.code(403).send({
-        success: false,
-        error: { code: 'FORBIDDEN', message: 'Not authorized to modify this watch' },
-      });
+      return await reply.fail('FORBIDDEN', 'Not authorized to modify this watch');
     }
 
     // Only allow modifications on active watches
     if (findResult.value.status !== 'active') {
-      return await reply.code(409).send({
-        success: false,
-        error: { code: 'CONFLICT', message: 'Cannot modify exclusions on a non-active watch' },
-      });
+      return await reply.fail('CONFLICT', 'Cannot modify exclusions on a non-active watch');
     }
 
     // Persist
@@ -844,6 +835,15 @@ After the existing drain check (Step 3g) and before the iteration loop (Step 3h)
     const prsToProcess = eligiblePrs.filter((pr) => !excludedSet.has(pr.number));
 
     // Step 3g-3: If all eligible PRs are excluded, skip (but do NOT drain)
+    //
+    // SEMANTIC NOTE: This returns `skipped_all` with `skipped: []`, which is
+    // distinct from the post-loop `skipped_all` (tick.ts ~line 231) where
+    // `skipped.length > 0` (PRs were attempted but blocked). The difference:
+    //   - skipped: []    → "nothing tried — user excluded all eligible PRs"
+    //   - skipped: [...]  → "everything tried but blocked by merge status"
+    // Consumers of `skipped_all` (e.g., mergeQueueTickRoute, monitoring) MUST
+    // NOT assume `skipped.length > 0`. Add a test covering this invariant in
+    // Task 1.6 Step 2 (the all-excluded test already asserts `skipped: []`).
     if (prsToProcess.length === 0) {
       await recordSuccessfulTick(watchId, []);
       return {
@@ -996,6 +996,24 @@ useEffect(() => {
 
 The toggle/bulk action handlers should set `setExclusionInFlight(true)` before the API call and `setExclusionInFlight(false)` in the finally block. This prevents a 30s poll from reverting a checkbox toggle that hasn't been confirmed by Firestore yet.
 
+**Post-flight sync cooldown:** When `exclusionInFlight` flips from `true` → `false`, the useEffect re-runs immediately. If a background poll completed *during* the API call and returned stale data (before the PUT reached Firestore), the sync will briefly overwrite optimistic state with old data — causing a visible checkbox flicker that self-corrects on the next poll. To mitigate this, add a 2-second cooldown after a successful API call before re-enabling sync:
+
+```typescript
+const [syncCooldown, setSyncCooldown] = useState(false);
+
+// In the useEffect, also guard on syncCooldown:
+useEffect(() => {
+  if (exclusionInFlight || syncCooldown) return;
+  // ... existing sync logic ...
+}, [watches, selectedBranch, exclusionInFlight, syncCooldown]);
+
+// In handler finally blocks, after setExclusionInFlight(false):
+setSyncCooldown(true);
+setTimeout(() => { setSyncCooldown(false); }, 2000);
+```
+
+This gives Firestore 2 seconds to propagate the write before the next sync re-reads watch data, eliminating the flicker in all practical scenarios.
+
 - [ ] **Step 3: Implement the toggle handler**
 
 Add the `handleToggleExclusion` callback. **Important:** Keep the state updater pure — compute next state in the updater, fire the API call outside it. This prevents React Strict Mode (which calls updaters twice in dev) from double-firing API calls.
@@ -1033,10 +1051,16 @@ const handleToggleExclusion = useCallback((prNumber: number): void => {
         setTimeout(() => { setExclusionError(null); }, 3000);
       } finally {
         setExclusionInFlight(false);
+        setSyncCooldown(true);
+        setTimeout(() => { setSyncCooldown(false); }, 2000);
       }
     })();
   }
 }, [getAccessToken]);
+// ^ Minimal dep array is intentional: `excludedPrNumbersRef`, `watchesRef`, and
+// `selectedBranchRef` are accessed via refs to avoid stale closures and prevent
+// callback identity churn on every state change. Only `getAccessToken` (stable
+// from Auth0) is a direct dependency.
 ```
 
 Note: This requires an `excludedPrNumbersRef` (similar to `watchesRef`) — declare once, used by both toggle and watch creation:
@@ -1071,6 +1095,8 @@ const handleSelectAll = useCallback((): void => {
         setTimeout(() => { setExclusionError(null); }, 3000);
       } finally {
         setExclusionInFlight(false);
+        setSyncCooldown(true);
+        setTimeout(() => { setSyncCooldown(false); }, 2000);
       }
     })();
   }
@@ -1096,6 +1122,8 @@ const handleDeselectAll = useCallback((eligiblePrNumbers: number[]): void => {
         setTimeout(() => { setExclusionError(null); }, 3000);
       } finally {
         setExclusionInFlight(false);
+        setSyncCooldown(true);
+        setTimeout(() => { setSyncCooldown(false); }, 2000);
       }
     })();
   }
@@ -1151,6 +1179,48 @@ interface UseMergeQueueResult {
 ```bash
 git add apps/web/src/hooks/useMergeQueue.ts
 git commit -m "feat(web): add exclusion state management to useMergeQueue hook"
+```
+
+### Task 2.2a: Add tests for useMergeQueue exclusion logic
+
+**Files:**
+- Modify: `apps/web/src/hooks/__tests__/useMergeQueue.test.ts`
+
+**Why this task exists:** Per CLAUDE.md, tests are *required* for `hooks/` (not optional like UI components). The hook gains significant new logic: `handleToggleExclusion`, `handleSelectAll`, `handleDeselectAll`, optimistic update/revert, `exclusionInFlight` guard, and `syncCooldown`. All must be tested.
+
+- [ ] **Step 1: Write test — toggle exclusion optimistic update**
+
+Add a test that verifies `handleToggleExclusion(42)` immediately adds PR #42 to `excludedPrNumbers`, and calling it again removes it (toggle behavior). Assert the state change is synchronous (optimistic).
+
+- [ ] **Step 2: Write test — toggle exclusion reverts on API failure**
+
+Mock `updateExclusions` to reject. Call `handleToggleExclusion(42)`, wait for the async operation to settle. Assert: (a) `excludedPrNumbers` reverts to the original state, (b) `exclusionError` is set with an error message, (c) after 3 seconds, `exclusionError` clears to null.
+
+- [ ] **Step 3: Write test — handleSelectAll clears all exclusions**
+
+With an active watch and some PRs excluded, call `handleSelectAll()`. Assert `excludedPrNumbers` becomes empty and `updateExclusions` is called with `[]`.
+
+- [ ] **Step 4: Write test — handleDeselectAll excludes all eligible PRs**
+
+Call `handleDeselectAll([1, 2, 3])`. Assert `excludedPrNumbers` becomes `new Set([1, 2, 3])` and `updateExclusions` is called with `[1, 2, 3]`.
+
+- [ ] **Step 5: Write test — exclusionInFlight prevents sync from poll**
+
+Simulate: (a) call `handleToggleExclusion` (sets `exclusionInFlight` true), (b) trigger a watches update (simulating a 30s poll), (c) assert `excludedPrNumbers` was NOT overwritten by the poll data while the API call is in-flight.
+
+- [ ] **Step 6: Write test — syncCooldown prevents flicker after API call**
+
+Simulate: (a) complete a toggle API call, (b) immediately trigger a watches update with stale data, (c) assert `excludedPrNumbers` retains the optimistic value during the 2-second cooldown window.
+
+- [ ] **Step 7: Write test — createWatch sends excludedPrNumbers**
+
+With no active watch, set some exclusions via toggle, then call `doToggleWatch`. Assert `createWatch` is called with `excludedPrNumbers` matching the in-memory state.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add apps/web/src/hooks/__tests__/useMergeQueue.test.ts
+git commit -m "test(web): add tests for useMergeQueue exclusion logic"
 ```
 
 ### Task 2.3: Add checkbox to PrRow component
