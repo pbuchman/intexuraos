@@ -250,7 +250,7 @@ describe('GitHubWebhookRules', () => {
       });
     });
 
-    it('should pass through for created issue_comment events from non-whitelisted senders', () => {
+    it('should skip created issue_comment events from non-whitelisted senders', () => {
       const event = {
         ...mockEvent,
         senderLogin: 'random-user',
@@ -262,20 +262,56 @@ describe('GitHubWebhookRules', () => {
       const result = rule.evaluate(event);
 
       expect(result).toEqual({
-        action: 'dispatch',
-        reason: 'ISSUE_COMMENT_CREATED_PASS_THROUGH',
+        action: 'skip',
+        reason: 'SENDER_NOT_WHITELISTED',
+        context: {
+          sender: 'random-user',
+          repoOwner: 'test-org',
+          allowedBots: ['bot1', 'bot2'],
+        },
       });
     });
 
-    it('should pass through for pull_request events', () => {
+    it('should skip pull_request events from non-whitelisted senders', () => {
       const event = { ...mockEvent, eventType: 'pull_request' as const, senderLogin: 'random-user' };
       const allowedBots = new Set(['bot1']);
       const rule = new SenderWhitelistRule(allowedBots);
       const result = rule.evaluate(event);
 
       expect(result).toEqual({
+        action: 'skip',
+        reason: 'SENDER_NOT_WHITELISTED',
+        context: {
+          sender: 'random-user',
+          repoOwner: 'test-org',
+          allowedBots: ['bot1'],
+        },
+      });
+    });
+
+    it('should dispatch pull_request events from repo owner', () => {
+      const event = { ...mockEvent, eventType: 'pull_request' as const, senderLogin: 'test-org' };
+      const allowedBots = new Set(['bot1']);
+      const rule = new SenderWhitelistRule(allowedBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({
         action: 'dispatch',
-        reason: 'PR_EVENT_PASS_THROUGH',
+        reason: 'SENDER_IS_REPO_OWNER',
+        context: { sender: 'test-org', repoOwner: 'test-org' },
+      });
+    });
+
+    it('should dispatch pull_request events from allowed bot', () => {
+      const event = { ...mockEvent, eventType: 'pull_request' as const, senderLogin: 'bot1' };
+      const allowedBots = new Set(['bot1']);
+      const rule = new SenderWhitelistRule(allowedBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({
+        action: 'dispatch',
+        reason: 'SENDER_IS_ALLOWED_BOT',
+        context: { sender: 'bot1', allowedBots: ['bot1'] },
       });
     });
 
@@ -620,7 +656,7 @@ describe('GitHubWebhookRules', () => {
     });
 
     it('should evaluate rules in order', () => {
-      const event = { ...mockEvent, eventType: 'issue_comment' as const, action: 'created' as const };
+      const event = { ...mockEvent, eventType: 'issue_comment' as const, action: 'created' as const, senderLogin: 'test-org' };
       const allowedRepos = new Set(['test-org/test-repo']);
       const allowedBots = new Set(['random-user']);
       const rules = [
@@ -659,7 +695,7 @@ describe('GitHubWebhookRules', () => {
       });
     });
 
-    it('should let created issue_comment from unauthorized sender reach triage', () => {
+    it('should skip created issue_comment from unauthorized sender before reaching triage', () => {
       const event = {
         ...mockEvent,
         eventType: 'issue_comment' as const,
@@ -677,8 +713,13 @@ describe('GitHubWebhookRules', () => {
       const result = service.evaluate(event);
 
       expect(result).toEqual({
-        action: 'needs_triage',
-        reason: 'TRIAGE_REQUIRED',
+        action: 'skip',
+        reason: 'SENDER_NOT_WHITELISTED',
+        context: {
+          sender: 'random-user',
+          repoOwner: 'test-org',
+          allowedBots: ['claude[bot]'],
+        },
       });
     });
 

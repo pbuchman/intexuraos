@@ -1,0 +1,27 @@
+{
+  "name": "@intexuraos/infra-openrouter",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0"
+  },
+  "dependencies": {
+    "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/llm-prompts": "workspace:*",
+    "@intexuraos/llm-audit": "workspace:*",
+    "@intexuraos/llm-contract": "workspace:*",
+    "@intexuraos/llm-pricing": "workspace:*",
+    "openai": "^5.3.0"
+  },
+  "devDependencies": {
+    "nock": "^14.0.0"
+  }
+}

@@ -7,7 +7,7 @@ import { WatchStatusCard } from '@/components/merge-queue/WatchStatusCard';
 import { PrStatusPipeline } from '@/components/merge-queue/PrStatusPipeline';
 import { PrList } from '@/components/merge-queue/PrList';
 import { MergeHistoryTimeline } from '@/components/merge-queue/MergeHistoryTimeline';
-import { getPrStatus } from '@/utils/mergeQueueStatus';
+import { getPrStatus, selectCurrentWatch } from '@/utils/mergeQueueStatus';
 import type { PrFilterStatus } from '@/types';
 
 const DEFAULT_OWNER = 'pbuchman';
@@ -48,16 +48,11 @@ export function MergeQueuePage(): React.JSX.Element {
   }, [prs]);
 
   // Find watch for selected branch — prefer active, then most-recently-created
-  // drained watch so history shows the latest execution, not the oldest.
-  const currentWatch = useMemo(() => {
-    if (selectedBranch === null) return null;
-    const branchWatches = watches.filter((w) => w.baseBranch === selectedBranch);
-    return branchWatches.find((w) => w.status === 'active')
-      ?? branchWatches
-          .filter((w) => w.status === 'drained')
-          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
-      ?? null;
-  }, [watches, selectedBranch]);
+  // drained or cancelled watch so history shows the latest execution.
+  const currentWatch = useMemo(
+    () => selectCurrentWatch(watches, selectedBranch),
+    [watches, selectedBranch],
+  );
 
   const isSelectedBranchBlocked = selectedBranch !== null &&
     branches.find((b) => b.name === selectedBranch)?.blocked === true;

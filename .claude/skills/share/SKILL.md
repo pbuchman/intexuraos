@@ -4,6 +4,9 @@ description: Publish HTML/markdown content to intexuraos.cloud/share/claude/. Su
 argument-hint: '[--html | --raw-md]'
 ---
 
+<!-- Counterpart: .codex/skills/share/SKILL.md (Codex CLI version of this skill) -->
+<!-- When updating this file, check whether the Codex version needs the same change. -->
+
 # Share — Publish Content to GCS
 
 Upload HTML or markdown content to the shared-content bucket, accessible at a public URL.

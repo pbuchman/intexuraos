@@ -22,6 +22,7 @@ export interface DecryptedApiKeys {
   openai?: string;
   anthropic?: string;
   perplexity?: string;
+  openrouter?: string;
 }
 
 /**

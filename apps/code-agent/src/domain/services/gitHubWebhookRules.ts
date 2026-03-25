@@ -150,7 +150,7 @@ export class ProtectedBaseBranchRule implements WebhookRule {
 
 /**
  * Rule that checks if the sender is in the allowed bots list or is the repository owner.
- * Pass-through for pull_request events (sender filtering doesn't apply to PRs).
+ * All event types are subject to sender authorization — no blanket pass-throughs.
  */
 export class SenderWhitelistRule implements WebhookRule {
   constructor(
@@ -158,15 +158,6 @@ export class SenderWhitelistRule implements WebhookRule {
   ) {}
 
   evaluate(event: GitHubPREvent): RuleOutcome {
-    // Pass-through for pull_request events — sender filtering doesn't apply
-    if (event.eventType === 'pull_request') {
-      return { action: 'dispatch', reason: 'PR_EVENT_PASS_THROUGH' };
-    }
-
-    if (event.eventType === 'issue_comment' && event.action === 'created') {
-      return { action: 'dispatch', reason: 'ISSUE_COMMENT_CREATED_PASS_THROUGH' };
-    }
-
     const sender = event.senderLogin;
     const repoOwner = event.repository.split('/')[0];
 

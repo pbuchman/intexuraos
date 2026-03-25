@@ -30,6 +30,7 @@
     "@intexuraos/infra-notion": "workspace:*",
     "@intexuraos/infra-otel": "workspace:*",
     "@intexuraos/infra-perplexity": "workspace:*",
+    "@intexuraos/infra-openrouter": "workspace:*",
     "@intexuraos/infra-pubsub": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/internal-clients": "workspace:*",
