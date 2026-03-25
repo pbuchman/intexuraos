@@ -139,25 +139,4 @@ export interface WhatsAppNotifier {
     userId: string,
     info: { repository: string; pullRequestNumber: number; lastError: string }
   ): Promise<Result<void, NotificationError>>;
-
-  /**
-   * Send notification when a CI check fails on an agent-created PR.
-   * INT-853
-   *
-   * @param userId - User ID to send notification to
-   * @param info - CI failure details including PR URL, check name, branch, and run URL
-   * @returns Ok(undefined) on success, Err on failure
-   */
-  notifyCIFailure(
-    userId: string,
-    info: {
-      repository: string;
-      pullRequestNumber: number;
-      prUrl: string;
-      checkName: string;
-      branch: string;
-      runUrl?: string;
-      taskId: string;
-    }
-  ): Promise<Result<void, NotificationError>>;
 }
