@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CodeTask } from '@/types';
-import { groupByLinearIssue, sortIssueGroups } from '../issueGroups.js';
+import { groupByLinearIssue, sortIssueGroups, hasImplementationReadyLabel } from '../issueGroups.js';
 import type { IssueGroup, PipelineStepData, SortOption } from '../issueGroups.js';
 
 function createMockTask(overrides: Partial<CodeTask> & { id: string }): CodeTask {
@@ -1016,5 +1016,139 @@ describe('sortIssueGroups', () => {
         expect(() => sortIssueGroups(groups, option)).not.toThrow();
       }
     });
+  });
+});
+
+describe('hasImplementationReadyLabel', () => {
+  it('returns true when ready-to-implement label exists', () => {
+    expect(hasImplementationReadyLabel([{ id: 'l1', name: 'ready-to-implement' }])).toBe(true);
+  });
+
+  it('returns true when code-task label exists (backward compat)', () => {
+    expect(hasImplementationReadyLabel([{ id: 'l1', name: 'code-task' }])).toBe(true);
+  });
+
+  it('returns true when labels is undefined (graceful fallback)', () => {
+    expect(hasImplementationReadyLabel(undefined)).toBe(true);
+  });
+
+  it('returns true when labels is empty array (graceful fallback)', () => {
+    expect(hasImplementationReadyLabel([])).toBe(true);
+  });
+
+  it('returns false when labels has items but neither ready-to-implement nor code-task', () => {
+    expect(hasImplementationReadyLabel([{ id: 'l1', name: 'some-other-label' }])).toBe(false);
+  });
+
+  it('handles mixed labels with ready-to-implement present', () => {
+    expect(hasImplementationReadyLabel([
+      { id: 'l1', name: 'bug' },
+      { id: 'l2', name: 'ready-to-implement' },
+    ])).toBe(true);
+  });
+
+  it('normalizes label names (spaces, underscores, casing)', () => {
+    expect(hasImplementationReadyLabel([{ id: 'l1', name: 'Ready To Implement' }])).toBe(true);
+    expect(hasImplementationReadyLabel([{ id: 'l1', name: 'ready_to_implement' }])).toBe(true);
+    expect(hasImplementationReadyLabel([{ id: 'l1', name: 'Code-Task' }])).toBe(true);
+  });
+});
+
+describe('label-gated actionable state', () => {
+  const linearIssueSkeleton = {
+    identifier: 'INT-100',
+    title: 'Test',
+    state: { name: 'Todo', type: 'unstarted' as const },
+    priority: 3,
+    assignee: null,
+    url: 'https://linear.app/test',
+    commentCount: 0,
+    lastCommentAt: null,
+  };
+
+  it('shows actionable when ready-to-implement label exists', () => {
+    const task = createMockTask({
+      id: 't1',
+      linearIssueId: 'INT-100',
+      agentType: 'planning',
+      status: 'planned',
+      linearIssue: {
+        ...linearIssueSkeleton,
+        labels: [{ id: 'l1', name: 'ready-to-implement' }],
+      },
+    });
+    const groups = groupByLinearIssue([task]);
+    expect(findStep(groups[0]?.pipeline, 'execution')?.state).toBe('actionable');
+  });
+
+  it('shows actionable when code-task label exists (backward compat)', () => {
+    const task = createMockTask({
+      id: 't1',
+      linearIssueId: 'INT-100',
+      agentType: 'planning',
+      status: 'planned',
+      linearIssue: {
+        ...linearIssueSkeleton,
+        labels: [{ id: 'l1', name: 'code-task' }],
+      },
+    });
+    const groups = groupByLinearIssue([task]);
+    expect(findStep(groups[0]?.pipeline, 'execution')?.state).toBe('actionable');
+  });
+
+  it('shows actionable when linearIssue is undefined (graceful fallback)', () => {
+    const task = createMockTask({
+      id: 't1',
+      linearIssueId: 'INT-100',
+      agentType: 'planning',
+      status: 'planned',
+    });
+    const groups = groupByLinearIssue([task]);
+    expect(findStep(groups[0]?.pipeline, 'execution')?.state).toBe('actionable');
+  });
+
+  it('shows actionable when linearIssue has empty labels array (graceful fallback)', () => {
+    const task = createMockTask({
+      id: 't1',
+      linearIssueId: 'INT-100',
+      agentType: 'planning',
+      status: 'planned',
+      linearIssue: {
+        ...linearIssueSkeleton,
+        labels: [],
+      },
+    });
+    const groups = groupByLinearIssue([task]);
+    expect(findStep(groups[0]?.pipeline, 'execution')?.state).toBe('actionable');
+  });
+
+  it('does NOT show actionable when linearIssue has labels but neither ready-to-implement nor code-task', () => {
+    const task = createMockTask({
+      id: 't1',
+      linearIssueId: 'INT-100',
+      agentType: 'planning',
+      status: 'planned',
+      linearIssue: {
+        ...linearIssueSkeleton,
+        labels: [{ id: 'l1', name: 'some-other-label' }],
+      },
+    });
+    const groups = groupByLinearIssue([task]);
+    expect(findStep(groups[0]?.pipeline, 'execution')).toBeUndefined();
+  });
+
+  it('does NOT show actionable when linearIssue has only unclear label', () => {
+    const task = createMockTask({
+      id: 't1',
+      linearIssueId: 'INT-100',
+      agentType: 'planning',
+      status: 'planned',
+      linearIssue: {
+        ...linearIssueSkeleton,
+        labels: [{ id: 'l1', name: 'unclear' }],
+      },
+    });
+    const groups = groupByLinearIssue([task]);
+    expect(findStep(groups[0]?.pipeline, 'execution')).toBeUndefined();
   });
 });
