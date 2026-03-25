@@ -303,6 +303,21 @@ describe('handlePrMerge', () => {
       expect(mockLinearIssueService.markTodo).not.toHaveBeenCalled();
     });
 
+    it('should detect [PLAN] case-insensitively (uppercase)', async () => {
+      mockCodeTaskRepo.findByPR.mockResolvedValue(
+        ok(createBaseTask({ linearIssueId: 'INT-150', userId: 'user-from-task' }))
+      );
+
+      await handlePrMerge(
+        buildDeps(),
+        createDefaultInput({ prTitle: '[INT-150] [PLAN] Uppercase plan tag' }),
+      );
+
+      expect(mockLinearIssueService.markTodo).toHaveBeenCalledWith('user-from-task', 'INT-150');
+      expect(mockLinearIssueService.markTodo).toHaveBeenCalledTimes(1);
+      expect(mockLinearIssueService.markQa).not.toHaveBeenCalled();
+    });
+
     it('should transition to Todo when plan PR has INT-XXX in body (not task)', async () => {
       await handlePrMerge(
         buildDeps(),
