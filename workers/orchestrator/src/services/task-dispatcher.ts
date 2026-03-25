@@ -1218,6 +1218,7 @@ export class TaskDispatcher {
       base.review_comments_posted = agentData.review_comments_posted;
       base.review_types = agentData.review_types;
       base.requirements_tracker_updated = agentData.requirements_tracker_updated;
+      base.gh_actions_status = agentData.gh_actions_status;
     } else {
       if (agentData.gh_pr_url !== '') {
         base.prUrl = agentData.gh_pr_url;
@@ -1251,6 +1252,12 @@ export class TaskDispatcher {
         task.lastSuccessResult.requirements_tracker_updated !== undefined
       ) {
         result.requirements_tracker_updated = task.lastSuccessResult.requirements_tracker_updated;
+      }
+      if (
+        result.gh_actions_status === undefined &&
+        task.lastSuccessResult.gh_actions_status !== undefined
+      ) {
+        result.gh_actions_status = task.lastSuccessResult.gh_actions_status;
       }
     }
     if (task.agentType === 'pull_request' && task.lastSuccessResult !== undefined) {
