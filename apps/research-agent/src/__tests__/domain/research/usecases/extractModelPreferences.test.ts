@@ -490,7 +490,6 @@ describe('extractModelPreferences', () => {
     it('handles OpenRouter model without slash', () => {
       const orModel = 'or:some-model' as ResearchModel;
       const result = getModelDisplayName(orModel);
-      // Falls through to else, parts[1] is undefined, uses staticModel as fallback (no dash replacement)
       expect(result).toBe('Or:some-model');
     });
   });
