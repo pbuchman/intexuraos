@@ -240,6 +240,14 @@ async function evaluatePREventInternal(
   const skipReason = state.skipReason ?? '(no reason)';
   /* v8 ignore stop @preserve */
   const dedupedReviewTypes = [...new Set(reviewsRequested)];
+
+  if (!state.skipped && dedupedReviewTypes.length === 0) {
+    logger.warn(
+      { repository: event.repository, prNumber: event.pullRequestNumber, toolCallsMade: result.toolCallsMade },
+      'GitHub Agent PR triage completed without calling any tool — defaulting to skip',
+    );
+  }
+
   const triage: GitHubAgentTriageResult = state.skipped
     ? { action: 'skip', reason: skipReason }
     : dedupedReviewTypes.length > 0
@@ -364,6 +372,14 @@ async function evaluateCommentEventInternal(
   /* v8 ignore start -- ts-type: skipReason is always set when skipped is true — unable to reach undefined fallback in normal flow @preserve */
   const commentSkipReason = state.skipReason ?? '(no reason)';
   /* v8 ignore stop @preserve */
+
+  if (!state.skipped && state.dispatchTemplate === undefined) {
+    logger.warn(
+      { repository: event.repository, prNumber: event.pullRequestNumber, toolCallsMade: result.toolCallsMade },
+      'GitHub Agent comment triage completed without calling any tool — defaulting to skip',
+    );
+  }
+
   const triage: GitHubAgentTriageResult = state.skipped
     ? { action: 'skip', reason: commentSkipReason }
     : state.dispatchTemplate !== undefined
