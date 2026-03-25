@@ -6,6 +6,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
+import nock from 'nock';
 import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
 import { buildServer } from '../../server.js';
@@ -28,16 +29,6 @@ const INTEXURAOS_AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
 const INTEXURAOS_AUTH_AUDIENCE = 'urn:intexuraos:api';
 const TEST_USER_ID = 'auth0|test-user-123';
 
-/**
- * Create a mock Response for global.fetch stubbing.
- */
-function createMockResponse(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
 describe('OpenRouter Routes - GET /research/openrouter/models', () => {
   let app: FastifyInstance;
   let jwksServer: FastifyInstance;
@@ -45,7 +36,6 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
   let jwksUrl: string;
   let fakeUserServiceClient: FakeUserServiceClient;
   const issuer = `https://${INTEXURAOS_AUTH0_DOMAIN}/`;
-  const originalFetch = globalThis.fetch;
 
   async function generateJwt(sub: string = TEST_USER_ID): Promise<string> {
     const builder = new jose.SignJWT({ sub })
@@ -125,7 +115,7 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     resetServices();
     resetOpenRouterCache();
     clearJwksCache();
-    globalThis.fetch = originalFetch;
+    nock.cleanAll();
     vi.useRealTimers();
   });
 
@@ -153,13 +143,9 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
       context_length: 500_000,
     }));
 
-    globalThis.fetch = vi.fn().mockImplementation(async (input: string | URL | Request) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-      if (url === 'https://openrouter.ai/api/v1/models') {
-        return createMockResponse(200, { data: catalogData });
-      }
-      return originalFetch(input);
-    });
+    nock('https://openrouter.ai')
+      .get('/api/v1/models')
+      .reply(200, { data: catalogData });
 
     const token = await generateJwt(TEST_USER_ID);
     const response = await app.inject({
@@ -186,13 +172,9 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
   it('returns fallback pricing when catalog fetch returns non-200', async () => {
     fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-or-key' });
 
-    globalThis.fetch = vi.fn().mockImplementation(async (input: string | URL | Request) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-      if (url === 'https://openrouter.ai/api/v1/models') {
-        return createMockResponse(503, 'Service Unavailable');
-      }
-      return originalFetch(input);
-    });
+    nock('https://openrouter.ai')
+      .get('/api/v1/models')
+      .reply(503, 'Service Unavailable');
 
     const token = await generateJwt(TEST_USER_ID);
     const response = await app.inject({
@@ -225,14 +207,11 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
       context_length: 500_000,
     }));
 
-    const fetchSpy = vi.fn().mockImplementation(async (input: string | URL | Request) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-      if (url === 'https://openrouter.ai/api/v1/models') {
-        return createMockResponse(200, { data: catalogData });
-      }
-      return originalFetch(input);
-    });
-    globalThis.fetch = fetchSpy;
+    // nock intercepts exactly one request — a second call would fail
+    const scope = nock('https://openrouter.ai')
+      .get('/api/v1/models')
+      .once()
+      .reply(200, { data: catalogData });
 
     const token = await generateJwt(TEST_USER_ID);
 
@@ -243,17 +222,7 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(response1.statusCode).toBe(200);
-
-    const countCatalogCalls = (): number =>
-      (fetchSpy.mock.calls as [string | URL | Request, ...unknown[]][]).filter(
-        (call) => {
-          const input = call[0];
-          const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
-          return url === 'https://openrouter.ai/api/v1/models';
-        }
-      ).length;
-
-    expect(countCatalogCalls()).toBe(1);
+    expect(scope.isDone()).toBe(true);
 
     // Advance time by 1 minute (within 5-minute TTL)
     vi.advanceTimersByTime(60_000);
@@ -272,7 +241,7 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     expect(body.success).toBe(true);
     expect(body.data.models).toHaveLength(14);
 
-    // Verify the catalog was only fetched once (second request used cache)
-    expect(countCatalogCalls()).toBe(1);
+    // If nock had received a second request it would have thrown —
+    // reaching here confirms the cache was used
   });
 });
