@@ -1,8 +1,7 @@
 import { Link } from 'react-router-dom';
 import { AlertTriangle, ChevronDown, Loader2 } from 'lucide-react';
 import { LlmModels, LlmProviders, createOpenRouterModelId } from '@intexuraos/llm-contract';
-import type { LlmProvider, SupportedModel } from '@/services/researchAgentApi.types';
-import type { OpenRouterModelInfo } from '@/services/researchAgentApi.types';
+import type { LlmProvider, OpenRouterModelInfo, SupportedModel } from '@/services/researchAgentApi.types';
 import { OpenRouterModelSelector } from './OpenRouterModelSelector.js';
 
 function noopStringArray(_ids: string[]): void {
