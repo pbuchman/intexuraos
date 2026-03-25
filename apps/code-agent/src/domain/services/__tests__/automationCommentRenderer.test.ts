@@ -467,6 +467,56 @@ describe('renderEvent', () => {
     });
   });
 
+  describe('ci_failure_detected', () => {
+    it('renders CI failure with check name, branch, and conclusion', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'ci_failure_detected',
+        checkName: 'ESLint',
+        conclusion: 'failure',
+        headBranch: 'task_abc123',
+        headSha: 'abc123def',
+        checkSuiteId: 123,
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/99',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe(
+        '**14:35** -- ⚠️ CI check failed: ESLint | branch: task_abc123 | failure'
+      );
+    });
+  });
+
+  describe('fix_task_dispatched', () => {
+    it('renders fix task dispatched with parent and fix task IDs', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'fix_task_dispatched',
+        parentTaskId: 'task_parent456',
+        fixTaskId: 'task_fix789',
+        checkName: 'ESLint',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe(
+        '**14:35** -- Fix task dispatched for CI failure | parent: `task_parent456` → fix: `task_fix789`'
+      );
+    });
+  });
+
+  describe('ci_failure_skip', () => {
+    it('renders CI failure skip with reason', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'ci_failure_skip',
+        reason: 'already_follow_up',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe('**14:35** -- CI failure skip: already_follow_up');
+    });
+  });
+
   describe('duration formatting', () => {
     it('formats seconds only', () => {
       useFakeTime();
