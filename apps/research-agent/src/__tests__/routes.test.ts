@@ -4372,6 +4372,82 @@ describe('Internal Routes', () => {
       expect(result?.status).toBe('failed');
       expect(result?.error).toContain('Unexpected repository error');
     });
+
+    it('processes allowlisted OpenRouter model with correct pricing', async () => {
+      const allowlistedModel = 'or:qwen/qwen3.5-plus-02-15' as typeof LlmModels.Gemini25Pro;
+      const research = createTestResearch({
+        id: 'research-123',
+        status: 'processing',
+        selectedModels: [allowlistedModel],
+        llmResults: [
+          { provider: 'openrouter' as typeof LlmProviders.Google, model: allowlistedModel, status: 'pending' },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, {
+        google: 'google-key',
+        openai: 'openai-key',
+        openrouter: 'openrouter-key',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-llm-call',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage(createLlmCallEvent({ model: allowlistedModel })),
+            messageId: 'msg-123',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+
+      // Verify the LLM result was updated (research provider was called)
+      const updatedResearch = fakeRepo.getAll()[0];
+      const result = updatedResearch?.llmResults.find((r) => r.model === allowlistedModel);
+      expect(result?.status).toBe('completed');
+    });
+
+    it('rejects non-allowlisted OpenRouter models', async () => {
+      const nonAllowlistedModel = 'or:unknown/not-in-allowlist' as typeof LlmModels.Gemini25Pro;
+      const research = createTestResearch({
+        id: 'research-123',
+        status: 'processing',
+        selectedModels: [nonAllowlistedModel],
+        llmResults: [
+          { provider: 'openrouter' as typeof LlmProviders.Google, model: nonAllowlistedModel, status: 'pending' },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, {
+        google: 'google-key',
+        openai: 'openai-key',
+        openrouter: 'openrouter-key',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-llm-call',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage(createLlmCallEvent({ model: nonAllowlistedModel })),
+            messageId: 'msg-123',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error?: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error?.code).toBe('INVALID_REQUEST');
+    });
   });
 
   describe('POST /internal/llm/pubsub/report-analytics - error handling', () => {

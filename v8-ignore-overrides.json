@@ -13,10 +13,11 @@
     "INT-1011": {
       "files": [
         "apps/research-agent/src/routes/openRouterRoutes.ts",
+        "apps/research-agent/src/routes/internalRoutes.ts",
         "packages/internal-clients/src/user-service/client.ts",
         "packages/infra-openrouter/src/client.ts"
       ],
-      "description": "openRouterRoutes has remaining ts-type branches (missing pricing, parseFloat defaults), auth-guard, getApiKeys failure guard, and a catch block that nock cannot trigger; client.ts has upstream API response branches (empty choices array, annotation URL structures, 503 OVERLOADED status, undefined usage) that vary by provider response; internal-clients/client.ts has nullish response field guards for the openrouter key field."
+      "description": "openRouterRoutes has remaining ts-type branches (missing pricing, parseFloat defaults), auth-guard, getApiKeys failure guard, and a catch block that nock cannot trigger; internalRoutes.ts has a defensive null check after isAllowedModel guard where getAllowlistPricing cannot return undefined for the same model; client.ts has upstream API response branches (empty choices array, annotation URL structures, 503 OVERLOADED status, undefined usage) that vary by provider response; internal-clients/client.ts has nullish response field guards for the openrouter key field."
     },
     "INT-1085": {
       "files": [

@@ -137,11 +137,9 @@ export class OpenRouterAdapter implements LlmResearchProvider, LlmSynthesisProvi
 
 function mapToLlmError(error: { code: string; message: string }): LlmError {
   const validCodes = ['API_ERROR', 'TIMEOUT', 'INVALID_KEY', 'RATE_LIMITED', 'OVERLOADED'] as const;
-  /* v8 ignore start -- ts-type: error code type narrowing for LlmError union @preserve */
   const code = validCodes.includes(error.code as (typeof validCodes)[number])
     ? (error.code as LlmError['code'])
     : 'API_ERROR';
-  /* v8 ignore stop @preserve */
 
   return { code, message: error.message };
 }

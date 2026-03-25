@@ -863,7 +863,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         );
 
         // Reject non-allowlisted OpenRouter models to enforce curated model policy
-        /* v8 ignore start -- upstream: cannot test allowlist rejection path without integration environment with actual OpenRouter API @preserve */
         if (isOpenRouterModel(event.model) && !isAllowedModel(getOpenRouterRawId(event.model))) {
           request.log.warn({ researchId: event.researchId, model: event.model }, '[3.3] OpenRouter model not in allowlist');
           void researchRepo.updateLlmResult(event.researchId, event.model, {
@@ -873,13 +872,19 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           });
           return await reply.fail('INVALID_REQUEST', 'Model not in curated allowlist');
         }
-        /* v8 ignore stop @preserve */
 
-        /* v8 ignore start -- upstream: after allowlist guard, OpenRouter models are guaranteed to be in allowlist @preserve */
-        const researchPricing = isOpenRouterModel(event.model)
-          ? getAllowlistPricing(getOpenRouterRawId(event.model)) as ModelPricing
-          : services.pricingContext.getPricing(event.model as LLMModel);
-        /* v8 ignore stop @preserve */
+        let researchPricing: ModelPricing;
+        if (isOpenRouterModel(event.model)) {
+          const pricing = getAllowlistPricing(getOpenRouterRawId(event.model));
+          /* v8 ignore start -- upstream: isAllowedModel guard above guarantees getAllowlistPricing returns defined for same model @preserve */
+          if (pricing === undefined) {
+            throw new Error(`No pricing for allowlisted model: ${String(event.model)}`);
+          }
+          /* v8 ignore stop @preserve */
+          researchPricing = pricing;
+        } else {
+          researchPricing = services.pricingContext.getPricing(event.model as LLMModel);
+        }
 
         const llmProvider = services.createResearchProvider(
           event.model,
