@@ -4,8 +4,8 @@
  * ALL_REVIEW_TYPES: the complete set used by validation and event storage.
  * LLM_TOOL_REVIEW_TYPES: the subset exposed to the LLM tool enum.
  *
- * plan_review is excluded from the LLM tool enum because plan-only PRs are
- * deterministically routed by evaluatePlanFiles() before LLM triage runs.
+ * plan_review is excluded from the LLM tool enum because plan-only PRs
+ * are handled separately from LLM triage.
  */
 
 export const ALL_REVIEW_TYPES = [

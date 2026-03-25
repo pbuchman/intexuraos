@@ -29,7 +29,7 @@ export interface GitHubAgentPromptInput {
 export const githubAgentPrompt: PromptBuilder<GitHubAgentPromptInput> = {
   name: 'github-agent',
   description: 'System prompt for GitHub Agent that evaluates PR and comment events',
-  version: '5.2.1',
+  version: '5.2.0',
   build(input: GitHubAgentPromptInput): string {
     const sections: string[] = [
       'You are a GitHub webhook evaluation agent for the IntexuraOS project.',
@@ -86,7 +86,7 @@ function buildPRSection(input: GitHubAgentPromptInput): string[] {
     '- **test_quality**: Request when PR has significant test file changes (.test.ts, .spec.ts). Checks for false positives, testing granularity, v8 ignore legitimacy, and test design.',
     '',
     'You may request multiple review types for a single PR if appropriate.',
-    '- **plan_review**: Request when all changed files are plan documents (*plan*.md). Use this instead of code_quality for plan-only PRs.',
+    'If all changed files are plan documents (*plan*.md), skip the PR — plan reviews are handled separately.',
     'Always call at least one tool (either `request_review` or `skip`).',
     '',
     '## HARD RULES',
