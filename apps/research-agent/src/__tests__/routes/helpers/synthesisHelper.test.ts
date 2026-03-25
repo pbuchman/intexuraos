@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { createSynthesisProviders } from '../../../routes/helpers/synthesisHelper.js';
 import type { DecryptedApiKeys, ServiceContainer } from '../../../services.js';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 
 const mockLogger = {
   info: () => {},
@@ -51,6 +51,38 @@ describe('createSynthesisProviders', () => {
 
     expect(result.synthesizer).toBeDefined();
     expect(result.contextInferrer).toBeDefined();
+  });
+
+  it('throws when synthesis provider API key is undefined', () => {
+    const apiKeys: DecryptedApiKeys = {
+      // No anthropic key — will throw when using ClaudeSonnet45
+    };
+
+    expect(() =>
+      createSynthesisProviders(
+        LlmModels.ClaudeSonnet45,
+        apiKeys,
+        'user-123',
+        mockServices,
+        mockLogger as never
+      )
+    ).toThrow(`No API key configured for provider '${LlmProviders.Anthropic}'`);
+  });
+
+  it('throws when synthesis provider API key is empty string', () => {
+    const apiKeys: DecryptedApiKeys = {
+      [LlmProviders.Anthropic]: '',
+    };
+
+    expect(() =>
+      createSynthesisProviders(
+        LlmModels.ClaudeSonnet45,
+        apiKeys,
+        'user-123',
+        mockServices,
+        mockLogger as never
+      )
+    ).toThrow(`No API key configured for provider '${LlmProviders.Anthropic}'`);
   });
 
   it('creates only synthesizer when Google API key is undefined', () => {
