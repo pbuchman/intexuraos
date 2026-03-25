@@ -66,15 +66,6 @@ export function renderEvent(
 
     case 'review_replaced':
       return `**${ts}** -- Review cancelled (replaced) | ${event.replacedTaskId}`;
-
-    case 'ci_failure_detected':
-      return `**${ts}** -- ⚠️ CI check failed: ${event.checkName} | branch: ${event.headBranch} | ${event.conclusion}`;
-
-    case 'fix_task_dispatched':
-      return `**${ts}** -- Fix task dispatched for CI failure | parent: \`${event.parentTaskId}\` → fix: \`${event.fixTaskId}\``;
-
-    case 'ci_failure_skip':
-      return `**${ts}** -- CI failure skip: ${event.reason}`;
   }
 }
 
