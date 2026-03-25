@@ -2,8 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import nock from 'nock';
 import { OpenApiToolRegistry } from '../openapi-tool-registry.js';
 import type { ServiceDefinition } from '../../config.js';
-import type { Logger } from '@intexuraos/common-core';
-import { createTestLogger, createSpyLogger } from './test-helpers.js';
+import { createTestLogger } from './test-helpers.js';
 
 const TEST_OPENAPI_SPEC = {
   openapi: '3.1.1',
@@ -53,7 +52,7 @@ describe('OpenApiToolRegistry', () => {
     registry = new OpenApiToolRegistry({
       allowedServices: [testService],
       internalAuthToken: 'test-token',
-      logger: createTestLogger() as unknown as Logger,
+      logger: createTestLogger() as never,
     });
   });
 
@@ -230,7 +229,7 @@ describe('OpenApiToolRegistry', () => {
     const filteredRegistry = new OpenApiToolRegistry({
       allowedServices: [serviceWithFilter],
       internalAuthToken: 'test-token',
-      logger: createTestLogger() as unknown as Logger,
+      logger: createTestLogger() as never,
     });
 
     nock('http://code-agent:8128')
@@ -290,26 +289,6 @@ describe('OpenApiToolRegistry', () => {
 
     const tools = await registry.getToolsForService('code-agent');
     expect(tools).toEqual([]);
-  });
-
-  it('warns when OpenAPI spec has no paths field', async () => {
-    const spyLogger = createSpyLogger();
-    const spyRegistry = new OpenApiToolRegistry({
-      allowedServices: [testService],
-      internalAuthToken: 'test-token',
-      logger: spyLogger as unknown as Logger,
-    });
-
-    nock('http://code-agent:8128')
-      .get('/openapi.json')
-      .reply(200, { openapi: '3.1.1', info: { title: 'Empty', version: '1.0.0' } });
-
-    await spyRegistry.getToolsForService('code-agent');
-
-    expect(spyLogger.warn).toHaveBeenCalledWith(
-      { service: 'code-agent' },
-      'OpenAPI spec has no paths — service may be misconfigured',
-    );
   });
 
   it('handles spec with empty paths', async () => {
@@ -587,69 +566,6 @@ describe('OpenApiToolRegistry', () => {
     const result = await getTasks.run({});
     expect(result).toContain('Error: Request to code-agent failed');
     expect(result).not.toContain('http://code-agent:8128');
-  });
-
-  it('logs allowed services at construction time', () => {
-    const spyLogger = createSpyLogger();
-    new OpenApiToolRegistry({
-      allowedServices: [testService],
-      internalAuthToken: 'test-token',
-      logger: spyLogger as unknown as Logger,
-    });
-    expect(spyLogger.info).toHaveBeenCalledWith(
-      { serviceCount: 1, serviceKeys: ['code-agent'] },
-      'OpenApiToolRegistry initialized',
-    );
-  });
-
-  it('logs before fetching OpenAPI spec for a service', async () => {
-    const spyLogger = createSpyLogger();
-    const spyRegistry = new OpenApiToolRegistry({
-      allowedServices: [testService],
-      internalAuthToken: 'test-token',
-      logger: spyLogger as unknown as Logger,
-    });
-
-    nock('http://code-agent:8128')
-      .get('/openapi.json')
-      .reply(200, TEST_OPENAPI_SPEC);
-
-    await spyRegistry.getToolsForService('code-agent');
-
-    expect(spyLogger.info).toHaveBeenCalledWith(
-      { service: 'code-agent', openapiUrl: 'http://code-agent:8128/openapi.json' },
-      'Fetching OpenAPI spec for service',
-    );
-  });
-
-  it('warns when a service produces zero tools', async () => {
-    const spyLogger = createSpyLogger();
-    const spyRegistry = new OpenApiToolRegistry({
-      allowedServices: [testService],
-      internalAuthToken: 'test-token',
-      logger: spyLogger as unknown as Logger,
-    });
-
-    const emptySpec = {
-      openapi: '3.1.1',
-      info: { title: 'Empty', version: '1.0.0' },
-      paths: {
-        '/internal/items': {
-          get: { summary: 'No operationId here' },
-        },
-      },
-    };
-
-    nock('http://code-agent:8128')
-      .get('/openapi.json')
-      .reply(200, emptySpec);
-
-    await spyRegistry.getToolsForService('code-agent');
-
-    expect(spyLogger.warn).toHaveBeenCalledWith(
-      { service: 'code-agent', toolCount: 0 },
-      'Service produced zero tools — check operationId on /internal/* routes',
-    );
   });
 
   it('handles parameter without schema', async () => {

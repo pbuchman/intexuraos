@@ -73,8 +73,8 @@ const dataInsightsItems: NavItem[] = [
 ];
 
 const hellscriptItems: NavItem[] = [
-  { to: '/hellscript', label: 'Infernal Whispers', icon: List },
-  { to: '/hellscript/new', label: 'Summon', icon: Plus },
+  { to: '/hellscript', label: 'Thoughts', icon: List },
+  { to: '/hellscript/new', label: 'New Conversation', icon: Plus },
   { to: '/hellscript/voice', label: 'Voice of the Damned', icon: PenTool },
   { to: '/hellscript/scriptures', label: 'Sacred Scriptures', icon: FileText },
 ];

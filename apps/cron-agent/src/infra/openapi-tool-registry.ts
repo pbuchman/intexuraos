@@ -13,10 +13,6 @@ export class OpenApiToolRegistry implements ToolRegistry {
     logger: Logger;
   }) {
     this.serviceMap = new Map(deps.allowedServices.map((s) => [s.key, s]));
-    deps.logger.info(
-      { serviceCount: this.serviceMap.size, serviceKeys: [...this.serviceMap.keys()] },
-      'OpenApiToolRegistry initialized',
-    );
   }
 
   async getToolsForService(serviceKey: string): Promise<ToolDefinition[]> {
@@ -68,10 +64,6 @@ export class OpenApiToolRegistry implements ToolRegistry {
   }
 
   private async fetchAndGenerateTools(service: ServiceDefinition): Promise<ToolDefinition[]> {
-    this.deps.logger.info(
-      { service: service.key, openapiUrl: service.openapiUrl },
-      'Fetching OpenAPI spec for service',
-    );
     try {
       const response = await fetch(service.openapiUrl);
       if (!response.ok) {
@@ -99,10 +91,6 @@ export class OpenApiToolRegistry implements ToolRegistry {
   ): ToolDefinition[] {
     const paths = spec['paths'] as Record<string, Record<string, Record<string, unknown>>> | undefined;
     if (paths === undefined) {
-      this.deps.logger.warn(
-        { service: service.key },
-        'OpenAPI spec has no paths — service may be misconfigured',
-      );
       return [];
     }
 
@@ -149,17 +137,10 @@ export class OpenApiToolRegistry implements ToolRegistry {
       }
     }
 
-    if (tools.length === 0) {
-      this.deps.logger.warn(
-        { service: service.key, toolCount: 0 },
-        'Service produced zero tools — check operationId on /internal/* routes',
-      );
-    } else {
-      this.deps.logger.info(
-        { service: service.key, toolCount: tools.length },
-        'Generated tools from OpenAPI spec',
-      );
-    }
+    this.deps.logger.info(
+      { service: service.key, toolCount: tools.length },
+      'Generated tools from OpenAPI spec',
+    );
 
     return tools;
   }

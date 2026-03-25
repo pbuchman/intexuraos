@@ -49,7 +49,6 @@ function createMockLinearIssueService(): LinearIssueService {
     },
     async markInProgress(): Promise<void> { return; },
     async markInReview(): Promise<void> { return; },
-    async markQa(): Promise<void> { return; },
   };
 }
 
@@ -150,9 +149,6 @@ function createMockWhatsAppNotifier(): WhatsAppNotifier {
       return ok(undefined);
     },
     async notifyDispatchRetryExhausted(): ReturnType<WhatsAppNotifier['notifyDispatchRetryExhausted']> {
-      return ok(undefined);
-    },
-    async notifyCIFailure(): ReturnType<WhatsAppNotifier['notifyCIFailure']> {
       return ok(undefined);
     },
   };

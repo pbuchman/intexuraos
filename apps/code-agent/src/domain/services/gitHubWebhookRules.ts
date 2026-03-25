@@ -255,49 +255,6 @@ export class SkipPrefixRule implements WebhookRule {
 }
 
 /**
- * Rule for CI failure detection on agent-created PRs.
- * - Pass-through for non-check_suite events
- * - For check_suite events: dispatch only when head branch matches task_* pattern
- * - Skip check_suite events on non-task branches (human PRs)
- */
-export class CIFailureRule implements WebhookRule {
-  private static readonly TASK_BRANCH_PREFIX = 'task_';
-
-  evaluate(event: GitHubPREvent): RuleOutcome {
-    // Pass-through for non-check_suite events
-    if (event.eventType !== 'check_suite') {
-      return {
-        action: 'dispatch',
-        reason: 'NOT_A_CHECK_SUITE_EVENT'
-      };
-    }
-
-    // For check_suite events, check if the head branch matches task_* pattern
-    const headBranch = event.baseBranch;
-    if (headBranch === null) {
-      return {
-        action: 'skip',
-        reason: 'CHECK_SUITE_NO_BRANCH_INFO'
-      };
-    }
-
-    if (!headBranch.startsWith(CIFailureRule.TASK_BRANCH_PREFIX)) {
-      return {
-        action: 'skip',
-        reason: 'CHECK_SUITE_NON_TASK_BRANCH',
-        context: { headBranch }
-      };
-    }
-
-    return {
-      action: 'dispatch',
-      reason: 'CHECK_SUITE_TASK_BRANCH',
-      context: { headBranch }
-    };
-  }
-}
-
-/**
  * Rule for special handling of edited bot reviews.
  */
 export class BotReviewEditRule implements WebhookRule {

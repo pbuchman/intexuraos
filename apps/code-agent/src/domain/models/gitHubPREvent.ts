@@ -10,8 +10,7 @@ export type GitHubEventType =
   | 'pull_request_review_comment'
   | 'issue_comment'
   | 'push'
-  | 'ping'
-  | 'check_suite';
+  | 'ping';
 
 export type GitHubPRAction =
   // pull_request actions
@@ -41,9 +40,7 @@ export type GitHubPRAction =
   | 'dismissed'
   // pull_request_review_comment actions
   | 'created'
-  | 'deleted'
-  // check_suite actions
-  | 'completed';
+  | 'deleted';
 
 export interface GitHubPREvent {
   id: string;
