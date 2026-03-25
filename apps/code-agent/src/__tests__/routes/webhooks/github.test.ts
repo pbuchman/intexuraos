@@ -3320,4 +3320,101 @@ describe('POST /webhooks/github', () => {
       ]);
     });
   });
+
+  describe('PR merge → QA transition', () => {
+    let mockMarkQa: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      mockMarkQa = vi.fn().mockResolvedValue(undefined);
+      Object.assign(mockServices, { linearIssueService: { markQa: mockMarkQa } });
+    });
+
+    it('should call handlePrMerge when PR is closed with merge', async () => {
+      vi.mocked(mockServices.codeTaskRepo.findByPR).mockResolvedValue(
+        ok({
+          id: 'task_merge-1',
+          userId: 'merge-user',
+          linearIssueId: 'INT-999',
+        } as never)
+      );
+
+      const mergedPayload = createPullRequestPayload({
+        action: 'closed',
+        pull_request: {
+          id: 101,
+          number: 123,
+          title: '[INT-999] Test PR',
+          body: 'Fixes INT-999',
+          state: 'closed',
+          merged_at: '2026-03-21T01:00:00Z',
+        },
+      });
+
+      const { payload, signature } = signPayload(mergedPayload);
+      await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-merge-1',
+        },
+        body: payload,
+      });
+
+      await waitForDetachedAsync(() => mockMarkQa.mock.calls.length >= 1);
+      expect(mockMarkQa).toHaveBeenCalledWith('merge-user', 'INT-999');
+    });
+
+    it('should NOT call handlePrMerge when PR is closed without merge', async () => {
+      const closedPayload = createPullRequestPayload({
+        action: 'closed',
+        pull_request: {
+          id: 101,
+          number: 123,
+          title: 'Test PR',
+          body: 'Test description',
+          state: 'closed',
+          merged_at: null,
+        },
+      });
+
+      const { payload, signature } = signPayload(closedPayload);
+      await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-close-no-merge-1',
+        },
+        body: payload,
+      });
+
+      await waitForDetachedAsync(() => vi.mocked(mockServices.unifiedEvaluator.evaluate).mock.calls.length >= 1);
+      expect(mockMarkQa).not.toHaveBeenCalled();
+    });
+
+    it('should NOT call handlePrMerge when PR is opened', async () => {
+      const openedPayload = createPullRequestPayload({ action: 'opened' });
+
+      const { payload, signature } = signPayload(openedPayload);
+      await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-opened-no-merge-1',
+        },
+        body: payload,
+      });
+
+      await waitForDetachedAsync(() => vi.mocked(mockServices.unifiedEvaluator.evaluate).mock.calls.length >= 1);
+      expect(mockMarkQa).not.toHaveBeenCalled();
+    });
+  });
 });
