@@ -588,6 +588,10 @@ Each requested review type MUST get its own dedicated section in the review body
 
 ${typeSections.join('\n\n')}
 
+### ⚙️ GitHub Actions Status
+- **CI:** ✅ Passed / ❌ FAILED — [check name]: [status]
+- **Other checks:** [status summary]
+
 ### 📋 Requirements Coverage
 | Requirement | Status |
 | --- | --- |
@@ -600,13 +604,17 @@ ${typeSections.join('\n\n')}
 Rules:
 - Include ONLY the sections listed above. Do NOT add sections for review types that were not requested.
 - Every included type section MUST have a \`**Verdict:**\` line.
-- The \`### 📋 Requirements Coverage\` and \`### Overall Assessment\` sections are ALWAYS required.`;
+- The following sections are ALWAYS required (never omit):
+  - \`### ⚙️ GitHub Actions Status\`
+  - \`### 📋 Requirements Coverage\`
+  - \`### Overall Assessment\`
+- When GitHub Actions have failures, the GH Actions section MUST use ❌ and list each failed check by name and status. This ensures the reviewer sees CI failures prominently and nitpicker-nuker can act on them.`;
 }
 
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '6.1.1',
+  version: '7.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
       params;
@@ -715,6 +723,21 @@ The full repository is cloned at \`/repo\`. You have access to ALL files in the 
 
 Combine repository browsing with the PR diff. The diff tells you WHAT changed; the repo tells you WHY it matters and whether it follows existing conventions.
 
+### Check GitHub Actions Status (MANDATORY — LAST STEP BEFORE REPORT)
+
+As the final data-gathering step before composing your review, check the status of GitHub Actions checks on the PR. Do this AFTER all code analysis is complete — by this point, actions that were in progress when the review started are more likely to have finished.
+
+\`\`\`bash
+gh pr checks <PR_NUMBER> --json name,state,bucket,workflow
+\`\`\`
+
+- If any checks have **failed** (\`bucket == "fail"\` or \`"cancel"\`), record each failed check name and status.
+- If checks are still **pending**, note this and proceed — do not block on pending checks.
+- If all checks **passed**, note this for the review summary.
+- If no checks are listed yet (workflows not triggered), note "GH Actions: not yet triggered" and proceed.
+
+**This step does NOT block your review** — it gathers information that MUST be included in the review summary (see Per-Type Review Structure below).
+
 ### Posting Review Comments
 
 Submit your review summary and ALL inline comments in a SINGLE \`POST /reviews\` API call. NEVER post the summary and inline comments as separate API calls — this creates duplicate reviews on the PR.
@@ -805,6 +828,7 @@ REVIEW_AGENT_FINAL:
 - review_comments_posted: <number of review comments posted>
 - review_types: <comma-separated list of review types performed>
 - requirements_tracker_updated: <yes|no — whether the requirements tracker comment was created/updated>
+- gh_actions_status: <all passed|N failed|pending|not yet triggered — GitHub Actions check result>
 - Summary: <3-5 sentences on one line: what you reviewed, key findings, overall quality assessment>
 \`\`\`
 

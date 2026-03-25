@@ -962,4 +962,32 @@ describe('system-prompt', () => {
     expect(result).toContain('mcp__linear__get_issue');
     expect(result).toContain('INT-123');
   });
+
+  it('review agent prompt includes GitHub Actions status check step', () => {
+    const result = reviewPrompt.build(baseParams);
+    expect(result).toContain('Check GitHub Actions Status');
+    expect(result).toContain('gh pr checks');
+    expect(result).toContain('bucket');
+  });
+
+  it('review agent prompt places GH Actions check as last step before posting review', () => {
+    const result = reviewPrompt.build(baseParams);
+    const repoAccessIndex = result.indexOf('Full Repository Access');
+    const ghActionsIndex = result.indexOf('Check GitHub Actions Status');
+    const postingIndex = result.indexOf('Posting Review Comments');
+    expect(repoAccessIndex).toBeLessThan(ghActionsIndex);
+    expect(ghActionsIndex).toBeLessThan(postingIndex);
+  });
+
+  it('review agent prompt includes GH Actions status in review structure template', () => {
+    const result = reviewPrompt.build(baseParams);
+    expect(result).toContain('GitHub Actions Status');
+    expect(result).toContain('gh_actions_status');
+  });
+
+  it('REVIEW_AGENT_FINAL block includes gh_actions_status field', () => {
+    const result = reviewPrompt.build(baseParams);
+    expect(result).toContain('gh_actions_status');
+    expect(result).toContain('REVIEW_AGENT_FINAL');
+  });
 });
