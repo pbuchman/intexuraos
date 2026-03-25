@@ -9,17 +9,6 @@
         "workers/orchestrator/src/start.ts"
       ],
       "description": "Remaining orchestrator v8 ignore triage: branches uncovered by unit tests require integration-level testing or are dead code from type narrowing"
-    },
-    "INT-1085": {
-      "files": [
-        "apps/code-agent/src/domain/services/automationCommentRenderer.ts",
-        "apps/code-agent/src/domain/services/gitHubDispatchService.ts",
-        "apps/code-agent/src/domain/services/gitHubWebhookRules.ts",
-        "apps/code-agent/src/domain/services/unifiedEvaluator.ts",
-        "apps/code-agent/src/infra/github-event-parser.ts",
-        "apps/code-agent/src/infra/services/whatsappNotifierImpl.ts"
-      ],
-      "description": "CI failure auto-handling feature: check_suite event branches, ci_failure_detected, fix_task_dispatched, and ci_failure_skip branches require integration-level testing via full webhook pipeline; error handling paths in payload parsing require specific malformed inputs not available in unit test fakes"
     }
   }
 }

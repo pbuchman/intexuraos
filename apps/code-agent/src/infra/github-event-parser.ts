@@ -611,7 +611,7 @@ export function parseCheckSuiteEvent(
 
   // Extract check suite details
   const checkSuiteId = cs['id'];
-  /* v8 ignore start -- test-infra: Test fakes cannot produce check_suite payload with url field; FakeGitHubEventParser does not extract url from check_suite @preserve */
+  /* v8 ignore start -- ts-type: typeof narrowing on unknown check_suite field — cs['url'] fallback unreachable when GitHub always provides string url @preserve */
   const checkSuiteUrl = typeof cs['url'] === 'string' ? cs['url'] : null;
   /* v8 ignore stop @preserve */
   const headBranch = typeof cs['head_branch'] === 'string' ? cs['head_branch'] : null;
@@ -677,7 +677,7 @@ export function parseCheckSuiteEvent(
     // This is the opposite semantic of other event types where baseBranch = target/merge-into branch.
     // CIFailureRule.evaluate() reads event.baseBranch expecting the source branch.
     baseBranch: headBranch,
-    /* v8 ignore start -- test-infra: Test fakes cannot produce check_suite payload where prMergedAt is a string or non-Date truthy value; createdAt also cannot be coerced via String() conversion in unit test fakes @preserve */
+    /* v8 ignore start -- ts-type: typeof and instanceof narrowing on unknown payload fields — prMergedAt/createdAt type coercion branches unreachable when test fixtures always provide Date objects @preserve */
     mergedAt:
       prMergedAt && typeof prMergedAt === 'string'
         ? new Date(prMergedAt)
