@@ -145,8 +145,7 @@ describe('useOpenRouterModels', () => {
   });
 
   it('refresh() triggers a new fetch after initial load', async () => {
-    const firstModel = MOCK_MODELS[0] ?? MOCK_MODELS[1];
-    const updatedModels = firstModel !== undefined ? [firstModel] : [];
+    const updatedModels = MOCK_MODELS.slice(0, 1);
     mockRequest
       .mockResolvedValueOnce({ models: MOCK_MODELS, cachedAt: '2026-03-25T00:00:00Z' })
       .mockResolvedValueOnce({ models: updatedModels, cachedAt: '2026-03-25T01:00:00Z' });
