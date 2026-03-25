@@ -8,6 +8,7 @@ interface UseOpenRouterModelsResult {
   models: OpenRouterModelInfo[];
   loading: boolean;
   error: string | null;
+  /** Triggers a fresh fetch; also use to retry after an error. */
   refresh: () => Promise<void>;
 }
 
