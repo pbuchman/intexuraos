@@ -152,6 +152,9 @@ function createMockWhatsAppNotifier(): WhatsAppNotifier {
     async notifyDispatchRetryExhausted(): ReturnType<WhatsAppNotifier['notifyDispatchRetryExhausted']> {
       return ok(undefined);
     },
+    async notifyCIFailure(): ReturnType<WhatsAppNotifier['notifyCIFailure']> {
+      return ok(undefined);
+    },
   };
 }
 
