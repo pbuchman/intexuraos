@@ -37,9 +37,9 @@ decisions, or implementation choices, you MUST:
    - Implementing [decision] per @[author]'s comment ([timestamp])
    - [Additional decisions...]
 
-3. **Include a "Decision Log" section in the PR description** (after "## Reasoning"):
+3. **Include a "Decision Log" section in the PR description** (after "### Key Decisions"):
    Format:
-   ## Decision Log
+   ### Decision Log
    | Decision | Source | Impact |
    |----------|--------|--------|
    | [what] | @[author] ([timestamp]) | [how it affected implementation] |
