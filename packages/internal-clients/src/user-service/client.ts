@@ -37,18 +37,16 @@ export type {
   OAuthProvider,
 } from './types.js';
 
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-function providerToKeyField(provider: LlmProvider) {
-  switch (provider) {
-    case LlmProviders.Google:
-      return 'google';
-    case LlmProviders.OpenAI:
-      return 'openai';
-    case LlmProviders.Anthropic:
-      return 'anthropic';
-    case LlmProviders.Perplexity:
-      return 'perplexity';
-  }
+const PROVIDER_KEYS: Record<LlmProvider, string> = {
+  google: 'google',
+  openai: 'openai',
+  anthropic: 'anthropic',
+  perplexity: 'perplexity',
+  openrouter: 'openrouter',
+};
+
+export function providerToKeyField(provider: LlmProvider): string {
+  return PROVIDER_KEYS[provider];
 }
 
 /**
@@ -83,6 +81,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
             openai?: string | null;
             anthropic?: string | null;
             perplexity?: string | null;
+            openrouter?: string | null;
           };
         };
 
@@ -101,6 +100,9 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         }
         if (data.perplexity !== null && data.perplexity !== undefined) {
           result.perplexity = data.perplexity;
+        }
+        if (data.openrouter !== null && data.openrouter !== undefined) {
+          result.openrouter = data.openrouter;
         }
 
         return ok(result);

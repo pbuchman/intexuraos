@@ -5,7 +5,7 @@ import {
   createPricingContext,
   type IPricingContext,
 } from '@intexuraos/llm-pricing';
-import { type ResearchModel, type FastModel, LlmModels } from '@intexuraos/llm-contract';
+import { type LLMModel, LlmModels } from '@intexuraos/llm-contract';
 import { buildServer } from './server.js';
 import { initializeServices } from './services.js';
 import { initSentry } from '@intexuraos/infra-sentry';
@@ -45,7 +45,7 @@ const PORT = Number(process.env['PORT'] ?? 8080);
 const HOST = process.env['HOST'] ?? '0.0.0.0';
 
 /** All models used by research-agent for research and synthesis */
-const REQUIRED_MODELS: (ResearchModel | FastModel)[] = [
+const REQUIRED_MODELS: LLMModel[] = [
   // Research models
   LlmModels.Gemini25Pro,
   LlmModels.Gemini25Flash,
