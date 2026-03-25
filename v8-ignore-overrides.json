@@ -17,6 +17,17 @@
         "packages/infra-openrouter/src/client.ts"
       ],
       "description": "openRouterRoutes has branches requiring integration-level HTTP mocking to cover; client.ts has an exhaustive switch default case that is unreachable but required by TypeScript's never type narrowing; validateKey uses live HTTP calls that cannot be unit tested."
+    },
+    "INT-1085": {
+      "files": [
+        "apps/code-agent/src/domain/services/automationCommentRenderer.ts",
+        "apps/code-agent/src/domain/services/gitHubDispatchService.ts",
+        "apps/code-agent/src/domain/services/gitHubWebhookRules.ts",
+        "apps/code-agent/src/domain/services/unifiedEvaluator.ts",
+        "apps/code-agent/src/infra/github-event-parser.ts",
+        "apps/code-agent/src/infra/services/whatsappNotifierImpl.ts"
+      ],
+      "description": "CI failure auto-handling feature: check_suite event branches, ci_failure_detected, fix_task_dispatched, and ci_failure_skip branches require integration-level testing via full webhook pipeline; error handling paths in payload parsing require specific malformed inputs not available in unit test fakes"
     }
   }
 }

@@ -421,5 +421,41 @@ Please check worker availability and retry manually if needed.`;
 
       return ok(undefined);
     },
+
+    async notifyCIFailure(
+      userId: string,
+      info: {
+        repository: string;
+        pullRequestNumber: number;
+        prUrl: string;
+        checkName: string;
+        branch: string;
+        runUrl?: string;
+        taskId: string;
+      }
+    ): Promise<Result<void, NotificationError>> {
+      const runUrlLine = info.runUrl !== undefined ? `\nGH Actions Run: ${info.runUrl}` : '';
+      const message = `❌ CI Check Failed: ${info.repository}#${String(info.pullRequestNumber)}
+
+Check: ${info.checkName}
+Branch: ${info.branch}${runUrlLine}
+
+A follow-up fix task has been automatically dispatched.`;
+
+      const result = await whatsappPublisher.publishSendMessage({
+        userId,
+        message,
+        ctaUrl: { displayText: 'View Pull Request', url: info.prUrl },
+      });
+
+      if (!result.ok) {
+        return err({
+          code: 'notification_failed',
+          message: result.error.message,
+        });
+      }
+
+      return ok(undefined);
+    },
   };
 }
