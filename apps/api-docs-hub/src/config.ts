@@ -4,8 +4,8 @@
  */
 
 import {
-  INTERNAL_API_SERVICE_CATALOG,
   INTERNAL_API_OPENAPI_URL_ENV_VARS,
+  buildInternalApiOpenApiSources,
 } from '@intexuraos/common-core';
 
 export interface OpenApiSource {
@@ -23,13 +23,9 @@ interface EnvVar {
   key: string;
 }
 
-const OPENAPI_URL_ENV_VARS = INTERNAL_API_OPENAPI_URL_ENV_VARS as readonly string[];
-const API_SERVICE_CATALOG = INTERNAL_API_SERVICE_CATALOG as readonly {
-  apiDocsName: string;
-  openApiUrlEnvVar: string;
-}[];
-
-const REQUIRED_ENV_VARS: EnvVar[] = OPENAPI_URL_ENV_VARS.map((key): EnvVar => ({ key }));
+const REQUIRED_ENV_VARS: EnvVar[] = (
+  INTERNAL_API_OPENAPI_URL_ENV_VARS as readonly string[]
+).map((key): EnvVar => ({ key }));
 
 /**
  * Load and validate configuration from environment variables.
@@ -56,12 +52,6 @@ export function loadConfig(): Config {
   return {
     port: Number(env['PORT'] ?? 8080),
     host: env['HOST'] ?? '0.0.0.0',
-    openApiSources: API_SERVICE_CATALOG.flatMap((entry): OpenApiSource[] => {
-      const url = env[entry.openApiUrlEnvVar]?.trim() ?? '';
-      if (url === '') {
-        return [];
-      }
-      return [{ name: entry.apiDocsName, url }];
-    }),
+    openApiSources: buildInternalApiOpenApiSources(env),
   };
 }
