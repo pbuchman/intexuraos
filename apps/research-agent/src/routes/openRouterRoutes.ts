@@ -30,6 +30,14 @@ let cacheExpiry = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
+ * Reset the in-memory cache (for testing).
+ */
+export function resetOpenRouterCache(): void {
+  cache = null;
+  cacheExpiry = 0;
+}
+
+/**
  * Fetch the full OpenRouter model catalog once and return a map of modelId -> catalog entry.
  * This avoids the N+1 problem where each model triggered a separate full catalog fetch.
  */
@@ -46,11 +54,9 @@ async function fetchOpenRouterCatalog(
       },
     });
 
-    /* v8 ignore start -- upstream: cannot simulate non-200 HTTP status from live OpenRouter API @preserve */
     if (!response.ok) {
       return null;
     }
-    /* v8 ignore stop @preserve */
 
     const data = (await response.json()) as {
       data: {
@@ -114,19 +120,15 @@ export const openRouterRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
     /* v8 ignore stop @preserve */
 
     const apiKey = keysResult.value.openrouter;
-    /* v8 ignore start -- test-infra: FakeUserServiceClient cannot model empty string API key @preserve */
     if (apiKey === undefined || apiKey === '') {
       return await reply.fail('NOT_FOUND', 'OpenRouter API key not configured');
     }
-    /* v8 ignore stop @preserve */
 
     // Check cache
     const now = Date.now();
-    /* v8 ignore start -- test-infra: cannot simulate stale cache hit in unit tests without time mocking @preserve */
     if (cache !== null && now < cacheExpiry) {
       return await reply.ok({ models: cache.models, cachedAt: cache.cachedAt });
     }
-    /* v8 ignore stop @preserve */
 
     // Fetch full catalog once (avoids N+1 problem of 14 separate catalog fetches)
     const catalog = await fetchOpenRouterCatalog(apiKey, request.log as Logger);

@@ -43,9 +43,13 @@ export function createSynthesisProviders(
     : pricingContext.getPricing(synthesisModel as LLMModel);
   /* v8 ignore stop @preserve */
 
+  if (synthesisKey === undefined || synthesisKey === '') {
+    throw new Error(`No API key configured for provider '${synthesisProvider}'`);
+  }
+
   const synthesizer = createSynthesizer(
     synthesisModel,
-    synthesisKey as string,
+    synthesisKey,
     userId,
     synthesisPricing,
     logger
