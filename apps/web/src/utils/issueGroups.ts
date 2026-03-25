@@ -65,7 +65,8 @@ export function getAgentTypeLabel(agentType: string): string {
   return agentType.charAt(0).toUpperCase() + agentType.slice(1);
 }
 
-/** Normalize label name to handle case/separator variations from Linear API. */
+// Mirrors packages/common-core/src/labels.ts normalizeLabel — local copy avoids
+// barrel import that pulls in node:crypto, breaking jsdom browser tests.
 function normalizeLabel(label: string): string {
   return label.trim().toLowerCase().replaceAll('_', '-').replaceAll(' ', '-');
 }
