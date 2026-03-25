@@ -1192,7 +1192,7 @@ export interface CodeTask {
     commentCount: number;
     lastCommentAt: string | null;
   };
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
   implementationTaskId?: string;
   parentTaskId?: string;
   followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement';
