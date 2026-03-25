@@ -13,9 +13,10 @@
     "INT-1011": {
       "files": [
         "apps/research-agent/src/routes/openRouterRoutes.ts",
-        "packages/internal-clients/src/user-service/client.ts"
+        "packages/internal-clients/src/user-service/client.ts",
+        "packages/infra-openrouter/src/client.ts"
       ],
-      "description": "openRouterRoutes has branches requiring integration-level HTTP mocking to cover; client.ts has an exhaustive switch default case that is unreachable but required by TypeScript's never type narrowing."
+      "description": "openRouterRoutes has branches requiring integration-level HTTP mocking to cover; client.ts has an exhaustive switch default case that is unreachable but required by TypeScript's never type narrowing; validateKey uses live HTTP calls that cannot be unit tested."
     }
   }
 }

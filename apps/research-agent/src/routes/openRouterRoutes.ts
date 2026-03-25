@@ -27,12 +27,20 @@ let cacheExpiry = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
- * Fetch live pricing from OpenRouter API for a specific model.
+ * Cached catalog data from OpenRouter API.
  */
-async function fetchLivePricingForModel(
-  apiKey: string,
-  modelId: string
-): Promise<{ inputPricePerMillion: number; outputPricePerMillion: number } | null> {
+interface CatalogEntry {
+  pricing: { inputPricePerMillion: number; outputPricePerMillion: number };
+  contextLength: number;
+}
+
+/**
+ * Fetch the full OpenRouter model catalog once and return a map of modelId -> catalog entry.
+ * This avoids the N+1 problem where each model triggered a separate full catalog fetch.
+ */
+async function fetchOpenRouterCatalog(
+  apiKey: string
+): Promise<Map<string, CatalogEntry> | null> {
   try {
     const response = await fetch('https://openrouter.ai/api/v1/models', {
       headers: {
@@ -59,41 +67,48 @@ async function fetchLivePricingForModel(
       }[];
     };
 
-    const model = data.data.find((m) => m.id === modelId);
-    /* v8 ignore start -- ts-type: cannot simulate API response missing pricing data in unit tests @preserve */
-    if (model?.pricing === undefined) {
-      return null;
-    }
-    /* v8 ignore stop @preserve */
+    const catalogMap = new Map<string, CatalogEntry>();
+    for (const model of data.data) {
+      /* v8 ignore start -- ts-type: cannot simulate API response missing pricing data in unit tests @preserve */
+      if (model.pricing === undefined) {
+        continue;
+      }
+      /* v8 ignore stop @preserve */
 
-    /* v8 ignore start -- ts-type: parseFloat nullish coalescing defaults are unreachable in unit tests @preserve */
-    return {
-      inputPricePerMillion: parseFloat(model.pricing.prompt ?? '0') * 1_000_000,
-      outputPricePerMillion: parseFloat(model.pricing.completion ?? '0') * 1_000_000,
-    };
-    /* v8 ignore stop @preserve */
+      /* v8 ignore start -- ts-type: parseFloat nullish coalescing defaults are unreachable in unit tests @preserve */
+      catalogMap.set(model.id, {
+        pricing: {
+          inputPricePerMillion: parseFloat(model.pricing.prompt ?? '0') * 1_000_000,
+          outputPricePerMillion: parseFloat(model.pricing.completion ?? '0') * 1_000_000,
+        },
+        contextLength: model.context_length ?? 102400,
+      });
+      /* v8 ignore stop @preserve */
+    }
+
+    return catalogMap;
   } catch {
     return null;
   }
 }
 
 /**
- * Build OpenRouterModelInfo from an allowlist entry, optionally enriched with live pricing.
+ * Build OpenRouterModelInfo from an allowlist entry, enriched with live catalog data.
  */
-/* v8 ignore start -- upstream: buildModelInfo fallback pricing path requires live API null response in unit tests @preserve */
+/* v8 ignore start -- upstream: buildModelInfo fallback path requires live API null response in unit tests @preserve */
 function buildModelInfo(
   entry: (typeof OPENROUTER_ALLOWED_MODELS)[number],
-  livePricing?: { inputPricePerMillion: number; outputPricePerMillion: number }
+  catalogEntry?: CatalogEntry
 ): OpenRouterModelInfo {
   return {
     id: entry.id,
     name: entry.name,
     provider: entry.provider,
-    contextLength: 102400, // Default context window; live API provides actual value
-    pricing: livePricing
+    contextLength: catalogEntry?.contextLength ?? 102400,
+    pricing: catalogEntry
       ? {
-          inputPricePerMillion: livePricing.inputPricePerMillion,
-          outputPricePerMillion: livePricing.outputPricePerMillion,
+          inputPricePerMillion: catalogEntry.pricing.inputPricePerMillion,
+          outputPricePerMillion: catalogEntry.pricing.outputPricePerMillion,
           useProviderCost: true,
         }
       : {
@@ -144,17 +159,16 @@ export const openRouterRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
     }
     /* v8 ignore stop @preserve */
 
-    // Fetch live pricing for all allowlisted models
-    const modelsWithPricing: OpenRouterModelInfo[] = [];
+    // Fetch full catalog once (avoids N+1 problem of 14 separate catalog fetches)
+    const catalog = await fetchOpenRouterCatalog(apiKey);
 
-    await Promise.all(
-      OPENROUTER_ALLOWED_MODELS.map(async (entry) => {
-        const livePricing = await fetchLivePricingForModel(apiKey, entry.id);
-        /* v8 ignore start -- upstream: cannot simulate null livePricing from OpenRouter API in unit tests @preserve */
-        modelsWithPricing.push(buildModelInfo(entry, livePricing ?? undefined));
-        /* v8 ignore stop @preserve */
-      })
-    );
+    // Build model info for each allowlisted model, enriching with live catalog data
+    const modelsWithPricing: OpenRouterModelInfo[] = OPENROUTER_ALLOWED_MODELS.map((entry) => {
+      const catalogEntry = catalog?.get(entry.id);
+      /* v8 ignore start -- upstream: cannot simulate null catalog from OpenRouter API in unit tests @preserve */
+      return buildModelInfo(entry, catalogEntry);
+      /* v8 ignore stop @preserve */
+    });
 
     const cachedAt = new Date().toISOString();
     cache = { models: modelsWithPricing, cachedAt };
