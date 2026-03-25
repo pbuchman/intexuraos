@@ -23,12 +23,14 @@ const PROVIDERS: ProviderConfig[] = [
   { id: 'openai', name: 'OpenAI (GPT)' },
   { id: 'anthropic', name: 'Anthropic (Claude)' },
   { id: 'perplexity', name: 'Perplexity (Sonar)' },
+  { id: 'openrouter', name: 'OpenRouter' },
 ];
 
 const PROVIDER_GROUP_LABELS: Record<string, string> = {
   google: 'Google',
   openai: 'OpenAI',
   anthropic: 'Anthropic',
+  openrouter: 'OpenRouter',
 };
 
 /**
@@ -64,6 +66,13 @@ function validateApiKeyFormat(provider: LlmProvider, key: string): string | null
         return 'Perplexity API key should start with "pplx-"';
       }
       break;
+    case 'openrouter':
+      // OpenRouter keys typically start with 'sk-or-' but can have various formats
+      // since it's a proxy aggregator. Just ensure it's not trivially short.
+      if (key.length < 20) {
+        return 'OpenRouter API key appears too short';
+      }
+      break;
   }
 
   return null;
@@ -74,6 +83,7 @@ interface TestResults {
   openai: LlmTestResult | null;
   anthropic: LlmTestResult | null;
   perplexity: LlmTestResult | null;
+  openrouter: LlmTestResult | null;
 }
 
 /**
@@ -137,6 +147,7 @@ export function ApiKeysSettingsPage(): React.JSX.Element {
   if (keys?.openai !== null && keys?.openai !== undefined) configuredProviders.add(LlmProviders.OpenAI);
   if (keys?.anthropic !== null && keys?.anthropic !== undefined) configuredProviders.add(LlmProviders.Anthropic);
   if (keys?.perplexity !== null && keys?.perplexity !== undefined) configuredProviders.add(LlmProviders.Perplexity);
+  if (keys?.openrouter !== null && keys?.openrouter !== undefined) configuredProviders.add(LlmProviders.OpenRouter);
 
   const modelGroups = groupModelsByProvider(configuredProviders, keys?.testResults);
 

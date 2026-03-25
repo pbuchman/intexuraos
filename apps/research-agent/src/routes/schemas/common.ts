@@ -5,13 +5,15 @@
 import { ALL_LLM_MODELS } from '@intexuraos/llm-contract';
 
 export const supportedModelSchema = {
-  type: 'string',
-  enum: ALL_LLM_MODELS,
+  anyOf: [
+    { type: 'string', enum: ALL_LLM_MODELS },
+    { type: 'string', pattern: '^or:[a-z0-9-]+/[a-z0-9._:-]+$' },
+  ],
 } as const;
 
 export const llmProviderSchema = {
   type: 'string',
-  enum: ['google', 'openai', 'anthropic', 'perplexity'],
+  enum: ['google', 'openai', 'anthropic', 'perplexity', 'openrouter'],
 } as const;
 
 export const researchStatusSchema = {

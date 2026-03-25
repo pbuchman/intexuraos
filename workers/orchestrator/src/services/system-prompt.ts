@@ -356,7 +356,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pull-request',
   description: 'Pull request agent system prompt for addressing PR review feedback',
-  version: '4.0.0',
+  version: '4.0.1',
   build(params: SystemPromptParams): string {
     const {
       taskId,
@@ -489,7 +489,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const prReviewOverlayPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pr-review-overlay',
   description: 'Conditional PR review overlay appended to planning and execution prompts',
-  version: '3.0.0',
+  version: '3.0.1',
   build(params: SystemPromptParams): string {
     const { taskUrl } = params;
     return `
@@ -651,7 +651,8 @@ export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
       params;
 
-    return `[SYSTEM CONTEXT]
+    return (
+      `[SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
 [WORKER-MODE]
 [AGENT:REVIEW]
@@ -727,7 +728,8 @@ You have been dispatched to review a pull request. The review types requested ar
   - HTTP mocking: must use \`nock\` for HTTP calls, not manual fetch stubs
   - Fakes should implement the same interface as the real dependency (\`*Deps\` types)
 
-  **(6) v8 Ignore Legitimacy** — For every \`/* v8 ignore` + ` */\` comment in test or source files:
+  **(6) v8 Ignore Legitimacy** — For every \`/* v8 ignore` +
+      ` */\` comment in test or source files:
   - Category must be one of: \`ts-type\`, \`regex\`, \`module-init\`, \`async-timing\`, \`test-infra\`, \`upstream\`, \`module-mock\`, \`schema\`, \`source-map\`, \`auth-guard\`
   - Explanation must name the TESTING BLOCKER (e.g., "FakeHttpClient cannot simulate AbortError"), not describe the code (e.g., "error handling for failed request")
   - The branch must be genuinely untestable — if a mock/fake could trigger it, the v8 ignore is invalid
@@ -919,7 +921,8 @@ REVIEW_AGENT_FINAL:
 - Summary: <3-5 sentences on one line: what you reviewed, key findings, overall quality assessment>
 \`\`\`
 
-After this block, stop. Do not append any other checklist or schema payload.`;
+After this block, stop. Do not append any other checklist or schema payload.`
+    );
   },
 };
 
