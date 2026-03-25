@@ -1,7 +1,11 @@
 ---
 name: share
 description: Use when the user asks to share, publish, or make HTML or markdown content available at a public URL.
+argument-hint: '[--html | --raw-md]'
 ---
+
+<!-- Counterpart: .claude/skills/share/SKILL.md (Claude Code version of this skill) -->
+<!-- When updating this file, check whether the Claude Code version needs the same change. -->
 
 # Share
 
@@ -31,11 +35,11 @@ Do not use this for private storage or internal-only artifacts.
 
 Choose the mode from explicit flags or user intent.
 
-| Mode | Trigger | Output |
-| --- | --- | --- |
-| Rich HTML | `--html`, "share as HTML", "publish this visualization", existing `.html` file | `.html` |
-| Styled Markdown | Default, "share this", "share as markdown", prose/report content | `.html` |
-| Raw Markdown | `--raw-md`, "share raw markdown", "upload the markdown file" | `.md` |
+| Mode            | Trigger                                                                        | Output  |
+| --------------- | ------------------------------------------------------------------------------ | ------- |
+| Rich HTML       | `--html`, "share as HTML", "publish this visualization", existing `.html` file | `.html` |
+| Styled Markdown | Default, "share this", "share as markdown", prose/report content               | `.html` |
+| Raw Markdown    | `--raw-md`, "share raw markdown", "upload the markdown file"                   | `.md`   |
 
 ## Workflow
 
@@ -182,20 +186,31 @@ Use this for styled markdown uploads after converting the markdown body to HTML.
           --color-blockquote-fg: #8b949e;
         }
       }
-      * { box-sizing: border-box; }
+      * {
+        box-sizing: border-box;
+      }
       body {
         max-width: 800px;
         margin: 0 auto;
         padding: 2rem 1.5rem;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
         font-size: 16px;
         line-height: 1.6;
         color: var(--color-fg);
         background: var(--color-bg);
       }
-      h1, h2 { padding-bottom: 0.3em; border-bottom: 1px solid var(--color-border); }
-      a { color: var(--color-link); text-decoration: none; }
-      a:hover { text-decoration: underline; }
+      h1,
+      h2 {
+        padding-bottom: 0.3em;
+        border-bottom: 1px solid var(--color-border);
+      }
+      a {
+        color: var(--color-link);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
       pre {
         background: var(--color-code-bg);
         border-radius: 6px;
@@ -211,15 +226,25 @@ Use this for styled markdown uploads after converting the markdown body to HTML.
         border-radius: 6px;
         padding: 0.2em 0.4em;
       }
-      table { border-collapse: collapse; width: 100%; }
-      th, td { border: 1px solid var(--color-border); padding: 6px 13px; }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+      th,
+      td {
+        border: 1px solid var(--color-border);
+        padding: 6px 13px;
+      }
       blockquote {
         margin: 0;
         padding: 0 1em;
         color: var(--color-blockquote-fg);
         border-left: 0.25em solid var(--color-border);
       }
-      img { max-width: 100%; height: auto; }
+      img {
+        max-width: 100%;
+        height: auto;
+      }
     </style>
   </head>
   <body>
