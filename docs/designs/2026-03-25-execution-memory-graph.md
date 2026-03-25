@@ -131,6 +131,16 @@ Document shape:
 - `createdAt: Timestamp`
 - `updatedAt: Timestamp`
 
+#### Suppression Policy
+
+A memory transitions from `active` to `suppressed` when any of these criteria are met:
+
+- **Negative outcome threshold:** `negativeCount / applicationCount >= 0.5` and `applicationCount >= 3` — the memory is consistently producing negative outcomes across a meaningful sample.
+- **Quality score floor:** `qualityScore < 0.25` after recomputation — the combined effectiveness, confidence, and recency signal is too low to justify continued retrieval.
+- **Manual suppression:** An admin endpoint (out of scope for v1, planned for v2) allows explicit suppression with a reason field.
+
+Suppression checks run during the application evaluation pipeline after counter updates. Suppressed memories are excluded from vector search results via the `status = active` pre-filter and do not count toward the top-3 retrieval limit. Suppression is reversible — a future admin endpoint can restore a memory to `active` status.
+
 ### Collection: `execution_memory_applications`
 
 Owner: `code-agent`
@@ -191,6 +201,7 @@ Create:
 - vector index on `execution_memories.embedding`
 - dimension `1536`
 - flat index enabled
+- composite vector index on `(repository, status, embedding)` for pre-filtered vector search
 - security rule denying direct client access
 
 ### `070_execution-memory-pipeline-indexes.mjs`
@@ -229,6 +240,8 @@ Instead:
 - keep `apps/chat-agent` and `apps/code-agent` as separate consumers of the shared helper
 
 This avoids app-to-app imports and keeps embedding logic in the package layer where it belongs.
+
+**Follow-up refactoring note:** `apps/chat-agent/src/infra/llm/embeddingClient.ts` contains a functionally equivalent OpenAI embedding client with retry logic and `Result` return types. After the `infra-gpt` embedding helper ships, `chat-agent` should be refactored to consume the shared helper instead of maintaining a parallel implementation. This is out of scope for v1 but tracked as a follow-up to avoid long-term duplication.
 
 ## Code-Agent Changes
 
@@ -375,15 +388,13 @@ Fallback if Gemini fails:
 
 ### Vector search
 
-- fetch top `20` nearest neighbors from `execution_memories`
-- Firestore native `findNearest()` on `embedding`
+- pre-filter with `.where("repository", "==", repo).where("status", "==", "active")` before vector search
+- fetch top `20` nearest neighbors from the pre-filtered set using Firestore native `findNearest()` on `embedding`
+- requires the composite vector index on `(repository, status, embedding)` created in migration 069
 
 ### Deterministic reranking
 
-Hard filters:
-
-- `repository` must equal the current task repository
-- `status` must equal `active`
+Note: `repository` and `status = active` filtering is handled at the vector search layer via Firestore `.where()` pre-filters, so all candidates reaching this stage already satisfy those constraints.
 
 Final score:
 
