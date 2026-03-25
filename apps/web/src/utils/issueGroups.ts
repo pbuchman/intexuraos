@@ -65,10 +65,16 @@ export function getAgentTypeLabel(agentType: string): string {
   return agentType.charAt(0).toUpperCase() + agentType.slice(1);
 }
 
-/** Normalize a label name: trim, lowercase, replace underscores/spaces with hyphens. */
+/** Normalize label name to handle case/separator variations from Linear API. */
 function normalizeLabel(label: string): string {
   return label.trim().toLowerCase().replaceAll('_', '-').replaceAll(' ', '-');
 }
+
+/** Labels that gate the Implement button (backward compat includes `code-task`). */
+const IMPLEMENTATION_READY_LABELS: ReadonlySet<string> = new Set([
+  'ready-to-implement',
+  'code-task',
+]);
 
 /**
  * Checks if a task's Linear labels indicate it's ready for implementation.
@@ -85,9 +91,7 @@ export function hasImplementationReadyLabel(labels: { name: string }[] | undefin
   if (labels === undefined || labels.length === 0) {
     return true;
   }
-  return labels.some(
-    (l) => normalizeLabel(l.name) === 'ready-to-implement' || normalizeLabel(l.name) === 'code-task',
-  );
+  return labels.some((l) => IMPLEMENTATION_READY_LABELS.has(normalizeLabel(l.name)));
 }
 
 function deriveStepState(status: CodeTaskStatus): StepState {
