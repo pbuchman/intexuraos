@@ -28,6 +28,7 @@ import type {
   GitHubWebhookAuditEvent,
   GitHubWebhookNormalizationStatus,
 } from '../../domain/models/gitHubWebhookAuditEvent.js';
+import { handlePrMerge } from '../../domain/usecases/handlePrMerge.js';
 import type { GitHubEventLogEntry } from '../../domain/models/gitHubEventLogEntry.js';
 
 export const ALLOWED_BOTS = new Set([
@@ -630,6 +631,24 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
           errorMessage: getErrorMessage(evalErr, 'unknown_evaluation_error'),
         });
       });
+
+      // Transition Linear issues to QA when PR is merged
+      if (parsedEvent.eventType === 'pull_request' && parsedEvent.action === 'closed' && parsedEvent.mergedAt !== null) {
+        const { codeTaskRepo, linearIssueService, userServiceClient } = getServices();
+        void handlePrMerge(
+          { codeTaskRepo, linearIssueService, userServiceClient, logger },
+          {
+            repository: parsedEvent.repository,
+            prNumber: parsedEvent.pullRequestNumber,
+            prBody: parsedEvent.body,
+            prTitle: parsedEvent.title,
+            prAuthorLogin: parsedEvent.prAuthorLogin,
+            senderLogin: parsedEvent.senderLogin,
+          },
+        ).catch((mergeErr: unknown) => {
+          logger.error({ mergeErr }, 'Unhandled error in handlePrMerge');
+        });
+      }
 
       // INT-1049: Trigger merge-conflict detection on push events
       if (parsedEvent.eventType === 'push') {
