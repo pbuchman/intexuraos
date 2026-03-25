@@ -1,8 +1,30 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import nock from 'nock';
-import { createUserServiceClient } from '../client.js';
+import { createUserServiceClient, providerToKeyField } from '../client.js';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { createFakePricingContext } from '@intexuraos/llm-pricing';
+
+describe('providerToKeyField', () => {
+  it('returns google for Google provider', () => {
+    expect(providerToKeyField(LlmProviders.Google)).toBe(LlmProviders.Google);
+  });
+
+  it('returns openai for OpenAI provider', () => {
+    expect(providerToKeyField(LlmProviders.OpenAI)).toBe(LlmProviders.OpenAI);
+  });
+
+  it('returns anthropic for Anthropic provider', () => {
+    expect(providerToKeyField(LlmProviders.Anthropic)).toBe(LlmProviders.Anthropic);
+  });
+
+  it('returns perplexity for Perplexity provider', () => {
+    expect(providerToKeyField(LlmProviders.Perplexity)).toBe(LlmProviders.Perplexity);
+  });
+
+  it('returns openrouter for OpenRouter provider', () => {
+    expect(providerToKeyField(LlmProviders.OpenRouter)).toBe(LlmProviders.OpenRouter);
+  });
+});
 
 describe('createUserServiceClient', () => {
   const mockLogger = {
@@ -151,6 +173,7 @@ describe('createUserServiceClient', () => {
         openai: 'openai-key',
         anthropic: 'anthropic-key',
         perplexity: 'perplexity-key',
+        openrouter: 'openrouter-key',
       };
 
       nock('http://localhost:3000')
@@ -166,6 +189,7 @@ describe('createUserServiceClient', () => {
         expect(result.value.openai).toBe('openai-key');
         expect(result.value.anthropic).toBe('anthropic-key');
         expect(result.value.perplexity).toBe('perplexity-key');
+        expect(result.value.openrouter).toBe('openrouter-key');
       } else {
         expect.fail('Expected successful result');
       }

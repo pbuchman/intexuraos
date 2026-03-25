@@ -30,12 +30,14 @@ interface UserSettingsDoc {
     openai?: EncryptedValue;
     anthropic?: EncryptedValue;
     perplexity?: EncryptedValue;
+    openrouter?: EncryptedValue;
   };
   llmTestResults?: {
     google?: LlmTestResult;
     openai?: LlmTestResult;
     anthropic?: LlmTestResult;
     perplexity?: LlmTestResult;
+    openrouter?: LlmTestResult;
   };
   llmPreferences?: LlmPreferences;
   transcriptionPreferences?: TranscriptionPreferences;

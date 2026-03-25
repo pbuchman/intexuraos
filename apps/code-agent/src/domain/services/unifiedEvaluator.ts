@@ -43,6 +43,8 @@ export interface UnifiedEvaluatorDeps {
   allowedBots: Set<string>;
   /** Code task repository for remediation interception on synchronize events. */
   codeTaskRepo?: CodeTaskRepository | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
+  /** Best-effort callback to post a GitHub comment when an unauthorized sender is rejected. */
+  onUnauthorizedSender?: ((event: GitHubPREvent) => Promise<void>) | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
 }
 
 export interface UnifiedEvaluator {
@@ -147,6 +149,13 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
       }
 
       if (ruleOutcome.action === 'skip') {
+        // Best-effort GitHub comment for unauthorized senders
+        if (ruleOutcome.reason === 'SENDER_NOT_WHITELISTED' && deps.onUnauthorizedSender !== undefined) {
+          void deps.onUnauthorizedSender(event).catch((commentErr: unknown) => {
+            logger.warn({ commentErr, eventId: event.id }, 'Failed to post unauthorized sender comment');
+          });
+        }
+
         // Record automation log: hard_rules skip
         const userId = await resolveUserId(event);
         recordLog(event, {

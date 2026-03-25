@@ -9,6 +9,25 @@
         "workers/orchestrator/src/start.ts"
       ],
       "description": "Remaining orchestrator v8 ignore triage: branches uncovered by unit tests require integration-level testing or are dead code from type narrowing"
+    },
+    "INT-1011": {
+      "files": [
+        "apps/research-agent/src/routes/openRouterRoutes.ts",
+        "apps/research-agent/src/routes/internalRoutes.ts",
+        "packages/infra-openrouter/src/client.ts"
+      ],
+      "description": "openRouterRoutes has remaining ts-type branches (missing pricing field in API response, parseFloat nullish defaults), auth-guard (FakeAuthPlugin always returns valid user), getApiKeys failure guard (FakeUserServiceClient cannot simulate getApiKeys failure), and a catch block for uncaught fetch exceptions; internalRoutes.ts has a defensive null check after isAllowedModel guard where getAllowlistPricing cannot return undefined for the same model; client.ts has upstream API response branches (empty choices array, annotation URL object structures, undefined usage) that require malformed upstream responses not reproducible with nock"
+    },
+    "INT-1085": {
+      "files": [
+        "apps/code-agent/src/domain/services/automationCommentRenderer.ts",
+        "apps/code-agent/src/domain/services/gitHubDispatchService.ts",
+        "apps/code-agent/src/domain/services/gitHubWebhookRules.ts",
+        "apps/code-agent/src/domain/services/unifiedEvaluator.ts",
+        "apps/code-agent/src/infra/github-event-parser.ts",
+        "apps/code-agent/src/infra/services/whatsappNotifierImpl.ts"
+      ],
+      "description": "CI failure auto-handling feature: check_suite event branches, ci_failure_detected, fix_task_dispatched, and ci_failure_skip branches require integration-level testing via full webhook pipeline; error handling paths in payload parsing require specific malformed inputs not available in unit test fakes"
     }
   }
 }

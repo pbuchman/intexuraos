@@ -3,7 +3,7 @@
  */
 
 import type { LlmProvider as ContractLlmProvider, ResearchModel } from '@intexuraos/llm-contract';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders, isOpenRouterModel } from '@intexuraos/llm-contract';
 
 export type LlmProvider = ContractLlmProvider;
 
@@ -22,6 +22,9 @@ const MODEL_TO_PROVIDER: Record<SupportedModel, LlmProvider> = {
 };
 
 export function getProviderForModel(model: SupportedModel): LlmProvider {
+  if (isOpenRouterModel(model)) {
+    return LlmProviders.OpenRouter;
+  }
   return MODEL_TO_PROVIDER[model];
 }
 

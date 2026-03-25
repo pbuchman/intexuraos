@@ -68,6 +68,7 @@ import { createRemediationTask } from './domain/usecases/createRemediationTask.j
 import type { MergeConflictDetector } from './domain/services/mergeConflictDetector.js';
 import { createDetectMergeConflictsOnPush } from './domain/usecases/detectMergeConflictsOnPush.js';
 import { fetchGitHubToken } from './domain/utils/gitHubTokenResolver.js';
+import { parseOwnerRepo } from './domain/utils/parseOwnerRepo.js';
 import type { GitHubWebhookAuditEventRepository } from './domain/repositories/gitHubWebhookAuditEventRepository.js';
 import { createFirestoreGitHubWebhookAuditEventRepository } from './infra/firestore/gitHubWebhookAuditEventRepository.js';
 import type { GitHubEventLogEntryRepository } from './domain/repositories/gitHubEventLogEntryRepository.js';
@@ -495,6 +496,20 @@ export function initServices(config: ServiceConfig): void {
     },
     allowedBots: ALLOWED_BOTS,
     codeTaskRepo,
+    onUnauthorizedSender: async (event: GitHubPREvent) => {
+      const parsed = parseOwnerRepo(event.repository);
+      if (parsed === null) return;
+      const ownerUserResult = await userServiceClient.resolveGitHubUsername(parsed.owner);
+      if (!ownerUserResult.ok) return;
+      const ownerUser = ownerUserResult.value;
+      if (ownerUser === null) return;
+      const token = await fetchGitHubToken(userServiceClient, ownerUser.userId, logger);
+      if (token === null) return;
+      await gitHubPRClient.postPRComment(
+        token, parsed.owner, parsed.repo, event.pullRequestNumber,
+        `⚠️ Only the repository owner and authorized bots can trigger worker commands. This event from \`${event.senderLogin}\` has been ignored.`,
+      );
+    },
   });
 
   container = {

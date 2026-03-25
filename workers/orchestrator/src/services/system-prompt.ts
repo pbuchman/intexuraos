@@ -356,7 +356,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pull-request',
   description: 'Pull request agent system prompt for addressing PR review feedback',
-  version: '4.0.0',
+  version: '4.0.1',
   build(params: SystemPromptParams): string {
     const {
       taskId,
@@ -489,7 +489,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const prReviewOverlayPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pr-review-overlay',
   description: 'Conditional PR review overlay appended to planning and execution prompts',
-  version: '3.0.0',
+  version: '3.0.1',
   build(params: SystemPromptParams): string {
     const { taskUrl } = params;
     return `
