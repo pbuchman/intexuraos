@@ -798,6 +798,7 @@ it('returns skipped_all (not drained) when all eligible PRs are excluded', async
   expect(tickResult).toBeDefined();
   if (tickResult === undefined) return;
   expect(tickResult.action).toBe('skipped_all');  // NOT 'drained' — PRs exist, just excluded
+  expect(tickResult.skipped).toStrictEqual([]);   // Empty — nothing attempted, user excluded all
 });
 ```
 
@@ -860,6 +861,8 @@ Then update the iteration loop to use `prsToProcess` instead of `eligiblePrs`:
 - **Keep** `remainingPrs: allPrs.length - 1` and `remainingPrs: allPrs.length` **unchanged** — `remainingPrs` represents total open PRs, not included-only PRs.
 
 **Important:** The `excludedPrNumbers` field defaults to `[]` for existing watch documents in Firestore. The `excludedSet` will be empty, so all PRs pass through — backwards compatible.
+
+**Downstream consumer audit (REQUIRED before merging Task 1.6):** The implementing agent MUST audit `mergeQueueTickRoute.ts` and any monitoring/logging consumers of `TickAction` to verify they handle `skipped_all` with `skipped: []` correctly. If any consumer assumes `skipped.length > 0` when `action === 'skipped_all'`, fix it or add a guard. Document the audit result in the commit message.
 
 - [ ] **Step 4: No `?? []` guard needed in tick use case**
 
@@ -1014,6 +1017,17 @@ setTimeout(() => { setSyncCooldown(false); }, 2000);
 
 This gives Firestore 2 seconds to propagate the write before the next sync re-reads watch data, eliminating the flicker in all practical scenarios.
 
+- [ ] **Step 2b: Declare `excludedPrNumbersRef` (BEFORE any callbacks)**
+
+**CRITICAL: This ref MUST be declared before Steps 3 and 4.** The callbacks below read `excludedPrNumbersRef.current` — if the ref doesn't exist yet, TypeScript will fail to compile. Place this immediately after the state declarations and sync effect:
+
+```typescript
+const excludedPrNumbersRef = useRef(excludedPrNumbers);
+excludedPrNumbersRef.current = excludedPrNumbers;
+```
+
+This ref is used by `handleToggleExclusion`, `handleSelectAll`, `handleDeselectAll`, and `doToggleWatch` to read the current exclusion state without adding it to `useCallback` dependency arrays.
+
 - [ ] **Step 3: Implement the toggle handler**
 
 Add the `handleToggleExclusion` callback. **Important:** Keep the state updater pure — compute next state in the updater, fire the API call outside it. This prevents React Strict Mode (which calls updaters twice in dev) from double-firing API calls.
@@ -1063,12 +1077,7 @@ const handleToggleExclusion = useCallback((prNumber: number): void => {
 // from Auth0) is a direct dependency.
 ```
 
-Note: This requires an `excludedPrNumbersRef` (similar to `watchesRef`) — declare once, used by both toggle and watch creation:
-
-```typescript
-const excludedPrNumbersRef = useRef(excludedPrNumbers);
-excludedPrNumbersRef.current = excludedPrNumbers;
-```
+Note: `excludedPrNumbersRef` was declared in Step 2b above — do NOT re-declare it here.
 
 - [ ] **Step 4: Implement bulk actions**
 
