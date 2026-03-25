@@ -23,6 +23,7 @@ import { loadConfig } from '../../config.js';
 
 import { extractDispatchWorkerType } from '../utils/dispatchWorkerTriage.js';
 import type { AutomationLog } from '../ports/automationLog.js';
+import type { CreateRemediationTaskRequest, CreateRemediationTaskError, CreateRemediationTaskResult } from '../usecases/createRemediationTask.js';
 
 export interface DispatchContext {
   event: GitHubPREvent;
@@ -87,6 +88,7 @@ export interface WebhookDispatchServiceDeps {
   serviceUrl: string;
   dispatchRetryRepo?: DispatchRetryRepository;
   automationLog: AutomationLog;
+  createRemediationTask?: (logger: Logger, request: CreateRemediationTaskRequest) => Promise<import('@intexuraos/common-core').Result<CreateRemediationTaskResult, CreateRemediationTaskError>>;
 }
 
 export function resolveLoginForTaskCreation(senderLogin: string, repository: string, allowedBots: Set<string>): string {
@@ -111,8 +113,43 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
           'Starting GitHub dispatch workflow'
         );
 
+        // Check if this should create a remediation task instead of regular dispatch
+        const workerDirective = extractDispatchWorkerType(event.body ?? '');
+        const isCodeWorkerReview = context.decision.reason === 'CODE_WORKER_REVIEW';
+        const isRemediationDispatch = isCodeWorkerReview || workerDirective !== undefined;
+
+        if (isRemediationDispatch && deps.createRemediationTask !== undefined) {
+          const senderLogin = resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots);
+          const remediationResult = await deps.createRemediationTask(logger, {
+            repository: event.repository,
+            prNumber: event.pullRequestNumber,
+            senderLogin,
+            workerType: workerDirective ?? 'auto',
+            eventId: event.id,
+            ...(isCodeWorkerReview && event.body !== null && { reviewBody: event.body }),
+            ...(!isCodeWorkerReview && event.body !== null && {
+              triggerComment: { id: Number(event.id), body: event.body, author: event.senderLogin },
+            }),
+            ...(event.baseBranch !== null && { baseBranch: event.baseBranch }),
+          });
+
+          if (!remediationResult.ok) {
+            logger.error(
+              { prNumber: event.pullRequestNumber, error: remediationResult.error },
+              'Failed to create remediation task'
+            );
+            return { success: false, dispatched: false, error: remediationResult.error.message };
+          }
+
+          logger.info(
+            { prNumber: event.pullRequestNumber, taskId: remediationResult.value.taskId, workerType: remediationResult.value.workerType },
+            'Created remediation task from dispatch'
+          );
+          return { success: true, dispatched: true, taskId: remediationResult.value.taskId };
+        }
+
         // Use non-review lookup to avoid routing generic comments into review tasks
-        const taskResult = await deps.codeTaskRepo.findLatestNonReviewTaskByPR(event.repository, event.pullRequestNumber);
+        const taskResult = await deps.codeTaskRepo.findLatestExecutionTaskByPR(event.repository, event.pullRequestNumber);
 
         if (!taskResult.ok) {
           logger.error(
@@ -160,7 +197,7 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
         );
 
         // Find the original task that created this PR
-        const taskResult = await deps.codeTaskRepo.findLatestNonReviewTaskByPR(event.repository, event.pullRequestNumber);
+        const taskResult = await deps.codeTaskRepo.findLatestExecutionTaskByPR(event.repository, event.pullRequestNumber);
 
         if (!taskResult.ok) {
           logger.error(

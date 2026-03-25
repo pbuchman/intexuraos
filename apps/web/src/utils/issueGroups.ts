@@ -54,6 +54,7 @@ const AGENT_TYPE_LABELS: Record<string, string> = {
   execution: 'Execution',
   pull_request: 'PR Task',
   review: 'Review',
+  remediation: 'Remediation',
 };
 
 export function getAgentTypeLabel(agentType: string): string {

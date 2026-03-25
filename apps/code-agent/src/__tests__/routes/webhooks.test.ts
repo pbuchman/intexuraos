@@ -3146,6 +3146,264 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.error).toBeUndefined();
     });
 
+    it('updates lastReviewedCommitSha on PR summary when review completes (INT-1087)', async () => {
+      const { gitHubPRClient } = installPRNotificationServices();
+      vi.mocked(gitHubPRClient.getPullRequestDetails).mockResolvedValue(
+        ok({
+          title: 'Test PR',
+          body: '',
+          authorLogin: 'alice',
+          baseBranch: 'development',
+          headBranch: 'feature/test',
+          mergeable: true,
+          mergeableState: 'clean',
+          headSha: 'abc123def456',
+        } as never)
+      );
+
+      const mockUpsert = vi.fn().mockResolvedValue(ok(undefined));
+      setServices({
+        ...getServices(),
+        gitHubPRSummaryRepo: {
+          ...getServices().gitHubPRSummaryRepo,
+          upsert: mockUpsert,
+        },
+      });
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_sha_update',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+          summary: 'Reviewed and posted findings.',
+          review_comments_posted: '2',
+          review_types: 'code_quality',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Verify task status
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('reviewed');
+
+      // Verify lastReviewedCommitSha was updated on PR summary
+      expect(mockUpsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          repository: 'pbuchman/intexuraos',
+          pullRequestNumber: 42,
+          lastReviewedCommitSha: 'abc123def456',
+        })
+      );
+    });
+
+    it('skips PR summary upsert when OAuth token fetch fails (INT-1087)', async () => {
+      const { userServiceClient } = installPRNotificationServices();
+      vi.mocked(userServiceClient.getOAuthToken).mockResolvedValue(
+        err({ code: 'CONNECTION_NOT_FOUND' as const, message: 'No token' })
+      );
+
+      const mockUpsert = vi.fn().mockResolvedValue(ok(undefined));
+      setServices({
+        ...getServices(),
+        gitHubPRSummaryRepo: {
+          ...getServices().gitHubPRSummaryRepo,
+          upsert: mockUpsert,
+        },
+      });
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_token_fail',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+          summary: 'Reviewed.',
+          review_comments_posted: '1',
+          review_types: 'code_quality',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockUpsert).not.toHaveBeenCalled();
+    });
+
+    it('skips PR summary upsert when PR details fetch fails (INT-1087)', async () => {
+      const { gitHubPRClient } = installPRNotificationServices();
+      vi.mocked(gitHubPRClient.getPullRequestDetails).mockResolvedValue(
+        err({ code: 'NOT_FOUND' as const, message: 'PR not found' })
+      );
+
+      const mockUpsert = vi.fn().mockResolvedValue(ok(undefined));
+      setServices({
+        ...getServices(),
+        gitHubPRSummaryRepo: {
+          ...getServices().gitHubPRSummaryRepo,
+          upsert: mockUpsert,
+        },
+      });
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_details_fail',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+          summary: 'Reviewed.',
+          review_comments_posted: '1',
+          review_types: 'code_quality',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockUpsert).not.toHaveBeenCalled();
+    });
+
+    it('handles thrown error in lastReviewedCommitSha update gracefully (INT-1087)', async () => {
+      const { userServiceClient } = installPRNotificationServices();
+      vi.mocked(userServiceClient.getOAuthToken).mockRejectedValue(
+        new Error('Network timeout')
+      );
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_throw',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+          summary: 'Reviewed.',
+          review_comments_posted: '1',
+          review_types: 'code_quality',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      // Should still succeed — the catch block handles the error gracefully
+      expect(response.statusCode).toBe(200);
+    });
+
     it('records automation log for review failure when task has workerType', async () => {
       installPRNotificationServices();
       const createResult = await codeTaskRepo.create({

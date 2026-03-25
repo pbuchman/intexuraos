@@ -5,7 +5,7 @@
  */
 
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import type { WorkerType } from '../../domain/models/codeTask.js';
+import type { AgentType, WorkerType } from '../../domain/models/codeTask.js';
 import type { WorkerCredentials } from '../../domain/models/workerSettings.js';
 import type {
   DispatchError,
@@ -58,7 +58,7 @@ interface WorkerTaskRequest {
   hasChildren: boolean;
   linearIssueId?: string;
   traceId?: string;
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  agentType?: AgentType;
   trackingCommentId?: string;
   continuationPrNumber?: number;
   continuationPrBranch?: string;

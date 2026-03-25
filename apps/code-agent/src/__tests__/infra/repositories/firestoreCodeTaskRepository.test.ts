@@ -659,6 +659,25 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.agentType).toBe('execution');
     });
 
+    it('stores agentType as remediation when provided (INT-1087)', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput({
+        agentType: 'remediation',
+        retriedFrom: 'original-task-id', // bypass dedup
+      });
+
+      const result = await repo.create(input);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.agentType).toBe('remediation');
+    });
+
     it('does not set agentType when not provided in create input', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -1667,6 +1686,52 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.value.logChunksDropped).toBe(5);
     });
+
+    it('sets requiresReReview when provided in update (INT-1087)', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({
+        agentType: 'remediation',
+        retriedFrom: 'original-task-id', // bypass dedup
+      }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const result = await repo.update(created.value.id, {
+        requiresReReview: false,
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.requiresReReview).toBe(false);
+    });
+
+    it('sets requiresReReview to true when provided in update (INT-1087)', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({
+        agentType: 'remediation',
+        retriedFrom: 'bypass-dedup', // bypass dedup
+      }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const result = await repo.update(created.value.id, {
+        requiresReReview: true,
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.requiresReReview).toBe(true);
+    });
   });
 
   describe('findArchivableTasks', () => {
@@ -1990,7 +2055,7 @@ describe('firestoreCodeTaskRepository', () => {
     });
   });
 
-  describe('findLatestNonReviewTaskByPR', () => {
+  describe('findLatestExecutionTaskByPR', () => {
     it('returns newest non-review task for PR', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -2018,7 +2083,7 @@ describe('firestoreCodeTaskRepository', () => {
       }));
       expect(nonReview.ok).toBe(true);
 
-      const result = await repo.findLatestNonReviewTaskByPR('test/repo', 456);
+      const result = await repo.findLatestExecutionTaskByPR('test/repo', 456);
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -2043,7 +2108,7 @@ describe('firestoreCodeTaskRepository', () => {
         sanitizedPrompt: 'review task',
       }));
 
-      const result = await repo.findLatestNonReviewTaskByPR('test/repo', 456);
+      const result = await repo.findLatestExecutionTaskByPR('test/repo', 456);
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -2068,7 +2133,7 @@ describe('firestoreCodeTaskRepository', () => {
       }));
       expect(legacy.ok).toBe(true);
 
-      const result = await repo.findLatestNonReviewTaskByPR('test/repo', 456);
+      const result = await repo.findLatestExecutionTaskByPR('test/repo', 456);
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -2101,7 +2166,7 @@ describe('firestoreCodeTaskRepository', () => {
         sanitizedPrompt: 'review 2',
       }));
 
-      const result = await repo.findLatestNonReviewTaskByPR('test/repo', 456);
+      const result = await repo.findLatestExecutionTaskByPR('test/repo', 456);
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -2135,13 +2200,80 @@ describe('firestoreCodeTaskRepository', () => {
         sanitizedPrompt: 'new task',
       }));
 
-      const result = await repo.findLatestNonReviewTaskByPR('test/repo', 456);
+      const result = await repo.findLatestExecutionTaskByPR('test/repo', 456);
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
       expect(result.value).not.toBeNull();
       expect(result.value?.id).toBe('task-new');
+    });
+
+    it('ignores remediation tasks when finding execution task (INT-1087)', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create an execution task
+      await repo.create(createTaskInput({
+        id: 'task-execution-1',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'execution',
+        prompt: 'Execution task',
+        sanitizedPrompt: 'execution task',
+      }));
+
+      // Create a remediation task (should be ignored)
+      await repo.create(createTaskInput({
+        id: 'task-remediation-1',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'remediation',
+        prompt: 'Remediation task',
+        sanitizedPrompt: 'remediation task',
+      }));
+
+      const result = await repo.findLatestExecutionTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe('task-execution-1');
+    });
+
+    it('returns null when all tasks are review or remediation tasks (INT-1087)', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.create(createTaskInput({
+        id: 'task-review-1',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'review',
+        prompt: 'Review task',
+        sanitizedPrompt: 'review task',
+      }));
+
+      await repo.create(createTaskInput({
+        id: 'task-remediation-1',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'remediation',
+        prompt: 'Remediation task',
+        sanitizedPrompt: 'remediation task',
+      }));
+
+      const result = await repo.findLatestExecutionTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toBeNull();
     });
 
     it('returns non-review task even when newer review task exists', async () => {
@@ -2170,7 +2302,7 @@ describe('firestoreCodeTaskRepository', () => {
         sanitizedPrompt: 'review task',
       }));
 
-      const result = await repo.findLatestNonReviewTaskByPR('test/repo', 456);
+      const result = await repo.findLatestExecutionTaskByPR('test/repo', 456);
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -2436,7 +2568,7 @@ describe('firestoreCodeTaskRepository', () => {
     });
   });
 
-  describe('findLatestNonReviewTaskByPR 50-doc exhaustion warning', () => {
+  describe('findLatestExecutionTaskByPR 50-doc exhaustion warning', () => {
     it('logs warning when 50 docs are scanned without finding a non-review task', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -2456,15 +2588,108 @@ describe('firestoreCodeTaskRepository', () => {
         }));
       }
 
-      const result = await repo.findLatestNonReviewTaskByPR('test/repo', 789);
+      const result = await repo.findLatestExecutionTaskByPR('test/repo', 789);
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.value).toBeNull();
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ repository: 'test/repo', prNumber: 789, docsScanned: 50 }),
-        'findLatestNonReviewTaskByPR exhausted 50-doc window without finding a non-review task',
+        'findLatestExecutionTaskByPR exhausted 50-doc window without finding a non-review task',
       );
+    });
+  });
+
+  describe('findRecentRemediationForPR', () => {
+    it('returns the most recent remediation task for matching repository and PR', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.create(createTaskInput({
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'remediation',
+        prompt: 'Remediation task',
+        sanitizedPrompt: 'remediation task',
+      }));
+
+      const result = await repo.findRecentRemediationForPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).not.toBeNull();
+      expect(result.value?.agentType).toBe('remediation');
+      expect(result.value?.prNumber).toBe(456);
+    });
+
+    it('returns null when no remediation task exists for PR', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a non-remediation task
+      await repo.create(createTaskInput({
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'review',
+        prompt: 'Review task',
+        sanitizedPrompt: 'review task',
+      }));
+
+      const result = await repo.findRecentRemediationForPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toBeNull();
+    });
+
+    it('returns null when remediation task is for different PR', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.create(createTaskInput({
+        repository: 'test/repo',
+        prNumber: 789,
+        agentType: 'remediation',
+        prompt: 'Remediation for other PR',
+        sanitizedPrompt: 'remediation for other pr',
+      }));
+
+      const result = await repo.findRecentRemediationForPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toBeNull();
+    });
+
+    it('returns null when remediation task is for different repository', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.create(createTaskInput({
+        repository: 'other/repo',
+        prNumber: 456,
+        agentType: 'remediation',
+        prompt: 'Remediation for other repo',
+        sanitizedPrompt: 'remediation for other repo',
+      }));
+
+      const result = await repo.findRecentRemediationForPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toBeNull();
     });
   });
 });

@@ -234,6 +234,71 @@ describe('createFirestoreGitHubPRSummariesRepository', () => {
       expect(calledData['lastConflictCheckedAt']).toBeNull();
     });
 
+    it('should include lastReviewedCommitSha when provided (INT-1087)', async () => {
+      const mockDocRef = {
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => ({
+          doc: vi.fn(() => mockDocRef),
+        })),
+      } as never);
+
+      const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
+      const input = createUpsertInput({ lastReviewedCommitSha: 'abc123def456' });
+      const result = await repo.upsert(input);
+
+      expect(result.ok).toBe(true);
+      const calledData = (mockDocRef.set as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(calledData['lastReviewedCommitSha']).toBe('abc123def456');
+    });
+
+    it('should omit lastReviewedCommitSha when not provided (INT-1087)', async () => {
+      const mockDocRef = {
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => ({
+          doc: vi.fn(() => mockDocRef),
+        })),
+      } as never);
+
+      const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
+      const input: UpsertGitHubPRSummaryInput = {
+        repository: 'intexuraos/test-repo',
+        pullRequestNumber: 42,
+        lastActivityAt: new Date('2024-01-10T12:00:00Z'),
+        firstSeenAt: new Date('2024-01-10T12:00:00Z'),
+      };
+      const result = await repo.upsert(input);
+
+      expect(result.ok).toBe(true);
+      const calledData = (mockDocRef.set as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(calledData).not.toHaveProperty('lastReviewedCommitSha');
+    });
+
+    it('should set lastReviewedCommitSha to null when explicitly null (INT-1087)', async () => {
+      const mockDocRef = {
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => ({
+          doc: vi.fn(() => mockDocRef),
+        })),
+      } as never);
+
+      const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
+      const input = createUpsertInput({ lastReviewedCommitSha: null });
+      const result = await repo.upsert(input);
+
+      expect(result.ok).toBe(true);
+      const calledData = (mockDocRef.set as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(calledData['lastReviewedCommitSha']).toBeNull();
+    });
+
     it('should handle Firestore errors', async () => {
       mockGetFirestore.mockReturnValue({
         collection: vi.fn(() => ({
@@ -384,6 +449,66 @@ describe('createFirestoreGitHubPRSummariesRepository', () => {
         const summary = result.value[0];
         expect(summary?.lastActivityAt).toEqual(new Date('2024-01-10T12:00:00.000Z'));
         expect(summary?.firstSeenAt).toEqual(new Date('2024-01-01T00:00:00.000Z'));
+      }
+    });
+
+    it('should map lastReviewedCommitSha from stored data (INT-1087)', async () => {
+      const summaryData = {
+        repository: 'intexuraos/test-repo',
+        pullRequestNumber: 42,
+        lastActivityAt: new Date('2024-01-10T12:00:00Z'),
+        firstSeenAt: new Date('2024-01-10T12:00:00Z'),
+        lastReviewedCommitSha: 'abc123def456',
+      };
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(
+          createMockQuerySnapshot([createMockDocSnapshot(summaryData)])
+        ),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
+      const result = await repo.findRecentlyActive(30);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value[0]?.lastReviewedCommitSha).toBe('abc123def456');
+      }
+    });
+
+    it('should default lastReviewedCommitSha to null when missing (INT-1087)', async () => {
+      const summaryData = {
+        repository: 'intexuraos/test-repo',
+        pullRequestNumber: 42,
+        lastActivityAt: new Date('2024-01-10T12:00:00Z'),
+        firstSeenAt: new Date('2024-01-10T12:00:00Z'),
+        // no lastReviewedCommitSha
+      };
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(
+          createMockQuerySnapshot([createMockDocSnapshot(summaryData)])
+        ),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
+      const result = await repo.findRecentlyActive(30);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value[0]?.lastReviewedCommitSha).toBeNull();
       }
     });
 

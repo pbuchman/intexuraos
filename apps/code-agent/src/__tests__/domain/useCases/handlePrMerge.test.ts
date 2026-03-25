@@ -46,7 +46,7 @@ describe('handlePrMerge', () => {
   let mockLogger: pino.Logger;
   let mockCodeTaskRepo: {
     findByPR: ReturnType<typeof vi.fn>;
-    findLatestNonReviewTaskByPR: ReturnType<typeof vi.fn>;
+    findLatestExecutionTaskByPR: ReturnType<typeof vi.fn>;
   };
   let mockLinearIssueService: {
     markQa: ReturnType<typeof vi.fn>;
@@ -59,7 +59,7 @@ describe('handlePrMerge', () => {
     mockLogger = createMockLogger();
     mockCodeTaskRepo = {
       findByPR: vi.fn().mockResolvedValue(ok(null)),
-      findLatestNonReviewTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
     };
     mockLinearIssueService = {
       markQa: vi.fn().mockResolvedValue(undefined),
@@ -92,7 +92,7 @@ describe('handlePrMerge', () => {
   it('should deduplicate when both repo methods return same task', async () => {
     const task = createBaseTask({ linearIssueId: 'INT-200', userId: 'user-1' });
     mockCodeTaskRepo.findByPR.mockResolvedValue(ok(task));
-    mockCodeTaskRepo.findLatestNonReviewTaskByPR.mockResolvedValue(ok(task));
+    mockCodeTaskRepo.findLatestExecutionTaskByPR.mockResolvedValue(ok(task));
 
     await handlePrMerge(buildDeps(), createDefaultInput());
 
@@ -104,7 +104,7 @@ describe('handlePrMerge', () => {
     mockCodeTaskRepo.findByPR.mockResolvedValue(
       ok(createBaseTask({ linearIssueId: 'INT-300', userId: 'user-a' }))
     );
-    mockCodeTaskRepo.findLatestNonReviewTaskByPR.mockResolvedValue(
+    mockCodeTaskRepo.findLatestExecutionTaskByPR.mockResolvedValue(
       ok(createBaseTask({ id: 'task_def', linearIssueId: 'INT-400', userId: 'user-b' }))
     );
 
@@ -203,8 +203,8 @@ describe('handlePrMerge', () => {
     expect(mockLinearIssueService.markQa).toHaveBeenCalledWith('resolved-user', 'INT-1100');
   });
 
-  it('should continue with other discovery when findLatestNonReviewTaskByPR returns err', async () => {
-    mockCodeTaskRepo.findLatestNonReviewTaskByPR.mockResolvedValue(
+  it('should continue with other discovery when findLatestExecutionTaskByPR returns err', async () => {
+    mockCodeTaskRepo.findLatestExecutionTaskByPR.mockResolvedValue(
       err({ code: 'FIRESTORE_ERROR', message: 'timeout' })
     );
 
@@ -215,7 +215,7 @@ describe('handlePrMerge', () => {
 
     expect(vi.mocked(mockLogger.warn)).toHaveBeenCalledWith(
       expect.objectContaining({ error: expect.objectContaining({ code: 'FIRESTORE_ERROR' }) }),
-      expect.stringContaining('findLatestNonReviewTaskByPR')
+      expect.stringContaining('findLatestExecutionTaskByPR')
     );
     expect(mockLinearIssueService.markQa).toHaveBeenCalledWith('resolved-user', 'INT-1500');
   });
