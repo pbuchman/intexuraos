@@ -157,6 +157,57 @@ describe('UnifiedEvaluator', () => {
       );
       expect(deps.evaluateEvent).not.toHaveBeenCalled();
     });
+
+    it('calls onUnauthorizedSender when skip reason is SENDER_NOT_WHITELISTED', async () => {
+      const onUnauthorizedSender = vi.fn().mockResolvedValue(undefined);
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'skip', reason: 'SENDER_NOT_WHITELISTED' }),
+        } as unknown as WebhookRulesService,
+        onUnauthorizedSender,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({ senderLogin: 'random-user' });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(onUnauthorizedSender).toHaveBeenCalledWith(event);
+    });
+
+    it('does not call onUnauthorizedSender for other skip reasons', async () => {
+      const onUnauthorizedSender = vi.fn().mockResolvedValue(undefined);
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'skip', reason: 'BOT_NOISE' }),
+        } as unknown as WebhookRulesService,
+        onUnauthorizedSender,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(onUnauthorizedSender).not.toHaveBeenCalled();
+    });
+
+    it('does not fail when onUnauthorizedSender rejects', async () => {
+      const onUnauthorizedSender = vi.fn().mockRejectedValue(new Error('GitHub API error'));
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'skip', reason: 'SENDER_NOT_WHITELISTED' }),
+        } as unknown as WebhookRulesService,
+        onUnauthorizedSender,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({ senderLogin: 'random-user' });
+
+      // Should not throw even when onUnauthorizedSender rejects
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ decision: 'skip', reason: 'SENDER_NOT_WHITELISTED' })
+      );
+    });
   });
 
   describe('dispatch result tracking', () => {
