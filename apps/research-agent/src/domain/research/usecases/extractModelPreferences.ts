@@ -6,7 +6,7 @@
  */
 
 import type { Logger } from '@intexuraos/common-core';
-import { getProviderForModel, type ResearchModel, LlmModels } from '@intexuraos/llm-contract';
+import { getProviderForModel, type LlmProvider, type ResearchModel, LlmModels } from '@intexuraos/llm-contract';
 import {
   buildModelExtractionPrompt,
   parseModelExtractionResponse,
@@ -68,38 +68,38 @@ const MODEL_DISPLAY_NAMES: Record<ResearchModel, string> = {
 /**
  * Get model display name, generating one for OpenRouter models.
  */
-function getModelDisplayName(model: ResearchModel): string {
+export function getModelDisplayName(model: ResearchModel): string {
   const staticModel = model as string;
-  /* v8 ignore start -- ts-type: cannot statically verify dynamic OpenRouter model ID is in static type union @preserve */
   if (staticModel in MODEL_DISPLAY_NAMES) {
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires ?? but `in` check guarantees key exists @preserve */
     return MODEL_DISPLAY_NAMES[staticModel as ResearchModel] ?? 'Unknown Model';
+    /* v8 ignore stop @preserve */
   }
   // OpenRouter model - extract name from ID (e.g., 'anthropic/claude-sonnet-4.6' -> 'Claude Sonnet 4.6')
   const parts = staticModel.split('/');
   const namePart = parts[1]?.replace(/-/g, ' ') ?? staticModel;
   return namePart.charAt(0).toUpperCase() + namePart.slice(1);
-  /* v8 ignore stop @preserve */
 }
 
 /**
  * Get model keywords, using default for OpenRouter models.
  */
-function getModelKeywords(model: ResearchModel): string[] {
+export function getModelKeywords(model: ResearchModel): string[] {
   const staticModel = model as string;
-  /* v8 ignore start -- ts-type: cannot statically verify dynamic OpenRouter model ID is in static type union @preserve */
   if (staticModel in MODEL_KEYWORDS) {
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires ?? but `in` check guarantees key exists @preserve */
     return MODEL_KEYWORDS[staticModel as ResearchModel] ?? ['openrouter'];
+    /* v8 ignore stop @preserve */
   }
   // OpenRouter model - return generic keyword
   return ['openrouter'];
-  /* v8 ignore stop @preserve */
 }
 
 /**
  * Get API key field name for a provider.
  * Provider is always one of the known values from getProviderForModel.
  */
-const PROVIDER_KEY_MAP: Record<string, keyof ApiKeyStore> = {
+const PROVIDER_KEY_MAP: Record<LlmProvider, keyof ApiKeyStore> = {
   google: 'google',
   openai: 'openai',
   anthropic: 'anthropic',
@@ -107,8 +107,8 @@ const PROVIDER_KEY_MAP: Record<string, keyof ApiKeyStore> = {
   openrouter: 'openrouter',
 };
 
-function providerToKeyField(provider: string): keyof ApiKeyStore {
-  return PROVIDER_KEY_MAP[provider] as keyof ApiKeyStore;
+function providerToKeyField(provider: LlmProvider): keyof ApiKeyStore {
+  return PROVIDER_KEY_MAP[provider];
 }
 
 /**

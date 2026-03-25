@@ -8,8 +8,11 @@ import { ok, err, type Logger } from '@intexuraos/common-core';
 import { LlmModels } from '@intexuraos/llm-contract';
 import {
   extractModelPreferences,
+  getModelDisplayName,
+  getModelKeywords,
   type ExtractModelPreferencesDeps,
 } from '../../../../domain/research/usecases/extractModelPreferences.js';
+import type { ResearchModel } from '../../../../domain/research/index.js';
 import type { ApiKeyStore, TextGenerationClient } from '../../../../domain/research/ports/index.js';
 
 function createSilentLogger(): Logger & {
@@ -469,6 +472,39 @@ describe('extractModelPreferences', () => {
 
       // Verify the prompt was called
       expect(llmClient.generate).toHaveBeenCalled();
+    });
+  });
+
+  describe('getModelDisplayName', () => {
+    it('returns static display name for known models', () => {
+      expect(getModelDisplayName(LlmModels.Gemini25Pro)).toBe('Gemini 2.5 Pro');
+      expect(getModelDisplayName(LlmModels.ClaudeSonnet45)).toBe('Claude Sonnet 4.5');
+    });
+
+    it('generates display name from OpenRouter model ID', () => {
+      const orModel = 'or:anthropic/claude-sonnet-4.6' as ResearchModel;
+      const result = getModelDisplayName(orModel);
+      expect(result).toBe('Claude sonnet 4.6');
+    });
+
+    it('handles OpenRouter model without slash', () => {
+      const orModel = 'or:some-model' as ResearchModel;
+      const result = getModelDisplayName(orModel);
+      // Falls through to else, parts[1] is undefined, uses staticModel as fallback (no dash replacement)
+      expect(result).toBe('Or:some-model');
+    });
+  });
+
+  describe('getModelKeywords', () => {
+    it('returns static keywords for known models', () => {
+      const keywords = getModelKeywords(LlmModels.Gemini25Pro);
+      expect(Array.isArray(keywords)).toBe(true);
+      expect(keywords.length).toBeGreaterThan(0);
+    });
+
+    it('returns openrouter keyword for OpenRouter models', () => {
+      const orModel = 'or:anthropic/claude-sonnet-4.6' as ResearchModel;
+      expect(getModelKeywords(orModel)).toEqual(['openrouter']);
     });
   });
 });

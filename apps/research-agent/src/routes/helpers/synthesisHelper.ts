@@ -3,7 +3,7 @@
  */
 
 import { getProviderForModel, isOpenRouterModel, getOpenRouterRawId, LlmModels, type LLMModel, type ModelPricing } from '@intexuraos/llm-contract';
-import { getAllowlistPricing, isAllowedModel, allowlistModelIds } from '@intexuraos/infra-openrouter';
+import { getAllowlistPricing, isAllowedModel } from '@intexuraos/infra-openrouter';
 import type { ResearchModel } from '../../domain/research/index.js';
 import type { ServiceContainer, DecryptedApiKeys } from '../../services.js';
 import type { Logger } from '@intexuraos/common-core';
@@ -30,8 +30,7 @@ export function createSynthesisProviders(
   // Reject non-allowlisted OpenRouter models to enforce curated model policy
   if (isOpenRouterModel(synthesisModel) && !isAllowedModel(getOpenRouterRawId(synthesisModel))) {
     throw new Error(
-      `OpenRouter model '${synthesisModel}' is not in the curated allowlist. ` +
-        `Allowed models: ${allowlistModelIds()}`
+      `OpenRouter model '${synthesisModel}' is not in the curated allowlist`
     );
   }
 

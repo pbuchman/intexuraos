@@ -173,6 +173,7 @@ describe('createUserServiceClient', () => {
         openai: 'openai-key',
         anthropic: 'anthropic-key',
         perplexity: 'perplexity-key',
+        openrouter: 'openrouter-key',
       };
 
       nock('http://localhost:3000')
@@ -188,6 +189,7 @@ describe('createUserServiceClient', () => {
         expect(result.value.openai).toBe('openai-key');
         expect(result.value.anthropic).toBe('anthropic-key');
         expect(result.value.perplexity).toBe('perplexity-key');
+        expect(result.value.openrouter).toBe('openrouter-key');
       } else {
         expect.fail('Expected successful result');
       }
