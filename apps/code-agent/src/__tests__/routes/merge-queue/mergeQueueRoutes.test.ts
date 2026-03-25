@@ -916,6 +916,9 @@ describe('Merge queue JWT routes', () => {
       });
 
       expect(res.statusCode).toBe(404);
+      const body = JSON.parse(res.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
     });
 
     it('returns 403 when user does not own the watch', async () => {
@@ -936,6 +939,9 @@ describe('Merge queue JWT routes', () => {
       });
 
       expect(res.statusCode).toBe(403);
+      const body = JSON.parse(res.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
     });
 
     it('returns 409 when watch is not active', async () => {
@@ -956,6 +962,9 @@ describe('Merge queue JWT routes', () => {
       });
 
       expect(res.statusCode).toBe(409);
+      const body = JSON.parse(res.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
     });
 
     it('returns 400 when excludedPrNumbers is not an array', async () => {

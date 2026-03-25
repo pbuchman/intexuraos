@@ -128,6 +128,7 @@ describe('serializeWatch', () => {
       cancelledAt: makeTimestamp('2026-01-06T00:00:00.000Z'),
       skippedPrs: [],
       mergedPrs: [],
+      excludedPrNumbers: [],
     } as unknown as MergeQueueWatch;
 
     const result = serializeWatch(watch);
@@ -137,6 +138,7 @@ describe('serializeWatch', () => {
     expect(result).not.toHaveProperty('cancelledAt');
     expect(result).not.toHaveProperty('id');
     expect(result['watchId']).toBe('watch-2');
+    expect(result['excludedPrNumbers']).toStrictEqual([]);
   });
 
   it('should handle null timestamp fields', () => {
@@ -156,6 +158,7 @@ describe('serializeWatch', () => {
       cancelledAt: null,
       skippedPrs: [],
       mergedPrs: [],
+      excludedPrNumbers: [],
     } as unknown as MergeQueueWatch;
 
     const result = serializeWatch(watch);
@@ -163,6 +166,7 @@ describe('serializeWatch', () => {
     expect(result['lastTickAt']).toBeNull();
     expect(result['lastErrorAt']).toBeNull();
     expect(result['drainedAt']).toBeNull();
+    expect(result['excludedPrNumbers']).toStrictEqual([]);
   });
 
   it('should include excludedPrNumbers in serialized output', () => {

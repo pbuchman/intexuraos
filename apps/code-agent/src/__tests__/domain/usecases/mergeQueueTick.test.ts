@@ -690,6 +690,7 @@ describe('mergeQueueTick', () => {
     if (tickResult === undefined) return;
     expect(tickResult.action).toBe('skipped_all');
     expect(tickResult.skipped).toStrictEqual([]);
+    expect(tickResult.remainingPrs).toBe(2);
   });
 
   it('handles summaries with null title, authorLogin, baseBranch, and headBranch', async () => {
