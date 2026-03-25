@@ -54,9 +54,7 @@ export const githubAgentPrompt: PromptBuilder<GitHubAgentPromptInput> = {
 };
 
 function buildPRSection(input: GitHubAgentPromptInput): string[] {
-  /* v8 ignore start -- ts-type: null coalescing fallback for optional array @preserve */
   const files = input.files ?? [];
-  /* v8 ignore stop @preserve */
   const fileList = files
     .map((f) => `  - ${f.filename} (${f.status}, +${String(f.additions)}/-${String(f.deletions)})`)
     .join('\n');
