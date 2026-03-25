@@ -21,6 +21,31 @@ For production code tasks (\`intexuraos.cloud\`), use the debug-code-task skill:
 - Fetch script: \`.claude/skills/debug-code-task/scripts/fetch-task.cjs\`
 - Usage: \`node .claude/skills/debug-code-task/scripts/fetch-task.cjs <taskId> [--logs] [--logs-only]\``;
 
+const COMMENT_DRIVEN_DECISION_LOG = `### Comment-Driven Decision Log (MANDATORY when comments exist)
+
+After reading all Linear issue comments, if ANY comment influenced your approach,
+decisions, or implementation choices, you MUST:
+
+1. **Track decisions**: For each comment that influenced a decision, record:
+   - What was decided
+   - Which comment drove it (author + timestamp)
+   - How it affected the outcome
+
+2. **Post a Linear acknowledgment comment** on the issue listing all comment-driven decisions:
+   Format:
+   📋 **Comment-Driven Decisions:**
+   - Implementing [decision] per @[author]'s comment ([timestamp])
+   - [Additional decisions...]
+
+3. **Include a "Decision Log" section in the PR description** (after "## Reasoning"):
+   Format:
+   ## Decision Log
+   | Decision | Source | Impact |
+   |----------|--------|--------|
+   | [what] | @[author] ([timestamp]) | [how it affected implementation] |
+
+If no comments exist or no comments influenced decisions, skip this section entirely.`;
+
 export interface SystemPromptParams {
   taskId: string;
   linearIssueId?: string;
@@ -77,30 +102,7 @@ Before doing ANY work — including the Complexity Judgment — you MUST read th
 
 **Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
 
-### Comment-Driven Decision Log (MANDATORY when comments exist)
-
-After reading all Linear issue comments, if ANY comment influenced your approach,
-decisions, or implementation choices, you MUST:
-
-1. **Track decisions**: For each comment that influenced a decision, record:
-   - What was decided
-   - Which comment drove it (author + timestamp)
-   - How it affected the outcome
-
-2. **Post a Linear acknowledgment comment** on the issue listing all comment-driven decisions:
-   Format:
-   📋 **Comment-Driven Decisions:**
-   - Implementing [decision] per @[author]'s comment ([timestamp])
-   - [Additional decisions...]
-
-3. **Include a "Decision Log" section in the PR description** (after "## Reasoning"):
-   Format:
-   ## Decision Log
-   | Decision | Source | Impact |
-   |----------|--------|--------|
-   | [what] | @[author] ([timestamp]) | [how it affected implementation] |
-
-If no comments exist or no comments influenced decisions, skip this section entirely.
+${COMMENT_DRIVEN_DECISION_LOG}
 
 ### Planning Contract (MANDATORY — NON-NEGOTIABLE)
 
@@ -269,30 +271,7 @@ Before doing ANY work, you MUST read the Linear issue AND all its comments:
 
 **Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
 
-### Comment-Driven Decision Log (MANDATORY when comments exist)
-
-After reading all Linear issue comments, if ANY comment influenced your approach,
-decisions, or implementation choices, you MUST:
-
-1. **Track decisions**: For each comment that influenced a decision, record:
-   - What was decided
-   - Which comment drove it (author + timestamp)
-   - How it affected the outcome
-
-2. **Post a Linear acknowledgment comment** on the issue listing all comment-driven decisions:
-   Format:
-   📋 **Comment-Driven Decisions:**
-   - Implementing [decision] per @[author]'s comment ([timestamp])
-   - [Additional decisions...]
-
-3. **Include a "Decision Log" section in the PR description** (after "## Reasoning"):
-   Format:
-   ## Decision Log
-   | Decision | Source | Impact |
-   |----------|--------|--------|
-   | [what] | @[author] ([timestamp]) | [how it affected implementation] |
-
-If no comments exist or no comments influenced decisions, skip this section entirely.
+${COMMENT_DRIVEN_DECISION_LOG}
 
 ### Mandatory Skill Order (non-negotiable)
 1. Start with \`superpowers:executing-plans\` (mandatory first skill)
