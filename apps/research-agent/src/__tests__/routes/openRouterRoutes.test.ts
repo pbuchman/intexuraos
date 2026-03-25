@@ -244,4 +244,59 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     // If nock had received a second request it would have thrown —
     // reaching here confirms the cache was used
   });
+
+  it('fetches new data after cache TTL expires', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-or-key' });
+
+    const catalogData = OPENROUTER_ALLOWED_MODELS.map((m) => ({
+      id: m.id,
+      pricing: { prompt: '0.000001', completion: '0.000005' },
+      context_length: 500_000,
+    }));
+
+    // First request — populates cache
+    nock('https://openrouter.ai')
+      .get('/api/v1/models')
+      .reply(200, { data: catalogData });
+
+    const token = await generateJwt(TEST_USER_ID);
+
+    const response1 = await app.inject({
+      method: 'GET',
+      url: '/research/openrouter/models',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(response1.statusCode).toBe(200);
+
+    // Advance past 5-minute TTL
+    vi.advanceTimersByTime(5 * 60 * 1000 + 1);
+
+    // Set up new nock for second catalog fetch (cache expired)
+    const updatedCatalogData = OPENROUTER_ALLOWED_MODELS.map((m) => ({
+      id: m.id,
+      pricing: { prompt: '0.000002', completion: '0.000010' },
+      context_length: 600_000,
+    }));
+
+    const scope2 = nock('https://openrouter.ai')
+      .get('/api/v1/models')
+      .reply(200, { data: updatedCatalogData });
+
+    // Second request — should make new HTTP call (cache expired)
+    const response2 = await app.inject({
+      method: 'GET',
+      url: '/research/openrouter/models',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(response2.statusCode).toBe(200);
+    expect(scope2.isDone()).toBe(true);
+
+    // Verify updated pricing was used
+    const body = JSON.parse(response2.body) as {
+      success: boolean;
+      data: { models: { contextLength: number }[] };
+    };
+    expect(body.data.models[0]?.contextLength).toBe(600_000);
+  });
 });

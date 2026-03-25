@@ -23,7 +23,7 @@ import {
 } from '../domain/research/index.js';
 import { formatLlmError } from '../domain/research/formatLlmError.js';
 import { getProviderForModel, isOpenRouterModel, getOpenRouterRawId, LlmModels, type LLMModel, type ModelPricing } from '@intexuraos/llm-contract';
-import { getAllowlistPricing, isAllowedModel, allowlistModelIds } from '@intexuraos/infra-openrouter';
+import { getAllowlistPricing, isAllowedModel } from '@intexuraos/infra-openrouter';
 import { getServices, type DecryptedApiKeys } from '../services.js';
 import { createSynthesisProviders } from './helpers/synthesisHelper.js';
 import { handleAllCompleted } from './helpers/completionHandlers.js';
@@ -867,7 +867,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           request.log.warn({ researchId: event.researchId, model: event.model }, '[3.3] OpenRouter model not in allowlist');
           void researchRepo.updateLlmResult(event.researchId, event.model, {
             status: 'failed',
-            error: `Model '${event.model}' is not in the curated allowlist. Allowed models: ${allowlistModelIds()}`,
+            error: `Model '${event.model}' is not in the curated allowlist`,
             completedAt: new Date().toISOString(),
           });
           return await reply.fail('INVALID_REQUEST', 'Model not in curated allowlist');

@@ -10,7 +10,7 @@ import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
 import { err, ok, type Result } from '@intexuraos/common-core';
 import { FakePricingContext } from '@intexuraos/llm-pricing';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders, type ResearchModel, type LlmProvider } from '@intexuraos/llm-contract';
 import { buildServer } from '../server.js';
 import { MIN_QUALITY_CHARS } from '../routes/internalRoutes.js';
 import { getServices, resetServices, type ServiceContainer, setServices } from '../services.js';
@@ -4374,13 +4374,13 @@ describe('Internal Routes', () => {
     });
 
     it('processes allowlisted OpenRouter model with correct pricing', async () => {
-      const allowlistedModel = 'or:qwen/qwen3.5-plus-02-15' as typeof LlmModels.Gemini25Pro;
+      const allowlistedModel = 'or:qwen/qwen3.5-plus-02-15' as ResearchModel;
       const research = createTestResearch({
         id: 'research-123',
         status: 'processing',
         selectedModels: [allowlistedModel],
         llmResults: [
-          { provider: 'openrouter' as typeof LlmProviders.Google, model: allowlistedModel, status: 'pending' },
+          { provider: 'openrouter' as LlmProvider, model: allowlistedModel, status: 'pending' },
         ],
       });
       fakeRepo.addResearch(research);
@@ -4414,13 +4414,13 @@ describe('Internal Routes', () => {
     });
 
     it('rejects non-allowlisted OpenRouter models', async () => {
-      const nonAllowlistedModel = 'or:unknown/not-in-allowlist' as typeof LlmModels.Gemini25Pro;
+      const nonAllowlistedModel = 'or:unknown/not-in-allowlist' as ResearchModel;
       const research = createTestResearch({
         id: 'research-123',
         status: 'processing',
         selectedModels: [nonAllowlistedModel],
         llmResults: [
-          { provider: 'openrouter' as typeof LlmProviders.Google, model: nonAllowlistedModel, status: 'pending' },
+          { provider: 'openrouter' as LlmProvider, model: nonAllowlistedModel, status: 'pending' },
         ],
       });
       fakeRepo.addResearch(research);

@@ -37,16 +37,16 @@ export type {
   OAuthProvider,
 } from './types.js';
 
-const PROVIDER_KEYS = {
+const PROVIDER_KEYS: Record<LlmProvider, string> = {
   google: 'google',
   openai: 'openai',
   anthropic: 'anthropic',
   perplexity: 'perplexity',
   openrouter: 'openrouter',
-} as const;
+};
 
 export function providerToKeyField(provider: LlmProvider): string {
-  return PROVIDER_KEYS[provider as keyof typeof PROVIDER_KEYS] as string;
+  return PROVIDER_KEYS[provider];
 }
 
 /**
@@ -101,11 +101,9 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         if (data.perplexity !== null && data.perplexity !== undefined) {
           result.perplexity = data.perplexity;
         }
-        /* v8 ignore start -- upstream: cannot verify openrouter key presence in API response @preserve */
         if (data.openrouter !== null && data.openrouter !== undefined) {
           result.openrouter = data.openrouter;
         }
-        /* v8 ignore stop @preserve */
 
         return ok(result);
       } catch (error) {
