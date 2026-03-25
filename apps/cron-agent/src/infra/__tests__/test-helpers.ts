@@ -1,4 +1,3 @@
-import { vi } from 'vitest';
 import { createFakeFirestore, setFirestore, resetFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@intexuraos/infra-firestore';
 
@@ -28,23 +27,6 @@ export function createTestLogger(): {
     error: () => { /* noop */ },
     debug: () => { /* noop */ },
     child: () => createTestLogger(),
-  };
-  return logger;
-}
-
-export function createSpyLogger(): {
-  info: ReturnType<typeof vi.fn>;
-  warn: ReturnType<typeof vi.fn>;
-  error: ReturnType<typeof vi.fn>;
-  debug: ReturnType<typeof vi.fn>;
-  child: () => ReturnType<typeof createSpyLogger>;
-} {
-  const logger: ReturnType<typeof createSpyLogger> = {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    child: () => createSpyLogger(),
   };
   return logger;
 }

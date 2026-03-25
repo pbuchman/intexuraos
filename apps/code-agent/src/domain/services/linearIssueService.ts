@@ -6,7 +6,7 @@
  */
 
 import type { Logger } from '@intexuraos/common-core';
-import type { LinearAgentClient, UpdateIssueStateRequest } from '../ports/linearAgentClient.js';
+import type { LinearAgentClient } from '../ports/linearAgentClient.js';
 
 export type LinearIssueType = 'feature' | 'bug' | 'refactor' | 'research';
 
@@ -56,37 +56,10 @@ export interface LinearIssueService {
    * Transition issue to In Review when PR is created.
    */
   markInReview(userId: string, linearIssueId: string): Promise<void>;
-
-  /**
-   * Transition issue to QA when PR is merged.
-   */
-  markQa(userId: string, linearIssueId: string): Promise<void>;
 }
 
 export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIssueService {
   const { linearAgentClient, logger } = deps;
-
-  async function transitionState(
-    userId: string,
-    linearIssueId: string,
-    state: UpdateIssueStateRequest['state'],
-    label: string,
-  ): Promise<void> {
-    if (!linearIssueId) {
-      logger.debug({}, 'Skipping state transition (no issue ID)');
-      return;
-    }
-
-    const result = await linearAgentClient.updateIssueState({
-      userId,
-      issueId: linearIssueId,
-      state,
-    });
-
-    if (!result.ok) {
-      logger.warn({ linearIssueId, error: result.error }, `Failed to update Linear issue to ${label}`);
-    }
-  }
 
   return {
     async ensureIssueExists(params): Promise<EnsureIssueResult> {
@@ -190,15 +163,37 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
     },
 
     async markInProgress(userId: string, linearIssueId: string): Promise<void> {
-      await transitionState(userId, linearIssueId, 'in_progress', 'In Progress');
+      if (!linearIssueId) {
+        logger.debug({}, 'Skipping state transition (no issue ID)');
+        return;
+      }
+
+      const result = await linearAgentClient.updateIssueState({
+        userId,
+        issueId: linearIssueId,
+        state: 'in_progress',
+      });
+
+      if (!result.ok) {
+        logger.warn({ linearIssueId, error: result.error }, 'Failed to update Linear issue to In Progress');
+      }
     },
 
     async markInReview(userId: string, linearIssueId: string): Promise<void> {
-      await transitionState(userId, linearIssueId, 'in_review', 'In Review');
-    },
+      if (!linearIssueId) {
+        logger.debug({}, 'Skipping state transition (no issue ID)');
+        return;
+      }
 
-    async markQa(userId: string, linearIssueId: string): Promise<void> {
-      await transitionState(userId, linearIssueId, 'qa', 'QA');
+      const result = await linearAgentClient.updateIssueState({
+        userId,
+        issueId: linearIssueId,
+        state: 'in_review',
+      });
+
+      if (!result.ok) {
+        logger.warn({ linearIssueId, error: result.error }, 'Failed to update Linear issue to In Review');
+      }
     },
   };
 }

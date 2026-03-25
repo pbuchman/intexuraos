@@ -19,14 +19,8 @@ const INTENT_BADGE_STYLES: Record<HellscriptIntentKind, string> = {
     'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
 };
 
-const INTENT_DISPLAY_LABELS: Partial<Record<HellscriptIntentKind, string>> = {
-  append_thought: 'append whisper',
-  delete_thought: 'delete whisper',
-  reorder_thoughts: 'reorder whispers',
-};
-
 function formatIntentLabel(kind: HellscriptIntentKind): string {
-  return INTENT_DISPLAY_LABELS[kind] ?? kind.replace(/_/g, ' ');
+  return kind.replace(/_/g, ' ');
 }
 
 
@@ -34,7 +28,7 @@ export function HellscriptTimeline({ events }: HellscriptTimelineProps): React.J
   if (events.length === 0) {
     return (
       <div className="py-8 text-center text-sm text-slate-400 dark:text-slate-500">
-        No events yet. Start by typing a whisper below.
+        No events yet. Start by typing a thought below.
       </div>
     );
   }

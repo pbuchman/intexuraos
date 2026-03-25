@@ -59,11 +59,11 @@ describe('getStartOfWeek', () => {
 });
 
 describe('getCurrentWeekRange', () => {
-  it('returns a range spanning exactly 7 calendar days', () => {
+  it('returns a range spanning exactly 7 days', () => {
     const { start, end } = getCurrentWeekRange();
 
     const diffMs = end.getTime() - start.getTime();
-    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
 
     expect(diffDays).toBe(7);
   });
