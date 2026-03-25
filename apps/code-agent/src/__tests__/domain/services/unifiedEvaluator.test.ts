@@ -479,7 +479,7 @@ describe('UnifiedEvaluator', () => {
       );
     });
 
-    it('creates review task for issue_comment request_review', async () => {
+    it('creates review task for @review issue_comment with selected worker type', async () => {
       const deps = createFakeDeps({
         webhookRules: {
           evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
@@ -488,9 +488,10 @@ describe('UnifiedEvaluator', () => {
           triage: {
             action: 'request_review',
             reviewTypes: ['architecture'],
+            workerType: 'qwen',
           },
           usage: { costUsd: 0.002, toolCalls: [] },
-          reasoning: 'The comment explicitly requested architecture review.',
+          reasoning: 'The comment explicitly requested architecture review with qwen.',
         })),
         createReviewTask: vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-comment-1', workerType: 'qwen' })),
       });
@@ -507,6 +508,7 @@ describe('UnifiedEvaluator', () => {
         logger,
         expect.objectContaining({
           reviewTypes: ['architecture'],
+          workerType: 'qwen',
           reviewComment: '@review architecture',
         })
       );
@@ -1327,10 +1329,10 @@ describe('LLM triage retry for pull_request events', () => {
     expect(evaluateEvent).toHaveBeenCalledTimes(2);
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ eventId: prEvent.id }),
-      'LLM triage failed for pull_request event, retrying'
+      'LLM triage failed for pull_request event, retrying with correction context'
     );
-    // Second call: same event, no correction context (removed from evaluateEvent signature)
-    expect(evaluateEvent).toHaveBeenCalledWith(prEvent);
+    // Second call should include correctionContext
+    expect(evaluateEvent).toHaveBeenCalledWith(prEvent, expect.stringContaining('Your previous attempt produced the following error'));
     // Should record a skip decision (from the successful second attempt)
     expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({ decision: 'skip', reason: expect.stringContaining('Trivial') })
@@ -1390,7 +1392,7 @@ describe('LLM triage retry for pull_request events', () => {
     // Both warns fire: retry warn first, then the existing 'LLM triage failed' warn
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ eventId: prEvent.id }),
-      'LLM triage failed for pull_request event, retrying'
+      'LLM triage failed for pull_request event, retrying with correction context'
     );
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ eventId: prEvent.id }),
@@ -1408,7 +1410,7 @@ describe('LLM retry for pull_request events', () => {
     logger = createFakeLogger();
   });
 
-  it('retry recovers on second attempt', async () => {
+  it('retry recovers on second attempt with correction context', async () => {
     const evaluateEvent = vi.fn()
       .mockResolvedValueOnce(err({ code: 'API_ERROR', message: 'Empty response from model' }))
       .mockResolvedValueOnce(ok({
@@ -1430,9 +1432,13 @@ describe('LLM retry for pull_request events', () => {
 
     expect(evaluateEvent).toHaveBeenCalledTimes(2);
 
-    // Both calls: only event arg (no correction context)
+    // First call: no correction context (only event arg)
     expect(evaluateEvent.mock.calls[0]).toHaveLength(1);
-    expect(evaluateEvent.mock.calls[1]).toHaveLength(1);
+
+    // Second call: includes correction context with the original error
+    const secondCallArgs = evaluateEvent.mock.calls[1] as [unknown, string];
+    expect(secondCallArgs[1]).toContain('Empty response from model');
+    expect(secondCallArgs[1]).toContain('MUST call one of the provided tools');
 
     expect(deps.eventDecisionRepo.save).toHaveBeenCalledTimes(1);
     expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
@@ -1444,7 +1450,7 @@ describe('LLM retry for pull_request events', () => {
     );
   });
 
-  it('no retry for issue_comment', async () => {
+  it('no retry for issue_comment — no correction context passed', async () => {
     const evaluateEvent = vi.fn()
       .mockResolvedValueOnce(err({ code: 'API_ERROR', message: 'Empty response from model' }));
 
@@ -1460,11 +1466,11 @@ describe('LLM retry for pull_request events', () => {
     await evaluator.evaluate(event, logger);
 
     expect(evaluateEvent).toHaveBeenCalledTimes(1);
-    // Only event arg passed
+    // Only event arg passed — no correction context
     expect(evaluateEvent.mock.calls[0]).toHaveLength(1);
   });
 
-  it('fallback to skip on double failure — no correction context on retry', async () => {
+  it('fallback to skip on double failure — correction context passed on retry', async () => {
     const evaluateEvent = vi.fn()
       .mockResolvedValueOnce(err({ code: 'API_ERROR', message: 'Empty response from model' }))
       .mockResolvedValueOnce(err({ code: 'API_ERROR', message: 'Empty response from model again' }));
@@ -1482,9 +1488,13 @@ describe('LLM retry for pull_request events', () => {
 
     expect(evaluateEvent).toHaveBeenCalledTimes(2);
 
-    // Both calls: only event arg (no correction context)
+    // First call: no correction context (only event arg)
     expect(evaluateEvent.mock.calls[0]).toHaveLength(1);
-    expect(evaluateEvent.mock.calls[1]).toHaveLength(1);
+
+    // Second call: includes correction context with the first error message
+    const secondCallArgs = evaluateEvent.mock.calls[1] as [unknown, string];
+    expect(secondCallArgs[1]).toContain('Empty response from model');
+    expect(secondCallArgs[1]).toContain('MUST call one of the provided tools');
 
     expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({
