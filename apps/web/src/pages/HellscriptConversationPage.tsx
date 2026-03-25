@@ -53,7 +53,7 @@ export function HellscriptConversationPage(): React.JSX.Element {
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
             {isNewConversation
-              ? 'New Conversation'
+              ? 'New Summoning'
               : workspace?.buffer.title ?? 'Loading...'}
           </h2>
           <Link
