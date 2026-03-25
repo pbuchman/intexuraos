@@ -328,6 +328,30 @@ describe('REVIEW_SCHEMA', () => {
       expect(result.data.requirements_tracker_updated).toBe('');
     }
   });
+
+  it('accepts gh_actions_status field', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/901',
+      review_comments_posted: '3',
+      review_types: 'code_quality,security',
+      gh_actions_status: 'all checks passed',
+      summary: 'Review summary.',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('defaults gh_actions_status to empty string when omitted', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/901',
+      review_comments_posted: '3',
+      review_types: 'code_quality,security',
+      summary: 'Review summary.',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.gh_actions_status).toBe('');
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -688,6 +712,7 @@ describe('OrchestratorCompletionVerifier', () => {
         review_comments_posted: '3',
         review_types: 'code_quality,security',
         requirements_tracker_updated: '',
+        gh_actions_status: '',
         summary: 'Reviewed and posted 3 comments.',
       });
     });
