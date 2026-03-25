@@ -107,5 +107,5 @@ export interface OpenRouterResponse {
     finish_reason: string;
   }[];
   usage?: OpenRouterUsage;
-  annotations?: string[];
+  annotations?: (string | { url?: string })[];
 }
