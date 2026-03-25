@@ -297,6 +297,8 @@ Behavior:
   - `execution_memory_ids_rejected`
   - `execution_memory_usage_summary`
 
+**Field-name mapping:** The orchestrator completion contract (`EXECUTION_AGENT_FINAL`) uses short names (`memory_ids_used`, `memory_ids_rejected`, `memory_usage_summary`). The `code-agent` webhook handler maps these to `execution_`-prefixed names (`execution_memory_ids_used`, `execution_memory_ids_rejected`, `execution_memory_usage_summary`) when persisting to the task document and application record. This prefix disambiguates memory fields from other task-level fields. The mapping is performed in `webhookRoutes.ts` when extracting the completion payload.
+
 ### Scheduler-backed processor
 
 Create:
@@ -508,7 +510,7 @@ Output schema:
 ```json
 {
   "decision": "create | skip",
-  "skipReason": "infra_only | insufficient_signal | already_completed | no_reusable_lesson | ",
+  "skipReason": "infra_only | insufficient_signal | already_completed | no_reusable_lesson",
   "evidenceSummary": "string",
   "memories": [
     {
@@ -554,6 +556,22 @@ When merging:
 - refresh `evidenceSummary`
 - recompute `qualityScore`
 - preserve counters
+
+### `qualityScore` formula
+
+`qualityScore` is a number in the range `[0, 1]` computed as:
+
+```
+qualityScore = 0.50 * effectiveness + 0.30 * confidence + 0.20 * recency
+```
+
+Where:
+
+- `effectiveness = (positiveCount + 1) / (applicationCount + 2)` — Laplace-smoothed positive outcome ratio
+- `confidence` — the distillation model's self-reported confidence (0–1) from the most recent distillation that produced or refreshed this memory
+- `recency = max(0, 1 - daysSinceLastApplication / 180)` — linear decay over 180 days since the memory was last applied to a task; memories never applied default to `recency = 1` at creation
+
+On merge, recompute using the merged counters and the newer distillation confidence. The formula is implementation-level and may be tuned in future versions without a plan amendment.
 
 ## Application Evaluation Pipeline
 
