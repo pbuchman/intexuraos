@@ -65,15 +65,11 @@ function buildPRSection(input: GitHubAgentPromptInput): string[] {
     '',
     '### PR Description',
     '',
-    /* v8 ignore start -- schema: template conditional for empty PR body @preserve */
     input.prBody !== '' ? input.prBody : '(no description)',
-    /* v8 ignore stop @preserve */
     '',
     '### Changed Files',
     '',
-    /* v8 ignore start -- schema: template conditional for empty file list @preserve */
     fileList !== '' ? fileList : '  (no files)',
-    /* v8 ignore stop @preserve */
     '',
     '## Instructions',
     '',
@@ -123,11 +119,9 @@ function buildPRSection(input: GitHubAgentPromptInput): string[] {
 
 function buildCommentSection(input: GitHubAgentPromptInput): string[] {
   const triageSection = buildIssueCommentTriageSection({
-    /* v8 ignore start -- ts-type: null coalescing for optional prompt inputs @preserve */
     commentBody: input.commentBody ?? '',
     isEdit: input.isEdit ?? false,
     isBotSender: input.isBotSender ?? false,
-    /* v8 ignore stop @preserve */
     senderLogin: input.senderLogin,
   });
 
