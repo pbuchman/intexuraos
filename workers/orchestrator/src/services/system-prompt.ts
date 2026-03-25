@@ -646,7 +646,7 @@ Rules:
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '7.1.0',
+  version: '7.2.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
       params;
@@ -690,7 +690,61 @@ You have been dispatched to review a pull request. The review types requested ar
 - **security**: Injection vulnerabilities (SQL, XSS, command), authentication/authorization issues, secrets exposure, OWASP top 10
 - **architecture**: Separation of concerns, dependency direction, API design, scalability, coupling/cohesion
 - **plan_review**: Plan document validation. Read the plan file carefully. Validate task decomposition, TDD discipline, file path accuracy, missing steps. Validate against the codebase: do referenced files exist? Do patterns match? Are interfaces correct? Flag over-engineering, missing error handling, incorrect assumptions about existing code. Do NOT review for code_quality/security/architecture — there is no code to review.
-- **test_quality**: (1) False positives — tests that pass but don't verify behavior (2) Testing granularity — too coarse or too fine (3) v8 ignore legitimacy — validate category, explanation names blocker not code, branch is genuinely untestable (4) Test isolation — state leaks, execution order deps (5) Assertion quality — weak assertions, missing edge cases
+- **test_quality**: Comprehensive test quality review. Analyze ALL test files in the PR across these categories:
+
+  **(1) False Positives** — Tests that pass but fail to verify actual behavior:
+  - Asserting that a mock returns what you configured it to return (circular verification)
+  - \`expect(result).toBeDefined()\` or \`expect(result).toBeTruthy()\` when a stronger assertion (\`toStrictEqual\`, \`toMatchObject\`) is feasible
+  - Testing that a function was called (spy verification with \`toHaveBeenCalledWith\`) without verifying the observable effect of that call
+  - \`toContain\` on a large string when an exact match or structured assertion is possible
+  - Tests with zero assertions (relying solely on "no error thrown")
+  - Tests that only exercise the happy path with no edge cases or error scenarios
+
+  **(2) Test Isolation & Lifecycle** — Tests must not leak state:
+  - Service container pattern: \`setServices({...fakes})\` in \`beforeEach\`, \`resetServices()\` in \`afterEach\` — flag tests that skip either
+  - Shared mutable fixtures across tests — each test must set up its own state
+  - Tests that depend on execution order (test B fails if test A doesn't run first)
+  - Missing cleanup of side effects (nock interceptors, timers, global state)
+  - For nock: every test using \`nock()\` must call \`nock.cleanAll()\` in \`afterEach\` or use \`nock.disableNetConnect()\` to catch leaks
+
+  **(3) Assertion Strength** — Assertions must be as specific as possible:
+  - Weak type assertions: \`toBeTruthy()\` instead of \`=== true\` (required by strictBooleanExpressions)
+  - Missing error message assertions: catching errors without verifying \`.message\` content
+  - No negative test cases: only testing what should succeed, never what should fail
+  - Using \`toEqual\` when \`toStrictEqual\` would catch type/prototype mismatches
+  - Result type handling: tests must narrow with \`if (!result.ok)\` before accessing \`.value\` — never \`(result as any).value\`
+
+  **(4) Testing Granularity** — Right level of abstraction:
+  - Too coarse: one test verifying multiple independent behaviors (should be split)
+  - Too fine: testing private internals or implementation details instead of public API behavior
+  - Missing boundary tests: off-by-one, empty arrays, null inputs, maximum lengths
+  - Route tests should use \`app.inject()\` for integration, domain logic should have unit tests
+
+  **(5) Mock & Fake Patterns** — Correct use of test doubles:
+  - Using \`vi.fn()\` when an in-memory fake would be more maintainable and realistic
+  - Mock return values that don't match the real dependency's type signature
+  - Over-mocking: mocking the unit under test instead of its dependencies
+  - HTTP mocking: must use \`nock\` for HTTP calls, not manual fetch stubs
+  - Fakes should implement the same interface as the real dependency (\`*Deps\` types)
+
+  **(6) v8 Ignore Legitimacy** — For every v8 ignore coverage exemption comment in test or source files:
+  - Category must be one of: \`ts-type\`, \`regex\`, \`module-init\`, \`async-timing\`, \`test-infra\`, \`upstream\`, \`module-mock\`, \`schema\`, \`source-map\`, \`auth-guard\`
+  - Explanation must name the TESTING BLOCKER (e.g., "FakeHttpClient cannot simulate AbortError"), not describe the code (e.g., "error handling for failed request")
+  - The branch must be genuinely untestable — if a mock/fake could trigger it, the v8 ignore is invalid
+  - These patterns are NEVER valid for v8 ignore: catch blocks, error paths, validation branches, conditional returns, if/else branches, default switch cases, null guards
+  - Flag any v8 ignore that appears to be LLM laziness (skipping testing effort rather than genuinely untestable code)
+
+  **(7) Test Structure & Naming** — Readability and maintainability:
+  - Test descriptions should describe behavior, not implementation ("calculates total with tax" not "calls calculateTax function")
+  - \`describe\` blocks should group by feature/behavior, not by method name
+  - Arrange-Act-Assert pattern should be clear in each test
+  - Test files should mirror source file structure (\`src/foo.ts\` → \`src/__tests__/foo.test.ts\`)
+
+  **(8) TypeScript Strictness in Tests** — Tests must follow the same strict TypeScript rules as production code:
+  - \`noUncheckedIndexedAccess\`: use \`arr[0] ?? fallback\` not bare \`arr[0]\`
+  - \`exactOptionalPropertyTypes\`: don't assign \`undefined\` to optional properties
+  - \`strictBooleanExpressions\`: use \`=== true\` not bare truthiness checks
+  - \`String()\` for template literal number interpolation
 
 ${
   linearIssueId !== undefined
