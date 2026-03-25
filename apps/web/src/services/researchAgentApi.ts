@@ -7,6 +7,7 @@ import type {
   PartialFailureDecision,
   Research,
   SaveDraftRequest,
+  OpenRouterModelsResponse,
   SupportedModel,
 } from './researchAgentApi.types.js';
 
@@ -240,6 +241,19 @@ export async function exportToNotion(accessToken: string, id: string): Promise<R
   );
 }
 
+/**
+ * Fetch curated OpenRouter models.
+ */
+export async function fetchOpenRouterModels(
+  accessToken: string
+): Promise<OpenRouterModelsResponse> {
+  return await apiRequest<OpenRouterModelsResponse>(
+    config.ResearchAgentUrl,
+    '/research/openrouter/models',
+    accessToken
+  );
+}
+
 export type {
   ConfirmPartialFailureResponse,
   CreateResearchRequest,
@@ -254,6 +268,8 @@ export type {
   ResearchStatus,
   SaveDraftRequest,
   SupportedModel,
+  OpenRouterModelInfo,
+  OpenRouterModelsResponse,
   ValidateInputRequest,
   ValidateInputResponse,
 } from './researchAgentApi.types.js';
