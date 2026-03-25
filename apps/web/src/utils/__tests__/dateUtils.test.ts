@@ -59,13 +59,19 @@ describe('getStartOfWeek', () => {
 });
 
 describe('getCurrentWeekRange', () => {
-  it('returns a range spanning exactly 7 days', () => {
+  it('returns a range spanning exactly 7 calendar days', () => {
     const { start, end } = getCurrentWeekRange();
 
-    const diffMs = end.getTime() - start.getTime();
-    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+    const cursor = new Date(start);
+    let dayCount = 0;
 
-    expect(diffDays).toBe(7);
+    while (cursor < end) {
+      cursor.setDate(cursor.getDate() + 1);
+      dayCount++;
+    }
+
+    expect(dayCount).toBe(7);
+    expect(cursor.getTime()).toBe(end.getTime());
   });
 
   it('start is always a Monday at midnight', () => {
