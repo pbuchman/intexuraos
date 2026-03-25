@@ -30,6 +30,11 @@ describe('DomainSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts "construction_building" as a valid domain', () => {
+    const result = DomainSchema.safeParse('construction_building');
+    expect(result.success).toBe(true);
+  });
+
   it('rejects invalid domain values', () => {
     const result = DomainSchema.safeParse('invalid_domain');
     expect(result.success).toBe(false);
