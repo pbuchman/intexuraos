@@ -381,7 +381,7 @@ Apply the same `excludedPrNumbers: data.excludedPrNumbers ?? []` pattern in all 
 Run: `cd /repo && pnpm vitest run apps/code-agent/src/__tests__/infra/firestore/mergeQueueWatchRepository.test.ts`
 Expected: PASS
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 git add apps/code-agent/src/infra/firestore/mergeQueueWatchRepository.ts apps/code-agent/src/__tests__/infra/firestore/mergeQueueWatchRepository.test.ts
@@ -392,11 +392,11 @@ git commit -m "feat(code-agent): persist excludedPrNumbers in Firestore merge qu
 
 **Files:**
 - Modify: `apps/code-agent/src/routes/merge-queue/serializeWatch.ts`
-- Test: Check if there's an existing `serializeWatch.test.ts`; if not, the serialization is implicitly tested via the route tests
+- Test: `apps/code-agent/src/__tests__/routes/merge-queue/serializeWatch.test.ts` (confirmed to exist)
 
 - [ ] **Step 1: Write a test for `serializeWatch` including `excludedPrNumbers`**
 
-Check for an existing `serializeWatch.test.ts`. If it exists, add a test case. If not, add a targeted test in the route tests (`mergeQueueRoutes.test.ts`) that verifies the `GET /code/merge-queue/watches` response includes `excludedPrNumbers`. For example, add to the `GET /code/merge-queue/watches` describe block:
+Add a test case in the existing `apps/code-agent/src/__tests__/routes/merge-queue/serializeWatch.test.ts` that verifies `excludedPrNumbers` appears in the serialized output. Additionally, add a test in the route tests (`mergeQueueRoutes.test.ts`) that verifies the full `GET /code/merge-queue/watches` response includes `excludedPrNumbers`. Add to the `GET /code/merge-queue/watches` describe block:
 
 ```typescript
 it('includes excludedPrNumbers in serialized watch response', async () => {
@@ -973,13 +973,16 @@ const [exclusionError, setExclusionError] = useState<string | null>(null);
 
 - [ ] **Step 2: Sync exclusions from watch data**
 
-Add an effect that syncs exclusion state when watch data changes (e.g., initial load, polling):
+Add an effect that syncs exclusion state when watch data changes (e.g., initial load, polling). **Important:** Guard with an in-flight flag to prevent poll-driven syncs from overwriting optimistic state while an exclusion API call is pending.
 
 ```typescript
-// Sync exclusion state from active watch
+const [exclusionInFlight, setExclusionInFlight] = useState(false);
+
+// Sync exclusion state from active watch (skips while API call is in-flight)
 // Note: Use `watches` and `selectedBranch` directly (not via refs) since they
 // are already in the dependency array and the effect re-runs when they change.
 useEffect(() => {
+  if (exclusionInFlight) return;  // Don't overwrite optimistic state during API call
   const activeWatch = watches.find(
     (w) => w.baseBranch === selectedBranch && w.status === 'active'
   );
@@ -988,98 +991,105 @@ useEffect(() => {
   } else {
     setExcludedPrNumbers(new Set());
   }
-}, [watches, selectedBranch]);
+}, [watches, selectedBranch, exclusionInFlight]);
 ```
+
+The toggle/bulk action handlers should set `setExclusionInFlight(true)` before the API call and `setExclusionInFlight(false)` in the finally block. This prevents a 30s poll from reverting a checkbox toggle that hasn't been confirmed by Firestore yet.
 
 - [ ] **Step 3: Implement the toggle handler**
 
-Add the `handleToggleExclusion` callback:
+Add the `handleToggleExclusion` callback. **Important:** Keep the state updater pure — compute next state in the updater, fire the API call outside it. This prevents React Strict Mode (which calls updaters twice in dev) from double-firing API calls.
 
 ```typescript
 const handleToggleExclusion = useCallback((prNumber: number): void => {
   setExclusionError(null);
 
+  // Compute next state (pure updater — no side effects)
+  const prev = excludedPrNumbersRef.current;
+  const next = new Set(prev);
+  if (next.has(prNumber)) {
+    next.delete(prNumber);
+  } else {
+    next.add(prNumber);
+  }
+
   // Optimistic update
-  setExcludedPrNumbers((prev) => {
-    const next = new Set(prev);
-    if (next.has(prNumber)) {
-      next.delete(prNumber);
-    } else {
-      next.add(prNumber);
-    }
+  setExcludedPrNumbers(next);
 
-    // Persist if active watch exists
-    const activeWatch = watchesRef.current.find(
-      (w) => w.baseBranch === selectedBranchRef.current && w.status === 'active'
-    );
-    if (activeWatch !== undefined) {
-      void (async (): Promise<void> => {
-        try {
-          const token = await getAccessToken();
-          await updateExclusions(token, activeWatch.watchId, [...next]);
-        } catch (err) {
-          // Revert on failure
-          setExcludedPrNumbers(prev);
-          setExclusionError(err instanceof Error ? err.message : 'Failed to update exclusion');
-          setTimeout(() => { setExclusionError(null); }, 3000);
-        }
-      })();
-    }
-
-    return next;
-  });
+  // Persist outside the updater
+  const activeWatch = watchesRef.current.find(
+    (w) => w.baseBranch === selectedBranchRef.current && w.status === 'active'
+  );
+  if (activeWatch !== undefined) {
+    void (async (): Promise<void> => {
+      try {
+        const token = await getAccessToken();
+        await updateExclusions(token, activeWatch.watchId, [...next]);
+      } catch (err) {
+        // Revert on failure
+        setExcludedPrNumbers(prev);
+        setExclusionError(err instanceof Error ? err.message : 'Failed to update exclusion');
+        setTimeout(() => { setExclusionError(null); }, 3000);
+      }
+    })();
+  }
 }, [getAccessToken]);
+```
+
+Note: This requires an `excludedPrNumbersRef` (similar to `watchesRef`):
+
+```typescript
+const excludedPrNumbersRef = useRef(excludedPrNumbers);
+excludedPrNumbersRef.current = excludedPrNumbers;
 ```
 
 - [ ] **Step 4: Implement bulk actions**
 
+Same pattern: pure state computation, API call outside the updater.
+
 ```typescript
 const handleSelectAll = useCallback((): void => {
-  setExcludedPrNumbers((prev) => {
-    const next = new Set<number>();
+  const prev = excludedPrNumbersRef.current;
+  const next = new Set<number>();  // empty = all included
+  setExcludedPrNumbers(next);
 
-    const activeWatch = watchesRef.current.find(
-      (w) => w.baseBranch === selectedBranchRef.current && w.status === 'active'
-    );
-    if (activeWatch !== undefined) {
-      void (async (): Promise<void> => {
-        try {
-          const token = await getAccessToken();
-          await updateExclusions(token, activeWatch.watchId, []);
-        } catch (err) {
-          setExcludedPrNumbers(prev);
-          setExclusionError(err instanceof Error ? err.message : 'Failed to update exclusions');
-          setTimeout(() => { setExclusionError(null); }, 3000);
-        }
-      })();
-    }
-
-    return next;
-  });
+  const activeWatch = watchesRef.current.find(
+    (w) => w.baseBranch === selectedBranchRef.current && w.status === 'active'
+  );
+  if (activeWatch !== undefined) {
+    void (async (): Promise<void> => {
+      try {
+        const token = await getAccessToken();
+        await updateExclusions(token, activeWatch.watchId, []);
+      } catch (err) {
+        setExcludedPrNumbers(prev);
+        setExclusionError(err instanceof Error ? err.message : 'Failed to update exclusions');
+        setTimeout(() => { setExclusionError(null); }, 3000);
+      }
+    })();
+  }
 }, [getAccessToken]);
 
 const handleDeselectAll = useCallback((eligiblePrNumbers: number[]): void => {
-  setExcludedPrNumbers((prev) => {
-    const next = new Set(eligiblePrNumbers);
+  const prev = excludedPrNumbersRef.current;
+  const next = new Set(eligiblePrNumbers);
+  setExcludedPrNumbers(next);
 
-    const activeWatch = watchesRef.current.find(
-      (w) => w.baseBranch === selectedBranchRef.current && w.status === 'active'
-    );
-    if (activeWatch !== undefined) {
-      void (async (): Promise<void> => {
-        try {
-          const token = await getAccessToken();
-          await updateExclusions(token, activeWatch.watchId, [...next]);
-        } catch (err) {
-          setExcludedPrNumbers(prev);
-          setExclusionError(err instanceof Error ? err.message : 'Failed to update exclusions');
-          setTimeout(() => { setExclusionError(null); }, 3000);
-        }
-      })();
-    }
-
-    return next;
-  });
+  const activeWatch = watchesRef.current.find(
+    (w) => w.baseBranch === selectedBranchRef.current && w.status === 'active'
+  );
+  if (activeWatch !== undefined) {
+    void (async (): Promise<void> => {
+      try {
+        const token = await getAccessToken();
+        await updateExclusions(token, activeWatch.watchId, [...next]);
+      } catch (err) {
+        setExcludedPrNumbers(prev);
+        setExclusionError(err instanceof Error ? err.message : 'Failed to update exclusions');
+        setTimeout(() => { setExclusionError(null); }, 3000);
+      }
+    })();
+  }
 }, [getAccessToken]);
 ```
 
@@ -1257,12 +1267,13 @@ interface PrListProps {
 
 - [ ] **Step 2: Compute selection stats**
 
-After filtering PRs, compute selection stats:
+Compute selection stats over the **full** `prs` array (not `filteredPrs`) so the counter stays stable as users toggle status filters. The counter reflects total eligible PRs regardless of which status filter is active:
 
 ```typescript
-const eligiblePrs = filteredPrs.filter((pr) => pr.authorIsEligible);
-const selectedCount = eligiblePrs.filter((pr) => !excludedPrNumbers.has(pr.number)).length;
-const totalEligible = eligiblePrs.length;
+// Use full prs array (pre-filter) so counter is stable across filter changes
+const allEligiblePrs = prs.filter((pr) => pr.authorIsEligible);
+const selectedCount = allEligiblePrs.filter((pr) => !excludedPrNumbers.has(pr.number)).length;
+const totalEligible = allEligiblePrs.length;
 ```
 
 - [ ] **Step 3: Add selection summary and bulk actions**
@@ -1288,7 +1299,7 @@ Before the column header, add:
         </button>
         <button
           type="button"
-          onClick={(): void => { onDeselectAll(eligiblePrs.map((pr) => pr.number)); }}
+          onClick={(): void => { onDeselectAll(allEligiblePrs.map((pr) => pr.number)); }}
           disabled={selectedCount === 0}
           className="text-xs text-blue-600 hover:underline disabled:text-slate-400 disabled:no-underline dark:text-blue-400"
         >
