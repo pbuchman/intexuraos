@@ -239,7 +239,7 @@ describe('evaluateEvent', () => {
       }
     });
 
-    it('returns skip with empty reason treated as no reason', async () => {
+    it('returns LLM_FAILED when skip is called with empty reason', async () => {
       const deps = createDeps({
         toolCallingClient: createFakeToolCallingClient({
           toolToCall: 'skip',
@@ -250,12 +250,10 @@ describe('evaluateEvent', () => {
 
       const result = await evaluateEvent(deps, event);
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.triage).toEqual({
-          action: 'skip',
-          reason: '',
-        });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
+        expect(result.error.message).toContain('Skip reason must not be empty');
       }
     });
 
@@ -272,12 +270,9 @@ describe('evaluateEvent', () => {
 
       const result = await evaluateEvent(deps, event);
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.triage).toEqual({
-          action: 'skip',
-          reason: 'No tool called',
-        });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
       }
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ reviewType: 'performance' }),
@@ -285,25 +280,16 @@ describe('evaluateEvent', () => {
       );
     });
 
-    it('returns skip with warn log when no tool is called for PR event', async () => {
-      const logger = createFakeLogger();
+    it('returns LLM_FAILED when no tool is called for PR event', async () => {
       const deps = createDeps({
         toolCallingClient: createFakeToolCallingClient({ callTools: false }),
-        logger,
       });
       const event = createFakePREvent();
       const result = await evaluateEvent(deps, event);
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.triage).toEqual({
-          action: 'skip',
-          reason: 'No tool called',
-        });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
       }
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ prNumber: event.pullRequestNumber }),
-        'GitHub Agent PR triage completed without calling any tool — defaulting to skip',
-      );
     });
 
     it('handles multiple review types', async () => {
@@ -439,16 +425,13 @@ describe('evaluateEvent', () => {
 
       const result = await evaluateEvent(deps, event);
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.triage).toEqual({
-          action: 'skip',
-          reason: 'No tool called',
-        });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
       }
     });
 
-    it('uses event.senderLogin directly for user resolution', async () => {
+    it('resolves bot sender to repo owner before user lookup', async () => {
       const userClient = createFakeUserServiceClient();
       const deps = createDeps({
         userServiceClient: userClient,
@@ -461,8 +444,24 @@ describe('evaluateEvent', () => {
 
       await evaluateEvent(deps, event);
 
-      // Uses event.senderLogin directly — no bot remapping in evaluateEvent
-      expect(userClient.resolveGitHubUsername).toHaveBeenCalledWith('intexuraos-code-worker[bot]');
+      // Should resolve 'pbuchman' (repo owner), not 'intexuraos-code-worker[bot]'
+      expect(userClient.resolveGitHubUsername).toHaveBeenCalledWith('pbuchman');
+    });
+
+    it('does not remap non-bot sender for user lookup', async () => {
+      const userClient = createFakeUserServiceClient();
+      const deps = createDeps({
+        userServiceClient: userClient,
+        allowedBots: new Set(['claude[bot]', 'intexuraos-code-worker[bot]']),
+      });
+      const event = createFakePREvent({
+        senderLogin: 'dev-user',
+        repository: 'pbuchman/intexuraos',
+      });
+
+      await evaluateEvent(deps, event);
+
+      expect(userClient.resolveGitHubUsername).toHaveBeenCalledWith('dev-user');
     });
 
     it('handles synchronize action', async () => {
@@ -516,7 +515,7 @@ describe('evaluateEvent', () => {
       );
     });
 
-    it('sends a single user message without correction context', async () => {
+    it('includes correctionContext in messages when provided on retry', async () => {
       let capturedMessages: { role: string; content: string }[] = [];
       const toolClient: ToolCallingClient = {
         async run(params): ReturnType<ToolCallingClient['run']> {
@@ -536,15 +535,166 @@ describe('evaluateEvent', () => {
 
       const deps = createDeps({ toolCallingClient: toolClient });
       const event = createFakePREvent();
+      const correction = 'Your previous attempt failed. You MUST call a tool.';
 
-      await evaluateEvent(deps, event);
+      await evaluateEvent(deps, event, correction);
 
-      expect(capturedMessages).toHaveLength(1);
+      expect(capturedMessages).toHaveLength(2);
       expect(capturedMessages[0]?.content).toBe('Evaluate this PR and decide what reviews to request.');
+      expect(capturedMessages[1]?.content).toBe(correction);
+    });
+  });
+
+  describe('plan-only PR detection', () => {
+    it('short-circuits to plan_review for plan-only PRs', async () => {
+      const planFiles = [
+        { filename: 'docs/plans/2026-03-20-my-plan.md', status: 'added', additions: 50, deletions: 0 },
+      ];
+      const prClient = createFakeGitHubPRClient();
+      (prClient.getPullRequestFiles as ReturnType<typeof vi.fn>).mockResolvedValue(ok(planFiles));
+
+      const deps: GitHubAgentDeps = {
+        logger: createFakeLogger(),
+        gitHubPRClient: prClient,
+        toolCallingClient: createFakeToolCallingClient({ callTools: false }),
+        userServiceClient: createFakeUserServiceClient(),
+        allowedBots: new Set(['bot1']),
+      };
+
+      const event = createFakePREvent();
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.triage).toEqual({
+          action: 'request_review',
+          reviewTypes: ['plan_review'],
+        });
+        expect(result.value.usage.costUsd).toBe(0);
+        expect(result.value.reasoning).toContain('Plan-only PR');
+      }
+    });
+
+    it('does not short-circuit for plan+code PRs', async () => {
+      const mixedFiles = [
+        { filename: 'docs/plans/2026-03-20-my-plan.md', status: 'added', additions: 50, deletions: 0 },
+        { filename: 'src/index.ts', status: 'modified', additions: 10, deletions: 5 },
+      ];
+      const prClient = createFakeGitHubPRClient();
+      (prClient.getPullRequestFiles as ReturnType<typeof vi.fn>).mockResolvedValue(ok(mixedFiles));
+
+      const deps: GitHubAgentDeps = {
+        logger: createFakeLogger(),
+        gitHubPRClient: prClient,
+        toolCallingClient: createFakeToolCallingClient(),
+        userServiceClient: createFakeUserServiceClient(),
+        allowedBots: new Set(['bot1']),
+      };
+
+      const event = createFakePREvent();
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Should go through normal LLM triage, not the plan short-circuit
+        expect(result.value.triage).not.toEqual(
+          expect.objectContaining({ reviewTypes: ['plan_review'] })
+        );
+        // Verify LLM was invoked (non-zero cost indicates LLM triage ran)
+        expect(result.value.usage.costUsd).toBeGreaterThan(0);
+      }
     });
   });
 
   describe('issue_comment events', () => {
+    it('evaluates @review comment and returns request_review triage with normalized worker type', async () => {
+      const toolClient: ToolCallingClient = {
+        async run(params): ReturnType<ToolCallingClient['run']> {
+          const requestReview = params.tools.find((t: ToolDefinition) => t.name === 'request_review');
+          if (requestReview !== undefined) {
+            await requestReview.run({ review_type: 'architecture', worker_type: 'qwen' });
+            await requestReview.run({ review_type: 'security', worker_type: 'qwen' });
+          }
+          return ok({
+            content: 'The user explicitly asked for architecture and security review with qwen.',
+            toolCallsMade: 2,
+            iterationCount: 1,
+            usage: { inputTokens: 120, outputTokens: 40, totalTokens: 160, costUsd: 0.002 },
+          });
+        },
+      };
+      const deps = createDeps({ toolCallingClient: toolClient });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: '@review architecture, security with qwen',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.triage).toEqual({
+          action: 'request_review',
+          reviewTypes: ['architecture', 'security'],
+          workerType: 'qwen',
+        });
+      }
+    });
+
+    it('returns request_review triage without workerType when worker_type is omitted', async () => {
+      const toolClient: ToolCallingClient = {
+        async run(params): ReturnType<ToolCallingClient['run']> {
+          const requestReview = params.tools.find((t: ToolDefinition) => t.name === 'request_review');
+          if (requestReview !== undefined) {
+            await requestReview.run({ review_type: 'architecture' });
+          }
+          return ok({
+            content: 'Architecture review without specifying worker type.',
+            toolCallsMade: 1,
+            iterationCount: 1,
+            usage: { inputTokens: 100, outputTokens: 30, totalTokens: 130, costUsd: 0.001 },
+          });
+        },
+      };
+      const deps = createDeps({ toolCallingClient: toolClient });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: '@review architecture',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.triage).toEqual({
+          action: 'request_review',
+          reviewTypes: ['architecture'],
+        });
+        // workerType should NOT be present
+        expect('workerType' in result.value.triage).toBe(false);
+      }
+    });
+
+    it('returns LLM_FAILED when @review comment does not call request_review', async () => {
+      const deps = createDeps({
+        toolCallingClient: createFakeToolCallingClient({ callTools: false }),
+      });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: '@review architecture',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
+      }
+    });
+
     it('evaluates a comment and returns dispatch triage', async () => {
       const deps = createDeps({
         toolCallingClient: createFakeToolCallingClient({
@@ -636,11 +786,9 @@ describe('evaluateEvent', () => {
       }
     });
 
-    it('returns skip with warn log when no tool is called for comment event', async () => {
-      const logger = createFakeLogger();
+    it('returns LLM_FAILED when no tool is called', async () => {
       const deps = createDeps({
         toolCallingClient: createFakeToolCallingClient({ callTools: false }),
-        logger,
       });
       const event = createFakePREvent({
         eventType: 'issue_comment',
@@ -650,17 +798,10 @@ describe('evaluateEvent', () => {
 
       const result = await evaluateEvent(deps, event);
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.triage).toEqual({
-          action: 'skip',
-          reason: 'No tool called',
-        });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
       }
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ prNumber: event.pullRequestNumber }),
-        'GitHub Agent comment triage completed without calling any tool — defaulting to skip',
-      );
     });
 
     it('returns reasoning from LLM content for comment events', async () => {
@@ -732,12 +873,9 @@ describe('evaluateEvent', () => {
 
       const result = await evaluateEvent(deps, event);
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.triage).toEqual({
-          action: 'skip',
-          reason: 'No tool called',
-        });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
       }
       expect(logger.warn).toHaveBeenCalled();
     });
@@ -783,12 +921,9 @@ describe('evaluateEvent', () => {
 
       const result = await evaluateEvent(deps, event);
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.triage).toEqual({
-          action: 'skip',
-          reason: 'No tool called',
-        });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
       }
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ template: 'unknown_template' }),
@@ -796,6 +931,317 @@ describe('evaluateEvent', () => {
       );
     });
 
+    it('logs warning for invalid worker type in @review request', async () => {
+      const logger = createFakeLogger();
+      const deps = createDeps({
+        logger,
+        toolCallingClient: createFakeToolCallingClient({
+          toolToCall: 'request_review',
+          toolArgs: { review_type: 'architecture', worker_type: 'invalid-worker' },
+        }),
+      });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: '@review architecture',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
+      }
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ workerType: 'invalid-worker' }),
+        'GitHub Agent used unknown review worker type'
+      );
+    });
+
+    it('logs warning for non-string review and worker types in @review request', async () => {
+      const logger = createFakeLogger();
+      const toolClient: ToolCallingClient = {
+        async run(params): ReturnType<ToolCallingClient['run']> {
+          const requestReview = params.tools.find((t: ToolDefinition) => t.name === 'request_review');
+          if (requestReview !== undefined) {
+            await requestReview.run({ review_type: 42, worker_type: 7 });
+          }
+          return ok({
+            content: 'Tried to request review with invalid argument types.',
+            toolCallsMade: 1,
+            iterationCount: 1,
+            usage: { inputTokens: 80, outputTokens: 20, totalTokens: 100, costUsd: 0.001 },
+          });
+        },
+      };
+      const deps = createDeps({ logger, toolCallingClient: toolClient });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: '@review architecture',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
+      }
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ reviewType: '' }),
+        'GitHub Agent requested unknown review type'
+      );
+    });
+
+    it('logs warning for conflicting worker types in @review request', async () => {
+      const logger = createFakeLogger();
+      const toolClient: ToolCallingClient = {
+        async run(params): ReturnType<ToolCallingClient['run']> {
+          const requestReview = params.tools.find((t: ToolDefinition) => t.name === 'request_review');
+          if (requestReview !== undefined) {
+            await requestReview.run({ review_type: 'architecture', worker_type: 'qwen' });
+            await requestReview.run({ review_type: 'security', worker_type: 'opus' });
+          }
+          return ok({
+            content: 'The comment asked for multiple scopes but the worker types conflicted.',
+            toolCallsMade: 2,
+            iterationCount: 1,
+            usage: { inputTokens: 120, outputTokens: 40, totalTokens: 160, costUsd: 0.002 },
+          });
+        },
+      };
+      const deps = createDeps({ logger, toolCallingClient: toolClient });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: '@review architecture with qwen and security with opus',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.triage).toEqual({
+          action: 'request_review',
+          reviewTypes: ['architecture'],
+          workerType: 'qwen',
+        });
+      }
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          existingWorkerType: 'qwen',
+          workerType: 'opus',
+        }),
+        'GitHub Agent requested conflicting review worker types'
+      );
+    });
+
+    it('includes correctionContext in messages for comment events when provided', async () => {
+      let capturedMessages: { role: string; content: string }[] = [];
+      const toolClient: ToolCallingClient = {
+        async run(params): ReturnType<ToolCallingClient['run']> {
+          capturedMessages = [...params.messages];
+          const skipTool = params.tools.find((t: ToolDefinition) => t.name === 'skip');
+          if (skipTool !== undefined) {
+            await skipTool.run({ reason: 'Not actionable' });
+          }
+          return ok({
+            content: 'Done.',
+            toolCallsMade: 1,
+            iterationCount: 1,
+            usage: { inputTokens: 80, outputTokens: 30, totalTokens: 110, costUsd: 0.001 },
+          });
+        },
+      };
+
+      const deps = createDeps({ toolCallingClient: toolClient });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: 'some comment',
+      });
+      const correction = 'Previous attempt failed. You MUST call a tool.';
+
+      await evaluateEvent(deps, event, correction);
+
+      expect(capturedMessages).toHaveLength(2);
+      expect(capturedMessages[0]?.content).toBe('Evaluate this comment and decide what action to take.');
+      expect(capturedMessages[1]?.content).toBe(correction);
+    });
+  });
+
+  describe('onExhausted and validation', () => {
+    it('passes onExhausted and repairIterations to toolCallingClient.run for PR events', async () => {
+      const captured = { onExhausted: undefined as unknown, repairIterations: undefined as unknown };
+      const toolClient: ToolCallingClient = {
+        async run(params): ReturnType<ToolCallingClient['run']> {
+          captured.onExhausted = params.onExhausted;
+          captured.repairIterations = params.repairIterations;
+          const skipTool = params.tools.find((t: ToolDefinition) => t.name === 'skip');
+          if (skipTool !== undefined) {
+            await skipTool.run({ reason: 'Test skip' });
+          }
+          return ok({
+            content: 'Done.',
+            toolCallsMade: 1,
+            iterationCount: 1,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 },
+          });
+        },
+      };
+      const deps = createDeps({ toolCallingClient: toolClient });
+      const event = createFakePREvent();
+
+      await evaluateEvent(deps, event);
+
+      expect(captured.onExhausted).toBeTypeOf('function');
+      expect(captured.repairIterations).toBe(2);
+    });
+
+    it('passes onExhausted and repairIterations to toolCallingClient.run for comment events', async () => {
+      const captured = { onExhausted: undefined as unknown, repairIterations: undefined as unknown };
+      const toolClient: ToolCallingClient = {
+        async run(params): ReturnType<ToolCallingClient['run']> {
+          captured.onExhausted = params.onExhausted;
+          captured.repairIterations = params.repairIterations;
+          const skipTool = params.tools.find((t: ToolDefinition) => t.name === 'skip');
+          if (skipTool !== undefined) {
+            await skipTool.run({ reason: 'Test skip' });
+          }
+          return ok({
+            content: 'Done.',
+            toolCallsMade: 1,
+            iterationCount: 1,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 },
+          });
+        },
+      };
+      const deps = createDeps({ toolCallingClient: toolClient });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: 'some comment',
+      });
+
+      await evaluateEvent(deps, event);
+
+      expect(captured.onExhausted).toBeTypeOf('function');
+      expect(captured.repairIterations).toBe(2);
+    });
+
+    it('returns LLM_FAILED when no tool called after repair for PR event', async () => {
+      const deps = createDeps({
+        toolCallingClient: createFakeToolCallingClient({ callTools: false }),
+      });
+      const event = createFakePREvent();
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
+        expect(result.error.message).toContain('No triage tool was called');
+      }
+    });
+
+    it('returns LLM_FAILED when skip reason is empty for PR event', async () => {
+      const deps = createDeps({
+        toolCallingClient: createFakeToolCallingClient({
+          toolToCall: 'skip',
+          toolArgs: { reason: '' },
+        }),
+      });
+      const event = createFakePREvent();
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
+        expect(result.error.message).toContain('Skip reason must not be empty');
+      }
+    });
+
+    it('returns LLM_FAILED when skip reason is empty for comment event', async () => {
+      const deps = createDeps({
+        toolCallingClient: createFakeToolCallingClient({
+          toolToCall: 'skip',
+          toolArgs: { reason: '' },
+        }),
+      });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: 'test comment',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
+        expect(result.error.message).toContain('Skip reason must not be empty');
+      }
+    });
+
+    it('onExhausted returns repair message with current state for PR events', async () => {
+      let capturedOnExhausted: ((ctx: { iterationCount: number; toolCallsMade: number }) => string | undefined) | undefined;
+      const toolClient: ToolCallingClient = {
+        async run(params): ReturnType<ToolCallingClient['run']> {
+          capturedOnExhausted = params.onExhausted;
+          const skipTool = params.tools.find((t: ToolDefinition) => t.name === 'skip');
+          if (skipTool !== undefined) {
+            await skipTool.run({ reason: 'Test skip' });
+          }
+          return ok({
+            content: 'Done.',
+            toolCallsMade: 1,
+            iterationCount: 1,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 },
+          });
+        },
+      };
+      const deps = createDeps({ toolCallingClient: toolClient });
+      const event = createFakePREvent();
+
+      await evaluateEvent(deps, event);
+
+      expect(capturedOnExhausted).toBeTypeOf('function');
+      if (typeof capturedOnExhausted === 'function') {
+        const repairMessage = (capturedOnExhausted as (ctx: { iterationCount: number; toolCallsMade: number }) => string | undefined)({ iterationCount: 5, toolCallsMade: 0 });
+        // skipTool.run() was called before onExhausted, so state.skipped=true → "recorded successfully"
+        expect(repairMessage).toContain('recorded successfully');
+        expect(repairMessage).toContain('Do NOT call any more tools');
+      }
+    });
+
+    it('onExhausted tells LLM to call a tool when no tools were called', async () => {
+      let capturedOnExhausted: ((ctx: { iterationCount: number; toolCallsMade: number }) => string | undefined) | undefined;
+      const toolClient: ToolCallingClient = {
+        async run(params): ReturnType<ToolCallingClient['run']> {
+          capturedOnExhausted = params.onExhausted;
+          // Do NOT call any tools — simulate pure text responses exhausting iterations
+          return ok({
+            content: 'Done.',
+            toolCallsMade: 0,
+            iterationCount: 5,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 },
+          });
+        },
+      };
+      const deps = createDeps({ toolCallingClient: toolClient });
+      const event = createFakePREvent();
+
+      await evaluateEvent(deps, event);
+
+      expect(capturedOnExhausted).toBeTypeOf('function');
+      if (typeof capturedOnExhausted === 'function') {
+        const repairMessage = (capturedOnExhausted as (ctx: { iterationCount: number; toolCallsMade: number }) => string | undefined)({ iterationCount: 5, toolCallsMade: 0 });
+        expect(repairMessage).toContain('incomplete');
+        expect(repairMessage).toContain('skip(reason)');
+        expect(repairMessage).toContain('request_review(review_type)');
+      }
+    });
   });
 
   describe('unsupported event types', () => {
