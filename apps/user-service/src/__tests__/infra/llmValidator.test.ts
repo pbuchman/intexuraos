@@ -33,6 +33,7 @@ vi.mock('@intexuraos/infra-perplexity', () => ({
 
 vi.mock('@intexuraos/infra-openrouter', () => ({
   createOpenRouterClient: vi.fn(),
+  OPENROUTER_VALIDATION_MODEL: 'qwen/qwen3.5-flash-02-23',
 }));
 
 // Import mocked modules after vi.mock

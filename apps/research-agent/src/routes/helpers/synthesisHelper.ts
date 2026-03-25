@@ -3,7 +3,7 @@
  */
 
 import { getProviderForModel, isOpenRouterModel, getOpenRouterRawId, LlmModels, type LLMModel, type ModelPricing } from '@intexuraos/llm-contract';
-import { getAllowlistPricing, isAllowedModel } from '@intexuraos/infra-openrouter';
+import { getAllowlistPricing, isAllowedModel, allowlistModelIds } from '@intexuraos/infra-openrouter';
 import type { ResearchModel } from '../../domain/research/index.js';
 import type { ServiceContainer, DecryptedApiKeys } from '../../services.js';
 import type { Logger } from '@intexuraos/common-core';
@@ -32,10 +32,7 @@ export function createSynthesisProviders(
   if (isOpenRouterModel(synthesisModel) && !isAllowedModel(getOpenRouterRawId(synthesisModel))) {
     throw new Error(
       `OpenRouter model '${synthesisModel}' is not in the curated allowlist. ` +
-        'Allowed models: qwen/qwen3.5-plus-02-15, qwen/qwen3.5-flash-02-23, minimax/minimax-m2.7, ' +
-        'x-ai/grok-4.20-beta, x-ai/grok-4.1-fast, moonshotai/kimi-k2.5, anthropic/claude-sonnet-4.6, ' +
-        'anthropic/claude-opus-4.6, google/gemini-3.1-pro-preview, google/gemini-2.5-flash, ' +
-        'openai/gpt-5.4, openai/gpt-5.4-mini, xiaomi/mimo-v2-pro, z-ai/glm-5-turbo'
+        `Allowed models: ${allowlistModelIds()}`
     );
   }
   /* v8 ignore stop @preserve */
