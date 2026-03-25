@@ -986,8 +986,11 @@ describe('system-prompt', () => {
   it('review scope description contains test_quality criteria', () => {
     const result = reviewPrompt.build(baseParams);
     expect(result).toContain('**test_quality**');
-    expect(result).toContain('False positives');
-    expect(result).toContain('v8 ignore legitimacy');
+    expect(result).toContain('False Positives');
+    expect(result).toContain('v8 Ignore Legitimacy');
+    expect(result).toContain('Mock & Fake Patterns');
+    expect(result).toContain('Test Structure & Naming');
+    expect(result).toContain('TypeScript Strictness in Tests');
   });
 
   it('REVIEW_AGENT_FINAL block includes requirements_tracker_updated field', () => {
