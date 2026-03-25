@@ -10,7 +10,7 @@ export function HellscriptDraftPane({ draft }: HellscriptDraftPaneProps): React.
     return (
       <div className="flex h-full items-center justify-center p-8 text-center">
         <p className="text-sm text-slate-400 dark:text-slate-500">
-          No draft yet. Add whispers and ask to forge a draft.
+          No draft yet. Add thoughts and ask to generate a draft.
         </p>
       </div>
     );

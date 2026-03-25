@@ -42,7 +42,7 @@ export function HellscriptComposer({
           setText(e.target.value);
         }}
         onKeyDown={handleKeyDown}
-        placeholder="Type a whisper... (Enter to send, Shift+Enter for newline)"
+        placeholder="Type a thought... (Enter to send, Shift+Enter for newline)"
         disabled={disabled}
         maxLength={10000}
         rows={3}

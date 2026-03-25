@@ -646,7 +646,7 @@ Rules:
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '7.2.0',
+  version: '8.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
       params;
@@ -727,7 +727,7 @@ You have been dispatched to review a pull request. The review types requested ar
   - HTTP mocking: must use \`nock\` for HTTP calls, not manual fetch stubs
   - Fakes should implement the same interface as the real dependency (\`*Deps\` types)
 
-  **(6) v8 Ignore Legitimacy** — For every v8 ignore coverage exemption comment in test or source files:
+  **(6) v8 Ignore Legitimacy** — For every \`/* v8 ignore */\` comment in test or source files:
   - Category must be one of: \`ts-type\`, \`regex\`, \`module-init\`, \`async-timing\`, \`test-infra\`, \`upstream\`, \`module-mock\`, \`schema\`, \`source-map\`, \`auth-guard\`
   - Explanation must name the TESTING BLOCKER (e.g., "FakeHttpClient cannot simulate AbortError"), not describe the code (e.g., "error handling for failed request")
   - The branch must be genuinely untestable — if a mock/fake could trigger it, the v8 ignore is invalid
