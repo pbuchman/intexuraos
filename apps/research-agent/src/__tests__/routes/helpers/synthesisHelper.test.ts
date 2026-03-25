@@ -4,10 +4,11 @@
 
 /* eslint-disable @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-empty-function */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createSynthesisProviders } from '../../../routes/helpers/synthesisHelper.js';
 import type { DecryptedApiKeys, ServiceContainer } from '../../../services.js';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import * as openrouterModule from '@intexuraos/infra-openrouter';
 import type { ResearchModel } from '../../../domain/research/index.js';
 
 const mockLogger = {
@@ -140,5 +141,30 @@ describe('createSynthesisProviders', () => {
     );
 
     expect(result.synthesizer).toBeDefined();
+  });
+
+  it('throws when getAllowlistPricing returns undefined for an allowed model', () => {
+    const apiKeys: DecryptedApiKeys = {
+      openrouter: 'test-or-key',
+    };
+
+    const validOrModel = 'or:anthropic/claude-sonnet-4.6' as ResearchModel;
+
+    // Temporarily make getAllowlistPricing return undefined while isAllowedModel still returns true
+    const spy = vi.spyOn(openrouterModule, 'getAllowlistPricing').mockReturnValue(undefined);
+
+    try {
+      expect(() =>
+        createSynthesisProviders(
+          validOrModel,
+          apiKeys,
+          'user-123',
+          mockServices,
+          mockLogger as never
+        )
+      ).toThrow('No pricing for allowlisted model: or:anthropic/claude-sonnet-4.6');
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

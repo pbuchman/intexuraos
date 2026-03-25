@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
 import { type ModelPricing, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
@@ -41,6 +41,10 @@ const createTestPricing = (overrides: Partial<ModelPricing> = {}): ModelPricing 
 describe('createOpenRouterClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    nock.cleanAll();
+  });
+
+  afterEach(() => {
     nock.cleanAll();
   });
 

@@ -35,9 +35,16 @@ export function createSynthesisProviders(
     );
   }
 
-  const synthesisPricing = isOpenRouterModel(synthesisModel)
-    ? getAllowlistPricing(getOpenRouterRawId(synthesisModel)) as ModelPricing
-    : pricingContext.getPricing(synthesisModel as LLMModel);
+  let synthesisPricing: ModelPricing;
+  if (isOpenRouterModel(synthesisModel)) {
+    const pricing = getAllowlistPricing(getOpenRouterRawId(synthesisModel));
+    if (pricing === undefined) {
+      throw new Error(`No pricing for allowlisted model: ${String(synthesisModel)}`);
+    }
+    synthesisPricing = pricing;
+  } else {
+    synthesisPricing = pricingContext.getPricing(synthesisModel as LLMModel);
+  }
 
   if (synthesisKey === undefined || synthesisKey === '') {
     throw new Error(`No API key configured for provider '${synthesisProvider}'`);
