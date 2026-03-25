@@ -119,18 +119,18 @@ export async function handlePrMerge(deps: HandlePrMergeDeps, input: HandlePrMerg
   }
 
   const isPlan = isPlanPr(prTitle);
+  const mark = isPlan
+    ? linearIssueService.markTodo.bind(linearIssueService)
+    : linearIssueService.markQa.bind(linearIssueService);
+  const targetState = isPlan ? 'todo' : 'qa';
 
   await Promise.all(
     [...issueMap].map(([linearIssueId, userId]) => {
       logger.info(
-        { linearIssueId, userId, repository, prNumber, targetState: isPlan ? 'todo' : 'qa' },
-        isPlan
-          ? 'Transitioning Linear issue to Todo on plan PR merge'
-          : 'Transitioning Linear issue to QA on PR merge'
+        { linearIssueId, userId, repository, prNumber, targetState },
+        'Transitioning Linear issue on PR merge'
       );
-      return isPlan
-        ? linearIssueService.markTodo(userId, linearIssueId)
-        : linearIssueService.markQa(userId, linearIssueId);
+      return mark(userId, linearIssueId);
     })
   );
 }
