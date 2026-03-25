@@ -712,4 +712,107 @@ describe('createOpenRouterClient', () => {
       }
     });
   });
+
+  describe('validateKey', () => {
+    it('returns key info on success', async () => {
+      nock(API_BASE_URL).get('/key').reply(200, {
+        token: 'sk-1234',
+        usage: 1000,
+        limit: 10000,
+        expiresAt: '2026-12-31T23:59:59Z',
+      });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      const result = await client.validateKey('test-key');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.token).toBe('sk-1234');
+        expect(result.value.usage).toBe(1000);
+      }
+    });
+
+    it('handles 401 invalid key error', async () => {
+      nock(API_BASE_URL).get('/key').reply(401, 'Invalid API key');
+
+      const client = createOpenRouterClient({
+        apiKey: 'bad-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      const result = await client.validateKey('bad-key');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_KEY');
+      }
+    });
+
+    it('handles 429 rate limit error', async () => {
+      nock(API_BASE_URL).get('/key').reply(429, 'Rate limited');
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      const result = await client.validateKey('test-key');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('RATE_LIMITED');
+      }
+    });
+
+    it('handles 500 API error', async () => {
+      nock(API_BASE_URL).get('/key').reply(500, 'Internal server error');
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      const result = await client.validateKey('test-key');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+      }
+    });
+
+    it('handles network error', async () => {
+      nock(API_BASE_URL).get('/key').replyWithError({ message: 'Network failure' });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      const result = await client.validateKey('test-key');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+      }
+    });
+  });
 });

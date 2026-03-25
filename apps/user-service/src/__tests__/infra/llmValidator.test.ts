@@ -269,7 +269,7 @@ describe('LlmValidatorImpl', () => {
     describe('openrouter provider', () => {
       it('returns ok when validation succeeds', async () => {
         const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok({ content: 'validated', usage: mockUsage })),
+          validateKey: vi.fn().mockResolvedValue(ok({ token: 'key-123', usage: 100, limit: null, expiresAt: null })),
         };
         vi.mocked(createOpenRouterClient).mockReturnValue(mockClient as never);
 
@@ -283,11 +283,12 @@ describe('LlmValidatorImpl', () => {
           pricing: testPricing.openrouter,
           logger: mockLogger,
         });
+        expect(mockClient.validateKey).toHaveBeenCalledWith('or-test-key');
       });
 
       it('returns INVALID_KEY error when key is invalid', async () => {
         const mockClient = {
-          generate: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
+          validateKey: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
         };
         vi.mocked(createOpenRouterClient).mockReturnValue(mockClient as never);
 
@@ -302,7 +303,7 @@ describe('LlmValidatorImpl', () => {
 
       it('returns API_ERROR when other errors occur', async () => {
         const mockClient = {
-          generate: vi.fn().mockResolvedValue(err({ code: 'RATE_LIMITED', message: 'Too fast' })),
+          validateKey: vi.fn().mockResolvedValue(err({ code: 'RATE_LIMITED', message: 'Too fast' })),
         };
         vi.mocked(createOpenRouterClient).mockReturnValue(mockClient as never);
 

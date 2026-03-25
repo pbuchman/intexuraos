@@ -49,13 +49,20 @@ import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
 import type {
   OpenRouterConfig,
   OpenRouterError,
+  OpenRouterKeyInfo,
   OpenRouterResponse,
   OpenRouterUsage,
   ResearchResult,
 } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 
-export type OpenRouterClient = Pick<LLMClient, 'research' | 'generate'>;
+export type OpenRouterClient = Pick<LLMClient, 'research' | 'generate'> & {
+  /**
+   * Validate an OpenRouter API key using the lightweight /api/v1/key endpoint.
+   * This is a free, no-token-cost introspection call.
+   */
+  validateKey: (apiKey: string) => Promise<Result<OpenRouterKeyInfo, OpenRouterError>>;
+};
 
 /** OpenRouter API base URL */
 const API_BASE_URL = 'https://openrouter.ai/api/v1';
@@ -334,6 +341,34 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           costUsd: 0,
         };
         trackUsage('generate', emptyUsage, false, errorMsg);
+        return err(mapOpenRouterError(error));
+      }
+    },
+
+    async validateKey(key: string): Promise<Result<OpenRouterKeyInfo, OpenRouterError>> {
+      try {
+        const response = await fetchWithTimeout(
+          `${API_BASE_URL}/key`,
+          {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${key}`,
+              'HTTP-Referer': 'https://intexuraos.cloud',
+              'X-Title': APP_TITLE,
+            },
+          },
+          10_000 // 10 second timeout for lightweight key check
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          const apiError = new OpenRouterApiError(response.status, errorText);
+          return err(mapOpenRouterError(apiError));
+        }
+
+        const data = (await response.json()) as OpenRouterKeyInfo;
+        return ok(data);
+      } catch (error) {
         return err(mapOpenRouterError(error));
       }
     },

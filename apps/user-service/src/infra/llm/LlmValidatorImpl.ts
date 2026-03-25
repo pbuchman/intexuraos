@@ -137,6 +137,7 @@ export class LlmValidatorImpl implements LlmValidator {
         return ok(undefined);
       }
       case LlmProviders.OpenRouter: {
+        // Use lightweight /api/v1/key endpoint for validation - no token cost
         const client = createOpenRouterClient({
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.OpenRouter],
@@ -144,7 +145,7 @@ export class LlmValidatorImpl implements LlmValidator {
           pricing: this.pricing.openrouter,
           logger: this.logger,
         });
-        const result = await client.generate(VALIDATION_PROMPT);
+        const result = await client.validateKey(apiKey);
         if (!result.ok) {
           return err({
             code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
