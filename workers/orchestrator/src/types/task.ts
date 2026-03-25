@@ -118,6 +118,7 @@ export interface TaskResult {
   review_comments_posted?: string;
   review_types?: string;
   requirements_tracker_updated?: string;
+  gh_actions_status?: string;
   rebaseResult?: {
     attempted: boolean;
     success: boolean;

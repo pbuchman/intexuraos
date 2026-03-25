@@ -597,6 +597,9 @@ export class DockerProvider implements IsolationProvider {
       if (workerTypeConfig.model !== undefined) {
         env.push(`ANTHROPIC_MODEL=${workerTypeConfig.model}`);
       }
+      if (workerTypeConfig.effort !== undefined) {
+        env.push(`CLAUDE_CODE_EFFORT_LEVEL=${workerTypeConfig.effort}`);
+      }
 
       if (this.config.gitUserName !== undefined) {
         env.push(`GIT_USER_NAME=${this.config.gitUserName}`);
