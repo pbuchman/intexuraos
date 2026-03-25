@@ -207,7 +207,6 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
         const { watchId } = request.params as { watchId: string };
         const body = request.body as { excludedPrNumbers?: unknown } | undefined;
 
-        // Validate body
         const rawExcluded = body?.excludedPrNumbers;
         if (!Array.isArray(rawExcluded) || !rawExcluded.every((n): n is number => typeof n === 'number')) {
           return await reply.fail('INVALID_REQUEST', 'excludedPrNumbers must be an array of numbers');
@@ -217,7 +216,6 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
 
         const { mergeQueueWatchRepo } = getServices();
 
-        // Find the watch
         const findResult = await mergeQueueWatchRepo.findById(watchId);
         if (!findResult.ok) {
           if (findResult.error.code === 'NOT_FOUND') {
@@ -229,7 +227,6 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           return await reply.fail('INTERNAL_ERROR', findResult.error.message);
         }
 
-        // Authorization check
         if (findResult.value.userId !== userId) {
           return await reply.code(403).send({
             success: false,
@@ -237,7 +234,6 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           });
         }
 
-        // Only allow modifications on active watches
         if (findResult.value.status !== 'active') {
           return await reply.code(409).send({
             success: false,
@@ -245,7 +241,6 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           });
         }
 
-        // Persist
         const updateResult = await mergeQueueWatchRepo.update(watchId, { excludedPrNumbers });
         if (!updateResult.ok) {
           request.log.error({ error: updateResult.error }, 'Failed to update watch exclusions');
