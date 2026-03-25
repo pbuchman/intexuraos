@@ -182,15 +182,15 @@ export interface MergeQueueWatch {
 
 ### Frontend (web) — files to modify
 
-| File                                                      | Action   | Responsibility                                      |
-| --------------------------------------------------------- | -------- | --------------------------------------------------- |
-| `apps/web/src/types/mergeQueue.ts`                        | Modify   | Add `excludedPrNumbers` to `MergeQueueWatch`        |
-| `apps/web/src/services/mergeQueueApi.ts`                  | Modify   | Add `updateExclusions()` function                   |
-| `apps/web/src/hooks/useMergeQueue.ts`                     | Modify   | Manage exclusion state, provide toggle handler      |
-| `apps/web/src/components/merge-queue/PrRow.tsx`           | Modify   | Add checkbox                                        |
-| `apps/web/src/components/merge-queue/PrList.tsx`          | Modify   | Add selection counter, bulk actions, pass callbacks |
-| `apps/web/src/components/merge-queue/WatchStatusCard.tsx` | Modify   | Show exclusion count                                |
-| `apps/web/src/pages/MergeQueuePage.tsx`                   | Modify   | Wire exclusion state through components             |
+| File                                                      | Action   | Responsibility                                                                               |
+| --------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------- |
+| `apps/web/src/types/mergeQueue.ts`                        | Modify   | Add `excludedPrNumbers` to `MergeQueueWatch`                                                 |
+| `apps/web/src/services/mergeQueueApi.ts`                  | Modify   | Add `updateExclusions()` function, extend `createWatch()` signature with `excludedPrNumbers` |
+| `apps/web/src/hooks/useMergeQueue.ts`                     | Modify   | Manage exclusion state, provide toggle handler                                               |
+| `apps/web/src/components/merge-queue/PrRow.tsx`           | Modify   | Add checkbox                                                                                 |
+| `apps/web/src/components/merge-queue/PrList.tsx`          | Modify   | Add selection counter, bulk actions, pass callbacks                                          |
+| `apps/web/src/components/merge-queue/WatchStatusCard.tsx` | Modify   | Show exclusion count                                                                         |
+| `apps/web/src/pages/MergeQueuePage.tsx`                   | Modify   | Wire exclusion state through components                                                      |
 
 ---
 
@@ -788,7 +788,9 @@ it('skips PRs that are in the watch excludedPrNumbers', async () => {
   );
 });
 
-it('drains when all eligible PRs are excluded', async () => {
+it('returns skipped_all (not drained) when all eligible PRs are excluded', async () => {
+  // When the user excludes all PRs, the watch must NOT drain — it stays active
+  // so the user can re-include PRs later without recreating the watch.
   const watch = makeWatch({ excludedPrNumbers: [1, 2] });
   deps.mergeQueueWatchRepo.findAllActive = vi.fn().mockResolvedValue(ok([watch]));
   deps.userServiceClient.getOAuthToken = vi.fn().mockResolvedValue(ok({ accessToken: 'token' }));
@@ -804,7 +806,7 @@ it('drains when all eligible PRs are excluded', async () => {
   const tickResult = result.value[0];
   expect(tickResult).toBeDefined();
   if (tickResult === undefined) return;
-  expect(tickResult.action).toBe('drained');
+  expect(tickResult.action).toBe('skipped_all');  // NOT 'drained' — PRs exist, just excluded
 });
 ```
 
@@ -823,27 +825,45 @@ async function processWatch(
 ): Promise<TickResult> {
 ```
 
-After the eligible PRs filter (Step 3e) and before the sort (Step 3f), add:
+**CRITICAL ordering:** The exclusion filter MUST happen AFTER the existing "zero eligible PRs = drain" check (Step 3g). If it happens before, excluding all PRs would prematurely drain the watch, deactivating auto-merge even though eligible PRs exist. The correct ordering is:
 
-```typescript
-    // Step 3e-2: Filter out excluded PRs
-    const excludedSet = new Set(watch.excludedPrNumbers);
-    const includedPrs = eligiblePrs.filter((pr) => !excludedSet.has(pr.number));
+```
+1. Filter eligible authors → eligiblePrs (existing Step 3e, unchanged)
+2. Sort eligiblePrs (existing Step 3f, unchanged)
+3. If eligiblePrs.length === 0 → drain (existing Step 3g, unchanged)
+4. Filter excluded from eligiblePrs → prsToProcess (NEW step)
+5. If prsToProcess.length === 0 → skipped_all (NOT drain — PRs exist, just excluded)
+6. Iterate prsToProcess (existing loop, operates on prsToProcess)
 ```
 
-Then rename the remaining code to use `includedPrs` instead of `eligiblePrs`:
-- Change `eligiblePrs.sort(...)` to `includedPrs.sort(...)`
-- Change `if (eligiblePrs.length === 0)` to `if (includedPrs.length === 0)`
-- Change `for (const pr of eligiblePrs)` to `for (const pr of includedPrs)`
-- **Keep** `remainingPrs: allPrs.length - 1` and `remainingPrs: allPrs.length` **unchanged** — `remainingPrs` represents total open PRs, not included-only PRs. Changing this would break the existing semantic contract of `TickResult`.
+After the existing drain check (Step 3g) and before the iteration loop (Step 3h), add:
+
+```typescript
+    // Step 3g-2: Filter out excluded PRs (AFTER drain check to avoid premature drain)
+    const excludedSet = new Set(watch.excludedPrNumbers);
+    const prsToProcess = eligiblePrs.filter((pr) => !excludedSet.has(pr.number));
+
+    // Step 3g-3: If all eligible PRs are excluded, skip (but do NOT drain)
+    if (prsToProcess.length === 0) {
+      await recordSuccessfulTick(watchId, []);
+      return {
+        watchId, owner, repo, baseBranch,
+        action: 'skipped_all',
+        remainingPrs: allPrs.length,
+        skipped: [],
+      };
+    }
+```
+
+Then update the iteration loop to use `prsToProcess` instead of `eligiblePrs`:
+- Change `for (const pr of eligiblePrs)` to `for (const pr of prsToProcess)`
+- **Keep** `remainingPrs: allPrs.length - 1` and `remainingPrs: allPrs.length` **unchanged** — `remainingPrs` represents total open PRs, not included-only PRs.
 
 **Important:** The `excludedPrNumbers` field defaults to `[]` for existing watch documents in Firestore. The `excludedSet` will be empty, so all PRs pass through — backwards compatible.
 
 - [ ] **Step 4: No `?? []` guard needed in tick use case**
 
 The backwards-compatibility `?? []` guard for old Firestore documents is already applied at the repository layer (Task 1.2 Step 7). The tick use case receives clean `MergeQueueWatch` objects with `excludedPrNumbers: number[]` guaranteed. No additional fallback is needed here.
-}
-```
 
 - [ ] **Step 5: Run tests to verify they pass**
 
