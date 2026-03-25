@@ -37,7 +37,7 @@ export function ResearchAgentPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
   const { keys, loading: keysLoading } = useLlmKeys();
   const isOpenRouterConfigured = keys !== null && keys.openrouter !== null;
-  const { models: openRouterModels, loading: openRouterLoading } = useOpenRouterModels(isOpenRouterConfigured);
+  const { models: openRouterModels, loading: openRouterLoading, error: openRouterError } = useOpenRouterModels(isOpenRouterConfigured);
 
   const draftId = searchParams.get('draftId');
   const isEditMode = draftId !== null && draftId !== '';
@@ -675,6 +675,7 @@ export function ResearchAgentPage(): React.JSX.Element {
             selectedOpenRouterModels={selectedOpenRouterModels}
             onOpenRouterChange={setSelectedOpenRouterModels}
             openRouterLoading={openRouterLoading}
+            openRouterError={openRouterError}
             isOpenRouterConfigured={isOpenRouterConfigured}
           />
         </Card>

@@ -67,6 +67,7 @@ export interface ModelSelectorProps {
   selectedOpenRouterModels?: string[];
   onOpenRouterChange?: (ids: string[]) => void;
   openRouterLoading?: boolean;
+  openRouterError?: string | null;
   isOpenRouterConfigured?: boolean;
 }
 
@@ -82,6 +83,7 @@ export function ModelSelector({
   selectedOpenRouterModels,
   onOpenRouterChange,
   openRouterLoading,
+  openRouterError,
   isOpenRouterConfigured,
 }: ModelSelectorProps): React.JSX.Element {
   return (
@@ -197,6 +199,7 @@ export function ModelSelector({
             onChange={onOpenRouterChange ?? noopStringArray}
             loading={openRouterLoading ?? false}
             disabled={disabled}
+            error={openRouterError ?? null}
           />
         </div>
       )}

@@ -9,6 +9,7 @@ interface OpenRouterModelSelectorProps {
   maxModels?: number;
   loading?: boolean;
   disabled?: boolean;
+  error?: string | null;
 }
 
 function formatPrice(pricePerToken: number): string {
@@ -29,6 +30,7 @@ export function OpenRouterModelSelector({
   maxModels = 5,
   loading = false,
   disabled = false,
+  error = null,
 }: OpenRouterModelSelectorProps): React.JSX.Element {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -62,6 +64,14 @@ export function OpenRouterModelSelector({
         <Loader2 className="h-4 w-4 animate-spin" />
         <span className="text-sm">Loading OpenRouter models...</span>
       </div>
+    );
+  }
+
+  if (error !== null) {
+    return (
+      <p className="py-2 text-sm text-red-600 dark:text-red-400">
+        Failed to load OpenRouter models: {error}
+      </p>
     );
   }
 

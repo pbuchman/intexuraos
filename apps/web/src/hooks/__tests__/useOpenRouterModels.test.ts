@@ -3,7 +3,7 @@
  * @vitest-environment jsdom
  */
 
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useOpenRouterModels } from '../useOpenRouterModels.js';
 
@@ -138,5 +138,29 @@ describe('useOpenRouterModels', () => {
     await waitFor(() => {
       expect(mockRequest).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('refresh() triggers a new fetch after initial load', async () => {
+    const firstModel = MOCK_MODELS[0] ?? MOCK_MODELS[1];
+    const updatedModels = firstModel !== undefined ? [firstModel] : [];
+    mockRequest
+      .mockResolvedValueOnce({ models: MOCK_MODELS, cachedAt: '2026-03-25T00:00:00Z' })
+      .mockResolvedValueOnce({ models: updatedModels, cachedAt: '2026-03-25T01:00:00Z' });
+
+    const { result } = renderHook(() => useOpenRouterModels(true));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+    expect(result.current.models).toEqual(MOCK_MODELS);
+    expect(mockRequest).toHaveBeenCalledTimes(1);
+
+    // Call refresh to trigger a new fetch
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(mockRequest).toHaveBeenCalledTimes(2);
+    expect(result.current.models).toEqual(updatedModels);
   });
 });
