@@ -15,7 +15,7 @@ export const ALL_REVIEW_TYPES = [
   'plan_review',
   'test_quality',
 ] as const;
-type ReviewType = (typeof ALL_REVIEW_TYPES)[number];
+export type ReviewType = (typeof ALL_REVIEW_TYPES)[number];
 
 export const LLM_TOOL_REVIEW_TYPES = ALL_REVIEW_TYPES.filter(
   (t): t is Exclude<ReviewType, 'plan_review'> => t !== 'plan_review',
