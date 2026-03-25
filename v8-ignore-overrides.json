@@ -10,17 +10,6 @@
       ],
       "description": "Remaining orchestrator v8 ignore triage: branches uncovered by unit tests require integration-level testing or are dead code from type narrowing"
     },
-    "INT-853": {
-      "files": [
-        "apps/code-agent/src/domain/services/automationCommentRenderer.ts",
-        "apps/code-agent/src/domain/services/gitHubDispatchService.ts",
-        "apps/code-agent/src/domain/services/gitHubWebhookRules.ts",
-        "apps/code-agent/src/domain/services/unifiedEvaluator.ts",
-        "apps/code-agent/src/infra/github-event-parser.ts",
-        "apps/code-agent/src/infra/services/whatsappNotifierImpl.ts"
-      ],
-      "description": "[DEPRECATED] This override is superseded by INT-1085. See INT-1085 for the tracking issue."
-    },
     "INT-1085": {
       "files": [
         "apps/code-agent/src/domain/services/automationCommentRenderer.ts",
