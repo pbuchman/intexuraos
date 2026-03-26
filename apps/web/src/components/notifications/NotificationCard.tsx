@@ -69,7 +69,7 @@ export function NotificationCard({
         <div className="flex flex-wrap gap-2 md:contents">
           <Badge className="w-fit md:order-1">{notification.device}</Badge>
           <Badge
-            className="max-w-full truncate md:order-2 md:max-w-[14rem]"
+            className="truncate md:order-2 md:max-w-[14rem]"
             title={notification.app}
           >
             {notification.app}
