@@ -8,9 +8,13 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { NotificationCard } from '../NotificationCard.js';
 import type { MobileNotification } from '@/types/index.js';
 
-vi.mock('lucide-react', () => ({
-  Trash2: (): React.JSX.Element => <span data-testid="trash-icon" />,
-}));
+vi.mock('lucide-react', async () => {
+  const actual = await vi.importActual<typeof import('lucide-react')>('lucide-react');
+  return {
+    ...actual,
+    Trash2: (): React.JSX.Element => <span data-testid="trash-icon" />,
+  };
+});
 
 vi.mock('@/utils/dateFormat', () => ({
   formatRelative: (): string => '2m ago',
