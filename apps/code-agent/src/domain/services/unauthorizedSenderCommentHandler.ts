@@ -6,6 +6,9 @@ import { fetchGitHubToken } from '../utils/gitHubTokenResolver.js';
 import { parseOwnerRepo } from '../utils/parseOwnerRepo.js';
 import { isReviewCommandComment } from '../utils/reviewTriage.js';
 
+/** Checks for @claude / @codex prefixes only. The @review prefix is handled
+ *  separately by `isReviewCommandComment` (from reviewTriage.ts) because that
+ *  function already exists for broader review-command classification. */
 function startsWithCommandPrefix(body: string): boolean {
   const normalized = body.trimStart().toLowerCase();
   return normalized.startsWith('@claude') || normalized.startsWith('@codex');
