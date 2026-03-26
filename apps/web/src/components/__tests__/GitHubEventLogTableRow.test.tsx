@@ -67,10 +67,53 @@ describe('GitHubEventLogTableRow', () => {
     const detail = screen.getAllByTitle('code_quality, test_quality');
     expect(detail).toHaveLength(2);
 
-    const desktopRow = container.querySelector('.xl\\:grid');
-    expect(desktopRow).not.toBeNull();
-    expect(desktopRow?.className).toContain('hidden');
-    expect(desktopRow?.className).toContain('xl:grid');
-    expect(desktopRow?.className).not.toContain('lg:grid');
+    const desktopRow = container.querySelector<HTMLElement>('.xl\\:grid');
+    if (desktopRow === null) throw new Error('desktop grid row not found');
+    expect(desktopRow.className).toContain('hidden');
+    expect(desktopRow.className).toContain('xl:grid');
+    expect(desktopRow.className).not.toContain('lg:grid');
+  });
+
+  it('renders Pending badge when decisionState is pending', () => {
+    const row = createRow();
+    row.decisionState = 'pending';
+    row.decisionOutcome = null;
+    row.dispatchAction = null;
+    row.reviewTypes = [];
+    render(<GitHubEventLogTableRow row={row} />);
+
+    expect(screen.getAllByText('Pending')).toHaveLength(2);
+    expect(screen.queryByTitle('code_quality, test_quality')).toBeNull();
+  });
+
+  it('renders Dispatch badge when decisionOutcome is dispatch', () => {
+    const row = createRow();
+    row.decisionOutcome = 'dispatch';
+    row.dispatchAction = 'dispatch_code_task';
+    row.reviewTypes = [];
+    render(<GitHubEventLogTableRow row={row} />);
+
+    expect(screen.getAllByText('Dispatch')).toHaveLength(2);
+    expect(screen.queryByTitle('code_quality, test_quality')).toBeNull();
+  });
+
+  it('renders Skip badge when decisionOutcome is skip', () => {
+    const row = createRow();
+    row.decisionOutcome = 'skip';
+    row.dispatchAction = null;
+    row.reviewTypes = [];
+    render(<GitHubEventLogTableRow row={row} />);
+
+    expect(screen.getAllByText('Skip')).toHaveLength(2);
+  });
+
+  it('renders Completed badge as fallthrough', () => {
+    const row = createRow();
+    row.decisionOutcome = 'some_other_outcome';
+    row.dispatchAction = null;
+    row.reviewTypes = [];
+    render(<GitHubEventLogTableRow row={row} />);
+
+    expect(screen.getAllByText('Completed')).toHaveLength(2);
   });
 });
