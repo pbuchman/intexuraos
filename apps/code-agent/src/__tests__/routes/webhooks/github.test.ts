@@ -3326,7 +3326,7 @@ describe('POST /webhooks/github', () => {
 
     beforeEach(() => {
       mockMarkQa = vi.fn().mockResolvedValue(undefined);
-      Object.assign(mockServices, { linearIssueService: { markQa: mockMarkQa } });
+      Object.assign(mockServices, { linearIssueService: { markQa: mockMarkQa, markTodo: vi.fn().mockResolvedValue(undefined) } });
     });
 
     it('should call handlePrMerge when PR is closed with merge', async () => {
