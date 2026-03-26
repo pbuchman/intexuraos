@@ -57,6 +57,9 @@ export function useMergeQueue(owner: string, repo: string): UseMergeQueueResult 
   const excludedPrNumbersRef = useRef(excludedPrNumbers);
   excludedPrNumbersRef.current = excludedPrNumbers;
 
+  const exclusionInFlightRef = useRef(false);
+  exclusionInFlightRef.current = exclusionInFlight;
+
   // Fetch branches and watches on mount
   const fetchInitialData = useCallback(async (): Promise<void> => {
     try {
@@ -163,7 +166,13 @@ export function useMergeQueue(owner: string, repo: string): UseMergeQueueResult 
     };
   }, [getAccessToken, owner, repo]);
 
+  // Clear exclusions when branch changes (handles branch switching)
+  useEffect(() => {
+    setExcludedPrNumbers(new Set());
+  }, [selectedBranch]);
+
   // Sync exclusion state from active watch (skips while API call is in-flight or during cooldown)
+  // Does NOT clear when no active watch exists — preserves pre-watch exclusions set by the user
   useEffect(() => {
     if (exclusionInFlight || syncCooldown) return;
     const activeWatch = watches.find(
@@ -171,8 +180,6 @@ export function useMergeQueue(owner: string, repo: string): UseMergeQueueResult 
     );
     if (activeWatch !== undefined) {
       setExcludedPrNumbers(new Set(activeWatch.excludedPrNumbers));
-    } else {
-      setExcludedPrNumbers(new Set());
     }
   }, [watches, selectedBranch, exclusionInFlight, syncCooldown]);
 
@@ -219,6 +226,7 @@ export function useMergeQueue(owner: string, repo: string): UseMergeQueueResult 
 
   // Shared helper: apply an exclusion update with optimistic state and API persistence
   const applyExclusionUpdate = useCallback((next: Set<number>): void => {
+    if (exclusionInFlightRef.current) return;
     setExclusionError(null);
     const prev = excludedPrNumbersRef.current;
     setExcludedPrNumbers(next);
