@@ -38,7 +38,8 @@ export function useOpenRouterModels(isConfigured: boolean): UseOpenRouterModelsR
     }
   }, [isConfigured, request]);
 
-  // Reset fetch state when provider becomes unconfigured so re-enabling triggers a fresh fetch
+  // NOTE: ordering matters — this reset must run before the fetch effect below
+  // so that toggling isConfigured false→true triggers a fresh fetch
   useEffect(() => {
     if (!isConfigured) {
       fetchedRef.current = false;
