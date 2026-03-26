@@ -29,7 +29,7 @@ import {
   type CompletionVerifierVerdict,
   getLast50Lines,
 } from './completion-verifier.js';
-import { getRuntimeForWorkerType, type RuntimeEvent } from './runtime/index.js';
+import { getRuntime, type RuntimeEvent, type WorkerRuntime } from './runtime/index.js';
 import type { TurnMetricsCollector } from './turn-metrics-collector.js';
 import type { ExecutionDeepValidator, DeepValidationInput } from './execution-deep-validator.js';
 import type { ExecutionAgentData } from './completion-verifier.js';
@@ -308,6 +308,7 @@ export class TaskDispatcher {
       const task: Task = {
         taskId,
         workerType: request.workerType,
+        runtime: WORKER_TYPES[request.workerType].runtime,
         prompt: request.prompt,
         repository,
         baseBranch,
@@ -664,6 +665,10 @@ export class TaskDispatcher {
     // TODO: Implement GitHub API call to get default repository
     // For now, use a default
     return 'pbuchman/intexuraos';
+  }
+
+  private resolveTaskRuntime(task: Task): WorkerRuntime {
+    return task.runtime ?? WORKER_TYPES[task.workerType].runtime;
   }
 
   private async saveTask(task: Task): Promise<void> {
@@ -1577,12 +1582,19 @@ export class TaskDispatcher {
       task.taskId,
       `Starting worker attempt: continueSession=${String(params.continueSession)}`
     );
+    const runtimeName = this.resolveTaskRuntime(task);
     const workerTypeConfig = WORKER_TYPES[task.workerType];
-    const runtime = getRuntimeForWorkerType(task.workerType);
+    const runtime = getRuntime(runtimeName);
     const runtimeAttemptState = runtime.createAttemptState(task.taskId, this.logger);
+    if (params.continueSession && runtimeName === 'codex' && task.runtimeSessionId === undefined) {
+      return {
+        ok: false,
+        error: new Error('Codex resume requires a persisted runtime session ID'),
+      };
+    }
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `Worker config: type=${task.workerType} model=${workerTypeConfig.model ?? 'default'} apiUrl=${workerTypeConfig.apiBaseUrl}`
+      `Worker config: type=${task.workerType} runtime=${runtimeName} model=${workerTypeConfig.model ?? 'default'} apiUrl=${workerTypeConfig.apiBaseUrl}`
     );
     this.appendOrchestratorTaskLog(
       task.taskId,
@@ -1632,6 +1644,8 @@ export class TaskDispatcher {
         /* v8 ignore stop @preserve */
         (params.injectActiveGoal === true ? this.buildActiveGoalSection(task, params.prompt) : ''),
       workerType: task.workerType,
+      runtimeOverride: runtimeName,
+      ...(task.runtimeSessionId !== undefined && { runtimeSessionId: task.runtimeSessionId }),
       secrets: this.isolation.getSecrets(),
       gcpSaKeyPath: this.isolation.gcpSaKeyPath,
       githubAppKeyPath: this.isolation.githubAppKeyPath,
@@ -1639,13 +1653,10 @@ export class TaskDispatcher {
       onLog: (chunk) => {
         const cleaned = stripDockerHeaders(chunk);
         this.lastOutputAt.set(task.taskId, Date.now());
-        this.handleRuntimeEvents(
-          task.taskId,
-          runtime.processLogChunk(runtimeAttemptState, cleaned)
-        );
+        void this.handleRuntimeEvents(task, runtime.processLogChunk(runtimeAttemptState, cleaned));
       },
       onComplete: (exitCode) => {
-        this.handleRuntimeEvents(task.taskId, runtime.flushAttemptState(runtimeAttemptState));
+        void this.handleRuntimeEvents(task, runtime.flushAttemptState(runtimeAttemptState));
         this.taskExitCodes.set(task.taskId, exitCode);
         this.attemptCompletionSignals.add(task.taskId);
         this.appendOrchestratorTaskLog(
@@ -2070,7 +2081,10 @@ export class TaskDispatcher {
     }
   }
 
-  private handleRuntimeEvents(taskId: string, events: RuntimeEvent[]): void {
+  private async handleRuntimeEvents(task: Task, events: RuntimeEvent[]): Promise<void> {
+    let shouldPersistTask = false;
+    const taskId = task.taskId;
+
     for (const event of events) {
       if (event.type === 'log') {
         if (event.text !== '') {
@@ -2080,6 +2094,10 @@ export class TaskDispatcher {
       }
 
       if (event.type === 'runtime_session_started') {
+        if (task.runtimeSessionId !== event.sessionId) {
+          task.runtimeSessionId = event.sessionId;
+          shouldPersistTask = true;
+        }
         this.logger.info({ taskId, sessionId: event.sessionId }, 'Detected runtime session start');
         continue;
       }
@@ -2105,6 +2123,10 @@ export class TaskDispatcher {
         );
       }
       this.claudeErrors.set(taskId, event.errorMessage);
+    }
+
+    if (shouldPersistTask) {
+      await this.saveTask(task);
     }
   }
 

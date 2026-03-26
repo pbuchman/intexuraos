@@ -1,3 +1,4 @@
+import type { WorkerRuntime } from '../services/runtime/types.js';
 import type { WorkerType } from '../services/isolation/types.js';
 
 export type TaskStatus =
@@ -24,6 +25,8 @@ export interface PendingResumeStart {
 export interface Task {
   taskId: string;
   workerType: WorkerType;
+  runtime?: WorkerRuntime;
+  runtimeSessionId?: string;
   prompt: string;
   repository: string;
   baseBranch: string;

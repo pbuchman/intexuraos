@@ -194,6 +194,16 @@ const createTestConfig = (overrides: Partial<WorkerConfig> = {}): WorkerConfig =
   ...overrides,
 });
 
+function createRuntimeOverrideConfig(
+  runtimeOverride: 'claude' | 'codex',
+  overrides: Partial<WorkerConfig> = {}
+): WorkerConfig {
+  return {
+    ...createTestConfig(overrides),
+    runtimeOverride,
+  } as WorkerConfig & { runtimeOverride: 'claude' | 'codex' };
+}
+
 class TestableDockerProvider extends DockerProvider {
   constructor(
     config: Partial<DockerProviderConfig>,
@@ -352,6 +362,98 @@ describe('DockerProvider', () => {
       expect(binds).toContainEqual(
         expect.stringContaining('claude-session-test-task-123:/home/claude/.claude:rw')
       );
+    });
+
+    it('mounts shared Codex auth separately from task-local Codex state', async () => {
+      const codexProvider = new TestableDockerProvider(
+        { sharedCodexAuthPath: '/shared/codex-auth' } as Partial<DockerProviderConfig>,
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await codexProvider.createWorker(createRuntimeOverrideConfig('codex'));
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      expect(binds).toContainEqual(
+        expect.stringContaining('codex-state-test-task-123:/home/claude/.codex:rw')
+      );
+      expect(binds).toContain('/shared/codex-auth/auth.json:/home/claude/.codex/auth.json:rw');
+    });
+
+    it('fails codex runtime creation when shared Codex auth is not configured', async () => {
+      await expect(provider.createWorker(createRuntimeOverrideConfig('codex'))).rejects.toThrow(
+        'Codex runtime requires sharedCodexAuthPath but it is not configured'
+      );
+
+      expect(mocks.mockDocker.createContainer).not.toHaveBeenCalled();
+    });
+
+    it('gives different tasks different Codex state directories', async () => {
+      const codexProvider = new TestableDockerProvider(
+        { sharedCodexAuthPath: '/shared/codex-auth' } as Partial<DockerProviderConfig>,
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await codexProvider.createWorker(
+        createRuntimeOverrideConfig('codex', { taskId: 'codex-task-a' })
+      );
+      await codexProvider.createWorker(
+        createRuntimeOverrideConfig('codex', { taskId: 'codex-task-b' })
+      );
+
+      const firstCreateCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const firstBinds = firstCreateCall?.HostConfig?.Binds as string[];
+      expect(firstBinds).toContainEqual(
+        expect.stringContaining('codex-state-codex-task-a:/home/claude/.codex:rw')
+      );
+
+      const secondCreateCall = mocks.mockDocker.createContainer.mock.calls[1]?.[0];
+      const secondBinds = secondCreateCall?.HostConfig?.Binds as string[];
+      expect(secondBinds).toContainEqual(
+        expect.stringContaining('codex-state-codex-task-b:/home/claude/.codex:rw')
+      );
+    });
+
+    it('fails codex resume when task-local state home is missing', async () => {
+      const fsModule = await import('node:fs');
+      (fsModule.existsSync as Mock).mockImplementation((filePath: unknown) => {
+        return !(typeof filePath === 'string' && filePath.includes('codex-state-test-task-123'));
+      });
+
+      const codexProvider = new TestableDockerProvider(
+        { sharedCodexAuthPath: '/shared/codex-auth' } as Partial<DockerProviderConfig>,
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await expect(
+        codexProvider.createWorker(
+          createRuntimeOverrideConfig('codex', {
+            continueSession: true,
+          })
+        )
+      ).rejects.toThrow('Codex resume requires existing task-local state');
+
+      expect(mocks.mockDocker.createContainer).not.toHaveBeenCalled();
+    });
+
+    it('keeps Claude mounts unchanged when Codex auth support is configured', async () => {
+      const codexAwareProvider = new TestableDockerProvider(
+        { sharedCodexAuthPath: '/shared/codex-auth' } as Partial<DockerProviderConfig>,
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await codexAwareProvider.createWorker(createTestConfig({ workerType: 'auto' }));
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      expect(binds).toContainEqual(
+        expect.stringContaining('claude-session-test-task-123:/home/claude/.claude:rw')
+      );
+      expect(binds.some((bind) => bind.includes('/home/claude/.codex'))).toBe(false);
     });
 
     it('mounts pnpm store volume and node_modules tmpfs', async () => {
@@ -3103,6 +3205,32 @@ describe('DockerProvider', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(onComplete).toHaveBeenCalledWith(0);
+    });
+
+    it('passes codex runtime metadata into run-attempt exec for resumed Codex tasks', async () => {
+      const codexProvider = new TestableDockerProvider(
+        { sharedCodexAuthPath: '/shared/codex-auth' } as Partial<DockerProviderConfig>,
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await codexProvider.createWorker(
+        createRuntimeOverrideConfig('codex', {
+          continueSession: true,
+          runtimeSessionId: 'thread_123',
+          onComplete: vi.fn(),
+        })
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const runAttemptCall = mocks.mockContainer.exec.mock.calls.find((call: unknown[]) => {
+        const opts = call[0] as { Cmd?: string[] };
+        return opts.Cmd?.[0] === '/entrypoint.sh' && opts.Cmd?.[1] === 'run-attempt';
+      });
+      const envArr = runAttemptCall?.[0]?.Env as string[];
+
+      expect(envArr).toContain('WORKER_RUNTIME=codex');
+      expect(envArr).toContain('CODEX_THREAD_ID=thread_123');
     });
 
     it('calls onComplete(1) when worker not found', async () => {
