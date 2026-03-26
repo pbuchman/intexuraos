@@ -81,6 +81,59 @@ describe('NotificationCard', () => {
     expect(handleDelete).toHaveBeenCalledWith('notification-123');
   });
 
+  it('applies scale and opacity classes when isDeleting is true and disables the delete button', () => {
+    const { container } = render(
+      <NotificationCard
+        notification={createNotification()}
+        onDelete={vi.fn()}
+        isDeleting={true}
+      />
+    );
+
+    const card = container.firstElementChild as HTMLElement;
+
+    expect(card).toHaveClass('scale-95');
+    expect(card).toHaveClass('opacity-50');
+
+    const deleteButton = screen.getByRole('button', { name: 'Delete notification' });
+
+    expect(deleteButton).toBeDisabled();
+  });
+
+  it('does not render the text paragraph when notification text is empty', () => {
+    render(
+      <NotificationCard
+        notification={createNotification({ text: '' })}
+        onDelete={vi.fn()}
+        isDeleting={false}
+      />
+    );
+
+    expect(screen.getByText('Build finished')).toBeInTheDocument();
+    expect(screen.queryByText('Deployment completed successfully.')).not.toBeInTheDocument();
+  });
+
+  it('dismisses the confirmation overlay without calling onDelete when Cancel is clicked', () => {
+    const handleDelete = vi.fn();
+
+    render(
+      <NotificationCard
+        notification={createNotification()}
+        onDelete={handleDelete}
+        isDeleting={false}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete notification' }));
+
+    expect(screen.getByText('Delete this notification?')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByText('Delete this notification?')).not.toBeInTheDocument();
+    expect(handleDelete).not.toHaveBeenCalled();
+  });
+
   it('truncates long app badges and exposes the full package name via title', () => {
     const longAppName = 'com.google.android.projection.gearhead';
 
