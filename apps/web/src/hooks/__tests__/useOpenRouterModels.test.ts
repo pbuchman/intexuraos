@@ -94,6 +94,25 @@ describe('useOpenRouterModels', () => {
     expect(result.current.error).toBe('Network error');
   });
 
+  it('refresh() retries after an initial fetch error', async () => {
+    mockRequest
+      .mockRejectedValueOnce(new Error('Network error'))
+      .mockResolvedValueOnce({ models: MOCK_MODELS, cachedAt: '2026-03-25T00:00:00Z' });
+
+    const { result } = renderHook(() => useOpenRouterModels(true));
+
+    await waitFor(() => {
+      expect(result.current.error).toBe('Network error');
+    });
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(result.current.models).toStrictEqual(MOCK_MODELS);
+    expect(result.current.error).toBeNull();
+  });
+
   it('does not re-fetch on subsequent renders', async () => {
     mockRequest.mockResolvedValueOnce({
       models: MOCK_MODELS,
