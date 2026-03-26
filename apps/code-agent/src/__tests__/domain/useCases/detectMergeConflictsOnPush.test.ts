@@ -1321,11 +1321,11 @@ describe('createDetectMergeConflictsOnPush', () => {
   it('treats review-only history as a fresh conflict workflow start', async () => {
     const logger = createLogger();
     const deps = createDeps(logger);
-    deps.codeTaskRepo.findLatestNonReviewTaskByPR.mockResolvedValue(ok(null));
 
     const detector = createDetectMergeConflictsOnPush(deps as never);
     await detector.detectOnPush(createPushEvent('refs/heads/release/2026.03'), logger);
 
+    expect(deps.codeTaskRepo.findLatestNonReviewTaskByPR).toHaveBeenCalledWith('intexuraos/intexuraos', 42);
     expect(deps.gitHubPRClient.updateIssueComment).toHaveBeenLastCalledWith(
       'oauth-token',
       'intexuraos',
