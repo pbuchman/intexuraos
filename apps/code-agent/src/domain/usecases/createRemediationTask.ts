@@ -25,7 +25,7 @@ export interface CreateRemediationTaskRequest {
   senderLogin: string;
   workerType: WorkerType;
   eventId: string;
-  triggerComment?: { id: number; body: string; author: string };
+  triggerComment?: { id: string; body: string; author: string };
   reviewBody?: string;
   inlineComments?: { path: string; line: number; body: string }[];
   linearIssueId?: string;

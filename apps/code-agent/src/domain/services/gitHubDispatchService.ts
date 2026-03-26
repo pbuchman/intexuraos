@@ -135,7 +135,7 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
             eventId: event.id,
             ...(isCodeWorkerReview && event.body !== null && { reviewBody: event.body }),
             ...(!isCodeWorkerReview && event.body !== null && {
-              triggerComment: { id: Number(event.id), body: event.body, author: event.senderLogin },
+              triggerComment: { id: event.id, body: event.body, author: event.senderLogin },
             }),
             ...(event.baseBranch !== null && { baseBranch: event.baseBranch }),
           });
