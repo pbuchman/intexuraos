@@ -45,7 +45,7 @@ export function PrRow({ pr, isNextToMerge, isExcluded, onToggleExclusion }: PrRo
 
   return (
     <div
-      className={`rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800 ${ACCENT_SHADOW[status]} ${
+      className={`rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800 ${isExcluded ? '' : ACCENT_SHADOW[status]} ${
         !pr.authorIsEligible || isExcluded ? 'opacity-50' : ''
       } ${isExcluded ? 'border-dashed' : ''}`}
     >

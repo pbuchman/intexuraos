@@ -405,6 +405,44 @@ describe('useMergeQueue', () => {
       expect(result.current.exclusionError).toBe('API failed');
     });
 
+    it('auto-clears exclusion error after 3 seconds', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+
+      try {
+        const branch = makeBranch('main', 1);
+        const watch = makeWatch('w-1', 'main', 'active');
+
+        mockListBranches.mockResolvedValue({ branches: [branch] });
+        mockListWatches.mockResolvedValue({ watches: [watch] });
+        mockListPrs.mockResolvedValue({ pullRequests: [] });
+        mockUpdateExclusions.mockRejectedValue(new Error('API failed'));
+
+        const { result } = renderHook(() => useMergeQueue(OWNER, REPO));
+
+        await waitFor(() => {
+          expect(result.current.loading).toBe(false);
+        });
+
+        act(() => {
+          result.current.handleToggleExclusion(42);
+        });
+
+        // Wait for API failure to set the error
+        await waitFor(() => {
+          expect(result.current.exclusionError).toBe('API failed');
+        });
+
+        // Advance past the 3s error clear timer
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(3001);
+        });
+
+        expect(result.current.exclusionError).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('handleSelectAll clears all exclusions and calls API', async () => {
       const branch = makeBranch('main', 1);
       const watch = makeWatch('w-1', 'main', 'active', [10, 20]);
