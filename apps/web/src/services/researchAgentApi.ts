@@ -254,6 +254,8 @@ export type {
   ResearchStatus,
   SaveDraftRequest,
   SupportedModel,
+  OpenRouterModelInfo,
+  OpenRouterModelsResponse,
   ValidateInputRequest,
   ValidateInputResponse,
 } from './researchAgentApi.types.js';

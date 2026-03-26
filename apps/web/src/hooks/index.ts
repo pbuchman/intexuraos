@@ -23,6 +23,7 @@ export { useDataInsights } from './useDataInsights.js';
 export { useDataSource, useDataSources } from './useDataSources.js';
 export { useLlmKeys } from './useLlmKeys.js';
 export { useNotes } from './useNotes.js';
+export { useOpenRouterModels } from './useOpenRouterModels.js';
 export { useResearch, useResearches } from './useResearch.js';
 export { useResearchDetailActions, type ResearchDetailActions } from './useResearchDetailActions.js';
 export { useTodos } from './useTodos.js';

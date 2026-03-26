@@ -64,6 +64,7 @@ import { createUnifiedEvaluator, type UnifiedEvaluator } from './domain/services
 import { evaluateEvent, type GitHubAgentEvalResult, type GitHubAgentError } from './domain/usecases/githubAgent.js';
 import type { GitHubPREvent } from './domain/models/gitHubPREvent.js';
 import { createReviewTask } from './domain/usecases/createReviewTask.js';
+import { createRemediationTask } from './domain/usecases/createRemediationTask.js';
 import type { MergeConflictDetector } from './domain/services/mergeConflictDetector.js';
 import { createDetectMergeConflictsOnPush } from './domain/usecases/detectMergeConflictsOnPush.js';
 import { fetchGitHubToken } from './domain/utils/gitHubTokenResolver.js';
@@ -437,6 +438,18 @@ export function initServices(config: ServiceConfig): void {
     serviceUrl: config.serviceUrl,
     dispatchRetryRepo,
     automationLog,
+    createRemediationTask: (taskLogger, request) => createRemediationTask(
+      {
+        logger: taskLogger,
+        codeTaskRepo,
+        userLookupService,
+        taskEnqueueService,
+        workerSettingsRepo,
+        orchestratorSecret: config.orchestratorSecret,
+        automationLog,
+      },
+      request,
+    ),
   });
 
   const dispatchService: WebhookDispatchService & CIFailureDispatchService = dispatchServiceResult;
@@ -470,6 +483,7 @@ export function initServices(config: ServiceConfig): void {
         workerSettingsRepo,
         orchestratorSecret: config.orchestratorSecret,
         automationLog,
+        gitHubPRSummaryRepo,
       },
       request,
     ),
@@ -482,6 +496,7 @@ export function initServices(config: ServiceConfig): void {
       return resolvedUser.userId;
     },
     allowedBots: ALLOWED_BOTS,
+    codeTaskRepo,
     onUnauthorizedSender: async (event: GitHubPREvent) => {
       const parsed = parseOwnerRepo(event.repository);
       if (parsed === null) return;

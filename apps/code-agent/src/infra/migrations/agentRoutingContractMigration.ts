@@ -2,7 +2,7 @@ import { FieldValue, type Firestore } from '@intexuraos/infra-firestore';
 import type { Logger } from 'pino';
 
 type LegacyExecutionPhase = 'design' | 'execution';
-type AgentType = 'planning' | 'execution' | 'pull_request' | 'review';
+type AgentType = 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
 
 function mapExecutionPhaseToAgentType(executionPhase: LegacyExecutionPhase): AgentType {
   return executionPhase === 'execution' ? 'execution' : 'planning';

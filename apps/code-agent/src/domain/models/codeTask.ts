@@ -14,7 +14,7 @@ export type WorkerType = CodeTaskWorkerType;
  */
 export type WorkerLocation = string;
 
-export type AgentType = 'planning' | 'execution' | 'pull_request' | 'review';
+export type AgentType = 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
 
 /** System prompt hash for auto-triggered merge-conflict resolution tasks. */
 export const MERGE_CONFLICT_SYSTEM_PROMPT_HASH = 'pr-merge-conflict-auto';
@@ -196,4 +196,7 @@ export interface CodeTask {
 
   // Review task metadata
   reviewTypes?: string[];        // Review types requested (e.g., ['code_quality', 'security'])
+
+  // Remediation task metadata
+  requiresReReview?: boolean;    // Set by remediation tasks before pushing code
 }

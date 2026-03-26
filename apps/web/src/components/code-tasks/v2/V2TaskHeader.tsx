@@ -79,6 +79,10 @@ export function V2TaskHeader({ task, workerStatusTag }: V2TaskHeaderProps): Reac
           <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
             Execution
           </span>
+        ) : task.agentType === 'remediation' ? (
+          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
+            Remediation
+          </span>
         ) : null}
         <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300">
           {task.workerType}

@@ -57,6 +57,7 @@ function mapSummaryData(data: Record<string, unknown>): GitHubPRSummary {
     managedConflictTaskOwnerUserId: (data['managedConflictTaskOwnerUserId'] as string | null | undefined) ?? null,
     lastActivityAt: toDate(data['lastActivityAt']),
     firstSeenAt: toDate(data['firstSeenAt']),
+    lastReviewedCommitSha: (data['lastReviewedCommitSha'] as string | null | undefined) ?? null,
   };
 }
 
@@ -81,8 +82,11 @@ export function createFirestoreGitHubPRSummariesRepository(deps: {
           repository: input.repository,
           pullRequestNumber: input.pullRequestNumber,
           lastActivityAt: input.lastActivityAt,
-          firstSeenAt: input.firstSeenAt,
         };
+
+        if (input.firstSeenAt !== undefined) {
+          data['firstSeenAt'] = input.firstSeenAt;
+        }
 
         // Only include title/state/mergedAt when explicitly provided (pull_request events)
         if ('title' in input) {
@@ -123,6 +127,9 @@ export function createFirestoreGitHubPRSummariesRepository(deps: {
         }
         if ('managedConflictTaskOwnerUserId' in input) {
           data['managedConflictTaskOwnerUserId'] = input.managedConflictTaskOwnerUserId ?? null;
+        }
+        if ('lastReviewedCommitSha' in input) {
+          data['lastReviewedCommitSha'] = input.lastReviewedCommitSha ?? null;
         }
 
         await docRef.set(data, { merge: true });

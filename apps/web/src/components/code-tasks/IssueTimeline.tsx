@@ -72,6 +72,14 @@ function getActionLabel(task: CodeTask): string {
     if (status === 'queued') return 'Review queued';
   }
 
+  if (agentType === 'remediation') {
+    if (status === 'implemented') return 'Remediation completed';
+    if (status === 'failed') return 'Remediation failed';
+    if (status === 'running') return 'Remediation running';
+    if (status === 'dispatched') return 'Remediation dispatched';
+    if (status === 'queued') return 'Remediation queued';
+  }
+
   // Default: capitalize status
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
