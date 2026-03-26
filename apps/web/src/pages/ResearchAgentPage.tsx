@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, Loader2, Plus, Sparkles, Trash2 } from 'lucide-react';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders, getOpenRouterRawId, isOpenRouterModel } from '@intexuraos/llm-contract';
 import {
   Button,
   Card,
@@ -11,7 +11,7 @@ import {
   PROVIDER_MODELS,
 } from '@/components';
 import { useAuth } from '@/context';
-import { useLlmKeys } from '@/hooks';
+import { useLlmKeys, useOpenRouterModels } from '@/hooks';
 import {
   getResearch,
   improveInput,
@@ -36,6 +36,8 @@ export function ResearchAgentPage(): React.JSX.Element {
   const [searchParams] = useSearchParams();
   const { getAccessToken } = useAuth();
   const { keys, loading: keysLoading } = useLlmKeys();
+  const isOpenRouterConfigured = keys !== null && keys.openrouter !== null;
+  const { models: openRouterModels, loading: openRouterLoading, error: openRouterError } = useOpenRouterModels(isOpenRouterConfigured);
 
   const draftId = searchParams.get('draftId');
   const isEditMode = draftId !== null && draftId !== '';
@@ -45,6 +47,7 @@ export function ResearchAgentPage(): React.JSX.Element {
     () => new Map()
   );
   const [synthesisModel, setSynthesisModel] = useState<SupportedModel | null>(null);
+  const [selectedOpenRouterModels, setSelectedOpenRouterModels] = useState<string[]>([]);
   const [inputContexts, setInputContexts] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -84,7 +87,10 @@ export function ResearchAgentPage(): React.JSX.Element {
   const configuredProviders: LlmProvider[] =
     keysLoading || keys === null
       ? []
-      : PROVIDER_MODELS.filter((p) => keys[p.id] !== null).map((p) => p.id);
+      : [
+          ...PROVIDER_MODELS.filter((p) => keys[p.id] !== null).map((p) => p.id),
+          ...(keys.openrouter !== null ? [LlmProviders.OpenRouter] : []),
+        ];
 
   const failedProviders: Map<LlmProvider, string> = ((): Map<LlmProvider, string> => {
     const map = new Map<LlmProvider, string>();
@@ -123,6 +129,11 @@ export function ResearchAgentPage(): React.JSX.Element {
         }
         setModelSelections(selections);
 
+        const orModels = draft.selectedModels
+          .filter((m) => isOpenRouterModel(m))
+          .map((m) => getOpenRouterRawId(m));
+        setSelectedOpenRouterModels(orModels);
+
         // Load synthesis model from draft (validate it's synthesis-capable)
         const draftSynthesisValid = SYNTHESIS_CAPABLE_MODELS.includes(draft.synthesisModel);
         if (draftSynthesisValid) {
@@ -146,6 +157,7 @@ export function ResearchAgentPage(): React.JSX.Element {
           modelSelections: selections,
           synthesisModel: draft.synthesisModel,
           inputContexts: loadedContexts,
+          selectedOpenRouterModels: orModels,
         };
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load draft');
@@ -188,7 +200,7 @@ export function ResearchAgentPage(): React.JSX.Element {
     try {
       const token = await getAccessToken();
       const validContexts = inputContexts.filter((ctx) => ctx.trim().length > 0);
-      const selectedModels = getSelectedModelsList(modelSelections);
+      const selectedModels = getSelectedModelsList(modelSelections, selectedOpenRouterModels);
 
       const request: SaveDraftRequest = { prompt };
       if (selectedModels.length > 0) {
@@ -208,6 +220,7 @@ export function ResearchAgentPage(): React.JSX.Element {
         modelSelections,
         synthesisModel,
         inputContexts: validContexts,
+        selectedOpenRouterModels,
       };
       setHasUnsavedChanges(false);
     } catch {
@@ -221,6 +234,7 @@ export function ResearchAgentPage(): React.JSX.Element {
     modelSelections,
     synthesisModel,
     inputContexts,
+    selectedOpenRouterModels,
     getAccessToken,
   ]);
 
@@ -229,15 +243,16 @@ export function ResearchAgentPage(): React.JSX.Element {
     modelSelections: Map<LlmProvider, SupportedModel | null>;
     synthesisModel: SupportedModel | null;
     inputContexts: string[];
-  }>({ modelSelections: new Map(), synthesisModel: null, inputContexts: [] });
+    selectedOpenRouterModels: string[];
+  }>({ modelSelections: new Map(), synthesisModel: null, inputContexts: [], selectedOpenRouterModels: [] });
 
   useEffect(() => {
     if (!isEditMode) return;
 
     const promptChanged = prompt !== lastSavedPromptRef.current;
 
-    const currentModels = getSelectedModelsList(modelSelections);
-    const savedModels = getSelectedModelsList(lastSavedStateRef.current.modelSelections);
+    const currentModels = getSelectedModelsList(modelSelections, selectedOpenRouterModels);
+    const savedModels = getSelectedModelsList(lastSavedStateRef.current.modelSelections, lastSavedStateRef.current.selectedOpenRouterModels);
     const modelsChanged = JSON.stringify(currentModels) !== JSON.stringify(savedModels);
 
     const synthesisChanged = synthesisModel !== lastSavedStateRef.current.synthesisModel;
@@ -247,7 +262,7 @@ export function ResearchAgentPage(): React.JSX.Element {
     if (promptChanged || modelsChanged || synthesisChanged || contextsChanged) {
       setHasUnsavedChanges(true);
     }
-  }, [prompt, modelSelections, synthesisModel, inputContexts, isEditMode]);
+  }, [prompt, modelSelections, synthesisModel, inputContexts, selectedOpenRouterModels, isEditMode]);
 
   // 1-minute autosave interval
   useEffect(() => {
@@ -316,7 +331,7 @@ export function ResearchAgentPage(): React.JSX.Element {
 
   const validContexts = inputContexts.filter((ctx) => ctx.trim().length > 0);
   const hasValidContexts = validContexts.length > 0;
-  const selectedModels = getSelectedModelsList(modelSelections);
+  const selectedModels = getSelectedModelsList(modelSelections, selectedOpenRouterModels);
   const isSingleModelNoContext = selectedModels.length === 1 && !hasValidContexts;
 
   const executeSubmit = async (params?: {
@@ -656,6 +671,12 @@ export function ResearchAgentPage(): React.JSX.Element {
             failedProviders={failedProviders}
             loading={keysLoading}
             disabled={submitting || savingDraft}
+            openRouterModels={openRouterModels}
+            selectedOpenRouterModels={selectedOpenRouterModels}
+            onOpenRouterChange={setSelectedOpenRouterModels}
+            openRouterLoading={openRouterLoading}
+            openRouterError={openRouterError}
+            isOpenRouterConfigured={isOpenRouterConfigured}
           />
         </Card>
 

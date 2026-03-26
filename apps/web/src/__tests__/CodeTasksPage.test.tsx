@@ -3,12 +3,13 @@
  * @vitest-environment jsdom
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { CodeTasksPage, DEFAULT_VISIBLE_STATUSES } from '../pages/CodeTasksPage.js';
 import type { CodeTask, CodeTaskStatus } from '../types/index.js';
 
 const mockNavigate = vi.fn();
+const mockGetAccessToken = vi.fn();
 const mockUseCodeTasks = vi.fn();
 const mockUseWorkersStatus = vi.fn();
 const localStorageState = new Map<string, string>();
@@ -41,7 +42,14 @@ vi.mock('react-router-dom', () => ({
 
 vi.mock('@/hooks', () => ({
   useCodeTasks: (): ReturnType<typeof mockUseCodeTasks> => mockUseCodeTasks(),
+  useTimeTick: (): number => 0,
   useWorkersStatus: (): ReturnType<typeof mockUseWorkersStatus> => mockUseWorkersStatus(),
+}));
+
+vi.mock('@/context', () => ({
+  useAuth: (): { getAccessToken: typeof mockGetAccessToken } => ({
+    getAccessToken: mockGetAccessToken,
+  }),
 }));
 
 vi.mock('@/components', () => ({
@@ -82,12 +90,14 @@ vi.mock('@/components', () => ({
   ),
 }));
 
-vi.mock('lucide-react', () => {
+vi.mock('lucide-react', async () => {
+  const actual = await vi.importActual<typeof import('lucide-react')>('lucide-react');
   const icon = (name: string) =>
     function MockIcon(): React.JSX.Element {
       return <span>{name}</span>;
     };
   return {
+    ...actual,
     ArrowUpDown: icon('ArrowUpDown'),
     Check: icon('Check'),
     ChevronDown: icon('ChevronDown'),
@@ -133,6 +143,10 @@ describe('CodeTasksPage', () => {
     localStorage.clear();
   });
 
+  beforeEach(() => {
+    mockGetAccessToken.mockResolvedValue('test-token');
+  });
+
   it('renders live Linear issue data from task.linearIssue', () => {
     mockUseCodeTasks.mockReturnValue({
       tasks: [
@@ -157,6 +171,7 @@ describe('CodeTasksPage', () => {
       hasMore: false,
       loadMore: vi.fn(),
       deleteTask: vi.fn(),
+      refresh: vi.fn(),
     });
     mockUseWorkersStatus.mockReturnValue({
       status: { workers: [{ name: 'mac', status: 'healthy' }] },
@@ -164,7 +179,7 @@ describe('CodeTasksPage', () => {
 
     render(<CodeTasksPage />);
 
-    expect(screen.getByText('Hydrated Linear Issue')).toBeInTheDocument();
+    expect(screen.getAllByText('Hydrated Linear Issue')).toHaveLength(2);
     expect(screen.getAllByRole('link', { name: 'INT-301' })).toSatisfy((links) =>
       links.every((link) =>
         link.getAttribute('href') === 'https://linear.app/pbuchman/issue/INT-301'
@@ -186,6 +201,7 @@ describe('CodeTasksPage', () => {
       hasMore: false,
       loadMore: vi.fn(),
       deleteTask: vi.fn(),
+      refresh: vi.fn(),
     });
     mockUseWorkersStatus.mockReturnValue({
       status: { workers: [] },
@@ -224,6 +240,7 @@ describe('CodeTasksPage', () => {
       hasMore: false,
       loadMore: vi.fn(),
       deleteTask: vi.fn(),
+      refresh: vi.fn(),
     });
     mockUseWorkersStatus.mockReturnValue({
       status: { workers: [] },

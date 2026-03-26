@@ -28,6 +28,25 @@ export function getProviderForModel(model: SupportedModel): LlmProvider {
   return MODEL_TO_PROVIDER[model];
 }
 
+/** Model info from OpenRouter curated allowlist */
+export interface OpenRouterModelInfo {
+  id: string;
+  name: string;
+  provider: string;
+  contextLength: number;
+  pricing: {
+    promptPerToken: number;
+    completionPerToken: number;
+  };
+  inputModalities: string[];
+  outputModalities: string[];
+}
+
+export interface OpenRouterModelsResponse {
+  models: OpenRouterModelInfo[];
+  cachedAt: string;
+}
+
 export type ResearchStatus =
   | 'draft'
   | 'pending'
