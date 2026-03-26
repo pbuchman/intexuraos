@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 
 import { MessageItem } from '../MessageItem.js';
 import type { WhatsAppMessage } from '@/types';
@@ -183,5 +183,56 @@ describe('MessageItem', () => {
 
     expect(within(screen.getByTestId('message-item-mobile')).queryByTitle('View transcription')).not.toBeInTheDocument();
     expect(within(screen.getByTestId('message-item-desktop')).queryByTitle('View transcription')).not.toBeInTheDocument();
+  });
+
+  it('calls onNoteClick when clicking a text message row', () => {
+    const onNoteClick = vi.fn();
+    render(
+      <MessageItem
+        message={createMessage()}
+        accessToken="token"
+        onDelete={vi.fn()}
+        onImageClick={vi.fn()}
+        onNoteClick={onNoteClick}
+        onTranscriptionClick={vi.fn()}
+        isDeleting={false}
+      />
+    );
+
+    // The outer container wraps both mobile and desktop shells
+    const row = screen.getByTestId('message-item-mobile').closest('[class*="group"]');
+    expect(row).toBeTruthy();
+    fireEvent.click(row as HTMLElement);
+    expect(onNoteClick).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'message-1', mediaType: 'text' })
+    );
+  });
+
+  it('does not call onNoteClick when clicking an audio message row', () => {
+    const onNoteClick = vi.fn();
+    render(
+      <MessageItem
+        message={createMessage({
+          id: 'audio-1',
+          mediaType: 'audio',
+          hasMedia: true,
+          text: '',
+          transcriptionStatus: 'completed',
+          transcription: 'Some transcription',
+        })}
+        accessToken="token"
+        onDelete={vi.fn()}
+        onImageClick={vi.fn()}
+        onNoteClick={onNoteClick}
+        onTranscriptionClick={vi.fn()}
+        isDeleting={false}
+      />
+    );
+
+    // The outer container wraps both mobile and desktop shells
+    const row = screen.getByTestId('message-item-mobile').closest('[class*="group"]');
+    expect(row).toBeTruthy();
+    fireEvent.click(row as HTMLElement);
+    expect(onNoteClick).not.toHaveBeenCalled();
   });
 });
