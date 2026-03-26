@@ -222,6 +222,8 @@ function createDeps(logger: Logger, options?: { includeSleep?: boolean }): TestD
     },
     codeTaskRepo: {
       findById: vi.fn().mockResolvedValue(err({ code: 'NOT_FOUND', message: 'not found' })),
+      // findByPR satisfies the CodeTaskRepository shape but is unused by the use case
+      // (lineage lookups use findLatestNonReviewTaskByPR instead).
       findByPR: vi.fn().mockResolvedValue(ok(null)),
       findLatestNonReviewTaskByPR: vi.fn().mockResolvedValue(ok(null)),
       findByIdForUser: vi.fn(),
@@ -1319,12 +1321,6 @@ describe('createDetectMergeConflictsOnPush', () => {
   it('treats review-only history as a fresh conflict workflow start', async () => {
     const logger = createLogger();
     const deps = createDeps(logger);
-    deps.codeTaskRepo.findByPR.mockResolvedValue(ok(createTask({
-      id: 'task-review-existing',
-      agentType: 'review',
-      status: 'running',
-      linearIssueId: 'INT-555',
-    })));
     deps.codeTaskRepo.findLatestNonReviewTaskByPR.mockResolvedValue(ok(null));
 
     const detector = createDetectMergeConflictsOnPush(deps as never);
