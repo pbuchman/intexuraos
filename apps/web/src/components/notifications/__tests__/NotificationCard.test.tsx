@@ -90,8 +90,9 @@ describe('NotificationCard', () => {
       />
     );
 
-    const card = container.firstElementChild as HTMLElement;
+    const card = container.firstElementChild;
 
+    expect(card).toBeTruthy();
     expect(card).toHaveClass('scale-95');
     expect(card).toHaveClass('opacity-50');
 
