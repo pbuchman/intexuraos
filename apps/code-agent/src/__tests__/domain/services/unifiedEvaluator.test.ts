@@ -1863,11 +1863,11 @@ describe('LLM retry for pull_request events', () => {
       expect(deps.createReviewTask).toHaveBeenCalled();
     });
 
-    it('triggers review when recent remediation task has requiresReReview=undefined (safe default)', async () => {
+    it('skips review when recent remediation task has requiresReReview=undefined (INT-1103: relaxed default — review agent controls via needs_remediation)', async () => {
       const codeTaskRepo = createRemediationCodeTaskRepo({
         status: 'reviewed',
         completedAt: new Date(),
-        // requiresReReview not set — undefined
+        // requiresReReview not set — undefined → skip review (requiresReReview !== true)
       });
       const deps = createFakeDeps({
         webhookRules: {
@@ -1886,7 +1886,8 @@ describe('LLM retry for pull_request events', () => {
 
       await evaluator.evaluate(event, logger);
 
-      expect(deps.createReviewTask).toHaveBeenCalled();
+      // requiresReReview !== true → skip re-review; review agent controls remediation via needs_remediation
+      expect(deps.createReviewTask).not.toHaveBeenCalled();
     });
 
     it('triggers review when no recent remediation task exists', async () => {

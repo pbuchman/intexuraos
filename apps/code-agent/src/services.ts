@@ -64,7 +64,7 @@ import { createUnifiedEvaluator, type UnifiedEvaluator } from './domain/services
 import { evaluateEvent, type GitHubAgentEvalResult, type GitHubAgentError } from './domain/usecases/githubAgent.js';
 import type { GitHubPREvent } from './domain/models/gitHubPREvent.js';
 import { createReviewTask } from './domain/usecases/createReviewTask.js';
-import { createRemediationTask } from './domain/usecases/createRemediationTask.js';
+import { createRemediationTask, type CreateRemediationTaskRequest, type CreateRemediationTaskResult, type CreateRemediationTaskError } from './domain/usecases/createRemediationTask.js';
 import type { MergeConflictDetector } from './domain/services/mergeConflictDetector.js';
 import { createDetectMergeConflictsOnPush } from './domain/usecases/detectMergeConflictsOnPush.js';
 import { fetchGitHubToken } from './domain/utils/gitHubTokenResolver.js';
@@ -123,6 +123,8 @@ export interface ServiceContainer {
   automationLog: AutomationLog;
   taskEnqueueService: TaskEnqueueService;
   mergeQueueWatchRepo: MergeQueueWatchRepository;
+  // Optional so existing setServices() call sites in tests don't need updating
+  createRemediationTaskFn?: (logger: Logger, request: CreateRemediationTaskRequest) => Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>>;
 }
 
 // Configuration required to initialize services
@@ -549,6 +551,18 @@ export function initServices(config: ServiceConfig): void {
     automationLog,
     taskEnqueueService,
     mergeQueueWatchRepo,
+    createRemediationTaskFn: (taskLogger: Logger, request: CreateRemediationTaskRequest): Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>> => createRemediationTask(
+      {
+        logger: taskLogger,
+        codeTaskRepo,
+        userLookupService,
+        taskEnqueueService,
+        workerSettingsRepo,
+        orchestratorSecret: config.orchestratorSecret,
+        automationLog,
+      },
+      request,
+    ),
   };
 }
 

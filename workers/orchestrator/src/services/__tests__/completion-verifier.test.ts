@@ -713,6 +713,7 @@ describe('OrchestratorCompletionVerifier', () => {
         review_types: 'code_quality,security',
         requirements_tracker_updated: '',
         gh_actions_status: '',
+        needs_remediation: '1',
         summary: 'Reviewed and posted 3 comments.',
       });
     });
