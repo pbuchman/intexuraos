@@ -620,6 +620,39 @@ describe('useMergeQueue', () => {
       expect(mockUpdateExclusions).not.toHaveBeenCalled();
     });
 
+    it('clears exclusions when selectedBranch changes', async () => {
+      const branchA = makeBranch('main', 2);
+      const branchB = makeBranch('develop', 1);
+
+      mockListBranches.mockResolvedValue({ branches: [branchA, branchB] });
+      mockListWatches.mockResolvedValue({ watches: [] });
+      mockListPrs.mockResolvedValue({ pullRequests: [] });
+
+      const { result } = renderHook(() => useMergeQueue(OWNER, REPO));
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      // Auto-selected 'main' (highest PR count). Set some exclusions.
+      expect(result.current.selectedBranch).toBe('main');
+
+      act(() => {
+        result.current.handleToggleExclusion(42);
+      });
+
+      expect(result.current.excludedPrNumbers).toEqual(new Set([42]));
+
+      // Switch branch — exclusions should reset
+      act(() => {
+        result.current.setSelectedBranch('develop');
+      });
+
+      await waitFor(() => {
+        expect(result.current.excludedPrNumbers).toEqual(new Set());
+      });
+    });
+
     it('sends excludedPrNumbers when creating a watch', async () => {
       const branch = makeBranch('main', 1);
 

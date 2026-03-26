@@ -95,6 +95,18 @@ describe('WatchStatusCard', () => {
     expect(html).toContain('Excluded: 3');
   });
 
+  it('shows excluded count in error-state watch when excludedCount > 0', () => {
+    const watch = makeWatch({ status: 'active', lastError: 'Merge conflict detected', lastErrorAt: '2026-03-25T12:00:00Z' });
+
+    const html = renderToStaticMarkup(
+      <WatchStatusCard watch={watch} onToggle={noop} isToggling={false} blocked={false} excludedCount={3} />,
+    );
+
+    expect(html).toContain('Active — Error');
+    expect(html).toContain('Excluded: 3');
+    expect(html).toContain('Merge conflict detected');
+  });
+
   it('hides excluded count when excludedCount is 0', () => {
     const watch = makeWatch({ status: 'active' });
 
