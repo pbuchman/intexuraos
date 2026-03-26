@@ -9,6 +9,7 @@ import {
 } from '@/components';
 import {
   getProviderForModel,
+  getProviderForStoredModel,
   type LlmProvider,
   type Research,
   type SupportedModel,
@@ -59,7 +60,12 @@ export function EnhanceModal({
   }, [onClose]);
 
   const existingProviders = useMemo(
-    () => new Set(research.selectedModels.map(getProviderForModel)),
+    () =>
+      new Set(
+        research.selectedModels
+          .map((model) => getProviderForStoredModel(model))
+          .filter((provider): provider is LlmProvider => provider !== null)
+      ),
     [research.selectedModels],
   );
 

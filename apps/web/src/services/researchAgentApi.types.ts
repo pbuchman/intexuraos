@@ -8,8 +8,9 @@ import { LlmModels, LlmProviders, isOpenRouterModel } from '@intexuraos/llm-cont
 export type LlmProvider = ContractLlmProvider;
 
 export type SupportedModel = ResearchModel;
+export type StoredResearchModel = string;
 
-const MODEL_TO_PROVIDER: Record<SupportedModel, LlmProvider> = {
+const MODEL_TO_PROVIDER = {
   [LlmModels.Gemini25Pro]: LlmProviders.Google,
   [LlmModels.Gemini25Flash]: LlmProviders.Google,
   [LlmModels.ClaudeOpus45]: LlmProviders.Anthropic,
@@ -19,13 +20,29 @@ const MODEL_TO_PROVIDER: Record<SupportedModel, LlmProvider> = {
   [LlmModels.Sonar]: LlmProviders.Perplexity,
   [LlmModels.SonarPro]: LlmProviders.Perplexity,
   [LlmModels.SonarDeepResearch]: LlmProviders.Perplexity,
-};
+} as const satisfies Record<string, LlmProvider>;
+
+export function isSelectableModel(model: string): model is SupportedModel {
+  return isOpenRouterModel(model) || Object.prototype.hasOwnProperty.call(MODEL_TO_PROVIDER, model);
+}
 
 export function getProviderForModel(model: SupportedModel): LlmProvider {
   if (isOpenRouterModel(model)) {
     return LlmProviders.OpenRouter;
   }
   return MODEL_TO_PROVIDER[model];
+}
+
+export function getProviderForStoredModel(model: StoredResearchModel): LlmProvider | null {
+  if (isOpenRouterModel(model)) {
+    return LlmProviders.OpenRouter;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(MODEL_TO_PROVIDER, model)) {
+    return null;
+  }
+
+  return MODEL_TO_PROVIDER[model as keyof typeof MODEL_TO_PROVIDER];
 }
 
 /** Model info from OpenRouter curated allowlist */
@@ -60,7 +77,7 @@ export type ResearchStatus =
 export type PartialFailureDecision = 'proceed' | 'retry' | 'cancel';
 
 export interface PartialFailure {
-  failedProviders: LlmProvider[];
+  failedModels: StoredResearchModel[];
   userDecision?: PartialFailureDecision;
   detectedAt: string;
   retryCount: number;
@@ -70,7 +87,7 @@ export interface PartialFailure {
  * Individual LLM result within a research.
  */
 export interface LlmResult {
-  provider: LlmProvider;
+  provider: string;
   model: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   result?: string;
@@ -127,8 +144,8 @@ export interface Research {
   prompt: string;
   /** Original user prompt before improvement. Only set when user accepted an improved suggestion. */
   originalPrompt?: string;
-  selectedModels: SupportedModel[];
-  synthesisModel: SupportedModel;
+  selectedModels: StoredResearchModel[];
+  synthesisModel: StoredResearchModel;
   status: ResearchStatus;
   llmResults: LlmResult[];
   inputContexts?: InputContext[];

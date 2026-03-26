@@ -42,6 +42,12 @@ import { getProviderForModel, LlmModels } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
 import { createSynthesisProviders } from './helpers/synthesisHelper.js';
 import {
+  getUnsupportedHistoricalModels,
+  getUnsupportedRetryMessage,
+  getUnsupportedSynthesisMessage,
+  isRetryableStoredResearchModel,
+} from './helpers/storedResearchModels.js';
+import {
   approveResearchResponseSchema,
   confirmPartialFailureBodySchema,
   confirmPartialFailureResponseSchema,
@@ -904,12 +910,16 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       switch (body.action) {
         case 'proceed': {
+          const synthesisModel = research.synthesisModel;
+          if (!isRetryableStoredResearchModel(synthesisModel)) {
+            return await reply.fail('CONFLICT', getUnsupportedSynthesisMessage(synthesisModel));
+          }
+
           const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
           if (!apiKeysResult.ok) {
             return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
           }
 
-          const synthesisModel = research.synthesisModel;
           const synthesisProvider = getProviderForModel(synthesisModel);
           const synthesisKey = apiKeysResult.value[synthesisProvider];
           if (synthesisKey === undefined) {
@@ -993,6 +1003,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         /* v8 ignore stop @preserve */
 
         case 'retry': {
+          const unsupportedFailedModels = getUnsupportedHistoricalModels(partialFailure.failedModels);
+          if (unsupportedFailedModels.length > 0) {
+            return await reply.fail('CONFLICT', getUnsupportedRetryMessage(unsupportedFailedModels));
+          }
+
           await researchRepo.update(id, {
             partialFailure: {
               ...partialFailure,
@@ -1083,6 +1098,26 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const research = existing.value;
+      const failedModels = research.llmResults
+        .filter((result) => result.status === 'failed')
+        .map((result) => result.model);
+      const hasSynthesisError =
+        research.synthesisError !== undefined && research.synthesisError !== '';
+      const hasSuccessfulLlms = research.llmResults.some((result) => result.status === 'completed');
+
+      if (failedModels.length > 0) {
+        const unsupportedFailedModels = getUnsupportedHistoricalModels(failedModels);
+        if (unsupportedFailedModels.length > 0) {
+          return await reply.fail('CONFLICT', getUnsupportedRetryMessage(unsupportedFailedModels));
+        }
+      } else if (hasSynthesisError && hasSuccessfulLlms) {
+        if (!isRetryableStoredResearchModel(research.synthesisModel)) {
+          return await reply.fail(
+            'CONFLICT',
+            getUnsupportedSynthesisMessage(research.synthesisModel)
+          );
+        }
+      }
 
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
       if (!apiKeysResult.ok) {
@@ -1593,4 +1628,3 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   done();
 };
-
