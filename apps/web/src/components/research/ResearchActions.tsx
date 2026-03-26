@@ -62,7 +62,7 @@ export function ResearchActions({
   onEditDraft,
   partialFailure: partialFailureState,
 }: ResearchActionsProps): React.JSX.Element {
-  const { retryBlockMessage } = useMemo(() => {
+  const retryBlockMessage = useMemo(() => {
     const failedRetryModels = research.llmResults
       .filter((result) => result.status === 'failed')
       .map((result) => result.model);
@@ -73,13 +73,11 @@ export function ResearchActions({
       research.synthesisError !== '' &&
       research.llmResults.some((result) => result.status === 'completed') &&
       !isSelectableModel(research.synthesisModel);
-    const message =
-      unsupportedRetryModels.length > 0
-        ? `Retry unavailable because these historical models are no longer supported: ${unsupportedRetryModels.map((model) => getModelDisplayName(model)).join(', ')}`
-        : retryBlockedByUnsupportedSynthesis
-          ? `Retry unavailable because the synthesis model ${getModelDisplayName(research.synthesisModel)} is no longer supported.`
-          : null;
-    return { retryBlockMessage: message };
+    return unsupportedRetryModels.length > 0
+      ? `Retry unavailable because these historical models are no longer supported: ${unsupportedRetryModels.map((model) => getModelDisplayName(model)).join(', ')}`
+      : retryBlockedByUnsupportedSynthesis
+        ? `Retry unavailable because the synthesis model ${getModelDisplayName(research.synthesisModel)} is no longer supported.`
+        : null;
   }, [research.llmResults, research.synthesisError, research.synthesisModel]);
 
   return (
