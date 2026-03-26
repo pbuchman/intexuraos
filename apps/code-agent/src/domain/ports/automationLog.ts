@@ -6,6 +6,8 @@
  * (e.g., as a single append-only GitHub PR comment).
  */
 
+import type { AgentType } from '../models/codeTask.js';
+
 export interface PRRef {
   repository: string; // e.g., "pbuchman/intexuraos"
   prNumber: number;
@@ -56,7 +58,7 @@ export type AutomationEvent =
       type: 'task_dispatched';
       taskId: string;
       workerType: string;
-      agentType: 'planning' | 'execution' | 'review' | 'pull_request';
+      agentType: AgentType;
       linearIssueId?: string;
     }
   | {

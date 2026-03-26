@@ -99,6 +99,60 @@ describe('createFirestoreMergeQueueWatchRepository', () => {
       expect(mockDocRef.set).toHaveBeenCalledTimes(1);
     });
 
+    it('stores excludedPrNumbers when provided', async () => {
+      const mockDocRef = {
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+      const mockSnapshot = { empty: true, docs: [] };
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(mockSnapshot),
+      };
+      const mockCollection = {
+        doc: vi.fn().mockReturnValue(mockDocRef),
+        where: vi.fn().mockReturnValue(mockQuery),
+      };
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn().mockReturnValue(mockCollection),
+      } as never);
+
+      const repo = createFirestoreMergeQueueWatchRepository({ logger: mockLogger });
+      const result = await repo.create(createWatchInput({ excludedPrNumbers: [42, 99] }));
+
+      expect(result.ok).toBe(true);
+      if (result.ok === true) {
+        expect(result.value.excludedPrNumbers).toStrictEqual([42, 99]);
+      }
+    });
+
+    it('defaults excludedPrNumbers to empty array when not provided', async () => {
+      const mockDocRef = {
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+      const mockSnapshot = { empty: true, docs: [] };
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(mockSnapshot),
+      };
+      const mockCollection = {
+        doc: vi.fn().mockReturnValue(mockDocRef),
+        where: vi.fn().mockReturnValue(mockQuery),
+      };
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn().mockReturnValue(mockCollection),
+      } as never);
+
+      const repo = createFirestoreMergeQueueWatchRepository({ logger: mockLogger });
+      const result = await repo.create(createWatchInput());
+
+      expect(result.ok).toBe(true);
+      if (result.ok === true) {
+        expect(result.value.excludedPrNumbers).toStrictEqual([]);
+      }
+    });
+
     it('should reject duplicate active watch with CONFLICT', async () => {
       const mockSnapshot = {
         empty: false,
@@ -250,6 +304,48 @@ describe('createFirestoreMergeQueueWatchRepository', () => {
         expect(result.error.code).toBe('FIRESTORE_ERROR');
       }
     });
+
+    it('defaults excludedPrNumbers to empty array for old documents', async () => {
+      const watchData = {
+        userId: 'user_123',
+        gitHubUsername: 'testuser',
+        owner: 'intexuraos',
+        repo: 'test-repo',
+        baseBranch: 'main',
+        status: 'active',
+        mergedPrs: [],
+        skippedPrs: [],
+        lastError: null,
+        lastErrorAt: null,
+        createdAt: new Date(),
+        lastTickAt: null,
+        drainedAt: null,
+        cancelledAt: null,
+        // Note: no excludedPrNumbers — simulates old document
+      };
+
+      const mockDocRef = {
+        get: vi.fn().mockResolvedValue({
+          exists: true,
+          id: 'watch_old',
+          data: () => watchData,
+        }),
+      };
+      const mockCollection = {
+        doc: vi.fn().mockReturnValue(mockDocRef),
+      };
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn().mockReturnValue(mockCollection),
+      } as never);
+
+      const repo = createFirestoreMergeQueueWatchRepository({ logger: mockLogger });
+      const result = await repo.findById('watch_old');
+
+      expect(result.ok).toBe(true);
+      if (result.ok === true) {
+        expect(result.value.excludedPrNumbers).toStrictEqual([]);
+      }
+    });
   });
 
   describe('findActiveByUserAndBranch()', () => {
@@ -382,6 +478,53 @@ describe('createFirestoreMergeQueueWatchRepository', () => {
         expect(result.error.code).toBe('FIRESTORE_ERROR');
       }
     });
+
+    it('defaults excludedPrNumbers to empty array for old documents', async () => {
+      const watchData = {
+        userId: 'user_123',
+        gitHubUsername: 'testuser',
+        owner: 'intexuraos',
+        repo: 'test-repo',
+        baseBranch: 'main',
+        status: 'active',
+        mergedPrs: [],
+        skippedPrs: [],
+        lastError: null,
+        lastErrorAt: null,
+        createdAt: new Date(),
+        lastTickAt: null,
+        drainedAt: null,
+        cancelledAt: null,
+      };
+
+      const mockSnapshot = {
+        empty: false,
+        docs: [{ id: 'watch_old', data: (): typeof watchData => watchData }],
+      };
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(mockSnapshot),
+      };
+
+      const mockCollection = {
+        where: vi.fn().mockReturnValue(mockQuery),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn().mockReturnValue(mockCollection),
+      } as never);
+
+      const repo = createFirestoreMergeQueueWatchRepository({ logger: mockLogger });
+      const result = await repo.findActiveByUserAndBranch('user_123', 'intexuraos', 'test-repo', 'main');
+
+      expect(result.ok).toBe(true);
+      if (result.ok === true) {
+        expect(result.value).not.toBeNull();
+        expect(result.value?.excludedPrNumbers).toStrictEqual([]);
+      }
+    });
   });
 
   describe('findAllActive()', () => {
@@ -483,6 +626,53 @@ describe('createFirestoreMergeQueueWatchRepository', () => {
         expect(result.error.code).toBe('FIRESTORE_ERROR');
       }
     });
+
+    it('defaults excludedPrNumbers to empty array for old documents', async () => {
+      const activeWatch = {
+        userId: 'user_123',
+        gitHubUsername: 'testuser',
+        owner: 'intexuraos',
+        repo: 'test-repo',
+        baseBranch: 'main',
+        status: 'active',
+        mergedPrs: [],
+        skippedPrs: [],
+        lastError: null,
+        lastErrorAt: null,
+        createdAt: new Date(),
+        lastTickAt: null,
+        drainedAt: null,
+        cancelledAt: null,
+      };
+
+      const mockSnapshot = {
+        docs: [
+          { id: 'watch_old', data: (): typeof activeWatch => activeWatch },
+        ],
+      };
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(mockSnapshot),
+      };
+
+      const mockCollection = {
+        where: vi.fn().mockReturnValue(mockQuery),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn().mockReturnValue(mockCollection),
+      } as never);
+
+      const repo = createFirestoreMergeQueueWatchRepository({ logger: mockLogger });
+      const result = await repo.findAllActive();
+
+      expect(result.ok).toBe(true);
+      if (result.ok === true) {
+        expect(result.value).toHaveLength(1);
+        expect(result.value[0]?.excludedPrNumbers).toStrictEqual([]);
+      }
+    });
   });
 
   describe('findByUserAndRepo()', () => {
@@ -579,6 +769,53 @@ describe('createFirestoreMergeQueueWatchRepository', () => {
       expect(result.ok).toBe(false);
       if (result.ok === false) {
         expect(result.error.code).toBe('FIRESTORE_ERROR');
+      }
+    });
+
+    it('defaults excludedPrNumbers to empty array for old documents', async () => {
+      const watchData = {
+        userId: 'user_123',
+        gitHubUsername: 'testuser',
+        owner: 'intexuraos',
+        repo: 'test-repo',
+        baseBranch: 'main',
+        mergedPrs: [],
+        skippedPrs: [],
+        lastError: null,
+        lastErrorAt: null,
+        createdAt: new Date(),
+        lastTickAt: null,
+        drainedAt: null,
+        cancelledAt: null,
+      };
+
+      const mockSnapshot = {
+        docs: [
+          { id: 'watch_old', data: (): Record<string, unknown> => ({ ...watchData, status: 'active' }) },
+        ],
+      };
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(mockSnapshot),
+      };
+
+      const mockCollection = {
+        where: vi.fn().mockReturnValue(mockQuery),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn().mockReturnValue(mockCollection),
+      } as never);
+
+      const repo = createFirestoreMergeQueueWatchRepository({ logger: mockLogger });
+      const result = await repo.findByUserAndRepo('user_123', 'intexuraos', 'test-repo');
+
+      expect(result.ok).toBe(true);
+      if (result.ok === true) {
+        expect(result.value).toHaveLength(1);
+        expect(result.value[0]?.excludedPrNumbers).toStrictEqual([]);
       }
     });
   });
@@ -687,6 +924,28 @@ describe('createFirestoreMergeQueueWatchRepository', () => {
       if (result.ok === false) {
         expect(result.error.code).toBe('FIRESTORE_ERROR');
       }
+    });
+
+    it('updates excludedPrNumbers', async () => {
+      const mockDocRef = {
+        update: vi.fn().mockResolvedValue(undefined),
+      };
+      const mockCollection = {
+        doc: vi.fn().mockReturnValue(mockDocRef),
+      };
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn().mockReturnValue(mockCollection),
+      } as never);
+
+      const repo = createFirestoreMergeQueueWatchRepository({ logger: mockLogger });
+      const result = await repo.update('watch_abc', {
+        excludedPrNumbers: [10, 20],
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mockDocRef.update).toHaveBeenCalledWith({
+        excludedPrNumbers: [10, 20],
+      });
     });
   });
 

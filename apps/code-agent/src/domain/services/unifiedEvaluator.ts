@@ -25,6 +25,8 @@ import type {
 import { isReviewCommandComment, extractReviewWorkerType } from '../utils/reviewTriage.js';
 import type { GitHubEventLogEntryRepository } from '../repositories/gitHubEventLogEntryRepository.js';
 import type { AutomationLog } from '../ports/automationLog.js';
+import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
+import type { CodeTask } from '../models/codeTask.js';
 
 export interface UnifiedEvaluatorDeps {
   webhookRules: WebhookRulesService;
@@ -39,6 +41,8 @@ export interface UnifiedEvaluatorDeps {
   /** Resolve a GitHub login to a platform userId for OAuth token lookup. */
   resolveTokenUserId?: ((senderLogin: string) => Promise<string | undefined>) | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
   allowedBots: Set<string>;
+  /** Code task repository for remediation interception on synchronize events. */
+  codeTaskRepo?: CodeTaskRepository | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
   /** Best-effort callback to post a GitHub comment when an unauthorized sender is rejected. */
   onUnauthorizedSender?: ((event: GitHubPREvent) => Promise<void>) | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
 }
@@ -140,27 +144,6 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
       );
 
       if (ruleOutcome.action === 'dispatch') {
-        // Enforcement loop cap: skip if enforcement already ran for this PR within the last hour
-        if (ruleOutcome.reason === 'CODE_WORKER_REVIEW' && deps.eventDecisionRepo.existsByPRAndReason !== undefined) {
-          const ENFORCEMENT_CAP_WINDOW_MS = 60 * 60 * 1000;
-          const alreadyEnforced = await deps.eventDecisionRepo.existsByPRAndReason(
-            event.repository, event.pullRequestNumber,
-            'CODE_WORKER_REVIEW', new Date(Date.now() - ENFORCEMENT_CAP_WINDOW_MS)
-          );
-          if (alreadyEnforced.ok && alreadyEnforced.value) {
-            logger.info(
-              { eventId: event.id, repository: event.repository, prNumber: event.pullRequestNumber },
-              'Enforcement already ran for this PR within the cap window, skipping'
-            );
-            await recordDecision(deps, event, {
-              decidedBy: 'hard_rules',
-              decision: 'skip',
-              reason: 'ENFORCEMENT_ALREADY_RAN',
-            }, startTime, logger);
-            return;
-          }
-        }
-
         await dispatchAndRecord(deps, event, ruleOutcome, startTime, logger);
         return;
       }
@@ -288,6 +271,37 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
       }
 
       if (triage.action === 'request_review') {
+        // Synchronize remediation interception:
+        // Before triggering a review for a synchronize event, check if a recent
+        // remediation task already determined that no re-review is needed.
+        if (event.eventType === 'pull_request' && event.action === 'synchronize' && deps.codeTaskRepo !== undefined) {
+          const shouldSkip = await shouldSkipReviewForRemediation(
+            deps.codeTaskRepo, event.repository, event.pullRequestNumber, event.id, logger,
+          );
+          if (shouldSkip) {
+            const userId = await resolveUserId(event);
+            recordLog(event, {
+              type: 'skipped',
+              decidedBy: 'llm_triage',
+              reason: 'remediation_no_rereview',
+              cost: usage.costUsd,
+              reasoning,
+              toolCalls: toolCallSummaries,
+            }, userId);
+
+            await recordDecision(deps, event, {
+              decidedBy: 'github_agent',
+              decision: 'skip',
+              reason: 'remediation_no_rereview: recent remediation task determined no re-review needed',
+              llmCostUsd: usage.costUsd,
+              ...(usage.model !== undefined && { llmModel: usage.model }),
+              llmToolCalls: usage.toolCalls,
+              llmReasoning: reasoning,
+            }, startTime, logger);
+            return;
+          }
+        }
+
         const reviewResult = await deps.createReviewTask(
           logger,
           {
@@ -537,6 +551,47 @@ async function recordDecision(
       'Failed to save event decision audit record'
     );
   }
+}
+
+const REMEDIATION_RECENCY_MS = 60 * 60 * 1000; // 60 minutes
+
+/**
+ * Check whether a recent remediation task indicates that re-review should be skipped.
+ * Returns true when review should be SKIPPED, false when review should proceed.
+ * Fails open: any error → proceed with review (return false).
+ */
+async function shouldSkipReviewForRemediation(
+  codeTaskRepo: CodeTaskRepository,
+  repository: string,
+  prNumber: number,
+  eventId: string,
+  logger: Logger,
+): Promise<boolean> {
+  const result = await codeTaskRepo.findRecentRemediationForPR(repository, prNumber);
+  if (!result.ok) {
+    logger.warn(
+      { eventId, error: result.error },
+      'Failed to check remediation task for synchronize interception, proceeding with review',
+    );
+    return false;
+  }
+
+  const task: CodeTask | null = result.value;
+  if (task === null) {
+    return false;
+  }
+
+  // A remediation task is "recent" if running, OR completed within the recency window
+  const isRunning = task.status === 'running';
+  const isRecentlyCompleted = task.completedAt !== undefined &&
+    (Date.now() - task.completedAt.toDate().getTime()) < REMEDIATION_RECENCY_MS;
+
+  if (!isRunning && !isRecentlyCompleted) {
+    return false;
+  }
+
+  // requiresReReview !== true → skip review; true → proceed with review; undefined → skip (review agent controls via needs_remediation)
+  return task.requiresReReview !== true;
 }
 
 /** Deduplicate tool calls into string summaries for automation log events. */

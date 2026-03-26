@@ -12,6 +12,7 @@ import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js'
 import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
+import type { GitHubPRSummaryRepository } from '../../domain/repositories/gitHubPRSummaryRepository.js';
 import { createReviewTask, type CreateReviewTaskDeps } from '../../domain/usecases/createReviewTask.js';
 
 function createFakeLogger(): Logger {
@@ -80,6 +81,36 @@ function createFakeWorkerSettingsRepo(): WorkerSettingsRepository {
     saveSettings: vi.fn().mockResolvedValue(ok(undefined)),
     updateDefaultReviewWorkerType: vi.fn().mockResolvedValue(ok(undefined)),
   } as unknown as WorkerSettingsRepository;
+}
+
+function createFakeGitHubPRSummaryRepo(lastReviewedCommitSha: string | null = null): GitHubPRSummaryRepository {
+  return {
+    upsert: vi.fn().mockResolvedValue(ok(undefined)),
+    findRecentlyActive: vi.fn().mockResolvedValue(ok([])),
+    findByPullRequest: vi.fn().mockResolvedValue(ok({
+      repository: 'intexuraos/intexuraos',
+      pullRequestNumber: 42,
+      title: 'Fix bug',
+      state: 'open',
+      mergedAt: null,
+      baseBranch: 'main',
+      authorLogin: 'dev-user',
+      headBranch: 'feature/fix',
+      mergeConflictStatus: null,
+      lastConflictCheckedAt: null,
+      conflictEpisodeStartedAt: null,
+      conflictResolvedAt: null,
+      managedConflictCommentId: null,
+      managedConflictTaskId: null,
+      managedConflictTaskOwnerUserId: null,
+      lastActivityAt: new Date(),
+      firstSeenAt: new Date(),
+      lastReviewedCommitSha,
+    })),
+    findOpenByBaseBranch: vi.fn().mockResolvedValue(ok([])),
+    findOpenByRepository: vi.fn().mockResolvedValue(ok([])),
+    findAllOpen: vi.fn().mockResolvedValue(ok([])),
+  } as unknown as GitHubPRSummaryRepository;
 }
 
 function createFakeTaskEnqueueService(): TaskEnqueueService {
@@ -1747,6 +1778,112 @@ describe('createReviewTask', () => {
       expect(createCall).toBeDefined();
       if (createCall !== undefined) {
         expect(createCall[0].prompt).not.toContain('### Issue Requirements');
+      }
+    });
+  });
+
+  describe('re-review context injection', () => {
+    it('includes re-review context when lastReviewedCommitSha is present', async () => {
+      const gitHubPRSummaryRepo = createFakeGitHubPRSummaryRepo('abc1234');
+      const deps = createFakeDeps({ gitHubPRSummaryRepo });
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-rereview-1',
+      });
+
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].prompt).toContain('## Re-review Context');
+        expect(createCall[0].prompt).toContain('abc1234');
+        expect(createCall[0].prompt).toContain('abc1234..HEAD');
+        expect(createCall[0].prompt).toContain('Do NOT re-flag findings from the previous review');
+      }
+    });
+
+    it('does not include re-review context when lastReviewedCommitSha is null', async () => {
+      const gitHubPRSummaryRepo = createFakeGitHubPRSummaryRepo(null);
+      const deps = createFakeDeps({ gitHubPRSummaryRepo });
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-rereview-2',
+      });
+
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].prompt).not.toContain('## Re-review Context');
+      }
+    });
+
+    it('does not include re-review context when gitHubPRSummaryRepo is not provided', async () => {
+      const deps = createFakeDeps();
+      // Default deps have no gitHubPRSummaryRepo
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-rereview-3',
+      });
+
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].prompt).not.toContain('## Re-review Context');
+      }
+    });
+
+    it('continues without re-review context when findByPullRequest fails', async () => {
+      const gitHubPRSummaryRepo = createFakeGitHubPRSummaryRepo(null);
+      vi.mocked(gitHubPRSummaryRepo.findByPullRequest).mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR' as const, message: 'DB error' })
+      );
+      const deps = createFakeDeps({ gitHubPRSummaryRepo });
+
+      const result = await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-rereview-4',
+      });
+
+      expect(result.ok).toBe(true);
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].prompt).not.toContain('## Re-review Context');
+      }
+    });
+
+    it('continues without re-review context when findByPullRequest returns null', async () => {
+      const gitHubPRSummaryRepo = createFakeGitHubPRSummaryRepo(null);
+      vi.mocked(gitHubPRSummaryRepo.findByPullRequest).mockResolvedValue(ok(null));
+      const deps = createFakeDeps({ gitHubPRSummaryRepo });
+
+      const result = await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-rereview-5',
+      });
+
+      expect(result.ok).toBe(true);
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].prompt).not.toContain('## Re-review Context');
       }
     });
   });
