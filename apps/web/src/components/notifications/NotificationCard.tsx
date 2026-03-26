@@ -20,6 +20,7 @@ export function NotificationCard({
   isDeleting,
 }: NotificationCardProps): React.JSX.Element {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const relativeTime = formatRelative(notification.receivedAt);
 
   return (
     <div
@@ -27,44 +28,49 @@ export function NotificationCard({
         isDeleting ? 'scale-95 opacity-50' : 'hover:shadow-md dark:hover:border-slate-600'
       }`}
     >
-      <div className="grid grid-cols-[auto_auto_1fr_auto_140px_60px] items-center gap-2">
-        {/* Device badge */}
-        <Badge>{notification.device}</Badge>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-[auto_auto_1fr_auto_140px_60px] md:items-center md:gap-2">
+        <div className="flex min-w-0 items-start justify-between gap-3 md:contents">
+          <div className="min-w-0 md:order-3">
+            <p className="line-clamp-2 break-words font-medium text-slate-900 dark:text-slate-100 md:truncate">
+              {notification.title}
+            </p>
+            {notification.text !== '' ? (
+              <p className="mt-1 line-clamp-2 break-words text-xs text-slate-500 dark:text-slate-400 md:mt-0 md:truncate">
+                {notification.text}
+              </p>
+            ) : null}
+          </div>
 
-        {/* App badge */}
-        <Badge>{notification.app}</Badge>
-
-        {/* Content preview (truncate) */}
-        <div className="min-w-0">
-          <p className="truncate font-medium text-slate-900 dark:text-slate-100">{notification.title}</p>
-          {notification.text !== '' ? (
-            <p className="truncate text-xs text-slate-500 dark:text-slate-400">{notification.text}</p>
-          ) : null}
+          <div className="flex items-start justify-end md:order-6">
+            <button
+              onClick={(e): void => {
+                e.stopPropagation();
+                setShowDeleteConfirm(true);
+              }}
+              disabled={isDeleting}
+              className="rounded p-1 text-slate-400 opacity-100 transition-opacity hover:bg-red-500/10 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50 md:opacity-0 md:group-hover:opacity-100"
+              aria-label="Delete notification"
+              title="Delete"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
 
-        {/* Source badge */}
-        <Badge>{notification.source}</Badge>
-
-        {/* Time */}
-        <span className="text-xs text-slate-400 dark:text-slate-500">
-          {formatRelative(notification.receivedAt)}
-        </span>
-
-        {/* Actions - R8 hover-reveal trash */}
-        <div className="flex items-center justify-end">
-          <button
-            onClick={(e): void => {
-              e.stopPropagation();
-              setShowDeleteConfirm(true);
-            }}
-            disabled={isDeleting}
-            className="rounded p-1 text-slate-400 opacity-0 transition-opacity hover:bg-red-500/10 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50 group-hover:opacity-100"
-            aria-label="Delete notification"
-            title="Delete"
+        <div className="flex flex-wrap gap-2 md:contents">
+          <Badge className="w-fit md:order-1">{notification.device}</Badge>
+          <Badge
+            className="max-w-full truncate md:order-2 md:max-w-[14rem]"
+            title={notification.app}
           >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+            {notification.app}
+          </Badge>
+          <Badge className="w-fit md:order-4">{notification.source}</Badge>
         </div>
+
+        <span className="text-xs text-slate-400 dark:text-slate-500 md:order-5">
+          {relativeTime}
+        </span>
       </div>
 
       {/* R5 overlay delete */}
