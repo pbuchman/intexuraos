@@ -70,7 +70,7 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
         });
 
         const userId = getUserId(request);
-        const body = request.body as { owner?: string; repo?: string; baseBranch?: string } | undefined;
+        const body = request.body as { owner?: string; repo?: string; baseBranch?: string; excludedPrNumbers?: unknown } | undefined;
         const owner = body?.owner ?? '';
         const repo = body?.repo ?? '';
         const baseBranch = body?.baseBranch ?? '';
@@ -119,6 +119,12 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           });
         }
 
+        // Lenient parse: invalid excludedPrNumbers silently defaults to [] (creation is lenient; PUT is strict)
+        const rawExcluded = body?.excludedPrNumbers;
+        const excludedPrNumbers: number[] = Array.isArray(rawExcluded) && rawExcluded.every((n): n is number => Number.isInteger(n) && (n as number) > 0)
+          ? rawExcluded
+          : [];
+
         // Create the watch
         const createResult = await mergeQueueWatchRepo.create({
           userId,
@@ -126,6 +132,7 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           owner,
           repo,
           baseBranch,
+          excludedPrNumbers,
         });
 
         if (!createResult.ok) {
@@ -185,6 +192,62 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
         }
 
         return await reply.ok({ success: true });
+      }
+    );
+
+    // PUT /code/merge-queue/watch/:watchId/exclusions — set excluded PRs
+    fastify.put(
+      '/code/merge-queue/watch/:watchId/exclusions',
+      async (request: FastifyRequest, reply: FastifyReply) => {
+        logIncomingRequest(request, {
+          message: 'Received request to PUT /code/merge-queue/watch/:watchId/exclusions',
+        });
+
+        const userId = getUserId(request);
+        const { watchId } = request.params as { watchId: string };
+        const body = request.body as { excludedPrNumbers?: unknown } | undefined;
+
+        const rawExcluded = body?.excludedPrNumbers;
+        if (!Array.isArray(rawExcluded) || !rawExcluded.every((n): n is number => Number.isInteger(n) && (n as number) > 0)) {
+          return await reply.fail('INVALID_REQUEST', 'excludedPrNumbers must be an array of positive integers');
+        }
+
+        const excludedPrNumbers: number[] = rawExcluded;
+
+        const { mergeQueueWatchRepo } = getServices();
+
+        const findResult = await mergeQueueWatchRepo.findById(watchId);
+        if (!findResult.ok) {
+          if (findResult.error.code === 'NOT_FOUND') {
+            return await reply.code(404).send({
+              success: false,
+              error: { code: 'NOT_FOUND', message: findResult.error.message },
+            });
+          }
+          return await reply.fail('INTERNAL_ERROR', findResult.error.message);
+        }
+
+        if (findResult.value.userId !== userId) {
+          return await reply.code(403).send({
+            success: false,
+            error: { code: 'FORBIDDEN', message: 'Not authorized to modify this watch' },
+          });
+        }
+
+        if (findResult.value.status !== 'active') {
+          return await reply.code(409).send({
+            success: false,
+            error: { code: 'CONFLICT', message: 'Cannot modify exclusions on a non-active watch' },
+          });
+        }
+
+        const updateResult = await mergeQueueWatchRepo.update(watchId, { excludedPrNumbers });
+        if (!updateResult.ok) {
+          request.log.error({ error: updateResult.error }, 'Failed to update watch exclusions');
+          return await reply.fail('INTERNAL_ERROR', updateResult.error.message);
+        }
+
+        return await reply.ok({ excludedPrNumbers });
       }
     );
 
