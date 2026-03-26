@@ -27,6 +27,20 @@ describe('Orchestrator Types', () => {
       expect(request.workerType).toBe('opus');
     });
 
+    it('accepts codex as a public CreateTaskRequest worker type', () => {
+      const request: CreateTaskRequest = {
+        taskId: 'test-codex',
+        workerType: 'codex',
+        prompt: 'Test prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      expect(request.workerType).toBe('codex');
+    });
+
     it('validates CreateTaskRequest with optional fields', () => {
       const request: CreateTaskRequest = {
         taskId: 'test-456',
@@ -174,6 +188,28 @@ describe('Orchestrator Types', () => {
 
       expect(task.linearIssueId).toBe('INT-456');
       expect(task.startedAt).toBe('2025-01-01T00:00:00.000Z');
+    });
+
+    it('allows persisted runtime metadata on tasks', () => {
+      const task: Task = {
+        taskId: 'task-codex',
+        status: 'running',
+        workerType: 'codex',
+        runtime: 'codex',
+        runtimeSessionId: 'thread_123',
+        prompt: 'Test prompt',
+        repository: 'intexuraos/intexuraos-2',
+        baseBranch: 'main',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        containerId: 'session-789',
+        worktreePath: '/tmp/worktrees/task-codex',
+        startedAt: '2025-01-01T00:00:00.000Z',
+        linearIssueLabels: [],
+      };
+
+      expect(task.runtime).toBe('codex');
+      expect(task.runtimeSessionId).toBe('thread_123');
     });
   });
 });

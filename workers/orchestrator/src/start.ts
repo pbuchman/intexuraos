@@ -181,6 +181,14 @@ async function validateThirdPartyApiKey(
   const keyName = config.apiKeyEnvVar;
   const keySuffix = suffix(apiKey);
 
+  if (keyName === undefined) {
+    logger.info(
+      { workerTypeName },
+      'Skipping API-key validation for runtime without direct API-key authentication'
+    );
+    return;
+  }
+
   const url =
     config.model !== undefined
       ? `${config.apiBaseUrl}/v1/messages`

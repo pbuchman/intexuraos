@@ -11,8 +11,11 @@ const createLogger = (): Logger => ({
 });
 
 describe('runtime registry', () => {
-  it('maps all current worker types to the Claude runtime', () => {
-    for (const workerType of Object.keys(WORKER_TYPES)) {
+  it('keeps existing Claude worker types on the Claude runtime', () => {
+    for (const [workerType, config] of Object.entries(WORKER_TYPES)) {
+      if (config.runtime !== 'claude') {
+        continue;
+      }
       expect(getRuntimeForWorkerType(workerType as keyof typeof WORKER_TYPES).runtime).toBe(
         'claude'
       );

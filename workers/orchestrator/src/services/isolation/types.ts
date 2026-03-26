@@ -27,7 +27,7 @@ export type WorkerType = CodeTaskWorkerType;
 export interface WorkerTypeConfig {
   runtime: WorkerRuntime;
   apiBaseUrl: string;
-  apiKeyEnvVar: 'ANTHROPIC_API_KEY' | 'MINIMAX_API_KEY' | 'DASHSCOPE_API_KEY';
+  apiKeyEnvVar?: 'ANTHROPIC_API_KEY' | 'MINIMAX_API_KEY' | 'DASHSCOPE_API_KEY';
   model?: string;
   effort?: 'low' | 'medium' | 'high' | 'max';
 }
@@ -74,6 +74,10 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
     apiKeyEnvVar: 'DASHSCOPE_API_KEY',
     model: 'kimi-k2.5',
+  },
+  codex: {
+    runtime: 'codex',
+    apiBaseUrl: 'https://api.openai.com',
   },
 };
 
