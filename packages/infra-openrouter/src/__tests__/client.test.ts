@@ -27,6 +27,7 @@ vi.mock('@intexuraos/llm-pricing', () => ({
 }));
 
 const { createOpenRouterClient } = await import('../client.js');
+const { createAuditContext } = await import('@intexuraos/llm-audit');
 
 const API_BASE_URL = 'https://openrouter.ai/api/v1';
 const TEST_MODEL = 'anthropic/claude-sonnet-4.6';
@@ -49,6 +50,47 @@ describe('createOpenRouterClient', () => {
   });
 
   describe('research', () => {
+    it('includes userId and researchId in audit context', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: `${TEST_MODEL}:online`,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'Research findings.', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        researchId: 'research-123',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      await client.research('Test prompt');
+
+      expect(vi.mocked(createAuditContext).mock.calls[0]?.[0]).toEqual(
+        expect.objectContaining({
+          provider: LlmProviders.OpenRouter,
+          model: TEST_MODEL,
+          method: 'research',
+          prompt: 'Test prompt',
+          userId: 'test-user',
+          researchId: 'research-123',
+        })
+      );
+    });
+
     it('sends request with :online suffix for research', async () => {
       let capturedBody: Record<string, unknown> | undefined;
 

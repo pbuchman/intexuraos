@@ -70,6 +70,27 @@ describe('OpenRouterAdapter', () => {
       });
     });
 
+    it('passes researchId to client when provided', () => {
+      mockCreateOpenRouterClient.mockClear();
+      new OpenRouterAdapter(
+        'test-key',
+        TEST_MODEL,
+        'test-user-id',
+        testPricing,
+        mockLogger,
+        'research-123'
+      );
+
+      expect(mockCreateOpenRouterClient).toHaveBeenCalledWith({
+        apiKey: 'test-key',
+        model: EXPECTED_RAW_MODEL,
+        userId: 'test-user-id',
+        researchId: 'research-123',
+        pricing: testPricing,
+        logger: mockLogger,
+      });
+    });
+
     it('passes non-OpenRouter model directly without stripping prefix', () => {
       mockCreateOpenRouterClient.mockClear();
       const nonOpenRouterModel = 'google/gemini-2.0-flash';

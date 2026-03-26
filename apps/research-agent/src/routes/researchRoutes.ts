@@ -211,6 +211,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
       }
 
+      const researchId = generateId();
       const submitParams: Parameters<typeof submitResearch>[0] = {
         userId: user.userId,
         prompt: body.prompt,
@@ -225,6 +226,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           body.inputContexts,
           apiKeys.google,
           user.userId,
+          researchId,
           createTitleGenerator,
           pricingContext.getPricing(LlmModels.Gemini25Flash),
           request.log
@@ -245,7 +247,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
       const result = await submitResearch(submitParams, {
         researchRepo,
-        generateId,
+        generateId: () => researchId,
         logger: request.log as unknown as Logger,
       });
 
@@ -289,6 +291,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const body = request.body as SaveDraftBody;
       const { researchRepo, generateId, userServiceClient, createTitleGenerator, pricingContext } =
         getServices();
+      const draftId = generateId();
 
       // Get user's API keys to generate title
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
@@ -302,7 +305,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           apiKeys.google,
           user.userId,
           pricingContext.getPricing(LlmModels.Gemini25Flash),
-          request.log
+          request.log,
+          draftId
         );
         const titleResult = await titleGenerator.generateTitle(body.prompt);
         title = titleResult.ok ? titleResult.value.title : body.prompt.slice(0, 60);
@@ -314,7 +318,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Create draft research (no default models - user must select before approving)
       const selectedModels = body.selectedModels ?? [];
       const draftParams: Parameters<typeof createDraftResearch>[0] = {
-        id: generateId(),
+        id: draftId,
         userId: user.userId,
         title,
         prompt: body.prompt,
@@ -326,6 +330,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           body.inputContexts,
           apiKeys.google,
           user.userId,
+          draftId,
           createTitleGenerator,
           pricingContext.getPricing(LlmModels.Gemini25Flash),
           request.log
@@ -431,7 +436,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             apiKeys.google,
             user.userId,
             pricingContext.getPricing(LlmModels.Gemini25Flash),
-            request.log
+            request.log,
+            existing.id
           );
           const titleResult = await titleGenerator.generateTitle(body.prompt);
           title = titleResult.ok ? titleResult.value.title : body.prompt.slice(0, 60);
@@ -455,6 +461,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           body.inputContexts,
           apiKeys.google,
           user.userId,
+          existing.id,
           createTitleGenerator,
           pricingContext.getPricing(LlmModels.Gemini25Flash),
           request.log
@@ -940,6 +947,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             synthesisModel,
             apiKeysResult.value,
             user.userId,
+            id,
             getServices(),
             request.log
           );
@@ -1138,6 +1146,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         synthesisModel,
         apiKeysResult.value,
         user.userId,
+        id,
         getServices(),
         request.log
       );
@@ -1283,6 +1292,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           body.additionalContexts,
           apiKeys.google,
           user.userId,
+          id,
           createTitleGenerator,
           pricingContext.getPricing(LlmModels.Gemini25Flash),
           request.log
