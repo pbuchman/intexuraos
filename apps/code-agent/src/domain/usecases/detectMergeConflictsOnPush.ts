@@ -343,7 +343,7 @@ async function upsertSummary(
 }
 
 async function resolveExistingConflictTask(
-  codeTaskRepo: Pick<CodeTaskRepository, 'findById' | 'findLatestNonReviewTaskByPR'>,
+  codeTaskRepo: Pick<CodeTaskRepository, 'findById' | 'findLatestExecutionTaskByPR'>,
   existingSummary: GitHubPRSummary,
   repository: string,
   prNumber: number,
@@ -390,11 +390,11 @@ async function resolveExistingConflictTask(
 
   // Review tasks should not define merge-conflict lineage or Linear grouping for
   // newly created conflict tasks. Use the latest non-review PR task instead.
-  const byPRResult = await codeTaskRepo.findLatestNonReviewTaskByPR(repository, prNumber);
+  const byPRResult = await codeTaskRepo.findLatestExecutionTaskByPR(repository, prNumber);
   if (!byPRResult.ok) {
     logger.warn(
       { error: byPRResult.error, repository, prNumber },
-      'Failed to load latest non-review task by PR for merge-conflict detection'
+      'Failed to load latest execution task by PR for merge-conflict detection'
     );
     return err({ code: byPRResult.error.code, message: byPRResult.error.message });
   }

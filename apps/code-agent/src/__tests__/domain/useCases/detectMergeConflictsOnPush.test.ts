@@ -26,7 +26,7 @@ interface TestDeps {
   codeTaskRepo: {
     findById: ReturnType<typeof vi.fn>;
     findByPR: ReturnType<typeof vi.fn>;
-    findLatestNonReviewTaskByPR: ReturnType<typeof vi.fn>;
+    findLatestExecutionTaskByPR: ReturnType<typeof vi.fn>;
     findByIdForUser: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
@@ -224,9 +224,9 @@ function createDeps(logger: Logger, options?: { includeSleep?: boolean }): TestD
     codeTaskRepo: {
       findById: vi.fn().mockResolvedValue(err({ code: 'NOT_FOUND', message: 'not found' })),
       // findByPR satisfies the CodeTaskRepository shape but is unused by the use case
-      // (lineage lookups use findLatestNonReviewTaskByPR instead).
+      // (lineage lookups use findLatestExecutionTaskByPR instead).
       findByPR: vi.fn().mockResolvedValue(ok(null)),
-      findLatestNonReviewTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
       findByIdForUser: vi.fn(),
       create: vi.fn().mockResolvedValue(ok(createTask({ id: 'task-created', status: 'queued' }))),
       update: vi.fn().mockResolvedValue(ok(createTask({ id: 'task-created', status: 'dispatched' }))),
@@ -676,7 +676,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       code: 'NOT_FOUND',
       message: 'Task task-stale not found',
     }));
-    deps.codeTaskRepo.findLatestNonReviewTaskByPR.mockResolvedValue(ok(currentTask));
+    deps.codeTaskRepo.findLatestExecutionTaskByPR.mockResolvedValue(ok(currentTask));
     deps.codeTaskRepo.findByIdForUser.mockResolvedValue(ok(currentTask));
 
     const detector = createDetectMergeConflictsOnPush(deps as never);
@@ -703,7 +703,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       code: 'NOT_FOUND',
       message: 'Task task-stale not found',
     }));
-    deps.codeTaskRepo.findLatestNonReviewTaskByPR.mockResolvedValue(ok(null));
+    deps.codeTaskRepo.findLatestExecutionTaskByPR.mockResolvedValue(ok(null));
 
     const detector = createDetectMergeConflictsOnPush(deps as never);
     await detector.detectOnPush(createPushEvent('refs/heads/release/2026.03'), logger);
@@ -736,7 +736,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       managedConflictTaskOwnerUserId: 'user-1',
     })]));
     deps.codeTaskRepo.findById.mockResolvedValue(ok(staleManagedTask));
-    deps.codeTaskRepo.findLatestNonReviewTaskByPR.mockResolvedValue(ok(currentTask));
+    deps.codeTaskRepo.findLatestExecutionTaskByPR.mockResolvedValue(ok(currentTask));
     deps.codeTaskRepo.findByIdForUser.mockResolvedValue(ok(currentTask));
 
     const detector = createDetectMergeConflictsOnPush(deps as never);
@@ -761,7 +761,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       managedConflictTaskId: null,
       managedConflictTaskOwnerUserId: 'user-1',
     })]));
-    deps.codeTaskRepo.findLatestNonReviewTaskByPR.mockResolvedValue(err({
+    deps.codeTaskRepo.findLatestExecutionTaskByPR.mockResolvedValue(err({
       code: 'FIRESTORE_ERROR',
       message: 'lookup failed',
     }));
@@ -1291,7 +1291,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       status: 'running',
       linearIssueId: 'INT-999',
     })));
-    deps.codeTaskRepo.findLatestNonReviewTaskByPR.mockResolvedValue(ok(createTask({
+    deps.codeTaskRepo.findLatestExecutionTaskByPR.mockResolvedValue(ok(createTask({
       id: 'task-execution-existing',
       agentType: 'execution',
       status: 'running',
@@ -1310,7 +1310,7 @@ describe('createDetectMergeConflictsOnPush', () => {
     await detector.detectOnPush(createPushEvent('refs/heads/release/2026.03'), logger);
 
     const createCall = deps.codeTaskRepo.create.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
-    expect(deps.codeTaskRepo.findLatestNonReviewTaskByPR).toHaveBeenCalledWith('intexuraos/intexuraos', 42);
+    expect(deps.codeTaskRepo.findLatestExecutionTaskByPR).toHaveBeenCalledWith('intexuraos/intexuraos', 42);
     expect(deps.codeTaskRepo.findByPR).not.toHaveBeenCalled();
     expect(createCall?.['linearIssueId']).toBe('INT-555');
     expect(deps.taskEnqueueService.enqueue).toHaveBeenCalledWith({
@@ -1326,7 +1326,7 @@ describe('createDetectMergeConflictsOnPush', () => {
     const detector = createDetectMergeConflictsOnPush(deps as never);
     await detector.detectOnPush(createPushEvent('refs/heads/release/2026.03'), logger);
 
-    expect(deps.codeTaskRepo.findLatestNonReviewTaskByPR).toHaveBeenCalledWith('intexuraos/intexuraos', 42);
+    expect(deps.codeTaskRepo.findLatestExecutionTaskByPR).toHaveBeenCalledWith('intexuraos/intexuraos', 42);
     expect(deps.gitHubPRClient.updateIssueComment).toHaveBeenLastCalledWith(
       'oauth-token',
       'intexuraos',
