@@ -92,7 +92,7 @@ describe('NotificationCard', () => {
 
     const card = container.firstElementChild;
 
-    expect(card).toBeTruthy();
+    expect(card).not.toBeNull();
     expect(card).toHaveClass('scale-95');
     expect(card).toHaveClass('opacity-50');
 
@@ -149,7 +149,7 @@ describe('NotificationCard', () => {
     const appBadge = screen.getByText(longAppName);
 
     expect(appBadge).toHaveAttribute('title', longAppName);
-    expect(appBadge).toHaveClass('max-w-full');
+    expect(appBadge).toHaveClass('md:max-w-[14rem]');
     expect(appBadge).toHaveClass('truncate');
   });
 });
