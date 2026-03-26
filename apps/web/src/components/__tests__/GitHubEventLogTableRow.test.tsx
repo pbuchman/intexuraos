@@ -89,7 +89,7 @@ describe('GitHubEventLogTableRow', () => {
   it('renders Dispatch badge when decisionOutcome is dispatch', () => {
     const row = createRow();
     row.decisionOutcome = 'dispatch';
-    row.dispatchAction = 'dispatch_code_task';
+    row.dispatchAction = 'create_task';
     row.reviewTypes = [];
     render(<GitHubEventLogTableRow row={row} />);
 
@@ -109,7 +109,7 @@ describe('GitHubEventLogTableRow', () => {
 
   it('renders Completed badge as fallthrough', () => {
     const row = createRow();
-    row.decisionOutcome = 'some_other_outcome';
+    row.decisionOutcome = null;
     row.dispatchAction = null;
     row.reviewTypes = [];
     render(<GitHubEventLogTableRow row={row} />);
