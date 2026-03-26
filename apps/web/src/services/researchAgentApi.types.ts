@@ -22,6 +22,11 @@ const MODEL_TO_PROVIDER = {
   [LlmModels.SonarDeepResearch]: LlmProviders.Perplexity,
 } as const satisfies Record<string, LlmProvider>;
 
+// TODO: isSelectableModel treats any `or:*` string as selectable, but the backend's
+// isRetryableStoredResearchModel checks the curated allowlist via isAllowedModel.
+// If a model is removed from the allowlist, the frontend shows Retry as enabled but
+// the backend returns 409. Plumb the allowlist check into the frontend to pre-disable
+// the button instead of relying on the error response.
 export function isSelectableModel(model: string): model is SupportedModel {
   return isOpenRouterModel(model) || Object.prototype.hasOwnProperty.call(MODEL_TO_PROVIDER, model);
 }

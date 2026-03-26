@@ -122,6 +122,7 @@ describe('ApiKeysSettingsPage', () => {
 
     render(<ApiKeysSettingsPage />);
 
+    // Index 4 = OpenRouter (order: Google, OpenAI, Anthropic, Perplexity, OpenRouter)
     const configureButtons = screen.getAllByRole('button', { name: 'Configure' });
     fireEvent.click(configureButtons[4] as HTMLButtonElement);
 
@@ -160,6 +161,7 @@ describe('ApiKeysSettingsPage', () => {
 
     render(<ApiKeysSettingsPage />);
 
+    // Index 4 = OpenRouter (order: Google, OpenAI, Anthropic, Perplexity, OpenRouter)
     const configureButtons = screen.getAllByRole('button', { name: 'Configure' });
     fireEvent.click(configureButtons[4] as HTMLButtonElement);
 

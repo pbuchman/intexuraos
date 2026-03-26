@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import {
   AlertTriangle,
   CheckCircle,
@@ -61,22 +62,25 @@ export function ResearchActions({
   onEditDraft,
   partialFailure: partialFailureState,
 }: ResearchActionsProps): React.JSX.Element {
-  const failedRetryModels = research.llmResults
-    .filter((result) => result.status === 'failed')
-    .map((result) => result.model);
-  const unsupportedRetryModels = failedRetryModels.filter((model) => !isSelectableModel(model));
-  const retryBlockedByUnsupportedSynthesis =
-    failedRetryModels.length === 0 &&
-    research.synthesisError !== undefined &&
-    research.synthesisError !== '' &&
-    research.llmResults.some((result) => result.status === 'completed') &&
-    !isSelectableModel(research.synthesisModel);
-  const retryBlockMessage =
-    unsupportedRetryModels.length > 0
-      ? `Retry unavailable because these historical models are no longer supported: ${unsupportedRetryModels.map((model) => getModelDisplayName(model)).join(', ')}`
-      : retryBlockedByUnsupportedSynthesis
-        ? `Retry unavailable because the synthesis model ${getModelDisplayName(research.synthesisModel)} is no longer supported.`
-        : null;
+  const { retryBlockMessage } = useMemo(() => {
+    const failedRetryModels = research.llmResults
+      .filter((result) => result.status === 'failed')
+      .map((result) => result.model);
+    const unsupportedRetryModels = failedRetryModels.filter((model) => !isSelectableModel(model));
+    const retryBlockedByUnsupportedSynthesis =
+      failedRetryModels.length === 0 &&
+      research.synthesisError !== undefined &&
+      research.synthesisError !== '' &&
+      research.llmResults.some((result) => result.status === 'completed') &&
+      !isSelectableModel(research.synthesisModel);
+    const message =
+      unsupportedRetryModels.length > 0
+        ? `Retry unavailable because these historical models are no longer supported: ${unsupportedRetryModels.map((model) => getModelDisplayName(model)).join(', ')}`
+        : retryBlockedByUnsupportedSynthesis
+          ? `Retry unavailable because the synthesis model ${getModelDisplayName(research.synthesisModel)} is no longer supported.`
+          : null;
+    return { retryBlockMessage: message };
+  }, [research.llmResults, research.synthesisError, research.synthesisModel]);
 
   return (
     <>
