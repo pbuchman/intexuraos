@@ -1,5 +1,8 @@
 /**
- * Use case: Transition associated Linear issues to QA when a PR is merged.
+ * Use case: Transition associated Linear issues on PR merge.
+ *
+ * Plan PRs (detected by `[plan]` in title) transition to Todo.
+ * All other PRs transition to QA.
  *
  * Discovery methods:
  * 1. Code task lookup via findByPR / findLatestExecutionTaskByPR
@@ -13,6 +16,10 @@ import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { LinearIssueService } from '../services/linearIssueService.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { extractIntIssueId } from '../utils/linearIdentifierParser.js';
+
+function isPlanPr(prTitle: string | null): boolean {
+  return prTitle !== null && /\[plan\]/i.test(prTitle);
+}
 
 export interface HandlePrMergeDeps {
   codeTaskRepo: CodeTaskRepository;
@@ -111,13 +118,19 @@ export async function handlePrMerge(deps: HandlePrMergeDeps, input: HandlePrMerg
     return;
   }
 
+  const isPlan = isPlanPr(prTitle);
+  const mark = isPlan
+    ? linearIssueService.markTodo.bind(linearIssueService)
+    : linearIssueService.markQa.bind(linearIssueService);
+  const targetState = isPlan ? 'todo' : 'qa';
+
   await Promise.all(
     [...issueMap].map(([linearIssueId, userId]) => {
       logger.info(
-        { linearIssueId, userId, repository, prNumber },
-        'Transitioning Linear issue to QA on PR merge'
+        { linearIssueId, userId, repository, prNumber, targetState },
+        'Transitioning Linear issue on PR merge'
       );
-      return linearIssueService.markQa(userId, linearIssueId);
+      return mark(userId, linearIssueId);
     })
   );
 }
