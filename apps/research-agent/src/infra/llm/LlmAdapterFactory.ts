@@ -32,21 +32,22 @@ export function createResearchProvider(
   apiKey: string,
   userId: string,
   pricing: ModelPricing,
-  logger: Logger
+  logger: Logger,
+  researchId: string | undefined
 ): LlmResearchProvider {
   const provider = getProviderForModel(model);
 
   switch (provider) {
     case 'google':
-      return new GeminiAdapter(apiKey, model, userId, pricing, logger);
+      return new GeminiAdapter(apiKey, model, userId, pricing, logger, researchId);
     case 'anthropic':
-      return new ClaudeAdapter(apiKey, model, userId, pricing, logger);
+      return new ClaudeAdapter(apiKey, model, userId, pricing, logger, researchId);
     case 'openai':
-      return new GptAdapter(apiKey, model, userId, pricing, logger);
+      return new GptAdapter(apiKey, model, userId, pricing, logger, researchId);
     case 'perplexity':
-      return new PerplexityAdapter(apiKey, model, userId, pricing, logger);
+      return new PerplexityAdapter(apiKey, model, userId, pricing, logger, researchId);
     case 'openrouter':
-      return new OpenRouterAdapter(apiKey, model, userId, pricing, logger);
+      return new OpenRouterAdapter(apiKey, model, userId, pricing, logger, researchId);
   }
 }
 
@@ -55,21 +56,22 @@ export function createSynthesizer(
   apiKey: string,
   userId: string,
   pricing: ModelPricing,
-  logger: Logger
+  logger: Logger,
+  researchId: string | undefined
 ): LlmSynthesisProvider {
   const provider = getProviderForModel(model);
 
   switch (provider) {
     case 'google':
-      return new GeminiAdapter(apiKey, model, userId, pricing, logger);
+      return new GeminiAdapter(apiKey, model, userId, pricing, logger, researchId);
     case 'anthropic':
       throw new Error('Anthropic does not support synthesis');
     case 'openai':
-      return new GptAdapter(apiKey, model, userId, pricing, logger);
+      return new GptAdapter(apiKey, model, userId, pricing, logger, researchId);
     case 'perplexity':
       throw new Error('Perplexity does not support synthesis');
     case 'openrouter':
-      return new OpenRouterAdapter(apiKey, model, userId, pricing, logger);
+      return new OpenRouterAdapter(apiKey, model, userId, pricing, logger, researchId);
   }
 }
 
@@ -78,9 +80,10 @@ export function createTitleGenerator(
   apiKey: string,
   userId: string,
   pricing: ModelPricing,
-  logger: Logger
+  logger: Logger,
+  researchId: string | undefined
 ): TitleGenerator {
-  return new GeminiAdapter(apiKey, model, userId, pricing, logger);
+  return new GeminiAdapter(apiKey, model, userId, pricing, logger, researchId);
 }
 
 export function createContextInferrer(
@@ -88,9 +91,10 @@ export function createContextInferrer(
   apiKey: string,
   userId: string,
   pricing: ModelPricing,
-  logger: Logger
+  logger: Logger,
+  researchId: string | undefined
 ): ContextInferenceProvider {
-  return new ContextInferenceAdapter(apiKey, model, userId, pricing, logger);
+  return new ContextInferenceAdapter(apiKey, model, userId, pricing, logger, researchId);
 }
 
 export function createInputValidator(

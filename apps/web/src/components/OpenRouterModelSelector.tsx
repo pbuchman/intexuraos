@@ -12,8 +12,14 @@ interface OpenRouterModelSelectorProps {
   error?: string | null;
 }
 
-function formatPrice(pricePerToken: number): string {
-  return (pricePerToken * 1_000_000).toFixed(2);
+export function formatPrice(pricePerMillion: number): string {
+  if (pricePerMillion === 0) {
+    return '0.00';
+  }
+  if (pricePerMillion < 0.01) {
+    return pricePerMillion.toFixed(4);
+  }
+  return pricePerMillion.toFixed(2);
 }
 
 function formatContextLength(length: number): string {
@@ -162,8 +168,8 @@ export function OpenRouterModelSelector({
                   </div>
                   <div className="mt-0.5 flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
                     <span>{formatContextLength(model.contextLength)} ctx</span>
-                    <span>${formatPrice(model.pricing.promptPerToken)}/M in</span>
-                    <span>${formatPrice(model.pricing.completionPerToken)}/M out</span>
+                    <span>${formatPrice(model.pricing.inputPricePerMillion)}/M in</span>
+                    <span>${formatPrice(model.pricing.outputPricePerMillion)}/M out</span>
                   </div>
                 </div>
               </label>

@@ -431,6 +431,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           synthesisModel,
           apiKeys,
           research.userId,
+          event.researchId,
           services,
           request.log
         );
@@ -451,7 +452,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             apiKeys.google,
             research.userId,
             services.pricingContext.getPricing(LlmModels.Gemini25Flash),
-            request.log
+            request.log,
+            event.researchId
           );
         }
 
@@ -891,7 +893,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           apiKey,
           event.userId,
           researchPricing,
-          request.log
+          request.log,
+          event.researchId
         );
         const startTime = Date.now();
         const llmResult = await llmProvider.research(event.prompt, research.researchContext);

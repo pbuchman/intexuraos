@@ -93,7 +93,9 @@ async function fetchWithTimeout(
 function createRequestContext(
   method: string,
   model: string,
-  prompt: string
+  prompt: string,
+  userId: string,
+  researchId?: string
 ): { requestId: string; startTime: Date; auditContext: AuditContext } {
   const requestId = randomUUID();
   const startTime = new Date();
@@ -103,6 +105,8 @@ function createRequestContext(
     method,
     prompt,
     startedAt: startTime,
+    userId,
+    ...(researchId !== undefined && { researchId }),
   });
   return { requestId, startTime, auditContext };
 }
@@ -127,7 +131,15 @@ class OpenRouterApiError extends Error {
  * - Error mapping to LLMError codes
  */
 export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClient {
-  const { apiKey, model, userId, pricing, timeoutMs = DEFAULT_TIMEOUT_MS, logger } = config;
+  const {
+    apiKey,
+    model,
+    userId,
+    researchId,
+    pricing,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    logger,
+  } = config;
 
   const usageLogger = createUsageLogger({ logger });
 
@@ -165,7 +177,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, OpenRouterError>> {
-      const { auditContext } = createRequestContext('research', model, prompt);
+      const { auditContext } = createRequestContext('research', model, prompt, userId, researchId);
 
       try {
         // Build the model ID - research uses :online suffix for web search
@@ -265,7 +277,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     },
 
     async generate(prompt: string): Promise<Result<GenerateResult, OpenRouterError>> {
-      const { auditContext } = createRequestContext('generate', model, prompt);
+      const { auditContext } = createRequestContext('generate', model, prompt, userId, researchId);
 
       try {
         const requestBody = {

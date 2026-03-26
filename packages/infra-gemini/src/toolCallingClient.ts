@@ -100,6 +100,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
           method: 'toolCalling',
           prompt: systemPrompt,
           startedAt: new Date(),
+          userId,
         },
         auditSink !== undefined ? { sink: auditSink } : undefined
       );

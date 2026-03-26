@@ -19,6 +19,7 @@ export function createSynthesisProviders(
   synthesisModel: ResearchModel,
   apiKeys: DecryptedApiKeys,
   userId: string,
+  researchId: string | undefined,
   services: ServiceContainer,
   logger: Logger
 ): SynthesisProviders {
@@ -54,7 +55,8 @@ export function createSynthesisProviders(
     synthesisKey,
     userId,
     synthesisPricing,
-    logger
+    logger,
+    researchId
   );
 
   const result: SynthesisProviders = { synthesizer };
@@ -65,7 +67,8 @@ export function createSynthesisProviders(
       apiKeys.google,
       userId,
       pricingContext.getPricing(LlmModels.Gemini25Flash),
-      logger
+      logger,
+      researchId
     );
   }
 
