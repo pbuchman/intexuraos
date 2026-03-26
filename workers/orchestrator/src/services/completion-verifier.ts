@@ -117,7 +117,11 @@ export const REVIEW_SCHEMA = z.object({
   review_types: z.string().trim().min(1, 'review_types must not be empty'),
   requirements_tracker_updated: z.string().optional().default(''),
   gh_actions_status: z.string().optional().default(''),
-  needs_remediation: z.string().regex(/^[01]$/).optional().default('1'),
+  needs_remediation: z
+    .string()
+    .regex(/^[01]$/)
+    .optional()
+    .default('1'),
   summary: z.string(),
 });
 

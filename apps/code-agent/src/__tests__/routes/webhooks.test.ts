@@ -4081,6 +4081,41 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(mockFn).not.toHaveBeenCalled();
     });
 
+    it('passes linearIssueId and baseBranch to remediation task when present on review task', async () => {
+      const result = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_rem_linear',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+        linearIssueId: 'INT-999',
+      });
+      if (!result.ok) throw new Error('Failed to create task');
+      const task = result.value;
+
+      const payload = makeRemediationPayload(task.id, '1');
+      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).toHaveBeenCalledOnce();
+      expect(mockFn).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          repository: 'pbuchman/intexuraos',
+          prNumber: 42,
+          linearIssueId: 'INT-999',
+          baseBranch: 'development',
+        }),
+      );
+    });
+
     it('does NOT create remediation for remediation task-complete (agentType guard)', async () => {
       const task = await createReviewTask({ traceId: 'trace_rem_guard', agentType: 'remediation' });
       const payload = {
@@ -4135,6 +4170,21 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
       // createRemediationTaskFn should NOT be called because dedup guard found existing task
+      expect(mockFn).not.toHaveBeenCalled();
+    });
+
+    it('still returns 200 when findRecentRemediationForPR returns an error (best-effort)', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_dedup_err' });
+      const payload = makeRemediationPayload(task.id, '1');
+
+      vi.spyOn(codeTaskRepo, 'findRecentRemediationForPR').mockResolvedValueOnce(
+        err({ code: 'FIRESTORE_ERROR', message: 'Query failed' }),
+      );
+
+      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
+
+      expect(response.statusCode).toBe(200);
+      // Should NOT call createRemediationTaskFn because dedup check errored (best-effort skip)
       expect(mockFn).not.toHaveBeenCalled();
     });
 
@@ -4978,6 +5028,57 @@ describe('POST /internal/webhooks/task-complete', () => {
           branch: 'fix/no-pr',
           commits: 1,
           summary: 'Completed but no PR',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(markInReviewSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not call markInReview for remediation task with linearIssueId', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix review findings',
+        sanitizedPrompt: 'Fix review findings',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        webhookSecret: 'test-webhook-secret',
+        linearIssueId: 'INT-504',
+        agentType: 'remediation',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const services = getServices();
+      const markInReviewSpy = vi.spyOn(services.linearIssueService, 'markInReview');
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          branch: 'fix/remediation-fixes',
+          commits: 1,
+          summary: 'Fixed review findings',
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/504',
         },
       };
 

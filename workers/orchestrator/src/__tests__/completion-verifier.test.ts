@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  REVIEW_SCHEMA,
-  buildReviewPrompt,
-} from '../services/completion-verifier.js';
+import { REVIEW_SCHEMA, buildReviewPrompt } from '../services/completion-verifier.js';
 
 describe('REVIEW_SCHEMA', () => {
   it('validates needs_remediation as "0"', () => {

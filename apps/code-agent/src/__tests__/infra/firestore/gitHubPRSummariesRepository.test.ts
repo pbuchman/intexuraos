@@ -326,6 +326,46 @@ describe('createFirestoreGitHubPRSummariesRepository', () => {
       expect(calledData['lastReviewedCommitSha']).toBeNull();
     });
 
+    it('should include lastReviewNeedsRemediation when provided (INT-1103)', async () => {
+      const mockDocRef = {
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => ({
+          doc: vi.fn(() => mockDocRef),
+        })),
+      } as never);
+
+      const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
+      const input = createUpsertInput({ lastReviewNeedsRemediation: '1' });
+      const result = await repo.upsert(input);
+
+      expect(result.ok).toBe(true);
+      const calledData = (mockDocRef.set as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(calledData['lastReviewNeedsRemediation']).toBe('1');
+    });
+
+    it('should set lastReviewNeedsRemediation to null when explicitly null (INT-1103)', async () => {
+      const mockDocRef = {
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => ({
+          doc: vi.fn(() => mockDocRef),
+        })),
+      } as never);
+
+      const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
+      const input = createUpsertInput({ lastReviewNeedsRemediation: null });
+      const result = await repo.upsert(input);
+
+      expect(result.ok).toBe(true);
+      const calledData = (mockDocRef.set as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(calledData['lastReviewNeedsRemediation']).toBeNull();
+    });
+
     it('should handle Firestore errors', async () => {
       mockGetFirestore.mockReturnValue({
         collection: vi.fn(() => ({
