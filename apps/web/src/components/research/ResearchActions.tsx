@@ -17,6 +17,8 @@ import type {
   PartialFailureDecision,
   Research,
 } from '@/services/researchAgentApi.types';
+import { isSelectableModel } from '@/services/researchAgentApi.types';
+import { getModelDisplayName } from './shared.js';
 
 export interface ActionState {
   loading: boolean;
@@ -59,6 +61,23 @@ export function ResearchActions({
   onEditDraft,
   partialFailure: partialFailureState,
 }: ResearchActionsProps): React.JSX.Element {
+  const failedRetryModels = research.llmResults
+    .filter((result) => result.status === 'failed')
+    .map((result) => result.model);
+  const unsupportedRetryModels = failedRetryModels.filter((model) => !isSelectableModel(model));
+  const retryBlockedByUnsupportedSynthesis =
+    failedRetryModels.length === 0 &&
+    research.synthesisError !== undefined &&
+    research.synthesisError !== '' &&
+    research.llmResults.some((result) => result.status === 'completed') &&
+    !isSelectableModel(research.synthesisModel);
+  const retryBlockMessage =
+    unsupportedRetryModels.length > 0
+      ? `Retry unavailable because these historical models are no longer supported: ${unsupportedRetryModels.map((model) => getModelDisplayName(model)).join(', ')}`
+      : retryBlockedByUnsupportedSynthesis
+        ? `Retry unavailable because the synthesis model ${getModelDisplayName(research.synthesisModel)} is no longer supported.`
+        : null;
+
   return (
     <>
       <ErrorBanner message={unshare.error} className="mt-2" />
@@ -131,7 +150,7 @@ export function ResearchActions({
             {research.status === 'failed' ? (
               <Button
                 onClick={retry.onRetry}
-                disabled={retry.loading || deleteAction.loading}
+                disabled={retry.loading || deleteAction.loading || retryBlockMessage !== null}
                 isLoading={retry.loading}
               >
                 <RefreshCw className="h-4 w-4 sm:mr-2" />
@@ -204,6 +223,11 @@ export function ResearchActions({
               <span className="hidden sm:inline">Delete</span>
             </Button>
           </div>
+          {research.status === 'failed' && retryBlockMessage !== null ? (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+              {retryBlockMessage}
+            </div>
+          ) : null}
           {unshare.showConfirm ? (
             <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
               <p className="mb-3 text-sm text-red-800 dark:text-red-300">Unshare this research?</p>
@@ -288,6 +312,7 @@ export function ResearchActions({
       {research.status === 'awaiting_confirmation' && research.partialFailure !== undefined ? (
         <PartialFailureConfirmation
           partialFailure={research.partialFailure}
+          synthesisModel={research.synthesisModel}
           onConfirm={partialFailureState.onConfirm}
           confirming={partialFailureState.loading}
           error={partialFailureState.error}
@@ -299,6 +324,7 @@ export function ResearchActions({
 
 interface PartialFailureConfirmationProps {
   partialFailure: PartialFailure;
+  synthesisModel: string;
   onConfirm: (action: PartialFailureDecision) => void;
   confirming: boolean;
   error: string | null;
@@ -306,18 +332,24 @@ interface PartialFailureConfirmationProps {
 
 function PartialFailureConfirmation({
   partialFailure,
+  synthesisModel,
   onConfirm,
   confirming,
   error,
 }: PartialFailureConfirmationProps): React.JSX.Element {
-  // Defensive: API may return undefined failedProviders despite type definition
+  // Defensive: API may return undefined failedModels despite type definition
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  const failedProvidersArr = partialFailure.failedProviders ?? [];
-  const failedProvidersText = failedProvidersArr
-    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+  const failedModelsArr = partialFailure.failedModels ?? [];
+  const failedModelsText = failedModelsArr
+    .map((model) => getModelDisplayName(model))
+    .join(', ');
+  const unsupportedFailedModels = failedModelsArr.filter((model) => !isSelectableModel(model));
+  const unsupportedFailedModelsText = unsupportedFailedModels
+    .map((model) => getModelDisplayName(model))
     .join(', ');
 
-  const canRetry = partialFailure.retryCount < 2;
+  const canRetry = partialFailure.retryCount < 2 && unsupportedFailedModels.length === 0;
+  const canProceed = isSelectableModel(synthesisModel);
 
   return (
     <Card className="mb-6 border-orange-200 bg-orange-50 dark:border-orange-800 dark:bg-orange-900/30">
@@ -326,10 +358,10 @@ function PartialFailureConfirmation({
         <div className="flex-1">
           <h3 className="font-semibold text-orange-800 dark:text-orange-300">Partial Failure Detected</h3>
           <p className="mt-1 text-sm text-orange-700 dark:text-orange-300/90">
-            {failedProvidersText !== ''
-              ? `${failedProvidersText} failed during research.`
-              : 'Some providers failed during research.'}{' '}
-            You can proceed with available results, retry the failed providers, or cancel.
+            {failedModelsText !== ''
+              ? `${failedModelsText} failed during research.`
+              : 'Some models failed during research.'}{' '}
+            You can proceed with available results, retry the failed models, or cancel.
           </p>
 
           {partialFailure.retryCount > 0 ? (
@@ -338,12 +370,26 @@ function PartialFailureConfirmation({
             </p>
           ) : null}
 
+          {unsupportedFailedModels.length > 0 ? (
+            <p className="mt-2 text-sm text-orange-700 dark:text-orange-300">
+              Retry unavailable because these historical models are no longer supported:{' '}
+              {unsupportedFailedModelsText}
+            </p>
+          ) : null}
+
+          {!canProceed ? (
+            <p className="mt-2 text-sm text-orange-700 dark:text-orange-300">
+              Proceed unavailable because the synthesis model{' '}
+              {getModelDisplayName(synthesisModel)} is no longer supported.
+            </p>
+          ) : null}
+
           <div className="mt-4 flex flex-wrap gap-3">
             <Button
               onClick={(): void => {
                 onConfirm('proceed');
               }}
-              disabled={confirming}
+              disabled={confirming || !canProceed}
               isLoading={confirming}
             >
               <CheckCircle className="h-4 w-4 sm:mr-2" />
@@ -356,12 +402,12 @@ function PartialFailureConfirmation({
                 onClick={(): void => {
                   onConfirm('retry');
                 }}
-                disabled={confirming}
+                disabled={confirming || !canRetry}
               >
                 <RefreshCw className="h-4 w-4 sm:mr-2" />
                 <span className="hidden sm:inline">
-                  {failedProvidersText !== ''
-                    ? `Retry Failed (${failedProvidersText})`
+                  {failedModelsText !== ''
+                    ? `Retry Failed (${failedModelsText})`
                     : 'Retry Failed'}
                 </span>
               </Button>

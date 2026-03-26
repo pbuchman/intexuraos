@@ -11,9 +11,17 @@ export const supportedModelSchema = {
   ],
 } as const;
 
+export const storedModelSchema = {
+  type: 'string',
+} as const;
+
 export const llmProviderSchema = {
   type: 'string',
   enum: ['google', 'openai', 'anthropic', 'perplexity', 'openrouter'],
+} as const;
+
+export const storedLlmProviderSchema = {
+  type: 'string',
 } as const;
 
 export const researchStatusSchema = {
@@ -33,7 +41,7 @@ export const researchStatusSchema = {
 export const llmResultSchema = {
   type: 'object',
   properties: {
-    provider: llmProviderSchema,
+    provider: storedLlmProviderSchema,
     model: { type: 'string' },
     status: { type: 'string', enum: ['pending', 'processing', 'completed', 'failed'] },
     result: { type: 'string', nullable: true },
@@ -65,7 +73,7 @@ export const partialFailureSchema = {
   properties: {
     failedModels: {
       type: 'array',
-      items: supportedModelSchema,
+      items: storedModelSchema,
     },
     userDecision: { type: 'string', enum: ['proceed', 'retry', 'cancel'], nullable: true },
     detectedAt: { type: 'string' },
@@ -117,9 +125,9 @@ export const researchSchema = {
     originalPrompt: { type: 'string', nullable: true },
     selectedModels: {
       type: 'array',
-      items: supportedModelSchema,
+      items: storedModelSchema,
     },
-    synthesisModel: supportedModelSchema,
+    synthesisModel: storedModelSchema,
     status: researchStatusSchema,
     llmResults: {
       type: 'array',

@@ -7,14 +7,12 @@ import { useResearches } from '@/hooks';
 import { formatRelative } from '@/utils/dateFormat';
 import { stripMarkdown } from '@/utils';
 import { toggleResearchFavourite } from '@/services/researchAgentApi';
-import {
-  getProviderForModel,
-  type Research,
-} from '@/services/researchAgentApi.types';
+import { type Research } from '@/services/researchAgentApi.types';
 import {
   ALL_RESEARCH_GROUP_STATUSES,
   deriveGroupStatus,
   getAccentShadow,
+  getUniqueResearchProviders,
   INACTIVE_SEGMENT_CLASS,
   RESEARCH_GROUP_STATUS_CONFIG,
   RESEARCH_SORT_OPTIONS,
@@ -203,7 +201,7 @@ const ResearchRow = memo(function ResearchRow({ research, onDelete, onToggleFavo
     }
   };
 
-  const uniqueProviders = [...new Set(research.selectedModels.map(getProviderForModel))];
+  const uniqueProviders = getUniqueResearchProviders(research.selectedModels);
 
   return (
     <div
