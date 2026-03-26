@@ -1797,6 +1797,57 @@ describe('TaskDispatcher', () => {
       );
     });
 
+    it('maps remediation agentType to execution for completion verification', async () => {
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: true,
+        missingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+        agentData: {
+          agentType: 'execution',
+          outcome: 'implemented',
+          superpowers_executing_plans: 'used',
+          superpowers_requesting_code_review: 'not used',
+          gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
+          summary: 'Remediation completed',
+        },
+      });
+      const internal = agentDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internal, 'checkForResult').mockResolvedValue({
+        branch: 'feat/remediation',
+        commits: 1,
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/999',
+      });
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        executionFinalAssistantLog()
+      );
+      const request: CreateTaskRequest = {
+        taskId: 'remediation-maps-to-execution',
+        workerType: 'auto',
+        prompt: 'Fix review findings',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'remediation',
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(singleAttemptCompletionControl.verifier.verify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentType: 'execution',
+          taskId: 'remediation-maps-to-execution',
+        })
+      );
+    });
+
     it('maps verifier executionMetadata to execution_* webhook fields for execution-agent tasks', async () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: true,
@@ -3159,6 +3210,44 @@ describe('TaskDispatcher', () => {
       await internalDispatcher.finalizeTask(task as unknown as Record<string, unknown>, 'failed', {
         error: { code: 'TEST', message: 'test', remediation: { action: 'retry' as const } },
       });
+
+      expect(preserveWorker).not.toHaveBeenCalled();
+      expect(destroyWorker).toHaveBeenCalledWith(taskId);
+    });
+
+    it('does not preserve remediation agent containers when preserveWorkerContainers is enabled', async () => {
+      const { destroyWorker, preserveWorker, dispatcher } = createPreserveTestFixture();
+
+      const taskId = 'remediation-no-preserve';
+      await dispatcher.submitTask({
+        taskId,
+        workerType: 'auto',
+        prompt: 'Remediation task should not preserve',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'remediation',
+      });
+      await flushAsync();
+
+      const task = await dispatcher.getTask(taskId);
+      if (task === null) {
+        throw new Error('Task not found');
+      }
+
+      const internalDispatcher = dispatcher as unknown as {
+        finalizeTask: (
+          taskArg: Record<string, unknown>,
+          finalStatus: 'completed',
+          payload: { result?: unknown; error?: unknown }
+        ) => Promise<void>;
+      };
+      await internalDispatcher.finalizeTask(
+        task as unknown as Record<string, unknown>,
+        'completed',
+        {}
+      );
 
       expect(preserveWorker).not.toHaveBeenCalled();
       expect(destroyWorker).toHaveBeenCalledWith(taskId);

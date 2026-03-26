@@ -47,6 +47,7 @@ function makeWatch(overrides: Partial<MergeQueueWatch> = {}): MergeQueueWatch {
     status: 'active',
     mergedPrs: [],
     skippedPrs: [],
+    excludedPrNumbers: [],
     lastError: null,
     lastErrorAt: null,
     createdAt: '2026-01-01T00:00:00Z',

@@ -414,6 +414,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.prBranch !== undefined) {
           updateData['prBranch'] = input.prBranch;
         }
+        if (input.requiresReReview !== undefined) {
+          updateData['requiresReReview'] = input.requiresReReview;
+        }
 
         await docRef.update(updateData);
 
@@ -713,6 +716,34 @@ export const createFirestoreCodeTaskRepository = (deps: {
       }
     },
 
+    findRecentRemediationForPR: async (
+      repository: string,
+      prNumber: number
+    ): Promise<Result<CodeTask | null, RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('repository', '==', repository)
+          .where('prNumber', '==', prNumber)
+          .where('agentType', '==', 'remediation')
+          .orderBy('createdAt', 'desc')
+          .limit(1)
+          .get();
+
+        if (snapshot.empty) {
+          return ok(null);
+        }
+
+        const doc = snapshot.docs[0]!;
+        return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
+      } catch (error) {
+        logger.error({ error, repository, prNumber }, 'Failed to find recent remediation task for PR');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
     deleteTask: async (taskId: string, userId: string): Promise<Result<void, RepositoryError>> => {
       try {
         const doc = await collection.doc(taskId).get();
@@ -886,7 +917,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
       }
     },
 
-    findLatestNonReviewTaskByPR: async (
+    findLatestExecutionTaskByPR: async (
       repository: string,
       prNumber: number
     ): Promise<Result<CodeTask | null, RepositoryError>> => {
@@ -903,12 +934,12 @@ export const createFirestoreCodeTaskRepository = (deps: {
           .limit(50)
           .get();
 
-        // Find the first non-review task (agentType !== 'review' or missing)
+        // Find the first execution-eligible task (excludes 'review' and 'remediation')
         for (const doc of snapshot.docs) {
           const data = doc.data();
           const agentType = data['agentType'] as string | undefined;
-          // Treat missing agentType as non-review (backward compatibility)
-          if (agentType !== 'review') {
+          // Treat missing agentType as execution-eligible (backward compatibility)
+          if (agentType !== 'review' && agentType !== 'remediation') {
             return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
           }
         }
@@ -916,13 +947,13 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (snapshot.docs.length === 50) {
           logger.warn(
             { repository, prNumber, docsScanned: 50 },
-            'findLatestNonReviewTaskByPR exhausted 50-doc window without finding a non-review task',
+            'findLatestExecutionTaskByPR exhausted 50-doc window without finding a non-review task',
           );
         }
 
         return ok(null);
       } catch (error) {
-        logger.error({ error, repository, prNumber }, 'Failed to find latest non-review task by PR');
+        logger.error({ error, repository, prNumber }, 'Failed to find latest execution task by PR');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,

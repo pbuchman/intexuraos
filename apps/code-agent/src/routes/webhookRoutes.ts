@@ -11,6 +11,7 @@ import type { TurnMetrics } from '../domain/models/turnMetrics.js';
 import { formatMetricsLogLines } from '../domain/formatters/metricsLogFormatter.js';
 import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
 import { parseLinearIdentifierFromUrl } from '../domain/utils/linearIdentifierParser.js';
+import { parseOwnerRepo } from '../domain/utils/parseOwnerRepo.js';
 
 /**
  * Best-effort: record a task_failed automation log event for PR-linked tasks.
@@ -80,6 +81,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       review_types?: string;
       requirements_tracker_updated?: string;
       gh_actions_status?: string;
+      needs_remediation?: string;
     };
     error?: {
       code: string;
@@ -129,6 +131,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 review_types: { type: 'string' },
                 requirements_tracker_updated: { type: 'string' },
                 gh_actions_status: { type: 'string' },
+                needs_remediation: { type: 'string' },
               },
               required: [],
             },
@@ -209,7 +212,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         });
       }
 
-      const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService, metricsClient, linearIssueService, linearAgentClient, logger, firestore } = getServices();
+      const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService, metricsClient, linearIssueService, linearAgentClient, logger, firestore, gitHubPRSummaryRepo, gitHubPRClient, userServiceClient } = getServices();
       const { taskId, status, result, error } = request.body;
 
       // Extract traceId from headers for downstream calls
@@ -997,13 +1000,16 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
         }
 
-        // Extract PR number from prUrl for findByPR correlation (INT-465)
+        // Extract PR number from prUrl for findByPR correlation (INT-465).
         let prNumber: number | undefined;
         if (result?.prUrl) {
           const match = /\/pull\/(\d+)/.exec(result.prUrl);
           if (match?.[1] !== undefined) {
             prNumber = Number(match[1]);
           }
+        }
+        if (prNumber === undefined && task.prNumber !== undefined) {
+          prNumber = task.prNumber;
         }
 
         const resolvedStatus =
@@ -1025,9 +1031,91 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
         await cleanupLockIfPR();
 
+        // Best-effort: update PR summary when review completes
+        if (resolvedStatus === 'reviewed' && prNumber !== undefined) {
+          try {
+            const tokenResult = await userServiceClient.getOAuthToken(task.userId, 'github');
+            if (tokenResult.ok) {
+              const parsed = parseOwnerRepo(task.repository);
+              /* v8 ignore start -- ts-type: parseOwnerRepo cannot return null for valid task.repository (always owner/repo format) @preserve */
+              if (parsed !== null) {
+              /* v8 ignore stop @preserve */
+                const detailsResult = await gitHubPRClient.getPullRequestDetails(tokenResult.value.accessToken, parsed.owner, parsed.repo, prNumber);
+                if (detailsResult.ok) {
+                  await gitHubPRSummaryRepo.upsert({
+                    repository: task.repository,
+                    pullRequestNumber: prNumber,
+                    lastActivityAt: new Date(),
+                    lastReviewedCommitSha: detailsResult.value.headSha,
+                    lastReviewNeedsRemediation: result?.needs_remediation ?? null,
+                  });
+                  request.log.info({ taskId, prNumber, headSha: detailsResult.value.headSha }, 'Updated lastReviewedCommitSha on PR summary');
+                }
+              }
+            }
+          } catch (reviewShaError: unknown) {
+            request.log.warn({ error: reviewShaError, taskId, prNumber }, 'Failed to update lastReviewedCommitSha (best-effort)');
+          }
+        }
+
+        // Best-effort: create remediation task when review finds actionable issues
+        if (task.agentType === 'review' && prNumber !== undefined && result !== undefined) {
+          try {
+            if (result.needs_remediation !== '0') {
+              const recentRemediationResult = await codeTaskRepo.findRecentRemediationForPR(task.repository, prNumber);
+              if (!recentRemediationResult.ok) {
+                request.log.warn(
+                  { taskId, prNumber, error: recentRemediationResult.error },
+                  'Failed to check recent remediation task, skipping remediation creation (best-effort)',
+                );
+              } else if (recentRemediationResult.value !== null) {
+                request.log.info(
+                  { taskId, prNumber, existingRemediationId: recentRemediationResult.value.id },
+                  'Recent remediation task already exists for PR, skipping creation',
+                );
+              } else {
+                const { createRemediationTaskFn, logger: remediationLogger } = getServices();
+                if (createRemediationTaskFn !== undefined) {
+                  const reviewBody = result.summary;
+                  const remediationResult = await createRemediationTaskFn(
+                    remediationLogger,
+                    {
+                      repository: task.repository,
+                      prNumber,
+                      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard, repository always contains '/' @preserve */
+                      senderLogin: task.repository.split('/')[0] ?? task.userId,
+                      /* v8 ignore stop @preserve */
+                      workerType: task.workerType,
+                      eventId: taskId,
+                      ...(reviewBody !== undefined && { reviewBody }),
+                      ...(task.baseBranch !== undefined && { baseBranch: task.baseBranch }),
+                      ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+                    },
+                  );
+                  if (remediationResult.ok) {
+                    request.log.info(
+                      { taskId, prNumber, remediationTaskId: remediationResult.value.taskId },
+                      'Created remediation task from review task-complete',
+                    );
+                  } else {
+                    request.log.warn(
+                      { taskId, prNumber, error: remediationResult.error },
+                      'Failed to create remediation task from review task-complete (best-effort)',
+                    );
+                  }
+                } else {
+                  request.log.warn({ taskId, prNumber }, 'createRemediationTaskFn not configured, skipping remediation creation');
+                }
+              }
+            }
+          } catch (remediationError: unknown) {
+            request.log.warn({ error: remediationError, taskId, prNumber }, 'Unexpected error during remediation task creation (best-effort)');
+          }
+        }
+
         // Best-effort In Review transition for agent types without deterministic enforcement
         // (planning, execution, and pull_request agents handle this in their own enforcement paths)
-        if (task.agentType !== 'execution' && task.agentType !== 'pull_request' && task.agentType !== 'planning' && prNumber !== undefined && task.linearIssueId !== undefined) {
+        if (task.agentType !== 'execution' && task.agentType !== 'pull_request' && task.agentType !== 'planning' && task.agentType !== 'remediation' && prNumber !== undefined && task.linearIssueId !== undefined) {
           await linearIssueService.markInReview(task.userId, task.linearIssueId);
         }
 

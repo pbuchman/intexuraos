@@ -43,12 +43,20 @@ describe('GptAdapter', () => {
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreateGptClient.mockClear();
-      new GptAdapter('test-key', LlmModels.O4MiniDeepResearch, 'test-user-id', testPricing, mockLogger);
+      new GptAdapter(
+        'test-key',
+        LlmModels.O4MiniDeepResearch,
+        'test-user-id',
+        testPricing,
+        mockLogger,
+        'research-123'
+      );
 
       expect(mockCreateGptClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: LlmModels.O4MiniDeepResearch,
         userId: 'test-user-id',
+        researchId: 'research-123',
         pricing: testPricing,
         logger: mockLogger,
       });

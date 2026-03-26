@@ -30,7 +30,8 @@ export class OpenRouterAdapter implements LlmResearchProvider, LlmSynthesisProvi
     model: string,
     userId: string,
     pricing: ModelPricing,
-    logger: Logger
+    logger: Logger,
+    researchId?: string
   ) {
     // Strip 'or:' prefix before passing to OpenRouter API client
     const rawModel = isOpenRouterModel(model) ? getOpenRouterRawId(model) : model;
@@ -38,6 +39,7 @@ export class OpenRouterAdapter implements LlmResearchProvider, LlmSynthesisProvi
       apiKey,
       model: rawModel,
       userId,
+      ...(researchId !== undefined && { researchId }),
       pricing,
       logger,
     });

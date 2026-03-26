@@ -20,6 +20,7 @@ import type { LinearAgentClient } from '../ports/linearAgentClient.js';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
+import type { GitHubPRSummaryRepository } from '../repositories/gitHubPRSummaryRepository.js';
 
 import { createHmac } from 'node:crypto';
 import type { AutomationLog } from '../ports/automationLog.js';
@@ -59,6 +60,7 @@ export interface CreateReviewTaskDeps {
   workerSettingsRepo: WorkerSettingsRepository;
   orchestratorSecret: string;
   automationLog: AutomationLog;
+  gitHubPRSummaryRepo?: GitHubPRSummaryRepository;
 }
 
 interface ResolvedLinearIssue {
@@ -156,6 +158,7 @@ function buildReviewPrompt(request: CreateReviewTaskRequest & {
   workerType: WorkerType;
   issueDescription?: string;
   planDocumentPath?: string;
+  reReviewCommitSha?: string;
 }): string {
   const { repository, prNumber, reviewTypes, workerType, reviewComment } = request;
   const lines = [
@@ -208,6 +211,25 @@ function buildReviewPrompt(request: CreateReviewTaskRequest & {
         `Plan file path: ${request.planDocumentPath}`,
       );
     }
+  }
+
+  if (request.reReviewCommitSha !== undefined) {
+    lines.push(
+      '',
+      '## Re-review Context',
+      '',
+      'This is a re-review for this PR. Your review MUST focus on changes',
+      `since commit ${request.reReviewCommitSha}.`,
+      '',
+      '### Review Scope',
+      `Commits since last review: ${request.reReviewCommitSha}..HEAD`,
+      '',
+      'IMPORTANT: Do NOT re-flag findings from the previous review unless they',
+      'are still present in the new changes. If a finding was flagged before and',
+      'the relevant code has not changed in the diff, assume it is being tracked',
+      'separately. Focus your review on NEW code, CHANGED code, and whether',
+      'prior findings were correctly addressed.',
+    );
   }
 
   return lines.join('\n');
@@ -318,6 +340,20 @@ export async function createReviewTask(
     }
   }
 
+  // Best-effort: detect re-review via PR summary's lastReviewedCommitSha
+  let reReviewCommitSha: string | undefined;
+  if (deps.gitHubPRSummaryRepo !== undefined) {
+    try {
+      const summaryResult = await deps.gitHubPRSummaryRepo.findByPullRequest(repository, prNumber);
+      if (summaryResult.ok && summaryResult.value !== null && summaryResult.value.lastReviewedCommitSha !== null) {
+        reReviewCommitSha = summaryResult.value.lastReviewedCommitSha;
+        logger.info({ repository, prNumber, lastReviewedCommitSha: reReviewCommitSha }, 'Detected re-review — prior review commit found');
+      }
+    } catch (error: unknown) {
+      logger.warn({ error, repository, prNumber }, 'Failed to fetch PR summary for re-review detection (best-effort)');
+    }
+  }
+
   // Best-effort Linear issue linking for UI grouping
   let linearIssueId: string | undefined;
   let createdDescription: string | undefined; // @allow-undefined-type -- mutable variable, not a property
@@ -386,6 +422,7 @@ export async function createReviewTask(
     workerType: effectiveWorkerType,
     ...(issueDescription !== undefined && { issueDescription }),
     ...(planDocumentPath !== undefined && { planDocumentPath }),
+    ...(reReviewCommitSha !== undefined && { reReviewCommitSha }),
   });
   const webhookSecret = createHmac('sha256', orchestratorSecret).update(eventId).digest('hex');
 

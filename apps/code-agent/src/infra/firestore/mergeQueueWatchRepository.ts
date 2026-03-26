@@ -16,6 +16,14 @@ import type {
 } from '../../domain/repositories/mergeQueueWatchRepository.js';
 import { getFirestore, FieldValue } from '@intexuraos/infra-firestore';
 
+/**
+ * Raw Firestore shape — old documents may lack excludedPrNumbers,
+ * so the field is optional here even though the domain model requires it.
+ */
+type FirestoreWatchData = Omit<MergeQueueWatch, 'id' | 'excludedPrNumbers'> & {
+  excludedPrNumbers?: number[];
+};
+
 const COLLECTION_NAME = 'merge_queue_watches';
 
 export function createFirestoreMergeQueueWatchRepository(deps: {
@@ -60,6 +68,7 @@ export function createFirestoreMergeQueueWatchRepository(deps: {
           status: 'active' as const,
           mergedPrs: [],
           skippedPrs: [],
+          excludedPrNumbers: input.excludedPrNumbers ?? [],
           lastError: null,
           lastErrorAt: null,
           createdAt: now,
@@ -97,10 +106,11 @@ export function createFirestoreMergeQueueWatchRepository(deps: {
           });
         }
 
-        const data = snapshot.data() as Omit<MergeQueueWatch, 'id'>;
+        const data = snapshot.data() as FirestoreWatchData;
         return ok({
           id: snapshot.id,
           ...data,
+          excludedPrNumbers: data.excludedPrNumbers ?? [],
         });
       } catch (error) {
         logger.error({ error, id }, 'Failed to find merge queue watch by ID');
@@ -136,10 +146,11 @@ export function createFirestoreMergeQueueWatchRepository(deps: {
           return ok(null);
         }
 
-        const data = doc.data() as Omit<MergeQueueWatch, 'id'>;
+        const data = doc.data() as FirestoreWatchData;
         return ok({
           id: doc.id,
           ...data,
+          excludedPrNumbers: data.excludedPrNumbers ?? [],
         });
       } catch (error) {
         logger.error({ error, userId, owner, repo, baseBranch }, 'Failed to find active watch by user and branch');
@@ -157,10 +168,11 @@ export function createFirestoreMergeQueueWatchRepository(deps: {
           .get();
 
         const watches: MergeQueueWatch[] = snapshot.docs.map((doc) => {
-          const data = doc.data() as Omit<MergeQueueWatch, 'id'>;
+          const data = doc.data() as FirestoreWatchData;
           return {
             id: doc.id,
             ...data,
+            excludedPrNumbers: data.excludedPrNumbers ?? [],
           };
         });
 
@@ -188,10 +200,11 @@ export function createFirestoreMergeQueueWatchRepository(deps: {
           .get();
 
         const watches: MergeQueueWatch[] = snapshot.docs.map((doc) => {
-          const data = doc.data() as Omit<MergeQueueWatch, 'id'>;
+          const data = doc.data() as FirestoreWatchData;
           return {
             id: doc.id,
             ...data,
+            excludedPrNumbers: data.excludedPrNumbers ?? [],
           };
         });
 
@@ -233,6 +246,9 @@ export function createFirestoreMergeQueueWatchRepository(deps: {
         }
         if (input.cancelledAt !== undefined) {
           updateData['cancelledAt'] = input.cancelledAt;
+        }
+        if (input.excludedPrNumbers !== undefined) {
+          updateData['excludedPrNumbers'] = input.excludedPrNumbers;
         }
 
         await docRef.update(updateData);

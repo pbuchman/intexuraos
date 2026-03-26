@@ -43,6 +43,8 @@ export interface OpenRouterConfig {
   model: string;
   /** User ID for usage tracking and analytics */
   userId: string;
+  /** Optional research ID for correlating audit logs to a research run */
+  researchId?: string;
   /** Cost configuration per million tokens */
   pricing: import('@intexuraos/llm-contract').ModelPricing;
   /** Request timeout in milliseconds. Default: 840000 (14 minutes) */

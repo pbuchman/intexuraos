@@ -68,7 +68,7 @@ DEFAULTS (record in defaults_applied if used):
 - currency: "${defaultCurrency}"
 
 DOMAIN OPTIONS:
-travel, product, technical, legal, medical, financial, security_privacy, business_strategy, marketing_sales, hr_people_ops, education_learning, science_research, history_culture, politics_policy, real_estate, food_nutrition, fitness_sports, entertainment_media, diy_home, outdoor_recreation, fishing, general, unknown
+travel, product, technical, legal, medical, financial, security_privacy, business_strategy, marketing_sales, hr_people_ops, education_learning, science_research, history_culture, politics_policy, real_estate, food_nutrition, fitness_sports, entertainment_media, construction_building, diy_home, outdoor_recreation, fishing, general, unknown
 
 SYNTHESIS_GOALS OPTIONS (include all that apply):
 - merge: Combine information from multiple sources
@@ -117,4 +117,4 @@ OUTPUT STRICT JSON (no markdown, no explanation):
   "red_flags": ["<any concerns>"]
 }`;
 }
-// Prompt version: 2.0.0
+// Prompt version: 2.1.0

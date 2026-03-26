@@ -20,7 +20,8 @@ describe('DOMAINS constant', () => {
     expect(DOMAINS).toContain('unknown');
     expect(DOMAINS).toContain('outdoor_recreation');
     expect(DOMAINS).toContain('fishing');
-    expect(DOMAINS.length).toBe(23);
+    expect(DOMAINS).toContain('construction_building');
+    expect(DOMAINS.length).toBe(24);
   });
 });
 

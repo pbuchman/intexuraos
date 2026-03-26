@@ -860,7 +860,7 @@ export class TaskDispatcher {
       ? 'pull_request'
       : task.agentType === 'review'
         ? 'review'
-        : task.agentType === 'execution'
+        : task.agentType === 'execution' || task.agentType === 'remediation'
           ? 'execution'
           : task.agentType === 'planning'
             ? 'planning'
@@ -1217,6 +1217,7 @@ export class TaskDispatcher {
       base.review_types = agentData.review_types;
       base.requirements_tracker_updated = agentData.requirements_tracker_updated;
       base.gh_actions_status = agentData.gh_actions_status;
+      base.needs_remediation = agentData.needs_remediation;
     } else {
       if (agentData.gh_pr_url !== '') {
         base.prUrl = agentData.gh_pr_url;
@@ -1256,6 +1257,12 @@ export class TaskDispatcher {
         task.lastSuccessResult.gh_actions_status !== undefined
       ) {
         result.gh_actions_status = task.lastSuccessResult.gh_actions_status;
+      }
+      if (
+        result.needs_remediation === undefined &&
+        task.lastSuccessResult.needs_remediation !== undefined
+      ) {
+        result.needs_remediation = task.lastSuccessResult.needs_remediation;
       }
     }
     if (task.agentType === 'pull_request' && task.lastSuccessResult !== undefined) {
@@ -1796,7 +1803,9 @@ export class TaskDispatcher {
   ): Promise<void> {
     const finalStatus = statusParam;
     const isNonPreservableAgentType =
-      task.agentType === 'review' || task.agentType === 'pull_request';
+      task.agentType === 'review' ||
+      task.agentType === 'pull_request' ||
+      task.agentType === 'remediation';
     const shouldPreserve =
       this.preserveWorkerContainers &&
       !isNonPreservableAgentType &&
