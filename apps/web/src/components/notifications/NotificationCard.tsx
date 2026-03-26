@@ -11,8 +11,15 @@ interface NotificationCardProps {
 }
 
 /**
- * Individual notification card styled as compact row with R4 pattern.
- * Desktop grid: Device badge | App badge | Content preview | Source badge | Time | Actions
+ * Individual notification card with responsive layout.
+ *
+ * - Mobile (< md): stacked single-column card with wrapped badge tags,
+ *   always-visible delete button, and free-flowing timestamp.
+ * - Desktop (≥ md): compact 6-column grid row —
+ *   Device badge | App badge | Content preview | Source badge | Time (140px) | Actions.
+ *
+ * Uses `md:contents` on wrapper divs so children participate directly in the
+ * parent grid at desktop breakpoint while remaining grouped for mobile layout.
  */
 export function NotificationCard({
   notification,
@@ -29,6 +36,7 @@ export function NotificationCard({
       }`}
     >
       <div className="grid grid-cols-1 gap-3 md:grid-cols-[auto_auto_1fr_auto_140px_60px] md:items-center md:gap-2">
+        {/* md:contents dissolves this wrapper at desktop so children slot into the parent grid */}
         <div className="flex min-w-0 items-start justify-between gap-3 md:contents">
           <div className="min-w-0 md:order-3">
             <p className="line-clamp-2 break-words font-medium text-slate-900 dark:text-slate-100 md:truncate">
@@ -57,6 +65,7 @@ export function NotificationCard({
           </div>
         </div>
 
+        {/* md:contents dissolves badge wrapper at desktop so badges slot into individual grid columns */}
         <div className="flex flex-wrap gap-2 md:contents">
           <Badge className="w-fit md:order-1">{notification.device}</Badge>
           <Badge

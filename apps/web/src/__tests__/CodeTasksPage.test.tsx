@@ -179,7 +179,7 @@ describe('CodeTasksPage', () => {
 
     render(<CodeTasksPage />);
 
-    expect(screen.getAllByText('Hydrated Linear Issue').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('Hydrated Linear Issue')).toHaveLength(2);
     expect(screen.getAllByRole('link', { name: 'INT-301' })).toSatisfy((links) =>
       links.every((link) =>
         link.getAttribute('href') === 'https://linear.app/pbuchman/issue/INT-301'
@@ -209,7 +209,7 @@ describe('CodeTasksPage', () => {
 
     render(<CodeTasksPage />);
 
-    expect(screen.getAllByText('Prompt only task').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('Prompt only task')).toHaveLength(2);
   });
 
   it('includes all non-archived CodeTaskStatus values in DEFAULT_VISIBLE_STATUSES', () => {
