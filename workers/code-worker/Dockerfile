@@ -113,13 +113,13 @@ RUN mkdir -p /repo /secrets /tmp /home/claude/.claude /home/claude/.config/gclou
 # Bake Claude default config to skip onboarding on fresh tmpfs
 # /home/claude is tmpfs so image contents are wiped — entrypoint.sh copies these at startup
 # NOTE: Build context is workspace root (.), so paths are root-relative
-COPY --chown=claude:claude workers/claude-worker/config-defaults/claude.json /opt/claude-defaults/.claude.json
+COPY --chown=claude:claude workers/code-worker/config-defaults/claude.json /opt/claude-defaults/.claude.json
 
 # Hook direnv into bash so env vars auto-load when entering /repo
 RUN echo 'eval "$(direnv hook bash)"' >> /opt/claude-defaults/.bashrc
 
 # Copy entrypoint
-COPY --chown=claude:claude workers/claude-worker/entrypoint.sh /entrypoint.sh
+COPY --chown=claude:claude workers/code-worker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Security: Remove unnecessary tools

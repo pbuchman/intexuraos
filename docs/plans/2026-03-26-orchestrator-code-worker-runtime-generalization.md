@@ -103,9 +103,9 @@
   Accept `codex` in the worker type schema.
 - `workers/orchestrator/src/start.ts`
   Wire Codex auth bootstrap paths, runtime-aware secrets, and any startup validation.
-- `workers/claude-worker/Dockerfile`
+- `workers/code-worker/Dockerfile`
   Keep shared image strategy; add any Codex runtime defaults or directory bootstrap required for managed use.
-- `workers/claude-worker/entrypoint.sh`
+- `workers/code-worker/entrypoint.sh`
   Split shared container setup from runtime-specific attempt execution.
 - `packages/common-core/src/codeTaskWorkerTypes.ts`
   Add `codex` only after the internal runtime path is implemented and tested.
@@ -119,9 +119,9 @@
   Verify keyword detection remains correct when `codex` is introduced.
 - `docs/services/orchestrator/technical.md`
   Update runtime architecture, auth flow, and mount model.
-- `docs/services/claude-worker/technical.md`
+- `docs/services/code-worker/technical.md`
   Explain the image’s transition toward a generic code-worker runtime while preserving Claude behavior.
-- `docs/services/claude-worker/tutorial.md`
+- `docs/services/code-worker/tutorial.md`
   Add Codex-specific login/runtime validation steps or split into a more neutral worker tutorial if the rename is included in the same implementation.
 
 ### Likely Test Files to Extend
@@ -341,8 +341,8 @@
 ### Task 5: Split entrypoint into shared setup plus runtime-specific attempt execution
 
 **Files:**
-- Modify: `workers/claude-worker/entrypoint.sh`
-- Modify: `workers/claude-worker/Dockerfile`
+- Modify: `workers/code-worker/entrypoint.sh`
+- Modify: `workers/code-worker/Dockerfile`
 - Test: `workers/orchestrator/src/services/isolation/__tests__/docker-provider.test.ts`
 
 - [ ] **Step 1: Write failing tests for runtime-specific command selection**
@@ -387,7 +387,7 @@
 
   ```bash
   ./scripts/build-worker-image.sh
-  docker run --rm -it --entrypoint /bin/bash europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest
+  docker run --rm -it --entrypoint /bin/bash europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest
   ```
 
   Inside the container, verify:
@@ -486,8 +486,8 @@
 
 **Files:**
 - Modify: `docs/services/orchestrator/technical.md`
-- Modify: `docs/services/claude-worker/technical.md`
-- Modify: `docs/services/claude-worker/tutorial.md`
+- Modify: `docs/services/code-worker/technical.md`
+- Modify: `docs/services/code-worker/tutorial.md`
 - Modify: `workers/orchestrator/DEPLOYMENT.md`
 
 - [ ] **Step 1: Update the docs after code lands**
@@ -509,7 +509,7 @@
 - [ ] **Step 3: Commit the rollout chunk**
 
   ```bash
-  git add packages/common-core workers/orchestrator workers/claude-worker apps/web apps/actions-agent docs
+  git add packages/common-core workers/orchestrator workers/code-worker apps/web apps/actions-agent docs
   git commit -m "feat(orchestrator): add codex runtime support"
   ```
 
@@ -551,12 +551,12 @@
 
   Expected: PASS
 
-### Task 10: Rename `claude-worker` to `code-worker` only after functional stability
+### Task 10: Rename `code-worker` to `code-worker` only after functional stability
 
 **Files:**
-- Modify: `workers/claude-worker/**`
+- Modify: `workers/code-worker/**`
 - Modify: `workers/orchestrator/DEPLOYMENT.md`
-- Modify: `docs/services/claude-worker/**`
+- Modify: `docs/services/code-worker/**`
 - Modify: image-name references in orchestrator config/docs/scripts
 
 - [ ] **Step 1: Confirm the functional rollout is stable**
@@ -601,4 +601,4 @@
 ## Planned Follow-Up
 
 - Add `codex_xhigh` after the base `codex` worker type is stable and effort configuration is proven end to end.
-- Revisit whether worker naming/docs should move fully from `claude-worker` to `code-worker` once the runtime adapter refactor is deployed cleanly.
+- Revisit whether worker naming/docs should move fully from `code-worker` to `code-worker` once the runtime adapter refactor is deployed cleanly.

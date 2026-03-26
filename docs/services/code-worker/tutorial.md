@@ -1,10 +1,10 @@
-# Claude Worker - Tutorial
+# Code Worker - Tutorial
 
-Getting started with building, testing, and running the claude-worker container image.
+Getting started with building, testing, and running the code-worker container image.
 
 > **Time:** 30-45 minutes
 > **Prerequisites:** Docker Desktop (or Docker Engine on Linux), access to IntexuraOS repo, `gcloud` CLI authenticated
-> **You'll learn:** How to build, run, test, and debug claude-worker containers
+> **You'll learn:** How to build, run, test, and debug code-worker containers
 
 ---
 
@@ -16,7 +16,7 @@ Getting started with building, testing, and running the claude-worker container 
 ./scripts/build-worker-image.sh
 ```
 
-This builds a multi-arch image (amd64 + arm64) tagged as `europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest` using the `workers/claude-worker/Dockerfile`.
+This builds a multi-arch image (amd64 + arm64) tagged as `europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest` using the `workers/code-worker/Dockerfile`.
 
 To build with a custom tag:
 
@@ -29,7 +29,7 @@ To build with a custom tag:
 Check the image exists and inspect its size:
 
 ```bash
-docker images europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest
+docker images europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest
 ```
 
 ### Step 1.3: Push to Artifact Registry (optional)
@@ -48,9 +48,9 @@ The test image replaces the real Claude CLI with a bash stub for E2E testing wit
 
 ```bash
 docker build \
-  -t claude-worker:test \
-  -f workers/claude-worker/Dockerfile.test \
-  workers/claude-worker/
+  -t code-worker:test \
+  -f workers/code-worker/Dockerfile.test \
+  workers/code-worker/
 ```
 
 ---
@@ -63,18 +63,18 @@ Create the isolated Docker network that worker containers use:
 ./scripts/setup-worker-network.sh
 ```
 
-This creates a bridge network named `claude-worker-net` on subnet `172.28.0.0/16`.
+This creates a bridge network named `code-worker-net` on subnet `172.28.0.0/16`.
 
 To verify:
 
 ```bash
-docker network inspect claude-worker-net --format '{{.Name}}: {{range .IPAM.Config}}{{.Subnet}}{{end}}'
+docker network inspect code-worker-net --format '{{.Name}}: {{range .IPAM.Config}}{{.Subnet}}{{end}}'
 ```
 
 **Expected output:**
 
 ```
-claude-worker-net: 172.28.0.0/16
+code-worker-net: 172.28.0.0/16
 ```
 
 ---
@@ -104,8 +104,8 @@ echo "List the files in the repository." > /tmp/test-secrets/user-prompt.txt
 
 ```bash
 docker run -it --rm \
-  --name claude-worker-manual \
-  --network claude-worker-net \
+  --name code-worker-manual \
+  --network code-worker-net \
   --memory 8g \
   --cpus 4 \
   -e TASK_ID=manual-test \
@@ -124,13 +124,13 @@ docker run -it --rm \
   --cap-add NET_RAW \
   --security-opt no-new-privileges \
   --user 1001:1001 \
-  europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest
+  europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest
 ```
 
 **Expected startup output:**
 
 ```
-[entrypoint] Claude worker starting at Thu Feb 19 12:00:00 UTC 2026
+[entrypoint] Code worker starting at Thu Feb 19 12:00:00 UTC 2026
 [entrypoint] Task ID: manual-test
 [entrypoint] Running as user: claude (uid=1001)
 [entrypoint] Claude config defaults restored
@@ -158,14 +158,14 @@ Managed mode keeps the container alive across multiple attempts (used by the orc
 
 ```bash
 docker run -d \
-  --name claude-worker-managed \
-  --network claude-worker-net \
+  --name code-worker-managed \
+  --network code-worker-net \
   --memory 8g \
   --cpus 4 \
   -e TASK_ID=managed-test \
   -e ANTHROPIC_API_KEY=your-api-key \
   -e ANTHROPIC_BASE_URL=https://api.anthropic.com \
-  -e CLAUDE_MANAGED_MODE=1 \
+  -e WORKER_MANAGED_MODE=1 \
   -e GIT_USER_NAME="Test User" \
   -e GIT_USER_EMAIL="test@example.com" \
   -v /tmp/test-repo:/repo:rw \
@@ -176,14 +176,14 @@ docker run -d \
   --cap-add NET_RAW \
   --security-opt no-new-privileges \
   --user 1001:1001 \
-  europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest
+  europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest
 ```
 
 ### Step 5.2: Wait for the readiness marker
 
 ```bash
 # Poll for the readiness marker
-until docker exec claude-worker-managed test -f /tmp/worker-ready 2>/dev/null; do
+until docker exec code-worker-managed test -f /tmp/worker-ready 2>/dev/null; do
   echo "Waiting for worker to be ready..."
   sleep 2
 done
@@ -198,7 +198,7 @@ echo "You are a helpful coding assistant." > /tmp/test-secrets/system-prompt.txt
 echo "List the files in the /repo directory." > /tmp/test-secrets/user-prompt.txt
 
 # Run the attempt
-docker exec claude-worker-managed /entrypoint.sh run-attempt
+docker exec code-worker-managed /entrypoint.sh run-attempt
 ```
 
 ### Step 5.4: Run a resume attempt
@@ -207,14 +207,14 @@ docker exec claude-worker-managed /entrypoint.sh run-attempt
 # Update prompt for follow-up
 echo "Now show me the README content." > /tmp/test-secrets/user-prompt.txt
 
-# Resume continues the previous Claude session
-docker exec -e CLAUDE_CONTINUE=1 claude-worker-managed /entrypoint.sh run-attempt
+# Resume continues the previous runtime session
+docker exec -e WORKER_CONTINUE=1 code-worker-managed /entrypoint.sh run-attempt
 ```
 
 ### Step 5.5: Clean up
 
 ```bash
-docker stop claude-worker-managed && docker rm claude-worker-managed
+docker stop code-worker-managed && docker rm code-worker-managed
 ```
 
 ---
@@ -229,15 +229,15 @@ To collect diagnostic data when Claude crashes:
 mkdir -p /tmp/forensics
 
 docker run -d \
-  --name claude-worker-forensics \
-  --network claude-worker-net \
+  --name code-worker-forensics \
+  --network code-worker-net \
   --memory 8g \
   --cpus 4 \
   -e TASK_ID=forensics-test \
   -e ANTHROPIC_API_KEY=your-api-key \
-  -e CLAUDE_MANAGED_MODE=1 \
-  -e CLAUDE_FORENSICS=1 \
-  -e CLAUDE_FORENSICS_DIR=/var/crash \
+  -e WORKER_MANAGED_MODE=1 \
+  -e WORKER_FORENSICS=1 \
+  -e WORKER_FORENSICS_DIR=/var/crash \
   -e GIT_USER_NAME="Test User" \
   -e GIT_USER_EMAIL="test@example.com" \
   -v /tmp/test-repo:/repo:rw \
@@ -249,7 +249,7 @@ docker run -d \
   --cap-add NET_RAW \
   --security-opt no-new-privileges \
   --user 1001:1001 \
-  europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest
+  europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest
 ```
 
 ### Step 6.2: Inspect forensics after a crash
@@ -268,7 +268,7 @@ cat /tmp/forensics/attempt-*/claude-exit-code.txt
 ### Step 6.3: Clean up
 
 ```bash
-docker stop claude-worker-forensics && docker rm claude-worker-forensics
+docker stop code-worker-forensics && docker rm code-worker-forensics
 ```
 
 ---
@@ -280,14 +280,14 @@ The E2E test suite verifies container lifecycle, mount permissions, input/output
 ### Step 7.1: Build the test image and create the network
 
 ```bash
-docker build -t claude-worker:test -f workers/claude-worker/Dockerfile.test workers/claude-worker/
-docker network create --driver bridge --subnet 172.28.0.0/16 claude-worker-net 2>/dev/null || true
+docker build -t code-worker:test -f workers/code-worker/Dockerfile.test workers/code-worker/
+docker network create --driver bridge --subnet 172.28.0.0/16 code-worker-net 2>/dev/null || true
 ```
 
 ### Step 7.2: Run the E2E tests
 
 ```bash
-WORKER_IMAGE=claude-worker:test WORKER_NETWORK=claude-worker-net pnpm --filter orchestrator test:e2e
+WORKER_IMAGE=code-worker:test WORKER_NETWORK=code-worker-net pnpm --filter orchestrator test:e2e
 ```
 
 **Expected test suites:**
@@ -359,7 +359,7 @@ The stub supports both interactive stdin mode and `--print` mode (reads from std
 ### Exercise 1: File Test
 
 ```bash
-docker build -t claude-worker:test -f workers/claude-worker/Dockerfile.test workers/claude-worker/
+docker build -t code-worker:test -f workers/code-worker/Dockerfile.test workers/code-worker/
 mkdir -p /tmp/test-repo /tmp/test-secrets
 cd /tmp/test-repo && git init && echo "test" > README.md && git add . && git commit -m "init"
 echo "You are a test assistant." > /tmp/test-secrets/system-prompt.txt
@@ -374,7 +374,7 @@ docker run --rm \
   --tmpfs /tmp:rw,noexec,nosuid,size=100m \
   --tmpfs /home/claude:rw,noexec,nosuid,size=100m,uid=1001,gid=1001 \
   --user 1001:1001 \
-  claude-worker:test
+  code-worker:test
 ```
 
 Expected: `/repo: WRITABLE`, `/secrets: READ-ONLY (good)`, `/tmp: WRITABLE`
@@ -384,12 +384,12 @@ Expected: `/repo: WRITABLE`, `/secrets: READ-ONLY (good)`, `/tmp: WRITABLE`
 ```bash
 # Start managed container (use test image)
 docker run -d --name continuity-test \
-  -e TASK_ID=continuity -e CLAUDE_MANAGED_MODE=1 \
+  -e TASK_ID=continuity -e WORKER_MANAGED_MODE=1 \
   -e GIT_USER_NAME="Test" -e GIT_USER_EMAIL="test@test.com" \
   -v /tmp/test-repo:/repo:rw -v /tmp/test-secrets:/secrets:ro \
   --tmpfs /tmp:rw,noexec,nosuid,size=100m \
   --tmpfs /home/claude:rw,noexec,nosuid,size=100m,uid=1001,gid=1001 \
-  --user 1001:1001 claude-worker:test
+  --user 1001:1001 code-worker:test
 
 # Wait for ready
 until docker exec continuity-test test -f /tmp/worker-ready; do sleep 1; done
@@ -400,7 +400,7 @@ docker exec continuity-test /entrypoint.sh run-attempt
 
 # Resume attempt
 echo "Follow-up task" > /tmp/test-secrets/user-prompt.txt
-docker exec -e CLAUDE_CONTINUE=1 continuity-test /entrypoint.sh run-attempt
+docker exec -e WORKER_CONTINUE=1 continuity-test /entrypoint.sh run-attempt
 
 # Check logs for both attempts
 docker logs continuity-test | grep "run-attempt\|Resuming"
@@ -413,14 +413,14 @@ docker stop continuity-test && docker rm continuity-test
 ```bash
 mkdir -p /tmp/forensics
 docker run -d --name forensics-test \
-  -e TASK_ID=forensics -e CLAUDE_MANAGED_MODE=1 \
-  -e CLAUDE_FORENSICS=1 -e CLAUDE_FORENSICS_DIR=/var/crash \
+  -e TASK_ID=forensics -e WORKER_MANAGED_MODE=1 \
+  -e WORKER_FORENSICS=1 -e WORKER_FORENSICS_DIR=/var/crash \
   -e GIT_USER_NAME="Test" -e GIT_USER_EMAIL="test@test.com" \
   -v /tmp/test-repo:/repo:rw -v /tmp/test-secrets:/secrets:ro \
   -v /tmp/forensics:/var/crash:rw \
   --tmpfs /tmp:rw,noexec,nosuid,size=100m \
   --tmpfs /home/claude:rw,noexec,nosuid,size=100m,uid=1001,gid=1001 \
-  --user 1001:1001 claude-worker:test
+  --user 1001:1001 code-worker:test
 
 until docker exec forensics-test test -f /tmp/worker-ready; do sleep 1; done
 

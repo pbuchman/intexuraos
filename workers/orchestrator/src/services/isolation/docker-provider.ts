@@ -36,9 +36,9 @@ export interface DockerProviderConfig {
 
 const DEFAULT_CONFIG: DockerProviderConfig = {
   imageName:
-    'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest',
+    'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest',
   imagePullPolicy: 'always',
-  networkName: 'claude-worker-net',
+  networkName: 'code-worker-net',
   maxConcurrent: 4,
   timeoutMs: 2 * 60 * 60 * 1000,
   secretsBasePath: '/tmp/claude-secrets',
@@ -46,7 +46,7 @@ const DEFAULT_CONFIG: DockerProviderConfig = {
   keepContainersAlive: false,
   managedAttemptsMode: true,
   forensicsMode: false,
-  forensicsBasePath: '/tmp/claude-worker-forensics',
+  forensicsBasePath: '/tmp/code-worker-forensics',
 };
 
 interface WorkerEntry {
@@ -95,7 +95,7 @@ function getHostUserInfo(): { uid: number; gid: number; userString: string } {
   return _hostUserInfo;
 }
 const DOCKER_PROVIDER_DIR = path.dirname(fileURLToPath(import.meta.url));
-const FORENSICS_SECCOMP_PROFILE_FILENAME = 'claude-worker-forensics-seccomp.json';
+const FORENSICS_SECCOMP_PROFILE_FILENAME = 'code-worker-forensics-seccomp.json';
 const EXEC_INSPECT_POLL_INTERVAL_MS = 5_000;
 
 export class DockerProvider implements IsolationProvider {
@@ -122,7 +122,7 @@ export class DockerProvider implements IsolationProvider {
   }
 
   private extractTaskIdFromContainerName(rawName: string): string | null {
-    const taskId = rawName.replace(/^\/claude-worker-/, '');
+    const taskId = rawName.replace(/^\/code-worker-/, '');
     return taskId === '' ? null : taskId;
   }
 
@@ -414,7 +414,7 @@ export class DockerProvider implements IsolationProvider {
     try {
       const containers = await this.docker.listContainers({
         all: true,
-        filters: { name: ['claude-worker-'] },
+        filters: { name: ['code-worker-'] },
       });
 
       return containers
@@ -505,7 +505,7 @@ export class DockerProvider implements IsolationProvider {
     // In-memory Maps are lost on restart, but Docker containers survive
     if (config.continueSession === true) {
       try {
-        const orphanContainer = this.docker.getContainer(`claude-worker-${taskId}`);
+        const orphanContainer = this.docker.getContainer(`code-worker-${taskId}`);
         const orphanInfo = await orphanContainer.inspect();
 
         if (orphanInfo.State.Running) {
@@ -642,9 +642,9 @@ export class DockerProvider implements IsolationProvider {
         `SENTRY_AUTH_TOKEN=${secrets.SENTRY_AUTH_TOKEN}`,
         `GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json`,
         `WORKER_RUNTIME=${runtime}`,
-        'CLAUDE_WORKER_MODE=1',
-        `CLAUDE_MANAGED_MODE=${this.config.managedAttemptsMode ? '1' : '0'}`,
-        `CLAUDE_CONTINUE=${config.continueSession === true ? '1' : '0'}`,
+        'CODE_WORKER_MODE=1',
+        `WORKER_MANAGED_MODE=${this.config.managedAttemptsMode ? '1' : '0'}`,
+        `WORKER_CONTINUE=${config.continueSession === true ? '1' : '0'}`,
       ];
 
       if (runtime === 'claude') {
@@ -673,8 +673,8 @@ export class DockerProvider implements IsolationProvider {
         env.push(`GIT_USER_EMAIL=${this.config.gitUserEmail}`);
       }
       if (this.config.forensicsMode) {
-        env.push('CLAUDE_FORENSICS=1');
-        env.push('CLAUDE_FORENSICS_DIR=/var/crash');
+        env.push('WORKER_FORENSICS=1');
+        env.push('WORKER_FORENSICS_DIR=/var/crash');
       }
 
       const keySuffix =
@@ -716,7 +716,7 @@ export class DockerProvider implements IsolationProvider {
 
       container = await this.docker.createContainer({
         Image: resolvedImage,
-        name: `claude-worker-${taskId}`,
+        name: `code-worker-${taskId}`,
         Env: env,
         WorkingDir: '/repo',
         User: getHostUserInfo().userString,
@@ -1086,7 +1086,7 @@ export class DockerProvider implements IsolationProvider {
     try {
       const containers = await this.docker.listContainers({
         all: true,
-        filters: { name: ['claude-worker-'] },
+        filters: { name: ['code-worker-'] },
       });
 
       const containerMap = new Map<
@@ -1482,7 +1482,7 @@ export class DockerProvider implements IsolationProvider {
         WorkingDir: '/',
         User: getHostUserInfo().userString,
         Env: [
-          `CLAUDE_CONTINUE=${config.continueSession === true ? '1' : '0'}`,
+          `WORKER_CONTINUE=${config.continueSession === true ? '1' : '0'}`,
           `WORKER_RUNTIME=${worker.runtime}`,
           ...(worker.runtime === 'codex' && config.runtimeSessionId !== undefined
             ? [`CODEX_THREAD_ID=${config.runtimeSessionId}`]

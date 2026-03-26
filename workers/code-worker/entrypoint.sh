@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ==============================================================================
-# Claude Worker Container Entrypoint
+# Code Worker Container Entrypoint
 # ==============================================================================
 
 setup_git_identity() {
@@ -41,11 +41,11 @@ setup_github_token() {
 }
 
 forensics_enabled() {
-    [ "${CLAUDE_FORENSICS:-0}" = "1" ]
+    [ "${WORKER_FORENSICS:-0}" = "1" ]
 }
 
 forensics_prepare_attempt_dir() {
-    local base_dir="${CLAUDE_FORENSICS_DIR:-/var/crash}"
+    local base_dir="${WORKER_FORENSICS_DIR:-/var/crash}"
     local stamp
     stamp="$(date -u +%Y%m%dT%H%M%SZ)"
     local out_dir="${base_dir}/attempt-${stamp}-$$"
@@ -61,7 +61,7 @@ capture_claude_crash_forensics() {
     {
         echo "timestamp_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         echo "task_id=${TASK_ID:-unknown}"
-        echo "continue_flag=${CLAUDE_CONTINUE:-0}"
+        echo "continue_flag=${WORKER_CONTINUE:-0}"
         echo "pwd=$(pwd)"
         echo "uid=$(id -u 2>/dev/null || true)"
         echo "gid=$(id -g 2>/dev/null || true)"
@@ -143,7 +143,7 @@ run_claude_attempt() {
             {
                 echo "started_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
                 echo "task_id=${TASK_ID:-unknown}"
-                echo "claude_continue=${CLAUDE_CONTINUE:-0}"
+                echo "claude_continue=${WORKER_CONTINUE:-0}"
                 echo "repo=/repo"
             } > "${attempt_forensics_dir}/attempt-meta.txt" 2>/dev/null || true
         else
@@ -151,7 +151,7 @@ run_claude_attempt() {
         fi
     fi
 
-    local continue_flag="${CLAUDE_CONTINUE:-0}"
+    local continue_flag="${WORKER_CONTINUE:-0}"
     if [ "$continue_flag" = "1" ]; then
         echo "[entrypoint] Resuming previous Claude session with --continue"
     fi
@@ -235,7 +235,7 @@ run_codex_attempt() {
                 echo "started_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
                 echo "task_id=${TASK_ID:-unknown}"
                 echo "runtime=codex"
-                echo "continue_flag=${CLAUDE_CONTINUE:-0}"
+                echo "continue_flag=${WORKER_CONTINUE:-0}"
                 echo "repo=/repo"
             } > "${attempt_forensics_dir}/attempt-meta.txt" 2>/dev/null || true
         else
@@ -243,7 +243,7 @@ run_codex_attempt() {
         fi
     fi
 
-    local continue_flag="${CLAUDE_CONTINUE:-0}"
+    local continue_flag="${WORKER_CONTINUE:-0}"
     if [ "$continue_flag" = "1" ] && [ -z "${CODEX_THREAD_ID:-}" ]; then
         echo "[entrypoint] ERROR: CODEX_THREAD_ID is required for resumed Codex attempts" >&2
         return 1
@@ -329,7 +329,7 @@ if [ "${1:-}" = "run-attempt" ]; then
     exit $attempt_exit
 fi
 
-echo "[entrypoint] Claude worker starting at $(date)"
+echo "[entrypoint] Code worker starting at $(date)"
 echo "[entrypoint] Task ID: ${TASK_ID:-unknown}"
 
 # ------------------------------------------------------------------------------
@@ -504,7 +504,7 @@ touch /tmp/worker-ready
 # ------------------------------------------------------------------------------
 # Managed mode: stay alive and wait for orchestrator to run attempts via docker exec
 # ------------------------------------------------------------------------------
-if [ "${CLAUDE_MANAGED_MODE:-0}" = "1" ]; then
+if [ "${WORKER_MANAGED_MODE:-0}" = "1" ]; then
     echo "[entrypoint] Managed attempt mode enabled; waiting for run-attempt invocations"
     while true; do
         sleep 3600

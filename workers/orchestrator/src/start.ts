@@ -27,6 +27,12 @@ import { createHeartbeatManager } from './heartbeat.js';
 import { createIsolationProvider, TokenRefresher } from './services/isolation/index.js';
 import { CredentialMonitor } from './services/isolation/credential-monitor.js';
 import { CredentialRefresher } from './services/isolation/credential-refresher.js';
+import {
+  ClaudeAuthManager,
+  CodexAuthManager,
+  CodexAuthRefresher,
+  WorkerAuthRegistry,
+} from './services/worker-auth/index.js';
 import Docker from 'dockerode';
 import { ApiKeyValidator } from './services/api-key-validator.js';
 import { WORKER_TYPES } from './services/isolation/types.js';
@@ -44,7 +50,7 @@ const DEFAULT_TASK_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour
 const EXEC_TIMEOUT_MS = 30 * 1000; // 30 seconds for external commands
 const DEFAULT_COMPLETION_MAX_ATTEMPTS = 3;
 const DEFAULT_WORKER_IMAGE =
-  'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest';
+  'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest';
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
@@ -252,31 +258,75 @@ function extractErrorChain(error: unknown): string {
   return parts.join(' → ');
 }
 
+function logWorkerAuthStartupStatus(
+  workerAuthRegistry: WorkerAuthRegistry,
+  logger: pino.Logger
+): void {
+  const states = workerAuthRegistry.getStates();
+  const claudeState = states.claude;
+  const codexState = states.codex;
+
+  if (claudeState.status === 'active') {
+    logger.info(
+      {
+        expiresAt: claudeState.expiresAt,
+        expiresInMinutes: claudeState.expiresInMinutes,
+        subscriptionType: claudeState.subscriptionType,
+      },
+      'Code worker auth active'
+    );
+  } else {
+    logger.warn({ state: claudeState }, 'Code worker auth not ready');
+  }
+
+  if (codexState.status === 'active') {
+    logger.info(
+      {
+        authMode: codexState.authMode,
+        expiresAt: codexState.expiresAt,
+        expiresInMinutes: codexState.expiresInMinutes,
+        lastRefreshAt: codexState.lastRefreshAt,
+      },
+      'Codex worker auth active'
+    );
+  } else {
+    logger.warn({ state: codexState }, 'Codex worker auth not ready');
+  }
+}
+
 async function validateWorkerApiKeys(
-  credentialMonitor: CredentialMonitor,
+  workerAuthRegistry: WorkerAuthRegistry,
   minimaxKey: string,
   dashscopeKey: string,
   logger: pino.Logger
 ): Promise<void> {
   const suffix = (key: string): string => (key.length > 4 ? '...' + key.slice(-4) : '****');
 
-  // Validate orchestrator credentials by checking monitor state
-  const credState = credentialMonitor.getState();
-  if (credState.status === 'active') {
+  const claudeState = workerAuthRegistry.getState('claude');
+  if (claudeState.status === 'active') {
     logger.info(
       {
-        expiresInMinutes: credState.expiresInMinutes,
-        subscriptionType: credState.subscriptionType,
+        expiresInMinutes: claudeState.expiresInMinutes,
+        subscriptionType: claudeState.subscriptionType,
       },
-      'Orchestrator credentials validated — token active, opus/auto tasks ready'
+      'Code worker auth validated — Claude-backed tasks ready'
     );
-  } else if (credState.status === 'expired') {
-    logger.warn('Orchestrator credentials expired — workers will refresh on first use');
   } else {
-    logger.error(
-      { message: credState.message },
-      'Orchestrator credentials not configured — opus/auto tasks will fail'
+    logger.warn({ state: claudeState }, 'Code worker auth not ready at startup');
+  }
+
+  const codexState = workerAuthRegistry.getState('codex');
+  if (codexState.status === 'active') {
+    logger.info(
+      {
+        authMode: codexState.authMode,
+        expiresInMinutes: codexState.expiresInMinutes,
+        lastRefreshAt: codexState.lastRefreshAt,
+      },
+      'Codex worker auth validated — Codex tasks ready'
     );
+  } else {
+    logger.warn({ state: codexState }, 'Codex worker auth not ready at startup');
   }
 
   // Validate all third-party API keys in parallel.
@@ -363,8 +413,8 @@ function getGitHubPrivateKey(projectId: string, cachePath: string, gcpSaKeyPath:
 /* v8 ignore start -- module-init: orchestrator bootstrap function: env vars, service wiring @preserve */
 async function bootstrap(): Promise<void> {
   const home = homedir();
-  const orchestratorDir = join(home, '.claude-orchestrator');
-  const worktreeDir = join(home, 'claude-workers', 'worktrees');
+  const orchestratorDir = join(home, '.code-orchestrator');
+  const worktreeDir = join(home, 'code-workers', 'worktrees');
   const logsDir = join(orchestratorDir, 'logs');
   const defaultRepoPath = join(orchestratorDir, 'repo');
 
@@ -488,7 +538,7 @@ async function bootstrap(): Promise<void> {
       settingsLocalTemplatePath: join(
         repoPath,
         'workers',
-        'claude-worker',
+        'code-worker',
         'config-defaults',
         'settings.local.json'
       ),
@@ -530,21 +580,21 @@ async function bootstrap(): Promise<void> {
 
   // Create Docker isolation provider
   const { secretsBasePath } = config;
-  const workerImage = getOptionalEnv('INTEXURAOS_CLAUDE_WORKER_IMAGE', DEFAULT_WORKER_IMAGE);
+  const workerImage = getOptionalEnv('INTEXURAOS_CODE_WORKER_IMAGE', DEFAULT_WORKER_IMAGE);
   const keepContainersAlive = process.env['KEEP_CONTAINERS_ALIVE'] === '1';
   if (keepContainersAlive) {
     logger.info({}, 'Debug mode: containers will be kept alive after task completion');
   }
-  const workerForensicsMode = getOptionalEnv('INTEXURAOS_CLAUDE_WORKER_FORENSICS', '0') === '1';
+  const workerForensicsMode = getOptionalEnv('INTEXURAOS_CODE_WORKER_FORENSICS', '0') === '1';
   const workerForensicsBasePath = getOptionalEnv(
-    'INTEXURAOS_CLAUDE_WORKER_FORENSICS_PATH',
+    'INTEXURAOS_CODE_WORKER_FORENSICS_PATH',
     join(orchestratorDir, 'forensics')
   );
   if (workerForensicsMode) {
     ensureDirectoryExists(workerForensicsBasePath);
     logger.warn(
       { workerForensicsBasePath },
-      'Claude worker forensics mode enabled (core dumps, exec stream persistence, crash snapshots)'
+      'Code worker forensics mode enabled (core dumps, exec stream persistence, crash snapshots)'
     );
   }
   const preserveWorkerContainers =
@@ -581,6 +631,8 @@ async function bootstrap(): Promise<void> {
   );
 
   const credentialsPath = join(sharedCredsPath, '.credentials.json');
+  const codexAuthPath = join(sharedCodexAuthPath, 'auth.json');
+  const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 
   // Credential monitor (read-only watcher)
   const credentialMonitor = new CredentialMonitor(
@@ -588,32 +640,34 @@ async function bootstrap(): Promise<void> {
     logger
   );
 
-  const monitorLoaded = credentialMonitor.loadCredentials();
-  if (!monitorLoaded) {
-    process.stderr.write(`\n❌ Orchestrator credentials not found at ${credentialsPath}\n`);
-    process.stderr.write(`   Run: ./workers/orchestrator/scripts/claude-login.sh\n\n`);
-    process.exit(1);
-  }
-  credentialMonitor.logStartupStatus();
-  credentialMonitor.startMonitoring();
-
   // Credential refresher (Docker-based, for when no workers running)
   const credentialRefresher = new CredentialRefresher(
-    { sharedCredsPath, imageName: workerImage, networkName: 'claude-worker-net' },
-    new Docker({ socketPath: '/var/run/docker.sock' }),
+    { sharedCredsPath, imageName: workerImage, networkName: 'code-worker-net' },
+    docker,
     logger
   );
 
-  // Get initial access token for Anthropic-backed workers.
-  const currentToken = credentialMonitor.getCurrentAccessToken();
-  if (currentToken === null) {
-    process.stderr.write(`\n❌ Credentials expired. Run claude-login.sh again.\n\n`);
-    process.exit(1);
-  }
+  const codexAuthRefresher = new CodexAuthRefresher(
+    { sharedAuthPath: sharedCodexAuthPath, imageName: workerImage, networkName: 'code-worker-net' },
+    docker,
+    logger
+  );
+
+  const workerAuthRegistry = new WorkerAuthRegistry([
+    new ClaudeAuthManager(credentialMonitor, credentialRefresher),
+    new CodexAuthManager(
+      { authPath: codexAuthPath, reloadIntervalMs: 60_000, refresher: codexAuthRefresher },
+      logger
+    ),
+  ]);
+
+  workerAuthRegistry.loadCredentials();
+  workerAuthRegistry.startMonitoring();
+  logWorkerAuthStartupStatus(workerAuthRegistry, logger);
 
   // Get API keys for workers
   const apiKeySecrets = {
-    ANTHROPIC_API_KEY: currentToken,
+    ANTHROPIC_API_KEY: workerAuthRegistry.getCurrentAccessToken('claude') ?? '',
     LINEAR_API_KEY: getRequiredEnv('INTEXURAOS_LINEAR_API_KEY'),
     SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
     MINIMAX_API_KEY: getRequiredEnv('INTEXURAOS_MINIMAX_APP_API_KEY'),
@@ -621,16 +675,16 @@ async function bootstrap(): Promise<void> {
   };
 
   const apiKeyValidator = new ApiKeyValidator(apiKeySecrets, logger);
-  apiKeyValidator.setCredentialMonitor(credentialMonitor);
 
   const isolationConfig: IsolationConfig = {
     provider: isolationProvider,
     tokenRefresher,
     apiKeyValidator,
+    workerAuthRegistry,
     getSecrets: () => ({
       ...apiKeySecrets,
       ANTHROPIC_API_KEY:
-        credentialMonitor.getCurrentAccessToken() ?? apiKeySecrets.ANTHROPIC_API_KEY,
+        workerAuthRegistry.getCurrentAccessToken('claude') ?? apiKeySecrets.ANTHROPIC_API_KEY,
     }),
     gcpSaKeyPath,
     githubAppKeyPath: config.githubAppPrivateKeyPath,
@@ -639,7 +693,7 @@ async function bootstrap(): Promise<void> {
   // Validate API keys asynchronously (non-blocking, warns on failure)
   const secrets = isolationConfig.getSecrets();
   void validateWorkerApiKeys(
-    credentialMonitor,
+    workerAuthRegistry,
     secrets.MINIMAX_API_KEY,
     secrets.DASHSCOPE_API_KEY,
     logger
@@ -714,19 +768,32 @@ async function bootstrap(): Promise<void> {
   // Credential monitoring loop — trigger Docker-based refresh when near expiry
   const REFRESH_BUFFER_MS = 5 * 60 * 1000;
   setInterval(() => {
-    if (credentialMonitor.isExpiringSoon(REFRESH_BUFFER_MS)) {
-      const runningTasks = dispatcher.getRunningTaskIds();
-      if (runningTasks.length === 0) {
-        logger.info('Credentials expiring soon, no active workers — triggering refresh');
-        void credentialRefresher.refresh().catch((err: unknown) => {
-          logger.error({ error: err }, 'Credential refresh failed');
-        });
-      } else {
+    const runningTasks = dispatcher.getRunningTaskIds();
+    if (runningTasks.length > 0) {
+      if (
+        workerAuthRegistry.isExpiringSoon('claude', REFRESH_BUFFER_MS) ||
+        workerAuthRegistry.isExpiringSoon('codex', REFRESH_BUFFER_MS)
+      ) {
         logger.debug(
           { runningCount: runningTasks.length },
-          'Credentials expiring soon but workers running — they will refresh naturally'
+          'Worker auth expiring soon but workers running — refresh deferred'
         );
       }
+      return;
+    }
+
+    for (const provider of ['claude', 'codex'] as const) {
+      if (!workerAuthRegistry.isExpiringSoon(provider, REFRESH_BUFFER_MS)) {
+        continue;
+      }
+
+      logger.info(
+        { provider },
+        'Worker auth expiring soon, no active workers — triggering refresh'
+      );
+      void workerAuthRegistry.refresh(provider).catch((err: unknown) => {
+        logger.error({ provider, error: err }, 'Worker auth refresh failed');
+      });
     }
   }, 60_000);
 
@@ -750,7 +817,7 @@ async function bootstrap(): Promise<void> {
     webhookClient,
     heartbeatManager,
     logger,
-    credentialMonitor,
+    workerAuthRegistry,
     isolationProvider
   );
 }

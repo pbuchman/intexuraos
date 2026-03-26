@@ -2,7 +2,7 @@
 
 ## Overview
 
-The orchestrator is a Fastify-based HTTP service that runs on local machines behind a Cloudflare Tunnel. It receives HMAC-signed task dispatch requests from code-agent, creates isolated git worktrees, spawns Docker containers running Claude Code in interactive mode, streams logs back in real time, and delivers completion results via signed webhooks. It manages GitHub App installation tokens and Anthropic OAuth credentials, persists state atomically to disk, and recovers interrupted tasks (including container adoption) on restart. After each worker attempt, an LLM-backed completion verifier (Gemini 2.5 Flash) evaluates whether the task met its agent-specific contract; failed verifications automatically trigger follow-up attempts up to a configurable limit. For execution tasks, a Deep Validator performs post-completion transcript analysis — verifying claims, checking contract compliance, comparing plan to reality, and posting a structured report on the PR. The Review Agent can be dispatched in `plan_review` mode to cross-reference implementations against their original plan documents. After each task completes, it collects per-task resource and token metrics and publishes them to code-agent. Linear issue context is now fetched via the code-agent proxy rather than querying Linear directly, improving resilience and decoupling.
+The orchestrator is a Fastify-based HTTP service that runs on local machines behind a Cloudflare Tunnel. It receives HMAC-signed task dispatch requests from code-agent, creates isolated git worktrees, spawns Docker containers running the shared code-worker runtime, streams logs back in real time, and delivers completion results via signed webhooks. It manages GitHub App installation tokens plus shared worker auth for Claude and Codex, persists state atomically to disk, and recovers interrupted tasks (including container adoption) on restart. After each worker attempt, an LLM-backed completion verifier (Gemini 2.5 Flash) evaluates whether the task met its agent-specific contract; failed verifications automatically trigger follow-up attempts up to a configurable limit. For execution tasks, a Deep Validator performs post-completion transcript analysis — verifying claims, checking contract compliance, comparing plan to reality, and posting a structured report on the PR. The Review Agent can be dispatched in `plan_review` mode to cross-reference implementations against their original plan documents. After each task completes, it collects per-task resource and token metrics and publishes them to code-agent. Linear issue context is now fetched via the code-agent proxy rather than querying Linear directly, improving resilience and decoupling.
 
 ## Agent-Based Routing and Contracts
 
@@ -115,8 +115,8 @@ graph TB
         end
 
         subgraph "Docker Containers"
-            W1[claude-worker-taskA<br/>Claude Code interactive]
-            W2[claude-worker-taskB<br/>Claude Code interactive]
+            W1[code-worker-taskA<br/>Claude Code or Codex]
+            W2[code-worker-taskB<br/>Claude Code or Codex]
         end
 
         DP --> W1
@@ -125,13 +125,13 @@ graph TB
         TR --> W2
 
         subgraph "Filesystem"
-            REPO[~/.claude-orchestrator/repo<br/>main git clone]
-            WT[~/claude-workers/worktrees/<br/>per-task worktrees]
-            STATE[~/.claude-orchestrator/state.json]
-            SECRETS[~/.claude-orchestrator/secrets/<br/>per-task credentials]
-            LOGS[~/.claude-orchestrator/logs/]
-            AUDIT[~/.claude-orchestrator/logs/llm-audit.log]
-            CREDS[~/.claude-orchestrator/claude-creds/<br/>shared OAuth credentials]
+            REPO[~/.code-orchestrator/repo<br/>main git clone]
+            WT[~/code-workers/worktrees/<br/>per-task worktrees]
+            STATE[~/.code-orchestrator/state.json]
+            SECRETS[~/.code-orchestrator/secrets/<br/>per-task credentials]
+            LOGS[~/.code-orchestrator/logs/]
+            AUDIT[~/.code-orchestrator/logs/llm-audit.log]
+            CREDS[~/.code-orchestrator/claude-creds/<br/>shared OAuth credentials]
         end
 
         WM --> REPO
@@ -225,7 +225,7 @@ Task execution timeout increased from 2 hours to 3 hours (`TASK_TIMEOUT_KILL_MS 
 | GET    | `/tasks/:id`           | None        | -                                   | `200 Task` or `404`                                            |
 | DELETE | `/tasks/:id`           | None        | -                                   | `200 { taskId, status: "cancelled" }` or `404`/`409`           |
 | POST   | `/tasks/:id/message`   | HMAC signed | `{ message: string }`               | `200 SendMessageResult` or `404`/`409`                         |
-| GET    | `/health`              | None        | -                                   | `200 { status, capacity, running, available, anthropicOAuth }` |
+| GET    | `/health`              | None        | -                                   | `200 { status, capacity, running, available, workerAuths }` |
 | GET    | `/meta/worker-image`   | None        | -                                   | `200` image diagnostics or `{ error }` if unavailable          |
 | POST   | `/admin/shutdown`      | HMAC signed | -                                   | `200 { status: "shutting_down" }`                              |
 | POST   | `/admin/refresh-token` | HMAC signed | -                                   | `200 { status: "refreshed", tokenExpiresAt }`                  |
@@ -247,7 +247,7 @@ Verification rejects requests with timestamps older than 5 minutes and replayed 
 ```typescript
 {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi' | 'codex';
   prompt: string;
   repository?: string;
   baseBranch?: string;
@@ -323,7 +323,7 @@ interface OrchestratorState {
 ```typescript
 interface Task {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi' | 'codex';
   prompt: string;
   repository: string;
   baseBranch: string;
@@ -450,9 +450,9 @@ Performs post-completion transcript analysis for execution tasks:
 
 Manages Docker container lifecycle via `dockerode`:
 
-- **Image:** configurable via `INTEXURAOS_CLAUDE_WORKER_IMAGE` (default: GCR Artifact Registry latest)
+- **Image:** configurable via `INTEXURAOS_CODE_WORKER_IMAGE` (default: GCR Artifact Registry latest)
 - **Image pull:** Always pulls before each task (fail-fast, no cached-image fallback); 15-minute timeout separated from container creation
-- **Network:** `claude-worker-net`
+- **Network:** `code-worker-net`
 - **Limits:** 8GB memory, 4 CPUs per container
 - **Security:** `CapDrop: ALL`, `CapAdd: NET_RAW`, `SecurityOpt: no-new-privileges`
 - **Mounts:** Worktree at `/repo` (rw), secrets at `/secrets` (ro), main `.git` dir for worktree support (rw), shared OAuth credentials at `/home/claude/.claude` (rw)
@@ -461,8 +461,8 @@ Manages Docker container lifecycle via `dockerode`:
 - **Container creation timeout:** 2 minutes
 - **Health gate:** `isHealthy()` checks Docker daemon connectivity and disk availability
 - **Managed attempts:** When enabled, the DockerProvider handles multi-attempt container lifecycle
-- **Forensics mode:** When enabled (`INTEXURAOS_CLAUDE_WORKER_FORENSICS=1`), captures core dumps and crash snapshots to the forensics directory
-- **Container discovery:** `listWorkerContainers()` discovers running `claude-worker-*` containers for startup recovery
+- **Forensics mode:** When enabled (`INTEXURAOS_CODE_WORKER_FORENSICS=1`), captures core dumps and crash snapshots to the forensics directory
+- **Container discovery:** `listWorkerContainers()` discovers running `code-worker-*` containers for startup recovery
 - **Periodic stale cleanup:** Removes orphaned containers not tracked in state.json after a configurable idle threshold
 
 ### WorktreeManager
@@ -472,7 +472,7 @@ Creates isolated git worktrees per task:
 - `git worktree add -b "{taskId}" "{path}" "origin/{baseBranch}"` — base branch is fetched from origin first
 - Supports `continuationPrBranch` checkout for retried tasks inheriting an existing PR branch
 - Copies `.mcp.json` template with environment variable substitution (Linear API key, Sentry auth token)
-- Copies `.claude/settings.local.json` from `workers/claude-worker/config-defaults/`
+- Copies `.claude/settings.local.json` from `workers/code-worker/config-defaults/`
 - `mergePlanningBranch()`: fetches and merges a planning PR branch into the execution worktree
 - All git operations serialized via `async-mutex` to prevent index corruption
 - Removes worktrees with `git worktree remove --force`
@@ -520,7 +520,7 @@ Manages GitHub App authentication (service-level):
 
 - Generates RS256-signed JWT (10-minute expiry) from app private key
 - Exchanges JWT for installation access token via GitHub API (with automatic retry via `octokit-plugin-retry`)
-- Writes token atomically to `~/.claude-orchestrator/github-token`
+- Writes token atomically to `~/.code-orchestrator/github-token`
 - Background refresh every 5 minutes
 - Auth degraded callback after 3 consecutive failures
 
@@ -529,25 +529,34 @@ Manages GitHub App authentication (service-level):
 Manages per-container GitHub tokens:
 
 - Mints fresh installation tokens via JWT (using `jose` library) every 30 minutes
-- Writes tokens to per-task secrets directories (`~/.claude-orchestrator/secrets/{taskId}/github-token`)
+- Writes tokens to per-task secrets directories (`~/.code-orchestrator/secrets/{taskId}/github-token`)
 - Starts/stops refresh loop based on active task count
 
-### CredentialMonitor
+### WorkerAuthRegistry
 
-Monitors Anthropic OAuth credentials:
+Coordinates shared worker auth state across runtimes:
 
-- Reads `~/.claude-orchestrator/claude-creds/.credentials.json` on startup and periodically (60s)
-- Exposes `getState()` returning `active`/`expired`/`not_configured` with expiry details
-- Exposes `getCurrentAccessToken()` for workers to use
-- Reports startup credential status (subscription type, expiry time)
+- Tracks provider-specific auth state for `claude` and `codex`
+- Exposes `/health` data via `workerAuths`
+- Blocks new task submission with `503 auth_unavailable` when the selected runtime is not ready
+- Triggers background refresh only when no tasks are running
 
-### CredentialRefresher
+### ClaudeAuthManager / CredentialRefresher
 
-Refreshes Anthropic OAuth tokens via Docker:
+Manages Claude shared auth:
 
-- Spawns a lightweight `claude-worker` container that runs `claude --print --model haiku 'reply ok'`
-- Triggered when credentials are expiring soon and no workers are running
-- 60-second polling loop checks expiry against a 5-minute buffer
+- Reads `~/.code-orchestrator/claude-creds/.credentials.json` on startup and periodically (60s)
+- Exposes the current access token for Claude-backed workers
+- Refreshes OAuth tokens via a lightweight `code-worker` container
+
+### CodexAuthManager / CodexAuthRefresher
+
+Manages Codex shared auth:
+
+- Reads `~/.code-orchestrator/codex-auth/auth.json`
+- Supports ChatGPT auth and API-key auth modes
+- Tracks runtime auth health independently from Claude
+- Refreshes ChatGPT-backed auth via a lightweight `code-worker` container
 
 ### SensitiveFileGuard
 
@@ -583,13 +592,13 @@ Collects per-task resource and token metrics after completion:
 | `INTEXURAOS_MINIMAX_APP_API_KEY`          | Yes      | -                                  |
 | `INTEXURAOS_DASHSCOPE_APP_API_KEY`        | Yes      | -                                  |
 | `GOOGLE_APPLICATION_CREDENTIALS`          | Yes      | -                                  |
-| `INTEXURAOS_REPOSITORY_PATH`              | No       | `~/.claude-orchestrator/repo`      |
+| `INTEXURAOS_REPOSITORY_PATH`              | No       | `~/.code-orchestrator/repo`      |
 | `INTEXURAOS_WORKER_CAPACITY`              | No       | `2`                                |
 | `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`      | No       | `3`                                |
 | `INTEXURAOS_PRESERVE_WORKER_CONTAINERS`   | No       | `1`                                |
-| `INTEXURAOS_CLAUDE_WORKER_IMAGE`          | No       | (GCR Artifact Registry)            |
-| `INTEXURAOS_CLAUDE_WORKER_FORENSICS`      | No       | `0`                                |
-| `INTEXURAOS_CLAUDE_WORKER_FORENSICS_PATH` | No       | `~/.claude-orchestrator/forensics` |
+| `INTEXURAOS_CODE_WORKER_IMAGE`          | No       | (GCR Artifact Registry)            |
+| `INTEXURAOS_CODE_WORKER_FORENSICS`      | No       | `0`                                |
+| `INTEXURAOS_CODE_WORKER_FORENSICS_PATH` | No       | `~/.code-orchestrator/forensics` |
 | `INTEXURAOS_GIT_USER_NAME`                | No       | (host git config)                  |
 | `INTEXURAOS_GIT_USER_EMAIL`               | No       | (host git config)                  |
 | `INTEXURAOS_GITHUB_APP_PRIVATE_KEY`       | No       | (Secret Manager)                   |

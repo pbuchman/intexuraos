@@ -53,7 +53,7 @@ describe('CredentialMonitor', () => {
 
     monitor = new CredentialMonitor(
       {
-        credentialsPath: '/home/user/.claude-orchestrator/claude-creds/.credentials.json',
+        credentialsPath: '/home/user/.code-orchestrator/claude-creds/.credentials.json',
         reloadIntervalMs: 60_000,
       },
       mockLogger
