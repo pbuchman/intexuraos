@@ -5,7 +5,7 @@
  * All other PRs transition to QA.
  *
  * Discovery methods:
- * 1. Code task lookup via findByPR / findLatestNonReviewTaskByPR
+ * 1. Code task lookup via findByPR / findLatestExecutionTaskByPR
  * 2. INT-XXX extraction from PR body/title
  *
  * Fire-and-forget: catches errors, logs, never throws.
@@ -48,7 +48,7 @@ export async function handlePrMerge(deps: HandlePrMergeDeps, input: HandlePrMerg
 
   const [findByPRResult, findLatestResult] = await Promise.all([
     codeTaskRepo.findByPR(repository, prNumber),
-    codeTaskRepo.findLatestNonReviewTaskByPR(repository, prNumber),
+    codeTaskRepo.findLatestExecutionTaskByPR(repository, prNumber),
   ]);
 
   if (!findByPRResult.ok) {
@@ -63,7 +63,7 @@ export async function handlePrMerge(deps: HandlePrMergeDeps, input: HandlePrMerg
   if (!findLatestResult.ok) {
     logger.warn(
       { error: findLatestResult.error, repository, prNumber },
-      'handlePrMerge: findLatestNonReviewTaskByPR failed'
+      'handlePrMerge: findLatestExecutionTaskByPR failed'
     );
   } else if (findLatestResult.value?.linearIssueId !== undefined) {
     if (!issueMap.has(findLatestResult.value.linearIssueId)) {
