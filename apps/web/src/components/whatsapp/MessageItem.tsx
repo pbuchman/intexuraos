@@ -239,6 +239,7 @@ export function MessageItem({
 
   return (
     <div
+      data-testid="message-item-row"
       className={`group relative cursor-pointer rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800 ${
         isDeleting ? 'scale-95 opacity-50' : ''
       }`}

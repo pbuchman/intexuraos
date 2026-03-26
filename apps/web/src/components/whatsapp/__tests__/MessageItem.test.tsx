@@ -185,6 +185,52 @@ describe('MessageItem', () => {
     expect(within(screen.getByTestId('message-item-desktop')).queryByTitle('View transcription')).not.toBeInTheDocument();
   });
 
+  it('shows transcribing status in mobile shell for processing audio', () => {
+    render(
+      <MessageItem
+        message={createMessage({
+          mediaType: 'audio',
+          hasMedia: true,
+          text: '',
+          transcriptionStatus: 'processing',
+        })}
+        accessToken="token"
+        onDelete={vi.fn()}
+        onImageClick={vi.fn()}
+        onNoteClick={vi.fn()}
+        onTranscriptionClick={vi.fn()}
+        isDeleting={false}
+      />
+    );
+
+    expect(
+      within(screen.getByTestId('message-item-mobile')).getByText('Transcribing...')
+    ).toBeInTheDocument();
+  });
+
+  it('shows transcription failed status in mobile shell for failed audio', () => {
+    render(
+      <MessageItem
+        message={createMessage({
+          mediaType: 'audio',
+          hasMedia: true,
+          text: '',
+          transcriptionStatus: 'failed',
+        })}
+        accessToken="token"
+        onDelete={vi.fn()}
+        onImageClick={vi.fn()}
+        onNoteClick={vi.fn()}
+        onTranscriptionClick={vi.fn()}
+        isDeleting={false}
+      />
+    );
+
+    expect(
+      within(screen.getByTestId('message-item-mobile')).getByText('Transcription failed')
+    ).toBeInTheDocument();
+  });
+
   it('calls onNoteClick when clicking a text message row', () => {
     const onNoteClick = vi.fn();
     render(
@@ -199,10 +245,8 @@ describe('MessageItem', () => {
       />
     );
 
-    // The outer container wraps both mobile and desktop shells
-    const row = screen.getByTestId('message-item-mobile').closest('[class*="group"]');
-    expect(row).toBeTruthy();
-    fireEvent.click(row as HTMLElement);
+    const row = screen.getByTestId('message-item-row');
+    fireEvent.click(row);
     expect(onNoteClick).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'message-1', mediaType: 'text' })
     );
@@ -229,10 +273,8 @@ describe('MessageItem', () => {
       />
     );
 
-    // The outer container wraps both mobile and desktop shells
-    const row = screen.getByTestId('message-item-mobile').closest('[class*="group"]');
-    expect(row).toBeTruthy();
-    fireEvent.click(row as HTMLElement);
+    const row = screen.getByTestId('message-item-row');
+    fireEvent.click(row);
     expect(onNoteClick).not.toHaveBeenCalled();
   });
 });
