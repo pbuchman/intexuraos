@@ -523,7 +523,7 @@ describe('GitHubDispatchService', () => {
       expect(requestArg).not.toHaveProperty('baseBranch');
     });
 
-    it('should extract workerType from @worker directive in comment', async () => {
+    it('should fall back to execution task with extracted workerType when @worker directive present but remediation not configured', async () => {
       const workerCommentEvent = { ...mockEvent, body: 'Fix this @worker minimax' };
       vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(null));
       mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-worker' }));
@@ -539,7 +539,7 @@ describe('GitHubDispatchService', () => {
       );
     });
 
-    it('should extract workerType from @model directive in comment', async () => {
+    it('should fall back to execution task with extracted workerType when @model directive present but remediation not configured', async () => {
       const modelCommentEvent = { ...mockEvent, body: '@model qwen fix the tests' };
       vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(null));
       mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-model' }));
