@@ -9,6 +9,7 @@ import {
   ModelSelector,
   getSelectedModelsList,
   PROVIDER_MODELS,
+  MAX_TOTAL_MODELS,
 } from '@/components';
 import { useAuth } from '@/context';
 import { useLlmKeys, useOpenRouterModels } from '@/hooks';
@@ -392,7 +393,31 @@ export function ResearchAgentPage(): React.JSX.Element {
         void navigate(`/research/${research.id}`);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create research');
+      // Parse detailed validation errors if available
+      let errorMessage: string;
+      if (
+        err !== null &&
+        typeof err === 'object' &&
+        'details' in err &&
+        err.details !== null &&
+        typeof err.details === 'object' &&
+        'errors' in err.details &&
+        Array.isArray(err.details.errors)
+      ) {
+        // Extract specific validation messages
+        const errors = err.details.errors as { path?: string; message?: string }[];
+        const messages = errors
+          .map((e) => e.message)
+          .filter((m): m is string => m !== undefined);
+        if (messages.length > 0) {
+          errorMessage = messages.join('; ');
+        } else {
+          errorMessage = err instanceof Error ? err.message : 'Failed to create research';
+        }
+      } else {
+        errorMessage = err instanceof Error ? err.message : 'Failed to create research';
+      }
+      setError(errorMessage);
       setSubmitting(false);
     }
   };
@@ -408,6 +433,14 @@ export function ResearchAgentPage(): React.JSX.Element {
     }
     if (synthesisModel === null) {
       setError('Select a synthesis model');
+      return;
+    }
+    // Pre-submit validation: check max models
+    if (selectedModels.length > MAX_TOTAL_MODELS) {
+      const excess = selectedModels.length - MAX_TOTAL_MODELS;
+      setError(
+        `Maximum ${String(MAX_TOTAL_MODELS)} models allowed. You selected ${String(selectedModels.length)}. Please remove ${String(excess)} model${excess === 1 ? '' : 's'}.`
+      );
       return;
     }
 
