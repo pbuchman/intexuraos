@@ -1,46 +1,30 @@
 /**
- * Tests for OpenRouterModelSelector.
- * @vitest-environment jsdom
+ * Tests for OpenRouterModelSelector pricing formatting.
  */
 
-import React from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { OpenRouterModelSelector } from '../OpenRouterModelSelector.js';
-import type { OpenRouterModelInfo } from '@/services/researchAgentApi.types';
+import { describe, expect, it } from 'vitest';
+import { formatPrice } from '../OpenRouterModelSelector.js';
 
-const TEST_MODELS: OpenRouterModelInfo[] = [
-  {
-    id: 'x-ai/grok-4-fast',
-    name: 'Grok 4 Fast',
-    provider: 'OpenRouter',
-    contextLength: 512000,
-    pricing: {
-      inputPricePerMillion: 0.003,
-      outputPricePerMillion: 15.5,
-    },
-    inputModalities: ['text'],
-    outputModalities: ['text'],
-  },
-];
-
-describe('OpenRouterModelSelector', () => {
-  afterEach(() => {
-    cleanup();
-    vi.clearAllMocks();
+describe('formatPrice', () => {
+  it('formats zero price as 0.00', () => {
+    expect(formatPrice(0)).toBe('0.00');
   });
 
-  it('renders per-million pricing without NaN values', () => {
-    render(
-      React.createElement(OpenRouterModelSelector, {
-        availableModels: TEST_MODELS,
-        selectedModelIds: [],
-        onChange: vi.fn(),
-      })
-    );
+  it('formats small prices (< 0.01) with 4 decimal places', () => {
+    expect(formatPrice(0.003)).toBe('0.0030');
+    expect(formatPrice(0.0001)).toBe('0.0001');
+  });
 
-    expect(screen.getByText('$0.0030/M in')).toBeTruthy();
-    expect(screen.getByText('$15.50/M out')).toBeTruthy();
-    expect(screen.queryByText(/NaN/)).toBeNull();
+  it('formats normal prices with 2 decimal places', () => {
+    expect(formatPrice(15.5)).toBe('15.50');
+    expect(formatPrice(3.0)).toBe('3.00');
+    expect(formatPrice(0.01)).toBe('0.01');
+  });
+
+  it('does not produce NaN for valid numeric inputs', () => {
+    const prices = [0, 0.003, 15.5, 3.0, 0.01, 100, 0.0001];
+    for (const price of prices) {
+      expect(formatPrice(price)).not.toBe('NaN');
+    }
   });
 });

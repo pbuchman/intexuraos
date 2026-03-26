@@ -12,7 +12,7 @@ interface OpenRouterModelSelectorProps {
   error?: string | null;
 }
 
-function formatPrice(pricePerMillion: number): string {
+export function formatPrice(pricePerMillion: number): string {
   if (pricePerMillion === 0) {
     return '0.00';
   }

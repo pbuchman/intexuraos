@@ -83,8 +83,7 @@ function createRequestContext(
 
 export function createGeminiClient(config: GeminiConfig): GeminiClient {
   const ai = new GoogleGenAI({ apiKey: config.apiKey });
-  const { model, userId, researchId, pricing, imagePricing, logger, usageSink, auditSink } =
-    config;
+  const { model, userId, researchId, pricing, imagePricing, logger, usageSink, auditSink } = config;
   const usageLogger = createUsageLogger({
     logger,
     ...(usageSink !== undefined && { sink: usageSink }),

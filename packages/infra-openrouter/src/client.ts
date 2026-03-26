@@ -131,8 +131,15 @@ class OpenRouterApiError extends Error {
  * - Error mapping to LLMError codes
  */
 export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClient {
-  const { apiKey, model, userId, researchId, pricing, timeoutMs = DEFAULT_TIMEOUT_MS, logger } =
-    config;
+  const {
+    apiKey,
+    model,
+    userId,
+    researchId,
+    pricing,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    logger,
+  } = config;
 
   const usageLogger = createUsageLogger({ logger });
 
