@@ -91,6 +91,8 @@ export interface WorkerConfig {
   prompt: string;
   systemPrompt: string;
   workerType: WorkerType;
+  runtimeOverride?: WorkerRuntime;
+  runtimeSessionId?: string;
   secrets: WorkerSecrets;
   gcpSaKeyPath: string;
   githubAppKeyPath: string;

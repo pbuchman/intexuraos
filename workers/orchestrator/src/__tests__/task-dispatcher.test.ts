@@ -6225,6 +6225,94 @@ describe('TaskDispatcher', () => {
     });
   });
 
+  describe('codex runtime metadata', () => {
+    const createCodexTask = (overrides?: Partial<Task>): Task => ({
+      taskId: 'codex-runtime-task',
+      workerType: 'auto',
+      runtime: 'codex',
+      prompt: 'Test Codex runtime handling',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      webhookUrl: 'https://example.com/webhook',
+      webhookSecret: 'secret-123',
+      status: 'running',
+      worktreePath: '/tmp/worktrees/codex-runtime-task',
+      containerId: '',
+      startedAt: new Date().toISOString(),
+      attemptCount: 1,
+      maxAttempts: 3,
+      verificationHistory: [],
+      linearIssueLabels: [],
+      hasChildren: false,
+      ...overrides,
+    });
+
+    it('persists runtimeSessionId when codex emits a session start event', async () => {
+      const task = createCodexTask();
+      await statePersistence.modify((state) => {
+        state.tasks[task.taskId] = task;
+      });
+
+      await (
+        dispatcher as unknown as {
+          handleRuntimeEvents: (task: Task, events: unknown[]) => Promise<void>;
+        }
+      ).handleRuntimeEvents(task, [{ type: 'runtime_session_started', sessionId: 'thread_123' }]);
+
+      const persisted = await dispatcher.getTask(task.taskId);
+      expect(task.runtimeSessionId).toBe('thread_123');
+      expect(persisted?.runtimeSessionId).toBe('thread_123');
+    });
+
+    it('passes hidden codex runtime metadata into worker creation for resumed attempts', async () => {
+      const task = createCodexTask({ runtimeSessionId: 'thread_123' });
+
+      const result = await (
+        dispatcher as unknown as {
+          startWorkerAttempt: (
+            task: Task,
+            params: { prompt: string; continueSession: boolean; injectActiveGoal?: boolean }
+          ) => Promise<{ ok: true; containerId: string } | { ok: false; error: unknown }>;
+        }
+      ).startWorkerAttempt(task, {
+        prompt: 'Resume Codex work',
+        continueSession: true,
+      });
+
+      expect(result).toEqual({ ok: true, containerId: 'container-codex-runtime-task' });
+      expect(mockIsolationProvider.createWorker).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'codex-runtime-task',
+          continueSession: true,
+          runtimeOverride: 'codex',
+          runtimeSessionId: 'thread_123',
+        })
+      );
+    });
+
+    it('rejects codex resume when runtimeSessionId is missing', async () => {
+      const task = createCodexTask();
+
+      const result = await (
+        dispatcher as unknown as {
+          startWorkerAttempt: (
+            task: Task,
+            params: { prompt: string; continueSession: boolean; injectActiveGoal?: boolean }
+          ) => Promise<{ ok: true; containerId: string } | { ok: false; error: unknown }>;
+        }
+      ).startWorkerAttempt(task, {
+        prompt: 'Resume Codex work',
+        continueSession: true,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(String(result.error)).toContain('persisted runtime session');
+      }
+      expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
+    });
+  });
+
   describe('prompt truncation in task log', () => {
     it('should truncate prompt longer than 500 characters in the log', async () => {
       const longPrompt = 'A'.repeat(600);

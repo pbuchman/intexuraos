@@ -542,7 +542,9 @@ async function bootstrap(): Promise<void> {
   const preserveWorkerContainers =
     getOptionalEnv('INTEXURAOS_PRESERVE_WORKER_CONTAINERS', '1') !== '0';
   const sharedCredsPath = join(orchestratorDir, 'claude-creds');
+  const sharedCodexAuthPath = join(orchestratorDir, 'codex-auth');
   ensureDirectoryExists(sharedCredsPath);
+  ensureDirectoryExists(sharedCodexAuthPath);
 
   const isolationProvider = await createIsolationProvider(
     {
@@ -551,6 +553,7 @@ async function bootstrap(): Promise<void> {
       keepContainersAlive,
       imageName: workerImage,
       sharedCredsPath,
+      sharedCodexAuthPath,
       forensicsMode: workerForensicsMode,
       forensicsBasePath: workerForensicsBasePath,
       ...(gitUserName !== undefined ? { gitUserName } : {}),

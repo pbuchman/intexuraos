@@ -201,12 +201,125 @@ run_claude_attempt() {
     return "$exit_code"
 }
 
+run_codex_attempt() {
+    if [ ! -d "/repo" ]; then
+        echo "[entrypoint] ERROR: /repo directory not mounted" >&2
+        return 1
+    fi
+
+    cd /repo
+    setup_git_identity
+    setup_github_token
+
+    if [ ! -f "/secrets/system-prompt.txt" ]; then
+        echo "[entrypoint] ERROR: /secrets/system-prompt.txt not found" >&2
+        return 1
+    fi
+
+    if [ ! -f "/secrets/user-prompt.txt" ]; then
+        echo "[entrypoint] ERROR: /secrets/user-prompt.txt not found" >&2
+        return 1
+    fi
+
+    local system_prompt
+    system_prompt=$(cat /secrets/system-prompt.txt)
+    echo "[entrypoint] System prompt loaded (${#system_prompt} chars)"
+    echo "[entrypoint] User prompt loaded ($(wc -c < /secrets/user-prompt.txt | tr -d ' ') bytes)"
+    local attempt_forensics_dir=""
+
+    if forensics_enabled; then
+        ulimit -c unlimited 2>/dev/null || true
+        if attempt_forensics_dir=$(forensics_prepare_attempt_dir); then
+            echo "[entrypoint] Forensics enabled; writing artifacts to ${attempt_forensics_dir}"
+            {
+                echo "started_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                echo "task_id=${TASK_ID:-unknown}"
+                echo "runtime=codex"
+                echo "continue_flag=${CLAUDE_CONTINUE:-0}"
+                echo "repo=/repo"
+            } > "${attempt_forensics_dir}/attempt-meta.txt" 2>/dev/null || true
+        else
+            echo "[entrypoint] WARNING: Forensics enabled but failed to create output dir" >&2
+        fi
+    fi
+
+    local continue_flag="${CLAUDE_CONTINUE:-0}"
+    if [ "$continue_flag" = "1" ] && [ -z "${CODEX_THREAD_ID:-}" ]; then
+        echo "[entrypoint] ERROR: CODEX_THREAD_ID is required for resumed Codex attempts" >&2
+        return 1
+    fi
+
+    local prompt_file
+    prompt_file="$(mktemp /tmp/codex-prompt.XXXXXX)"
+    {
+        printf '[SYSTEM PROMPT]\n%s\n\n[USER PROMPT]\n' "$system_prompt"
+        cat /secrets/user-prompt.txt
+    } > "$prompt_file"
+
+    echo "[entrypoint] Starting Codex in exec mode..."
+
+    set +e
+    if [ -n "$attempt_forensics_dir" ]; then
+        if [ "$continue_flag" = "1" ]; then
+            codex exec resume --json \
+                --skip-git-repo-check \
+                --dangerously-bypass-approvals-and-sandbox \
+                "${CODEX_THREAD_ID}" \
+                - < "$prompt_file" 2>&1 | tee -a "${attempt_forensics_dir}/codex-stream.log"
+        else
+            codex exec --json \
+                --skip-git-repo-check \
+                --dangerously-bypass-approvals-and-sandbox \
+                - < "$prompt_file" 2>&1 | tee -a "${attempt_forensics_dir}/codex-stream.log"
+        fi
+    else
+        if [ "$continue_flag" = "1" ]; then
+            codex exec resume --json \
+                --skip-git-repo-check \
+                --dangerously-bypass-approvals-and-sandbox \
+                "${CODEX_THREAD_ID}" \
+                - < "$prompt_file"
+        else
+            codex exec --json \
+                --skip-git-repo-check \
+                --dangerously-bypass-approvals-and-sandbox \
+                - < "$prompt_file"
+        fi
+    fi
+    local exit_code=$?
+    set -e
+
+    rm -f "$prompt_file"
+
+    if [ -n "$attempt_forensics_dir" ]; then
+        printf '%s\n' "$exit_code" > "${attempt_forensics_dir}/codex-exit-code.txt" 2>/dev/null || true
+    fi
+
+    echo "[entrypoint] Codex attempt finished with exit code: ${exit_code}"
+    return "$exit_code"
+}
+
+run_worker_attempt() {
+    case "${WORKER_RUNTIME:-claude}" in
+        claude)
+            run_claude_attempt
+            ;;
+        codex)
+            run_codex_attempt
+            ;;
+        *)
+            echo "[entrypoint] ERROR: Unsupported worker runtime '${WORKER_RUNTIME:-}'" >&2
+            return 1
+            ;;
+    esac
+}
+
 if [ "${1:-}" = "run-attempt" ]; then
     if [ ! -f "/tmp/worker-ready" ]; then
         echo "[entrypoint] ERROR: Worker not ready — readiness marker missing" >&2
         exit 1
     fi
-    run_claude_attempt
+    run_worker_attempt
     attempt_exit=$?
     # Terminate lingering child processes (MCP servers, background tools)
     # that may hold Docker exec file descriptors open.
@@ -397,5 +510,5 @@ if [ -d "/repo/.git" ] || [ -f "/repo/.git" ]; then
     echo "[entrypoint] Git branch: $(git -C /repo branch --show-current 2>/dev/null || echo 'unknown')"
 fi
 
-run_claude_attempt
+run_worker_attempt
 exit $?
