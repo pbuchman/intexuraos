@@ -367,6 +367,12 @@ describe('useMergeQueue', () => {
       });
 
       expect(result.current.excludedPrNumbers).toEqual(new Set());
+
+      await waitFor(() => {
+        expect(mockUpdateExclusions).toHaveBeenCalledWith('test-token', 'w-1', []);
+      });
+
+      expect(mockUpdateExclusions).toHaveBeenCalledTimes(2);
     });
 
     it('reverts exclusion and shows error on API failure', async () => {
@@ -450,9 +456,7 @@ describe('useMergeQueue', () => {
       expect(result.current.excludedPrNumbers).toEqual(new Set([1, 2, 3]));
 
       await waitFor(() => {
-        expect(mockUpdateExclusions).toHaveBeenCalledWith(
-          'test-token', 'w-1', expect.arrayContaining([1, 2, 3])
-        );
+        expect(mockUpdateExclusions).toHaveBeenCalledWith('test-token', 'w-1', [1, 2, 3]);
       });
     });
 
@@ -475,6 +479,144 @@ describe('useMergeQueue', () => {
 
       // State updates in memory only
       expect(result.current.excludedPrNumbers).toEqual(new Set([42]));
+      expect(mockUpdateExclusions).not.toHaveBeenCalled();
+    });
+
+    it('blocks concurrent exclusion updates while API call is in-flight', async () => {
+      const branch = makeBranch('main', 1);
+      const watch = makeWatch('w-1', 'main', 'active');
+
+      mockListBranches.mockResolvedValue({ branches: [branch] });
+      mockListWatches.mockResolvedValue({ watches: [watch] });
+      mockListPrs.mockResolvedValue({ pullRequests: [] });
+
+      // First API call hangs until resolved
+      let resolveFirst: (() => void) | undefined;
+      mockUpdateExclusions.mockImplementationOnce(
+        () => new Promise<{ excludedPrNumbers: number[] }>((resolve) => {
+          resolveFirst = (): void => { resolve({ excludedPrNumbers: [42] }); };
+        })
+      );
+
+      const { result } = renderHook(() => useMergeQueue(OWNER, REPO));
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      // First toggle — starts in-flight API call
+      act(() => {
+        result.current.handleToggleExclusion(42);
+      });
+
+      expect(result.current.excludedPrNumbers).toEqual(new Set([42]));
+
+      // Wait for the first API call to be initiated (async getAccessToken microtask resolves)
+      await waitFor(() => {
+        expect(mockUpdateExclusions).toHaveBeenCalledTimes(1);
+      });
+
+      // Second toggle while first is still in-flight — should be blocked
+      act(() => {
+        result.current.handleToggleExclusion(99);
+      });
+
+      // State should still be {42} — the second toggle was blocked
+      expect(result.current.excludedPrNumbers).toEqual(new Set([42]));
+      expect(mockUpdateExclusions).toHaveBeenCalledTimes(1);
+
+      // Resolve first call to clean up
+      resolveFirst?.();
+
+      await waitFor(() => {
+        expect(mockUpdateExclusions).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it('preserves pre-watch exclusions across watch poll cycles', async () => {
+      const branch = makeBranch('main', 1);
+
+      mockListBranches.mockResolvedValue({ branches: [branch] });
+      mockListWatches.mockResolvedValue({ watches: [] });
+      mockListPrs.mockResolvedValue({ pullRequests: [] });
+
+      const { result } = renderHook(() => useMergeQueue(OWNER, REPO));
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      // Set pre-watch exclusions
+      act(() => {
+        result.current.handleToggleExclusion(42);
+      });
+
+      expect(result.current.excludedPrNumbers).toEqual(new Set([42]));
+
+      // Simulate a watch poll returning empty watches (new array reference)
+      mockListWatches.mockResolvedValue({ watches: [] });
+
+      // Trigger a re-render by updating watches state (simulates poll)
+      await act(async () => {
+        // Force a watches update by calling fetchInitialData which re-fetches
+        await result.current.fetchInitialData();
+      });
+
+      // Pre-watch exclusions should be preserved, NOT cleared by the poll
+      expect(result.current.excludedPrNumbers).toEqual(new Set([42]));
+    });
+
+    it('does not call API for handleSelectAll with no active watch', async () => {
+      const branch = makeBranch('main', 1);
+
+      mockListBranches.mockResolvedValue({ branches: [branch] });
+      mockListWatches.mockResolvedValue({ watches: [] });
+      mockListPrs.mockResolvedValue({ pullRequests: [] });
+
+      const { result } = renderHook(() => useMergeQueue(OWNER, REPO));
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      // Set some pre-watch exclusions first
+      act(() => {
+        result.current.handleToggleExclusion(10);
+      });
+      act(() => {
+        result.current.handleToggleExclusion(20);
+      });
+
+      expect(result.current.excludedPrNumbers).toEqual(new Set([10, 20]));
+
+      // Select all — should clear exclusions locally but not call API
+      act(() => {
+        result.current.handleSelectAll();
+      });
+
+      expect(result.current.excludedPrNumbers).toEqual(new Set());
+      expect(mockUpdateExclusions).not.toHaveBeenCalled();
+    });
+
+    it('does not call API for handleDeselectAll with no active watch', async () => {
+      const branch = makeBranch('main', 1);
+
+      mockListBranches.mockResolvedValue({ branches: [branch] });
+      mockListWatches.mockResolvedValue({ watches: [] });
+      mockListPrs.mockResolvedValue({ pullRequests: [] });
+
+      const { result } = renderHook(() => useMergeQueue(OWNER, REPO));
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      // Deselect all — should set exclusions locally but not call API
+      act(() => {
+        result.current.handleDeselectAll([1, 2, 3]);
+      });
+
+      expect(result.current.excludedPrNumbers).toEqual(new Set([1, 2, 3]));
       expect(mockUpdateExclusions).not.toHaveBeenCalled();
     });
 
