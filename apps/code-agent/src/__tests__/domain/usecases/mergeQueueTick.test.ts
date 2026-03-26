@@ -691,6 +691,7 @@ describe('mergeQueueTick', () => {
     expect(tickResult.action).toBe('skipped_all');
     expect(tickResult.skipped).toStrictEqual([]);
     expect(tickResult.remainingPrs).toBe(2);
+    expect(mockGitHubPRClient.getPullRequestDetails).not.toHaveBeenCalled();
   });
 
   it('handles summaries with null title, authorLogin, baseBranch, and headBranch', async () => {
