@@ -69,7 +69,7 @@ function createGitHubPRClientMock(): GitHubPRClient {
 function createUserServiceClientMock(): UserServiceClient {
   return {
     getApiKeys: vi.fn().mockResolvedValue(ok({})),
-    getLlmClient: vi.fn().mockResolvedValue(ok({} as never)),
+    getLlmClient: vi.fn(),
     reportLlmSuccess: vi.fn().mockResolvedValue(undefined),
     getOAuthToken: vi.fn().mockResolvedValue(ok({ accessToken: 'github-token', email: 'owner@example.com' })),
     resolveGitHubUsername: vi.fn().mockResolvedValue(ok({ userId: 'owner-user-id' })),
@@ -169,6 +169,28 @@ describe('createUnauthorizedSenderCommentHandler', () => {
     });
 
     await handler(createEvent({ senderLogin: 'reviewer', body: '@codex fix this lint error' }));
+
+    expect(userServiceClient.resolveGitHubUsername).toHaveBeenCalledWith('pbuchman');
+    expect(userServiceClient.getOAuthToken).toHaveBeenCalledWith('owner-user-id', 'github');
+    expect(gitHubPRClient.postPRComment).toHaveBeenCalledWith(
+      'github-token',
+      'pbuchman',
+      'intexuraos',
+      42,
+      '@ignore\n\n⚠️ Only the repository owner and authorized bots can trigger worker commands. This event from `reviewer` has been ignored.'
+    );
+  });
+
+  it('posts an @ignore warning for unauthorized @review commands', async () => {
+    const gitHubPRClient = createGitHubPRClientMock();
+    const userServiceClient = createUserServiceClientMock();
+    const handler = createUnauthorizedSenderCommentHandler({
+      gitHubPRClient,
+      userServiceClient,
+      logger: createMockLogger(),
+    });
+
+    await handler(createEvent({ senderLogin: 'reviewer', body: '@review architecture' }));
 
     expect(userServiceClient.resolveGitHubUsername).toHaveBeenCalledWith('pbuchman');
     expect(userServiceClient.getOAuthToken).toHaveBeenCalledWith('owner-user-id', 'github');
