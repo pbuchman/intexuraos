@@ -32,6 +32,8 @@ describe('loadConfig', () => {
     delete process.env['INTEXURAOS_LINEAR_AGENT_URL'];
     delete process.env['INTEXURAOS_WEB_AGENT_URL'];
     delete process.env['INTEXURAOS_CRON_AGENT_URL'];
+    delete process.env['INTEXURAOS_HELLSCRIPT_AGENT_URL'];
+    delete process.env['INTEXURAOS_CODE_AGENT_OPENAPI_URL'];
     delete process.env['INTEXURAOS_GEMINI_APP_API_KEY'];
   });
 
