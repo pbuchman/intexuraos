@@ -46,7 +46,7 @@ export interface Task {
    */
   retriedFrom?: string;
   /** Agent type from code-agent. When set, used instead of recalculating from labels. */
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
   /** Existing PR tracking comment to reuse instead of creating a new one. */
   trackingCommentId?: string;
   /** Existing PR number inherited from retry/follow-up continuation flow. */
@@ -119,6 +119,7 @@ export interface TaskResult {
   review_types?: string;
   requirements_tracker_updated?: string;
   gh_actions_status?: string;
+  needs_remediation?: string; // '0' or '1'
   rebaseResult?: {
     attempted: boolean;
     success: boolean;

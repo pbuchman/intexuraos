@@ -638,9 +638,11 @@ describe('GitHubDispatchService', () => {
   });
 
   describe('dispatch — remediation routing (INT-1087)', () => {
-    it('should create remediation task for code-worker review events', async () => {
+    it('should NOT create remediation task for CODE_WORKER_REVIEW', async () => {
       const mockCreateRemediation = vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'task-rem-1', workerType: 'auto' }));
       deps = createMockDeps({ createRemediationTask: mockCreateRemediation });
+      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(null));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-new' }));
 
       const codeWorkerContext: DispatchContext = {
         event: { ...mockEvent, eventType: 'pull_request_review', action: 'submitted', senderLogin: 'claude[bot]', body: 'Review findings: 3 issues found' },
@@ -652,16 +654,7 @@ describe('GitHubDispatchService', () => {
       const result = await service.dispatch(codeWorkerContext);
 
       expect(result.success).toBe(true);
-      expect(result.taskId).toBe('task-rem-1');
-      expect(mockCreateRemediation).toHaveBeenCalledWith(
-        mockLogger,
-        expect.objectContaining({
-          repository: 'test-owner/test-repo',
-          prNumber: 42,
-          workerType: 'auto',
-          reviewBody: 'Review findings: 3 issues found',
-        })
-      );
+      expect(mockCreateRemediation).not.toHaveBeenCalled();
     });
 
     it('should create remediation task for @worker directive comments', async () => {
@@ -705,25 +698,22 @@ describe('GitHubDispatchService', () => {
       expect(result.taskId).toBe('task-rem-3');
     });
 
-    it('should pass baseBranch to remediation task when event has baseBranch', async () => {
+    it('should pass baseBranch to remediation task when @worker event has baseBranch', async () => {
       const mockCreateRemediation = vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'task-rem-branch', workerType: 'auto' }));
       deps = createMockDeps({ createRemediationTask: mockCreateRemediation });
 
-      const codeWorkerContext: DispatchContext = {
+      const workerContext: DispatchContext = {
         event: {
           ...mockEvent,
-          eventType: 'pull_request_review',
-          action: 'submitted',
-          senderLogin: 'claude[bot]',
-          body: 'Review findings: 3 issues found',
+          body: '@worker opus fix the formatting',
           baseBranch: 'development',
         },
-        decision: { action: 'dispatch', reason: 'CODE_WORKER_REVIEW' },
+        decision: { action: 'dispatch', reason: 'ALL_RULES_PASSED' },
         logger: mockLogger,
       };
 
       const service = createWebhookDispatchService(deps);
-      const result = await service.dispatch(codeWorkerContext);
+      const result = await service.dispatch(workerContext);
 
       expect(result.success).toBe(true);
       expect(mockCreateRemediation).toHaveBeenCalledWith(

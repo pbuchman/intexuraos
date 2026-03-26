@@ -53,6 +53,8 @@ import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockSer
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
 import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
+import type { CreateRemediationTaskRequest, CreateRemediationTaskResult, CreateRemediationTaskError } from '../../domain/usecases/createRemediationTask.js';
+import type { Result } from '@intexuraos/common-core';
 
 // Mock fetchWithAuth
 vi.mock('@intexuraos/internal-clients', async () => ({
@@ -3949,6 +3951,223 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.status).toBe('cancelled');
       expect(getResult.value.error?.code).toBe('task_cancelled');
       expect(getResult.value.callbackReceived).toBe(true);
+    });
+  });
+
+  describe('review task-complete → remediation creation (INT-1103)', () => {
+    // Helper: create a review task in Firestore and return it
+    async function createReviewTask(overrides: {
+      traceId: string;
+      prNumber?: number;
+      agentType?: 'review' | 'remediation';
+    }): Promise<import('../../domain/models/codeTask.js').CodeTask> {
+      const result = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: overrides.traceId,
+        prNumber: overrides.prNumber ?? 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: overrides.agentType ?? 'review',
+      });
+      if (!result.ok) throw new Error('Failed to create task');
+      return result.value;
+    }
+
+    function makeRemediationPayload(taskId: string, needs_remediation?: string): { taskId: string; status: 'completed'; result: { summary: string; review_comments_posted: string; review_types: string; needs_remediation?: string } } {
+      return {
+        taskId,
+        status: 'completed' as const,
+        result: {
+          summary: 'Found 2 issues',
+          review_comments_posted: '2',
+          review_types: 'code_quality',
+          ...(needs_remediation !== undefined && { needs_remediation }),
+        },
+      };
+    }
+
+    type RemediationFn = (logger: import('pino').Logger, request: CreateRemediationTaskRequest) => Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>>;
+
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+    async function sendTaskCompleteWithRemediation(payload: object, mockCreateRemediationFn?: ReturnType<typeof vi.fn>) {
+      const mockFn = mockCreateRemediationFn ?? vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'remediation-task-1', workerType: 'auto' }));
+      setServices({
+        ...getServices(),
+        createRemediationTaskFn: mockFn as RemediationFn,
+      });
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+      return { response, mockFn };
+    }
+
+    it('creates remediation task when needs_remediation is "1"', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_1' });
+      const payload = makeRemediationPayload(task.id, '1');
+
+      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).toHaveBeenCalledOnce();
+      expect(mockFn).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          repository: 'pbuchman/intexuraos',
+          prNumber: 42,
+          workerType: 'auto',
+          reviewBody: 'Found 2 issues',
+        }),
+      );
+    });
+
+    it('does NOT create remediation task when needs_remediation is "0"', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_0' });
+      const payload = makeRemediationPayload(task.id, '0');
+
+      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).not.toHaveBeenCalled();
+    });
+
+    it('creates remediation task when needs_remediation is undefined (fail-open)', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_undefined' });
+      const payload = makeRemediationPayload(task.id, undefined);
+
+      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).toHaveBeenCalledOnce();
+    });
+
+    it('does NOT create remediation task when result is absent (verification failed)', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_no_result' });
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+      };
+
+      const mockFn = vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'rem-never', workerType: 'auto' }));
+      setServices({ ...getServices(), createRemediationTaskFn: mockFn });
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      // No result → review enforcement rejects it before reaching the remediation block
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).not.toHaveBeenCalled();
+    });
+
+    it('does NOT create remediation for remediation task-complete (agentType guard)', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_guard', agentType: 'remediation' });
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Fixed 2 issues',
+          needs_remediation: '1',
+        },
+      };
+
+      const mockFn = vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'rem-never', workerType: 'auto' }));
+      setServices({ ...getServices(), createRemediationTaskFn: mockFn });
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).not.toHaveBeenCalled();
+    });
+
+    it('skips remediation creation when recent remediation already running (dedup guard)', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_dedup' });
+
+      // Pre-create an existing remediation task for the same PR
+      const existingRemediation = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix review findings',
+        sanitizedPrompt: 'Fix review findings',
+        systemPromptHash: 'remediation-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_existing_rem',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret-2',
+        agentType: 'remediation',
+      });
+      expect(existingRemediation.ok).toBe(true);
+
+      const payload = makeRemediationPayload(task.id, '1');
+      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
+
+      expect(response.statusCode).toBe(200);
+      // createRemediationTaskFn should NOT be called because dedup guard found existing task
+      expect(mockFn).not.toHaveBeenCalled();
+    });
+
+    it('still returns 200 when createRemediationTaskFn returns an error (best-effort)', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_error' });
+      const payload = makeRemediationPayload(task.id, '1');
+
+      const { response } = await sendTaskCompleteWithRemediation(
+        payload,
+        vi.fn().mockResolvedValue(err({ code: 'task_creation_failed', message: 'Firestore error' })),
+      );
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('still returns 200 when createRemediationTaskFn is not configured', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_no_fn' });
+      const payload = makeRemediationPayload(task.id, '1');
+
+      // Do NOT set createRemediationTaskFn — it's optional in ServiceContainer
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
     });
   });
 

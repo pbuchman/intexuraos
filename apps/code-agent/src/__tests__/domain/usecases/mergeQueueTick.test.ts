@@ -65,6 +65,7 @@ function makePrSummary(overrides: Partial<GitHubPRSummary> = {}): GitHubPRSummar
     lastActivityAt: new Date('2026-03-14T00:00:00Z'),
     firstSeenAt: new Date('2026-03-14T00:00:00Z'),
     lastReviewedCommitSha: null,
+    lastReviewNeedsRemediation: null,
     ...overrides,
   };
 }

@@ -81,6 +81,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       review_types?: string;
       requirements_tracker_updated?: string;
       gh_actions_status?: string;
+      needs_remediation?: string;
     };
     error?: {
       code: string;
@@ -130,6 +131,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 review_types: { type: 'string' },
                 requirements_tracker_updated: { type: 'string' },
                 gh_actions_status: { type: 'string' },
+                needs_remediation: { type: 'string' },
               },
               required: [],
             },
@@ -998,13 +1000,16 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
         }
 
-        // Extract PR number from prUrl for findByPR correlation (INT-465)
+        // Extract PR number from prUrl for findByPR correlation (INT-465).
         let prNumber: number | undefined;
         if (result?.prUrl) {
           const match = /\/pull\/(\d+)/.exec(result.prUrl);
           if (match?.[1] !== undefined) {
             prNumber = Number(match[1]);
           }
+        }
+        if (prNumber === undefined && task.prNumber !== undefined) {
+          prNumber = task.prNumber;
         }
 
         const resolvedStatus =
@@ -1026,7 +1031,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
         await cleanupLockIfPR();
 
-        // Best-effort: update lastReviewedCommitSha on PR summary when review completes
+        // Best-effort: update PR summary when review completes
         if (resolvedStatus === 'reviewed' && prNumber !== undefined) {
           try {
             const tokenResult = await userServiceClient.getOAuthToken(task.userId, 'github');
@@ -1042,6 +1047,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                     pullRequestNumber: prNumber,
                     lastActivityAt: new Date(),
                     lastReviewedCommitSha: detailsResult.value.headSha,
+                    lastReviewNeedsRemediation: result?.needs_remediation ?? null,
                   });
                   request.log.info({ taskId, prNumber, headSha: detailsResult.value.headSha }, 'Updated lastReviewedCommitSha on PR summary');
                 }
@@ -1049,6 +1055,59 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             }
           } catch (reviewShaError: unknown) {
             request.log.warn({ error: reviewShaError, taskId, prNumber }, 'Failed to update lastReviewedCommitSha (best-effort)');
+          }
+        }
+
+        // Best-effort: create remediation task when review finds actionable issues
+        if (task.agentType === 'review' && resolvedStatus === 'reviewed' && prNumber !== undefined && result !== undefined) {
+          try {
+            if (result.needs_remediation !== '0') {
+              const recentRemediationResult = await codeTaskRepo.findRecentRemediationForPR(task.repository, prNumber);
+              if (!recentRemediationResult.ok) {
+                request.log.warn(
+                  { taskId, prNumber, error: recentRemediationResult.error },
+                  'Failed to check recent remediation task, skipping remediation creation (best-effort)',
+                );
+              } else if (recentRemediationResult.value !== null) {
+                request.log.info(
+                  { taskId, prNumber, existingRemediationId: recentRemediationResult.value.id },
+                  'Recent remediation task already exists for PR, skipping creation',
+                );
+              } else {
+                const { createRemediationTaskFn, logger: remediationLogger } = getServices();
+                if (createRemediationTaskFn !== undefined) {
+                  const reviewBody = result.summary;
+                  const remediationResult = await createRemediationTaskFn(
+                    remediationLogger,
+                    {
+                      repository: task.repository,
+                      prNumber,
+                      senderLogin: task.repository.split('/')[0] ?? task.userId,
+                      workerType: task.workerType,
+                      eventId: taskId,
+                      ...(reviewBody !== undefined && { reviewBody }),
+                      ...(task.baseBranch !== undefined && { baseBranch: task.baseBranch }),
+                      ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+                    },
+                  );
+                  if (remediationResult.ok) {
+                    request.log.info(
+                      { taskId, prNumber, remediationTaskId: remediationResult.value.taskId },
+                      'Created remediation task from review task-complete',
+                    );
+                  } else {
+                    request.log.warn(
+                      { taskId, prNumber, error: remediationResult.error },
+                      'Failed to create remediation task from review task-complete (best-effort)',
+                    );
+                  }
+                } else {
+                  request.log.warn({ taskId, prNumber }, 'createRemediationTaskFn not configured, skipping remediation creation');
+                }
+              }
+            }
+          } catch (remediationError: unknown) {
+            request.log.warn({ error: remediationError, taskId, prNumber }, 'Unexpected error during remediation task creation (best-effort)');
           }
         }
 

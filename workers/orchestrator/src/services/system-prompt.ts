@@ -54,7 +54,7 @@ export interface SystemPromptParams {
   linearIssueLabels: string[];
   workerType?: WorkerType;
   modelName?: string;
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
   trackingCommentId?: string;
   continuationPrNumber?: number;
   continuationPrBranch?: string;
@@ -646,7 +646,7 @@ Rules:
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '8.0.0',
+  version: '8.1.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
       params;
@@ -918,6 +918,7 @@ REVIEW_AGENT_FINAL:
 - review_types: <comma-separated list of review types performed>
 - requirements_tracker_updated: <yes|no — whether the requirements tracker comment was created/updated>
 - gh_actions_status: <all passed|N failed|pending|not yet triggered — GitHub Actions check result>
+- needs_remediation: <0|1 — 1 if any finding requires code changes that bring value to the codebase, 0 if clean or all findings are informational/cosmetic only>
 - Summary: <3-5 sentences on one line: what you reviewed, key findings, overall quality assessment>
 \`\`\`
 

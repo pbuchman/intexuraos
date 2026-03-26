@@ -24,6 +24,7 @@ export interface GitHubPRSummary {
   lastActivityAt: Date;
   firstSeenAt: Date;
   lastReviewedCommitSha: string | null;  // HEAD SHA at last review completion
+  lastReviewNeedsRemediation: string | null;  // '0' or '1' from review agent needs_remediation signal
 }
 
 /**
@@ -50,4 +51,5 @@ export interface UpsertGitHubPRSummaryInput {
   managedConflictTaskId?: string | null;
   managedConflictTaskOwnerUserId?: string | null;
   lastReviewedCommitSha?: string | null;  // HEAD SHA at last review completion
+  lastReviewNeedsRemediation?: string | null;  // '0' or '1' from review agent needs_remediation signal
 }

@@ -113,10 +113,9 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
           'Starting GitHub dispatch workflow'
         );
 
-        // Check if this should create a remediation task instead of regular dispatch
+        // Only user @worker/@model directives reach dispatch(); review events are gated out by CodeWorkerOutputRule
         const workerDirective = extractDispatchWorkerType(event.body ?? '');
-        const isCodeWorkerReview = context.decision.reason === 'CODE_WORKER_REVIEW';
-        const isRemediationDispatch = isCodeWorkerReview || workerDirective !== undefined;
+        const isRemediationDispatch = workerDirective !== undefined;
 
         if (isRemediationDispatch) {
           const senderLogin = resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots);
@@ -124,11 +123,9 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
             repository: event.repository,
             prNumber: event.pullRequestNumber,
             senderLogin,
-            workerType: workerDirective ?? 'auto',
+            workerType: workerDirective,
             eventId: event.id,
-            ...(isCodeWorkerReview && event.body !== null && { reviewBody: event.body }),
-            // TODO (INT-1087 V2): fetch inline review comments from GitHub API and populate inlineComments
-            ...(!isCodeWorkerReview && event.body !== null && {
+            ...(event.body !== null && {
               triggerComment: { body: event.body, author: event.senderLogin },
             }),
             ...(event.baseBranch !== null && { baseBranch: event.baseBranch }),
