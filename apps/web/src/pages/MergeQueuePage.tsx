@@ -22,6 +22,8 @@ export function MergeQueuePage(): React.JSX.Element {
     loading, error, prsLoading, prsError,
     isToggling, toggleError,
     fetchInitialData, handleToggleWatch,
+    excludedPrNumbers, exclusionError,
+    handleToggleExclusion, handleSelectAll, handleDeselectAll,
   } = useMergeQueue(DEFAULT_OWNER, DEFAULT_REPO);
 
   const [activeFilters, setActiveFilters] = useState<Set<PrFilterStatus>>(new Set(ALL_FILTERS));
@@ -127,9 +129,13 @@ export function MergeQueuePage(): React.JSX.Element {
           onToggle={handleToggleWatch}
           isToggling={isToggling}
           blocked={isSelectedBranchBlocked}
+          excludedCount={excludedPrNumbers.size}
         />
         {toggleError !== null ? (
           <p className="mt-1 text-xs text-red-600 dark:text-red-400">{toggleError}</p>
+        ) : null}
+        {exclusionError !== null ? (
+          <p className="mt-1 text-xs text-red-600 dark:text-red-400">{exclusionError}</p>
         ) : null}
       </div>
 
@@ -161,6 +167,10 @@ export function MergeQueuePage(): React.JSX.Element {
               prs={prs}
               activeFilters={activeFilters}
               isLoading={prsLoading}
+              excludedPrNumbers={excludedPrNumbers}
+              onToggleExclusion={handleToggleExclusion}
+              onSelectAll={handleSelectAll}
+              onDeselectAll={handleDeselectAll}
             />
           )}
         </div>
