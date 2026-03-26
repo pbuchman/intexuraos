@@ -133,7 +133,7 @@ describe('createRemediationTask', () => {
   it('includes trigger comment in prompt when present', async () => {
     const deps = createFakeDeps();
     const request = createDefaultRequest({
-      triggerComment: { id: 1, body: '@worker opus fix the review findings', author: 'bob' },
+      triggerComment: { id: '12345', body: '@worker opus fix the review findings', author: 'bob' },
     });
 
     await createRemediationTask(deps, request);

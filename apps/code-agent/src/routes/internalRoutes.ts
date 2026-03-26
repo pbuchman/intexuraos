@@ -212,6 +212,12 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             id: { type: 'string', description: 'Code task ID' },
           },
         },
+        headers: {
+          type: 'object',
+          properties: {
+            'x-task-id': { type: 'string', description: 'Caller task ID — must match the :id path param' },
+          },
+        },
         body: {
           type: 'object',
           required: ['requiresReReview'],
@@ -287,6 +293,22 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 type: 'object',
                 properties: {
                   code: { type: 'string', enum: ['NOT_FOUND'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
                   message: { type: 'string' },
                 },
                 required: ['code', 'message'],
