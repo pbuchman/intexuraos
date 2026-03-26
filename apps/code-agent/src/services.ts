@@ -444,6 +444,7 @@ export function initServices(config: ServiceConfig): void {
         codeTaskRepo,
         userLookupService,
         taskEnqueueService,
+        workerSettingsRepo,
         orchestratorSecret: config.orchestratorSecret,
         automationLog,
       },

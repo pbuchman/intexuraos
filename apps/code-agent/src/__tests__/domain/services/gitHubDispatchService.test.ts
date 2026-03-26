@@ -125,6 +125,7 @@ function createMockDeps(overrides: Partial<WebhookDispatchServiceDeps> = {}): We
     orchestratorSecret: 'test-secret',
     serviceUrl: 'http://localhost:8080',
     automationLog: { record: vi.fn().mockResolvedValue(undefined) },
+    createRemediationTask: vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'task-rem-default', workerType: 'auto' })),
     ...overrides,
   };
 }
@@ -523,32 +524,36 @@ describe('GitHubDispatchService', () => {
       expect(requestArg).not.toHaveProperty('baseBranch');
     });
 
-    it('should fall back to execution task with extracted workerType when @worker directive present but remediation not configured', async () => {
+    it('should route @worker directive to remediation task', async () => {
+      const mockCreateRemediation = vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'task-rem-worker', workerType: 'minimax' }));
+      deps = createMockDeps({ createRemediationTask: mockCreateRemediation });
       const workerCommentEvent = { ...mockEvent, body: 'Fix this @worker minimax' };
-      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(null));
-      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-worker' }));
 
       const service = createWebhookDispatchService(deps);
-      await service.dispatch({ ...context, event: workerCommentEvent });
+      const result = await service.dispatch({ ...context, event: workerCommentEvent });
 
-      const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
-      expect(requestArg?.workerType).toBe('minimax');
-      expect(mockLogger.info).toHaveBeenCalledWith(
+      expect(result.success).toBe(true);
+      expect(result.taskId).toBe('task-rem-worker');
+      expect(mockCreateRemediation).toHaveBeenCalledWith(
+        mockLogger,
         expect.objectContaining({ workerType: 'minimax', prNumber: 42 }),
-        'Extracted worker type from comment'
       );
     });
 
-    it('should fall back to execution task with extracted workerType when @model directive present but remediation not configured', async () => {
+    it('should route @model directive to remediation task', async () => {
+      const mockCreateRemediation = vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'task-rem-model', workerType: 'qwen' }));
+      deps = createMockDeps({ createRemediationTask: mockCreateRemediation });
       const modelCommentEvent = { ...mockEvent, body: '@model qwen fix the tests' };
-      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(null));
-      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-model' }));
 
       const service = createWebhookDispatchService(deps);
-      await service.dispatch({ ...context, event: modelCommentEvent });
+      const result = await service.dispatch({ ...context, event: modelCommentEvent });
 
-      const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
-      expect(requestArg?.workerType).toBe('qwen');
+      expect(result.success).toBe(true);
+      expect(result.taskId).toBe('task-rem-model');
+      expect(mockCreateRemediation).toHaveBeenCalledWith(
+        mockLogger,
+        expect.objectContaining({ workerType: 'qwen', prNumber: 42 }),
+      );
     });
 
     it('should not pass workerType when no @worker/@model directive found', async () => {
@@ -610,22 +615,25 @@ describe('GitHubDispatchService', () => {
       expect(requestArg?.comment).toBe('Test description');
     });
 
-    it('should extract worker type from raw body but use messageBuilder for comment', async () => {
+    it('should route pull_request_review with @worker directive to remediation task', async () => {
+      const mockCreateRemediation = vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'task-rem-review-worker', workerType: 'minimax' }));
+      deps = createMockDeps({ createRemediationTask: mockCreateRemediation });
       const reviewEvent: GitHubPREvent = {
         ...mockEvent,
         eventType: 'pull_request_review',
         action: 'submitted',
         body: 'Fix this @worker minimax',
       };
-      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(null));
-      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-worker-review' }));
 
       const service = createWebhookDispatchService(deps);
-      await service.dispatch({ ...context, event: reviewEvent });
+      const result = await service.dispatch({ ...context, event: reviewEvent });
 
-      const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
-      expect(requestArg?.workerType).toBe('minimax');
-      expect(requestArg?.comment).toBe('built-message');
+      expect(result.success).toBe(true);
+      expect(result.taskId).toBe('task-rem-review-worker');
+      expect(mockCreateRemediation).toHaveBeenCalledWith(
+        mockLogger,
+        expect.objectContaining({ workerType: 'minimax' }),
+      );
     });
   });
 
@@ -762,11 +770,9 @@ describe('GitHubDispatchService', () => {
       expect(result.error).toContain('Firestore error');
     });
 
-    it('should skip remediation dispatch when createRemediationTask not configured', async () => {
-      // Don't provide createRemediationTask in deps
-      deps = createMockDeps();
-      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(null));
-      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-fallback' }));
+    it('should always route @worker directives to remediation task', async () => {
+      const mockCreateRemediation = vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'task-rem-always', workerType: 'opus' }));
+      deps = createMockDeps({ createRemediationTask: mockCreateRemediation });
 
       const workerContext: DispatchContext = {
         event: { ...mockEvent, body: '@worker opus fix it' },
@@ -777,13 +783,14 @@ describe('GitHubDispatchService', () => {
       const service = createWebhookDispatchService(deps);
       const result = await service.dispatch(workerContext);
 
-      // Should fall through to normal dispatch since createRemediationTask is undefined
       expect(result.success).toBe(true);
-      expect(result.taskId).toBe('task-fallback');
-      // Should warn about missing createRemediationTask
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ prNumber: mockEvent.pullRequestNumber }),
-        expect.stringContaining('createRemediationTask not configured')
+      expect(result.taskId).toBe('task-rem-always');
+      expect(mockCreateRemediation).toHaveBeenCalledWith(
+        mockLogger,
+        expect.objectContaining({
+          workerType: 'opus',
+          prNumber: 42,
+        }),
       );
     });
   });

@@ -15,6 +15,7 @@ import type { CodeTaskRepository, CreateTaskInput } from '../repositories/codeTa
 import type { WorkerType } from '../models/codeTask.js';
 import type { UserLookupService } from '../ports/userLookupService.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
+import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
 import type { AutomationLog } from '../ports/automationLog.js';
 import { generateWebhookSecret } from '../utils/secrets.js';
 import { sanitizePrompt } from '../utils/promptSanitization.js';
@@ -49,6 +50,7 @@ export interface CreateRemediationTaskDeps {
   codeTaskRepo: CodeTaskRepository;
   userLookupService: UserLookupService;
   taskEnqueueService: TaskEnqueueService;
+  workerSettingsRepo: WorkerSettingsRepository;
   orchestratorSecret: string;
   automationLog: AutomationLog;
 }
@@ -118,11 +120,12 @@ export async function createRemediationTask(
   deps: CreateRemediationTaskDeps,
   request: CreateRemediationTaskRequest,
 ): Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>> {
-  const { logger, codeTaskRepo, userLookupService, taskEnqueueService, orchestratorSecret } = deps;
-  const { repository, prNumber, senderLogin, workerType, eventId } = request;
+  const { logger, codeTaskRepo, userLookupService, taskEnqueueService, workerSettingsRepo, orchestratorSecret } = deps;
+  const { repository, prNumber, senderLogin, eventId } = request;
+  const requestedWorkerType = request.workerType;
 
   logger.info(
-    { repository, prNumber, senderLogin, workerType, eventId },
+    { repository, prNumber, senderLogin, workerType: requestedWorkerType, eventId },
     'Creating remediation task',
   );
 
@@ -139,22 +142,32 @@ export async function createRemediationTask(
 
   const { userId } = userResult.value;
 
-  // Best-effort Linear issue linking from existing execution task
-  let linearIssueId: string | undefined = request.linearIssueId;
-  if (linearIssueId === undefined) {
-    const existingResult = await codeTaskRepo.findByPR(repository, prNumber);
-    if (existingResult.ok) {
-      linearIssueId = existingResult.value?.linearIssueId;
-      if (linearIssueId !== undefined) {
-        logger.info({ linearIssueId, prNumber }, 'Copied linearIssueId from existing PR task for remediation');
-      }
-    } else {
-      logger.warn({ error: existingResult.error, prNumber }, 'Failed to look up existing PR task for remediation Linear linking');
+  // Resolution chain: explicit request > user setting > 'auto'
+  let effectiveWorkerType: WorkerType = requestedWorkerType;
+  if (requestedWorkerType === 'auto') {
+    const settingsResult = await workerSettingsRepo.getSettings(userId);
+    if (settingsResult.ok && settingsResult.value?.defaultReviewWorkerType !== undefined) {
+      effectiveWorkerType = settingsResult.value.defaultReviewWorkerType;
+      logger.info({ userId, defaultReviewWorkerType: effectiveWorkerType }, 'Using user default review worker type for remediation task');
     }
   }
 
-  // Build prompt
-  const prompt = buildRemediationPrompt(request);
+  // Best-effort Linear issue linking from existing execution task
+  let linearIssueId: string | undefined = request.linearIssueId;
+  if (linearIssueId === undefined) {
+    const existingResult = await codeTaskRepo.findLatestExecutionTaskByPR(repository, prNumber);
+    if (existingResult.ok) {
+      linearIssueId = existingResult.value?.linearIssueId;
+      if (linearIssueId !== undefined) {
+        logger.info({ linearIssueId, prNumber }, 'Copied linearIssueId from existing execution task for remediation');
+      }
+    } else {
+      logger.warn({ error: existingResult.error, prNumber }, 'Failed to look up existing execution task for remediation Linear linking');
+    }
+  }
+
+  // Build prompt with effective worker type
+  const prompt = buildRemediationPrompt({ ...request, workerType: effectiveWorkerType });
   const webhookSecret = generateWebhookSecret(orchestratorSecret, eventId);
   const baseBranch = request.baseBranch ?? 'main';
 
@@ -163,7 +176,7 @@ export async function createRemediationTask(
     prompt,
     sanitizedPrompt: sanitizePrompt(prompt),
     systemPromptHash: 'remediation-auto',
-    workerType,
+    workerType: effectiveWorkerType,
     workerLocation: 'queued',
     repository,
     baseBranch,
@@ -199,7 +212,7 @@ export async function createRemediationTask(
   }
 
   logger.info(
-    { taskId: task.id, repository, prNumber, workerType, queuePosition: enqueueResult.value.queuePosition },
+    { taskId: task.id, repository, prNumber, workerType: effectiveWorkerType, queuePosition: enqueueResult.value.queuePosition },
     'Remediation task created and enqueued',
   );
 
@@ -208,7 +221,7 @@ export async function createRemediationTask(
     {
       type: 'task_dispatched',
       taskId: task.id,
-      workerType,
+      workerType: effectiveWorkerType,
       agentType: 'remediation',
       ...(linearIssueId !== undefined && { linearIssueId }),
     },
@@ -217,5 +230,5 @@ export async function createRemediationTask(
     logger.warn({ error, taskId: task.id }, 'Failed to record automation log for remediation task dispatch');
   });
 
-  return ok({ status: 'queued' as const, taskId: task.id, workerType });
+  return ok({ status: 'queued' as const, taskId: task.id, workerType: effectiveWorkerType });
 }
