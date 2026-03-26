@@ -319,7 +319,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Look up the task
       const findResult = await codeTaskRepo.findById(id);
       if (!findResult.ok) {
-        return await reply.fail('NOT_FOUND', `Task ${id} not found`);
+        if (findResult.error.code === 'NOT_FOUND') {
+          return await reply.fail('NOT_FOUND', `Task ${id} not found`);
+        }
+        return await reply.fail('INTERNAL_ERROR', `Failed to look up task ${id}`);
       }
 
       const task = findResult.value;

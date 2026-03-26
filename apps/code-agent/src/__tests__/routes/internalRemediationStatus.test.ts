@@ -174,6 +174,34 @@ describe('PATCH /internal/tasks/:id/remediation-status', () => {
     expect(body.error.code).toBe('NOT_FOUND');
   });
 
+  it('returns 500 when findById encounters a Firestore error', async () => {
+    const task = await createRemediationTask();
+    const services = getServices();
+
+    const failingRepo = {
+      ...services.codeTaskRepo,
+      findById: vi.fn().mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR' as const, message: 'Firestore unavailable' })
+      ),
+    };
+    setServices({ ...services, codeTaskRepo: failingRepo });
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: `/internal/tasks/${task.id}/remediation-status`,
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-task-id': task.id,
+      },
+      payload: { requiresReReview: true },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
+
   it('returns 403 when task agentType is not remediation', async () => {
     const task = await createPlanningTask();
 

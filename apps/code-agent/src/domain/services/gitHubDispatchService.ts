@@ -118,6 +118,13 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
         const isCodeWorkerReview = context.decision.reason === 'CODE_WORKER_REVIEW';
         const isRemediationDispatch = isCodeWorkerReview || workerDirective !== undefined;
 
+        if (isRemediationDispatch && deps.createRemediationTask === undefined) {
+          logger.warn(
+            { prNumber: event.pullRequestNumber, reason: context.decision.reason },
+            'Remediation dispatch requested but createRemediationTask not configured'
+          );
+        }
+
         if (isRemediationDispatch && deps.createRemediationTask !== undefined) {
           const senderLogin = resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots);
           const remediationResult = await deps.createRemediationTask(logger, {

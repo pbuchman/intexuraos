@@ -34,7 +34,7 @@ export interface UpsertGitHubPRSummaryInput {
   repository: string;
   pullRequestNumber: number;
   lastActivityAt: Date;
-  firstSeenAt: Date;
+  firstSeenAt?: Date;
   // Only present for pull_request events (not review/comment events)
   title?: string | null;
   state?: string | null;
