@@ -2,8 +2,8 @@
 # Login to Codex CLI for orchestrator (separate from user credentials)
 set -euo pipefail
 
-SHARED_AUTH_DIR="$HOME/.claude-orchestrator/codex-auth"
-WORKER_IMAGE="${INTEXURAOS_CLAUDE_WORKER_IMAGE:-europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest}"
+SHARED_AUTH_DIR="$HOME/.code-orchestrator/codex-auth"
+WORKER_IMAGE="${INTEXURAOS_CODE_WORKER_IMAGE:-europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest}"
 
 mkdir -p "$SHARED_AUTH_DIR"
 

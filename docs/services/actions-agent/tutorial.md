@@ -356,13 +356,13 @@ curl -X GET https://actions-agent.intexuraos.com/actions/ACTION_ID/preview \
 
 ## Part 7: Code Actions
 
-Code actions dispatch tasks to code-agent (Claude Code). They use interactive WhatsApp buttons with three options.
+Code actions dispatch tasks to code-agent, which then routes them to the selected code worker runtime. They use interactive WhatsApp buttons with three options.
 
 ### How Code Action Approval Works
 
 1. Send a command: "Fix the authentication bug in the login module"
 2. Receive a WhatsApp message with interactive buttons:
-   - **Approve** (approve and dispatch to Claude Code)
+   - **Approve** (approve and dispatch to the selected code worker)
    - **Reject** (cancel the action)
    - **Convert to Issue** (reject this action but create a Linear issue instead)
 3. Tap **Approve** to dispatch to code-agent

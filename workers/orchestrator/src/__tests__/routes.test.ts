@@ -4,15 +4,15 @@ import { createHmac } from 'node:crypto';
 import { registerRoutes, cleanUpExpiredNonces } from '../routes.js';
 import type { TaskDispatcher } from '../services/task-dispatcher.js';
 import type { GitHubTokenService } from '../github/token-service.js';
-import type { CredentialMonitor } from '../services/isolation/credential-monitor.js';
 import type { IsolationProvider } from '../services/isolation/types.js';
+import type { WorkerAuthRegistry } from '../services/worker-auth/index.js';
 import type { Logger } from '@intexuraos/common-core';
 
 describe('Routes', () => {
   let app: FastifyInstance;
   let dispatcher: TaskDispatcher;
   let tokenService: GitHubTokenService;
-  let credentialMonitor: CredentialMonitor;
+  let workerAuthRegistry: WorkerAuthRegistry;
   let isolationProvider: IsolationProvider;
 
   const mockLogger: Logger = {
@@ -62,17 +62,26 @@ describe('Routes', () => {
       refreshToken: vi.fn(async () => ({ ok: true, value: 'new-token' })),
     } as unknown as GitHubTokenService;
 
-    credentialMonitor = {
-      getState: vi.fn(() => ({
-        status: 'active',
-        expiresAt: new Date(Date.now() + 4 * 3600000).toISOString(),
-        expiresInMinutes: 240,
-        subscriptionType: 'max',
+    workerAuthRegistry = {
+      getStates: vi.fn(() => ({
+        claude: {
+          status: 'active',
+          authMode: 'oauth',
+          refreshSupported: true,
+          expiresAt: new Date(Date.now() + 4 * 3600000).toISOString(),
+          expiresInMinutes: 240,
+          subscriptionType: 'max',
+        },
+        codex: {
+          status: 'active',
+          authMode: 'chatgpt',
+          refreshSupported: true,
+          expiresAt: new Date(Date.now() + 4 * 3600000).toISOString(),
+          expiresInMinutes: 240,
+          lastRefreshAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+        },
       })),
-      getCurrentAccessToken: vi.fn(() => 'sk-ant-oat01-mock'),
-      loadCredentials: vi.fn(() => true),
-      logStartupStatus: vi.fn(),
-    } as unknown as CredentialMonitor;
+    } as unknown as WorkerAuthRegistry;
 
     isolationProvider = {
       getHealthDetails: vi.fn(() => ({ docker: true, disk: true })),
@@ -85,7 +94,7 @@ describe('Routes', () => {
       { orchestratorSecret },
       mockLogger,
       undefined,
-      credentialMonitor,
+      workerAuthRegistry,
       isolationProvider
     );
     await app.ready();
@@ -224,6 +233,33 @@ describe('Routes', () => {
       expect(dispatchCall).toBeDefined();
       expect(dispatchCall?.['planningPrBranch']).toBeUndefined();
       expect(dispatchCall?.['planningPrUrl']).toBeUndefined();
+    });
+
+    it('should return 503 when dispatcher reports auth_unavailable', async () => {
+      vi.mocked(dispatcher.submitTask).mockResolvedValueOnce({
+        ok: false,
+        error: { type: 'auth_unavailable', message: 'Codex auth is not configured' },
+      });
+
+      const taskPayload = {
+        taskId: 'test-auth-unavailable',
+        workerType: 'codex',
+        prompt: 'Test prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+      };
+
+      const { headers, body } = createSignedRequest(taskPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/tasks',
+        headers,
+        body,
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({ error: 'Codex auth is not configured' });
     });
 
     it('should reject without authentication headers', async () => {
@@ -520,7 +556,7 @@ describe('Routes', () => {
   });
 
   describe('GET /health', () => {
-    it('should return health status with anthropicOAuth', async () => {
+    it('should return health status with workerAuths', async () => {
       const response = await app.inject({
         method: 'GET',
         url: '/health',
@@ -535,11 +571,16 @@ describe('Routes', () => {
         available: 5,
       });
       expect(json).toHaveProperty('githubTokenExpiresAt');
-      expect(json.anthropicOAuth).toMatchObject({
+      expect(json.workerAuths.claude).toMatchObject({
         status: 'active',
         subscriptionType: 'max',
       });
-      expect(json.anthropicOAuth.expiresInMinutes).toBe(240);
+      expect(json.workerAuths.claude.expiresInMinutes).toBe(240);
+      expect(json.workerAuths.codex).toMatchObject({
+        status: 'active',
+        authMode: 'chatgpt',
+        refreshSupported: true,
+      });
     });
 
     it('should return null githubTokenExpiresAt when token expiry is not set', async () => {
@@ -555,10 +596,22 @@ describe('Routes', () => {
       expect(json.githubTokenExpiresAt).toBeNull();
     });
 
-    it('should return expired anthropicOAuth status', async () => {
-      vi.mocked(credentialMonitor.getState).mockReturnValueOnce({
-        status: 'expired',
-        message: 'Access token expired',
+    it('should return expired codex auth status', async () => {
+      vi.mocked(workerAuthRegistry.getStates).mockReturnValueOnce({
+        claude: {
+          status: 'active',
+          authMode: 'oauth',
+          refreshSupported: true,
+          expiresAt: new Date(Date.now() + 4 * 3600000).toISOString(),
+          expiresInMinutes: 240,
+          subscriptionType: 'max',
+        },
+        codex: {
+          status: 'expired',
+          authMode: 'chatgpt',
+          refreshSupported: true,
+          message: 'Codex ChatGPT access token expired',
+        },
       });
 
       const response = await app.inject({
@@ -568,13 +621,23 @@ describe('Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const json = response.json();
-      expect(json.anthropicOAuth.status).toBe('expired');
+      expect(json.workerAuths.codex.status).toBe('expired');
     });
 
-    it('should return not_configured anthropicOAuth status', async () => {
-      vi.mocked(credentialMonitor.getState).mockReturnValueOnce({
-        status: 'not_configured',
-        message: 'OAuth credentials not found',
+    it('should return not_configured worker auth status', async () => {
+      vi.mocked(workerAuthRegistry.getStates).mockReturnValueOnce({
+        claude: {
+          status: 'not_configured',
+          authMode: null,
+          refreshSupported: false,
+          message: 'Claude credentials not found',
+        },
+        codex: {
+          status: 'not_configured',
+          authMode: null,
+          refreshSupported: false,
+          message: 'Codex auth file not found',
+        },
       });
 
       const response = await app.inject({
@@ -584,7 +647,8 @@ describe('Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const json = response.json();
-      expect(json.anthropicOAuth.status).toBe('not_configured');
+      expect(json.workerAuths.claude.status).toBe('not_configured');
+      expect(json.workerAuths.codex.status).toBe('not_configured');
     });
 
     it('should include dockerHealthy and diskHealthy in health response', async () => {

@@ -14,7 +14,7 @@ gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.serv
 
 ### Code Task Debugging (MANDATORY — NON-NEGOTIABLE)
 When asked to debug or investigate a code task from \`dev.intexuraos.cloud\` (dev environment), you MUST immediately exit with a clear message:
-> "Dev environment code tasks cannot be debugged from the Claude worker. Only production (\`intexuraos.cloud\`) code tasks can be investigated."
+> "Dev environment code tasks cannot be debugged from the code worker. Only production (\`intexuraos.cloud\`) code tasks can be investigated."
 
 For production code tasks (\`intexuraos.cloud\`), use the debug-code-task skill:
 - Skill definition: \`.claude/skills/debug-code-task/SKILL.md\`
@@ -68,7 +68,7 @@ export const planningPrompt: PromptBuilder<SystemPromptParams> = {
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     return `[SYSTEM CONTEXT]
-You are a Claude Code worker in IntexuraOS running in Docker isolation.
+You are an IntexuraOS code worker running in Docker isolation.
 [WORKER-MODE]
 [AGENT:PLANNING]
 Task ID: ${taskId}
@@ -237,7 +237,7 @@ Push and create PR ONLY after code review completes with zero issues:
       : 'AFTER review completes with ZERO issues: push and create PR as the LAST step.';
 
     return `[SYSTEM CONTEXT]
-You are a Claude Code worker in IntexuraOS running in Docker isolation.
+You are an IntexuraOS code worker running in Docker isolation.
 [WORKER-MODE]
 [AGENT:EXECUTION]
 Task ID: ${taskId}
@@ -369,7 +369,7 @@ export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
     } = params;
 
     return `[SYSTEM CONTEXT]
-You are a Claude Code worker in IntexuraOS running in Docker isolation.
+You are an IntexuraOS code worker running in Docker isolation.
 [WORKER-MODE]
 [AGENT:PULL_REQUEST]
 Task ID: ${taskId}
@@ -653,7 +653,7 @@ export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
 
     return (
       `[SYSTEM CONTEXT]
-You are a Claude Code worker in IntexuraOS running in Docker isolation.
+You are an IntexuraOS code worker running in Docker isolation.
 [WORKER-MODE]
 [AGENT:REVIEW]
 Task ID: ${taskId}

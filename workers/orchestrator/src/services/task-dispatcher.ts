@@ -21,6 +21,7 @@ import type { IsolationProvider, WorkerConfig, WorkerHandle } from './isolation/
 import { WORKER_TYPES } from './isolation/types.js';
 import type { TokenRefresher } from './isolation/token-refresher.js';
 import type { ApiKeyValidator } from './api-key-validator.js';
+import type { WorkerAuthProvider, WorkerAuthRegistry } from './worker-auth/index.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { stripDockerHeaders } from './log-formatter.js';
 import {
@@ -60,6 +61,7 @@ export interface DispatchError {
   type:
     | 'at_capacity'
     | 'docker_unavailable'
+    | 'auth_unavailable'
     | 'invalid_request'
     | 'invalid_status'
     | 'service_error';
@@ -77,6 +79,7 @@ export interface IsolationConfig {
   provider: IsolationProvider;
   tokenRefresher: TokenRefresher;
   apiKeyValidator: ApiKeyValidator;
+  workerAuthRegistry: WorkerAuthRegistry;
   getSecrets: () => {
     ANTHROPIC_API_KEY: string;
     LINEAR_API_KEY: string;
@@ -136,9 +139,54 @@ export class TaskDispatcher {
     return null;
   }
 
+  private getRequiredWorkerAuthProvider(
+    workerType: CreateTaskRequest['workerType']
+  ): WorkerAuthProvider | null {
+    const workerTypeConfig = WORKER_TYPES[workerType];
+    if (workerTypeConfig.runtime === 'codex') {
+      return 'codex';
+    }
+    if (workerTypeConfig.apiKeyEnvVar === 'ANTHROPIC_API_KEY') {
+      return 'claude';
+    }
+    return null;
+  }
+
+  private checkWorkerAuthAvailability(
+    workerType: CreateTaskRequest['workerType']
+  ): Result<void, DispatchError> | null {
+    const provider = this.getRequiredWorkerAuthProvider(workerType);
+    if (provider === null) {
+      return null;
+    }
+
+    const authState = this.isolation.workerAuthRegistry.getState(provider);
+    const isReady =
+      provider === 'codex'
+        ? authState.status === 'active' ||
+          (authState.status === 'expired' && authState.refreshSupported)
+        : authState.status === 'active';
+
+    if (isReady) {
+      return null;
+    }
+
+    const providerName = provider === 'claude' ? 'Claude' : 'Codex';
+    return {
+      ok: false,
+      error: {
+        type: 'auth_unavailable',
+        message: `${providerName} auth is not ready: ${authState.message ?? authState.status}`,
+      },
+    };
+  }
+
   async submitTask(request: CreateTaskRequest): Promise<Result<void, DispatchError>> {
     const healthErr = this.checkDockerAvailability();
     if (healthErr !== null) return healthErr;
+
+    const workerAuthErr = this.checkWorkerAuthAvailability(request.workerType);
+    if (workerAuthErr !== null) return workerAuthErr;
 
     // Atomic capacity check
     const capacityCheck = await this.capacityMutex.runExclusive(() => {
@@ -285,23 +333,6 @@ export class TaskDispatcher {
           { taskId },
           'No planning branch to merge — dispatched without planningPrBranch'
         );
-      }
-
-      const workerTypeConfig = WORKER_TYPES[request.workerType];
-      if (workerTypeConfig.apiKeyEnvVar === 'ANTHROPIC_API_KEY') {
-        const validation = await this.isolation.apiKeyValidator.validate('anthropic');
-        if (!validation.valid) {
-          /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
-          if (this.runningCount > 0) this.runningCount--;
-          /* v8 ignore stop @preserve */
-          this.logForwarder.unregisterTask(taskId);
-          await this.sendSetupFailureWebhook(
-            request,
-            `Anthropic API key is invalid: ${validation.errorMessage ?? 'authentication failed'}`,
-            new Error('INVALID_API_KEY')
-          );
-          return;
-        }
       }
 
       // Create task object
@@ -669,6 +700,10 @@ export class TaskDispatcher {
 
   private resolveTaskRuntime(task: Task): WorkerRuntime {
     return task.runtime ?? WORKER_TYPES[task.workerType].runtime;
+  }
+
+  private getRuntimeDisplayName(task: Task): string {
+    return this.resolveTaskRuntime(task) === 'codex' ? 'Codex' : 'Claude';
   }
 
   private async saveTask(task: Task): Promise<void> {
@@ -1071,13 +1106,14 @@ export class TaskDispatcher {
       return;
     }
 
-    // Missing fields: re-launch Claude with adjusted prompt if attempts remain
+    // Missing fields: re-launch the selected runtime with an adjusted prompt if attempts remain
     if (verification.missingFields.length > 0 && attempt < maxAttempts) {
       this.logForwarder.appendChunk(task.taskId, '\n\n');
       const nextAttempt = attempt + 1;
+      const runtimeName = this.getRuntimeDisplayName(task);
       this.appendOrchestratorTaskLog(
         task.taskId,
-        `Missing fields; re-launching Claude (${String(nextAttempt)}/${String(maxAttempts)}): ${verification.missingFields.join(', ')}`
+        `Missing fields; re-launching ${runtimeName} (${String(nextAttempt)}/${String(maxAttempts)}): ${verification.missingFields.join(', ')}`
       );
       await this.flushTaskLogs(task.taskId);
       await this.teardownAttempt(task.taskId, true);
@@ -1447,7 +1483,7 @@ export class TaskDispatcher {
     );
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `Resumed-after-success completion: using loosened verification (exit code + Claude error only)`
+      'Resumed-after-success completion: using loosened verification (exit code + runtime hard error only)'
     );
 
     try {
@@ -1469,6 +1505,7 @@ export class TaskDispatcher {
     }
     const claudeError = this.claudeErrors.get(task.taskId);
     const exitCode = this.taskExitCodes.get(task.taskId);
+    const runtimeName = this.getRuntimeDisplayName(task);
 
     const hasHardError =
       (typeof exitCode === 'number' && exitCode !== 0) || claudeError !== undefined;
@@ -1497,7 +1534,7 @@ export class TaskDispatcher {
           ...(typeof exitCode === 'number' && exitCode !== 0
             ? [`Non-zero exit code: ${String(exitCode)}`]
             : []),
-          ...(claudeError !== undefined ? [`Claude error: ${claudeError}`] : []),
+          ...(claudeError !== undefined ? [`${runtimeName} error: ${claudeError}`] : []),
         ].join('; '),
         remediation: { action: 'retry' },
       };

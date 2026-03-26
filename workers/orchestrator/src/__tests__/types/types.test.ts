@@ -71,11 +71,29 @@ describe('Orchestrator Types', () => {
         running: 2,
         available: 3,
         githubTokenExpiresAt: null,
-        anthropicOAuth: { status: 'not_configured', message: 'Not configured' },
+        dockerHealthy: true,
+        diskHealthy: true,
+        workerAuths: {
+          claude: {
+            status: 'not_configured',
+            authMode: null,
+            refreshSupported: false,
+            message: 'Not configured',
+          },
+          codex: {
+            status: 'active',
+            authMode: 'chatgpt',
+            refreshSupported: true,
+            expiresAt: '2026-03-26T12:00:00.000Z',
+            expiresInMinutes: 10,
+            lastRefreshAt: '2026-03-26T11:50:00.000Z',
+          },
+        },
       };
 
       expect(health.status).toBe('ready');
       expect(health.available).toBe(3);
+      expect(health.workerAuths.codex.authMode).toBe('chatgpt');
     });
   });
 

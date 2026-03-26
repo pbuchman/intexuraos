@@ -48,8 +48,8 @@ Complete documentation for all IntexuraOS services, workers, and packages.
 | ----------------- | ----------------------------------------------------------------------------------- |
 | **chat-agent**    | New: In-app AI assistant with RAG, guest access, command creation                   |
 | **code-agent**    | New: Autonomous code execution with worker dispatch and dedup                       |
-| **orchestrator**  | New: Local worker orchestration for Claude Code sessions via Docker                 |
-| **claude-worker** | New: Docker container image for isolated Claude Code execution                      |
+| **orchestrator**  | New: Local worker orchestration for code-worker sessions via Docker                 |
+| **code-worker** | New: Docker container image for isolated Claude/Codex execution                     |
 | **log-cleanup**   | New: Cloud Function for scheduled log retention management                          |
 | **vm-lifecycle**  | New: Cloud Functions for GCE VM start/stop lifecycle control                        |
 | **22 packages**   | New: All shared packages documented (common, infra, LLM stack)                      |
@@ -235,8 +235,8 @@ Cloud Functions and local services that run outside Cloud Run.
 
 | Worker                                     | Type            | Purpose                                                          | Trigger                     |
 | ------------------------------------------ | --------------- | ---------------------------------------------------------------- | --------------------------- |
-| [orchestrator](orchestrator/features.md)   | Local service   | Spawns Claude Code sessions in Docker containers via worktrees   | HTTP (HMAC-signed dispatch) |
-| [claude-worker](claude-worker/features.md) | Docker image    | Isolated Claude Code execution environment with git and tools    | Started by orchestrator     |
+| [orchestrator](orchestrator/features.md) | Local service | Spawns code-worker sessions in Docker containers via worktrees | HTTP (HMAC-signed dispatch) |
+| [code-worker](code-worker/features.md)   | Docker image  | Isolated Claude/Codex execution environment with git and tools | Started by orchestrator     |
 | [log-cleanup](log-cleanup/features.md)     | Cloud Function  | Deletes old task logs via code-agent cleanup API                 | Pub/Sub (scheduled)         |
 | [vm-lifecycle](vm-lifecycle/features.md)   | Cloud Functions | Starts and stops GCE VM instances with health polling            | HTTP (internal auth)        |
 | [transcription](transcription/features.md) | Cloud Function  | Converts WhatsApp voice notes to text via Speechmatics           | Pub/Sub (audio-stored)      |
@@ -244,9 +244,9 @@ Cloud Functions and local services that run outside Cloud Run.
 
 ### Worker Details
 
-**orchestrator** — Runs on local machines (Mac or VM) behind Cloudflare Tunnel. Receives task dispatch requests from code-agent, creates isolated git worktrees, spawns Claude Code sessions in Docker containers, and reports results via webhooks. Supports 7 worker types across Anthropic (opus, auto, sonnet), MiniMax (minimax/M2.7), and Alibaba Cloud Model Studio (glm/glm-5, qwen/qwen3.5-plus, kimi/kimi-k2.5). Features plan-aware code reviews with requirements tracking, Gemini-based completion verification with agent-specific Zod schemas, execution deep validation with transcript analysis, Linear proxy via code-agent, auto-enforcement of review findings, selective container preservation by agent type, 3-hour task timeout, versioned system prompts via PromptBuilder, planning PR branch merging, forensics mode, and mid-task messaging.
+**orchestrator** — Runs on local machines (Mac or VM) behind Cloudflare Tunnel. Receives task dispatch requests from code-agent, creates isolated git worktrees, spawns code-worker sessions in Docker containers, and reports results via webhooks. Supports worker types across Anthropic (opus, auto, sonnet), MiniMax (minimax/M2.7), Alibaba Cloud Model Studio (glm/glm-5, qwen/qwen3.5-plus, kimi/kimi-k2.5), and Codex (`codex`). Features plan-aware code reviews with requirements tracking, Gemini-based completion verification with agent-specific Zod schemas, execution deep validation with transcript analysis, Linear proxy via code-agent, auto-enforcement of review findings, selective container preservation by agent type, 3-hour task timeout, versioned system prompts via PromptBuilder, planning PR branch merging, forensics mode, and mid-task messaging.
 
-**claude-worker** -- Docker container (Node.js 22 Alpine) pre-loaded with Claude CLI, git, pnpm, GitHub CLI, ripgrep, terraform, and gcloud. Runs as non-root user with network restrictions. The orchestrator manages its lifecycle.
+**code-worker** -- Docker container (Node.js 22 Alpine) pre-loaded with Claude CLI, Codex CLI, git, pnpm, GitHub CLI, ripgrep, terraform, and gcloud. Runs as non-root user with network restrictions. The orchestrator manages its lifecycle.
 
 **log-cleanup** -- Pub/Sub-triggered Cloud Function that calls the code-agent's internal cleanup API to delete task logs older than the configured retention period (default 90 days).
 
@@ -385,7 +385,7 @@ graph TD
 
     subgraph "Worker Layer"
         ORCH[orchestrator]
-        CW[claude-worker]
+        CW[code-worker]
     end
 
     subgraph "Support"

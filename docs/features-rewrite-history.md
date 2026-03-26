@@ -52,7 +52,7 @@ All 24 services scored through the full 6-critic panel. Existing drafts presente
 | bookmarks-agent              | 9     | 9.1   | 9.1   | 9     | 8.5   | 7 R   | 8.62 | 5/6  | Targeted edits  |
 | calendar-agent               | 7 R   | 9     | 9     | 9     | 7 R   | 8     | 8.17 | 4/6  | Targeted edits  |
 | chat-agent                   | 9     | 9.1   | 8.5   | 7.5 R | 8     | 6 R   | 8.02 | 4/6  | Targeted edits  |
-| claude-worker                | 8 R   | 9     | 9.5   | 9     | 9     | 8.5   | 8.83 | 5/6  | Targeted edits  |
+| code-worker                | 8 R   | 9     | 9.5   | 9     | 9     | 8.5   | 8.83 | 5/6  | Targeted edits  |
 | code-agent                   | 7 R   | 9     | 9     | 9     | 8 R   | 9     | 8.50 | 4/6  | Targeted edits  |
 | commands-agent               | 9     | 7 R   | 8     | 7 R   | 7 R   | 7 R   | 7.50 | 2/6  | Targeted edits  |
 | data-insights-agent          | 8 R   | 9     | 9     | 8     | 7 R   | 8     | 8.17 | 4/6  | Targeted edits  |
@@ -75,7 +75,7 @@ All 24 services scored through the full 6-critic panel. Existing drafts presente
 
 | Service                      | Correction                                                                                                                                                          |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| claude-worker                | "nothing shared" contradicts shared credentials mode; "no tokens through third-party" false for GLM workers routing through api.z.ai                                |
+| code-worker                | "nothing shared" contradicts shared credentials mode; "no tokens through third-party" false for GLM workers routing through api.z.ai                                |
 | orchestrator                 | 8GB/4CPU not in Docker config; mid-task messages queued until attempt finishes, not real-time                                                                       |
 | code-agent                   | Doesn't transcribe/classify (that's actions-agent/whatsapp-service); PR comments via sendTaskMessage not new tasks; cancel button on start notification not failure |
 | calendar-agent               | OAuth via user-service not direct Google sign-in; attendees not in LLM extraction schema; retry uses stored data                                                    |
@@ -134,7 +134,7 @@ Overview drift: NONE (overview.md restructured in same session)
 
 Overview drift: NONE (overview.md restructured in same session)
 
-### claude-worker
+### code-worker
 
 | Round | PA  | Dev | Strat | EU  | Build | Comp | Avg  | SHIP | Action         |
 | ----- | --- | --- | ----- | --- | ----- | ---- | ---- | ---- | -------------- |

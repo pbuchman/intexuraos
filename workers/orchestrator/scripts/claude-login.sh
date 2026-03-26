@@ -2,8 +2,8 @@
 # Login to Claude Code for orchestrator (separate from user credentials)
 set -euo pipefail
 
-SHARED_CREDS_DIR="$HOME/.claude-orchestrator/claude-creds"
-WORKER_IMAGE="${INTEXURAOS_CLAUDE_WORKER_IMAGE:-europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest}"
+SHARED_CREDS_DIR="$HOME/.code-orchestrator/claude-creds"
+WORKER_IMAGE="${INTEXURAOS_CODE_WORKER_IMAGE:-europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest}"
 
 mkdir -p "$SHARED_CREDS_DIR"
 

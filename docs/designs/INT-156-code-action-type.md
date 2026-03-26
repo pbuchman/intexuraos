@@ -553,7 +553,7 @@ workers/
 **Manual deployment:**
 
 ```bash
-cd ~/claude-workers/repos/intexuraos
+cd ~/code-workers/repos/intexuraos
 git pull origin development
 pnpm install --frozen-lockfile
 pnpm --filter orchestrator build
@@ -566,10 +566,10 @@ Self-updating orchestrator checks for updates on restart:
 
 ```bash
 #!/bin/bash
-# ~/claude-workers/scripts/start-with-update.sh
+# ~/code-workers/scripts/start-with-update.sh
 
-REPO_DIR=~/claude-workers/repos/intexuraos
-LOG_FILE=~/claude-workers/logs/update.log
+REPO_DIR=~/code-workers/repos/intexuraos
+LOG_FILE=~/code-workers/logs/update.log
 
 cd "$REPO_DIR"
 
@@ -834,7 +834,7 @@ export ZAI_API_KEY="..."                 # Required for glm worker type
 
 ### Orchestrator State Persistence
 
-**File:** `~/.claude-orchestrator/state.json`
+**File:** `~/.code-orchestrator/state.json`
 
 **Structure:**
 
@@ -844,7 +844,7 @@ export ZAI_API_KEY="..."                 # Required for glm worker type
     "cc-task-123": {
       "status": "running",
       "tmuxSession": "cc-task-123",
-      "worktreePath": "/Users/user/claude-workers/worktrees/cc-task-123",
+      "worktreePath": "/Users/user/code-workers/worktrees/cc-task-123",
       "startedAt": "2026-01-24T10:00:00Z",
       "webhookUrl": "https://code-agent.../internal/webhooks/task-complete",
       "webhookSecret": "whsec_...",
@@ -899,15 +899,15 @@ export ZAI_API_KEY="..."                 # Required for glm worker type
 
 **Token storage (file-based for long-running tasks):**
 
-- Token file: `~/.claude-orchestrator/github-token`
-- Environment variable: `GH_TOKEN_FILE=~/.claude-orchestrator/github-token`
+- Token file: `~/.code-orchestrator/github-token`
+- Environment variable: `GH_TOKEN_FILE=~/.code-orchestrator/github-token`
 - Git credential helper configured to read from file
 - Claude Code reads fresh token on each git operation
 
 **Normal flow:**
 
 1. GitHub App generates installation token
-2. Token written to `~/.claude-orchestrator/github-token` (atomic write)
+2. Token written to `~/.code-orchestrator/github-token` (atomic write)
 3. Token metadata stored in `state.json` with expiry
 4. Background job refreshes 15 minutes before expiry
 5. Running tasks automatically use updated token on next git operation
@@ -977,7 +977,7 @@ curl -X POST http://localhost:8080/admin/refresh-token
 
 **Capture mechanism:**
 
-1. tmux session logs to file: `~/.claude-orchestrator/logs/{taskId}.log`
+1. tmux session logs to file: `~/.code-orchestrator/logs/{taskId}.log`
 2. Background process tails log file continuously
 
 **Chunking strategy:**
@@ -1005,7 +1005,7 @@ When total logs exceed 4MB:
 4. Insert marker chunk: `[... {N} chunks omitted due to size limits ...]`
 5. Set `logChunksDropped` field with count of dropped chunks
 
-**Local file retention:** Full log always preserved locally at `~/.claude-orchestrator/logs/{taskId}.log` regardless of Firestore limits.
+**Local file retention:** Full log always preserved locally at `~/.code-orchestrator/logs/{taskId}.log` regardless of Firestore limits.
 
 **Delivery to Firestore:**
 
@@ -2204,14 +2204,14 @@ Multi-field queries require composite indexes. Add to `firestore.indexes.json`:
 
 **Rationale:** Task records are cheap and valuable for debugging. Log chunks are larger and cleaned after 90 days to manage storage costs while retaining sufficient history.
 
-**Cleanup script:** `~/claude-workers/scripts/cleanup-worktrees.sh`
+**Cleanup script:** `~/code-workers/scripts/cleanup-worktrees.sh`
 
 ```bash
 #!/bin/bash
 # Cleanup worktrees older than 7 days (only if not active)
 
-WORKTREE_DIR=~/claude-workers/worktrees
-STATE_FILE=~/.claude-orchestrator/state.json
+WORKTREE_DIR=~/code-workers/worktrees
+STATE_FILE=~/.code-orchestrator/state.json
 RETENTION_DAYS=7
 
 # Get list of active task IDs from orchestrator state
@@ -2240,7 +2240,7 @@ done
 **Cron schedule:** Run daily at 3 AM
 
 ```cron
-0 3 * * * ~/claude-workers/scripts/cleanup-worktrees.sh >> ~/claude-workers/logs/cleanup.log 2>&1
+0 3 * * * ~/code-workers/scripts/cleanup-worktrees.sh >> ~/code-workers/logs/cleanup.log 2>&1
 ```
 
 **Installation:** Add via `crontab -e` on each worker machine during setup.
@@ -2456,7 +2456,7 @@ interface CodeTask {
 **Version tracking:**
 
 - Git tag per release: `orchestrator-v{version}`
-- Symlink: `~/claude-workers/orchestrator → ~/claude-workers/releases/v{version}`
+- Symlink: `~/code-workers/orchestrator → ~/code-workers/releases/v{version}`
 
 **Rollback procedure:**
 
@@ -2466,7 +2466,7 @@ launchctl unload ~/Library/LaunchAgents/com.intexuraos.orchestrator.plist  # Mac
 sudo systemctl stop orchestrator                                           # VM
 
 # 2. Switch to previous version
-cd ~/claude-workers
+cd ~/code-workers
 rm orchestrator
 ln -s releases/v{previous} orchestrator
 

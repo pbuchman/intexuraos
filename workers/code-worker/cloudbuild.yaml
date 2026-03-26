@@ -1,5 +1,5 @@
-# Manual trigger: Build and push claude-worker Docker image only
-# Note: No deploy step - claude-worker is a Docker image, not a Cloud Run service
+# Manual trigger: Build and push code-worker Docker image only
+# Note: No deploy step - code-worker is a Docker image, not a Cloud Run service
 steps:
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build'
@@ -7,8 +7,8 @@ steps:
     args:
       [
         'cloudbuild/scripts/build-push-monitored.sh',
-        'claude-worker',
-        'workers/claude-worker/Dockerfile',
+        'code-worker',
+        'workers/code-worker/Dockerfile',
       ]
     env:
       - 'DOCKER_BUILDKIT=1'
