@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { AudioPlayer, ImageThumbnail } from '@/components';
 import { getMessageMediaUrl } from '@/services';
-import { formatDateTime } from '@/utils/dateFormat';
+import { formatDateTime, formatDateTimeCompact } from '@/utils/dateFormat';
 import type { WhatsAppMessage } from '@/types';
 import {
   Check,
   Copy,
   ExternalLink,
+  Image as ImageIcon,
   MessageSquare,
   Mic,
   Trash2,
@@ -17,7 +18,7 @@ import { TextWithLinks } from './shared.js';
 const TEXT_PREVIEW_LIMIT = 800;
 
 // Extracted helpers to avoid recomputation on every render
-function getMediaTypeIconForMessage(
+function getDesktopMediaIndicator(
   message: WhatsAppMessage,
   accessToken: string,
   onImageClick: (messageId: string) => void,
@@ -32,6 +33,16 @@ function getMediaTypeIconForMessage(
         }}
       />
     );
+  }
+  if (message.mediaType === 'audio') {
+    return <Mic className="h-4 w-4 text-slate-400" />;
+  }
+  return <MessageSquare className="h-4 w-4 text-slate-400" />;
+}
+
+function getMobileMediaIndicator(message: WhatsAppMessage): React.JSX.Element {
+  if (message.mediaType === 'image' && message.hasMedia) {
+    return <ImageIcon className="h-4 w-4 text-slate-400" />;
   }
   if (message.mediaType === 'audio') {
     return <Mic className="h-4 w-4 text-slate-400" />;
@@ -130,6 +141,102 @@ export function MessageItem({
       ? contentPreview.slice(0, TEXT_PREVIEW_LIMIT) + '...'
       : contentPreview;
 
+  const renderPreviewStatus = (mobile: boolean): React.JSX.Element | null => {
+    const statusBaseClass = mobile ? 'mt-1 text-xs' : 'truncate text-xs';
+
+    if (
+      message.mediaType === 'audio' &&
+      message.transcriptionStatus !== 'completed' &&
+      message.transcriptionStatus !== 'failed'
+    ) {
+      return (
+        <p className={`${statusBaseClass} text-slate-500 dark:text-slate-400`}>
+          Transcribing...
+        </p>
+      );
+    }
+
+    if (message.mediaType === 'audio' && message.transcriptionStatus === 'failed') {
+      return (
+        <p className={`${statusBaseClass} text-red-500 dark:text-red-400`}>
+          Transcription failed
+        </p>
+      );
+    }
+
+    return null;
+  };
+
+  const renderActionButtons = (desktop: boolean): React.JSX.Element => {
+    const desktopRevealClass = desktop ? 'sm:opacity-0 sm:group-hover:opacity-100' : '';
+    const noteActionClass = `rounded p-1 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300 ${desktopRevealClass}`;
+    const deleteActionClass = `rounded p-1 text-slate-400 transition-all hover:bg-red-500/10 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50 ${desktopRevealClass}`;
+    const copyActionClass = copied
+      ? 'rounded p-1 transition-all text-green-600 dark:text-green-400'
+      : `rounded p-1 transition-all text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300 ${desktopRevealClass}`;
+
+    return (
+      <div className="flex items-center justify-end gap-1">
+        {message.mediaType === 'audio' ? (
+          message.transcriptionStatus === 'completed' &&
+          message.transcription !== undefined &&
+          message.transcription !== '' ? (
+            <button
+              onClick={(e): void => {
+                e.stopPropagation();
+                onTranscriptionClick(message);
+              }}
+              className={noteActionClass}
+              aria-label="View transcription"
+              title="View transcription"
+            >
+              <Mic className="h-3.5 w-3.5" />
+            </button>
+          ) : null
+        ) : (
+          <button
+            onClick={(e): void => {
+              e.stopPropagation();
+              onNoteClick(message);
+            }}
+            className={noteActionClass}
+            aria-label="View note"
+            title="View note"
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+          </button>
+        )}
+
+        {hasTextContent && (
+          <button
+            onClick={(e): void => {
+              e.stopPropagation();
+              void handleCopy();
+            }}
+            className={copyActionClass}
+            aria-label={copied ? 'Copied!' : 'Copy message'}
+            title={copied ? 'Copied!' : 'Copy message'}
+          >
+            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          </button>
+        )}
+
+        <button
+          onClick={(e): void => {
+            e.stopPropagation();
+            setShowDeleteConfirm(true);
+          }}
+          disabled={isDeleting || showDeleteConfirm}
+          className={deleteActionClass}
+          aria-label="Delete"
+          title="Delete"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div
       className={`group relative cursor-pointer rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800 ${
@@ -143,101 +250,44 @@ export function MessageItem({
         onNoteClick(message);
       }}
     >
-      <div className="grid grid-cols-[auto_1fr_140px_100px] items-center gap-2">
-        {/* Media type indicator */}
+      <div data-testid="message-item-mobile" className="sm:hidden">
+        <div className="min-w-0">
+          <p className="line-clamp-2 break-words font-medium text-slate-900 dark:text-slate-100">
+            {truncatedPreview}
+          </p>
+          {renderPreviewStatus(true)}
+        </div>
+        <div className="mt-3 flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
+            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700">
+              {getMobileMediaIndicator(message)}
+            </div>
+            <span>{formatDateTimeCompact(message.receivedAt)}</span>
+          </div>
+          <div className="shrink-0">{renderActionButtons(false)}</div>
+        </div>
+      </div>
+
+      <div
+        data-testid="message-item-desktop"
+        className="hidden sm:grid sm:grid-cols-[auto_1fr_140px_100px] sm:items-center sm:gap-2"
+      >
         <div className="flex h-8 w-8 items-center justify-center">
-          {getMediaTypeIconForMessage(message, accessToken, onImageClick)}
+          {getDesktopMediaIndicator(message, accessToken, onImageClick)}
         </div>
 
-        {/* Content preview - single line truncate */}
         <div className="min-w-0">
           <p className="truncate font-medium text-slate-900 dark:text-slate-100">
             {truncatedPreview}
           </p>
-          {/* Show transcription status for audio */}
-          {message.mediaType === 'audio' &&
-            message.transcriptionStatus !== 'completed' &&
-            message.transcriptionStatus !== 'failed' && (
-              <p className="truncate text-xs text-slate-500 dark:text-slate-400">
-                Transcribing...
-              </p>
-            )}
-          {message.mediaType === 'audio' &&
-            message.transcriptionStatus === 'failed' && (
-              <p className="truncate text-xs text-red-500 dark:text-red-400">
-                Transcription failed
-              </p>
-            )}
+          {renderPreviewStatus(false)}
         </div>
 
-        {/* Time */}
         <span className="text-xs text-slate-400 dark:text-slate-500">
           {formatDateTime(message.receivedAt)}
         </span>
 
-        {/* Actions */}
-        <div className="flex items-center justify-end gap-1">
-          {/* Note/Transcription view button */}
-          {message.mediaType === 'audio' ? (
-            message.transcriptionStatus === 'completed' &&
-            message.transcription !== undefined &&
-            message.transcription !== '' ? (
-              <button
-                onClick={(e): void => {
-                  e.stopPropagation();
-                  onTranscriptionClick(message);
-                }}
-                className="rounded p-1 text-slate-400 opacity-0 transition-all hover:bg-slate-100 hover:text-slate-600 group-hover:opacity-100 dark:hover:bg-slate-700 dark:hover:text-slate-300"
-                title="View transcription"
-              >
-                <Mic className="h-3.5 w-3.5" />
-              </button>
-            ) : null
-          ) : (
-            <button
-              onClick={(e): void => {
-                e.stopPropagation();
-                onNoteClick(message);
-              }}
-              className="rounded p-1 text-slate-400 opacity-0 transition-all hover:bg-slate-100 hover:text-slate-600 group-hover:opacity-100 dark:hover:bg-slate-700 dark:hover:text-slate-300"
-              title="View note"
-            >
-              <MessageSquare className="h-3.5 w-3.5" />
-            </button>
-          )}
-
-          {/* Copy button */}
-          {hasTextContent && (
-            <button
-              onClick={(e): void => {
-                e.stopPropagation();
-                void handleCopy();
-              }}
-              className={`rounded p-1 transition-all ${
-                copied
-                  ? 'text-green-600 dark:text-green-400'
-                  : 'text-slate-400 opacity-0 hover:bg-slate-100 hover:text-slate-600 group-hover:opacity-100 dark:hover:bg-slate-700 dark:hover:text-slate-300'
-              }`}
-              aria-label={copied ? 'Copied!' : 'Copy message'}
-              title={copied ? 'Copied!' : 'Copy message'}
-            >
-              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-            </button>
-          )}
-
-          {/* Delete button */}
-          <button
-            onClick={(e): void => {
-              e.stopPropagation();
-              setShowDeleteConfirm(true);
-            }}
-            disabled={isDeleting || showDeleteConfirm}
-            className="rounded p-1 text-slate-400 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
-            title="Delete"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        {renderActionButtons(true)}
       </div>
 
       {/* Overlay delete confirmation */}
