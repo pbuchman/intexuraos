@@ -573,21 +573,21 @@ describe('GitHubWebhookRules', () => {
       expect(result).toEqual({ action: 'skip', reason: 'CODE_WORKER_NON_PR_EVENT' });
     });
 
-    it('should dispatch pull_request_review.submitted by code worker unconditionally', () => {
+    it('should skip pull_request_review.submitted by code worker (handled by task-complete, INT-1103)', () => {
       const body = '## Code Quality Review\n\n### Suggestions\n\n1. **Hardcoded value** — Extract timeout to a constant.';
       const event = { ...mockEvent, eventType: 'pull_request_review' as const, action: 'submitted' as const, senderLogin: 'intexuraos-code-worker[bot]', body };
       const rule = new CodeWorkerOutputRule(codeWorkerBots);
       const result = rule.evaluate(event);
 
-      expect(result).toEqual({ action: 'dispatch', reason: 'CODE_WORKER_REVIEW' });
+      expect(result).toEqual({ action: 'skip', reason: 'CODE_WORKER_REVIEW_HANDLED_BY_TASK_COMPLETE' });
     });
 
-    it('should dispatch pull_request_review.submitted by code worker with null body', () => {
+    it('should skip pull_request_review.submitted by code worker with null body (handled by task-complete, INT-1103)', () => {
       const event = { ...mockEvent, eventType: 'pull_request_review' as const, action: 'submitted' as const, senderLogin: 'intexuraos-code-worker[bot]', body: null };
       const rule = new CodeWorkerOutputRule(codeWorkerBots);
       const result = rule.evaluate(event);
 
-      expect(result).toEqual({ action: 'dispatch', reason: 'CODE_WORKER_REVIEW' });
+      expect(result).toEqual({ action: 'skip', reason: 'CODE_WORKER_REVIEW_HANDLED_BY_TASK_COMPLETE' });
     });
 
     it('should dispatch pull_request.opened by non-bot sender', () => {
