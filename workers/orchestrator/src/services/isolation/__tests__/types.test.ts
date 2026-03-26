@@ -40,4 +40,10 @@ describe('WORKER_TYPES configuration', () => {
     expect(WORKER_TYPES.opus.apiBaseUrl).toBe('https://api.anthropic.com');
     expect(WORKER_TYPES.opus.apiKeyEnvVar).toBe('ANTHROPIC_API_KEY');
   });
+
+  it('routes all current worker types through the Claude runtime', () => {
+    for (const config of Object.values(WORKER_TYPES)) {
+      expect(config.runtime).toBe('claude');
+    }
+  });
 });
