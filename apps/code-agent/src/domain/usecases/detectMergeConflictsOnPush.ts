@@ -27,15 +27,6 @@ const SYSTEM_PROMPT_HASH = MERGE_CONFLICT_SYSTEM_PROMPT_HASH;
 const DEFAULT_WEB_URL = 'https://intexuraos.cloud';
 const DEFAULT_RETRY_DELAY_MS = 500;
 const DEFAULT_MERGEABILITY_RETRIES = 2;
-const TERMINAL_OR_PLANNED_TASK_STATUSES = new Set<CodeTask['status']>([
-  'planned',
-  'implemented',
-  'reviewed',
-  'failed',
-  'interrupted',
-  'cancelled',
-  'archived',
-]);
 
 type MergeConflictStatus = GitHubPRSummary['mergeConflictStatus'];
 type ClassifiedMergeConflictStatus = NonNullable<MergeConflictStatus>;
@@ -352,7 +343,7 @@ async function upsertSummary(
 }
 
 async function resolveExistingConflictTask(
-  codeTaskRepo: Pick<CodeTaskRepository, 'findById' | 'findByPR'>,
+  codeTaskRepo: Pick<CodeTaskRepository, 'findById' | 'findLatestNonReviewTaskByPR'>,
   existingSummary: GitHubPRSummary,
   repository: string,
   prNumber: number,
@@ -397,9 +388,14 @@ async function resolveExistingConflictTask(
     }
   }
 
-  const byPRResult = await codeTaskRepo.findByPR(repository, prNumber);
+  // Review tasks should not define merge-conflict lineage or Linear grouping for
+  // newly created conflict tasks. Use the latest non-review PR task instead.
+  const byPRResult = await codeTaskRepo.findLatestNonReviewTaskByPR(repository, prNumber);
   if (!byPRResult.ok) {
-    logger.warn({ error: byPRResult.error, repository, prNumber }, 'Failed to load task by PR for merge-conflict detection');
+    logger.warn(
+      { error: byPRResult.error, repository, prNumber },
+      'Failed to load latest non-review task by PR for merge-conflict detection'
+    );
     return err({ code: byPRResult.error.code, message: byPRResult.error.message });
   }
 
@@ -559,10 +555,6 @@ async function createMergeConflictTask(
   });
 
   const linkedLinearIssueId = linearResult.linearIssueId;
-  const shouldOmitLinearIssueId =
-    params.existingTask?.linearIssueId !== undefined &&
-    !TERMINAL_OR_PLANNED_TASK_STATUSES.has(params.existingTask.status) &&
-    params.existingTask.agentType !== 'pull_request';
 
   const prompt = buildConflictInstruction({
     repository: params.repository,
@@ -583,7 +575,7 @@ async function createMergeConflictTask(
 
     userId: params.ownerUserId,
     webhookSecret,
-    ...(linkedLinearIssueId !== undefined && !shouldOmitLinearIssueId && { linearIssueId: linkedLinearIssueId }),
+    ...(linkedLinearIssueId !== undefined && { linearIssueId: linkedLinearIssueId }),
   }));
 
   if (!createResult.ok) {
