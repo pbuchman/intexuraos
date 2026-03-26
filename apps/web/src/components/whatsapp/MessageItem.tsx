@@ -141,8 +141,8 @@ export function MessageItem({
       ? contentPreview.slice(0, TEXT_PREVIEW_LIMIT) + '...'
       : contentPreview;
 
-  const renderPreviewStatus = (mobile: boolean): React.JSX.Element | null => {
-    const statusBaseClass = mobile ? 'mt-1 text-xs' : 'truncate text-xs';
+  const renderPreviewStatus = (variant: 'mobile' | 'desktop'): React.JSX.Element | null => {
+    const statusBaseClass = variant === 'mobile' ? 'mt-1 text-xs' : 'truncate text-xs';
 
     if (
       message.mediaType === 'audio' &&
@@ -167,8 +167,8 @@ export function MessageItem({
     return null;
   };
 
-  const renderActionButtons = (desktop: boolean): React.JSX.Element => {
-    const desktopRevealClass = desktop ? 'sm:opacity-0 sm:group-hover:opacity-100' : '';
+  const renderActionButtons = (variant: 'mobile' | 'desktop'): React.JSX.Element => {
+    const desktopRevealClass = variant === 'desktop' ? 'sm:opacity-0 sm:group-hover:opacity-100' : '';
     const noteActionClass = `rounded p-1 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300 ${desktopRevealClass}`;
     const deleteActionClass = `rounded p-1 text-slate-400 transition-all hover:bg-red-500/10 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50 ${desktopRevealClass}`;
     const copyActionClass = copied
@@ -255,7 +255,7 @@ export function MessageItem({
           <p className="line-clamp-2 break-words font-medium text-slate-900 dark:text-slate-100">
             {truncatedPreview}
           </p>
-          {renderPreviewStatus(true)}
+          {renderPreviewStatus('mobile')}
         </div>
         <div className="mt-3 flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
@@ -264,7 +264,7 @@ export function MessageItem({
             </div>
             <span>{formatDateTimeCompact(message.receivedAt)}</span>
           </div>
-          <div className="shrink-0">{renderActionButtons(false)}</div>
+          <div className="shrink-0">{renderActionButtons('mobile')}</div>
         </div>
       </div>
 
@@ -280,14 +280,14 @@ export function MessageItem({
           <p className="truncate font-medium text-slate-900 dark:text-slate-100">
             {truncatedPreview}
           </p>
-          {renderPreviewStatus(false)}
+          {renderPreviewStatus('desktop')}
         </div>
 
         <span className="text-xs text-slate-400 dark:text-slate-500">
           {formatDateTime(message.receivedAt)}
         </span>
 
-        {renderActionButtons(true)}
+        {renderActionButtons('desktop')}
       </div>
 
       {/* Overlay delete confirmation */}
