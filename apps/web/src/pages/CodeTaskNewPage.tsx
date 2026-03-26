@@ -12,17 +12,7 @@ import type { LinearIssueOption } from '@/hooks/useLinearIssueOptions';
 import { ApiError, parseConflictError } from '@/services/apiClient';
 import { listCodeTasks } from '@/services/codeAgentApi';
 import { useAuth } from '@/context';
-
-const WORKER_TYPE_METADATA: Record<CodeTaskWorkerType, { name: string; description: string }> = {
-  auto: { name: 'Auto', description: 'Automatically select the best available model for the task' },
-  opus: { name: 'Opus', description: 'Anthropic\'s most capable model for complex reasoning and coding tasks' },
-  sonnet: { name: 'Sonnet', description: 'Anthropic\'s daily coding model with the best balance of speed and intelligence' },
-  minimax: { name: 'MiniMax', description: 'MiniMax\'s coding and agent model with strong reasoning at lower cost' },
-  glm: { name: 'GLM', description: 'Zhipu\'s flagship Agentic Engineering model for complex systems and long-running agent tasks' },
-  qwen: { name: 'Qwen', description: 'Advanced Qwen model with thinking enabled' },
-  kimi: { name: 'Kimi', description: 'Moonshot\'s latest recommended model with image understanding' },
-  codex: { name: 'Codex', description: 'OpenAI Codex runtime for code-task execution with persisted thread resume' },
-};
+import { WORKER_TYPE_METADATA } from '@/components/workers/shared.js';
 
 const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string }[] = CODE_TASK_WORKER_TYPES.map((id) => ({
   id,
@@ -32,7 +22,7 @@ const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string 
 type LinearMode = 'create' | 'link';
 
 const PLANNING_PLACEHOLDER =
-  'Describe what you want to build. Claude will analyse the instructions, create a Linear issue with acceptance criteria, and prepare a design — no code will be written prior to your approval.';
+  'Describe what you want to build. The selected worker will analyze the instructions, create a Linear issue with acceptance criteria, and prepare a design — no code will be written prior to your approval.';
 
 const EXECUTION_DEFAULT_PROMPT =
   'Implement exactly as described in the linked Linear issue. Follow the acceptance criteria and design, run CI, and create a PR.';
@@ -126,7 +116,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
 
   const placeholderText = linearMode === 'create'
     ? PLANNING_PLACEHOLDER
-    : 'Describe what you want Claude to build or fix...';
+    : 'Describe what you want the selected worker to build or fix...';
 
   // Form is valid when: has prompt AND has a healthy worker selected (or only 1 healthy worker auto-selected)
   const isValid =
@@ -254,7 +244,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
     <Layout>
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">New Code Task</h2>
-        <p className="text-slate-600 dark:text-slate-300">Submit a coding task to be executed by Claude</p>
+        <p className="text-slate-600 dark:text-slate-300">Submit a coding task to be executed by the selected worker</p>
       </div>
 
       <Card className="mb-6">

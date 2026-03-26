@@ -357,7 +357,7 @@ verify_network_restrictions &
 # ------------------------------------------------------------------------------
 # Create required directories (tmpfs on /home/claude wipes image dirs)
 # ------------------------------------------------------------------------------
-mkdir -p /home/claude/.config/gcloud /home/claude/.claude
+mkdir -p /home/claude/.config/gcloud /home/claude/.claude /home/claude/.agents/skills
 
 # ------------------------------------------------------------------------------
 # Restore Claude config defaults (skips onboarding on fresh tmpfs)
@@ -382,6 +382,16 @@ if [ -d "/opt/claude-plugins/.claude/plugins" ]; then
         sed -i 's|/opt/claude-plugins/.claude|/home/claude/.claude|g' /home/claude/.claude/plugins/known_marketplaces.json
     fi
     echo "[entrypoint] Plugin cache restored ($(ls /home/claude/.claude/plugins/cache/ 2>/dev/null | wc -l) marketplaces)"
+fi
+
+# ------------------------------------------------------------------------------
+# Restore pre-installed Codex skill discovery directory into ~/.agents/
+# Codex discovers skills from ~/.agents/skills. The staged symlink points at
+# /opt/codex-superpowers/skills, which stays in the image filesystem.
+# ------------------------------------------------------------------------------
+if [ -d "/opt/codex-home/.agents/skills" ]; then
+    cp -a /opt/codex-home/.agents/. /home/claude/.agents/
+    echo "[entrypoint] Codex skill discovery restored"
 fi
 
 # ------------------------------------------------------------------------------
