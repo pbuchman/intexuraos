@@ -31,6 +31,8 @@ export function useOpenRouterModels(isConfigured: boolean): UseOpenRouterModelsR
       setModels(response.models);
       fetchedRef.current = true;
     } catch (err) {
+      // fetchedRef stays false on error — allows auto-retry on hook recreation
+      // and explicit retry via refresh(). This is intentional.
       setError(getErrorMessage(err));
       setModels([]);
     } finally {

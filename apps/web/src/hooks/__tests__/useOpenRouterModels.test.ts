@@ -137,8 +137,10 @@ describe('useOpenRouterModels', () => {
       cachedAt: '2026-03-25T00:00:00Z',
     });
 
-    let isConfigured = true;
-    const { result, rerender } = renderHook(() => useOpenRouterModels(isConfigured));
+    const { result, rerender } = renderHook(
+      ({ configured }: { configured: boolean }) => useOpenRouterModels(configured),
+      { initialProps: { configured: true } }
+    );
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -146,13 +148,11 @@ describe('useOpenRouterModels', () => {
     expect(mockRequest).toHaveBeenCalledTimes(1);
 
     // Unconfigure
-    isConfigured = false;
-    rerender();
+    rerender({ configured: false });
     expect(result.current.models).toStrictEqual([]);
 
     // Reconfigure — should trigger a new fetch
-    isConfigured = true;
-    rerender();
+    rerender({ configured: true });
 
     await waitFor(() => {
       expect(mockRequest).toHaveBeenCalledTimes(2);
