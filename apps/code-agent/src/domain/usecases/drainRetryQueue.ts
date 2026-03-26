@@ -23,6 +23,11 @@ import { generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 import { buildLockCleanups, type LockCleanupInfo } from '../utils/prTaskLock.js';
 import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../utils/taskRouting.js';
 import { archiveRetriedTaskAfterDispatch } from '../utils/archiveRetriedTaskAfterDispatch.js';
+import {
+  prepareExecutionMemoryContext,
+  toDispatchExecutionMemoryContext,
+  type PrepareExecutionMemoryResources,
+} from './prepareExecutionMemoryContext.js';
 
 // In-memory guard for single-instance environments
 let isDrainingRetries = false;
@@ -53,6 +58,7 @@ export interface DrainRetryQueueDeps {
   workerSettingsRepo: WorkerSettingsRepository;
   logLineRepo: LogLineRepository;
   statusMirrorService: StatusMirrorService;
+  executionMemory?: PrepareExecutionMemoryResources;
 }
 
 export async function drainRetryQueue(
@@ -245,6 +251,30 @@ async function handleNewTaskRetry(
   const agentType = resolveTaskAgentType(task, linearIssueLabels);
   const dispatchLabels = ensureDispatchLabelsForAgentType(linearIssueLabels, agentType);
   const webhookUrl = `${config.serviceUrl}/internal/webhooks/task-complete`;
+  let taskExecutionMemoryContext = task.executionMemoryContext;
+
+  if (
+    config.executionMemoryEnabled
+    && agentType === 'execution'
+    && taskExecutionMemoryContext === undefined
+  ) {
+    taskExecutionMemoryContext = await prepareExecutionMemoryContext({
+      task,
+      linearIssueLabels: dispatchLabels,
+      logger,
+      linearAgentClient,
+      queryClient: deps.executionMemory?.queryClient,
+      embeddingClient: deps.executionMemory?.embeddingClient,
+      executionMemoryRepo: deps.executionMemory?.executionMemoryRepo,
+      executionMemoryApplicationRepo: deps.executionMemory?.executionMemoryApplicationRepo,
+    });
+
+    await codeTaskRepo.update(entry.taskId, {
+      executionMemoryContext: taskExecutionMemoryContext,
+    });
+  }
+
+  const dispatchExecutionMemoryContext = toDispatchExecutionMemoryContext(taskExecutionMemoryContext);
 
   // Attempt dispatch
   const dispatchResult = await taskDispatcher.dispatch({
@@ -267,6 +297,9 @@ async function handleNewTaskRetry(
     }),
     ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
     ...(task.reviewTypes !== undefined && { reviewTypes: task.reviewTypes }),
+    ...(dispatchExecutionMemoryContext !== undefined && {
+      executionMemoryContext: dispatchExecutionMemoryContext,
+    }),
   });
 
   if (!dispatchResult.ok) {

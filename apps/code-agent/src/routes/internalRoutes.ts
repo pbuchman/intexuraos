@@ -3,6 +3,7 @@ import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-htt
 import { getServices } from '../services.js';
 import { authenticateInternalScheduler } from './helpers/internalAuth.js';
 import { getLinearIssueContext } from '../domain/usecases/getLinearIssueContext.js';
+import { processExecutionMemoryBacklog } from '../domain/usecases/processExecutionMemoryBacklog.js';
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // POST /internal/merge-conflicts/reconcile - triggered by Cloud Scheduler (INT-1023)
@@ -191,6 +192,139 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // @allow-raw-send: internal endpoint returns structured context directly
       return await reply.send(result.data);
+    }
+  );
+
+  fastify.post<{ Body: { limit?: number } }>(
+    '/internal/execution-memory/process',
+    {
+      schema: {
+        operationId: 'processExecutionMemoryBacklog',
+        summary: 'Process pending execution-memory post-run work',
+        description:
+          'Called by Cloud Scheduler. Claims pending execution-memory post-run tasks and evaluates/distills reusable lessons.',
+        tags: ['internal'],
+        body: {
+          anyOf: [
+            {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                limit: { type: 'number', minimum: 1, maximum: 50 },
+              },
+            },
+            { type: 'null' },
+          ],
+        },
+        response: {
+          200: {
+            description: 'Backlog processing completed',
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  claimed: { type: 'number' },
+                  completed: { type: 'number' },
+                  skipped: { type: 'number' },
+                  errored: { type: 'number' },
+                  taskIds: { type: 'array', items: { type: 'string' } },
+                },
+                required: ['claimed', 'completed', 'skipped', 'errored', 'taskIds'],
+              },
+              diagnostics: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  requestId: { type: 'string' },
+                  durationMs: { type: 'number' },
+                  downstreamStatus: { type: 'number' },
+                  downstreamRequestId: { type: 'string' },
+                  endpointCalled: { type: 'string' },
+                },
+                required: ['requestId'],
+              },
+            },
+            required: ['success', 'data'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/execution-memory/process',
+      });
+
+      const authResult = authenticateInternalScheduler(request);
+      if (!authResult.authenticated) {
+        request.log.warn('Internal auth failed for execution-memory process');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      const services = getServices();
+      const result = await processExecutionMemoryBacklog({
+        logger: services.logger,
+        codeTaskRepo: services.codeTaskRepo,
+        logLineRepo: services.logLineRepo,
+        turnMetricsRepo: services.turnMetricsRepo,
+        linearAgentClient: services.linearAgentClient,
+        executionMemoryRepo: services.executionMemoryRepo as NonNullable<typeof services.executionMemoryRepo>,
+        executionMemoryApplicationRepo:
+          services.executionMemoryApplicationRepo as NonNullable<typeof services.executionMemoryApplicationRepo>,
+        /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes is not tracked after service override tests @preserve */
+        ...(services.executionMemoryEvaluatorClient !== undefined && {
+          evaluatorClient: services.executionMemoryEvaluatorClient,
+        }),
+        ...(services.executionMemoryDistillerClient !== undefined && {
+          distillerClient: services.executionMemoryDistillerClient,
+        }),
+        ...(services.executionMemoryEmbeddingClient !== undefined && {
+          embeddingClient: services.executionMemoryEmbeddingClient,
+        }),
+        /* v8 ignore stop @preserve */
+        limit: request.body.limit ?? 10,
+      });
+
+      if (!result.ok) {
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      return await reply.ok(result.value);
     }
   );
 

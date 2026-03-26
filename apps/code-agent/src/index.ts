@@ -18,6 +18,8 @@ const REQUIRED_ENV = [
   'INTEXURAOS_ORCHESTRATOR_SECRET', // For HMAC signature validation from orchestrator
   'INTEXURAOS_GITHUB_WEBHOOK_SECRET', // For GitHub webhook signature verification
   'INTEXURAOS_SERVICE_URL', // Webhook callback URL — orchestrator calls this to report task status
+  'INTEXURAOS_EXECUTION_MEMORY_ENABLED', // Feature flag for execution memory retrieval/distillation
+  'INTEXURAOS_OPENAI_APP_API_KEY', // OpenAI embeddings for execution memory retrieval/distillation
 ];
 
 /**
@@ -74,6 +76,7 @@ async function main(): Promise<void> {
     serviceUrl: config.serviceUrl,
     userServiceUrl: config.userServiceUrl,
     geminiAppApiKey: config.geminiAppApiKey,
+    openaiAppApiKey: config.openaiAppApiKey,
   });
 
   const { firestore, logger } = getServices();

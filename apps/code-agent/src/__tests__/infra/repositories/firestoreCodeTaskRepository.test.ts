@@ -2,7 +2,7 @@
  * Tests for CodeTask Firestore repository with deduplication.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
+import { Timestamp, createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import type { Logger } from '@intexuraos/common-core';
 import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
@@ -659,6 +659,42 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.agentType).toBe('execution');
     });
 
+    it('stores executionMemoryContext when provided in create input', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput({
+        agentType: 'execution',
+        executionMemoryContext: {
+          status: 'matched',
+          applicationId: 'app_123',
+          retrievalVersion: 'execution-memory-retrieval@1.0.0',
+          querySummary: 'Callback logging, route verification, and env propagation.',
+          matchedMemories: [
+            {
+              memoryId: 'mem_142',
+              title: 'Log incoming requests on callback routes',
+              memoryType: 'pitfall_pattern',
+              score: 0.94,
+              appliesWhen: 'A callback route changes request handling.',
+              action: 'Update request logging with the route change.',
+              avoid: 'Do not copy stale branch names from memories.',
+              verification: 'Add app.inject coverage for the route.',
+            },
+          ],
+        },
+      });
+
+      const result = await repo.create(input);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.executionMemoryContext).toEqual(input.executionMemoryContext);
+    });
+
     it('does not set agentType when not provided in create input', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -900,6 +936,110 @@ describe('firestoreCodeTaskRepository', () => {
       if (result.value.queuedAt !== undefined) {
         expect(result.value.queuedAt.toDate()).toEqual(queuedAt);
       }
+    });
+
+    it('updates executionMemoryPostRun fields', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({ agentType: 'execution' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const completedAt = Timestamp.fromDate(new Date());
+      const result = await repo.update(created.value.id, {
+        executionMemoryPostRun: {
+          status: 'pending',
+          attempts: 0,
+          generatedMemoryIds: [],
+          completedAt,
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.executionMemoryPostRun).toEqual(
+        expect.objectContaining({
+          status: 'pending',
+          attempts: 0,
+          generatedMemoryIds: [],
+        })
+      );
+      if (result.value.executionMemoryPostRun?.completedAt !== undefined) {
+        expect(result.value.executionMemoryPostRun.completedAt.toDate()).toEqual(completedAt.toDate());
+      }
+    });
+
+    it('updates executionMemoryContext and converts Date timestamps to Firestore Timestamp', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({ agentType: 'execution' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const matchedAt = new Date();
+      const result = await repo.update(created.value.id, {
+        executionMemoryContext: {
+          status: 'matched',
+          applicationId: 'app-123',
+          retrievalVersion: 'execution-memory-retrieval@1.0.0',
+          querySummary: 'Callback route verification work',
+          matchedAt: matchedAt as unknown as Timestamp,
+          matchedMemories: [
+            {
+              memoryId: 'mem-1',
+              title: 'Verify route serialization',
+              memoryType: 'verification_pattern',
+              score: 0.9,
+              appliesWhen: 'Route handlers change',
+              action: 'Add app.inject coverage',
+              avoid: 'Do not skip response contract verification',
+              verification: 'Assert route payload shape',
+            },
+          ],
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.executionMemoryContext).toEqual(expect.objectContaining({
+        status: 'matched',
+        applicationId: 'app-123',
+      }));
+      expect(result.value.executionMemoryContext?.matchedAt).toBeInstanceOf(Timestamp);
+    });
+
+    it('drops invalid execution memory timestamps during update serialization', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({ agentType: 'execution' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const result = await repo.update(created.value.id, {
+        executionMemoryContext: {
+          status: 'matched',
+          applicationId: 'app-123',
+          retrievalVersion: 'execution-memory-retrieval@1.0.0',
+          querySummary: 'Callback route verification work',
+          matchedAt: 123 as unknown as Timestamp,
+          matchedMemories: [],
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.executionMemoryContext?.matchedAt).toBeUndefined();
     });
   });
 

@@ -11,6 +11,10 @@ import { getFirestore } from '@intexuraos/infra-firestore';
 import { TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
 import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { LlmModels, type ToolCallingClient } from '@intexuraos/llm-contract';
+import { createLlmClient, createToolCallingClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
+import { EmbeddingClient } from '@intexuraos/infra-gpt';
+import OpenAI from 'openai';
+import type { CreateEmbeddingResponse } from 'openai/resources';
 import type { CodeTaskRepository } from './domain/repositories/codeTaskRepository.js';
 import type { LogChunkRepository } from './domain/repositories/logChunkRepository.js';
 import type { LogLineRepository } from './domain/repositories/logLineRepository.js';
@@ -44,6 +48,10 @@ import type { GitHubPREventRepository } from './domain/repositories/gitHubPREven
 import { createFirestoreGitHubPREventsRepository } from './infra/firestore/gitHubPREventsRepository.js';
 import type { TurnMetricsRepository } from './domain/repositories/turnMetricsRepository.js';
 import { createFirestoreTurnMetricsRepository } from './infra/repositories/firestoreTurnMetricsRepository.js';
+import type { ExecutionMemoryRepository } from './domain/repositories/executionMemoryRepository.js';
+import type { ExecutionMemoryApplicationRepository } from './domain/repositories/executionMemoryApplicationRepository.js';
+import { createFirestoreExecutionMemoryRepository } from './infra/repositories/firestoreExecutionMemoryRepository.js';
+import { createFirestoreExecutionMemoryApplicationRepository } from './infra/repositories/firestoreExecutionMemoryApplicationRepository.js';
 import type { GitHubPRSummaryRepository } from './domain/repositories/gitHubPRSummaryRepository.js';
 import { createFirestoreGitHubPRSummariesRepository } from './infra/firestore/gitHubPRSummariesRepository.js';
 import type { GitHubPRClient } from './domain/ports/gitHubPRClient.js';
@@ -55,7 +63,6 @@ import { CodeWorkerOutputRule, ActionableEventRule, ProtectedBaseBranchRule, Sen
 import { createWebhookDispatchService, type WebhookDispatchService, type CIFailureDispatchService } from './domain/services/gitHubDispatchService.js';
 import { createWebhookMessageBuilder } from './domain/services/gitHubMessageBuilder.js';
 import { ALLOWED_BOTS, CODE_WORKER_BOTS } from './routes/webhooks/github.js';
-import { createToolCallingClient } from '@intexuraos/llm-factory';
 import type { EventDecisionRepository } from './domain/repositories/eventDecisionRepository.js';
 import { createFirestoreEventDecisionRepository } from './infra/firestore/eventDecisionRepository.js';
 import type { DispatchRetryRepository } from './domain/repositories/dispatchRetryRepository.js';
@@ -82,6 +89,8 @@ import { createFirestoreMergeQueueWatchRepository } from './infra/firestore/merg
 
 const GEMINI_TOOL_CALLING_MODEL = LlmModels.Gemini25Flash;
 const GEMINI_TOOL_CALLING_PRICING = TOOL_CALLING_PRICING[LlmModels.Gemini25Flash];
+const EXECUTION_MEMORY_MODEL = LlmModels.Gemini25Flash;
+const EXECUTION_MEMORY_USER_ID = 'system:execution-memory';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -122,6 +131,12 @@ export interface ServiceContainer {
   automationLog: AutomationLog;
   taskEnqueueService: TaskEnqueueService;
   mergeQueueWatchRepo: MergeQueueWatchRepository;
+  executionMemoryRepo?: ExecutionMemoryRepository;
+  executionMemoryApplicationRepo?: ExecutionMemoryApplicationRepository;
+  executionMemoryQueryClient?: LlmGenerateClient;
+  executionMemoryDistillerClient?: LlmGenerateClient;
+  executionMemoryEvaluatorClient?: LlmGenerateClient;
+  executionMemoryEmbeddingClient?: EmbeddingClient;
 }
 
 // Configuration required to initialize services
@@ -139,6 +154,7 @@ export interface ServiceConfig {
   userServiceUrl: string;
   // GitHub Agent (INT-743)
   geminiAppApiKey: string;
+  openaiAppApiKey: string;
 }
 
 let container: ServiceContainer | null = null;
@@ -386,6 +402,42 @@ export function initServices(config: ServiceConfig): void {
         logger,
       })
     : undefined;
+  const executionMemoryOpenAI = config.openaiAppApiKey !== ''
+    ? new OpenAI({ apiKey: config.openaiAppApiKey })
+    : undefined;
+  const executionMemoryQueryClient = config.geminiAppApiKey !== ''
+    ? createLlmClient({
+        apiKey: config.geminiAppApiKey,
+        model: EXECUTION_MEMORY_MODEL,
+        userId: EXECUTION_MEMORY_USER_ID,
+        pricing: GEMINI_TOOL_CALLING_PRICING,
+        logger,
+      })
+    : undefined;
+  const executionMemoryDistillerClient = config.geminiAppApiKey !== ''
+    ? createLlmClient({
+        apiKey: config.geminiAppApiKey,
+        model: EXECUTION_MEMORY_MODEL,
+        userId: EXECUTION_MEMORY_USER_ID,
+        pricing: GEMINI_TOOL_CALLING_PRICING,
+        logger,
+      })
+    : undefined;
+  const executionMemoryEvaluatorClient = config.geminiAppApiKey !== ''
+    ? createLlmClient({
+        apiKey: config.geminiAppApiKey,
+        model: EXECUTION_MEMORY_MODEL,
+        userId: EXECUTION_MEMORY_USER_ID,
+        pricing: GEMINI_TOOL_CALLING_PRICING,
+        logger,
+      })
+    : undefined;
+  const executionMemoryEmbeddingClient = executionMemoryOpenAI !== undefined
+    ? new EmbeddingClient({
+        embedFn: (text: string, model: string): Promise<CreateEmbeddingResponse> =>
+          executionMemoryOpenAI.embeddings.create({ model, input: text }),
+      })
+    : undefined;
 
   const gitHubPREventRepo = createFirestoreGitHubPREventsRepository({ logger });
   const gitHubPRSummaryRepo = createFirestoreGitHubPRSummariesRepository({ logger });
@@ -443,6 +495,11 @@ export function initServices(config: ServiceConfig): void {
 
   const mergeQueueWatchRepo = createFirestoreMergeQueueWatchRepository({ logger });
   const eventDecisionRepo = createFirestoreEventDecisionRepository({ logger });
+  const executionMemoryRepo = createFirestoreExecutionMemoryRepository({ firestore, logger });
+  const executionMemoryApplicationRepo = createFirestoreExecutionMemoryApplicationRepository({
+    firestore,
+    logger,
+  });
 
   const unifiedEvaluator = createUnifiedEvaluator({
     webhookRules,
@@ -547,6 +604,12 @@ export function initServices(config: ServiceConfig): void {
     automationLog,
     taskEnqueueService,
     mergeQueueWatchRepo,
+    executionMemoryRepo,
+    executionMemoryApplicationRepo,
+    ...(executionMemoryQueryClient !== undefined && { executionMemoryQueryClient }),
+    ...(executionMemoryDistillerClient !== undefined && { executionMemoryDistillerClient }),
+    ...(executionMemoryEvaluatorClient !== undefined && { executionMemoryEvaluatorClient }),
+    ...(executionMemoryEmbeddingClient !== undefined && { executionMemoryEmbeddingClient }),
   };
 }
 

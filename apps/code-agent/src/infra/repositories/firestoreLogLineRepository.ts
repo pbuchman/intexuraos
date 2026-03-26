@@ -53,6 +53,32 @@ export class FirestoreLogLineRepository implements LogLineRepository {
       return err({ code: 'FIRESTORE_ERROR', message: getErrorMessage(error) });
     }
   }
+
+  async listRecent(taskId: string, limit: number): Promise<Result<FormattedLogLine[], RepositoryError>> {
+    try {
+      const snapshot = await this.firestore
+        .collection('code_tasks')
+        .doc(taskId)
+        .collection('log_lines')
+        .orderBy('sequence', 'desc')
+        .limit(limit)
+        .get();
+
+      const lines = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          sequence: Number(data['sequence'] ?? 0),
+          text: String(data['text'] ?? ''),
+          timestamp: data['timestamp'] as FormattedLogLine['timestamp'],
+        };
+      }).reverse();
+
+      return ok(lines);
+    } catch (error) {
+      this.logger.error({ taskId, error: getErrorMessage(error) }, 'Failed to list recent log lines');
+      return err({ code: 'FIRESTORE_ERROR', message: getErrorMessage(error) });
+    }
+  }
 }
 
 export function createFirestoreLogLineRepository(
