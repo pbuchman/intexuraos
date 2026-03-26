@@ -96,7 +96,9 @@ async function fetchWithTimeout(
 function createRequestContext(
   method: string,
   model: string,
-  prompt: string
+  prompt: string,
+  userId: string,
+  researchId?: string
 ): { requestId: string; startTime: Date; auditContext: AuditContext } {
   const requestId = randomUUID();
   const startTime = new Date();
@@ -106,6 +108,8 @@ function createRequestContext(
     method,
     prompt,
     startedAt: startTime,
+    userId,
+    ...(researchId !== undefined && { researchId }),
   });
   return { requestId, startTime, auditContext };
 }
@@ -206,7 +210,8 @@ async function processStreamResponse(
 }
 
 export function createPerplexityClient(config: PerplexityConfig): PerplexityClient {
-  const { apiKey, model, userId, pricing, timeoutMs = DEFAULT_TIMEOUT_MS, logger } = config;
+  const { apiKey, model, userId, researchId, pricing, timeoutMs = DEFAULT_TIMEOUT_MS, logger } =
+    config;
   const usageLogger = createUsageLogger({ logger });
 
   function trackUsage(
@@ -240,7 +245,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, PerplexityError>> {
-      const { auditContext } = createRequestContext('research', model, prompt);
+      const { auditContext } = createRequestContext('research', model, prompt, userId, researchId);
 
       try {
         const searchContext = SEARCH_CONTEXT_MAP[model] ?? 'medium';
@@ -322,7 +327,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
     },
 
     async generate(prompt: string): Promise<Result<GenerateResult, PerplexityError>> {
-      const { auditContext } = createRequestContext('generate', model, prompt);
+      const { auditContext } = createRequestContext('generate', model, prompt, userId, researchId);
 
       try {
         const requestBody: PerplexityRequestBody = {

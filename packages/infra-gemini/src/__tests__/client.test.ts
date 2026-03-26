@@ -88,6 +88,36 @@ describe('createGeminiClient', () => {
   });
 
   describe('research', () => {
+    it('includes userId and researchId in audit context', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: 'Research findings about AI.',
+        usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 50 },
+        candidates: [{ groundingMetadata: {} }],
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        researchId: 'research-123',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      await client.research('Tell me about AI');
+
+      expect(vi.mocked(createAuditContext).mock.calls[0]?.[0]).toEqual(
+        expect.objectContaining({
+          provider: LlmProviders.Google,
+          model: TEST_MODEL,
+          method: 'research',
+          prompt: 'Tell me about AI',
+          userId: 'test-user',
+          researchId: 'research-123',
+        })
+      );
+    });
+
     it('returns research result with content and usage from pricing', async () => {
       mockGenerateContent.mockResolvedValue({
         text: 'Research findings about AI.',

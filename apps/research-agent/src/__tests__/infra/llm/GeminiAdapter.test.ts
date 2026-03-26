@@ -45,12 +45,13 @@ describe('GeminiAdapter', () => {
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreateGeminiClient.mockClear();
-      new GeminiAdapter('test-key', LlmModels.Gemini25Pro, 'test-user-id', testPricing, mockLogger);
+      new GeminiAdapter('test-key', LlmModels.Gemini25Pro, 'test-user-id', testPricing, mockLogger, 'research-123');
 
       expect(mockCreateGeminiClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: LlmModels.Gemini25Pro,
         userId: 'test-user-id',
+        researchId: 'research-123',
         pricing: testPricing,
         logger: mockLogger,
       });

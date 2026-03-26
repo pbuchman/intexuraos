@@ -51,6 +51,7 @@ vi.mock('@intexuraos/llm-pricing', () => ({
 }));
 
 const { createGptClient } = await import('../client.js');
+const { createAuditContext } = await import('@intexuraos/llm-audit');
 
 const TEST_MODEL = 'gpt-4o';
 
@@ -73,6 +74,36 @@ describe('createGptClient', () => {
   });
 
   describe('research', () => {
+    it('includes userId and researchId in audit context', async () => {
+      mockResponsesCreate.mockResolvedValue({
+        output_text: 'Research findings about AI.',
+        output: [],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        researchId: 'research-123',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      await client.research('Tell me about AI');
+
+      expect(vi.mocked(createAuditContext).mock.calls[0]?.[0]).toEqual(
+        expect.objectContaining({
+          provider: LlmProviders.OpenAI,
+          model: TEST_MODEL,
+          method: 'research',
+          prompt: 'Tell me about AI',
+          userId: 'test-user',
+          researchId: 'research-123',
+        })
+      );
+    });
+
     it('returns research result with content and usage from pricing', async () => {
       mockResponsesCreate.mockResolvedValue({
         output_text: 'Research findings about AI.',
