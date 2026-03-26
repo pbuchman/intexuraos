@@ -75,11 +75,7 @@ describe('GitHubEventLogTableRow', () => {
   });
 
   it('renders Pending badge when decisionState is pending', () => {
-    const row = createRow();
-    row.decisionState = 'pending';
-    row.decisionOutcome = null;
-    row.dispatchAction = null;
-    row.reviewTypes = [];
+    const row = { ...createRow(), decisionState: 'pending' as const, decisionOutcome: null, dispatchAction: null, reviewTypes: [] as string[] };
     render(<GitHubEventLogTableRow row={row} />);
 
     expect(screen.getAllByText('Pending')).toHaveLength(2);
@@ -87,10 +83,7 @@ describe('GitHubEventLogTableRow', () => {
   });
 
   it('renders Dispatch badge when decisionOutcome is dispatch', () => {
-    const row = createRow();
-    row.decisionOutcome = 'dispatch';
-    row.dispatchAction = 'create_task';
-    row.reviewTypes = [];
+    const row = { ...createRow(), decisionOutcome: 'dispatch' as const, dispatchAction: 'create_task' as const, reviewTypes: [] as string[] };
     render(<GitHubEventLogTableRow row={row} />);
 
     expect(screen.getAllByText('Dispatch')).toHaveLength(2);
@@ -98,31 +91,24 @@ describe('GitHubEventLogTableRow', () => {
   });
 
   it('renders Skip badge when decisionOutcome is skip', () => {
-    const row = createRow();
-    row.decisionOutcome = 'skip';
-    row.dispatchAction = null;
-    row.reviewTypes = [];
+    const row = { ...createRow(), decisionOutcome: 'skip' as const, dispatchAction: null, reviewTypes: [] as string[] };
     render(<GitHubEventLogTableRow row={row} />);
 
     expect(screen.getAllByText('Skip')).toHaveLength(2);
   });
 
   it('renders Completed badge as fallthrough', () => {
-    const row = createRow();
-    row.decisionOutcome = null;
-    row.dispatchAction = null;
-    row.reviewTypes = [];
+    const row = { ...createRow(), decisionOutcome: null, dispatchAction: null, reviewTypes: [] as string[] };
     render(<GitHubEventLogTableRow row={row} />);
 
     expect(screen.getAllByText('Completed')).toHaveLength(2);
   });
 
   it('renders hydrating spinner when isHydrating is true', () => {
-    const row = createRow();
-    row.isHydrating = true;
+    const row = { ...createRow(), isHydrating: true };
     const { container } = render(<GitHubEventLogTableRow row={row} />);
 
     const spinners = container.querySelectorAll('.animate-spin');
-    expect(spinners.length).toBeGreaterThanOrEqual(2);
+    expect(spinners.length).toBe(2);
   });
 });
