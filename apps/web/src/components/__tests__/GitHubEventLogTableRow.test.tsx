@@ -116,4 +116,13 @@ describe('GitHubEventLogTableRow', () => {
 
     expect(screen.getAllByText('Completed')).toHaveLength(2);
   });
+
+  it('renders hydrating spinner when isHydrating is true', () => {
+    const row = createRow();
+    row.isHydrating = true;
+    const { container } = render(<GitHubEventLogTableRow row={row} />);
+
+    const spinners = container.querySelectorAll('.animate-spin');
+    expect(spinners.length).toBeGreaterThanOrEqual(2);
+  });
 });
