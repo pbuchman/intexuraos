@@ -11,6 +11,7 @@ import type { TurnMetrics } from '../domain/models/turnMetrics.js';
 import { formatMetricsLogLines } from '../domain/formatters/metricsLogFormatter.js';
 import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
 import { parseLinearIdentifierFromUrl } from '../domain/utils/linearIdentifierParser.js';
+import { parseOwnerRepo } from '../domain/utils/parseOwnerRepo.js';
 
 /**
  * Best-effort: record a task_failed automation log event for PR-linked tasks.
@@ -209,7 +210,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         });
       }
 
-      const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService, metricsClient, linearIssueService, linearAgentClient, logger, firestore } = getServices();
+      const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService, metricsClient, linearIssueService, linearAgentClient, logger, firestore, gitHubPRSummaryRepo, gitHubPRClient, userServiceClient } = getServices();
       const { taskId, status, result, error } = request.body;
 
       // Extract traceId from headers for downstream calls
@@ -1024,6 +1025,32 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
         await cleanupLockIfPR();
+
+        // Best-effort: update lastReviewedCommitSha on PR summary when review completes
+        if (resolvedStatus === 'reviewed' && prNumber !== undefined) {
+          try {
+            const tokenResult = await userServiceClient.getOAuthToken(task.userId, 'github');
+            if (tokenResult.ok) {
+              const parsed = parseOwnerRepo(task.repository);
+              /* v8 ignore start -- ts-type: parseOwnerRepo cannot return null for valid task.repository (always owner/repo format) @preserve */
+              if (parsed !== null) {
+              /* v8 ignore stop @preserve */
+                const detailsResult = await gitHubPRClient.getPullRequestDetails(tokenResult.value.accessToken, parsed.owner, parsed.repo, prNumber);
+                if (detailsResult.ok) {
+                  await gitHubPRSummaryRepo.upsert({
+                    repository: task.repository,
+                    pullRequestNumber: prNumber,
+                    lastActivityAt: new Date(),
+                    lastReviewedCommitSha: detailsResult.value.headSha,
+                  });
+                  request.log.info({ taskId, prNumber, headSha: detailsResult.value.headSha }, 'Updated lastReviewedCommitSha on PR summary');
+                }
+              }
+            }
+          } catch (reviewShaError: unknown) {
+            request.log.warn({ error: reviewShaError, taskId, prNumber }, 'Failed to update lastReviewedCommitSha (best-effort)');
+          }
+        }
 
         // Best-effort In Review transition for agent types without deterministic enforcement
         // (planning, execution, and pull_request agents handle this in their own enforcement paths)

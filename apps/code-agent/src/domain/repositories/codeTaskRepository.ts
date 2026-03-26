@@ -5,7 +5,7 @@
 
 import type { Result } from '@intexuraos/common-core';
 import type FirebaseFirestore from '@google-cloud/firestore';
-import type { CodeTask, TaskStatus, WorkerType } from '../models/codeTask.js';
+import type { AgentType, CodeTask, TaskStatus, WorkerType } from '../models/codeTask.js';
 
 export interface CreateTaskInput {
   /** Pre-generated task ID. Auto-generated if not provided. */
@@ -36,7 +36,7 @@ export interface CreateTaskInput {
   // Follow-up tracking (INT-465)
   parentTaskId?: string;
   followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement' | 'ci_failure';
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  agentType?: AgentType;
   /** Initial task status. Defaults to 'queued' if not specified. */
   initialStatus?: 'queued' | 'dispatched';
 
@@ -72,6 +72,9 @@ export interface UpdateTaskInput {
   // PR correlation (INT-465): populated on task completion from result.prUrl
   prNumber?: number;
   prBranch?: string;
+
+  // Remediation task metadata
+  requiresReReview?: boolean;
 }
 
 export interface ListTasksInput {
@@ -182,12 +185,12 @@ export interface CodeTaskRepository {
   ): Promise<Result<CodeTask | null, RepositoryError>>;
 
   /**
-   * Find the newest non-review task for a PR.
-   * Used to route generic PR comments to existing non-review tasks.
-   * Returns null if no non-review tasks exist for the PR.
-   * Treats tasks with missing agentType as non-review (backward compatibility).
+   * Find the newest execution-eligible task for a PR.
+   * Excludes review and remediation tasks — only returns planning, execution,
+   * or pull_request tasks. Used to route generic PR comments to existing tasks.
+   * Treats tasks with missing agentType as execution-eligible (backward compatibility).
    */
-  findLatestNonReviewTaskByPR(
+  findLatestExecutionTaskByPR(
     repository: string,
     prNumber: number
   ): Promise<Result<CodeTask | null, RepositoryError>>;
@@ -200,6 +203,17 @@ export interface CodeTaskRepository {
     linearIssueId: string,
     limit: number
   ): Promise<Result<CodeTask[], RepositoryError>>;
+
+  /**
+   * Find the most recent remediation task for a PR.
+   * Used by the unified evaluator to decide whether to auto-trigger re-review
+   * after a synchronize event. Returns the newest remediation task (by createdAt)
+   * regardless of status; caller determines recency in-memory.
+   */
+  findRecentRemediationForPR(
+    repository: string,
+    prNumber: number
+  ): Promise<Result<CodeTask | null, RepositoryError>>;
 
   /**
    * Delete a task by ID, scoped to a user.
