@@ -10,3 +10,7 @@ export const WORKER_TYPE_METADATA: Record<CodeTaskWorkerType, { name: string; de
   kimi: { name: 'Kimi', description: 'Moonshot\'s latest recommended model with image understanding' },
   codex: { name: 'Codex', description: 'OpenAI Codex runtime for code-task execution with persisted thread resume' },
 };
+
+export const WORKER_TYPE_LABELS: Record<CodeTaskWorkerType, string> = Object.fromEntries(
+  Object.entries(WORKER_TYPE_METADATA).map(([workerType, metadata]) => [workerType, metadata.name])
+) as Record<CodeTaskWorkerType, string>;
