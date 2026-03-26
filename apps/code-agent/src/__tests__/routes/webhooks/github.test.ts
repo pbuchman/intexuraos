@@ -114,7 +114,8 @@ describe('POST /webhooks/github', () => {
       countQueued: vi.fn().mockResolvedValue(ok(0)),
       findRecentTasksByLinearIssue: vi.fn().mockResolvedValue(ok([])),
       findPlannedTaskByLinearIssue: vi.fn().mockResolvedValue(ok(null)),
-      findLatestNonReviewTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findRecentRemediationForPR: vi.fn().mockResolvedValue(ok(null)),
     };
 
     // Create mock PR summary repo
@@ -3326,7 +3327,7 @@ describe('POST /webhooks/github', () => {
 
     beforeEach(() => {
       mockMarkQa = vi.fn().mockResolvedValue(undefined);
-      Object.assign(mockServices, { linearIssueService: { markQa: mockMarkQa } });
+      Object.assign(mockServices, { linearIssueService: { markQa: mockMarkQa, markTodo: vi.fn().mockResolvedValue(undefined) } });
     });
 
     it('should call handlePrMerge when PR is closed with merge', async () => {

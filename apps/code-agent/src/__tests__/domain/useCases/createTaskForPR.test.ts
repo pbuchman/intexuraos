@@ -49,6 +49,7 @@ function createMockLinearIssueService(): LinearIssueService {
     },
     async markInProgress(): Promise<void> { return; },
     async markInReview(): Promise<void> { return; },
+    async markTodo(): Promise<void> { return; },
     async markQa(): Promise<void> { return; },
   };
 }
@@ -109,7 +110,10 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async findPlannedTaskByLinearIssue(): ReturnType<CodeTaskRepository['findPlannedTaskByLinearIssue']> {
       return ok(null);
     },
-    async findLatestNonReviewTaskByPR(): ReturnType<CodeTaskRepository['findLatestNonReviewTaskByPR']> {
+    async findLatestExecutionTaskByPR(): ReturnType<CodeTaskRepository['findLatestExecutionTaskByPR']> {
+      return ok(null);
+    },
+    async findRecentRemediationForPR(): ReturnType<CodeTaskRepository['findRecentRemediationForPR']> {
       return ok(null);
     },
   };

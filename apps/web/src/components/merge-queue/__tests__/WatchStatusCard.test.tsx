@@ -25,6 +25,7 @@ function makeWatch(overrides: Partial<MergeQueueWatch> = {}): MergeQueueWatch {
     status: 'active',
     mergedPrs: [],
     skippedPrs: [],
+    excludedPrNumbers: [],
     lastError: null,
     lastErrorAt: null,
     createdAt: '2026-01-01T00:00:00Z',
@@ -52,7 +53,7 @@ describe('WatchStatusCard', () => {
     });
 
     const html = renderToStaticMarkup(
-      <WatchStatusCard watch={watch} onToggle={noop} isToggling={false} blocked={false} />,
+      <WatchStatusCard watch={watch} onToggle={noop} isToggling={false} blocked={false} excludedCount={0} />,
     );
 
     // Verify "Cancelled" label is displayed
@@ -71,7 +72,7 @@ describe('WatchStatusCard', () => {
 
   it('renders toggle when watch is null', () => {
     const html = renderToStaticMarkup(
-      <WatchStatusCard watch={null} onToggle={noop} isToggling={false} blocked={false} />,
+      <WatchStatusCard watch={null} onToggle={noop} isToggling={false} blocked={false} excludedCount={0} />,
     );
 
     // Should show the toggle with "Auto-merge" label
@@ -82,5 +83,37 @@ describe('WatchStatusCard', () => {
     expect(html).not.toContain('Cancelled');
     expect(html).not.toContain('Drained');
     expect(html).not.toContain('Active');
+  });
+
+  it('shows excluded count in active watch when excludedCount > 0', () => {
+    const watch = makeWatch({ status: 'active' });
+
+    const html = renderToStaticMarkup(
+      <WatchStatusCard watch={watch} onToggle={noop} isToggling={false} blocked={false} excludedCount={3} />,
+    );
+
+    expect(html).toContain('Excluded: 3');
+  });
+
+  it('shows excluded count in error-state watch when excludedCount > 0', () => {
+    const watch = makeWatch({ status: 'active', lastError: 'Merge conflict detected', lastErrorAt: '2026-03-25T12:00:00Z' });
+
+    const html = renderToStaticMarkup(
+      <WatchStatusCard watch={watch} onToggle={noop} isToggling={false} blocked={false} excludedCount={3} />,
+    );
+
+    expect(html).toContain('Active — Error');
+    expect(html).toContain('Excluded: 3');
+    expect(html).toContain('Merge conflict detected');
+  });
+
+  it('hides excluded count when excludedCount is 0', () => {
+    const watch = makeWatch({ status: 'active' });
+
+    const html = renderToStaticMarkup(
+      <WatchStatusCard watch={watch} onToggle={noop} isToggling={false} blocked={false} excludedCount={0} />,
+    );
+
+    expect(html).not.toContain('Excluded');
   });
 });

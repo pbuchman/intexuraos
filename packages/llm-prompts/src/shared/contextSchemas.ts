@@ -27,6 +27,7 @@ export const DOMAINS = [
   'food_nutrition',
   'fitness_sports',
   'entertainment_media',
+  'construction_building',
   'diy_home',
   'outdoor_recreation',
   'fishing',
