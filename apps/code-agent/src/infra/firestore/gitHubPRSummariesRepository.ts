@@ -82,8 +82,11 @@ export function createFirestoreGitHubPRSummariesRepository(deps: {
           repository: input.repository,
           pullRequestNumber: input.pullRequestNumber,
           lastActivityAt: input.lastActivityAt,
-          firstSeenAt: input.firstSeenAt,
         };
+
+        if (input.firstSeenAt !== undefined) {
+          data['firstSeenAt'] = input.firstSeenAt;
+        }
 
         // Only include title/state/mergedAt when explicitly provided (pull_request events)
         if ('title' in input) {

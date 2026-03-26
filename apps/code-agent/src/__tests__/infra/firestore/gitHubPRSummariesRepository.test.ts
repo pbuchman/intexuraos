@@ -131,6 +131,33 @@ describe('createFirestoreGitHubPRSummariesRepository', () => {
       expect(calledData).not.toHaveProperty('mergedAt');
     });
 
+    it('should omit firstSeenAt from Firestore data when not provided in input', async () => {
+      const mockDocRef = {
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => ({
+          doc: vi.fn(() => mockDocRef),
+        })),
+      } as never);
+
+      const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
+      // Input without firstSeenAt (e.g., review-completion upsert preserving original value)
+      const input: UpsertGitHubPRSummaryInput = {
+        repository: 'intexuraos/test-repo',
+        pullRequestNumber: 42,
+        lastActivityAt: new Date('2024-01-10T12:00:00Z'),
+      };
+      const result = await repo.upsert(input);
+
+      expect(result.ok).toBe(true);
+      const calledData = (mockDocRef.set as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(calledData).not.toHaveProperty('firstSeenAt');
+      expect(calledData['repository']).toBe('intexuraos/test-repo');
+      expect(calledData['lastActivityAt']).toEqual(new Date('2024-01-10T12:00:00Z'));
+    });
+
     it('should include headBranch, mergeConflictStatus, and lastConflictCheckedAt independently', async () => {
       const mockDocRef = {
         set: vi.fn().mockResolvedValue(undefined),

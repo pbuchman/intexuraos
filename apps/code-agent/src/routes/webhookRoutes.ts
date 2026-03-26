@@ -1041,7 +1041,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                     repository: task.repository,
                     pullRequestNumber: prNumber,
                     lastActivityAt: new Date(),
-                    firstSeenAt: new Date(),
                     lastReviewedCommitSha: detailsResult.value.headSha,
                   });
                   request.log.info({ taskId, prNumber, headSha: detailsResult.value.headSha }, 'Updated lastReviewedCommitSha on PR summary');

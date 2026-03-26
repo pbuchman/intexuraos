@@ -780,6 +780,11 @@ describe('GitHubDispatchService', () => {
       // Should fall through to normal dispatch since createRemediationTask is undefined
       expect(result.success).toBe(true);
       expect(result.taskId).toBe('task-fallback');
+      // Should warn about missing createRemediationTask
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ prNumber: mockEvent.pullRequestNumber }),
+        expect.stringContaining('createRemediationTask not configured')
+      );
     });
   });
 
