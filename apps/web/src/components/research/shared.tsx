@@ -7,7 +7,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { PROVIDER_MODELS } from '@/components';
-import type { ResearchStatus } from '@/services/researchAgentApi.types';
+import { getProviderForStoredModel, type ResearchStatus } from '@/services/researchAgentApi.types';
 
 // --- Status badge config ---
 
@@ -102,6 +102,14 @@ export function getModelDisplayName(modelId: string): string {
     }
   }
   return modelId;
+}
+
+export function getUniqueResearchProviders(models: readonly string[]): string[] {
+  const providers = models
+    .map((model) => getProviderForStoredModel(model))
+    .filter((provider): provider is NonNullable<typeof provider> => provider !== null);
+
+  return [...new Set(providers)];
 }
 
 // --- Status helpers ---
