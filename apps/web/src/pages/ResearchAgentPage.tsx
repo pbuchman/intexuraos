@@ -21,6 +21,8 @@ import {
 } from '@/services/researchAgentApi';
 import {
   getProviderForModel,
+  getProviderForStoredModel,
+  isSelectableModel,
   type LlmProvider,
   type SupportedModel,
   type SaveDraftRequest,
@@ -123,7 +125,8 @@ export function ResearchAgentPage(): React.JSX.Element {
         const selections = new Map<LlmProvider, SupportedModel | null>();
         for (const provider of PROVIDER_MODELS) {
           const selectedModel = draft.selectedModels.find(
-            (m) => getProviderForModel(m) === provider.id
+            (m): m is SupportedModel =>
+              isSelectableModel(m) && getProviderForStoredModel(m) === provider.id
           );
           selections.set(provider.id, selectedModel ?? null);
         }
@@ -135,9 +138,13 @@ export function ResearchAgentPage(): React.JSX.Element {
         setSelectedOpenRouterModels(orModels);
 
         // Load synthesis model from draft (validate it's synthesis-capable)
-        const draftSynthesisValid = SYNTHESIS_CAPABLE_MODELS.includes(draft.synthesisModel);
-        if (draftSynthesisValid) {
-          setSynthesisModel(draft.synthesisModel);
+        const draftSynthesisModel =
+          isSelectableModel(draft.synthesisModel) &&
+          SYNTHESIS_CAPABLE_MODELS.includes(draft.synthesisModel)
+            ? draft.synthesisModel
+            : null;
+        if (draftSynthesisModel !== null) {
+          setSynthesisModel(draftSynthesisModel);
         } else {
           // Draft had invalid synthesis model - will be auto-selected when keys load
           setSynthesisModel(null);
@@ -155,7 +162,7 @@ export function ResearchAgentPage(): React.JSX.Element {
         // Track initial saved state for change detection
         lastSavedStateRef.current = {
           modelSelections: selections,
-          synthesisModel: draft.synthesisModel,
+          synthesisModel: draftSynthesisModel,
           inputContexts: loadedContexts,
           selectedOpenRouterModels: orModels,
         };

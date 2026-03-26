@@ -999,6 +999,43 @@ describe('Research Routes - Authenticated', () => {
       expect(body.data.items).toHaveLength(2);
     });
 
+    it('returns historical model identifiers without failing serialization', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const historicalResearch = createTestResearch({
+        id: 'historical-research-1',
+        selectedModels: ['glm-4.7-flash'] as unknown as ResearchModel[],
+        synthesisModel: 'glm-4.7' as ResearchModel,
+        partialFailure: {
+          failedModels: ['glm-4.7-flash'] as unknown as ResearchModel[],
+          detectedAt: '2026-01-22T09:21:15.145Z',
+          retryCount: 0,
+        },
+      });
+      fakeRepo.addResearch(historicalResearch);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          items: {
+            selectedModels: string[];
+            synthesisModel: string;
+            partialFailure?: { failedModels: string[] };
+          }[];
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.items[0]?.selectedModels).toEqual(['glm-4.7-flash']);
+      expect(body.data.items[0]?.synthesisModel).toBe('glm-4.7');
+      expect(body.data.items[0]?.partialFailure?.failedModels).toEqual(['glm-4.7-flash']);
+    });
+
     it('supports limit and cursor params', async () => {
       const token = await createToken(TEST_USER_ID);
 
@@ -1048,6 +1085,41 @@ describe('Research Routes - Authenticated', () => {
       const body = JSON.parse(response.body) as { success: boolean; data: Research };
       expect(body.success).toBe(true);
       expect(body.data.id).toBe(research.id);
+    });
+
+    it('returns historical model identifiers on detail reads', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        id: 'historical-detail-1',
+        selectedModels: ['glm-4.7'] as unknown as ResearchModel[],
+        synthesisModel: 'glm-4.7' as ResearchModel,
+        partialFailure: {
+          failedModels: ['glm-4.7'] as unknown as ResearchModel[],
+          detectedAt: '2026-01-22T09:21:15.145Z',
+          retryCount: 0,
+        },
+      });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/research/${research.id}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          selectedModels: string[];
+          synthesisModel: string;
+          partialFailure?: { failedModels: string[] };
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.selectedModels).toEqual(['glm-4.7']);
+      expect(body.data.synthesisModel).toBe('glm-4.7');
+      expect(body.data.partialFailure?.failedModels).toEqual(['glm-4.7']);
     });
 
     it('returns 404 when not found', async () => {
@@ -1800,6 +1872,34 @@ describe('Research Routes - Authenticated', () => {
       expect(updatedResearch?.partialFailure?.userDecision).toBe('proceed');
     });
 
+    it('proceeds when failed models are historical but synthesis model is still supported', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createAwaitingConfirmationResearch({
+        partialFailure: {
+          failedModels: ['glm-4.7'] as unknown as ResearchModel[],
+          detectedAt: '2024-01-01T10:00:00Z',
+          retryCount: 0,
+        },
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/confirm`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { action: 'proceed' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { action: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.action).toBe('proceed');
+    });
+
     it('retries failed providers when action is retry', async () => {
       const token = await createToken(TEST_USER_ID);
       const research = createAwaitingConfirmationResearch();
@@ -1823,6 +1923,59 @@ describe('Research Routes - Authenticated', () => {
 
       const updatedResearch = fakeRepo.getAll().find((r) => r.id === research.id);
       expect(updatedResearch?.status).toBe('retrying');
+    });
+
+    it('returns 409 when retry targets historical unsupported failed models', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createAwaitingConfirmationResearch({
+        partialFailure: {
+          failedModels: ['glm-4.7-flash'] as unknown as ResearchModel[],
+          detectedAt: '2024-01-01T10:00:00Z',
+          retryCount: 0,
+        },
+      });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/confirm`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { action: 'retry' },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+      expect(body.error.message).toContain('glm-4.7-flash');
+    });
+
+    it('returns 409 when proceed requires a historical unsupported synthesis model', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createAwaitingConfirmationResearch({
+        synthesisModel: 'glm-4.7' as ResearchModel,
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/confirm`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { action: 'proceed' },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+      expect(body.error.message).toContain('glm-4.7');
     });
 
     it('cancels research when action is cancel', async () => {
@@ -2167,6 +2320,43 @@ describe('Research Routes - Authenticated', () => {
       expect(updatedResearch?.status).toBe('retrying');
     });
 
+    it('returns 409 when retrying failed research would require historical unsupported models', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createFailedResearch({
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
+            status: 'completed',
+            result: 'Google result',
+          },
+          {
+            provider: LlmProviders.OpenAI,
+            model: 'glm-4.7',
+            status: 'failed',
+            error: 'Historical model retired',
+          },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/retry`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+      expect(body.error.message).toContain('glm-4.7');
+    });
+
     it('re-runs synthesis when LLMs succeeded but synthesis failed', async () => {
       const token = await createToken(TEST_USER_ID);
       const research = createTestResearch({
@@ -2206,6 +2396,46 @@ describe('Research Routes - Authenticated', () => {
 
       const updatedResearch = fakeRepo.getAll().find((r) => r.id === research.id);
       expect(updatedResearch?.status).toBe('completed');
+    });
+
+    it('returns 409 when retrying synthesis would require a historical unsupported synthesis model', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        status: 'failed',
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
+            status: 'completed',
+            result: 'Result 1',
+          },
+          {
+            provider: LlmProviders.OpenAI,
+            model: 'o4-mini',
+            status: 'completed',
+            result: 'Result 2',
+          },
+        ],
+        synthesisModel: 'glm-4.7' as ResearchModel,
+        synthesisError: 'Historical synthesis failed',
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/retry`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+      expect(body.error.message).toContain('glm-4.7');
     });
 
     it('returns success when research is already completed (idempotent)', async () => {
