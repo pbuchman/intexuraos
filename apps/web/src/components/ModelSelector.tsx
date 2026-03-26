@@ -71,6 +71,10 @@ export interface ModelSelectorProps {
   isOpenRouterConfigured?: boolean;
 }
 
+const MAX_TOTAL_MODELS = 6;
+
+export { MAX_TOTAL_MODELS };
+
 export function ModelSelector({
   selectedModels,
   onChange,
@@ -86,8 +90,35 @@ export function ModelSelector({
   openRouterError,
   isOpenRouterConfigured,
 }: ModelSelectorProps): React.JSX.Element {
+  // Calculate total selected models across all providers
+  const regularProviderCount = Array.from(selectedModels.values()).filter((m) => m !== null).length;
+  const openRouterCount = selectedOpenRouterModels?.length ?? 0;
+  const totalSelectedModels = regularProviderCount + openRouterCount;
+
+  // Calculate remaining slots for OpenRouter (cannot exceed MAX_TOTAL_MODELS)
+  const openRouterMaxModels = MAX_TOTAL_MODELS - regularProviderCount;
+
+  // Check if at max capacity
+  const isMaxReached = totalSelectedModels >= MAX_TOTAL_MODELS;
+
   return (
     <div className="space-y-3">
+      {/* Total model counter */}
+      <div className="flex items-center justify-between rounded-lg bg-slate-100 px-4 py-2 dark:bg-slate-700/50">
+        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+          Total Models Selected
+        </span>
+        <span
+          className={`text-sm font-bold ${
+            totalSelectedModels >= MAX_TOTAL_MODELS
+              ? 'text-amber-600 dark:text-amber-400'
+              : 'text-blue-600 dark:text-blue-400'
+          }`}
+        >
+          {String(totalSelectedModels)}/{String(MAX_TOTAL_MODELS)}
+        </span>
+      </div>
+
       {loading ? (
         <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500 text-sm mb-2">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -101,7 +132,9 @@ export function ModelSelector({
         const testFailedError = isTestFailed ? failedProviders.get(provider.id) : undefined;
         const selectedModel = selectedModels.get(provider.id) ?? null;
         const isActive = selectedModel !== null;
-        const isRowDisabled = loading || !isConfigured || isTestFailed || isProviderDisabled || disabled;
+        // Disable provider row if at max and not already selected
+        const isMaxDisabled = isMaxReached && !isActive;
+        const isRowDisabled = loading || !isConfigured || isTestFailed || isProviderDisabled || disabled || isMaxDisabled;
 
         return (
           <div
@@ -120,6 +153,7 @@ export function ModelSelector({
               >
                 {provider.displayName}
                 {isProviderDisabled && isConfigured ? ' (already selected)' : ''}
+                {isMaxDisabled ? ' (max reached)' : ''}
               </span>
 
               <div className="flex items-center gap-3">
@@ -189,7 +223,7 @@ export function ModelSelector({
             OpenRouter Models
             {selectedOpenRouterModels !== undefined && selectedOpenRouterModels.length > 0 && (
               <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full dark:bg-blue-900/40 dark:text-blue-300">
-                {String(selectedOpenRouterModels.length)} selected
+                {String(selectedOpenRouterModels.length)}/{String(openRouterMaxModels)} selected
               </span>
             )}
           </h4>
@@ -197,6 +231,7 @@ export function ModelSelector({
             availableModels={openRouterModels ?? []}
             selectedModelIds={selectedOpenRouterModels ?? []}
             onChange={onOpenRouterChange ?? noopStringArray}
+            maxModels={openRouterMaxModels}
             loading={openRouterLoading ?? false}
             disabled={disabled}
             error={openRouterError ?? null}
