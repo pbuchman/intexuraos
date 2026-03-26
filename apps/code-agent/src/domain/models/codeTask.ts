@@ -82,6 +82,7 @@ export interface TaskResult {
   review_comments_posted?: string;
   review_types?: string;
   requirements_tracker_updated?: string;
+  needs_remediation?: string;
 }
 
 /**

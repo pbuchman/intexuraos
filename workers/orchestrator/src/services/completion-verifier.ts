@@ -67,6 +67,7 @@ export interface ReviewAgentData {
   review_types: string;
   requirements_tracker_updated: string;
   gh_actions_status: string;
+  needs_remediation: string;
   summary: string;
 }
 
@@ -116,6 +117,7 @@ export const REVIEW_SCHEMA = z.object({
   review_types: z.string().trim().min(1, 'review_types must not be empty'),
   requirements_tracker_updated: z.string().optional().default(''),
   gh_actions_status: z.string().optional().default(''),
+  needs_remediation: z.string().regex(/^[01]$/).optional().default('1'),
   summary: z.string(),
 });
 
@@ -242,10 +244,12 @@ export function buildReviewPrompt(transcript: string): string {
     '- review_comments_posted: number of review comments posted as a string (e.g., "3")',
     '- review_types: comma-separated list of review types performed (e.g., "code_quality,security")',
     '- requirements_tracker_updated: "yes" if tracker comment was created/updated, "no" if skipped, empty string if no requirements available',
+    '- gh_actions_status: GitHub Actions check result (e.g., "all passed", "2 failed", "pending", "not yet triggered")',
+    '- needs_remediation: "0" if the PR is clean or all findings are informational only, "1" if any finding requires code changes',
     '- summary: 3-5 sentence summary of the review findings — the LLM agent typically states this clearly as a summary block in its final output',
     '',
     'Example valid response:',
-    '{"gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","review_comments_posted":"3","review_types":"code_quality,security","requirements_tracker_updated":"yes","summary":"The review agent analyzed PR #901 for code quality and security issues. Found 3 issues: a missing null check, an unused import, and a potential XSS vulnerability. All findings were posted as inline review comments."}',
+    '{"gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","review_comments_posted":"3","review_types":"code_quality,security","requirements_tracker_updated":"yes","gh_actions_status":"all passed","needs_remediation":"1","summary":"The review agent analyzed PR #901 for code quality and security issues. Found 3 issues: a missing null check, an unused import, and a potential XSS vulnerability. All findings were posted as inline review comments."}',
     '',
     'Transcript (last 50 lines):',
     transcript,

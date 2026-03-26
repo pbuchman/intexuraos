@@ -22,7 +22,7 @@ export interface CreateTaskRequest {
    */
   retriedFrom?: string;
   /** Agent type determined by code-agent routing analysis. */
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
   /** Existing PR tracking comment to reuse instead of creating a new one. */
   trackingCommentId?: string;
   /** Existing PR number to continue instead of creating a fresh PR. */

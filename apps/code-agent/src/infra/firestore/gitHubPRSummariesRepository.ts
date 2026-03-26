@@ -58,6 +58,7 @@ function mapSummaryData(data: Record<string, unknown>): GitHubPRSummary {
     lastActivityAt: toDate(data['lastActivityAt']),
     firstSeenAt: toDate(data['firstSeenAt']),
     lastReviewedCommitSha: (data['lastReviewedCommitSha'] as string | null | undefined) ?? null,
+    lastReviewNeedsRemediation: (data['lastReviewNeedsRemediation'] as string | null | undefined) ?? null,
   };
 }
 
@@ -130,6 +131,9 @@ export function createFirestoreGitHubPRSummariesRepository(deps: {
         }
         if ('lastReviewedCommitSha' in input) {
           data['lastReviewedCommitSha'] = input.lastReviewedCommitSha ?? null;
+        }
+        if ('lastReviewNeedsRemediation' in input) {
+          data['lastReviewNeedsRemediation'] = input.lastReviewNeedsRemediation ?? null;
         }
 
         await docRef.set(data, { merge: true });
