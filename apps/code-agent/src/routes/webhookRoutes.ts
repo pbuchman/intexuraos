@@ -1059,7 +1059,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
 
         // Best-effort: create remediation task when review finds actionable issues
-        if (task.agentType === 'review' && resolvedStatus === 'reviewed' && prNumber !== undefined && result !== undefined) {
+        if (task.agentType === 'review' && prNumber !== undefined && result !== undefined) {
           try {
             if (result.needs_remediation !== '0') {
               const recentRemediationResult = await codeTaskRepo.findRecentRemediationForPR(task.repository, prNumber);
@@ -1082,7 +1082,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                     {
                       repository: task.repository,
                       prNumber,
+                      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard, repository always contains '/' @preserve */
                       senderLogin: task.repository.split('/')[0] ?? task.userId,
+                      /* v8 ignore stop @preserve */
                       workerType: task.workerType,
                       eventId: taskId,
                       ...(reviewBody !== undefined && { reviewBody }),
@@ -1113,7 +1115,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         // Best-effort In Review transition for agent types without deterministic enforcement
         // (planning, execution, and pull_request agents handle this in their own enforcement paths)
-        if (task.agentType !== 'execution' && task.agentType !== 'pull_request' && task.agentType !== 'planning' && prNumber !== undefined && task.linearIssueId !== undefined) {
+        if (task.agentType !== 'execution' && task.agentType !== 'pull_request' && task.agentType !== 'planning' && task.agentType !== 'remediation' && prNumber !== undefined && task.linearIssueId !== undefined) {
           await linearIssueService.markInReview(task.userId, task.linearIssueId);
         }
 

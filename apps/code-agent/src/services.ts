@@ -564,7 +564,7 @@ export function initServices(config: ServiceConfig): void {
     automationLog,
     taskEnqueueService,
     mergeQueueWatchRepo,
-    createRemediationTaskFn: (taskLogger, request) => createRemediationTask(
+    createRemediationTaskFn: (taskLogger: Logger, request: CreateRemediationTaskRequest): Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>> => createRemediationTask(
       {
         logger: taskLogger,
         codeTaskRepo,
