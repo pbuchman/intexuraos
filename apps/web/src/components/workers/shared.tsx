@@ -8,4 +8,5 @@ export const WORKER_TYPE_METADATA: Record<CodeTaskWorkerType, { name: string; de
   glm: { name: 'GLM', description: 'Zhipu\'s flagship Agentic Engineering model for complex systems and long-running agent tasks' },
   qwen: { name: 'Qwen', description: 'Advanced Qwen model with thinking enabled' },
   kimi: { name: 'Kimi', description: 'Moonshot\'s latest recommended model with image understanding' },
+  codex: { name: 'Codex', description: 'OpenAI Codex runtime for code-task execution with persisted thread resume' },
 };

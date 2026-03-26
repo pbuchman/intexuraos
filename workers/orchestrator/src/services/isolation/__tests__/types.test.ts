@@ -41,8 +41,17 @@ describe('WORKER_TYPES configuration', () => {
     expect(WORKER_TYPES.opus.apiKeyEnvVar).toBe('ANTHROPIC_API_KEY');
   });
 
-  it('routes all current worker types through the Claude runtime', () => {
-    for (const config of Object.values(WORKER_TYPES)) {
+  it('routes public codex workers through the Codex runtime', () => {
+    expect(WORKER_TYPES.codex.runtime).toBe('codex');
+    expect(WORKER_TYPES.codex.apiBaseUrl).toBe('https://api.openai.com');
+    expect(WORKER_TYPES.codex.apiKeyEnvVar).toBeUndefined();
+  });
+
+  it('keeps existing worker types on the Claude runtime', () => {
+    for (const [workerType, config] of Object.entries(WORKER_TYPES)) {
+      if (workerType === 'codex') {
+        continue;
+      }
       expect(config.runtime).toBe('claude');
     }
   });

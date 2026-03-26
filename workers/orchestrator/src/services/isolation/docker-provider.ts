@@ -607,7 +607,8 @@ export class DockerProvider implements IsolationProvider {
       }
 
       const workerTypeConfig = WORKER_TYPES[workerType];
-      const apiKey = secrets[workerTypeConfig.apiKeyEnvVar];
+      const apiKey =
+        workerTypeConfig.apiKeyEnvVar === undefined ? '' : secrets[workerTypeConfig.apiKeyEnvVar];
 
       // When shared credentials are configured for opus/auto workers, Claude CLI reads
       // credentials from the mounted .credentials.json file. No ANTHROPIC_API_KEY needed.
@@ -617,11 +618,18 @@ export class DockerProvider implements IsolationProvider {
         workerTypeConfig.apiKeyEnvVar === 'ANTHROPIC_API_KEY';
       const useSharedCodexAuth =
         runtime === 'codex' && this.config.sharedCodexAuthPath !== undefined;
+      const requiredApiKeyEnvVar = workerTypeConfig.apiKeyEnvVar;
 
-      if (runtime === 'claude' && apiKey === '') {
-        throw new Error(
-          `Worker type '${workerType}' requires ${workerTypeConfig.apiKeyEnvVar} but it is not configured`
-        );
+      if (runtime === 'claude') {
+        if (requiredApiKeyEnvVar === undefined) {
+          throw new Error(`Worker type '${workerType}' is missing API key configuration`);
+        }
+
+        if (apiKey === '') {
+          throw new Error(
+            `Worker type '${workerType}' requires ${requiredApiKeyEnvVar} but it is not configured`
+          );
+        }
       }
 
       if (runtime === 'codex' && !useSharedCodexAuth) {
