@@ -127,6 +127,7 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
             workerType: workerDirective ?? 'auto',
             eventId: event.id,
             ...(isCodeWorkerReview && event.body !== null && { reviewBody: event.body }),
+            // TODO (INT-1087 V2): fetch inline review comments from GitHub API and populate inlineComments
             ...(!isCodeWorkerReview && event.body !== null && {
               triggerComment: { body: event.body, author: event.senderLogin },
             }),
