@@ -2670,6 +2670,39 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value).toBeNull();
     });
 
+    it('returns the most recent task when multiple remediation tasks exist', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.create(createTaskInput({
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'remediation',
+        prompt: 'Older remediation',
+        sanitizedPrompt: 'older remediation',
+      }));
+
+      // Create a second remediation task — needs unique dedupKey to avoid collision
+      await repo.create(createTaskInput({
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'remediation',
+        prompt: 'Newer remediation',
+        sanitizedPrompt: 'newer remediation',
+        traceId: 'trace-newer',
+      }));
+
+      const result = await repo.findRecentRemediationForPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).not.toBeNull();
+      expect(result.value?.sanitizedPrompt).toBe('newer remediation');
+    });
+
     it('returns null when remediation task is for different repository', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
