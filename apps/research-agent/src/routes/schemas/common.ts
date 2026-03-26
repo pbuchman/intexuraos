@@ -11,6 +11,13 @@ export const supportedModelSchema = {
   ],
 } as const;
 
+/**
+ * Intentionally relaxed to a plain string (no enum constraint).
+ * Historical research documents may contain model IDs that have since been removed
+ * from ALL_LLM_MODELS or the OpenRouter allowlist. Using the stricter
+ * supportedModelSchema here would cause Fastify to strip those values from read
+ * responses, breaking the UI's ability to display and guard against retired models.
+ */
 export const storedModelSchema = {
   type: 'string',
 } as const;
