@@ -989,6 +989,19 @@ describe('Merge queue JWT routes', () => {
       expect(res.statusCode).toBe(400);
     });
 
+    it('returns 400 when excludedPrNumbers contains non-positive-integers', async () => {
+      const cases = [[1.5, 2], [0, 1], [-1, 2]];
+      for (const invalid of cases) {
+        const res = await server.inject({
+          method: 'PUT',
+          url: '/code/merge-queue/watch/watch_abc/exclusions',
+          headers: { authorization: 'Bearer valid-token' },
+          payload: { excludedPrNumbers: invalid },
+        });
+        expect(res.statusCode).toBe(400);
+      }
+    });
+
     it('returns 500 when update fails', async () => {
       vi.mocked(mockMergeQueueWatchRepo.findById).mockResolvedValue(
         ok({

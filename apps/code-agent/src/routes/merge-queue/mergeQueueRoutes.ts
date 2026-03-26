@@ -208,8 +208,8 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
         const body = request.body as { excludedPrNumbers?: unknown } | undefined;
 
         const rawExcluded = body?.excludedPrNumbers;
-        if (!Array.isArray(rawExcluded) || !rawExcluded.every((n): n is number => typeof n === 'number')) {
-          return await reply.fail('INVALID_REQUEST', 'excludedPrNumbers must be an array of numbers');
+        if (!Array.isArray(rawExcluded) || !rawExcluded.every((n): n is number => Number.isInteger(n) && (n as number) > 0)) {
+          return await reply.fail('INVALID_REQUEST', 'excludedPrNumbers must be an array of positive integers');
         }
 
         const excludedPrNumbers: number[] = rawExcluded;
