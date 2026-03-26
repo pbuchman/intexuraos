@@ -7,6 +7,7 @@ import { ok, err, type Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { UserLookupService } from '../../domain/ports/userLookupService.js';
 import type { TaskEnqueueService } from '../../domain/services/taskEnqueueService.js';
+import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import { createRemediationTask, type CreateRemediationTaskDeps, type CreateRemediationTaskRequest } from '../../domain/usecases/createRemediationTask.js';
 
 function createFakeLogger(): Logger {
@@ -27,12 +28,20 @@ function createFakeTaskEnqueueService(): TaskEnqueueService {
   };
 }
 
+function createFakeWorkerSettingsRepo(overrides?: Partial<WorkerSettingsRepository>): WorkerSettingsRepository {
+  return {
+    getSettings: vi.fn().mockResolvedValue(ok(null)),
+    saveSettings: vi.fn().mockResolvedValue(ok(undefined)),
+    ...overrides,
+  } as unknown as WorkerSettingsRepository;
+}
+
 function createFakeDeps(overrides: Partial<CreateRemediationTaskDeps> = {}): CreateRemediationTaskDeps {
   return {
     logger: createFakeLogger(),
     codeTaskRepo: {
       create: vi.fn().mockResolvedValue(ok({ id: 'task-remediation-1' })),
-      findByPR: vi.fn().mockResolvedValue(ok(null)),
+      findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
     } as unknown as CodeTaskRepository,
     userLookupService: {
       resolveByGitHubUsername: vi.fn().mockResolvedValue(ok({
@@ -49,6 +58,7 @@ function createFakeDeps(overrides: Partial<CreateRemediationTaskDeps> = {}): Cre
       })),
     } as unknown as UserLookupService,
     taskEnqueueService: createFakeTaskEnqueueService(),
+    workerSettingsRepo: createFakeWorkerSettingsRepo(),
     orchestratorSecret: 'test-secret',
     automationLog: {
       record: vi.fn().mockResolvedValue(undefined),
@@ -146,7 +156,7 @@ describe('createRemediationTask', () => {
     const deps = createFakeDeps({
       codeTaskRepo: {
         create: vi.fn().mockResolvedValue(ok({ id: 'task-remediation-1' })),
-        findByPR: vi.fn().mockResolvedValue(ok({ id: 'task-exec-1', linearIssueId: 'INT-500' })),
+        findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok({ id: 'task-exec-1', linearIssueId: 'INT-500' })),
       } as unknown as CodeTaskRepository,
     });
 
@@ -158,7 +168,7 @@ describe('createRemediationTask', () => {
 
   it('creates task without linearIssueId when no execution task exists', async () => {
     const deps = createFakeDeps();
-    // findByPR returns null (default)
+    // findLatestExecutionTaskByPR returns null (default)
 
     await createRemediationTask(deps, createDefaultRequest());
 
@@ -202,7 +212,7 @@ describe('createRemediationTask', () => {
     const deps = createFakeDeps({
       codeTaskRepo: {
         create: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'write failed' })),
-        findByPR: vi.fn().mockResolvedValue(ok(null)),
+        findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
       } as unknown as CodeTaskRepository,
     });
 
@@ -255,7 +265,7 @@ describe('createRemediationTask', () => {
     const deps = createFakeDeps({
       codeTaskRepo: {
         create: vi.fn().mockResolvedValue(ok({ id: 'task-remediation-1' })),
-        findByPR: vi.fn().mockResolvedValue(ok(null)),
+        findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
         findActiveReviewForPR,
       } as unknown as CodeTaskRepository,
     });
@@ -299,11 +309,11 @@ describe('createRemediationTask', () => {
     );
   });
 
-  it('continues when findByPR fails for Linear issue linking', async () => {
+  it('continues when findLatestExecutionTaskByPR fails for Linear issue linking', async () => {
     const deps = createFakeDeps({
       codeTaskRepo: {
         create: vi.fn().mockResolvedValue(ok({ id: 'task-remediation-1' })),
-        findByPR: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'timeout' })),
+        findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'timeout' })),
       } as unknown as CodeTaskRepository,
     });
 
@@ -320,5 +330,56 @@ describe('createRemediationTask', () => {
 
     const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0]?.[0];
     expect(createCall?.linearIssueId).toBe('INT-999');
+  });
+
+  it('uses user default worker type when request workerType is auto', async () => {
+    const deps = createFakeDeps({
+      workerSettingsRepo: createFakeWorkerSettingsRepo({
+        getSettings: vi.fn().mockResolvedValue(ok({
+          defaultReviewWorkerType: 'sonnet',
+          workers: [],
+        })),
+      }),
+    });
+
+    const result = await createRemediationTask(deps, createDefaultRequest({ workerType: 'auto' }));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.workerType).toBe('sonnet');
+
+    const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0]?.[0];
+    expect(createCall?.workerType).toBe('sonnet');
+  });
+
+  it('keeps explicit workerType when not auto', async () => {
+    const deps = createFakeDeps({
+      workerSettingsRepo: createFakeWorkerSettingsRepo({
+        getSettings: vi.fn().mockResolvedValue(ok({
+          defaultReviewWorkerType: 'sonnet',
+          workers: [],
+        })),
+      }),
+    });
+
+    const result = await createRemediationTask(deps, createDefaultRequest({ workerType: 'opus' }));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.workerType).toBe('opus');
+  });
+
+  it('falls back to auto when user has no default worker type setting', async () => {
+    const deps = createFakeDeps({
+      workerSettingsRepo: createFakeWorkerSettingsRepo({
+        getSettings: vi.fn().mockResolvedValue(ok(null)),
+      }),
+    });
+
+    const result = await createRemediationTask(deps, createDefaultRequest({ workerType: 'auto' }));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.workerType).toBe('auto');
   });
 });

@@ -88,7 +88,7 @@ export interface WebhookDispatchServiceDeps {
   serviceUrl: string;
   dispatchRetryRepo?: DispatchRetryRepository;
   automationLog: AutomationLog;
-  createRemediationTask?: (logger: Logger, request: CreateRemediationTaskRequest) => Promise<import('@intexuraos/common-core').Result<CreateRemediationTaskResult, CreateRemediationTaskError>>;
+  createRemediationTask: (logger: Logger, request: CreateRemediationTaskRequest) => Promise<import('@intexuraos/common-core').Result<CreateRemediationTaskResult, CreateRemediationTaskError>>;
 }
 
 export function resolveLoginForTaskCreation(senderLogin: string, repository: string, allowedBots: Set<string>): string {
@@ -118,14 +118,7 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
         const isCodeWorkerReview = context.decision.reason === 'CODE_WORKER_REVIEW';
         const isRemediationDispatch = isCodeWorkerReview || workerDirective !== undefined;
 
-        if (isRemediationDispatch && deps.createRemediationTask === undefined) {
-          logger.warn(
-            { prNumber: event.pullRequestNumber, reason: context.decision.reason },
-            'Remediation dispatch requested but createRemediationTask not configured'
-          );
-        }
-
-        if (isRemediationDispatch && deps.createRemediationTask !== undefined) {
+        if (isRemediationDispatch) {
           const senderLogin = resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots);
           const remediationResult = await deps.createRemediationTask(logger, {
             repository: event.repository,
@@ -476,18 +469,14 @@ async function handleNewTask(
     }
   }
 
-  // Extract @worker/@model directive from comment
-  const workerType = extractDispatchWorkerType(event.body ?? '');
-  if (workerType !== undefined) {
-    logger.info({ workerType, prNumber: event.pullRequestNumber }, 'Extracted worker type from comment');
-  }
-
   // Use messageBuilder for pull_request_review events to apply template routing
   // (e.g. code-worker reviews → nitpick-nuker template)
   const comment = event.eventType === 'pull_request_review'
     ? deps.messageBuilder.build(event)
     : event.body ?? '';
 
+  // Note: @worker/@model directives are intercepted by remediation dispatch
+  // before reaching handleNewTask, so workerType extraction is not needed here.
   const createResult = await createTaskForPR(
     {
       logger,
@@ -510,7 +499,6 @@ async function handleNewTask(
       eventId: event.id,
       ...(event.title !== null && { prTitle: event.title }),
       ...(resolvedBaseBranch !== null && { baseBranch: resolvedBaseBranch }),
-      ...(workerType !== undefined && { workerType }),
     },
   );
 
