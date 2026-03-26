@@ -81,7 +81,7 @@ describe('MessageItem', () => {
     expect(mobileShell).toHaveClass('sm:hidden');
     expect(desktopShell).toHaveClass('hidden', 'sm:grid');
     expect(within(mobileShell).getByText('Create a detailed project update with all open questions and blockers.')).toHaveClass('line-clamp-2', 'break-words');
-    expect(within(mobileShell).getByText('Mar 25, 4:45 PM')).toBeInTheDocument();
+    expect(within(mobileShell).getByText(/^Mar 25, 4:45 [AP]M$/)).toBeInTheDocument();
   });
 
   it('shows touch-visible actions on mobile and hover-reveal actions on desktop for text messages', () => {
