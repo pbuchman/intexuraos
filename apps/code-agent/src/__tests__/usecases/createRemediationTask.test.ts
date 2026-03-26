@@ -133,7 +133,7 @@ describe('createRemediationTask', () => {
   it('includes trigger comment in prompt when present', async () => {
     const deps = createFakeDeps();
     const request = createDefaultRequest({
-      triggerComment: { id: '12345', body: '@worker opus fix the review findings', author: 'bob' },
+      triggerComment: { body: '@worker opus fix the review findings', author: 'bob' },
     });
 
     await createRemediationTask(deps, request);
@@ -251,12 +251,19 @@ describe('createRemediationTask', () => {
   });
 
   it('does not perform review dedup — no findActiveReviewForPR call', async () => {
-    const deps = createFakeDeps();
+    const findActiveReviewForPR = vi.fn();
+    const deps = createFakeDeps({
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(ok({ id: 'task-remediation-1' })),
+        findByPR: vi.fn().mockResolvedValue(ok(null)),
+        findActiveReviewForPR,
+      } as unknown as CodeTaskRepository,
+    });
 
     await createRemediationTask(deps, createDefaultRequest());
 
     // Should NOT call findActiveReviewForPR (no dedup for remediation)
-    expect(vi.mocked(deps.codeTaskRepo).findActiveReviewForPR).toBeUndefined();
+    expect(findActiveReviewForPR).not.toHaveBeenCalled();
   });
 
   it('uses baseBranch from request when provided', async () => {
