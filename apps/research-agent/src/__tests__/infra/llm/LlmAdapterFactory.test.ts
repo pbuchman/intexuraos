@@ -20,7 +20,7 @@ vi.mock('../../../infra/llm/GeminiAdapter.js', () => ({
     apiKey: string;
     model: string;
     userId: string;
-    researchId?: string;
+    researchId?: string | undefined;
     logger: Logger;
     constructor(
       apiKey: string,
@@ -44,7 +44,7 @@ vi.mock('../../../infra/llm/ClaudeAdapter.js', () => ({
     apiKey: string;
     model: string;
     userId: string;
-    researchId?: string;
+    researchId?: string | undefined;
     logger: Logger;
     constructor(
       apiKey: string,
@@ -68,7 +68,7 @@ vi.mock('../../../infra/llm/GptAdapter.js', () => ({
     apiKey: string;
     model: string;
     userId: string;
-    researchId?: string;
+    researchId?: string | undefined;
     logger: Logger;
     constructor(
       apiKey: string,
@@ -92,7 +92,7 @@ vi.mock('../../../infra/llm/PerplexityAdapter.js', () => ({
     apiKey: string;
     model: string;
     userId: string;
-    researchId?: string;
+    researchId?: string | undefined;
     logger: Logger;
     constructor(
       apiKey: string,
@@ -116,7 +116,7 @@ vi.mock('../../../infra/llm/OpenRouterAdapter.js', () => ({
     apiKey: string;
     model: string;
     userId: string;
-    researchId?: string;
+    researchId?: string | undefined;
     logger: Logger;
     constructor(
       apiKey: string,
@@ -167,6 +167,7 @@ describe('LlmAdapterFactory', () => {
 
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('anthropic-key');
       expect((provider as unknown as { model: string }).model).toBe(LlmModels.ClaudeOpus45);
+      expect((provider as unknown as { researchId?: string }).researchId).toBe('research-123');
     });
 
     it('creates GptAdapter for openai model', () => {
@@ -181,6 +182,7 @@ describe('LlmAdapterFactory', () => {
 
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('openai-key');
       expect((provider as unknown as { model: string }).model).toBe(LlmModels.O4MiniDeepResearch);
+      expect((provider as unknown as { researchId?: string }).researchId).toBe('research-123');
     });
 
     it('creates PerplexityAdapter for perplexity model', () => {
@@ -195,6 +197,7 @@ describe('LlmAdapterFactory', () => {
 
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('perplexity-key');
       expect((provider as unknown as { model: string }).model).toBe(LlmModels.SonarPro);
+      expect((provider as unknown as { researchId?: string }).researchId).toBe('research-123');
     });
 
     it('creates OpenRouterAdapter for openrouter model', () => {
@@ -210,6 +213,7 @@ describe('LlmAdapterFactory', () => {
 
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('openrouter-key');
       expect((provider as unknown as { model: string }).model).toBe(openRouterModel);
+      expect((provider as unknown as { researchId?: string }).researchId).toBe('research-123');
     });
   });
 

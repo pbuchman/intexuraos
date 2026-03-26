@@ -91,6 +91,42 @@ describe('createOpenRouterClient', () => {
       );
     });
 
+    it('excludes researchId from audit context when undefined', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: `${TEST_MODEL}:online`,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'Research findings.', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      await client.research('Test prompt');
+
+      const auditArgs = vi.mocked(createAuditContext).mock.calls[0]?.[0] as unknown as Record<
+        string,
+        unknown
+      >;
+      expect(auditArgs).not.toHaveProperty('researchId');
+      expect(auditArgs?.['userId']).toBe('test-user');
+    });
+
     it('sends request with :online suffix for research', async () => {
       let capturedBody: Record<string, unknown> | undefined;
 

@@ -104,6 +104,31 @@ describe('createGptClient', () => {
       );
     });
 
+    it('excludes researchId from audit context when undefined', async () => {
+      mockResponsesCreate.mockResolvedValue({
+        output_text: 'Research findings about AI.',
+        output: [],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      await client.research('Tell me about AI');
+
+      const auditArgs = vi.mocked(createAuditContext).mock.calls[0]?.[0] as unknown as Record<
+        string,
+        unknown
+      >;
+      expect(auditArgs).not.toHaveProperty('researchId');
+      expect(auditArgs?.['userId']).toBe('test-user');
+    });
+
     it('returns research result with content and usage from pricing', async () => {
       mockResponsesCreate.mockResolvedValue({
         output_text: 'Research findings about AI.',

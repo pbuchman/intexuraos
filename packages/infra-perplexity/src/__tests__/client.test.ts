@@ -133,6 +133,40 @@ describe('createPerplexityClient', () => {
       );
     });
 
+    it('excludes researchId from audit context when undefined', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions', (body) => body.stream === true)
+        .reply(
+          200,
+          createSSEBody({
+            content: 'Research findings about AI.',
+            usage: {
+              prompt_tokens: 100,
+              completion_tokens: 50,
+              total_tokens: 150,
+            },
+          }),
+          { 'Content-Type': 'text/event-stream' }
+        );
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      await client.research('Tell me about AI');
+
+      const auditArgs = vi.mocked(createAuditContext).mock.calls[0]?.[0] as unknown as Record<
+        string,
+        unknown
+      >;
+      expect(auditArgs).not.toHaveProperty('researchId');
+      expect(auditArgs?.['userId']).toBe('test-user');
+    });
+
     it('returns research result with content and usage from pricing (streaming)', async () => {
       nock(API_BASE_URL)
         .post('/chat/completions', (body) => body.stream === true)
