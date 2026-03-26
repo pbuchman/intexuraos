@@ -45,6 +45,22 @@ export class FirestoreTurnMetricsRepository implements TurnMetricsRepository {
       return err({ code: 'FIRESTORE_ERROR', message: getErrorMessage(error) });
     }
   }
+
+  async listByTask(taskId: string): Promise<Result<TurnMetrics[], RepositoryError>> {
+    try {
+      const snapshot = await this.firestore
+        .collection('code_tasks')
+        .doc(taskId)
+        .collection('turn_metrics')
+        .orderBy('attempt', 'asc')
+        .get();
+
+      return ok(snapshot.docs.map((doc) => doc.data() as TurnMetrics));
+    } catch (error) {
+      this.logger.error({ taskId, error: getErrorMessage(error) }, 'Failed to list turn metrics');
+      return err({ code: 'FIRESTORE_ERROR', message: getErrorMessage(error) });
+    }
+  }
 }
 
 export function createFirestoreTurnMetricsRepository(

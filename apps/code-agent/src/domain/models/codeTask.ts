@@ -78,10 +78,46 @@ export interface TaskResult {
   execution_outcome_label?: 'implemented' | 'already_completed';
   execution_superpowers_executing_plans_used?: '0' | '1';
   execution_superpowers_requesting_code_review_used?: '0' | '1';
+  execution_memory_ids_used?: string;
+  execution_memory_ids_rejected?: string;
+  execution_memory_usage_summary?: string;
   execution_linear_issue_url?: string;
   review_comments_posted?: string;
   review_types?: string;
   requirements_tracker_updated?: string;
+}
+
+export interface ExecutionMemoryContextMemory {
+  memoryId: string;
+  title: string;
+  memoryType: 'implementation_pattern' | 'verification_pattern' | 'pitfall_pattern';
+  score: number;
+  appliesWhen: string;
+  action: string;
+  avoid: string;
+  verification: string;
+}
+
+export interface ExecutionMemoryContext {
+  status: 'none' | 'matched' | 'error';
+  applicationId?: string;
+  retrievalVersion?: string;
+  querySummary?: string;
+  matchedAt?: Timestamp;
+  matchedMemories?: ExecutionMemoryContextMemory[];
+  errorCode?: string;
+  errorMessage?: string;
+}
+
+export interface ExecutionMemoryPostRun {
+  status: 'pending' | 'processing' | 'completed' | 'skipped' | 'error';
+  attempts: number;
+  lastAttemptAt?: Timestamp;
+  generatedMemoryIds: string[];
+  evaluationSummary?: string;
+  skipReason?: 'infra_only' | 'insufficient_signal' | 'already_completed' | 'no_reusable_lesson';
+  errorMessage?: string;
+  completedAt?: Timestamp;
 }
 
 /**
@@ -196,4 +232,6 @@ export interface CodeTask {
 
   // Review task metadata
   reviewTypes?: string[];        // Review types requested (e.g., ['code_quality', 'security'])
+  executionMemoryContext?: ExecutionMemoryContext;
+  executionMemoryPostRun?: ExecutionMemoryPostRun;
 }

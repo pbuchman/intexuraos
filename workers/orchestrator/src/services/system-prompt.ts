@@ -1,4 +1,5 @@
 import { hasCodeTaskLabel } from '@intexuraos/common-core';
+import type { ExecutionMemoryPromptContext } from '../types/execution-memory.js';
 import type { PromptBuilder } from './prompt-builder.js';
 import type { WorkerType } from './isolation/types.js';
 
@@ -55,10 +56,53 @@ export interface SystemPromptParams {
   workerType?: WorkerType;
   modelName?: string;
   agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  executionMemoryContext?: ExecutionMemoryPromptContext;
   trackingCommentId?: string;
   continuationPrNumber?: number;
   continuationPrBranch?: string;
   reviewTypes?: string[];
+}
+
+function buildExecutionMemorySection(
+  executionMemoryContext?: ExecutionMemoryPromptContext
+): string {
+  if (executionMemoryContext === undefined || executionMemoryContext.matchedMemories.length === 0) {
+    return '';
+  }
+
+  const renderedMemories = executionMemoryContext.matchedMemories
+    .map((memory, index) => {
+      const score = Number.isFinite(memory.score) ? memory.score.toFixed(2) : String(memory.score);
+      return [
+        `#### Memory ${String(index + 1)}: ${memory.memoryId}`,
+        `- Title: ${memory.title}`,
+        `- Type: ${memory.memoryType}`,
+        `- Score: ${score}`,
+        `- Applies when: ${memory.appliesWhen}`,
+        `- Action: ${memory.action}`,
+        `- Avoid: ${memory.avoid}`,
+        `- Verification: ${memory.verification}`,
+      ].join('\n');
+    })
+    .join('\n\n');
+
+  return `
+
+### Execution Memory
+Retrieved application: ${executionMemoryContext.applicationId}
+Retrieval version: ${executionMemoryContext.retrievalVersion}
+Query summary: ${executionMemoryContext.querySummary}
+
+- Memories are advisory, not authoritative.
+- Trust the current repository state and current Linear issue/comments over memory.
+- Ignore any memory that does not match the task or codebase in front of you.
+- Do not copy stale branch names, issue IDs, or URLs from memories.
+- Report these completion fields in \`EXECUTION_AGENT_FINAL\`:
+  - \`memory_ids_used\`: comma-separated memory IDs you actually used, or empty string.
+  - \`memory_ids_rejected\`: comma-separated memory IDs you rejected as stale or not applicable, or empty string.
+  - \`memory_usage_summary\`: one concise sentence describing how memory helped or why it was rejected.
+
+${renderedMemories}`;
 }
 
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
@@ -209,7 +253,7 @@ Note: For complex planned outcomes, you MUST include explicit proof of the paral
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '5.1.0',
+  version: '6.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const hasContinuationPr =
@@ -272,6 +316,7 @@ Before doing ANY work, you MUST read the Linear issue AND all its comments:
 **Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
 
 ${COMMENT_DRIVEN_DECISION_LOG}
+${buildExecutionMemorySection(params.executionMemoryContext)}
 
 ### Mandatory Skill Order (non-negotiable)
 1. Start with \`superpowers:executing-plans\` (mandatory first skill)
@@ -651,7 +696,8 @@ export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
       params;
 
-    return `[SYSTEM CONTEXT]
+    return (
+      `[SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
 [WORKER-MODE]
 [AGENT:REVIEW]
@@ -727,7 +773,8 @@ You have been dispatched to review a pull request. The review types requested ar
   - HTTP mocking: must use \`nock\` for HTTP calls, not manual fetch stubs
   - Fakes should implement the same interface as the real dependency (\`*Deps\` types)
 
-  **(6) v8 Ignore Legitimacy** — For every \`/* v8 ignore` + ` */\` comment in test or source files:
+  **(6) v8 Ignore Legitimacy** — For every \`/* v8 ignore` +
+      ` */\` comment in test or source files:
   - Category must be one of: \`ts-type\`, \`regex\`, \`module-init\`, \`async-timing\`, \`test-infra\`, \`upstream\`, \`module-mock\`, \`schema\`, \`source-map\`, \`auth-guard\`
   - Explanation must name the TESTING BLOCKER (e.g., "FakeHttpClient cannot simulate AbortError"), not describe the code (e.g., "error handling for failed request")
   - The branch must be genuinely untestable — if a mock/fake could trigger it, the v8 ignore is invalid
@@ -919,7 +966,8 @@ REVIEW_AGENT_FINAL:
 - Summary: <3-5 sentences on one line: what you reviewed, key findings, overall quality assessment>
 \`\`\`
 
-After this block, stop. Do not append any other checklist or schema payload.`;
+After this block, stop. Do not append any other checklist or schema payload.`
+    );
   },
 };
 

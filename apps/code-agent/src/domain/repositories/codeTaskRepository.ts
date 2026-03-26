@@ -47,6 +47,8 @@ export interface CreateTaskInput {
 
   // Review task metadata
   reviewTypes?: string[];
+  executionMemoryContext?: CodeTask['executionMemoryContext'];
+  executionMemoryPostRun?: CodeTask['executionMemoryPostRun'];
 }
 
 export interface UpdateTaskInput {
@@ -72,6 +74,8 @@ export interface UpdateTaskInput {
   // PR correlation (INT-465): populated on task completion from result.prUrl
   prNumber?: number;
   prBranch?: string;
+  executionMemoryContext?: CodeTask['executionMemoryContext'];
+  executionMemoryPostRun?: CodeTask['executionMemoryPostRun'];
 }
 
 export interface ListTasksInput {
@@ -236,4 +240,9 @@ export interface CodeTaskRepository {
   findPlannedTaskByLinearIssue(
     linearIssueId: string
   ): Promise<Result<CodeTask | null, RepositoryError>>;
+
+  /**
+   * List execution tasks waiting for scheduler-backed execution-memory post-run processing.
+   */
+  listPendingExecutionMemoryPostRun(limit: number): Promise<Result<CodeTask[], RepositoryError>>;
 }

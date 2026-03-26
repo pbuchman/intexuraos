@@ -26,11 +26,47 @@ import {
   type DrainTaskQueueDeps,
 } from '../../../domain/usecases/drainTaskQueue.js';
 
+const prepareExecutionMemoryContextMock = vi.fn();
+let mockExecutionMemoryEnabled = false;
+
+vi.mock('../../../domain/usecases/prepareExecutionMemoryContext.js', (): {
+  prepareExecutionMemoryContext: (...args: unknown[]) => unknown;
+  toDispatchExecutionMemoryContext: (context: {
+    status?: string;
+    applicationId?: string;
+    retrievalVersion?: string;
+    querySummary?: string;
+    matchedMemories?: unknown[];
+  } | undefined) => unknown;
+} => ({
+  prepareExecutionMemoryContext: (...args: unknown[]): unknown => prepareExecutionMemoryContextMock(...args),
+  toDispatchExecutionMemoryContext: (context: {
+    status?: string;
+    applicationId?: string;
+    retrievalVersion?: string;
+    querySummary?: string;
+    matchedMemories?: unknown[];
+  } | undefined): unknown =>
+    context?.status === 'matched'
+      ? {
+          applicationId: context.applicationId ?? '',
+          retrievalVersion: context.retrievalVersion ?? '',
+          querySummary: context.querySummary ?? '',
+          matchedMemories: context.matchedMemories ?? [],
+        }
+      : undefined,
+}));
+
 // Mock config
 vi.mock('../../../config.js', () => ({
-  loadConfig: (): { queue: { maxSize: number; ttlMinutes: number }; serviceUrl: string } => ({
+  loadConfig: (): {
+    queue: { maxSize: number; ttlMinutes: number };
+    serviceUrl: string;
+    executionMemoryEnabled: boolean;
+  } => ({
     queue: { maxSize: 50, ttlMinutes: 30 },
     serviceUrl: 'https://code-agent.test',
+    executionMemoryEnabled: mockExecutionMemoryEnabled,
   }),
 }));
 
@@ -80,6 +116,8 @@ describe('drainTaskQueue', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    prepareExecutionMemoryContextMock.mockReset();
+    mockExecutionMemoryEnabled = false;
 
     mockLogger = {
       info: vi.fn(),
@@ -233,6 +271,118 @@ describe('drainTaskQueue', () => {
 
     // Verify notification sent
     expect(mockWhatsappNotifier.notifyTaskQueueExpired).toHaveBeenCalledWith('user-456', task);
+  });
+
+  it('prepares and threads execution memory context for execution-agent dispatches', async () => {
+    mockExecutionMemoryEnabled = true;
+    const task = createMockTask({
+      linearIssueId: 'INT-1098',
+      agentType: 'execution',
+    });
+
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    mockLinearAgentClient.validateIssue.mockResolvedValue(ok({
+      id: 'issue-123',
+      identifier: 'INT-1098',
+      title: 'Issue',
+      url: 'https://linear.app/intexura/issue/INT-1098',
+      labels: ['code-task'],
+      childCount: 0,
+      parentId: null,
+    }));
+    setupWorkerSettings();
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'matched',
+      applicationId: 'app-123',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'Auth callback logging work',
+      matchedMemories: [
+        {
+          memoryId: 'mem-1',
+          title: 'Add route-level coverage',
+          memoryType: 'verification_pattern',
+          score: 0.91,
+          appliesWhen: 'Fastify callback routes are changing',
+          action: 'Add app.inject coverage',
+          avoid: 'Do not skip schema changes',
+          verification: 'Check task detail serialization',
+        },
+      ],
+    });
+    mockCodeTaskRepo.update.mockImplementation(async (_taskId, input) => ok({
+      ...task,
+      ...(input.status !== undefined ? { status: input.status } : {}),
+      ...(input.executionMemoryContext !== undefined
+        ? { executionMemoryContext: input.executionMemoryContext }
+        : {}),
+      ...(input.workerLocation !== undefined ? { workerLocation: input.workerLocation } : {}),
+    }));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    expect(prepareExecutionMemoryContextMock).toHaveBeenCalledOnce();
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', expect.objectContaining({
+      executionMemoryContext: expect.objectContaining({
+        status: 'matched',
+        applicationId: 'app-123',
+      }),
+    }));
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      agentType: 'execution',
+      executionMemoryContext: {
+        applicationId: 'app-123',
+        retrievalVersion: 'execution-memory-retrieval@1.0.0',
+        querySummary: 'Auth callback logging work',
+        matchedMemories: [
+          expect.objectContaining({ memoryId: 'mem-1' }),
+        ],
+      },
+    }));
+  });
+
+  it('warns when execution memory context persistence fails before dispatch', async () => {
+    mockExecutionMemoryEnabled = true;
+    const task = createMockTask({
+      linearIssueId: 'INT-1098',
+      agentType: 'execution',
+    });
+
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    mockLinearAgentClient.validateIssue.mockResolvedValue(ok({
+      id: 'issue-123',
+      identifier: 'INT-1098',
+      title: 'Issue',
+      url: 'https://linear.app/intexura/issue/INT-1098',
+      labels: ['code-task'],
+      childCount: 0,
+      parentId: null,
+    }));
+    setupWorkerSettings();
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'none',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'Auth callback logging work',
+    });
+    mockCodeTaskRepo.update
+      .mockResolvedValueOnce(err({ message: 'update failed' }))
+      .mockResolvedValueOnce(ok({
+        ...task,
+        status: 'dispatched',
+      }));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task-123',
+        error: expect.objectContaining({ message: 'update failed' }),
+      }),
+      'Failed to persist execution memory context before dispatch'
+    );
   });
 
   it('clears parent implementationTaskId when expired task has parentTaskId', async () => {

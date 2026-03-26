@@ -1075,8 +1075,52 @@ describe('system-prompt', () => {
     expect(planningPrompt.version).toBe('3.1.0');
   });
 
-  it('execution prompt version is 5.1.0', () => {
-    expect(executionPrompt.version).toBe('5.1.0');
+  it('execution prompt version is 6.0.0', () => {
+    expect(executionPrompt.version).toBe('6.0.0');
+  });
+
+  it('injects execution memory section only for execution tasks', () => {
+    const executionResult = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task'],
+      executionMemoryContext: {
+        applicationId: 'app_123',
+        retrievalVersion: 'execution-memory-retrieval@1.0.0',
+        querySummary: 'Callback logging, route verification, and env propagation.',
+        matchedMemories: [
+          {
+            memoryId: 'mem_142',
+            title: 'Log incoming requests on callback routes',
+            memoryType: 'pitfall_pattern',
+            score: 0.94,
+            appliesWhen: 'A callback route changes request handling.',
+            action: 'Update request logging with the route change.',
+            avoid: 'Do not copy stale branch names from memories.',
+            verification: 'Add app.inject coverage for the route.',
+          },
+        ],
+      },
+    });
+
+    const planningResult = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['bug'],
+      executionMemoryContext: {
+        applicationId: 'app_ignored',
+        retrievalVersion: 'execution-memory-retrieval@1.0.0',
+        querySummary: 'ignored',
+        matchedMemories: [],
+      },
+    });
+
+    expect(executionResult).toContain('### Execution Memory');
+    expect(executionResult).toContain('Memories are advisory, not authoritative');
+    expect(executionResult).toContain('mem_142');
+    expect(executionResult).toContain('Do not copy stale branch names from memories.');
+    expect(executionResult).toContain('memory_ids_used');
+    expect(executionResult).toContain('memory_ids_rejected');
+    expect(executionResult).toContain('memory_usage_summary');
+    expect(planningResult).not.toContain('### Execution Memory');
   });
 
   it('review agent prompt includes Linear section when linearIssueId is provided', () => {

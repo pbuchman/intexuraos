@@ -25,11 +25,47 @@ import {
   type DrainRetryQueueDeps,
 } from '../../../domain/usecases/drainRetryQueue.js';
 
+const prepareExecutionMemoryContextMock = vi.fn();
+let mockExecutionMemoryEnabled = false;
+
+vi.mock('../../../domain/usecases/prepareExecutionMemoryContext.js', (): {
+  prepareExecutionMemoryContext: (...args: unknown[]) => unknown;
+  toDispatchExecutionMemoryContext: (context: {
+    status?: string;
+    applicationId?: string;
+    retrievalVersion?: string;
+    querySummary?: string;
+    matchedMemories?: unknown[];
+  } | undefined) => unknown;
+} => ({
+  prepareExecutionMemoryContext: (...args: unknown[]): unknown => prepareExecutionMemoryContextMock(...args),
+  toDispatchExecutionMemoryContext: (context: {
+    status?: string;
+    applicationId?: string;
+    retrievalVersion?: string;
+    querySummary?: string;
+    matchedMemories?: unknown[];
+  } | undefined): unknown =>
+    context?.status === 'matched'
+      ? {
+          applicationId: context.applicationId ?? '',
+          retrievalVersion: context.retrievalVersion ?? '',
+          querySummary: context.querySummary ?? '',
+          matchedMemories: context.matchedMemories ?? [],
+        }
+      : undefined,
+}));
+
 // Mock config
 vi.mock('../../../config.js', () => ({
-  loadConfig: (): { retryQueue: { maxAttempts: number; ttlMinutes: number }; serviceUrl: string } => ({
+  loadConfig: (): {
+    retryQueue: { maxAttempts: number; ttlMinutes: number };
+    serviceUrl: string;
+    executionMemoryEnabled: boolean;
+  } => ({
     retryQueue: { maxAttempts: 3, ttlMinutes: 10 },
     serviceUrl: 'https://code-agent.test',
+    executionMemoryEnabled: mockExecutionMemoryEnabled,
   }),
 }));
 
@@ -146,6 +182,8 @@ describe('drainRetryQueue', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     _resetRetryDrainGuard();
+    prepareExecutionMemoryContextMock.mockReset();
+    mockExecutionMemoryEnabled = false;
 
     mockLogger = {
       info: vi.fn(),
@@ -191,6 +229,57 @@ describe('drainRetryQueue', () => {
     mockStatusMirrorService = {
       mirrorStatus: vi.fn().mockResolvedValue(ok(undefined)),
     };
+  });
+
+  it('prepares and threads execution memory context for execution task retries', async () => {
+    mockExecutionMemoryEnabled = true;
+    mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+    mockCodeTaskRepo.findById.mockResolvedValue(ok({
+      ...sampleTask,
+      linearIssueId: 'INT-1098',
+      agentType: 'execution',
+    }));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'matched',
+      applicationId: 'app-456',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'Retry the callback route change with logging verification',
+      matchedMemories: [
+        {
+          memoryId: 'mem-9',
+          title: 'Verify route serialization',
+          memoryType: 'verification_pattern',
+          score: 0.88,
+          appliesWhen: 'Route schema changes',
+          action: 'Update schema and app.inject coverage',
+          avoid: 'Do not patch the handler alone',
+          verification: 'Check route response shape',
+        },
+      ],
+    });
+
+    const result = await drainRetryQueue(buildDeps());
+
+    expect(result.ok).toBe(true);
+    expect(prepareExecutionMemoryContextMock).toHaveBeenCalledOnce();
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({
+      executionMemoryContext: expect.objectContaining({
+        status: 'matched',
+        applicationId: 'app-456',
+      }),
+    }));
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      agentType: 'execution',
+      executionMemoryContext: {
+        applicationId: 'app-456',
+        retrievalVersion: 'execution-memory-retrieval@1.0.0',
+        querySummary: 'Retry the callback route change with logging verification',
+        matchedMemories: [
+          expect.objectContaining({ memoryId: 'mem-9' }),
+        ],
+      },
+    }));
   });
 
   afterEach(() => {

@@ -276,6 +276,7 @@ describe('POST /internal/webhooks/task-complete', () => {
   });
 
   afterEach(() => {
+    delete process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'];
     resetServices();
     resetFirestore();
     vi.clearAllMocks();
@@ -2053,6 +2054,102 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.result?.execution_linear_issue_url).toContain('/INT-123');
     });
 
+    it('marks execution memory post-run pending and stores memory usage fields when feature flag is enabled', async () => {
+      process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] = 'true';
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Implement the task',
+        sanitizedPrompt: 'Implement the task',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 't-exec-memory-pending',
+        linearIssueId: 'INT-123',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'execution',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const validateIssueSpy = vi.spyOn(getServices().linearAgentClient, 'validateIssue');
+      validateIssueSpy.mockReset();
+      validateIssueSpy
+        .mockResolvedValueOnce(
+          ok({
+            id: 'routed-uuid',
+            identifier: 'INT-123',
+            title: 'Routed issue',
+            url: 'https://linear.app/pbuchman/issue/INT-123',
+            labels: ['code-task'],
+            childCount: 0,
+            parentId: null,
+          })
+        )
+        .mockResolvedValueOnce(
+          ok({
+            id: 'routed-uuid',
+            identifier: 'INT-123',
+            title: 'Routed issue',
+            url: 'https://linear.app/pbuchman/issue/INT-123',
+            labels: ['code-task'],
+            childCount: 0,
+            parentId: null,
+          })
+        );
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/901',
+          branch: 'feat/execution-agent',
+          commits: 2,
+          summary: 'Implemented execution task',
+          execution_outcome_label: 'implemented' as const,
+          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_requesting_code_review_used: '1' as const,
+          execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
+          execution_memory_ids_used: 'mem_142,mem_155',
+          execution_memory_ids_rejected: 'mem_188',
+          execution_memory_usage_summary: 'Used route logging and coverage lessons.',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.executionMemoryPostRun).toEqual(
+        expect.objectContaining({
+          status: 'pending',
+          attempts: 0,
+          generatedMemoryIds: [],
+        })
+      );
+      expect(getResult.value.result?.execution_memory_ids_used).toBe('mem_142,mem_155');
+      expect(getResult.value.result?.execution_memory_ids_rejected).toBe('mem_188');
+      expect(getResult.value.result?.execution_memory_usage_summary).toBe(
+        'Used route logging and coverage lessons.'
+      );
+    });
+
     it('does not post implementation completion comment when the final update fails', async () => {
       const { gitHubPRClient } = installPRNotificationServices();
       const createResult = await codeTaskRepo.create({
@@ -2137,6 +2234,54 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(gitHubPRClient.postPRComment).not.toHaveBeenCalled();
 
       updateSpy.mockRestore();
+    });
+
+    it('does not queue execution-memory post-run work for non-execution agents', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Implement the task',
+        sanitizedPrompt: 'Implement the task',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_non_execution',
+        linearIssueId: 'INT-123',
+        agentType: 'planning',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Planned the task',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.executionMemoryPostRun).toBeUndefined();
     });
 
     it('handles markdown-wrapped execution_linear_issue_url in execution completion', async () => {

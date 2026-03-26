@@ -4339,6 +4339,31 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.success).toBe(true);
     });
 
+    it('returns 200 when execution-memory services are not configured', async () => {
+      const services = getServices();
+      const {
+        executionMemoryQueryClient: _queryClient,
+        executionMemoryEmbeddingClient: _embeddingClient,
+        executionMemoryRepo: _executionMemoryRepo,
+        executionMemoryApplicationRepo: _executionMemoryApplicationRepo,
+        ...servicesWithoutExecutionMemory
+      } = services;
+      setServices(servicesWithoutExecutionMemory);
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/drain-queue',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+    });
+
     it('returns 200 when authenticated via OIDC bearer token', async () => {
       const response = await server.inject({
         method: 'POST',

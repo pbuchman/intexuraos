@@ -1459,11 +1459,13 @@ module "code_agent" {
     INTEXURAOS_ORCHESTRATOR_SECRET   = module.secret_manager.secret_ids["INTEXURAOS_ORCHESTRATOR_SECRET"]
     INTEXURAOS_TOKEN_ENCRYPTION_KEY  = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
     INTEXURAOS_GITHUB_WEBHOOK_SECRET = module.secret_manager.secret_ids["INTEXURAOS_GITHUB_WEBHOOK_SECRET"]
+    INTEXURAOS_OPENAI_APP_API_KEY    = module.secret_manager.secret_ids["INTEXURAOS_OPENAI_APP_API_KEY"]
   })
 
   env_vars = merge(local.common_service_env_vars, {
     INTEXURAOS_SERVICE_URL                = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
+    INTEXURAOS_EXECUTION_MEMORY_ENABLED   = "false"
     INTEXURAOS_QUEUE_MAX_SIZE             = "50"
     INTEXURAOS_QUEUE_TTL_MINUTES          = "30"
     INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS   = "3"

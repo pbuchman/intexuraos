@@ -29,6 +29,7 @@ import { generateWebhookSecret } from '../domain/utils/secrets.js';
 import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
 import { loadConfig } from '../config.js';
 import { backLinkPlanningTask } from '../domain/usecases/backLinkPlanningTask.js';
+import type { CodeTask } from '../domain/models/codeTask.js';
 
 const logger = createAppLogger({ name: 'code-routes' });
 
@@ -93,6 +94,55 @@ const linearIssueForDisplaySchema = {
 const workerTypeSchema = {
   type: 'string',
   enum: CODE_TASK_WORKER_TYPES,
+} as const;
+
+const executionMemoryContextSchema = {
+  type: 'object',
+  nullable: true,
+  properties: {
+    status: { type: 'string', enum: ['none', 'matched', 'error'] },
+    applicationId: { type: 'string', nullable: true },
+    retrievalVersion: { type: 'string', nullable: true },
+    querySummary: { type: 'string', nullable: true },
+    matchedAt: { type: 'string', format: 'date-time', nullable: true },
+    matchedMemories: {
+      type: 'array',
+      nullable: true,
+      items: {
+        type: 'object',
+        properties: {
+          memoryId: { type: 'string' },
+          title: { type: 'string' },
+          memoryType: { type: 'string', enum: ['implementation_pattern', 'verification_pattern', 'pitfall_pattern'] },
+          score: { type: 'number' },
+          appliesWhen: { type: 'string' },
+          action: { type: 'string' },
+          avoid: { type: 'string' },
+          verification: { type: 'string' },
+        },
+        required: ['memoryId', 'title', 'memoryType', 'score', 'appliesWhen', 'action', 'avoid', 'verification'],
+      },
+    },
+    errorCode: { type: 'string', nullable: true },
+    errorMessage: { type: 'string', nullable: true },
+  },
+  required: ['status'],
+} as const;
+
+const executionMemoryPostRunSchema = {
+  type: 'object',
+  nullable: true,
+  properties: {
+    status: { type: 'string', enum: ['pending', 'processing', 'completed', 'skipped', 'error'] },
+    attempts: { type: 'number' },
+    lastAttemptAt: { type: 'string', format: 'date-time', nullable: true },
+    generatedMemoryIds: { type: 'array', items: { type: 'string' } },
+    evaluationSummary: { type: 'string', nullable: true },
+    skipReason: { type: 'string', enum: ['infra_only', 'insufficient_signal', 'already_completed', 'no_reusable_lesson'], nullable: true },
+    errorMessage: { type: 'string', nullable: true },
+    completedAt: { type: 'string', format: 'date-time', nullable: true },
+  },
+  required: ['status', 'attempts', 'generatedMemoryIds'],
 } as const;
 
 // Response schema for created task
@@ -162,6 +212,8 @@ const codeTaskSchema = {
         },
       },
     },
+    executionMemoryContext: executionMemoryContextSchema,
+    executionMemoryPostRun: executionMemoryPostRunSchema,
   },
   required: [
     'id',
@@ -249,6 +301,8 @@ function taskToApiResponse(task: {
       supportLink?: string;
     };
   };
+  executionMemoryContext?: CodeTask['executionMemoryContext'];
+  executionMemoryPostRun?: CodeTask['executionMemoryPostRun'];
   completedAt?: unknown;
   logChunksDropped?: number;
   statusSummary?: unknown;
@@ -298,8 +352,74 @@ function taskToApiResponse(task: {
       supportLink?: string;
     };
   };
+  executionMemoryContext?: {
+    status: 'none' | 'matched' | 'error';
+    applicationId?: string;
+    retrievalVersion?: string;
+    querySummary?: string;
+    matchedAt?: string;
+    matchedMemories?: {
+      memoryId: string;
+      title: string;
+      memoryType: 'implementation_pattern' | 'verification_pattern' | 'pitfall_pattern';
+      score: number;
+      appliesWhen: string;
+      action: string;
+      avoid: string;
+      verification: string;
+    }[];
+    errorCode?: string;
+    errorMessage?: string;
+  };
+  executionMemoryPostRun?: {
+    status: 'pending' | 'processing' | 'completed' | 'skipped' | 'error';
+    attempts: number;
+    lastAttemptAt?: string;
+    generatedMemoryIds: string[];
+    evaluationSummary?: string;
+    skipReason?: 'infra_only' | 'insufficient_signal' | 'already_completed' | 'no_reusable_lesson';
+    errorMessage?: string;
+    completedAt?: string;
+  };
 }
 {
+  const executionMemoryMatchedAt = task.executionMemoryContext?.matchedAt !== undefined
+    ? timestampToIso(task.executionMemoryContext.matchedAt)
+    : undefined;
+  const executionMemoryContext = task.executionMemoryContext !== undefined
+    ? (() => {
+        const { matchedAt: _matchedAt, ...rest } = task.executionMemoryContext;
+        return {
+          ...rest,
+          ...(executionMemoryMatchedAt !== undefined && { matchedAt: executionMemoryMatchedAt }),
+        };
+      })()
+    : undefined;
+  const executionMemoryLastAttemptAt = task.executionMemoryPostRun?.lastAttemptAt !== undefined
+    ? timestampToIso(task.executionMemoryPostRun.lastAttemptAt)
+    : undefined;
+  const executionMemoryCompletedAt = task.executionMemoryPostRun?.completedAt !== undefined
+    ? timestampToIso(task.executionMemoryPostRun.completedAt)
+    : undefined;
+  const executionMemoryPostRun = task.executionMemoryPostRun !== undefined
+    ? (() => {
+        const {
+          lastAttemptAt: _lastAttemptAt,
+          completedAt: _completedAt,
+          ...rest
+        } = task.executionMemoryPostRun;
+        return {
+          ...rest,
+          ...(executionMemoryLastAttemptAt !== undefined && {
+            lastAttemptAt: executionMemoryLastAttemptAt,
+          }),
+          ...(executionMemoryCompletedAt !== undefined && {
+            completedAt: executionMemoryCompletedAt,
+          }),
+        };
+      })()
+    : undefined;
+
   return {
     id: task.id,
     userId: task.userId,
@@ -326,6 +446,8 @@ function taskToApiResponse(task: {
     ...(task.followUpReason !== undefined && { followUpReason: task.followUpReason }),
     ...(task.result !== undefined && { result: task.result }),
     ...(task.error !== undefined && { error: task.error }),
+    ...(executionMemoryContext !== undefined && { executionMemoryContext }),
+    ...(executionMemoryPostRun !== undefined && { executionMemoryPostRun }),
   };
 }
 
@@ -1712,6 +1834,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                       },
                     },
                   },
+                  executionMemoryContext: executionMemoryContextSchema,
+                  executionMemoryPostRun: executionMemoryPostRunSchema,
                   statusSummary: { type: 'object', nullable: true },
                 },
               },
@@ -3931,6 +4055,22 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         workerSettingsRepo: services.workerSettingsRepo,
         logLineRepo: services.logLineRepo,
         statusMirrorService: services.statusMirrorService,
+        executionMemory: {
+          /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes is not tracked after service override tests @preserve */
+          ...(services.executionMemoryQueryClient !== undefined && {
+            queryClient: services.executionMemoryQueryClient,
+          }),
+          ...(services.executionMemoryEmbeddingClient !== undefined && {
+            embeddingClient: services.executionMemoryEmbeddingClient,
+          }),
+          ...(services.executionMemoryRepo !== undefined && {
+            executionMemoryRepo: services.executionMemoryRepo,
+          }),
+          ...(services.executionMemoryApplicationRepo !== undefined && {
+            executionMemoryApplicationRepo: services.executionMemoryApplicationRepo,
+          }),
+          /* v8 ignore stop @preserve */
+        },
       });
 
       if (retryResult.ok && retryResult.value.action !== 'empty' && retryResult.value.action !== 'failed') {
@@ -3950,6 +4090,22 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         workerSettingsRepo: services.workerSettingsRepo,
         taskEnqueueService: services.taskEnqueueService,
         orchestratorSecret: loadConfig().orchestratorSecret,
+        executionMemory: {
+          /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes is not tracked after service override tests @preserve */
+          ...(services.executionMemoryQueryClient !== undefined && {
+            queryClient: services.executionMemoryQueryClient,
+          }),
+          ...(services.executionMemoryEmbeddingClient !== undefined && {
+            embeddingClient: services.executionMemoryEmbeddingClient,
+          }),
+          ...(services.executionMemoryRepo !== undefined && {
+            executionMemoryRepo: services.executionMemoryRepo,
+          }),
+          ...(services.executionMemoryApplicationRepo !== undefined && {
+            executionMemoryApplicationRepo: services.executionMemoryApplicationRepo,
+          }),
+          /* v8 ignore stop @preserve */
+        },
       });
 
       if (!result.ok) {
