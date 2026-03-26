@@ -57,8 +57,8 @@ export interface OpenRouterModelInfo {
   provider: string;
   contextLength: number;
   pricing: {
-    promptPerToken: number;
-    completionPerToken: number;
+    inputPricePerMillion: number;
+    outputPricePerMillion: number;
   };
   inputModalities: string[];
   outputModalities: string[];

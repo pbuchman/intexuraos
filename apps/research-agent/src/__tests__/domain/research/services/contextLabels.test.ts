@@ -34,6 +34,7 @@ describe('generateContextLabels', () => {
       contexts,
       undefined,
       'user-123',
+      undefined,
       () => {
         throw new Error('Should not be called');
       },
@@ -68,6 +69,7 @@ describe('generateContextLabels', () => {
       contexts,
       'google-api-key',
       'user-123',
+      undefined,
       () => mockGenerator,
       mockPricing,
       mockLogger
@@ -93,6 +95,7 @@ describe('generateContextLabels', () => {
       contexts,
       'google-api-key',
       'user-123',
+      undefined,
       () => mockGenerator,
       mockPricing,
       mockLogger
@@ -118,6 +121,7 @@ describe('generateContextLabels', () => {
       contexts,
       'google-api-key',
       'user-123',
+      undefined,
       () => mockGenerator,
       mockPricing,
       mockLogger
@@ -136,6 +140,7 @@ describe('generateContextLabels', () => {
     let capturedUserId: unknown;
     let capturedPricing: unknown;
     let capturedLogger: unknown;
+    let capturedResearchId: unknown;
 
     const mockGenerator = {
       generateTitle: async () => ok({ title: 'Title', usage: { inputTokens: 10, outputTokens: 5 } }),
@@ -146,12 +151,14 @@ describe('generateContextLabels', () => {
       contexts,
       'test-api-key',
       'test-user-id',
-      (model, apiKey, userId, pricing, logger) => {
+      'research-456',
+      (model, apiKey, userId, pricing, logger, researchId) => {
         capturedModel = model;
         capturedApiKey = apiKey;
         capturedUserId = userId;
         capturedPricing = pricing;
         capturedLogger = logger;
+        capturedResearchId = researchId;
         return mockGenerator;
       },
       mockPricing,
@@ -163,6 +170,7 @@ describe('generateContextLabels', () => {
     expect(capturedUserId).toBe('test-user-id');
     expect(capturedPricing).toBe(mockPricing);
     expect(capturedLogger).toBe(mockLogger);
+    expect(capturedResearchId).toBe('research-456');
   });
 
   it('processes multiple contexts in parallel', async () => {
@@ -182,7 +190,7 @@ describe('generateContextLabels', () => {
       },
     };
 
-    await generateContextLabels(contexts, 'api-key', 'user', () => mockGenerator, mockPricing, mockLogger);
+    await generateContextLabels(contexts, 'api-key', 'user', undefined, () => mockGenerator, mockPricing, mockLogger);
 
     expect(callOrder).toEqual([1, 2, 3]);
   });
