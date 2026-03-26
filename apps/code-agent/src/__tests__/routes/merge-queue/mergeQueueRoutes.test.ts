@@ -903,6 +903,33 @@ describe('Merge queue JWT routes', () => {
       });
     });
 
+    it('clears exclusions when given an empty array', async () => {
+      vi.mocked(mockMergeQueueWatchRepo.findById).mockResolvedValue(
+        ok({
+          id: 'watch_abc',
+          userId: 'test-user-id',
+          status: 'active',
+          excludedPrNumbers: [1, 2],
+        } as never)
+      );
+      vi.mocked(mockMergeQueueWatchRepo.update).mockResolvedValue(ok(undefined));
+
+      const res = await server.inject({
+        method: 'PUT',
+        url: '/code/merge-queue/watch/watch_abc/exclusions',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: { excludedPrNumbers: [] },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body) as { success: boolean; data: { excludedPrNumbers: number[] } };
+      expect(body.success).toBe(true);
+      expect(body.data.excludedPrNumbers).toStrictEqual([]);
+      expect(mockMergeQueueWatchRepo.update).toHaveBeenCalledWith('watch_abc', {
+        excludedPrNumbers: [],
+      });
+    });
+
     it('returns 404 when watch not found', async () => {
       vi.mocked(mockMergeQueueWatchRepo.findById).mockResolvedValue(
         err({ code: 'NOT_FOUND' as const, message: 'Watch watch_xyz not found' })
