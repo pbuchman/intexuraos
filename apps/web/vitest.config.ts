@@ -40,7 +40,7 @@ export default defineConfig({
     globals: false,
     environment: 'jsdom',
     include: ['src/**/__tests__/**/*.ts', 'src/**/__tests__/**/*.tsx'],
-    exclude: ['**/node_modules/**', '**/dist/**', '**/__tests__/setup.ts'],
+    exclude: ['**/node_modules/**', '**/dist/**', '**/__tests__/setup.ts', '**/__tests__/__mocks__/**'],
     setupFiles: ['./src/__tests__/setup.ts'],
     typecheck: {
       enabled: false,
