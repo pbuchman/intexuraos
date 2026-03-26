@@ -1323,10 +1323,21 @@ describe('createDetectMergeConflictsOnPush', () => {
     const logger = createLogger();
     const deps = createDeps(logger);
 
+    // Simulate review-only history: findByPR would return a review task,
+    // but the use case exclusively uses findLatestExecutionTaskByPR (which
+    // returns ok(null) by default) — so the workflow treats this as fresh.
+    deps.codeTaskRepo.findByPR.mockResolvedValue(ok(createTask({
+      id: 'task-review-only',
+      agentType: 'review',
+      status: 'reviewed',
+      linearIssueId: 'INT-999',
+    })));
+
     const detector = createDetectMergeConflictsOnPush(deps as never);
     await detector.detectOnPush(createPushEvent('refs/heads/release/2026.03'), logger);
 
     expect(deps.codeTaskRepo.findLatestExecutionTaskByPR).toHaveBeenCalledWith('intexuraos/intexuraos', 42);
+    expect(deps.codeTaskRepo.findByPR).not.toHaveBeenCalled();
     expect(deps.gitHubPRClient.updateIssueComment).toHaveBeenLastCalledWith(
       'oauth-token',
       'intexuraos',
