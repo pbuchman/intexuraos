@@ -5,6 +5,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
+import type { WorkerSettingsRepository } from '../../../domain/ports/workerSettingsRepository.js';
 import pino from 'pino';
 import { createTaskForPR, type CreateTaskForPRDeps, type CreateTaskForPRRequest } from '../../../domain/usecases/createTaskForPR.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
@@ -254,6 +255,13 @@ function createMockFirestore(): CreateTaskForPRDeps['firestore'] {
   };
 }
 
+function createFakeWorkerSettingsRepo(overrides?: Partial<WorkerSettingsRepository>): WorkerSettingsRepository {
+  return {
+    getSettings: vi.fn().mockResolvedValue(ok(null)),
+    ...overrides,
+  } as unknown as WorkerSettingsRepository;
+}
+
 function createDefaultDeps(): CreateTaskForPRDeps {
   return {
     logger,
@@ -267,6 +275,7 @@ function createDefaultDeps(): CreateTaskForPRDeps {
     userServiceClient: createMockUserServiceClient(),
     firestore: createMockFirestore(),
     automationLog: { record: vi.fn().mockResolvedValue(undefined) },
+    workerSettingsRepo: createFakeWorkerSettingsRepo(),
   };
 }
 
@@ -985,6 +994,69 @@ describe('createTaskForPR', () => {
       expect(result.ok).toBe(true);
       // Verify lock was NOT deleted (task enqueued successfully)
       expect(mockLockDeleteFn).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('worker type resolution from user settings', () => {
+    it('uses defaultPullRequestWorkerType from user settings when no request workerType', async () => {
+      let capturedWorkerType: unknown;
+
+      deps.workerSettingsRepo = createFakeWorkerSettingsRepo({
+        getSettings: vi.fn().mockResolvedValue(ok({ defaultPullRequestWorkerType: 'sonnet' })),
+      });
+
+      deps.codeTaskRepo = {
+        ...createMockCodeTaskRepo(),
+        async create(input): ReturnType<CodeTaskRepository['create']> {
+          capturedWorkerType = (input as unknown as Record<string, unknown>)['workerType'];
+          return ok({} as never);
+        },
+      };
+
+      await createTaskForPR(deps, request);
+
+      expect(capturedWorkerType).toBe('sonnet');
+    });
+
+    it('request workerType takes priority over user default', async () => {
+      let capturedWorkerType: unknown;
+
+      deps.workerSettingsRepo = createFakeWorkerSettingsRepo({
+        getSettings: vi.fn().mockResolvedValue(ok({ defaultPullRequestWorkerType: 'sonnet' })),
+      });
+
+      deps.codeTaskRepo = {
+        ...createMockCodeTaskRepo(),
+        async create(input): ReturnType<CodeTaskRepository['create']> {
+          capturedWorkerType = (input as unknown as Record<string, unknown>)['workerType'];
+          return ok({} as never);
+        },
+      };
+
+      request.workerType = 'opus';
+      await createTaskForPR(deps, request);
+
+      expect(capturedWorkerType).toBe('opus');
+    });
+
+    it('falls back to auto when user has no defaultPullRequestWorkerType setting', async () => {
+      let capturedWorkerType: unknown;
+
+      deps.workerSettingsRepo = createFakeWorkerSettingsRepo({
+        getSettings: vi.fn().mockResolvedValue(ok(null)),
+      });
+
+      deps.codeTaskRepo = {
+        ...createMockCodeTaskRepo(),
+        async create(input): ReturnType<CodeTaskRepository['create']> {
+          capturedWorkerType = (input as unknown as Record<string, unknown>)['workerType'];
+          return ok({} as never);
+        },
+      };
+
+      await createTaskForPR(deps, request);
+
+      expect(capturedWorkerType).toBe('auto');
     });
   });
 });

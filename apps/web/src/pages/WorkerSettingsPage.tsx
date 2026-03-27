@@ -9,7 +9,7 @@ import type {
 } from '@/services/workerSettingsApi.types';
 import { WorkerRow } from '@/components/workers/WorkerRow.js';
 import { AddWorkerForm } from '@/components/workers/AddWorkerForm.js';
-import { DefaultReviewWorkerTypeCard } from '@/components/workers/DefaultReviewWorkerTypeCard.js';
+import { DefaultWorkerTypeCard } from '@/components/workers/DefaultWorkerTypeCard.js';
 
 const MAX_WORKERS = 2;
 
@@ -23,7 +23,7 @@ export function WorkerSettingsPage(): React.JSX.Element {
     deleteWorker,
     testConnectivity,
     reorderWorkers,
-    updateDefaultReviewWorkerType,
+    updateDefaultWorkerType,
   } = useWorkerSettings();
 
   const [showAddForm, setShowAddForm] = useState(false);
@@ -72,9 +72,48 @@ export function WorkerSettingsPage(): React.JSX.Element {
       ) : null}
 
       <div className="mb-6">
-        <DefaultReviewWorkerTypeCard
-          currentType={settings?.defaultReviewWorkerType ?? 'glm'}
-          onUpdate={updateDefaultReviewWorkerType}
+        <DefaultWorkerTypeCard
+          title="Default Review Model"
+          description="Model used for automated PR reviews when no specific model is requested."
+          successMessage="Default review model saved"
+          currentType={settings?.defaultReviewWorkerType ?? 'auto'}
+          onUpdate={(wt): Promise<void> => updateDefaultWorkerType('review', wt)}
+        />
+      </div>
+      <div className="mb-6">
+        <DefaultWorkerTypeCard
+          title="Default Remediation Model"
+          description="Model used for automated code fixes after reviews find issues."
+          successMessage="Default remediation model saved"
+          currentType={settings?.defaultRemediationWorkerType ?? 'auto'}
+          onUpdate={(wt): Promise<void> => updateDefaultWorkerType('remediation', wt)}
+        />
+      </div>
+      <div className="mb-6">
+        <DefaultWorkerTypeCard
+          title="Default Execution Model"
+          description="Model used for implementing approved plans and code tasks."
+          successMessage="Default execution model saved"
+          currentType={settings?.defaultExecutionWorkerType ?? 'auto'}
+          onUpdate={(wt): Promise<void> => updateDefaultWorkerType('execution', wt)}
+        />
+      </div>
+      <div className="mb-6">
+        <DefaultWorkerTypeCard
+          title="Default Planning Model"
+          description="Model used for creating implementation plans from task descriptions."
+          successMessage="Default planning model saved"
+          currentType={settings?.defaultPlanningWorkerType ?? 'auto'}
+          onUpdate={(wt): Promise<void> => updateDefaultWorkerType('planning', wt)}
+        />
+      </div>
+      <div className="mb-6">
+        <DefaultWorkerTypeCard
+          title="Default Pull Request Model"
+          description="Model used for tasks triggered by PR comments."
+          successMessage="Default pull request model saved"
+          currentType={settings?.defaultPullRequestWorkerType ?? 'auto'}
+          onUpdate={(wt): Promise<void> => updateDefaultWorkerType('pull-request', wt)}
         />
       </div>
 

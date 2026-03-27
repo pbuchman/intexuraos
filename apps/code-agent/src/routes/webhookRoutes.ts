@@ -1230,7 +1230,8 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                     /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard, repository always contains '/' @preserve */
                     senderLogin: task.repository.split('/')[0] ?? task.userId,
                     /* v8 ignore stop @preserve */
-                    workerType: task.workerType,
+                    // Always pass 'auto' — remediation resolves its own default via defaultRemediationWorkerType
+                    workerType: 'auto',
                     eventId: taskId,
                     ...(reviewBody !== undefined && { reviewBody }),
                     ...(inlineComments !== undefined && inlineComments.length > 0 && { inlineComments }),
