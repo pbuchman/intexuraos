@@ -162,7 +162,7 @@ export async function processCodeAction(
     hasChildren,
   } = issueResult;
 
-  // Derive worker type from labels (single match only, otherwise fall back to request's workerType)
+  // Resolution chain: Linear label > request workerType > user setting > 'auto'
   const labelWorkerType = getWorkerTypeFromLabels(linearIssueLabels);
   let effectiveWorkerType: WorkerType = labelWorkerType ?? workerType;
   if (effectiveWorkerType === 'auto') {
