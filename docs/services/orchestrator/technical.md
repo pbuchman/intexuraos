@@ -225,7 +225,7 @@ Task execution timeout increased from 2 hours to 3 hours (`TASK_TIMEOUT_KILL_MS 
 | GET    | `/tasks/:id`           | None        | -                                   | `200 Task` or `404`                                            |
 | DELETE | `/tasks/:id`           | None        | -                                   | `200 { taskId, status: "cancelled" }` or `404`/`409`           |
 | POST   | `/tasks/:id/message`   | HMAC signed | `{ message: string }`               | `200 SendMessageResult` or `404`/`409`                         |
-| GET    | `/health`              | None        | -                                   | `200 { status, capacity, running, available, workerAuths }` |
+| GET    | `/health`              | None        | -                                   | `200 { status, capacity, running, available, workerAuths }`    |
 | GET    | `/meta/worker-image`   | None        | -                                   | `200` image diagnostics or `{ error }` if unavailable          |
 | POST   | `/admin/shutdown`      | HMAC signed | -                                   | `200 { status: "shutting_down" }`                              |
 | POST   | `/admin/refresh-token` | HMAC signed | -                                   | `200 { status: "refreshed", tokenExpiresAt }`                  |
@@ -592,13 +592,13 @@ Collects per-task resource and token metrics after completion:
 | `INTEXURAOS_MINIMAX_APP_API_KEY`          | Yes      | -                                  |
 | `INTEXURAOS_DASHSCOPE_APP_API_KEY`        | Yes      | -                                  |
 | `GOOGLE_APPLICATION_CREDENTIALS`          | Yes      | -                                  |
-| `INTEXURAOS_REPOSITORY_PATH`              | No       | `~/.code-orchestrator/repo`      |
+| `INTEXURAOS_REPOSITORY_PATH`              | No       | `~/.code-orchestrator/repo`        |
 | `INTEXURAOS_WORKER_CAPACITY`              | No       | `2`                                |
 | `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`      | No       | `3`                                |
 | `INTEXURAOS_PRESERVE_WORKER_CONTAINERS`   | No       | `1`                                |
-| `INTEXURAOS_CODE_WORKER_IMAGE`          | No       | (GCR Artifact Registry)            |
-| `INTEXURAOS_CODE_WORKER_FORENSICS`      | No       | `0`                                |
-| `INTEXURAOS_CODE_WORKER_FORENSICS_PATH` | No       | `~/.code-orchestrator/forensics` |
+| `INTEXURAOS_CODE_WORKER_IMAGE`            | No       | (GCR Artifact Registry)            |
+| `INTEXURAOS_CODE_WORKER_FORENSICS`        | No       | `0`                                |
+| `INTEXURAOS_CODE_WORKER_FORENSICS_PATH`   | No       | `~/.code-orchestrator/forensics`   |
 | `INTEXURAOS_GIT_USER_NAME`                | No       | (host git config)                  |
 | `INTEXURAOS_GIT_USER_EMAIL`               | No       | (host git config)                  |
 | `INTEXURAOS_GITHUB_APP_PRIVATE_KEY`       | No       | (Secret Manager)                   |
