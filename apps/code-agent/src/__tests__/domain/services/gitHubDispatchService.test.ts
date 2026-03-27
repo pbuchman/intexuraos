@@ -540,20 +540,19 @@ describe('GitHubDispatchService', () => {
       );
     });
 
-    it('should route @model directive to remediation task', async () => {
-      const mockCreateRemediation = vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'task-rem-model', workerType: 'qwen' }));
-      deps = createMockDeps({ createRemediationTask: mockCreateRemediation });
+    it('should ignore @model directive (not recognized)', async () => {
+      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(null));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-no-branch' }));
       const modelCommentEvent = { ...mockEvent, body: '@model qwen fix the tests' };
 
       const service = createWebhookDispatchService(deps);
       const result = await service.dispatch({ ...context, event: modelCommentEvent });
 
       expect(result.success).toBe(true);
-      expect(result.taskId).toBe('task-rem-model');
-      expect(mockCreateRemediation).toHaveBeenCalledWith(
-        mockLogger,
-        expect.objectContaining({ workerType: 'qwen', prNumber: 42 }),
-      );
+      // @model is not recognized, so it should not be treated as a remediation directive
+      // Instead it falls through to normal task creation without workerType
+      const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
+      expect(requestArg).not.toHaveProperty('workerType');
     });
 
     it('should not pass workerType when no @worker/@model directive found', async () => {
@@ -681,9 +680,9 @@ describe('GitHubDispatchService', () => {
       );
     });
 
-    it('should create remediation task for @model directive comments', async () => {
-      const mockCreateRemediation = vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'task-rem-3', workerType: 'sonnet' }));
-      deps = createMockDeps({ createRemediationTask: mockCreateRemediation });
+    it('should ignore @model directive in comments (not recognized)', async () => {
+      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(null));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-new' }));
 
       const modelContext: DispatchContext = {
         event: { ...mockEvent, body: '@model sonnet fix the tests' },
@@ -695,7 +694,10 @@ describe('GitHubDispatchService', () => {
       const result = await service.dispatch(modelContext);
 
       expect(result.success).toBe(true);
-      expect(result.taskId).toBe('task-rem-3');
+      // @model is not recognized, so it should not trigger remediation
+      // Instead it falls through to normal task creation without workerType
+      const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
+      expect(requestArg).not.toHaveProperty('workerType');
     });
 
     it('should pass baseBranch to remediation task when @worker event has baseBranch', async () => {
