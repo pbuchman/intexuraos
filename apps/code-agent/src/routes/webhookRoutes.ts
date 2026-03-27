@@ -1184,6 +1184,34 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 required: false,
                 signal: remediationSignal,
               });
+
+              // Best-effort: set review-outcome label on the origin Linear issue
+              try {
+                const originResult = await codeTaskRepo.findLatestExecutionTaskByPR(task.repository, prNumber);
+                if (originResult.ok && originResult.value !== null && originResult.value.linearIssueId !== undefined) {
+                  const originTask = originResult.value;
+                  const originLinearIssueId: string = originResult.value.linearIssueId;
+                  const label = originTask.agentType === 'planning' ? 'ready-to-implement' : 'ready-to-merge';
+                  const issueValidation = await linearAgentClient.validateIssue({
+                    userId: originTask.userId,
+                    identifier: originLinearIssueId,
+                  });
+                  if (issueValidation.ok) {
+                    const labelResult = await linearAgentClient.updateIssueMetadata({
+                      userId: originTask.userId,
+                      issueId: issueValidation.value.id,
+                      addLabels: [label],
+                    });
+                    if (!labelResult.ok) {
+                      request.log.warn({ taskId, prNumber, label, error: labelResult.error }, 'Failed to set review-outcome label (best-effort)');
+                    }
+                  } else {
+                    request.log.warn({ taskId, prNumber, linearIssueId: originTask.linearIssueId, error: issueValidation.error }, 'Failed to validate origin issue for review-outcome label (best-effort)');
+                  }
+                }
+              } catch (labelError: unknown) {
+                request.log.warn({ error: labelError, taskId, prNumber }, 'Failed to set review-outcome label (best-effort)');
+              }
             } else {
               const { createRemediationTaskFn, logger: remediationLogger } = getServices();
               if (createRemediationTaskFn !== undefined) {

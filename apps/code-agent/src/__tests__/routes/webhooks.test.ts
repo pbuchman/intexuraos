@@ -4745,6 +4745,249 @@ describe('POST /internal/webhooks/task-complete', () => {
     });
   });
 
+  describe('review task-complete → review-outcome labels on Linear issue', () => {
+    async function createOriginTask(overrides: {
+      traceId: string;
+      agentType: 'planning' | 'execution';
+      linearIssueId?: string;
+    }): Promise<import('../../domain/models/codeTask.js').CodeTask> {
+      const result = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Create a PR',
+        sanitizedPrompt: 'Create a PR',
+        systemPromptHash: 'origin-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: overrides.traceId,
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: overrides.agentType,
+        linearIssueId: overrides.linearIssueId ?? 'INT-500',
+      });
+      if (!result.ok) throw new Error('Failed to create origin task');
+      return result.value;
+    }
+
+    async function createReviewTaskForLabel(overrides: {
+      traceId: string;
+    }): Promise<import('../../domain/models/codeTask.js').CodeTask> {
+      const result = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: overrides.traceId,
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+      if (!result.ok) throw new Error('Failed to create review task');
+      return result.value;
+    }
+
+    function makeLabelPayload(taskId: string): {
+      taskId: string;
+      status: 'completed';
+      result: {
+        summary: string;
+        review_comments_posted: string;
+        review_types: string;
+        needs_remediation: string;
+      };
+    } {
+      return {
+        taskId,
+        status: 'completed' as const,
+        result: {
+          summary: 'All good',
+          review_comments_posted: '0',
+          review_types: 'code_quality',
+          needs_remediation: '0',
+        },
+      };
+    }
+
+    type LabelRemediationFn = (logger: import('pino').Logger, request: CreateRemediationTaskRequest) => Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>>;
+
+    async function sendLabelPayload(payload: object): Promise<import('fastify').LightMyRequestResponse> {
+      const mockFn = vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'rem-never', workerType: 'auto' }));
+      setServices({
+        ...getServices(),
+        createRemediationTaskFn: mockFn as LabelRemediationFn,
+      });
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      return app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+    }
+
+    it('adds ready-to-implement label when origin task is a planning task', async () => {
+      await createOriginTask({ traceId: 'trace_label_planning', agentType: 'planning' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_planning_review' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const validateSpy = vi.mocked(lac.validateIssue);
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      expect(validateSpy).toHaveBeenCalledWith({
+        userId: 'user-123',
+        identifier: 'INT-500',
+      });
+      expect(metadataSpy).toHaveBeenCalledWith({
+        userId: 'user-123',
+        issueId: 'linear-issue-uuid',
+        addLabels: ['ready-to-implement'],
+      });
+    });
+
+    it('adds ready-to-merge label when origin task is an execution task', async () => {
+      await createOriginTask({ traceId: 'trace_label_execution', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_execution_review' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      expect(metadataSpy).toHaveBeenCalledWith({
+        userId: 'user-123',
+        issueId: 'linear-issue-uuid',
+        addLabels: ['ready-to-merge'],
+      });
+    });
+
+    it('skips label when findLatestExecutionTaskByPR returns null', async () => {
+      // No origin task created — only the review task exists
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_no_origin' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const validateSpy = vi.mocked(lac.validateIssue);
+      // validateIssue should NOT be called for the label-setting path
+      // (it may be called by other paths, so we check it wasn't called with INT-500)
+      const labelCalls = validateSpy.mock.calls.filter(
+        (call) => call[0].identifier === 'INT-500'
+      );
+      expect(labelCalls).toHaveLength(0);
+    });
+
+    it('skips label when origin task has no linearIssueId', async () => {
+      // Create origin task without linearIssueId
+      const originResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Create a PR',
+        sanitizedPrompt: 'Create a PR',
+        systemPromptHash: 'origin-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_label_no_linear',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'execution',
+        // no linearIssueId
+      });
+      if (!originResult.ok) throw new Error('Failed to create origin task');
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_no_linear_review' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      // No label update should have been attempted
+      const { linearAgentClient: lac } = getServices();
+      const validateSpy = vi.mocked(lac.validateIssue);
+      const labelCalls = validateSpy.mock.calls.filter(
+        (call) => call[0].identifier === 'INT-500'
+      );
+      expect(labelCalls).toHaveLength(0);
+    });
+
+    it('logs error and succeeds when validateIssue fails', async () => {
+      await createOriginTask({ traceId: 'trace_label_validate_fail', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_validate_fail_review' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      const { linearAgentClient: lac } = getServices();
+      vi.mocked(lac.validateIssue).mockResolvedValueOnce(
+        err({ code: 'NOT_FOUND' as const, message: 'Issue not found' })
+      );
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      // updateIssueMetadata should NOT be called since validate failed
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      const labelCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].addLabels !== undefined &&
+          (call[0].addLabels.includes('ready-to-merge') || call[0].addLabels.includes('ready-to-implement'))
+      );
+      expect(labelCalls).toHaveLength(0);
+    });
+
+    it('logs error and succeeds when updateIssueMetadata fails', async () => {
+      await createOriginTask({ traceId: 'trace_label_metadata_fail', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_metadata_fail_review' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      const { linearAgentClient: lac } = getServices();
+      vi.mocked(lac.updateIssueMetadata).mockResolvedValueOnce(
+        err({ code: 'UNKNOWN' as const, message: 'Update failed' })
+      );
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('does NOT set labels when needs_remediation is not "0"', async () => {
+      await createOriginTask({ traceId: 'trace_label_remediation', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_remediation_review' });
+      const payload = {
+        taskId: reviewTask.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Found issues',
+          review_comments_posted: '2',
+          review_types: 'code_quality',
+          needs_remediation: '1',
+        },
+      };
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      const labelCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].addLabels !== undefined &&
+          (call[0].addLabels.includes('ready-to-merge') || call[0].addLabels.includes('ready-to-implement'))
+      );
+      expect(labelCalls).toHaveLength(0);
+    });
+  });
+
   describe('remediation task-complete → requiresReReview persistence', () => {
     async function createRemediationTaskRecord(
       traceId: string,
