@@ -1069,6 +1069,51 @@ describe('drainTaskQueue', () => {
       }
     });
 
+    it('round-robin: oldest non-PR task dispatches before newer PR-scoped task', async () => {
+      // Regression: non-PR tasks (planning/execution) must not be starved behind newer PR work
+      const olderTs = Timestamp.fromDate(new Date(Date.now() - 10_000));
+      const newerTs = Timestamp.fromDate(new Date(Date.now() - 3000));
+
+      const planningTask = createMockTask({
+        id: 'task-planning',
+        linearIssueId: 'INT-200',
+        createdAt: olderTs,
+        queuedAt: olderTs,
+        // no prNumber — this is a planning task
+      });
+      const prTask = createMockTask({
+        id: 'task-pr-newer',
+        prNumber: 55,
+        repository: 'pbuchman/intexuraos',
+        linearIssueId: 'INT-201',
+        createdAt: newerTs,
+        queuedAt: newerTs,
+      });
+
+      // listQueuedByAge returns global FIFO: planning first, then PR task
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([planningTask, prTask]));
+      mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockResolvedValue(ok({ hasActive: false }));
+      setupWorkerSettings();
+
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({ id: 'issue-id', identifier: 'INT-200', title: 'Test', url: 'https://linear.app', labels: [], childCount: 0 })
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ id: 'task-planning', status: 'dispatched' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // The older planning task (no prNumber) must be dispatched, not the newer PR task
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-planning' });
+      }
+      // Per-PR guard should NOT have been called for the planning task (no prNumber)
+      expect(mockCodeTaskRepo.hasDispatchedOrRunningForPR).not.toHaveBeenCalled();
+    });
+
     it('TTL expires deadlocked task before concurrency guard runs', async () => {
       // This is the regression test for the deadlock bug:
       // Two queued tasks for same PR + Linear issue that would deadlock under old logic
