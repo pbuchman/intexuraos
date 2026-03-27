@@ -6469,6 +6469,67 @@ describe('TaskDispatcher', () => {
       );
     });
 
+    it('routes codex log events through appendRawChunk to bypass formatted-log cap', async () => {
+      const task = createCodexTask();
+      await statePersistence.modify((state) => {
+        state.tasks[task.taskId] = task;
+      });
+
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+      vi.mocked(mockLogForwarder.appendRawChunk).mockClear();
+
+      await (
+        dispatcher as unknown as {
+          handleRuntimeEvents: (task: Task, events: unknown[]) => Promise<void>;
+        }
+      ).handleRuntimeEvents(task, [{ type: 'log', text: 'codex output line\n' }]);
+
+      expect(mockLogForwarder.appendRawChunk).toHaveBeenCalledWith(
+        'codex-runtime-task',
+        'codex output line\n'
+      );
+      expect(mockLogForwarder.appendChunk).not.toHaveBeenCalled();
+    });
+
+    it('routes non-codex log events through appendChunk', async () => {
+      const task: Task = {
+        taskId: 'claude-runtime-task',
+        workerType: 'auto',
+        prompt: 'Test Claude runtime handling',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret-123',
+        status: 'running',
+        worktreePath: '/tmp/worktrees/claude-runtime-task',
+        containerId: '',
+        startedAt: new Date().toISOString(),
+        attemptCount: 1,
+        maxAttempts: 3,
+        verificationHistory: [],
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await statePersistence.modify((state) => {
+        state.tasks[task.taskId] = task;
+      });
+
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+      vi.mocked(mockLogForwarder.appendRawChunk).mockClear();
+
+      await (
+        dispatcher as unknown as {
+          handleRuntimeEvents: (task: Task, events: unknown[]) => Promise<void>;
+        }
+      ).handleRuntimeEvents(task, [{ type: 'log', text: 'claude output line\n' }]);
+
+      expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
+        'claude-runtime-task',
+        'claude output line\n'
+      );
+      expect(mockLogForwarder.appendRawChunk).not.toHaveBeenCalled();
+    });
+
     it('rejects codex resume when runtimeSessionId is missing', async () => {
       const task = createCodexTask();
 

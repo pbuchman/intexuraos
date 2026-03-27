@@ -52,6 +52,7 @@ function createMockRepo(): WorkerSettingsRepository {
     updateHealthStatus: async (): ReturnType<WorkerSettingsRepository['updateHealthStatus']> => ok(undefined),
     updateDefaultReviewWorkerType: async (): ReturnType<WorkerSettingsRepository['updateDefaultReviewWorkerType']> => ok(undefined),
     updateDefaultWorkerType: async (): ReturnType<WorkerSettingsRepository['updateDefaultWorkerType']> => ok(undefined),
+    clearDefaultWorkerType: async (): ReturnType<WorkerSettingsRepository['clearDefaultWorkerType']> => ok(undefined),
   };
 }
 
