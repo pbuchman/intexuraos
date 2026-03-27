@@ -45,8 +45,7 @@ describe('drainTaskQueue', () => {
   let mockLogger: Logger;
   let mockCodeTaskRepo: {
     listQueuedByAge: ReturnType<typeof vi.fn>;
-    hasActiveTaskForLinearIssue: ReturnType<typeof vi.fn>;
-    findActiveReviewForPR: ReturnType<typeof vi.fn>;
+    hasDispatchedOrRunningForPR: ReturnType<typeof vi.fn>;
     findById: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     countQueued: ReturnType<typeof vi.fn>;
@@ -90,8 +89,7 @@ describe('drainTaskQueue', () => {
 
     mockCodeTaskRepo = {
       listQueuedByAge: vi.fn(),
-      hasActiveTaskForLinearIssue: vi.fn().mockResolvedValue(ok({ hasActive: false })),
-      findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
+      hasDispatchedOrRunningForPR: vi.fn().mockResolvedValue(ok({ hasActive: false })),
       findById: vi.fn(),
       update: vi.fn(),
       countQueued: vi.fn(),
@@ -955,68 +953,12 @@ describe('drainTaskQueue', () => {
     });
   });
 
-  describe('per-resource concurrency guard (INT-949)', () => {
-    it('skips task with linearIssueId when active task exists for same issue', async () => {
-      const task = createMockTask({ linearIssueId: 'INT-100' });
-      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
-      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
-        ok({ hasActive: true, taskId: 'other-task-999' })
-      );
-
-      const result = await drainTaskQueue(createDeps());
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toEqual({ action: 'still_busy' });
-      }
-    });
-
-    it('skips task with prNumber when active review exists for same PR', async () => {
+  describe('per-PR concurrency guard and round-robin', () => {
+    it('skips task when dispatched/running task exists for same PR', async () => {
       const task = createMockTask({ prNumber: 42, repository: 'pbuchman/intexuraos' });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
-      mockCodeTaskRepo.findActiveReviewForPR.mockResolvedValue(
-        ok(createMockTask({ id: 'active-review-999' }))
-      );
-
-      const result = await drainTaskQueue(createDeps());
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toEqual({ action: 'still_busy' });
-      }
-    });
-
-    it('dispatches second candidate when first is blocked by linearIssueId', async () => {
-      const blocked = createMockTask({ id: 'task-blocked', linearIssueId: 'INT-100' });
-      const dispatchable = createMockTask({ id: 'task-free' });
-      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([blocked, dispatchable]));
-      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
-        ok({ hasActive: true, taskId: 'other-task-999' })
-      );
-      setupWorkerSettings();
-
-      mockTaskDispatcher.dispatch.mockResolvedValue(
-        ok({ dispatched: true, workerLocation: 'home-mac' })
-      );
-      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ id: 'task-free', status: 'dispatched' })));
-
-      const result = await drainTaskQueue(createDeps());
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-free' });
-      }
-    });
-
-    it('returns still_busy when all candidates are blocked', async () => {
-      const task1 = createMockTask({ id: 'task-1', linearIssueId: 'INT-100' });
-      const task2 = createMockTask({ id: 'task-2', prNumber: 42, repository: 'pbuchman/intexuraos' });
-      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task1, task2]));
-      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
-        ok({ hasActive: true, taskId: 'other-task-999' })
-      );
-      mockCodeTaskRepo.findActiveReviewForPR.mockResolvedValue(
-        ok(createMockTask({ id: 'active-review-999' }))
+      mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockResolvedValue(
+        ok({ hasActive: true, taskId: 'running-task-999' })
       );
 
       const result = await drainTaskQueue(createDeps());
@@ -1027,13 +969,50 @@ describe('drainTaskQueue', () => {
       }
     });
 
-    it('does not self-block: task with linearIssueId dispatches when it is the active task', async () => {
-      const task = createMockTask({ id: 'task-123', linearIssueId: 'INT-100' });
-      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
-      // hasActive returns this task's own ID — should NOT block
-      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
-        ok({ hasActive: true, taskId: 'task-123' })
+    it('dispatches next PR task when first PR is blocked', async () => {
+      const blocked = createMockTask({ id: 'task-pr42', prNumber: 42, repository: 'pbuchman/intexuraos' });
+      const free = createMockTask({ id: 'task-pr99', prNumber: 99, repository: 'pbuchman/intexuraos' });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([blocked, free]));
+      mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockImplementation(
+        async (_repo: string, prNumber: number) => {
+          if (prNumber === 42) return ok({ hasActive: true, taskId: 'running-on-42' });
+          return ok({ hasActive: false });
+        }
       );
+      setupWorkerSettings();
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ id: 'task-pr99', status: 'dispatched' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-pr99' });
+      }
+    });
+
+    it('returns still_busy when all candidates are blocked by per-PR guard', async () => {
+      const task1 = createMockTask({ id: 'task-1', prNumber: 42, repository: 'pbuchman/intexuraos' });
+      const task2 = createMockTask({ id: 'task-2', prNumber: 99, repository: 'pbuchman/intexuraos' });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task1, task2]));
+      mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockResolvedValue(
+        ok({ hasActive: true, taskId: 'some-running-task' })
+      );
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual(expect.objectContaining({ action: 'still_busy' }));
+      }
+    });
+
+    it('dispatches task without prNumber (no per-PR guard applies)', async () => {
+      const task = createMockTask({ id: 'task-no-pr', linearIssueId: 'INT-100' });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
       setupWorkerSettings();
 
       mockLinearAgentClient.validateIssue.mockResolvedValue(
@@ -1042,35 +1021,96 @@ describe('drainTaskQueue', () => {
       mockTaskDispatcher.dispatch.mockResolvedValue(
         ok({ dispatched: true, workerLocation: 'home-mac' })
       );
-      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ id: 'task-no-pr', status: 'dispatched' })));
 
       const result = await drainTaskQueue(createDeps());
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-123' });
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-no-pr' });
       }
+      // Per-PR guard should NOT have been called for a task without prNumber
+      expect(mockCodeTaskRepo.hasDispatchedOrRunningForPR).not.toHaveBeenCalled();
     });
 
-    it('does not self-block: task with prNumber dispatches when it is the active review', async () => {
-      const task = createMockTask({ id: 'task-123', prNumber: 42, repository: 'pbuchman/intexuraos' });
-      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
-      mockCodeTaskRepo.findActiveReviewForPR.mockResolvedValue(
-        ok(createMockTask({ id: 'task-123' }))
+    it('round-robin: picks tasks from different PRs in creation order', async () => {
+      // PR 42 has 2 tasks, PR 99 has 1 — round-robin should pick PR 42 first (oldest), then PR 99
+      const olderTs = Timestamp.fromDate(new Date(Date.now() - 5000));
+      const newerTs = Timestamp.fromDate(new Date(Date.now() - 3000));
+      const newestTs = Timestamp.fromDate(new Date(Date.now() - 1000));
+
+      const pr42_task1 = createMockTask({ id: 'task-pr42-a', prNumber: 42, repository: 'pbuchman/intexuraos', createdAt: olderTs });
+      const pr42_task2 = createMockTask({ id: 'task-pr42-b', prNumber: 42, repository: 'pbuchman/intexuraos', createdAt: newestTs });
+      const pr99_task1 = createMockTask({ id: 'task-pr99-a', prNumber: 99, repository: 'pbuchman/intexuraos', createdAt: newerTs });
+
+      // listQueuedByAge returns global FIFO: pr42_task1, pr99_task1, pr42_task2
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([pr42_task1, pr99_task1, pr42_task2]));
+
+      // PR 42 is blocked, PR 99 is free
+      mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockImplementation(
+        async (_repo: string, prNumber: number) => {
+          if (prNumber === 42) return ok({ hasActive: true, taskId: 'running-on-42' });
+          return ok({ hasActive: false });
+        }
       );
       setupWorkerSettings();
 
       mockTaskDispatcher.dispatch.mockResolvedValue(
         ok({ dispatched: true, workerLocation: 'home-mac' })
       );
-      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ id: 'task-pr99-a', status: 'dispatched' })));
 
       const result = await drainTaskQueue(createDeps());
 
+      // Round-robin tried PR 42 first (blocked), then PR 99 (dispatched)
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-123' });
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-pr99-a' });
       }
+    });
+
+    it('TTL expires deadlocked task before concurrency guard runs', async () => {
+      // This is the regression test for the deadlock bug:
+      // Two queued tasks for same PR + Linear issue that would deadlock under old logic
+      const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+      const expiredTask = createMockTask({
+        id: 'task-expired',
+        prNumber: 42,
+        repository: 'pbuchman/intexuraos',
+        linearIssueId: 'INT-100',
+        agentType: 'pull_request',
+        queuedAt: Timestamp.fromDate(beyondTtl),
+      });
+      const blockedTask = createMockTask({
+        id: 'task-blocked',
+        prNumber: 42,
+        repository: 'pbuchman/intexuraos',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+      });
+
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([expiredTask, blockedTask]));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(expiredTask));
+
+      const result = await drainTaskQueue(createDeps());
+
+      // TTL fires BEFORE concurrency guard — expired task cleaned up
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual(expect.objectContaining({ action: 'expired', taskId: 'task-expired' }));
+      }
+
+      // Verify task was marked as failed
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-expired', {
+        status: 'failed',
+        error: {
+          code: 'queue_timeout',
+          message: 'Task expired in queue after 30 minutes. Workers were still busy.',
+        },
+      });
+
+      // Verify per-PR guard was NOT called (TTL returned before reaching it)
+      expect(mockCodeTaskRepo.hasDispatchedOrRunningForPR).not.toHaveBeenCalled();
     });
   });
 
@@ -1346,7 +1386,7 @@ describe('drainTaskQueue', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         // Oldest (reviewOld) dispatched — its cancellation failed so it remained in activeCandidates
-        // and was picked first in FIFO dispatch order before findActiveReviewForPR could block it
+        // and was picked first in FIFO dispatch order before per-PR guard could block it
         expect(result.value).toEqual({ action: 'dispatched', taskId: 'review-old' });
       }
 
