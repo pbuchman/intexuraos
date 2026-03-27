@@ -15,7 +15,7 @@ import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerType } from '../../domain/models/codeTask.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
-import { hasCodeTaskLabel, hasComplexTaskLabel, hasUnclearLabel } from '../../domain/utils/labelUtils.js';
+import { hasCodeTaskLabel, hasComplexTaskLabel, hasUnclearLabel, getWorkerTypeFromLabels } from '../../domain/utils/labelUtils.js';
 import { randomUUID } from 'node:crypto';
 import { generateWebhookSecret } from '../utils/secrets.js';
 import { fanOutChildTasks } from './fanOutChildTasks.js';
@@ -249,8 +249,15 @@ export async function submitToExecutionAgent(
   }
 
   // Step 10: Create the Execution Agent task
-  // Use provided workerType if specified, otherwise use original task's workerType
-  const effectiveWorkerType = workerType ?? originalTask.workerType;
+  // Resolution chain: Linear label > explicit request > user setting > 'auto'
+  const labelWorkerType = getWorkerTypeFromLabels(freshLabels);
+  let effectiveWorkerType: WorkerType = labelWorkerType ?? workerType ?? 'auto';
+  if (effectiveWorkerType === 'auto') {
+    if (settings?.defaultExecutionWorkerType !== undefined) {
+      effectiveWorkerType = settings.defaultExecutionWorkerType;
+      logger.info({ userId, defaultExecutionWorkerType: effectiveWorkerType }, 'Using user default execution worker type');
+    }
+  }
   const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, executionTaskId);
   const createInput = {
     id: executionTaskId,
