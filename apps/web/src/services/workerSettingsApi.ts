@@ -124,6 +124,66 @@ export async function updateDefaultReviewWorkerType(
   );
 }
 
+/**
+ * Update default remediation worker type.
+ */
+export async function updateDefaultRemediationWorkerType(
+  accessToken: string,
+  workerType: string,
+): Promise<UpdateDefaultReviewWorkerTypeResponse> {
+  return await apiRequest<UpdateDefaultReviewWorkerTypeResponse>(
+    config.codeAgentUrl,
+    '/code/worker-settings/default-remediation-worker-type',
+    accessToken,
+    { method: 'PATCH', body: { workerType } },
+  );
+}
+
+/**
+ * Update default execution worker type.
+ */
+export async function updateDefaultExecutionWorkerType(
+  accessToken: string,
+  workerType: string,
+): Promise<UpdateDefaultReviewWorkerTypeResponse> {
+  return await apiRequest<UpdateDefaultReviewWorkerTypeResponse>(
+    config.codeAgentUrl,
+    '/code/worker-settings/default-execution-worker-type',
+    accessToken,
+    { method: 'PATCH', body: { workerType } },
+  );
+}
+
+/**
+ * Update default planning worker type.
+ */
+export async function updateDefaultPlanningWorkerType(
+  accessToken: string,
+  workerType: string,
+): Promise<UpdateDefaultReviewWorkerTypeResponse> {
+  return await apiRequest<UpdateDefaultReviewWorkerTypeResponse>(
+    config.codeAgentUrl,
+    '/code/worker-settings/default-planning-worker-type',
+    accessToken,
+    { method: 'PATCH', body: { workerType } },
+  );
+}
+
+/**
+ * Update default pull request worker type.
+ */
+export async function updateDefaultPullRequestWorkerType(
+  accessToken: string,
+  workerType: string,
+): Promise<UpdateDefaultReviewWorkerTypeResponse> {
+  return await apiRequest<UpdateDefaultReviewWorkerTypeResponse>(
+    config.codeAgentUrl,
+    '/code/worker-settings/default-pull-request-worker-type',
+    accessToken,
+    { method: 'PATCH', body: { workerType } },
+  );
+}
+
 export type {
   MaskedWorkerConfig,
   WorkerSettingsResponse,
