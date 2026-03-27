@@ -279,19 +279,39 @@ git commit -m "feat: preserve pull_request containers after completion (INT-1130
 **Files:**
 - Modify: `workers/orchestrator/src/services/task-dispatcher.ts`
 - Modify: `workers/orchestrator/src/types/task.ts`
+- Modify: `workers/orchestrator/src/types/schemas.ts`
+- Modify: `workers/orchestrator/src/types/api.ts`
 - Modify: `workers/orchestrator/src/__tests__/task-dispatcher.test.ts`
+- Modify: `apps/code-agent/src/infra/services/taskDispatcherImpl.ts`
 
-- [ ] **Step 1: Ensure prNumber is on Task type and populated during dispatch**
+- [ ] **Step 1: Add prNumber to orchestrator dispatch schema and Task type**
 
-Check `workers/orchestrator/src/types/task.ts` — if `prNumber` is not on the `Task` interface, add it as `prNumber?: number`. The dispatch request from code-agent already sends PR number for pull_request tasks.
+`prNumber` does NOT currently exist on the orchestrator dispatch contract. It must be added in 3 places:
 
-In `task-dispatcher.ts` `dispatch()` around line 360, ensure `prNumber` is spread from the request onto the task:
+1. **Orchestrator schema** (`workers/orchestrator/src/types/schemas.ts`): Add to `CreateTaskRequestSchema`:
+   ```typescript
+   prNumber: z.number().int().positive().optional(),
+   ```
 
-```typescript
-...(request.prNumber !== undefined && { prNumber: request.prNumber }),
-```
+2. **Orchestrator Task type** (`workers/orchestrator/src/types/task.ts`): Add to `Task` interface:
+   ```typescript
+   prNumber?: number;
+   ```
 
-Also check `workers/orchestrator/src/types/api.ts` and `schemas.ts` — ensure `prNumber` is accepted in the dispatch request schema.
+3. **Code-agent dispatcher** (`apps/code-agent/src/infra/services/taskDispatcherImpl.ts`): Add to `WorkerTaskRequest` interface:
+   ```typescript
+   prNumber?: number;
+   ```
+   And populate it in the dispatch request builder from `DispatchRequest.prNumber`.
+
+4. **Code-agent DispatchRequest type** (`apps/code-agent/src/domain/services/taskDispatcher.ts`): Add `prNumber?: number` if not present.
+
+5. In `task-dispatcher.ts` `dispatch()` around line 360, spread `prNumber` from the request onto the task:
+   ```typescript
+   ...(request.prNumber !== undefined && { prNumber: request.prNumber }),
+   ```
+
+6. In `routes.ts` where the schema is parsed, ensure `prNumber` is forwarded to the dispatch request.
 
 - [ ] **Step 2: Write test for one-per-PR enforcement**
 
