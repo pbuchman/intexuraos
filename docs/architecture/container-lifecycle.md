@@ -134,7 +134,7 @@ The container receives these environment variables:
 | `SENTRY_AUTH_TOKEN`              | Sentry auth token                          |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to GCP SA key                         |
 | `CLAUDE_PROJECT_DIR`             | Always `/repo`                             |
-| `CODE_WORKER_MODE`             | Always `1`                                 |
+| `CODE_WORKER_MODE`               | Always `1`                                 |
 | `WORKER_MANAGED_MODE`            | `1` if managed attempts enabled            |
 | `WORKER_CONTINUE`                | `1` if resuming (continueSession)          |
 | `GIT_USER_NAME`                  | Git user name (if configured)              |
@@ -523,10 +523,10 @@ These are defaults in `DEFAULT_CONFIG` — overridable through the constructor's
 
 | Value                      | Default                                                                                      |
 | -------------------------- | -------------------------------------------------------------------------------------------- |
-| Docker image (`imageName`) | `europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest` |
+| Docker image (`imageName`) | `europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest`   |
 | Max concurrent             | 4                                                                                            |
 | Image pull policy          | `always`                                                                                     |
-| Network name               | `code-worker-net`                                                                          |
+| Network name               | `code-worker-net`                                                                            |
 | Keep containers alive      | `false`                                                                                      |
 | Secrets base path          | `/tmp/claude-secrets`                                                                        |
 | Managed attempts mode      | `true`                                                                                       |

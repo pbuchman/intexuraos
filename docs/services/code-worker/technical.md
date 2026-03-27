@@ -47,13 +47,13 @@ graph TB
 | Commit      | Description                                                  | Date       |
 | ----------- | ------------------------------------------------------------ | ---------- |
 | `5e1fdda3`  | Docker cache busting for Claude CLI + add Codex CLI          | 2026-03-15 |
-| `191488b4`  | Enable tasks env var in code-worker settings               | 2026-03-13 |
+| `191488b4`  | Enable tasks env var in code-worker settings                 | 2026-03-13 |
 | `393fbbde`  | Clean up orphaned child processes after Claude attempt exits | 2026-03-10 |
 | `57354c70`  | Read GitHub token from file instead of stale env var         | 2026-03-06 |
 | `c8c09941`  | Move secret sync from orchestrator to container entrypoint   | 2026-03-03 |
 | `2a75b75a`  | Fix container.envrc mount failure, add direnv                | 2026-03-02 |
 | `afc1cb24`  | Build multi-arch image for amd64+arm64                       | 2026-02-26 |
-| `36bca370`  | Add code-worker crash forensics mode                        | 2026-02-26 |
+| `36bca370`  | Add code-worker crash forensics mode                         | 2026-02-26 |
 | `98caac48`  | Pre-install Claude Code plugins in image                     | 2026-02-25 |
 
 ### Docker Cache Busting and Codex CLI (5e1fdda3)
@@ -99,17 +99,17 @@ Network: `code-worker-net` (bridge driver, subnet `172.28.0.0/16`, IP masquerade
 
 ## Mount Points
 
-| Container Path            | Host Source                                 | Mode      | Purpose                                            |
-| ------------------------- | ------------------------------------------- | --------- | -------------------------------------------------- |
-| `/repo`                   | `{secretsBasePath}/../worktrees/{taskId}`   | rw        | Git worktree for the task                          |
-| `/secrets`                | `{secretsBasePath}/{taskId}`                | ro        | GCP SA key + GitHub token + prompt files           |
-| `/home/claude/pnpm-store` | `{secretsBasePath}/../pnpm-store`           | rw        | Shared pnpm content-addressable store              |
-| `/home/claude/.claude`    | `{secretsBasePath}/claude-session-{taskId}` | rw        | Claude session state (persists across attempts)    |
-| `/home/claude/.codex`     | `{secretsBasePath}/codex-state-{taskId}`    | rw        | Codex runtime state (persists across attempts)     |
-| `/tmp`                    | tmpfs (2 GB)                                | rw,noexec | Ephemeral scratch + ready marker                   |
+| Container Path            | Host Source                                 | Mode      | Purpose                                               |
+| ------------------------- | ------------------------------------------- | --------- | ----------------------------------------------------- |
+| `/repo`                   | `{secretsBasePath}/../worktrees/{taskId}`   | rw        | Git worktree for the task                             |
+| `/secrets`                | `{secretsBasePath}/{taskId}`                | ro        | GCP SA key + GitHub token + prompt files              |
+| `/home/claude/pnpm-store` | `{secretsBasePath}/../pnpm-store`           | rw        | Shared pnpm content-addressable store                 |
+| `/home/claude/.claude`    | `{secretsBasePath}/claude-session-{taskId}` | rw        | Claude session state (persists across attempts)       |
+| `/home/claude/.codex`     | `{secretsBasePath}/codex-state-{taskId}`    | rw        | Codex runtime state (persists across attempts)        |
+| `/tmp`                    | tmpfs (2 GB)                                | rw,noexec | Ephemeral scratch + ready marker                      |
 | `/home/claude`            | tmpfs (500 MB)                              | rw,noexec | Home directory (pnpm-store, .claude, .codex overlaid) |
-| `/repo/node_modules`      | tmpfs (4 GB)                                | rw,exec   | Linux-native node_modules (shadows Mac host mount) |
-| `{mainGitDir}`            | Main `.git` directory (for worktrees)       | rw        | Git operations on worktrees                        |
+| `/repo/node_modules`      | tmpfs (4 GB)                                | rw,exec   | Linux-native node_modules (shadows Mac host mount)    |
+| `{mainGitDir}`            | Main `.git` directory (for worktrees)       | rw        | Git operations on worktrees                           |
 
 ### Secrets Directory Files
 
@@ -365,10 +365,10 @@ The `DockerProvider` class in the orchestrator manages the full container lifecy
 | Get resource usage  | `getResourceUsage(taskId)`      | CPU%, memory used/limit from Docker stats                                 |
 | List workers        | `listWorkers()`                 | All active worker handles                                                 |
 | Cleanup orphans     | `cleanupOrphanedContainers()`   | Remove containers older than 24 hours from previous runs                  |
-| Cleanup session     | `cleanupTaskSession(taskId)`    | Delete per-task Claude or Codex runtime state directory                    |
+| Cleanup session     | `cleanupTaskSession(taskId)`    | Delete per-task Claude or Codex runtime state directory                   |
 | Preserve worker     | `preserveWorker(taskId)`        | Park container in preserved map (keep alive for debugging)                |
 | List preserved      | `listPreservedWorkers()`        | Active preserved (not-yet-destroyed) worker entries                       |
-| List containers     | `listWorkerContainers()`        | Discover all code-worker containers on the Docker engine                |
+| List containers     | `listWorkerContainers()`        | Discover all code-worker containers on the Docker engine                  |
 | Image info          | `getImageInfo()`                | Configured image ref, last pulled digest, pull policy                     |
 
 ### Shared Credentials Mode
