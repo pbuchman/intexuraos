@@ -435,7 +435,7 @@ export function initServices(config: ServiceConfig): void {
     gitHubPRClient,
     userServiceClient,
     firestore,
-    messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS),
+    messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS),
     allowedBots: ALLOWED_BOTS,
     orchestratorSecret: config.orchestratorSecret,
     serviceUrl: config.serviceUrl,

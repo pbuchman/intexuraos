@@ -468,7 +468,6 @@ async function handleNewTask(
   }
 
   // Use messageBuilder for pull_request_review events to apply template routing
-  // (e.g. code-worker reviews → nitpick-nuker template)
   const comment = event.eventType === 'pull_request_review'
     ? deps.messageBuilder.build(event)
     : event.body ?? '';
