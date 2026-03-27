@@ -7,7 +7,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useTimezone } from '../useTimezone.js';
 
-const mockGetUserTimezoneSettings = vi.fn();
+const mockGetUserSettings = vi.fn();
 const mockPatchUserTimezone = vi.fn();
 const mockGetAccessToken = vi.fn();
 
@@ -19,8 +19,11 @@ vi.mock('@/context', () => ({
   } => mockUseAuth(),
 }));
 
+vi.mock('@/services/authApi', () => ({
+  getUserSettings: (...args: unknown[]): unknown => mockGetUserSettings(...args),
+}));
+
 vi.mock('@/services/userTimezoneApi', () => ({
-  getUserTimezoneSettings: (...args: unknown[]): unknown => mockGetUserTimezoneSettings(...args),
   patchUserTimezone: (...args: unknown[]): unknown => mockPatchUserTimezone(...args),
 }));
 
@@ -48,7 +51,7 @@ describe('useTimezone', () => {
   });
 
   it('loads timezone on mount', async () => {
-    mockGetUserTimezoneSettings.mockResolvedValue({
+    mockGetUserSettings.mockResolvedValue({
       userId: 'user-123',
       timezone: 'Europe/Berlin',
       createdAt: '2026-01-01T00:00:00Z',
@@ -62,11 +65,11 @@ describe('useTimezone', () => {
     });
 
     expect(result.current.error).toBeNull();
-    expect(mockGetUserTimezoneSettings).toHaveBeenCalledWith('test-token', 'user-123');
+    expect(mockGetUserSettings).toHaveBeenCalledWith('test-token', 'user-123');
   });
 
   it('returns null timezone when none is stored', async () => {
-    mockGetUserTimezoneSettings.mockResolvedValue({
+    mockGetUserSettings.mockResolvedValue({
       userId: 'user-123',
       timezone: undefined,
       createdAt: '2026-01-01T00:00:00Z',
@@ -76,14 +79,14 @@ describe('useTimezone', () => {
     const { result } = renderHook(() => useTimezone());
 
     await waitFor(() => {
-      expect(mockGetUserTimezoneSettings).toHaveBeenCalledOnce();
+      expect(mockGetUserSettings).toHaveBeenCalledOnce();
     });
 
     expect(result.current.timezone).toBeNull();
   });
 
   it('sets error on fetch failure', async () => {
-    mockGetUserTimezoneSettings.mockRejectedValue(new Error('Network error'));
+    mockGetUserSettings.mockRejectedValue(new Error('Network error'));
 
     const { result } = renderHook(() => useTimezone());
 
@@ -104,11 +107,11 @@ describe('useTimezone', () => {
     const { result } = renderHook(() => useTimezone());
 
     expect(result.current.timezone).toBeNull();
-    expect(mockGetUserTimezoneSettings).not.toHaveBeenCalled();
+    expect(mockGetUserSettings).not.toHaveBeenCalled();
   });
 
   it('updateTimezone PATCHes and updates local state', async () => {
-    mockGetUserTimezoneSettings.mockResolvedValue({
+    mockGetUserSettings.mockResolvedValue({
       userId: 'user-123',
       timezone: 'Europe/Berlin',
       createdAt: '2026-01-01T00:00:00Z',
@@ -133,7 +136,7 @@ describe('useTimezone', () => {
   });
 
   it('updateTimezone sets error and rethrows on failure', async () => {
-    mockGetUserTimezoneSettings.mockResolvedValue({
+    mockGetUserSettings.mockResolvedValue({
       userId: 'user-123',
       timezone: 'Europe/Berlin',
       createdAt: '2026-01-01T00:00:00Z',

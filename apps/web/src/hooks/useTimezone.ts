@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/context';
-import { getUserTimezoneSettings, patchUserTimezone } from '@/services/userTimezoneApi';
+import { getUserSettings } from '@/services/authApi';
+import { patchUserTimezone } from '@/services/userTimezoneApi';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
 
 interface UseTimezoneResult {
@@ -27,7 +28,7 @@ export function useTimezone(): UseTimezoneResult {
     void (async (): Promise<void> => {
       try {
         const token = await getAccessToken();
-        const settings = await getUserTimezoneSettings(token, userId);
+        const settings = await getUserSettings(token, userId);
         setTimezone(settings.timezone ?? null);
       } catch (err) {
         setError(getErrorMessage(err));

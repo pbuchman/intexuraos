@@ -311,12 +311,16 @@ function formatTimestamp(iso: string, timezone?: string): string {
   return `${timePart} ${tzName}`;
 }
 
+const tzNameFmtCache = new Map<string, Intl.DateTimeFormat>();
+
 function extractTzName(date: Date, tz: string, locale: string): string {
-  return (
-    new Intl.DateTimeFormat(locale, { timeZone: tz, timeZoneName: 'short' })
-      .formatToParts(date)
-      .find((p) => p.type === 'timeZoneName')?.value ?? tz
-  );
+  const key = `${tz}:${locale}`;
+  let fmt = tzNameFmtCache.get(key);
+  if (fmt === undefined) {
+    fmt = new Intl.DateTimeFormat(locale, { timeZone: tz, timeZoneName: 'short' });
+    tzNameFmtCache.set(key, fmt);
+  }
+  return fmt.formatToParts(date).find((p) => p.type === 'timeZoneName')?.value ?? tz;
 }
 
 function resolveTimezoneAbbreviation(date: Date, tz: string): string {
