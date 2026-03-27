@@ -1468,6 +1468,7 @@ module "code_agent" {
     INTEXURAOS_QUEUE_TTL_MINUTES          = "30"
     INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS   = "3"
     INTEXURAOS_RETRY_QUEUE_TTL_MINUTES    = "10"
+    INTEXURAOS_ENABLE_METRICS             = "true"
   })
 
   depends_on = [
