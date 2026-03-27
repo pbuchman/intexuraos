@@ -27,7 +27,7 @@ describe('renderHeader', () => {
 
 describe('renderEvent', () => {
   describe('webhook_received', () => {
-    it('renders event type, action, and sender', () => {
+    it('renders human-readable label for pull_request.opened', () => {
       useFakeTime();
       const event: AutomationEvent = {
         type: 'webhook_received',
@@ -38,10 +38,10 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- `pull_request.opened` by @octocat');
+      expect(result).toBe('**14:35** -- PR opened by @octocat');
     });
 
-    it('renders event type as link when eventUrl is present', () => {
+    it('renders human-readable label for issue_comment.created as link when eventUrl is present', () => {
       useFakeTime();
       const event: AutomationEvent = {
         type: 'webhook_received',
@@ -54,7 +54,7 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toBe(
-        '**14:35** -- [`issue_comment.created`](https://github.com/pbuchman/intexuraos/pull/42#issuecomment-123) by @octocat'
+        '**14:35** -- [Comment posted](https://github.com/pbuchman/intexuraos/pull/42#issuecomment-123) by @octocat'
       );
     });
 
@@ -71,7 +71,7 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toBe(
-        '**14:35** -- `issue_comment.created` by @octocat \u2014 @ignore Automated Code review'
+        '**14:35** -- Comment posted by @octocat \u2014 @ignore Automated Code review'
       );
     });
 
@@ -89,8 +89,22 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toBe(
-        '**14:35** -- [`pull_request_review.submitted`](https://github.com/pbuchman/intexuraos/pull/42#pullrequestreview-1) by @reviewer \u2014 APPROVED: Looks good'
+        '**14:35** -- [Review submitted](https://github.com/pbuchman/intexuraos/pull/42#pullrequestreview-1) by @reviewer \u2014 APPROVED: Looks good'
       );
+    });
+
+    it('falls back to backtick-wrapped raw name for unmapped event action', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'webhook_received',
+        eventType: 'pull_request',
+        action: 'labeled',
+        sender: 'octocat',
+        deliveryId: 'abc-123',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe('**14:35** -- `pull_request.labeled` by @octocat');
     });
   });
 
@@ -173,7 +187,7 @@ describe('renderEvent', () => {
   });
 
   describe('triage_dispatch', () => {
-    it('renders review dispatch with review types', () => {
+    it('renders review dispatch with unicode arrow, no bold, lowercase d', () => {
       useFakeTime();
       const event: AutomationEvent = {
         type: 'triage_dispatch',
@@ -185,8 +199,10 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toContain(
-        '**14:35** -- Triage -> **Dispatching review** (`code_review, architecture`)'
+        '**14:35** -- Triage \u2192 dispatching review (`code_review, architecture`)'
       );
+      expect(result).not.toContain('->');
+      expect(result).not.toContain('**Dispatching review**');
       expect(result).toContain('<details>');
       expect(result).toContain('Triage cost: $0.123');
       expect(result).toContain('Complex PR needs thorough review.');
@@ -194,7 +210,7 @@ describe('renderEvent', () => {
       expect(result).toContain('- `getDiff()`');
     });
 
-    it('renders task dispatch when no reviewTypes', () => {
+    it('renders task dispatch with unicode arrow, no bold, lowercase d', () => {
       useFakeTime();
       const event: AutomationEvent = {
         type: 'triage_dispatch',
@@ -205,8 +221,10 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- Triage -> **Dispatching task**');
-      expect(result).not.toContain('Dispatching review');
+      expect(result).toContain('**14:35** -- Triage \u2192 dispatching task');
+      expect(result).not.toContain('->');
+      expect(result).not.toContain('**Dispatching task**');
+      expect(result).not.toContain('dispatching review');
     });
   });
 
@@ -227,7 +245,7 @@ describe('renderEvent', () => {
   });
 
   describe('task_dispatched', () => {
-    it('renders task ID with link and worker type', () => {
+    it('hides UUID behind View task link and shows worker type', () => {
       useFakeTime();
       const event: AutomationEvent = {
         type: 'task_dispatched',
@@ -238,32 +256,40 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toBe(
-        '**14:35** -- Implementation dispatched: [`task_abc123`](https://intexuraos.cloud/#/code-tasks/task_abc123) | opus'
+        '**14:35** -- Implementation dispatched | opus | [View task](https://intexuraos.cloud/#/code-tasks/task_abc123)'
       );
     });
 
-    it('renders review agent type label', () => {
+    it('renders review agent type label without raw UUID', () => {
       useFakeTime();
       const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'review' });
-      expect(result).toContain('Review dispatched:');
+      expect(result).toContain('Review dispatched |');
+      expect(result).not.toContain('Review dispatched:');
+      expect(result).toContain('[View task]');
     });
 
-    it('renders remediation agent type label', () => {
+    it('renders remediation agent type label without raw UUID', () => {
       useFakeTime();
       const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'remediation' });
-      expect(result).toContain('Remediation dispatched:');
+      expect(result).toContain('Remediation dispatched |');
+      expect(result).not.toContain('Remediation dispatched:');
+      expect(result).toContain('[View task]');
     });
 
-    it('renders plan agent type label', () => {
+    it('renders plan agent type label without raw UUID', () => {
       useFakeTime();
       const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'planning' });
-      expect(result).toContain('Plan dispatched:');
+      expect(result).toContain('Plan dispatched |');
+      expect(result).not.toContain('Plan dispatched:');
+      expect(result).toContain('[View task]');
     });
 
-    it('renders PR agent type label', () => {
+    it('renders PR agent type label without raw UUID', () => {
       useFakeTime();
       const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'pull_request' });
-      expect(result).toContain('PR dispatched:');
+      expect(result).toContain('PR dispatched |');
+      expect(result).not.toContain('PR dispatched:');
+      expect(result).toContain('[View task]');
     });
   });
 
@@ -281,7 +307,7 @@ describe('renderEvent', () => {
       expect(result).toBe('**14:35** -- Remediation not required');
     });
 
-    it('renders remediation required with dispatched task link', () => {
+    it('returns null when required=true and taskId present (task_dispatched already logs this)', () => {
       useFakeTime();
       const event: AutomationEvent = {
         type: 'remediation_decision',
@@ -292,9 +318,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe(
-        '**14:35** -- Remediation dispatched: [`task_rem_123`](https://intexuraos.cloud/#/code-tasks/task_rem_123)'
-      );
+      expect(result).toBeNull();
     });
 
     it('renders fail-open remediation requirement when review signal is missing', () => {

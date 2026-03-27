@@ -109,7 +109,7 @@ describe('GitHubPRAutomationLog', () => {
       expect(prNumber).toBe(42);
       expect(body).toContain('@ignore');
       expect(body).toContain('### IntexuraOS Automation');
-      expect(body).toContain('`pull_request.opened` by @pbuchman');
+      expect(body).toContain('PR opened by @pbuchman');
     });
 
     it('should save comment record to Firestore', async () => {
@@ -169,7 +169,7 @@ describe('GitHubPRAutomationLog', () => {
       expect(updateIssueComment).toHaveBeenCalledOnce();
       const [, , , , body] = updateIssueComment.mock.calls[0] as [string, string, string, number, string];
       expect(body).toContain('existing line');
-      expect(body).toContain('Dispatching review');
+      expect(body).toContain('dispatching review');
     });
 
     it('should update Firestore eventCount', async () => {
