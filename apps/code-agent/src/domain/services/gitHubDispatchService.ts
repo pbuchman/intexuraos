@@ -113,7 +113,7 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
           'Starting GitHub dispatch workflow'
         );
 
-        // Only user @worker/@model directives reach dispatch(); review events are gated out by CodeWorkerOutputRule
+        // Only user @worker directives reach dispatch(); review events are gated out by CodeWorkerOutputRule
         const workerDirective = extractDispatchWorkerType(event.body ?? '');
         const isRemediationDispatch = workerDirective !== undefined;
 
@@ -473,7 +473,7 @@ async function handleNewTask(
     ? deps.messageBuilder.build(event)
     : event.body ?? '';
 
-  // Note: @worker/@model directives are intercepted by remediation dispatch
+  // Note: @worker directives are intercepted by remediation dispatch
   // before reaching handleNewTask, so workerType extraction is not needed here.
   const createResult = await createTaskForPR(
     {
