@@ -164,7 +164,13 @@ export async function processCodeAction(
 
   // Derive worker type from labels (single match only, otherwise fall back to request's workerType)
   const labelWorkerType = getWorkerTypeFromLabels(linearIssueLabels);
-  const effectiveWorkerType = labelWorkerType ?? workerType;
+  let effectiveWorkerType: WorkerType = labelWorkerType ?? workerType;
+  if (effectiveWorkerType === 'auto') {
+    if (settings?.defaultPlanningWorkerType !== undefined) {
+      effectiveWorkerType = settings.defaultPlanningWorkerType;
+      logger.info({ userId, defaultPlanningWorkerType: effectiveWorkerType }, 'Using user default planning worker type');
+    }
+  }
 
   logger.info(
     {
