@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 const { mockUseWorkerSettings } = vi.hoisted(() => ({
@@ -41,9 +41,6 @@ describe('WorkerSettingsPage', () => {
       reorderWorkers: vi.fn(),
       updateDefaultWorkerType: vi.fn(),
     });
-  });
-
-  afterEach(() => {
   });
 
   it('shows auto as the selected review worker type when no default is saved', () => {
