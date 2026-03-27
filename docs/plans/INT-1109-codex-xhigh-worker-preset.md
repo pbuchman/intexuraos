@@ -73,8 +73,10 @@ All subissues are direct children of `INT-1109` and can be implemented in parall
 - `workers/orchestrator/src/services/isolation/types.ts`
 - `workers/orchestrator/src/types/api.ts`
 - `workers/orchestrator/src/types/schemas.ts`
+- `workers/orchestrator/src/services/system-prompt.ts`
 - `workers/orchestrator/src/services/isolation/__tests__/types.test.ts`
 - `workers/orchestrator/src/__tests__/types/types.test.ts`
+- `workers/orchestrator/src/services/__tests__/system-prompt.test.ts`
 - Any focused orchestrator tests that assert worker-type routing or managed attempt config
 
 ### Code-agent
@@ -84,6 +86,9 @@ All subissues are direct children of `INT-1109` and can be implemented in parall
 - `apps/code-agent/src/domain/models/codeTask.ts`
 - `apps/code-agent/src/domain/usecases/createReviewTask.ts`
 - `apps/code-agent/src/domain/usecases/createRemediationTask.ts`
+- `apps/code-agent/src/domain/utils/reviewTriage.ts`
+- `apps/code-agent/src/domain/utils/dispatchWorkerTriage.ts`
+- `apps/code-agent/src/__tests__/routes/codeSubmit.test.ts`
 - Review triage helpers/prompts/tests that parse or normalize worker types
 
 ### Web
@@ -110,12 +115,15 @@ All subissues are direct children of `INT-1109` and can be implemented in parall
 - Modify: `workers/orchestrator/src/services/isolation/types.ts`
 - Modify: `workers/orchestrator/src/types/api.ts`
 - Modify: `workers/orchestrator/src/types/schemas.ts`
+- Modify: `workers/orchestrator/src/services/system-prompt.ts`
 - Modify: `workers/orchestrator/src/services/isolation/__tests__/types.test.ts`
 - Modify: `workers/orchestrator/src/__tests__/types/types.test.ts`
+- Modify: `workers/orchestrator/src/services/__tests__/system-prompt.test.ts`
 - Modify: any focused orchestrator tests that validate worker-type routing if they enumerate known presets
 
 - [ ] Add `codex_xhigh` to orchestrator worker-type validation anywhere public worker-type enums are mirrored.
 - [ ] Extend `WORKER_TYPES` so `codex_xhigh` uses `runtime='codex'`, `apiBaseUrl='https://api.openai.com'`, and `effort='xhigh'`.
+- [ ] Update orchestrator system-prompt worker-type fallback text and focused tests anywhere supported public worker names are hardcoded.
 - [ ] Keep `codex` unchanged and verify that no new route fields or response fields are introduced.
 - [ ] Run `pnpm --filter orchestrator test -- src/services/isolation/__tests__/types.test.ts src/__tests__/types/types.test.ts`.
 
@@ -127,10 +135,14 @@ All subissues are direct children of `INT-1109` and can be implemented in parall
 - Modify: `apps/code-agent/src/domain/models/codeTask.ts` only if comments or docstrings still describe the old set inaccurately
 - Modify: `apps/code-agent/src/domain/usecases/createReviewTask.ts`
 - Modify: `apps/code-agent/src/domain/usecases/createRemediationTask.ts`
+- Modify: `apps/code-agent/src/domain/utils/reviewTriage.ts`
+- Modify: `apps/code-agent/src/domain/utils/dispatchWorkerTriage.ts`
+- Modify: `apps/code-agent/src/__tests__/routes/codeSubmit.test.ts`
 - Modify: review worker parsing/normalization helpers and focused tests that enumerate valid worker types
 
 - [ ] Broaden submit/retry/review-related schemas and guards so `codex_xhigh` is accepted anywhere `CODE_TASK_WORKER_TYPES` drives validation.
 - [ ] Ensure saved default review worker type can persist and later reuse `codex_xhigh` without changing existing fallback behavior.
+- [ ] Audit and update worker-alias parsing plus focused submit/review tests so comment-driven and review-driven entry points recognize `codex_xhigh`.
 - [ ] Update review worker normalization/parsing tests if any logic still assumes `codex` is the only Codex-family preset.
 - [ ] Run focused code-agent tests covering route validation and review-default persistence.
 
