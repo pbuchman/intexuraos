@@ -45,7 +45,7 @@ export function renderEvent(
       return renderTriageFailed(ts, event);
 
     case 'task_dispatched':
-      return `**${ts}** -- ${agentTypeLabel(event.agentType)} dispatched: [\`${event.taskId}\`](https://intexuraos.cloud/#/code-tasks/${event.taskId}) | ${event.workerType}`;
+      return `**${ts}** -- ${agentTypeLabel(event.agentType)} dispatched | ${event.workerType} | [View task](https://intexuraos.cloud/#/code-tasks/${event.taskId})`;
 
     case 'task_dispatch_failed':
       return renderTaskDispatchFailed(ts, event);
@@ -88,11 +88,25 @@ export function renderEvent(
 // Internal renderers
 // ---------------------------------------------------------------------------
 
+function webhookEventLabel(eventType: string, action: string): string {
+  const key = `${eventType}.${action}`;
+  switch (key) {
+    case 'pull_request.opened': return 'PR opened';
+    case 'pull_request.synchronize': return 'Commits pushed';
+    case 'pull_request.closed': return 'PR closed';
+    case 'pull_request.reopened': return 'PR reopened';
+    case 'pull_request_review.submitted': return 'Review submitted';
+    case 'pull_request_review_comment.created': return 'Inline comment';
+    case 'issue_comment.created': return 'Comment posted';
+    default: return `\`${key}\``;
+  }
+}
+
 function renderWebhookReceived(
   ts: string,
   event: Extract<AutomationEvent, { type: 'webhook_received' }>
 ): string {
-  const eventLabel = `\`${event.eventType}.${event.action}\``;
+  const eventLabel = webhookEventLabel(event.eventType, event.action);
   const linkedLabel = event.eventUrl !== undefined
     ? `[${eventLabel}](${event.eventUrl})`
     : eventLabel;
@@ -142,8 +156,8 @@ function renderTriageDispatch(
   const hasReviewTypes =
     reviewTypes !== undefined && reviewTypes.length > 0;
   const headline = hasReviewTypes
-    ? `**${ts}** -- Triage -> **Dispatching review** (\`${reviewTypes.join(', ')}\`)`
-    : `**${ts}** -- Triage -> **Dispatching task**`;
+    ? `**${ts}** -- Triage → dispatching review (\`${reviewTypes.join(', ')}\`)`
+    : `**${ts}** -- Triage → dispatching task`;
 
   const details: string[] = [];
   details.push(`Triage cost: ${formatCost(event.cost)}`);
@@ -237,13 +251,15 @@ function renderTaskInterrupted(
 function renderRemediationDecision(
   ts: string,
   event: Extract<AutomationEvent, { type: 'remediation_decision' }>
-): string {
+): string | null {
   if (!event.required) {
     return `**${ts}** -- Remediation not required`;
   }
 
   if (event.taskId !== undefined) {
-    return `**${ts}** -- Remediation dispatched: [\`${event.taskId}\`](https://intexuraos.cloud/#/code-tasks/${event.taskId})`;
+    // Suppressed: task_dispatched is always emitted before this event when taskId is set.
+    // If task_dispatched is absent from the log, this entry will also be missing.
+    return null;
   }
 
   if (event.signal === 'missing') {
