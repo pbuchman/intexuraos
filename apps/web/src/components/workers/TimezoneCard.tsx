@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card } from '@/components';
 
 export interface TimezoneCardProps {
@@ -8,7 +8,6 @@ export interface TimezoneCardProps {
   onUpdate: (timezone: string) => Promise<void>;
 }
 
-// Group IANA timezone names by region prefix for usability
 function groupTimezones(timezones: string[]): Map<string, string[]> {
   const groups = new Map<string, string[]>();
   for (const tz of timezones) {
@@ -43,6 +42,13 @@ export function TimezoneCard({
   onUpdate,
 }: TimezoneCardProps): React.JSX.Element {
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect((): (() => void) => {
+    return (): void => {
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   const displayTimezone = currentTimezone ?? BROWSER_TIMEZONE;
 
@@ -50,10 +56,11 @@ export function TimezoneCard({
     const value = e.target.value;
     if (value === '' || value === currentTimezone) return;
     setSaveSuccess(false);
+    if (timerRef.current !== null) clearTimeout(timerRef.current);
     try {
       await onUpdate(value);
       setSaveSuccess(true);
-      setTimeout(() => {
+      timerRef.current = setTimeout((): void => {
         setSaveSuccess(false);
       }, 3000);
     } catch {

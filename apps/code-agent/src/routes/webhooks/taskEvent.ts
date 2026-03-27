@@ -59,45 +59,30 @@ function mapToAutomationEvent(body: TaskEventWebhookBody, agentType?: AgentType)
       };
     case 'task_completed': {
       const status = (body.status ?? 'unknown') as Extract<AutomationEvent, { type: 'task_completed' }>['status'];
-      const event: AutomationEvent = {
+      return {
         type: 'task_completed',
         taskId: body.taskId,
         status,
         duration: body.duration ?? 0,
         ...(agentType !== undefined && { agentType }),
+        ...(body.prUrl !== undefined && { prUrl: body.prUrl }),
+        ...(body.commits !== undefined && { commits: body.commits }),
       };
-      if (body.prUrl !== undefined) {
-        (event as { prUrl?: string }).prUrl = body.prUrl;
-      }
-      if (body.commits !== undefined) {
-        (event as { commits?: { sha: string; message: string }[] }).commits = body.commits;
-      }
-      return event;
     }
-    case 'task_failed': {
-      const event: AutomationEvent = {
+    case 'task_failed':
+      return {
         type: 'task_failed',
         taskId: body.taskId,
         error: body.error?.message ?? 'Unknown error',
+        ...(body.error?.code !== undefined && { errorCode: body.error.code }),
+        ...(body.duration !== undefined && { duration: body.duration }),
       };
-      if (body.error?.code !== undefined) {
-        (event as { errorCode?: string }).errorCode = body.error.code;
-      }
-      if (body.duration !== undefined) {
-        (event as { duration?: number }).duration = body.duration;
-      }
-      return event;
-    }
-    case 'task_interrupted': {
-      const event: AutomationEvent = {
+    case 'task_interrupted':
+      return {
         type: 'task_interrupted',
         taskId: body.taskId,
+        ...(body.duration !== undefined && { duration: body.duration }),
       };
-      if (body.duration !== undefined) {
-        (event as { duration?: number }).duration = body.duration;
-      }
-      return event;
-    }
   }
 }
 
