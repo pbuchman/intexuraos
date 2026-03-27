@@ -435,19 +435,24 @@ describe('workerSettingsRepository', () => {
       }
     });
 
-    it('should delete entire document when removing last worker', async () => {
+    it('should keep the settings document when removing the last worker', async () => {
       const repo = createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
 
       await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac' }));
+      await repo.updateDefaultReviewWorkerType('user-1', 'glm');
       await repo.deleteWorker('user-1', 'home-mac');
 
       const settings = await repo.getSettings('user-1');
       expect(settings.ok).toBe(true);
       if (settings.ok) {
-        expect(settings.value).toBeNull();
+        expect(settings.value).not.toBeNull();
+      }
+      if (settings.ok && settings.value !== null) {
+        expect(settings.value.workers).toEqual([]);
+        expect(settings.value.defaultReviewWorkerType).toBe('glm');
       }
     });
 

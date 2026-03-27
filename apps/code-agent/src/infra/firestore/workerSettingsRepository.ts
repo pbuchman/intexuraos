@@ -354,16 +354,11 @@ export function createWorkerSettingsRepository(
 
         const now = new Date().toISOString();
 
-        // If this is the only worker, delete the entire document
-        if (existingData.workers.length === 1) {
-          await docRef.delete();
-        } else {
-          const updatedWorkers = existingData.workers.filter((w) => w.name !== workerName);
-          await docRef.update({
-            workers: updatedWorkers,
-            updatedAt: now,
-          });
-        }
+        const updatedWorkers = existingData.workers.filter((w) => w.name !== workerName);
+        await docRef.update({
+          workers: updatedWorkers,
+          updatedAt: now,
+        });
 
         return ok(undefined);
       } catch (error) {
