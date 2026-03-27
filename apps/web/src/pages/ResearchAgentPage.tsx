@@ -13,6 +13,7 @@ import {
 } from '@/components';
 import { useAuth } from '@/context';
 import { useLlmKeys, useOpenRouterModels } from '@/hooks';
+import { ApiError } from '@/services/apiClient';
 import {
   getResearch,
   improveInput,
@@ -107,6 +108,15 @@ export function ResearchAgentPage(): React.JSX.Element {
     }
     return map;
   })();
+
+  // Auto-trim OpenRouter selections when dynamic max decreases below current count
+  useEffect(() => {
+    const regularCount = Array.from(modelSelections.values()).filter((m) => m !== null).length;
+    const maxOR = MAX_TOTAL_MODELS - regularCount;
+    if (selectedOpenRouterModels.length > maxOR) {
+      setSelectedOpenRouterModels((prev) => prev.slice(0, maxOR));
+    }
+  }, [modelSelections, selectedOpenRouterModels.length]);
 
   // Load draft if in edit mode
   useEffect(() => {
@@ -395,25 +405,18 @@ export function ResearchAgentPage(): React.JSX.Element {
     } catch (err) {
       // Parse detailed validation errors if available
       let errorMessage: string;
-      if (
-        err !== null &&
-        typeof err === 'object' &&
-        'details' in err &&
-        err.details !== null &&
-        typeof err.details === 'object' &&
-        'errors' in err.details &&
-        Array.isArray(err.details.errors)
-      ) {
-        // Extract specific validation messages
-        const errors = err.details.errors as { path?: string; message?: string }[];
-        const messages = errors
+      if (err instanceof ApiError && err.details !== undefined) {
+        // Extract specific validation messages from API error details
+        const { errors: validationErrors } = err.details as {
+          errors?: { path?: string; message?: string }[];
+        };
+        const messages = (validationErrors ?? [])
           .map((e) => e.message)
           .filter((m): m is string => m !== undefined);
-        if (messages.length > 0) {
-          errorMessage = messages.join('; ');
-        } else {
-          errorMessage = err instanceof Error ? err.message : 'Failed to create research';
-        }
+        errorMessage =
+          messages.length > 0
+            ? messages.join('; ')
+            : err.message;
       } else {
         errorMessage = err instanceof Error ? err.message : 'Failed to create research';
       }

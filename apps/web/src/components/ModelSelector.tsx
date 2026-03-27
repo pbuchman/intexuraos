@@ -71,9 +71,7 @@ export interface ModelSelectorProps {
   isOpenRouterConfigured?: boolean;
 }
 
-const MAX_TOTAL_MODELS = 6;
-
-export { MAX_TOTAL_MODELS };
+export const MAX_TOTAL_MODELS = 6;
 
 export function ModelSelector({
   selectedModels,
