@@ -1208,7 +1208,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                       request.log.warn({ taskId, prNumber, label, error: labelResult.error }, 'Failed to set review-outcome label (best-effort)');
                     }
                   } else {
-                    request.log.warn({ taskId, prNumber, linearIssueId: originTask.linearIssueId, error: issueValidation.error }, 'Failed to validate origin issue for review-outcome label (best-effort)');
+                    request.log.warn({ taskId, prNumber, linearIssueId: originLinearIssueId, error: issueValidation.error }, 'Failed to validate origin issue for review-outcome label (best-effort)');
                   }
                 } else if (!originResult.ok) {
                   request.log.warn({ taskId, prNumber, error: originResult.error }, 'Failed to look up origin task for review-outcome label (best-effort)');

@@ -97,9 +97,16 @@ export function hasImplementationReadyLabel(labels: { name: string }[] | undefin
   return labels.some((l) => IMPLEMENTATION_READY_LABELS.has(normalizeLabel(l.name)));
 }
 
+/**
+ * Checks if a task's Linear labels indicate it's ready for merge.
+ *
+ * Unlike `hasImplementationReadyLabel`, this returns false for undefined/empty labels —
+ * the `ready-to-merge` label is set deterministically by the review-outcome handler,
+ * so there is no legacy-data fallback needed.
+ */
 export function hasMergeReadyLabel(labels: { name: string }[] | undefined): boolean {
   if (labels === undefined || labels.length === 0) {
-    return false; // No fallback — require explicit label
+    return false;
   }
   return labels.some((l) => normalizeLabel(l.name) === 'ready-to-merge');
 }
@@ -169,11 +176,10 @@ function derivePipeline(tasks: CodeTask[]): PipelineState {
   }
 
   // Merge-ready logic: if execution step is completed, PR exists, and ready-to-merge label present
-  const executionEntryForMerge = stepMap.get('execution');
   if (
-    executionEntryForMerge?.step.state === 'completed' &&
-    executionEntryForMerge.task.result?.prUrl !== undefined &&
-    hasMergeReadyLabel(executionEntryForMerge.task.linearIssue?.labels)
+    executionEntry?.step.state === 'completed' &&
+    executionEntry.task.result?.prUrl !== undefined &&
+    hasMergeReadyLabel(executionEntry.task.linearIssue?.labels)
   ) {
     steps.push({
       agentType: 'merge',
