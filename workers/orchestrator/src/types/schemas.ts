@@ -38,7 +38,7 @@ export const CreateTaskRequestSchema = z.object({
   webhookUrl: z.string().url(),
   webhookSecret: z.string().min(1),
   actionId: z.string().optional(),
-  agentType: z.enum(['planning', 'execution', 'pull_request', 'review']).optional(),
+  agentType: z.enum(['planning', 'execution', 'pull_request', 'review', 'remediation']).optional(),
   trackingCommentId: z.string().min(1).optional(),
   continuationPrNumber: z.number().int().positive().optional(),
   continuationPrBranch: z.string().min(1).optional(),

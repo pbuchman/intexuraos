@@ -109,6 +109,14 @@ export type AutomationEvent =
       replacedTaskId: string;
       replacedWorkerType?: string;
     }
+  | {
+      type: 'remediation_decision';
+      required: boolean;
+      source: 'review_result';
+      signal: '0' | '1' | 'missing';
+      taskId?: string;
+      existingTaskId?: string;
+    }
 
   // Phase 7: CI Failure handling (INT-853)
   | {

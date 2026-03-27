@@ -151,15 +151,27 @@ export async function createRemediationTask(
 
   // Best-effort Linear issue linking from existing execution task
   let linearIssueId: string | undefined = request.linearIssueId;
+  let prBranch: string | undefined;
   if (linearIssueId === undefined) {
     const existingResult = await codeTaskRepo.findLatestExecutionTaskByPR(repository, prNumber);
     if (existingResult.ok) {
       linearIssueId = existingResult.value?.linearIssueId;
+      prBranch = existingResult.value?.prBranch;
       if (linearIssueId !== undefined) {
         logger.info({ linearIssueId, prNumber }, 'Copied linearIssueId from existing execution task for remediation');
       }
+      if (prBranch !== undefined) {
+        logger.info({ prBranch, prNumber }, 'Copied prBranch from existing execution task for remediation');
+      }
     } else {
       logger.warn({ error: existingResult.error, prNumber }, 'Failed to look up existing execution task for remediation Linear linking');
+    }
+  } else {
+    const existingResult = await codeTaskRepo.findLatestExecutionTaskByPR(repository, prNumber);
+    if (existingResult.ok) {
+      prBranch = existingResult.value?.prBranch;
+    } else {
+      logger.warn({ error: existingResult.error, prNumber }, 'Failed to look up existing execution task for remediation PR continuation');
     }
   }
 
@@ -182,6 +194,7 @@ export async function createRemediationTask(
     prNumber,
     agentType: 'remediation',
     ...(linearIssueId !== undefined && { linearIssueId }),
+    ...(prBranch !== undefined && { prBranch }),
   };
 
   const createResult = await codeTaskRepo.create(taskInput);
