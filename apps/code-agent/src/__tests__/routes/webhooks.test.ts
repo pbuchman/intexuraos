@@ -4924,6 +4924,26 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(labelCalls).toHaveLength(0);
     });
 
+    it('logs warning and succeeds when findLatestExecutionTaskByPR returns error', async () => {
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_origin_error' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      vi.spyOn(codeTaskRepo, 'findLatestExecutionTaskByPR').mockResolvedValueOnce(
+        err({ code: 'FIRESTORE_ERROR' as const, message: 'Simulated query error' })
+      );
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      // validateIssue should NOT be called since origin lookup failed
+      const { linearAgentClient: lac } = getServices();
+      const validateSpy = vi.mocked(lac.validateIssue);
+      const labelCalls = validateSpy.mock.calls.filter(
+        (call) => call[0].identifier === 'INT-500'
+      );
+      expect(labelCalls).toHaveLength(0);
+    });
+
     it('logs error and succeeds when validateIssue fails', async () => {
       await createOriginTask({ traceId: 'trace_label_validate_fail', agentType: 'execution' });
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_validate_fail_review' });
