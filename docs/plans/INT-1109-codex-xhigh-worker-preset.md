@@ -96,8 +96,9 @@ Implementation is handled as a **single consolidated subtask** under `INT-1109`,
 ### Web
 
 - `apps/web/src/components/workers/shared.tsx`
-- `apps/web/src/components/workers/DefaultReviewWorkerTypeCard.tsx`
+- `apps/web/src/components/workers/DefaultWorkerTypeCard.tsx`
 - `apps/web/src/pages/CodeTaskNewPage.tsx`
+- `apps/web/src/pages/WorkerSettingsPage.tsx`
 - Focused tests for worker selection surfaces
 
 ## Task 1: Shared worker-type contract
@@ -152,8 +153,9 @@ Implementation is handled as a **single consolidated subtask** under `INT-1109`,
 
 **Files:**
 - Modify: `apps/web/src/components/workers/shared.tsx`
-- Modify: `apps/web/src/components/workers/DefaultReviewWorkerTypeCard.tsx`
+- Modify: `apps/web/src/components/workers/DefaultWorkerTypeCard.tsx`
 - Modify: `apps/web/src/pages/CodeTaskNewPage.tsx`
+- Modify: `apps/web/src/pages/WorkerSettingsPage.tsx`
 - Modify: focused tests for task creation and worker settings selectors
 
 - [ ] Add the frozen label and description for `codex-xhigh` in the shared web worker metadata map.
