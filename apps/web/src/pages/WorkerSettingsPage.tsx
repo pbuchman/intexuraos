@@ -84,7 +84,7 @@ export function WorkerSettingsPage(): React.JSX.Element {
           title="Default Review Model"
           description="Model used for automated PR reviews when no specific model is requested."
           successMessage="Default review model saved"
-          currentType={settings?.defaultReviewWorkerType ?? 'glm'}
+          currentType={settings?.defaultReviewWorkerType ?? 'auto'}
           onUpdate={(wt): Promise<void> => updateDefaultWorkerType('review', wt)}
         />
       </div>
