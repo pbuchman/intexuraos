@@ -29,6 +29,7 @@ import { sanitizePrompt } from '../utils/promptSanitization.js';
 import { generateWebhookSecret } from '../utils/secrets.js';
 import type { AutomationLog } from '../ports/automationLog.js';
 import { updatePRTitleWithLinearTag } from '../utils/updatePRTitleWithLinearTag.js';
+import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
 
 const DEFAULT_LINEAR_FALLBACK_ERROR = 'Linear unavailable';
 
@@ -78,6 +79,7 @@ export interface CreateTaskForPRDeps {
   gitHubPRClient: GitHubPRClient;
   userServiceClient: UserServiceClient;
   automationLog: AutomationLog;
+  workerSettingsRepo: WorkerSettingsRepository;
   firestore: {
     runTransaction: <T>(fn: (transaction: FirebaseFirestore.Transaction) => Promise<T>) => Promise<T>;
     doc: (path: string) => FirebaseFirestore.DocumentReference;
@@ -171,6 +173,16 @@ export async function createTaskForPR(
 
   const { userId } = userResult.value; // @allow-result-access -- narrowed by !userResult.ok above
   logger.debug({ userId, senderLogin }, 'Resolved GitHub username to user');
+
+  // Resolve effective worker type: request > user default > 'auto'
+  let effectiveWorkerType: WorkerType = request.workerType ?? 'auto';
+  if (effectiveWorkerType === 'auto') {
+    const settingsResult = await deps.workerSettingsRepo.getSettings(userId);
+    if (settingsResult.ok && settingsResult.value?.defaultPullRequestWorkerType !== undefined) {
+      effectiveWorkerType = settingsResult.value.defaultPullRequestWorkerType;
+      logger.info({ userId, defaultPullRequestWorkerType: effectiveWorkerType }, 'Using user default pull request worker type');
+    }
+  }
 
   // Fetch baseBranch from GitHub API when not provided (e.g. issue_comment events
   // where no prior pull_request event was stored)
@@ -280,7 +292,7 @@ export async function createTaskForPR(
         prompt: taskPrompt,
         sanitizedPrompt: sanitizePrompt(taskPrompt),
         systemPromptHash: 'pr-comment-auto',
-        workerType: request.workerType ?? 'auto',
+        workerType: effectiveWorkerType,
         workerLocation: 'queued',
         repository,
         baseBranch: resolvedBaseBranch ?? 'main',
@@ -367,7 +379,7 @@ export async function createTaskForPR(
     {
       type: 'task_dispatched',
       taskId,
-      workerType: request.workerType ?? 'auto',
+      workerType: effectiveWorkerType,
       agentType: 'pull_request',
       ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
     },
