@@ -18,7 +18,7 @@ export function useTimezoneAutoDetect(): void {
     const userId = user?.sub;
     if (userId === undefined) return;
 
-    hasRun.current = true;
+    hasRun.current = true; // prevent concurrent runs
 
     void (async (): Promise<void> => {
       try {
@@ -33,7 +33,8 @@ export function useTimezoneAutoDetect(): void {
 
         await patchUserTimezone(token, userId, detectedTimezone);
       } catch {
-        // Fire-and-forget — silently ignore errors, don't block app load
+        // Transient failure — allow retry on next render cycle
+        hasRun.current = false;
       }
     })();
   }, [isAuthenticated, user?.sub, getAccessToken]);

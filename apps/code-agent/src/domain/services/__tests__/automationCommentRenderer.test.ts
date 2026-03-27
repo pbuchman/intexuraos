@@ -855,6 +855,58 @@ describe('renderEvent', () => {
       expect(result).toBe('**15:35 CET** -- PR opened by @octocat');
     });
 
+    it('formats America/* timezone with named abbreviation, not GMT offset', () => {
+      const event: AutomationEvent = {
+        type: 'webhook_received',
+        eventType: 'pull_request',
+        action: 'opened',
+        sender: 'octocat',
+        deliveryId: 'abc-123',
+      };
+
+      // 14:35 UTC = 09:35 EST (America/New_York in January / standard time)
+      const result = renderEvent(event, {
+        timestamp: '2026-01-15T14:35:00Z',
+        timezone: 'America/New_York',
+      });
+      expect(result).toBe('**09:35 EST** -- PR opened by @octocat');
+    });
+
+    it('formats America/Los_Angeles with named abbreviation', () => {
+      const event: AutomationEvent = {
+        type: 'webhook_received',
+        eventType: 'pull_request',
+        action: 'opened',
+        sender: 'octocat',
+        deliveryId: 'abc-123',
+      };
+
+      // 14:35 UTC = 06:35 PST (America/Los_Angeles in January / standard time)
+      const result = renderEvent(event, {
+        timestamp: '2026-01-15T14:35:00Z',
+        timezone: 'America/Los_Angeles',
+      });
+      expect(result).toBe('**06:35 PST** -- PR opened by @octocat');
+    });
+
+    it('uses GMT offset when both locales lack a named abbreviation', () => {
+      const event: AutomationEvent = {
+        type: 'webhook_received',
+        eventType: 'pull_request',
+        action: 'opened',
+        sender: 'octocat',
+        deliveryId: 'abc-123',
+      };
+
+      // Asia/Tokyo produces GMT+9 in both en-US and en-GB — the formatter
+      // keeps the en-US offset as the best available label
+      const result = renderEvent(event, {
+        timestamp: '2026-01-15T14:35:00Z',
+        timezone: 'Asia/Tokyo',
+      });
+      expect(result).toBe('**23:35 GMT+9** -- PR opened by @octocat');
+    });
+
     it('defaults to current time when no timestamp provided', () => {
       useFakeTime(); // Sets to 2026-03-14T14:35:00Z
       const event: AutomationEvent = {
@@ -891,6 +943,32 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event, { timestamp: '2026-03-14T14:35:00Z', timezone: undefined });
       expect(result).toBe('**14:35 UTC** -- Task started');
+    });
+
+    it('falls back to timezone string when formatToParts lacks timeZoneName', () => {
+      const original = Intl.DateTimeFormat.prototype.formatToParts;
+      vi.spyOn(Intl.DateTimeFormat.prototype, 'formatToParts').mockReturnValue([
+        { type: 'literal', value: '1/15/2026' },
+      ]);
+
+      const event: AutomationEvent = {
+        type: 'webhook_received',
+        eventType: 'pull_request',
+        action: 'opened',
+        sender: 'octocat',
+        deliveryId: 'abc-123',
+      };
+
+      const result = renderEvent(event, {
+        timestamp: '2026-01-15T14:35:00Z',
+        timezone: 'America/New_York',
+      });
+      // When formatToParts lacks timeZoneName, falls back to the IANA zone string
+      expect(result).toContain('America/New_York');
+
+      vi.mocked(Intl.DateTimeFormat.prototype.formatToParts).mockRestore();
+      // Verify the original is restored
+      expect(Intl.DateTimeFormat.prototype.formatToParts).toBe(original);
     });
   });
 });
