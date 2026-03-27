@@ -75,9 +75,33 @@ describe('REVIEW_SCHEMA', () => {
     expect(result.success).toBe(false);
   });
 
-  it('requires review_id as a numeric string', () => {
+  it('accepts review result when review_id is omitted', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/1',
+      review_comments_posted: '1',
+      review_types: 'code_quality',
+      summary: 'Some findings.',
+      needs_remediation: '1',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts review result when review_id is empty string', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/1',
+      review_id: '',
+      review_comments_posted: '1',
+      review_types: 'code_quality',
+      summary: 'Some findings.',
+      needs_remediation: '1',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects non-empty non-numeric review_id', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/1',
+      review_id: 'abc',
       review_comments_posted: '1',
       review_types: 'code_quality',
       summary: 'Some findings.',

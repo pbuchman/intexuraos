@@ -1121,40 +1121,38 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 if (createRemediationTaskFn !== undefined) {
                   let reviewBody = result.summary;
                   let inlineComments: { path: string; line: number; body: string }[] | undefined;
-                  if (result.review_id !== undefined) {
+                  if (result.review_id !== undefined && /^\d+$/.test(result.review_id)) {
                     const reviewId = Number(result.review_id);
-                    if (Number.isFinite(reviewId)) {
-                      const enrichedReviewResult = await enrichReviewWithComments(
-                        { logger: remediationLogger, gitHubPREventRepo },
-                        {
-                          repository: task.repository,
-                          pullRequestNumber: prNumber,
-                          reviewId,
-                          reviewBody: null,
-                        },
-                      );
-                      if (enrichedReviewResult.ok) {
-                        reviewBody = enrichedReviewResult.value.reviewBody ?? reviewBody;
-                        if (enrichedReviewResult.value.comments.length > 0) {
-                          inlineComments = enrichedReviewResult.value.comments
-                            .filter(
-                              (
-                                comment,
-                              ): comment is typeof comment & { line: number } => comment.line !== null,
-                            )
-                            .map((comment) => ({
-                              path: comment.path,
-                              line: comment.line,
-                              body: comment.body,
-                            }));
-                        }
-                      } else {
-                        request.log.warn(
-                          { taskId, prNumber, reviewId, error: enrichedReviewResult.error },
-                          'Failed to enrich review context from stored GitHub events, falling back to verifier summary',
-                        );
+                    const enrichedReviewResult = await enrichReviewWithComments(
+                      { logger: remediationLogger, gitHubPREventRepo },
+                      {
+                        repository: task.repository,
+                        pullRequestNumber: prNumber,
+                        reviewId,
+                        reviewBody: null,
+                      },
+                    );
+                    if (enrichedReviewResult.ok) {
+                      reviewBody = enrichedReviewResult.value.reviewBody ?? reviewBody;
+                      if (enrichedReviewResult.value.comments.length > 0) {
+                        inlineComments = enrichedReviewResult.value.comments
+                          .filter(
+                            (
+                              comment,
+                            ): comment is typeof comment & { line: number } => comment.line !== null,
+                          )
+                          .map((comment) => ({
+                            path: comment.path,
+                            line: comment.line,
+                            body: comment.body,
+                          }));
                       }
-                    }
+                    } else {
+                      request.log.warn(
+                        { taskId, prNumber, reviewId, error: enrichedReviewResult.error },
+                        'Failed to enrich review context from stored GitHub events, falling back to verifier summary',
+                      );
+                      }
                   }
                   const remediationResult = await createRemediationTaskFn(
                     remediationLogger,

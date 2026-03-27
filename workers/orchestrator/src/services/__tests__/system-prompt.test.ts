@@ -205,6 +205,10 @@ describe('system-prompt', () => {
     expect(result).toContain('requires_re_review');
     expect(result).toContain('Do NOT create a new PR');
     expect(result).toContain('REMEDIATION_AGENT_FINAL:');
+    expect(result).toContain('superpowers:receiving-code-review');
+    expect(result).toContain('mcp__linear__save_comment');
+    expect(result).not.toContain('mcp__linear__create_comment');
+    expect(result).not.toContain('superpowers:requesting-code-review');
   });
 
   it('remediation prompt renders linearIssueTitle in PR Description when provided', () => {
@@ -247,6 +251,16 @@ describe('system-prompt', () => {
     });
 
     expect(result).toContain('[INT-123 Fix login bug]');
+  });
+
+  it('execution prompt uses the real Linear MCP comment tool', () => {
+    const result = executionPrompt.build({
+      ...baseParams,
+      linearIssueLabels: ['code-task'],
+    });
+
+    expect(result).toContain('mcp__linear__save_comment');
+    expect(result).not.toContain('mcp__linear__create_comment');
   });
 
   it('pull request prompt renders linearIssueTitle in PR Description when provided', () => {
@@ -1125,12 +1139,12 @@ describe('system-prompt', () => {
     expect(planningPrompt.version).toBe('3.1.1');
   });
 
-  it('execution prompt version is 5.1.1', () => {
-    expect(executionPrompt.version).toBe('5.1.1');
+  it('execution prompt version is 5.1.2', () => {
+    expect(executionPrompt.version).toBe('5.1.2');
   });
 
-  it('remediation prompt version is 1.0.0', () => {
-    expect(remediationPrompt.version).toBe('1.0.0');
+  it('remediation prompt version is 1.0.1', () => {
+    expect(remediationPrompt.version).toBe('1.0.1');
   });
 
   it('review agent prompt includes Linear section when linearIssueId is provided', () => {
