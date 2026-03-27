@@ -141,7 +141,7 @@ jobs:
         run: |
           bash cloudbuild/scripts/build-push-monitored.sh image-service apps/image-service/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh api-docs-hub apps/api-docs-hub/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh claude-worker workers/claude-worker/Dockerfile &
+          bash cloudbuild/scripts/build-push-monitored.sh code-worker workers/code-worker/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh notion-service apps/notion-service/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh user-service apps/user-service/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh whatsapp-service apps/whatsapp-service/Dockerfile &

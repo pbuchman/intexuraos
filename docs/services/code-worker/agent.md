@@ -1,6 +1,6 @@
-# claude-worker — Agent Interface
+# code-worker — Agent Interface
 
-> Machine-readable interface definition for AI agents and the orchestrator interacting with claude-worker containers.
+> Machine-readable interface definition for AI agents and the orchestrator interacting with code-worker containers.
 
 ---
 
@@ -8,8 +8,8 @@
 
 | Field    | Value                                                                           |
 | -------- | ------------------------------------------------------------------------------- |
-| **Name** | claude-worker                                                                   |
-| **Role** | Isolated Docker Container for Claude Code Sessions                              |
+| **Name** | code-worker                                                                    |
+| **Role** | Isolated Docker Container for Claude Code and Codex Sessions                    |
 | **Goal** | Execute AI coding tasks in sandboxed environments with enforced security limits |
 
 ---
@@ -32,11 +32,11 @@ interface WorkerConfig {
   worktreePath: string;
   prompt: string; // User prompt content (written to secrets/user-prompt.txt)
   systemPrompt: string; // System prompt content (written to secrets/system-prompt.txt)
-  workerType: 'auto' | 'opus' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi';
+  workerType: 'auto' | 'opus' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi' | 'codex';
   secrets: WorkerSecrets;
   gcpSaKeyPath: string;
   githubAppKeyPath: string;
-  continueSession?: boolean; // true = CLAUDE_CONTINUE=1 + restore preserved container
+  continueSession?: boolean; // true = WORKER_CONTINUE=1 + restore preserved container
   onLog?: (chunk: string) => void;
   onComplete?: (exitCode: number) => void;
 }
@@ -72,7 +72,7 @@ interface IsolationProvider {
 
   listWorkers(): Promise<WorkerHandle[]>;
 
-  // Remove per-task Claude session directory from host
+  // Remove per-task runtime session directory from host
   cleanupTaskSession?(taskId: string): Promise<void>;
 
   // Park container in preserved map (keeps alive, clears secrets)
@@ -98,13 +98,13 @@ interface IsolationProvider {
 ### Worker Types
 
 ```typescript
-type WorkerType = 'auto' | 'opus' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi';
+type WorkerType = 'auto' | 'opus' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi' | 'codex';
 
 const WORKER_TYPES: Record<
   WorkerType,
   {
     apiBaseUrl: string;
-    apiKeyEnvVar: 'ANTHROPIC_API_KEY' | 'MINIMAX_API_KEY' | 'DASHSCOPE_API_KEY';
+    apiKeyEnvVar?: 'ANTHROPIC_API_KEY' | 'MINIMAX_API_KEY' | 'DASHSCOPE_API_KEY';
     model?: string;
   }
 > = {
@@ -142,8 +142,13 @@ const WORKER_TYPES: Record<
     apiKeyEnvVar: 'DASHSCOPE_API_KEY',
     model: 'kimi-k2.5',
   },
+  codex: {
+    apiBaseUrl: 'runtime-managed',
+  },
 };
 ```
+
+`codex` uses the Codex runtime and shared Codex auth rather than Anthropic-compatible API routing.
 
 ---
 
@@ -157,10 +162,10 @@ const WORKER_TYPES: Record<
 6. The `waitForCompletion` method resolves with `-1` on timeout and automatically triggers `destroyWorker` with force kill.
 7. Concurrent workers are limited to `maxConcurrent` (default 4). Exceeding this limit throws an error; the caller must wait for an existing worker to finish.
 8. GitHub token refresh is handled by the orchestrator's `TokenRefresher`, which updates `/secrets/github-token` every 30 minutes via bind mount. Within a single attempt, tokens are refreshed via file reads — the git credential helper reads the file directly on each git operation (`$(cat /secrets/github-token)` in gitconfig), and the `gh` CLI uses a wrapper at `/usr/local/bin/gh` that re-reads the file before each invocation. The `GITHUB_TOKEN` env var is a point-in-time snapshot set at attempt start and may go stale; it is not the authoritative source.
-9. In managed mode (`CLAUDE_MANAGED_MODE=1`), the container does NOT exit after completing an attempt. The orchestrator must call `destroyWorker` explicitly when the task is done.
-10. When `continueSession: true` is passed to `createWorker`, it restores a preserved container (via `preservedWorkers` map) or reconnects to an orphaned container by name (`claude-worker-{taskId}`). This handles orchestrator restarts without losing in-flight containers.
+9. In managed mode (`WORKER_MANAGED_MODE=1`), the container does NOT exit after completing an attempt. The orchestrator must call `destroyWorker` explicitly when the task is done.
+10. When `continueSession: true` is passed to `createWorker`, it restores a preserved container (via `preservedWorkers` map) or reconnects to an orphaned container by name (`code-worker-{taskId}`). This handles orchestrator restarts without losing in-flight containers.
 11. The container syncs environment variables from GCP Secret Manager at startup via `scripts/sync-secrets.sh`. These are loaded into the shell environment via `.envrc` and `direnv`. The orchestrator does not need to pre-sync secrets.
-12. Crash forensics are enabled by setting `CLAUDE_FORENSICS=1`. The forensics directory must be bind-mounted if the orchestrator needs to access artifacts after container destruction.
+12. Crash forensics are enabled by setting `WORKER_FORENSICS=1`. The forensics directory must be bind-mounted if the orchestrator needs to access artifacts after container destruction.
 
 ---
 
@@ -181,8 +186,8 @@ interface ContainerMounts {
     files: {
       'gcp-sa.json': 'optional'; // GCP service account key
       'github-token': 'optional'; // Refreshed GitHub token
-      'system-prompt.txt': 'required-for-run-attempt'; // Claude system prompt
-      'user-prompt.txt': 'required-for-run-attempt'; // Claude user prompt (piped to stdin)
+      'system-prompt.txt': 'required-for-run-attempt'; // Worker system prompt
+      'user-prompt.txt': 'required-for-run-attempt'; // Worker user prompt (piped to stdin)
     };
   };
   '/home/claude/pnpm-store': {
@@ -196,6 +201,12 @@ interface ContainerMounts {
     mode: 'rw';
     type: 'bind'; // Session history persists for --continue resumption
   };
+  '/home/claude/.codex': {
+    source: string; // Host per-task session (secretsBasePath/codex-state-{taskId})
+    // auth.json is mounted from sharedCodexAuthPath when Codex auth is configured
+    mode: 'rw';
+    type: 'bind'; // Codex thread state persists for exec resume
+  };
   '/tmp': {
     type: 'tmpfs';
     size: '2g';
@@ -208,7 +219,7 @@ interface ContainerMounts {
     type: 'tmpfs';
     size: '500m';
     options: 'rw,noexec,nosuid,uid={HOST_UID},gid={HOST_GID}';
-    // pnpm-store and .claude bind mounts overlay this tmpfs
+    // pnpm-store, .claude, and .codex bind mounts overlay this tmpfs
   };
   '/repo/node_modules': {
     type: 'tmpfs';
@@ -230,7 +241,7 @@ interface ContainerMounts {
 //    createWorker writes prompt content to secrets dir, then calls docker exec run-attempt.
 const handle = await provider.createWorker({
   taskId: 'INT-500-implement-feature',
-  worktreePath: '/home/user/.claude-orchestrator/worktrees/INT-500',
+  worktreePath: '/home/user/.code-orchestrator/worktrees/INT-500',
   workerType: 'auto',
   systemPrompt: 'You are a coding agent working on IntexuraOS...',
   prompt: 'Implement the feature described in INT-500.',
@@ -240,7 +251,7 @@ const handle = await provider.createWorker({
     SENTRY_AUTH_TOKEN: 'sntrys_...',
   },
   gcpSaKeyPath: '/home/user/.config/gcloud/sa-key.json',
-  githubAppKeyPath: '/home/user/.claude-orchestrator/secrets/INT-500/github-token',
+  githubAppKeyPath: '/home/user/.code-orchestrator/secrets/INT-500/github-token',
   onLog: (chunk) => logForwarder.forward('INT-500', chunk),
   onComplete: (exitCode) => console.log('Attempt done:', exitCode),
 });
@@ -295,7 +306,7 @@ if (exitCode === 0) {
 
 ## Events Published
 
-None. Claude Worker does not publish Pub/Sub events. Communication is via container exit codes and log output.
+None. Code Worker does not publish Pub/Sub events. Communication is via container exit codes and log output.
 
 ---
 
@@ -304,7 +315,7 @@ None. Claude Worker does not publish Pub/Sub events. Communication is via contai
 | Dependency           | Why Needed                 | Failure Behavior                               |
 | -------------------- | -------------------------- | ---------------------------------------------- |
 | Docker Engine        | Container runtime          | Cannot start worker                            |
-| Anthropic API        | Claude CLI model access    | Claude exits with error                        |
+| Anthropic / OpenAI auth endpoints | Claude or Codex runtime access | Selected runtime exits with error |
 | GitHub (public)      | Push commits, create PRs   | Git operations fail                            |
 | npm registry         | pnpm install               | Dependency install fails (non-fatal for retry) |
 | GCP Secret Manager   | Environment variable sync  | Falls back to existing .envrc                  |

@@ -137,7 +137,8 @@ const VERIFIER_PRICING: Partial<Record<LLMModel, ModelPricing>> = {
   },
 };
 
-const FATAL_EXIT_CODE_PATTERN = /\[entrypoint\] Claude attempt finished with exit code: (137|139)/;
+const FATAL_EXIT_CODE_PATTERN =
+  /\[entrypoint\] (?:Claude|Codex) attempt finished with exit code: (137|139)/;
 
 export function detectFatalExitCode(rawLogs: string): number | undefined {
   const match = FATAL_EXIT_CODE_PATTERN.exec(rawLogs);
@@ -262,20 +263,20 @@ export function buildReviewPrompt(transcript: string): string {
 
 export function buildResumeSummaryPrompt(transcript: string): string {
   return [
-    'You are summarizing the output of a resumed Claude coding session.',
+    'You are summarizing the output of a resumed code-worker session.',
     'Analyze the transcript below and extract a brief summary of what was accomplished.',
     'Return ONLY a JSON object with a single field, no markdown fences.',
     '',
     'Rules:',
-    '- Find the summary Claude stated directly in the last assistant messages.',
+    '- Find the summary the worker stated directly in the last assistant messages.',
     '- If no explicit summary exists, write 2-3 sentences describing the last completed action.',
     '- Keep it concise and factual.',
     '',
     'Field:',
-    '- summary: 2-3 sentence summary of what Claude accomplished in this resumed session',
+    '- summary: 2-3 sentence summary of what the worker accomplished in this resumed session',
     '',
     'Example valid response:',
-    '{"summary":"Claude fixed the authentication bug by updating the token refresh logic. CI passed after the fix."}',
+    '{"summary":"The worker fixed the authentication bug by updating the token refresh logic. CI passed after the fix."}',
     '',
     'Transcript (last 20 lines):',
     transcript,

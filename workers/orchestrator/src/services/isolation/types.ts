@@ -6,6 +6,7 @@
  */
 
 import type { CodeTaskWorkerType } from '@intexuraos/common-core';
+import type { WorkerRuntime } from '../runtime/types.js';
 
 export interface AnthropicOAuthCredentials {
   accessToken: string;
@@ -24,47 +25,59 @@ export type OAuthState =
 export type WorkerType = CodeTaskWorkerType;
 
 export interface WorkerTypeConfig {
+  runtime: WorkerRuntime;
   apiBaseUrl: string;
-  apiKeyEnvVar: 'ANTHROPIC_API_KEY' | 'MINIMAX_API_KEY' | 'DASHSCOPE_API_KEY';
+  apiKeyEnvVar?: 'ANTHROPIC_API_KEY' | 'MINIMAX_API_KEY' | 'DASHSCOPE_API_KEY';
   model?: string;
   effort?: 'low' | 'medium' | 'high' | 'max';
 }
 
 export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
   auto: {
+    runtime: 'claude',
     apiBaseUrl: 'https://api.anthropic.com',
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
   },
   opus: {
+    runtime: 'claude',
     apiBaseUrl: 'https://api.anthropic.com',
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
     model: 'opus',
     effort: 'high',
   },
   sonnet: {
+    runtime: 'claude',
     apiBaseUrl: 'https://api.anthropic.com',
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
     model: 'sonnet',
   },
   minimax: {
+    runtime: 'claude',
     apiBaseUrl: 'https://api.minimax.io/anthropic',
     apiKeyEnvVar: 'MINIMAX_API_KEY',
     model: 'MiniMax-M2.7',
   },
   glm: {
+    runtime: 'claude',
     apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
     apiKeyEnvVar: 'DASHSCOPE_API_KEY',
     model: 'glm-5',
   },
   qwen: {
+    runtime: 'claude',
     apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
     apiKeyEnvVar: 'DASHSCOPE_API_KEY',
     model: 'qwen3.5-plus',
   },
   kimi: {
+    runtime: 'claude',
     apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
     apiKeyEnvVar: 'DASHSCOPE_API_KEY',
     model: 'kimi-k2.5',
+  },
+  codex: {
+    runtime: 'codex',
+    apiBaseUrl: 'https://api.openai.com',
   },
 };
 
@@ -82,6 +95,8 @@ export interface WorkerConfig {
   prompt: string;
   systemPrompt: string;
   workerType: WorkerType;
+  runtimeOverride?: WorkerRuntime;
+  runtimeSessionId?: string;
   secrets: WorkerSecrets;
   gcpSaKeyPath: string;
   githubAppKeyPath: string;

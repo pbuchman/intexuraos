@@ -1,5 +1,6 @@
 import type { OrchestratorStatus } from './state.js';
-import type { OAuthState, WorkerType } from '../services/isolation/types.js';
+import type { WorkerType } from '../services/isolation/types.js';
+import type { WorkerAuthProvider, WorkerAuthState } from '../services/worker-auth/index.js';
 
 // POST /tasks request
 export interface CreateTaskRequest {
@@ -44,5 +45,7 @@ export interface HealthResponse {
   running: number;
   available: number;
   githubTokenExpiresAt: string | null;
-  anthropicOAuth: OAuthState;
+  dockerHealthy: boolean;
+  diskHealthy: boolean;
+  workerAuths: Record<WorkerAuthProvider, WorkerAuthState>;
 }

@@ -8,19 +8,19 @@ Every code task in IntexuraOS passes through a four-stage verification pipeline 
 
 ## The Verification Flow
 
-### Stage 1: Task Execution (Claude Worker)
+### Stage 1: Task Execution (Code Worker)
 
-The claude-worker runs inside an isolated Docker container with strict security constraints:
+The code-worker runs inside an isolated Docker container with strict security constraints:
 
 - **Non-root execution** — the entrypoint refuses to run as root (`entrypoint.sh:225-228`)
 - **Network isolation** — cloud metadata endpoints are blocked (`entrypoint.sh:234-239`)
 - **Read-only secrets** — system and user prompts mounted at `/secrets/` (`entrypoint.sh:123-131`)
-- **Claude Code in `--print` mode** — `claude --print --verbose --output-format stream-json --dangerously-skip-permissions` (`entrypoint.sh:164-187`)
+- **Runtime-specific execution** — `claude --print --verbose --output-format stream-json --dangerously-skip-permissions` or `codex exec --json`, depending on `workerType`
 - **Managed attempt mode** — the orchestrator can run multiple attempts via `docker exec` with the `run-attempt` subcommand (`entrypoint.sh:204-217`)
 
 Each container gets a fresh repository copy (via git worktree), its own credentials, and a pre-installed dependency cache. When the task finishes, the entrypoint logs the exit code and terminates lingering child processes.
 
-**Evidence:** `workers/claude-worker/entrypoint.sh`
+**Evidence:** `workers/code-worker/entrypoint.sh`
 
 ### Stage 2: Completion Verification (Gemini 2.5 Flash)
 
@@ -112,7 +112,7 @@ The verification pipeline deliberately uses two different AI providers:
 
 | Role                        | Provider             | Model                                        | Why                                                                                   |
 | --------------------------- | -------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------- |
-| **Execution**               | Anthropic            | Claude (Opus/Sonnet/Haiku via claude-worker) | Optimized for autonomous coding — tool use, file editing, test execution              |
+| **Execution**               | Anthropic            | Claude (Opus/Sonnet/Haiku via code-worker) | Optimized for autonomous coding — tool use, file editing, test execution              |
 | **Completion Verification** | Google               | Gemini 2.5 Flash                             | Fast structured extraction from logs; independent provider prevents self-verification |
 | **Deep Validation**         | Google               | Gemini 2.5 Flash                             | Reads full transcript with 200K context; same independence guarantee                  |
 | **Enforcement**             | None (deterministic) | Code-agent business logic                    | No AI — pure TypeScript validation of data structures and Linear state                |
@@ -126,7 +126,7 @@ sequenceDiagram
     participant User
     participant CodeAgent as Code Agent
     participant Orchestrator
-    participant ClaudeWorker as Claude Worker<br>(Docker Container)
+    participant ClaudeWorker as Code Worker<br>(Docker Container)
     participant Gemini as Gemini 2.5 Flash
     participant GitHub
     participant Linear

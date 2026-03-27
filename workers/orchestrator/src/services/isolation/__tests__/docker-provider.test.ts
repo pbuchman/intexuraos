@@ -93,7 +93,7 @@ function createMockDocker(): MockDockerResult {
     getImage: vi.fn().mockReturnValue({
       inspect: vi.fn().mockResolvedValue({
         RepoDigests: [
-          'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker@sha256:testdigest',
+          'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker@sha256:testdigest',
         ],
       }),
     }),
@@ -145,10 +145,7 @@ vi.mock('node:fs', async (importOriginal) => {
     statSync: vi.fn().mockReturnValue({ isFile: () => false, isDirectory: () => true }),
     statfsSync: vi.fn().mockReturnValue({ bavail: 2_000_000, bsize: 4096 }),
     readFileSync: vi.fn().mockImplementation((filePath: unknown) => {
-      if (
-        typeof filePath === 'string' &&
-        filePath.includes('claude-worker-forensics-seccomp.json')
-      ) {
+      if (typeof filePath === 'string' && filePath.includes('code-worker-forensics-seccomp.json')) {
         return '{"defaultAction":"SCMP_ACT_ERRNO","syscalls":[]}';
       }
       return '';
@@ -193,6 +190,16 @@ const createTestConfig = (overrides: Partial<WorkerConfig> = {}): WorkerConfig =
   githubAppKeyPath: '/test/github-key.pem',
   ...overrides,
 });
+
+function createRuntimeOverrideConfig(
+  runtimeOverride: 'claude' | 'codex',
+  overrides: Partial<WorkerConfig> = {}
+): WorkerConfig {
+  return {
+    ...createTestConfig(overrides),
+    runtimeOverride,
+  } as WorkerConfig & { runtimeOverride: 'claude' | 'codex' };
+}
 
 class TestableDockerProvider extends DockerProvider {
   constructor(
@@ -354,6 +361,127 @@ describe('DockerProvider', () => {
       );
     });
 
+    it('mounts shared Codex auth separately from task-local Codex state', async () => {
+      const codexProvider = new TestableDockerProvider(
+        { sharedCodexAuthPath: '/shared/codex-auth' } as Partial<DockerProviderConfig>,
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await codexProvider.createWorker(createRuntimeOverrideConfig('codex'));
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      expect(binds).toContainEqual(
+        expect.stringContaining('codex-state-test-task-123:/home/claude/.codex:rw')
+      );
+      expect(binds).toContain('/shared/codex-auth/auth.json:/home/claude/.codex/auth.json:rw');
+    });
+
+    it('creates public codex workers without requiring a direct API key env var', async () => {
+      const codexProvider = new TestableDockerProvider(
+        { sharedCodexAuthPath: '/shared/codex-auth' } as Partial<DockerProviderConfig>,
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await codexProvider.createWorker(createTestConfig({ workerType: 'codex' }));
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0] as {
+        Env?: string[];
+      };
+      const envArr = createCall.Env ?? [];
+
+      expect(envArr).toContain('WORKER_RUNTIME=codex');
+      expect(envArr.some((entry) => entry.startsWith('ANTHROPIC_API_KEY='))).toBe(false);
+    });
+
+    it('fails codex runtime creation when shared Codex auth is not configured', async () => {
+      await expect(provider.createWorker(createRuntimeOverrideConfig('codex'))).rejects.toThrow(
+        'Codex runtime requires sharedCodexAuthPath but it is not configured'
+      );
+
+      expect(mocks.mockDocker.createContainer).not.toHaveBeenCalled();
+    });
+
+    it('fails when Claude runtime is selected for a worker type without API key env config', async () => {
+      await expect(
+        provider.createWorker(
+          createTestConfig({
+            workerType: 'codex',
+            runtimeOverride: 'claude',
+          })
+        )
+      ).rejects.toThrow("Worker type 'codex' is missing API key configuration");
+    });
+
+    it('gives different tasks different Codex state directories', async () => {
+      const codexProvider = new TestableDockerProvider(
+        { sharedCodexAuthPath: '/shared/codex-auth' } as Partial<DockerProviderConfig>,
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await codexProvider.createWorker(
+        createRuntimeOverrideConfig('codex', { taskId: 'codex-task-a' })
+      );
+      await codexProvider.createWorker(
+        createRuntimeOverrideConfig('codex', { taskId: 'codex-task-b' })
+      );
+
+      const firstCreateCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const firstBinds = firstCreateCall?.HostConfig?.Binds as string[];
+      expect(firstBinds).toContainEqual(
+        expect.stringContaining('codex-state-codex-task-a:/home/claude/.codex:rw')
+      );
+
+      const secondCreateCall = mocks.mockDocker.createContainer.mock.calls[1]?.[0];
+      const secondBinds = secondCreateCall?.HostConfig?.Binds as string[];
+      expect(secondBinds).toContainEqual(
+        expect.stringContaining('codex-state-codex-task-b:/home/claude/.codex:rw')
+      );
+    });
+
+    it('fails codex resume when task-local state home is missing', async () => {
+      const fsModule = await import('node:fs');
+      (fsModule.existsSync as Mock).mockImplementation((filePath: unknown) => {
+        return !(typeof filePath === 'string' && filePath.includes('codex-state-test-task-123'));
+      });
+
+      const codexProvider = new TestableDockerProvider(
+        { sharedCodexAuthPath: '/shared/codex-auth' } as Partial<DockerProviderConfig>,
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await expect(
+        codexProvider.createWorker(
+          createRuntimeOverrideConfig('codex', {
+            continueSession: true,
+          })
+        )
+      ).rejects.toThrow('Codex resume requires existing task-local state');
+
+      expect(mocks.mockDocker.createContainer).not.toHaveBeenCalled();
+    });
+
+    it('keeps Claude mounts unchanged when Codex auth support is configured', async () => {
+      const codexAwareProvider = new TestableDockerProvider(
+        { sharedCodexAuthPath: '/shared/codex-auth' } as Partial<DockerProviderConfig>,
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await codexAwareProvider.createWorker(createTestConfig({ workerType: 'auto' }));
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      expect(binds).toContainEqual(
+        expect.stringContaining('claude-session-test-task-123:/home/claude/.claude:rw')
+      );
+      expect(binds.some((bind) => bind.includes('/home/claude/.codex'))).toBe(false);
+    });
+
     it('mounts pnpm store volume and node_modules tmpfs', async () => {
       const config = createTestConfig();
       await provider.createWorker(config);
@@ -390,8 +518,8 @@ describe('DockerProvider', () => {
         Hard: number;
       }[];
 
-      expect(envArr).toContain('CLAUDE_FORENSICS=1');
-      expect(envArr).toContain('CLAUDE_FORENSICS_DIR=/var/crash');
+      expect(envArr).toContain('WORKER_FORENSICS=1');
+      expect(envArr).toContain('WORKER_FORENSICS_DIR=/var/crash');
       expect(binds).toContain('/tmp/worker-forensics/test-task-123:/var/crash:rw');
       expect(capAdd).toContain('SYS_PTRACE');
       expect(securityOpt.some((opt: string) => opt.startsWith('seccomp='))).toBe(true);
@@ -399,16 +527,16 @@ describe('DockerProvider', () => {
       expect(ulimits).toContainEqual({ Name: 'core', Soft: -1, Hard: -1 });
     });
 
-    it('sets CLAUDE_WORKER_MODE env var', async () => {
+    it('sets CODE_WORKER_MODE env var', async () => {
       const config = createTestConfig();
       await provider.createWorker(config);
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
-      expect(envArr).toContainEqual('CLAUDE_WORKER_MODE=1');
+      expect(envArr).toContainEqual('CODE_WORKER_MODE=1');
     });
 
-    it('sets CLAUDE_CONTINUE for resumed attempts', async () => {
+    it('sets WORKER_CONTINUE for resumed attempts', async () => {
       // No orphan container exists — force creation path
       mocks.mockContainer.inspect.mockRejectedValueOnce(new Error('No such container'));
       const config = createTestConfig({ continueSession: true });
@@ -416,7 +544,7 @@ describe('DockerProvider', () => {
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
-      expect(envArr).toContainEqual('CLAUDE_CONTINUE=1');
+      expect(envArr).toContainEqual('WORKER_CONTINUE=1');
     });
 
     it('reuses existing container for continued attempts', async () => {
@@ -1249,7 +1377,7 @@ describe('DockerProvider', () => {
     it('returns configured image info with null digest before any pull', () => {
       const info = provider.getImageInfo();
       expect(info.configuredRef).toBe(
-        'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest'
+        'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest'
       );
       expect(info.lastResolvedDigest).toBeNull();
       expect(info.pullPolicy).toBe('always');
@@ -1261,7 +1389,7 @@ describe('DockerProvider', () => {
 
       const info = provider.getImageInfo();
       expect(info.lastResolvedDigest).toBe(
-        'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker@sha256:testdigest'
+        'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker@sha256:testdigest'
       );
     });
 
@@ -1289,7 +1417,7 @@ describe('DockerProvider', () => {
 
       expect(mocks.mockDocker.pull).toHaveBeenCalled();
       expect(resolvedImage).toBe(
-        'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker@sha256:testdigest'
+        'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker@sha256:testdigest'
       );
     });
 
@@ -1348,7 +1476,7 @@ describe('DockerProvider', () => {
 
       expect(mocks.mockDocker.pull).not.toHaveBeenCalled();
       expect(resolvedImage).toBe(
-        'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest'
+        'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest'
       );
     });
 
@@ -1459,7 +1587,7 @@ describe('DockerProvider', () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
         {
           Id: 'test-container-id',
-          Names: ['/claude-worker-preserved-task'],
+          Names: ['/code-worker-preserved-task'],
           State: 'running',
           Created: Math.floor((Date.now() - 1000) / 1000),
         },
@@ -1481,7 +1609,7 @@ describe('DockerProvider', () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
         {
           Id: 'test-container-id',
-          Names: ['/claude-worker-preserved-task'],
+          Names: ['/code-worker-preserved-task'],
           State: 'running',
           Created: Math.floor(Date.now() / 1000),
         },
@@ -1499,7 +1627,7 @@ describe('DockerProvider', () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
         {
           Id: 'orphan-container-id',
-          Names: ['/claude-worker-orphan-task'],
+          Names: ['/code-worker-orphan-task'],
           State: 'running',
           Created: fourHoursAgo,
         },
@@ -1517,7 +1645,7 @@ describe('DockerProvider', () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
         {
           Id: 'exited-container-id',
-          Names: ['/claude-worker-exited-task'],
+          Names: ['/code-worker-exited-task'],
           State: 'exited',
           Created: fourHoursAgo,
         },
@@ -1537,7 +1665,7 @@ describe('DockerProvider', () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
         {
           Id: 'test-container-id',
-          Names: ['/claude-worker-active-task'],
+          Names: ['/code-worker-active-task'],
           State: 'running',
           Created: fourHoursAgo,
         },
@@ -1569,7 +1697,7 @@ describe('DockerProvider', () => {
         mocks.mockDocker.listContainers.mockResolvedValueOnce([
           {
             Id: 'orphan-container-id',
-            Names: ['/claude-worker-orphan-task'],
+            Names: ['/code-worker-orphan-task'],
             State: 'running',
             Created: fourHoursAgo,
           },
@@ -1594,7 +1722,7 @@ describe('DockerProvider', () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
         {
           Id: 'orphan-container-id',
-          Names: ['/claude-worker-orphan-task'],
+          Names: ['/code-worker-orphan-task'],
           State: 'running',
           Created: fourHoursAgo,
         },
@@ -1618,7 +1746,7 @@ describe('DockerProvider', () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
         {
           Id: 'orphan-container-id',
-          Names: ['/claude-worker-orphan-task'],
+          Names: ['/code-worker-orphan-task'],
           State: 'running',
           Created: fourHoursAgo,
         },
@@ -1648,7 +1776,7 @@ describe('DockerProvider', () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
         {
           Id: 'orphan-container-id',
-          Names: ['/claude-worker-orphan-task'],
+          Names: ['/code-worker-orphan-task'],
           State: 'running',
           Created: fourHoursAgo,
         },
@@ -1704,8 +1832,8 @@ describe('DockerProvider', () => {
   describe('listWorkerContainers', () => {
     it('returns discovered containers with taskId extracted from name', async () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
-        { Id: 'container-1', Names: ['/claude-worker-task-abc'], State: 'running' },
-        { Id: 'container-2', Names: ['/claude-worker-task-def'], State: 'exited' },
+        { Id: 'container-1', Names: ['/code-worker-task-abc'], State: 'running' },
+        { Id: 'container-2', Names: ['/code-worker-task-def'], State: 'exited' },
       ]);
 
       const result = await provider.listWorkerContainers();
@@ -1716,7 +1844,7 @@ describe('DockerProvider', () => {
       ]);
       expect(mocks.mockDocker.listContainers).toHaveBeenCalledWith({
         all: true,
-        filters: { name: ['claude-worker-'] },
+        filters: { name: ['code-worker-'] },
       });
     });
 
@@ -1741,7 +1869,7 @@ describe('DockerProvider', () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
         {
           Id: 'container-uuid',
-          Names: ['/claude-worker-550e8400-e29b-41d4-a716-446655440000'],
+          Names: ['/code-worker-550e8400-e29b-41d4-a716-446655440000'],
           State: 'running',
         },
       ]);
@@ -1761,7 +1889,7 @@ describe('DockerProvider', () => {
       mocks.mockDocker.listContainers.mockResolvedValue([
         {
           Id: 'container-good',
-          Names: ['/claude-worker-task_abc'],
+          Names: ['/code-worker-task_abc'],
           State: 'running',
           Created: Math.floor(Date.now() / 1000),
         },
@@ -1795,7 +1923,7 @@ describe('DockerProvider', () => {
       const result = (provider as any).resolveForensicsSeccompProfilePath();
 
       expect(result).toBeTypeOf('string');
-      expect(result).toContain('claude-worker-forensics-seccomp.json');
+      expect(result).toContain('code-worker-forensics-seccomp.json');
     });
 
     it('returns null when no candidate path exists', async () => {
@@ -2529,15 +2657,15 @@ describe('DockerProvider', () => {
   });
 
   describe('env configuration branches', () => {
-    it('sets CLAUDE_MANAGED_MODE=1 when managedAttemptsMode is true', async () => {
+    it('sets WORKER_MANAGED_MODE=1 when managedAttemptsMode is true', async () => {
       await provider.createWorker(createTestConfig());
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
-      expect(envArr).toContainEqual('CLAUDE_MANAGED_MODE=1');
+      expect(envArr).toContainEqual('WORKER_MANAGED_MODE=1');
     });
 
-    it('sets CLAUDE_MANAGED_MODE=0 when managedAttemptsMode is false', async () => {
+    it('sets WORKER_MANAGED_MODE=0 when managedAttemptsMode is false', async () => {
       const nonManagedProvider = new TestableDockerProvider(
         { managedAttemptsMode: false },
         mockLogger,
@@ -2547,7 +2675,7 @@ describe('DockerProvider', () => {
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
-      expect(envArr).toContainEqual('CLAUDE_MANAGED_MODE=0');
+      expect(envArr).toContainEqual('WORKER_MANAGED_MODE=0');
     });
 
     it('sets LINEAR_API_KEY and SENTRY_AUTH_TOKEN in env', async () => {
@@ -3105,6 +3233,32 @@ describe('DockerProvider', () => {
       expect(onComplete).toHaveBeenCalledWith(0);
     });
 
+    it('passes codex runtime metadata into run-attempt exec for resumed Codex tasks', async () => {
+      const codexProvider = new TestableDockerProvider(
+        { sharedCodexAuthPath: '/shared/codex-auth' } as Partial<DockerProviderConfig>,
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await codexProvider.createWorker(
+        createRuntimeOverrideConfig('codex', {
+          continueSession: true,
+          runtimeSessionId: 'thread_123',
+          onComplete: vi.fn(),
+        })
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const runAttemptCall = mocks.mockContainer.exec.mock.calls.find((call: unknown[]) => {
+        const opts = call[0] as { Cmd?: string[] };
+        return opts.Cmd?.[0] === '/entrypoint.sh' && opts.Cmd?.[1] === 'run-attempt';
+      });
+      const envArr = runAttemptCall?.[0]?.Env as string[];
+
+      expect(envArr).toContain('WORKER_RUNTIME=codex');
+      expect(envArr).toContain('CODEX_THREAD_ID=thread_123');
+    });
+
     it('calls onComplete(1) when worker not found', async () => {
       const onComplete = vi.fn();
 
@@ -3523,7 +3677,7 @@ describe('DockerProvider', () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
         {
           Id: 'bad-container',
-          Names: ['/claude-worker-'],
+          Names: ['/code-worker-'],
           State: 'running',
           Created: Math.floor(Date.now() / 1000) - 4 * 60 * 60,
         },
@@ -3541,7 +3695,7 @@ describe('DockerProvider', () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
         {
           Id: 'young-container',
-          Names: ['/claude-worker-young-task'],
+          Names: ['/code-worker-young-task'],
           State: 'running',
           Created: Math.floor(Date.now() / 1000) - 60, // 1 minute ago
         },

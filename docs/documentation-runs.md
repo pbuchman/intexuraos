@@ -1319,7 +1319,7 @@
 
 ---
 
-## 2026-03-15 — linear-agent, actions-agent, whatsapp-service, mobile-notifications-service, claude-worker (v3.3.0 DashScope migration batch)
+## 2026-03-15 — linear-agent, actions-agent, whatsapp-service, mobile-notifications-service, code-worker (v3.3.0 DashScope migration batch)
 
 **Action:** Updated
 **Agent:** service-scribe (autonomous)
@@ -1338,9 +1338,9 @@
 - `docs/services/whatsapp-service/technical-debt.md` — Added 2 resolved issues, updated analysis run
 - `docs/services/mobile-notifications-service/technical.md` — New Recent Changes for v8 ignore test replacement
 - `docs/services/mobile-notifications-service/technical-debt.md` — Added resolved issue, updated analysis run
-- `docs/services/claude-worker/technical.md` — New Recent Changes (cache bust, tasks env, orphan cleanup), added kimi worker type, updated toolchain (Codex CLI), updated config defaults
-- `docs/services/claude-worker/technical-debt.md` — Added 2 resolved issues (orphan cleanup, cache busting), updated analysis run
-- `docs/services/claude-worker/agent.md` — Updated WorkerType union (glm/qwen/kimi keys), added kimi config
+- `docs/services/code-worker/technical.md` — New Recent Changes (cache bust, tasks env, orphan cleanup), added kimi worker type, updated toolchain (Codex CLI), updated config defaults
+- `docs/services/code-worker/technical-debt.md` — Added 2 resolved issues (orphan cleanup, cache busting), updated analysis run
+- `docs/services/code-worker/agent.md` — Updated WorkerType union (glm/qwen/kimi keys), added kimi config
 - `docs/documentation-runs.md` — This entry
 
 **Inferred Insights:**
@@ -1349,7 +1349,7 @@
 - actions-agent: ZAI env var removed, worker types expanded to 7 (added qwen/kimi), v8 ignore blocks replaced with real tests across 7 files (INT-785)
 - whatsapp-service: v8 ignore blocks replaced with real tests across 5 files (INT-799), silent dispatch failures fixed (INT-810/811)
 - mobile-notifications-service: v8 ignore blocks replaced with real tests in repository files, reduced to 10 directives
-- claude-worker: kimi worker type added (kimi-k2.5 via DashScope), Docker cache busting for Claude CLI, Codex CLI installed, tasks env var enabled, orphaned child process cleanup
+- code-worker: kimi worker type added (kimi-k2.5 via DashScope), Docker cache busting for Claude CLI, Codex CLI installed, tasks env var enabled, orphaned child process cleanup
 
 **Documentation Coverage:** 100%
 
@@ -1556,7 +1556,7 @@
 - `docs/services/orchestrator/technical-debt.md` -- Updated date and analysis run version to v3.1.0; all 11 debt items unchanged (none resolved since last run)
 - `docs/services/orchestrator/agent.md` -- Updated WorkerType from 3 to 6 types, updated TaskVerificationRecord to simplified schema, added planningPrBranch/planningPrUrl/resumedAfterSuccess to Task, updated message limit from 10000 to 20000 chars, updated TaskResult fields, updated startup recovery to include container adoption, added new env vars, updated constraints
 - `docs/services/index.md` -- Updated orchestrator worker description with multi-model support and new features
-- `docs/site-index.json` -- Updated orchestrator features list and endpoint count; updated claude-worker worker types to 6
+- `docs/site-index.json` -- Updated orchestrator features list and endpoint count; updated code-worker worker types to 6
 - `docs/documentation-runs.md` -- This entry
 
 **Inferred Insights:**
@@ -1831,18 +1831,18 @@
 
 ---
 
-## 2026-03-07 -- claude-worker
+## 2026-03-07 -- code-worker
 
 **Action:** Updated
 **Agent:** service-scribe (autonomous)
 
 **Files:**
 
-- `docs/services/claude-worker/features.md` -- Added crash forensics capability, plugin pre-installation, daily rebuild schedule, secret sync/direnv, updated use case and key benefits
-- `docs/services/claude-worker/technical.md` -- Added crash forensics section, plugin pre-installation table, secret sync and direnv entrypoint steps, multi-arch build details, Cloud Build/daily rebuild section, direnv gotcha, forensics env vars, recent changes table updated
-- `docs/services/claude-worker/tutorial.md` -- Added Part 6 for crash forensics, updated expected output for plugins and secret sync, added troubleshooting rows for secret sync and plugins, updated exercises
-- `docs/services/claude-worker/technical-debt.md` -- Updated date; added 4 resolved issues (plugin pre-install, multi-arch build, crash forensics, secret sync to container); added entrypoint SRP violation
-- `docs/services/claude-worker/agent.md` -- Added constraints 11-12 (secret sync, forensics); added error handling table with exit codes; added events published section; added dependencies table
+- `docs/services/code-worker/features.md` -- Added crash forensics capability, plugin pre-installation, daily rebuild schedule, secret sync/direnv, updated use case and key benefits
+- `docs/services/code-worker/technical.md` -- Added crash forensics section, plugin pre-installation table, secret sync and direnv entrypoint steps, multi-arch build details, Cloud Build/daily rebuild section, direnv gotcha, forensics env vars, recent changes table updated
+- `docs/services/code-worker/tutorial.md` -- Added Part 6 for crash forensics, updated expected output for plugins and secret sync, added troubleshooting rows for secret sync and plugins, updated exercises
+- `docs/services/code-worker/technical-debt.md` -- Updated date; added 4 resolved issues (plugin pre-install, multi-arch build, crash forensics, secret sync to container); added entrypoint SRP violation
+- `docs/services/code-worker/agent.md` -- Added constraints 11-12 (secret sync, forensics); added error handling table with exit codes; added events published section; added dependencies table
 - `docs/documentation-runs.md` -- This entry
 
 **Inferred Insights:**
@@ -3062,7 +3062,7 @@
 actions-agent, api-docs-hub, app-settings-service, bookmarks-agent, calendar-agent, chat-agent, code-agent, commands-agent, data-insights-agent, image-service, linear-agent, mobile-notifications-service, notes-agent, notion-service, research-agent, todos-agent, user-service, web, web-agent, whatsapp-service
 
 **Workers Updated:**
-claude-worker, log-cleanup, orchestrator, vm-lifecycle
+code-worker, log-cleanup, orchestrator, vm-lifecycle
 
 **Packages Updated:**
 common-core, common-http, http-contracts, http-server, infra-claude, infra-firestore, infra-gemini, infra-glm, infra-gpt, infra-notion, infra-otel (NEW), infra-perplexity, infra-pubsub, infra-sentry, infra-whatsapp, internal-clients, llm-audit, llm-contract, llm-factory, llm-pricing, llm-prompts, llm-utils
@@ -3268,7 +3268,7 @@ Log of all `/document-service` runs.
 **New Workers:**
 
 - orchestrator - Coordinates multi-agent workflows and resource management
-- claude-worker - Handles Claude API interactions with retry logic and rate limiting
+- code-worker - Handles Claude API interactions with retry logic and rate limiting
 - log-cleanup - Automated log rotation and archival system
 - vm-lifecycle - Virtual machine provisioning and lifecycle management
 

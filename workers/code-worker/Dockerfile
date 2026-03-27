@@ -70,6 +70,14 @@ RUN curl -fsSL https://claude.ai/install.sh | bash \
 # Not used in production workflows; kept for A/B evaluation purposes.
 RUN npm install -g @openai/codex
 
+# Pre-install Codex Superpowers skills using Codex native skill discovery.
+# Codex discovers skills from ~/.agents/skills, so we stage a ready-to-restore
+# home fragment and copy it into the runtime tmpfs during container startup.
+RUN git clone --depth 1 https://github.com/obra/superpowers.git /opt/codex-superpowers \
+    && rm -rf /opt/codex-superpowers/.git \
+    && mkdir -p /opt/codex-home/.agents/skills \
+    && ln -s /opt/codex-superpowers/skills /opt/codex-home/.agents/skills/superpowers
+
 # Pre-install MCP server packages globally.
 # Claude plugins invoke these via `npx -y <package>`. On Alpine, npx downloads to a
 # temp cache with noexec-restricted permissions, causing "Permission denied" at startup.
@@ -100,18 +108,18 @@ RUN addgroup -S claude && adduser -S claude -G claude -u 1001
 
 # Set up directories (including .config/gcloud for gcloud auth)
 RUN mkdir -p /repo /secrets /tmp /home/claude/.claude /home/claude/.config/gcloud \
-    && chown -R claude:claude /repo /secrets /tmp /home/claude /opt/claude-plugins
+    && chown -R claude:claude /repo /secrets /tmp /home/claude /opt/claude-plugins /opt/codex-home /opt/codex-superpowers
 
 # Bake Claude default config to skip onboarding on fresh tmpfs
 # /home/claude is tmpfs so image contents are wiped — entrypoint.sh copies these at startup
 # NOTE: Build context is workspace root (.), so paths are root-relative
-COPY --chown=claude:claude workers/claude-worker/config-defaults/claude.json /opt/claude-defaults/.claude.json
+COPY --chown=claude:claude workers/code-worker/config-defaults/claude.json /opt/claude-defaults/.claude.json
 
 # Hook direnv into bash so env vars auto-load when entering /repo
 RUN echo 'eval "$(direnv hook bash)"' >> /opt/claude-defaults/.bashrc
 
 # Copy entrypoint
-COPY --chown=claude:claude workers/claude-worker/entrypoint.sh /entrypoint.sh
+COPY --chown=claude:claude workers/code-worker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Security: Remove unnecessary tools

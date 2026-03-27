@@ -46,6 +46,10 @@ describe('extractDispatchWorkerType', () => {
     expect(extractDispatchWorkerType('@worker kimi')).toBe('kimi');
   });
 
+  it('extracts codex from @worker codex', () => {
+    expect(extractDispatchWorkerType('@worker codex')).toBe('codex');
+  });
+
   it('extracts auto from @model auto', () => {
     expect(extractDispatchWorkerType('@model auto')).toBe('auto');
   });

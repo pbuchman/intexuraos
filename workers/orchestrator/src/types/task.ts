@@ -1,3 +1,4 @@
+import type { WorkerRuntime } from '../services/runtime/types.js';
 import type { WorkerType } from '../services/isolation/types.js';
 
 export type TaskStatus =
@@ -24,6 +25,8 @@ export interface PendingResumeStart {
 export interface Task {
   taskId: string;
   workerType: WorkerType;
+  runtime?: WorkerRuntime;
+  runtimeSessionId?: string;
   prompt: string;
   repository: string;
   baseBranch: string;
@@ -77,7 +80,7 @@ export interface Task {
   verificationHistory?: TaskVerificationRecord[];
   /**
    * Set when a completed task is resumed via sendMessage().
-   * Gates loosened completion verification (exit code + Claude error only).
+   * Gates loosened completion verification (exit code + runtime-reported hard error only).
    * Cleared before persisting in finalizeTask().
    */
   resumedAfterSuccess?: boolean;

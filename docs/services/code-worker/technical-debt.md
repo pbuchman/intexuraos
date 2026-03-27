@@ -1,4 +1,4 @@
-# Claude Worker - Technical Debt
+# Code Worker - Technical Debt
 
 **Last Updated:** 2026-03-15
 **Analysis Run:** v3.3.0 documentation refresh (DashScope worker types, cache busting, orphan cleanup)
@@ -102,7 +102,7 @@ No test coverage gaps. The worker is tested via E2E tests in the orchestrator wo
 
 ## TypeScript Issues
 
-Not applicable. The claude-worker is entirely shell scripts and Dockerfiles — no TypeScript code.
+Not applicable. The code-worker is entirely shell scripts and Dockerfiles — no TypeScript code.
 
 ---
 
@@ -140,7 +140,7 @@ Implemented the full Docker-based isolation architecture, replacing the previous
 
 ### INT-491: Interactive Mode Migration then Superseded by Managed Mode (2026-02-08, revised 2026-02-12)
 
-Initially migrated from `--print` mode to interactive mode with Docker attach stdin. This was subsequently superseded by the managed execution mode (`CLAUDE_MANAGED_MODE=1`), which reverts to `--print` mode but via file-based prompts (`/secrets/system-prompt.txt`, `/secrets/user-prompt.txt`) invoked through `docker exec /entrypoint.sh run-attempt`. The managed mode approach avoids the complexity of stdin stream management and Docker attach ordering while enabling container reuse across multiple attempts.
+Initially migrated from `--print` mode to interactive mode with Docker attach stdin. This was subsequently superseded by the managed execution mode (`WORKER_MANAGED_MODE=1`), which reverts to `--print` mode but via file-based prompts (`/secrets/system-prompt.txt`, `/secrets/user-prompt.txt`) invoked through `docker exec /entrypoint.sh run-attempt`. The managed mode approach avoids the complexity of stdin stream management and Docker attach ordering while enabling container reuse across multiple attempts.
 
 ### MCP Server Permission Errors (2026-02-19)
 
@@ -164,7 +164,7 @@ Switched from single-arch to multi-arch build (`linux/amd64,linux/arm64`) using 
 
 ### Crash Forensics Mode (2026-02-26)
 
-Added `CLAUDE_FORENSICS=1` mode that captures core dumps, GDB backtraces, debug logs, and session state when Claude CLI crashes (exit code 139). Installed `gdb`, `strace`, and `file` utilities in the production image.
+Added `WORKER_FORENSICS=1` mode that captures core dumps, GDB backtraces, debug logs, and session state when Claude CLI crashes (exit code 139). Installed `gdb`, `strace`, and `file` utilities in the production image.
 
 ### Secret Sync Moved to Container (2026-03-03)
 

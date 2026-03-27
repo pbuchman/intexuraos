@@ -1,5 +1,5 @@
 # ==============================================================================
-# Claude Worker Test Image
+# Code Worker Test Image
 # ==============================================================================
 # Uses a stub script instead of real Claude CLI for E2E testing.
 # This allows testing container behavior without API calls.

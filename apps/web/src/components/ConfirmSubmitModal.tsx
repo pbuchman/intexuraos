@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { Send, Loader2 } from 'lucide-react';
+import type { CodeTaskWorkerType } from '@intexuraos/common-core/code-task-worker-types';
 import { Button } from './ui/Button.js';
+import { WORKER_TYPE_LABELS } from './workers/shared.js';
 
 interface ConfirmSubmitModalProps {
   isOpen: boolean;
   taskTitle: string;
   workerName: string;
-  workerType: string;
+  workerType: CodeTaskWorkerType;
   onConfirm: () => Promise<void>;
   onCancel: () => void;
 }
@@ -36,10 +38,7 @@ export function ConfirmSubmitModal({
     }
   };
 
-  const WORKER_TYPE_LABELS: Record<string, string> = {
-    auto: 'Auto', opus: 'Opus', sonnet: 'Sonnet', minimax: 'MiniMax', glm: 'GLM', qwen: 'Qwen', kimi: 'Kimi',
-  };
-  const workerTypeLabel = WORKER_TYPE_LABELS[workerType] ?? workerType;
+  const workerTypeLabel = WORKER_TYPE_LABELS[workerType];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

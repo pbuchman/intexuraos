@@ -46,6 +46,11 @@ describe('extractReviewWorkerType', () => {
     expect(workerType).toBe('auto');
   });
 
+  it('extracts codex worker type', () => {
+    const workerType = extractReviewWorkerType('@review codex');
+    expect(workerType).toBe('codex');
+  });
+
   it('is case-insensitive', () => {
     const workerType = extractReviewWorkerType('@review with MINIMAX');
     expect(workerType).toBe('minimax');
@@ -111,5 +116,9 @@ describe('normalizeReviewWorkerType', () => {
 
   it('trims whitespace', () => {
     expect(normalizeReviewWorkerType('  opus  ')).toBe('opus');
+  });
+
+  it('normalizes codex', () => {
+    expect(normalizeReviewWorkerType('codex')).toBe('codex');
   });
 });

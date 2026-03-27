@@ -1,6 +1,6 @@
 # Orchestrator Deployment & Build Reference
 
-Consolidated reference for building, deploying, and managing the orchestrator and its claude-worker containers.
+Consolidated reference for building, deploying, and managing the orchestrator and its code-worker containers.
 
 ---
 
@@ -17,18 +17,18 @@ Consolidated reference for building, deploying, and managing the orchestrator an
 │  └── Docker SDK (dockerode) → spawns worker containers      │
 │                                                             │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │ claude-worker container (Docker)                     │   │
-│  │ Image: europe-central2-docker.pkg.dev/.../claude-    │   │
+│  │ code-worker container (Docker)                       │   │
+│  │ Image: europe-central2-docker.pkg.dev/.../code-     │   │
 │  │        worker:latest                                 │   │
-│  │ Runs: claude --dangerously-skip-permissions --verbose │   │
-│  │ Mounts: /repo (worktree), /secrets (GCP SA, tokens)  │   │
-│  │ Network: claude-worker-net                           │   │
-│  │ Deps: container runs its own pnpm install            │   │
+│  │ Runs: claude --print or codex exec                  │   │
+│  │ Mounts: /repo (worktree), /secrets (GCP SA, tokens) │   │
+│  │ Network: code-worker-net                             │   │
+│  │ Deps: container runs its own pnpm install           │   │
 │  └──────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-The orchestrator is **not** containerized — it runs as a native Node.js process. Only the claude-worker runs in Docker. Dependency installation (`pnpm install`) happens inside the Docker container, not on the host.
+The orchestrator is **not** containerized — it runs as a native Node.js process. Only the code-worker runs in Docker. Dependency installation (`pnpm install`) happens inside the Docker container, not on the host.
 
 ---
 
@@ -70,18 +70,18 @@ Or via systemd (Linux) or macOS LaunchAgent (see `workers/orchestrator/README.md
 
 ---
 
-## Claude Worker (Docker Image)
+## Code Worker (Docker Image)
 
 ### Image Registry
 
 ```
-europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest
+europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest
 ```
 
 For deterministic runtime behavior, prefer digest pinning in orchestrator env:
 
 ```bash
-export INTEXURAOS_CLAUDE_WORKER_IMAGE=europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker@sha256:<digest>
+export INTEXURAOS_CODE_WORKER_IMAGE=europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker@sha256:<digest>
 ```
 
 ### Build
@@ -92,8 +92,8 @@ export INTEXURAOS_CLAUDE_WORKER_IMAGE=europe-central2-docker.pkg.dev/intexuraos-
 
 # Or directly from root context (Dockerfile uses root-relative COPY paths)
 docker build --no-cache --platform linux/amd64 \
-  -t europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest \
-  -f workers/claude-worker/Dockerfile \
+  -t europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest \
+  -f workers/code-worker/Dockerfile \
   .
 ```
 
@@ -104,10 +104,10 @@ docker build --no-cache --platform linux/amd64 \
 PUSH=true ./scripts/build-worker-image.sh latest
 
 # Or directly
-docker push europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest
+docker push europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest
 ```
 
-After push, capture digest and update `INTEXURAOS_CLAUDE_WORKER_IMAGE` (digest form) on orchestrator host.
+After push, capture digest and update `INTEXURAOS_CODE_WORKER_IMAGE` (digest form) on orchestrator host.
 
 ### Cache Busting
 
@@ -116,12 +116,12 @@ Always use `--no-cache` when the entrypoint or any COPY'd file has changed.
 
 ### Key Files
 
-| File                                    | Purpose                                        |
-| --------------------------------------- | ---------------------------------------------- |
-| `workers/claude-worker/Dockerfile`      | Production image (node:22-alpine + Claude CLI) |
-| `workers/claude-worker/Dockerfile.test` | Test image (claude-stub instead of real CLI)   |
-| `workers/claude-worker/entrypoint.sh`   | Container entrypoint (starts Claude)           |
-| `scripts/build-worker-image.sh`         | Build + optional push helper                   |
+| File                                  | Purpose                                               |
+| ------------------------------------- | ----------------------------------------------------- |
+| `workers/code-worker/Dockerfile`      | Production image (node:22-alpine + Claude/Codex CLIs) |
+| `workers/code-worker/Dockerfile.test` | Test image (claude-stub instead of real CLI)          |
+| `workers/code-worker/entrypoint.sh`   | Container entrypoint (dispatches Claude or Codex)     |
+| `scripts/build-worker-image.sh`       | Build + optional push helper                          |
 
 ### What the Entrypoint Does
 
@@ -132,7 +132,7 @@ Always use `--no-cache` when the entrypoint or any COPY'd file has changed.
 5. Activates GCP service account
 6. Loads GitHub token (with background refresh loop)
 7. In managed mode, installs dependencies once and waits for `run-attempt` invocations
-8. For each attempt (`/entrypoint.sh run-attempt`), runs Claude in `--print --output-format stream-json`
+8. For each attempt (`/entrypoint.sh run-attempt`), runs the runtime-specific CLI (`claude --print --output-format stream-json` or `codex exec --json`)
 
 Orchestrator reuses the same container for follow-up attempts and invokes `--continue` when resuming.
 
@@ -150,8 +150,8 @@ Set by `docker-provider.ts` when creating containers:
 | `SENTRY_AUTH_TOKEN`              | Secrets               | Sentry MCP integration            |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Hardcoded `/secrets/` | GCP auth inside container         |
 | `CLAUDE_PROJECT_DIR`             | Hardcoded `/repo`     | Hook path resolution              |
-| `CLAUDE_MANAGED_MODE`            | Hardcoded `1`         | Enable managed run-attempt mode   |
-| `CLAUDE_CONTINUE`                | Per-attempt config    | Resume previous Claude session    |
+| `WORKER_MANAGED_MODE`            | Hardcoded `1`         | Enable managed run-attempt mode   |
+| `WORKER_CONTINUE`                | Per-attempt config    | Resume previous runtime session   |
 
 ---
 
@@ -164,8 +164,8 @@ Set by `docker-provider.ts` when creating containers:
 ./scripts/setup-worker-network.sh
 
 # Build test image (uses claude-stub instead of real CLI)
-cd workers/claude-worker
-docker build -t claude-worker:test -f Dockerfile.test .
+cd workers/code-worker
+docker build -t code-worker:test -f Dockerfile.test .
 ```
 
 ### Run
@@ -191,8 +191,8 @@ pnpm --filter orchestrator test:e2e
 ### When `entrypoint.sh` Changes
 
 1. Build image: `docker build --no-cache ...`
-2. Push image: `docker push europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest`
-3. Capture pushed digest and update `INTEXURAOS_CLAUDE_WORKER_IMAGE` to that digest
+2. Push image: `docker push europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest`
+3. Capture pushed digest and update `INTEXURAOS_CODE_WORKER_IMAGE` to that digest
 4. Running containers use the old image until recreated (no hot reload)
 
 ### When Orchestrator Source Changes
@@ -207,8 +207,8 @@ pnpm --filter orchestrator test:e2e
 ### When Both Change (e.g., INT-491)
 
 1. Commit and push code
-2. Build and push claude-worker image (`--no-cache`)
-3. Update orchestrator env (`INTEXURAOS_CLAUDE_WORKER_IMAGE=@sha256:...`)
+2. Build and push code-worker image (`--no-cache`)
+3. Update orchestrator env (`INTEXURAOS_CODE_WORKER_IMAGE=@sha256:...`)
 4. Rebuild orchestrator: `pnpm --filter orchestrator build`
 5. Restart orchestrator process
 
@@ -223,7 +223,7 @@ pnpm --filter orchestrator test:e2e
 | Artifact      | Docker image in Artifact Registry | `dist/index.js` bundle                |
 | Terraform     | Cloud Run service module          | Not managed by Terraform              |
 | Push script   | `push-missing-images.sh`          | Not included (apps/ only)             |
-| Docker images | Self-contained                    | Orchestrator spawns claude-worker     |
+| Docker images | Self-contained                    | Orchestrator spawns code-worker       |
 
 ---
 
@@ -231,13 +231,13 @@ pnpm --filter orchestrator test:e2e
 
 ```bash
 # Check running worker containers
-docker ps --filter name=claude-worker-
+docker ps --filter name=code-worker-
 
 # View worker logs
-docker logs claude-worker-<task-id>
+docker logs code-worker-<task-id>
 
 # Kill orphaned containers
-docker rm -f $(docker ps -aq --filter name=claude-worker-)
+docker rm -f $(docker ps -aq --filter name=code-worker-)
 
 # Check orchestrator health
 curl http://localhost:8199/health

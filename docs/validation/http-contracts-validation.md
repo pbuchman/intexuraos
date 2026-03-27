@@ -313,7 +313,7 @@ All routes verified against `apps/*/src/routes/`. Auth: `Bearer` = Auth0 JWT, `I
 | ------ | ------- | ------ | ------------- | ------ |
 | POST   | `/chat` | Bearer | chatRoutes.ts | OK     |
 
-### claude-worker
+### code-worker
 
 Workers run as Cloud Functions, not Cloud Run. No HTTP endpoints — event-driven via Cloud Events.
 
@@ -645,7 +645,7 @@ Internal HTTP calls verified against both caller docs and callee code.
 
 ## v3 Validation Notes
 
-- **Workers excluded from endpoint count**: claude-worker, log-cleanup, orchestrator, and vm-lifecycle run as Cloud Functions and have no HTTP endpoints — they are event-driven via Cloud Events / Pub/Sub.
+- **Workers excluded from endpoint count**: code-worker, log-cleanup, orchestrator, and vm-lifecycle run as Cloud Functions and have no HTTP endpoints — they are event-driven via Cloud Events / Pub/Sub.
 - **Pub/Sub push endpoint auth**: All OIDC-authenticated push handlers are authenticated at the Cloud Run infrastructure level. The `From: noreply@google.com` header is a secondary signal for logging, not the primary auth mechanism.
 - **Dual-auth endpoints**: Endpoints marked `Internal/OIDC` accept both Cloud Scheduler OIDC tokens and X-Internal-Auth headers for flexibility.
 - **`GET /images/proxy` in bookmarks-agent**: `None` auth is intentional — this endpoint proxies external images for bookmark card display in the web UI.

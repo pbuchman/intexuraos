@@ -1,4 +1,4 @@
-# Claude Worker
+# Code Worker
 
 Every coding task gets a fully equipped, security-hardened development environment that self-destructs when the work is done.
 
@@ -8,9 +8,9 @@ Running an AI coding agent on your host machine is like handing a contractor the
 
 Most managed platforms solve this by moving the problem off your machine entirely. They run the agent in their cloud, with their API keys, on their infrastructure. Your source code passes through third-party servers. Your API spend flows through someone else's account, with their rate limits and their audit trail. When something goes wrong — and with autonomous agents, things do go wrong — you have no way to inspect what the agent accessed, no way to replay its network calls, and no way to confirm that credentials were not logged somewhere you cannot reach. Platforms like Devin, Cursor Background Agents, and Copilot Workspace all require this trade-off. The convenience is real. The control you give up is permanent.
 
-Claude Worker takes a fundamentally different position: the agent runs on your machine, inside your network, under your API keys — but it cannot touch anything beyond the single task it was assigned. Your source code never leaves your infrastructure. Your Anthropic subscription, your rate limits, your audit trail. The security boundary is not a vendor's terms of service; it is a container you own and can inspect. Rebuilding this from scratch — the credential isolation, the network restrictions, the session continuity, the daily toolchain updates — is months of infrastructure work that cloud-only competitors cannot shortcut by changing a configuration flag.
+Code Worker takes a fundamentally different position: the agent runs on your machine, inside your network, under your API keys — but it cannot touch anything beyond the single task it was assigned. Your source code never leaves your infrastructure. Your Claude and Codex auth, your rate limits, your audit trail. The security boundary is not a vendor's terms of service; it is a container you own and can inspect. Rebuilding this from scratch — the credential isolation, the network restrictions, the session continuity, the daily toolchain updates — is months of infrastructure work that cloud-only competitors cannot shortcut by changing a configuration flag.
 
-This is also why Claude Worker exists as a separate, purpose-built container image rather than a mode of the orchestrator process. The orchestrator manages tasks, dispatches work, and verifies results. The worker is the environment itself — the toolchain, the security perimeter, the ephemeral workspace. Splitting them at the image boundary means you can rebuild the coding environment daily (picking up the latest Claude CLI) without redeploying orchestration logic. You can run four environments simultaneously, each with its own repository copy and credential set, without them sharing a single byte of memory or state. And you can version, audit, and pin the exact image digest that ran any given task — something impossible when the environment is just a subprocess of the orchestrator.
+This is also why Code Worker exists as a separate, purpose-built container image rather than a mode of the orchestrator process. The orchestrator manages tasks, dispatches work, and verifies results. The worker is the environment itself — the toolchain, the security perimeter, the ephemeral workspace. Splitting them at the image boundary means you can rebuild the coding environment daily (picking up the latest Claude/Codex tooling) without redeploying orchestration logic. You can run four environments simultaneously, each with its own repository copy and credential set, without them sharing a single byte of memory or state. And you can version, audit, and pin the exact image digest that ran any given task — something impossible when the environment is just a subprocess of the orchestrator.
 
 ## Use Case: The Overnight Feature Build
 
@@ -29,7 +29,7 @@ A team lead who wants a complex feature implemented by morning — without babys
 
 Most retry systems are amnesiacs. When an attempt fails — a test breaks, a timeout hits, the approach needs rethinking — they tear everything down and start from scratch. The agent reinstalls dependencies, re-reads the codebase, re-discovers the same dead ends, and burns through the same forty minutes of setup before it can try something new.
 
-Claude Worker does not restart. It recovers. The environment stays alive between attempts. The orchestrator triggers each retry as a new command inside the same running container, resuming the agent's previous session with full context about what it tried and why it failed. Installed packages persist. The codebase is already indexed. The session history is intact.
+Code Worker does not restart. It recovers. The environment stays alive between attempts. The orchestrator triggers each retry as a new command inside the same running container, resuming the agent's previous session with full context about what it tried and why it failed. Installed packages persist. The codebase is already indexed. The session history is intact.
 
 This is not a small optimization. It is the difference between an agent that takes three cold starts to solve a hard problem — each one burning setup time and API tokens — and an agent that accumulates knowledge across attempts, treating each failure as information rather than a reason to forget everything.
 
@@ -37,15 +37,15 @@ This is not a small optimization. It is the difference between an agent that tak
 
 ### Runs on Your Infrastructure — Not in Someone Else's Cloud
 
-Every environment runs on a machine you control, using API keys you own, behind a network perimeter you define. Your source code is never uploaded to a third-party service. Your Anthropic API spend is yours — your rate limits, your usage dashboard, your billing. When you need to audit what the agent did, the logs are on your machine, the container image digest is in your registry, and the git history is in your repository.
+Every environment runs on a machine you control, using provider credentials you own, behind a network perimeter you define. Your source code is never uploaded to a third-party service. Your Claude or Codex usage is yours — your rate limits, your usage dashboard, your billing. When you need to audit what the agent did, the logs are on your machine, the container image digest is in your registry, and the git history is in your repository.
 
 This is not a philosophical preference. It is a structural advantage that cloud-hosted competitors cannot replicate without abandoning their business model. They need your code on their servers to run their agents. You do not need to send your code anywhere. The agent runs where the code already lives.
 
-**Example:** Your company's security policy prohibits source code from leaving the corporate network. With cloud-hosted coding agents, that is a non-starter. With Claude Worker, the agent runs on your own server or your development machine — the code never crosses a network boundary you do not control.
+**Example:** Your company's security policy prohibits source code from leaving the corporate network. With cloud-hosted coding agents, that is a non-starter. With Code Worker, the agent runs on your own server or your development machine — the code never crosses a network boundary you do not control.
 
 ### Arrives Fully Equipped — Zero Setup, Zero Delay
 
-Every environment ships with a complete developer toolchain: version control, package management, fast code search, infrastructure validation, browser automation for running end-to-end tests, the GitHub CLI for pull request workflows, and cloud authentication. Six Claude Code plugins — for documentation lookup, enhanced tool capabilities, browser testing, commit attribution, PR review, and frontend design — are pre-installed and configured before the agent writes its first line of code.
+Every environment ships with a complete developer toolchain: version control, package management, fast code search, infrastructure validation, browser automation for running end-to-end tests, the GitHub CLI for pull request workflows, and cloud authentication. Claude Code plugins and Codex skill tooling are pre-installed and configured before the agent writes its first line of code.
 
 Project dependencies install automatically at startup. A shared package store means the first environment pays the installation cost once; every subsequent environment reuses the cached packages. Environment variables sync from a cloud secret store and load automatically, so the agent has access to every service credential without manual configuration. A task that would take twenty minutes to set up by hand is ready in seconds.
 
@@ -71,7 +71,7 @@ This is not just tidiness. Ephemeral environments eliminate an entire category o
 
 ## Getting Started
 
-Claude Worker runs as part of the IntexuraOS platform. When you assign a coding task through the dashboard, the system provisions and manages the environment automatically. There is nothing to install, configure, or maintain — the environment arrives ready to work and disappears when the work is done.
+Code Worker runs as part of the IntexuraOS platform. When you assign a coding task through the dashboard, the system provisions and manages the environment automatically. There is nothing to install, configure, or maintain — the environment arrives ready to work and disappears when the work is done.
 
 ## Key Benefits
 
