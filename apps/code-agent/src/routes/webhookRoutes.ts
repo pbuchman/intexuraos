@@ -1202,12 +1202,16 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                       issueId: issueValidation.value.id,
                       addLabels: [label],
                     });
-                    if (!labelResult.ok) {
+                    if (labelResult.ok) {
+                      request.log.info({ taskId, prNumber, label, linearIssueId: originLinearIssueId }, 'Set review-outcome label on origin issue');
+                    } else {
                       request.log.warn({ taskId, prNumber, label, error: labelResult.error }, 'Failed to set review-outcome label (best-effort)');
                     }
                   } else {
                     request.log.warn({ taskId, prNumber, linearIssueId: originTask.linearIssueId, error: issueValidation.error }, 'Failed to validate origin issue for review-outcome label (best-effort)');
                   }
+                } else if (!originResult.ok) {
+                  request.log.warn({ taskId, prNumber, error: originResult.error }, 'Failed to look up origin task for review-outcome label (best-effort)');
                 }
               } catch (labelError: unknown) {
                 request.log.warn({ error: labelError, taskId, prNumber }, 'Failed to set review-outcome label (best-effort)');
