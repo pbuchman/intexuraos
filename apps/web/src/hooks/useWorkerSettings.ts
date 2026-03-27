@@ -12,6 +12,10 @@ import {
   testWorkerConnectivity,
   reorderWorkers as reorderWorkersApi,
   updateDefaultReviewWorkerType as updateDefaultReviewWorkerTypeApi,
+  updateDefaultRemediationWorkerType as updateDefaultRemediationWorkerTypeApi,
+  updateDefaultExecutionWorkerType as updateDefaultExecutionWorkerTypeApi,
+  updateDefaultPlanningWorkerType as updateDefaultPlanningWorkerTypeApi,
+  updateDefaultPullRequestWorkerType as updateDefaultPullRequestWorkerTypeApi,
 } from '@/services/workerSettingsApi';
 import type {
   WorkerSettingsResponse,
@@ -31,6 +35,10 @@ interface UseWorkerSettingsResult {
   testConnectivity: (workerName: string) => Promise<TestWorkerConnectivityResponse>;
   reorderWorkers: (workerNames: string[]) => Promise<void>;
   updateDefaultReviewWorkerType: (workerType: string) => Promise<void>;
+  updateDefaultRemediationWorkerType: (workerType: string) => Promise<void>;
+  updateDefaultExecutionWorkerType: (workerType: string) => Promise<void>;
+  updateDefaultPlanningWorkerType: (workerType: string) => Promise<void>;
+  updateDefaultPullRequestWorkerType: (workerType: string) => Promise<void>;
   refresh: (showLoading?: boolean) => Promise<void>;
 }
 
@@ -180,6 +188,74 @@ export function useWorkerSettings(): UseWorkerSettingsResult {
     [user?.sub, getAccessToken, refresh]
   );
 
+  const handleUpdateDefaultRemediationWorkerType = useCallback(
+    async (workerType: string): Promise<void> => {
+      const userId = user?.sub;
+      if (userId === undefined) return;
+
+      try {
+        const token = await getAccessToken();
+        await updateDefaultRemediationWorkerTypeApi(token, workerType);
+        await refresh(false);
+      } catch (err) {
+        setError(getErrorMessage(err, 'Failed to update default remediation worker type'));
+        throw err;
+      }
+    },
+    [user?.sub, getAccessToken, refresh]
+  );
+
+  const handleUpdateDefaultExecutionWorkerType = useCallback(
+    async (workerType: string): Promise<void> => {
+      const userId = user?.sub;
+      if (userId === undefined) return;
+
+      try {
+        const token = await getAccessToken();
+        await updateDefaultExecutionWorkerTypeApi(token, workerType);
+        await refresh(false);
+      } catch (err) {
+        setError(getErrorMessage(err, 'Failed to update default execution worker type'));
+        throw err;
+      }
+    },
+    [user?.sub, getAccessToken, refresh]
+  );
+
+  const handleUpdateDefaultPlanningWorkerType = useCallback(
+    async (workerType: string): Promise<void> => {
+      const userId = user?.sub;
+      if (userId === undefined) return;
+
+      try {
+        const token = await getAccessToken();
+        await updateDefaultPlanningWorkerTypeApi(token, workerType);
+        await refresh(false);
+      } catch (err) {
+        setError(getErrorMessage(err, 'Failed to update default planning worker type'));
+        throw err;
+      }
+    },
+    [user?.sub, getAccessToken, refresh]
+  );
+
+  const handleUpdateDefaultPullRequestWorkerType = useCallback(
+    async (workerType: string): Promise<void> => {
+      const userId = user?.sub;
+      if (userId === undefined) return;
+
+      try {
+        const token = await getAccessToken();
+        await updateDefaultPullRequestWorkerTypeApi(token, workerType);
+        await refresh(false);
+      } catch (err) {
+        setError(getErrorMessage(err, 'Failed to update default pull request worker type'));
+        throw err;
+      }
+    },
+    [user?.sub, getAccessToken, refresh]
+  );
+
   const handleReorderWorkers = useCallback(
     async (workerNames: string[]): Promise<void> => {
       const userId = user?.sub;
@@ -208,6 +284,10 @@ export function useWorkerSettings(): UseWorkerSettingsResult {
     testConnectivity,
     reorderWorkers: handleReorderWorkers,
     updateDefaultReviewWorkerType: handleUpdateDefaultReviewWorkerType,
+    updateDefaultRemediationWorkerType: handleUpdateDefaultRemediationWorkerType,
+    updateDefaultExecutionWorkerType: handleUpdateDefaultExecutionWorkerType,
+    updateDefaultPlanningWorkerType: handleUpdateDefaultPlanningWorkerType,
+    updateDefaultPullRequestWorkerType: handleUpdateDefaultPullRequestWorkerType,
     refresh,
   };
 }
