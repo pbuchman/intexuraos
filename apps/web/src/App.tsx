@@ -1,6 +1,7 @@
 import { HashRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { Auth0Provider } from '@auth0/auth0-react';
 import { AuthProvider, SyncQueueProvider, ThemeProvider, useAuth } from '@/context';
+import { useTimezoneAutoDetect } from '@/hooks';
 import { PWAProvider } from '@/context/pwa-context';
 import { AndroidInstallBanner, IOSInstallBanner, UpdateBanner } from '@/components/pwa-banners';
 import { DevBar } from '@/components/DevBar';
@@ -63,6 +64,11 @@ import {
   WhatsAppNotesPage,
   WorkerSettingsPage,
 } from '@/pages';
+
+function TimezoneAutoDetect(): null {
+  useTimezoneAutoDetect();
+  return null;
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }): React.JSX.Element {
   const { isAuthenticated, isLoading } = useAuth();
@@ -591,6 +597,7 @@ export function App(): React.JSX.Element {
           >
             <HashRouter>
               <AuthProvider>
+                <TimezoneAutoDetect />
                 <SyncQueueProvider>
                   <AppRoutes />
                   <UpdateBanner />
