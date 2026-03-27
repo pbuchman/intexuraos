@@ -72,7 +72,7 @@ From `state.json`: `webhookUrl`, `webhookSecret`, `workerType`, `worktreePath`, 
 | File                   | Change                                                                                     |
 | ---------------------- | ------------------------------------------------------------------------------------------ |
 | `main.ts`              | Replace `runStartupRecovery()` with new adoption flow coordinating Docker + state          |
-| `docker-provider.ts`   | New `listWorkerContainers()` method to discover all `code-worker-*` containers           |
+| `docker-provider.ts`   | New `listWorkerContainers()` method to discover all `code-worker-*` containers             |
 | `task-dispatcher.ts`   | New `adoptTask()` method that re-registers timers/monitors and triggers --continue attempt |
 | `detect-zombies` route | Fix `INTERNAL_ERROR` in the code-agent endpoint                                            |
 

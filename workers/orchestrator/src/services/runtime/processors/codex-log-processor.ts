@@ -12,11 +12,139 @@ interface CodexLogObject {
   thread_id?: string;
   message?: string;
   error?: { message?: string };
+  usage?: {
+    input_tokens?: number;
+    cached_input_tokens?: number;
+    output_tokens?: number;
+  };
   item?: {
     type?: string;
+    id?: string;
     text?: string;
     message?: string;
+    command?: string;
+    aggregated_output?: string;
+    exit_code?: number | null;
+    status?: string;
   };
+}
+
+const MAX_LINE_LENGTH = 200;
+const MAX_CMD_LENGTH = 300;
+const MAX_OUTPUT_LINES = 20;
+const OUTPUT_HEAD_LINES = 12;
+const OUTPUT_TAIL_LINES = 5;
+
+function truncateLine(line: string, max = MAX_LINE_LENGTH): string {
+  if (line.length <= max) return line;
+  return line.slice(0, max) + ' [...]';
+}
+
+function stripShellWrapper(command: string): string {
+  const match = /^\/bin\/sh -lc (?:"([\s\S]*)"|'([\s\S]*)')$/.exec(command);
+  /* v8 ignore start -- ts-type: regex alternation guarantees one capture group is always defined, but TS types both as string | undefined @preserve */
+  if (match !== null) return match[1] ?? match[2] ?? command;
+  /* v8 ignore stop @preserve */
+  return command;
+}
+
+function gutterLine(line: string): string {
+  return `    | ${truncateLine(line)}`;
+}
+
+function formatCommandOutput(output: string): string {
+  if (output === '') return '';
+
+  const lines = output.split('\n');
+
+  if (lines.length <= MAX_OUTPUT_LINES) {
+    return lines.map(gutterLine).join('\n') + '\n';
+  }
+
+  const head = lines.slice(0, OUTPUT_HEAD_LINES).map(gutterLine);
+  const tail = lines.slice(-OUTPUT_TAIL_LINES).map(gutterLine);
+  const omitted = lines.length - OUTPUT_HEAD_LINES - OUTPUT_TAIL_LINES;
+  return [...head, `    | [... ${String(omitted)} lines omitted ...]`, ...tail].join('\n') + '\n';
+}
+
+function formatTurnCompleted(obj: CodexLogObject): string {
+  const u = obj.usage ?? {};
+  const input = u.input_tokens;
+  const cached = u.cached_input_tokens ?? 0;
+  const output = u.output_tokens;
+  const cachePercent = input !== undefined && input > 0 ? Math.round((cached / input) * 100) : 0;
+  const inputStr = input !== undefined ? String(input) : '?';
+  const outputStr = output !== undefined ? String(output) : '?';
+  return `[codex] Turn completed | input: ${inputStr} tokens (${String(cachePercent)}% cached) | output: ${outputStr} tokens`;
+}
+
+function formatItemCompleted(obj: CodexLogObject): string | null {
+  const item = obj.item;
+  if (item === undefined) return null;
+
+  if (item.type === 'agent_message' && typeof item.text === 'string') {
+    return `[msg] ${item.text}`;
+  }
+
+  if (item.type === 'command_execution' && typeof item.command === 'string') {
+    const cmd = truncateLine(stripShellWrapper(item.command), MAX_CMD_LENGTH);
+    const exitLabel = item.exit_code === 0 ? 'ok' : `EXIT ${String(item.exit_code ?? '?')}`;
+    const trimmedOutput = (item.aggregated_output ?? '').trimEnd();
+    const lineCount = trimmedOutput === '' ? 0 : trimmedOutput.split('\n').length;
+
+    let result = `[cmd] $ ${cmd}  → ${exitLabel} (${String(lineCount)} lines)`;
+    const formattedOutput = formatCommandOutput(trimmedOutput);
+    if (formattedOutput !== '') {
+      result += '\n' + formattedOutput.slice(0, -1);
+    }
+    return result;
+  }
+
+  return null;
+}
+
+function formatJsonLine(jsonLine: string): string | null {
+  try {
+    const obj = JSON.parse(jsonLine) as CodexLogObject;
+    const type = obj.type;
+
+    if (type === 'thread.started' && typeof obj.thread_id === 'string') {
+      return `[codex] Session started: thread=${obj.thread_id}`;
+    }
+
+    if (type === 'turn.started') {
+      return '[codex] Turn started';
+    }
+
+    if (type === 'turn.completed') {
+      return formatTurnCompleted(obj);
+    }
+
+    if (type === 'item.started') {
+      return null; // signal removal
+    }
+
+    if (type === 'item.completed') {
+      return formatItemCompleted(obj) ?? jsonLine;
+    }
+
+    if (type === 'error' && typeof obj.message === 'string') {
+      return `[error] ${obj.message}`;
+    }
+
+    return jsonLine;
+  } catch {
+    return jsonLine;
+  }
+}
+
+export function formatCodexMessages(text: string): string {
+  const result = text.replace(/^(\{.+\})(\n?)$/gm, (_match, jsonLine: string, nl: string) => {
+    const formatted = formatJsonLine(jsonLine);
+    if (formatted === null) return ''; // remove entire line including newline
+    return formatted + nl;
+  });
+  return result;
 }
 
 function parseCodexLogLine(state: CodexAttemptState, line: string): RuntimeEvent[] {
@@ -106,7 +234,7 @@ export const codexLogProcessor: RuntimeLogProcessor<CodexAttemptState> = {
   processChunk(state, chunk) {
     const events: RuntimeEvent[] = [];
     if (chunk !== '') {
-      events.push({ type: 'log', text: chunk });
+      events.push({ type: 'log', text: formatCodexMessages(chunk) });
     }
     events.push(...processBufferedLines(state, chunk));
     return events;
