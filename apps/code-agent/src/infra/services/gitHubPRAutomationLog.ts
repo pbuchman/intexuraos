@@ -31,12 +31,14 @@ export interface GitHubPRAutomationLogDeps {
 export function createGitHubPRAutomationLog(deps: GitHubPRAutomationLogDeps): AutomationLog {
   const { gitHubPRClient, prAutomationCommentRepo, resolveOAuthToken, userServiceClient, logger } = deps;
   const pending = new Map<string, Promise<void>>();
-  const timezoneCache = new Map<string, string | undefined>();
+  const TIMEZONE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  const timezoneCache = new Map<string, { value: string | undefined; expiresAt: number }>();
 
   async function resolveTimezone(userId: string): Promise<string | undefined> {
-    if (timezoneCache.has(userId)) return timezoneCache.get(userId);
+    const cached = timezoneCache.get(userId);
+    if (cached !== undefined && Date.now() < cached.expiresAt) return cached.value;
     const tz = await userServiceClient.getUserTimezone(userId);
-    timezoneCache.set(userId, tz);
+    timezoneCache.set(userId, { value: tz, expiresAt: Date.now() + TIMEZONE_CACHE_TTL_MS });
     return tz;
   }
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useAuth } from '@/context';
-import { getUserTimezoneSettings, patchUserTimezone } from '@/services/userTimezoneApi';
+import { getUserSettings } from '@/services/authApi';
+import { patchUserTimezone } from '@/services/userTimezoneApi';
 
 /**
  * Fire-and-forget hook: on first authenticated load, reads the browser's
@@ -26,7 +27,7 @@ export function useTimezoneAutoDetect(): void {
         if (detectedTimezone === '') return;
 
         const token = await getAccessToken();
-        const settings = await getUserTimezoneSettings(token, userId);
+        const settings = await getUserSettings(token, userId);
 
         // Only write if no timezone is stored — never overwrite a manual selection
         if (settings.timezone !== undefined && settings.timezone !== '') return;

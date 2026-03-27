@@ -7,7 +7,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useTimezoneAutoDetect } from '../useTimezoneAutoDetect.js';
 
-const mockGetUserTimezoneSettings = vi.fn();
+const mockGetUserSettings = vi.fn();
 const mockPatchUserTimezone = vi.fn();
 const mockGetAccessToken = vi.fn();
 
@@ -19,8 +19,11 @@ vi.mock('@/context', () => ({
   } => mockUseAuth(),
 }));
 
+vi.mock('@/services/authApi', () => ({
+  getUserSettings: (...args: unknown[]): unknown => mockGetUserSettings(...args),
+}));
+
 vi.mock('@/services/userTimezoneApi', () => ({
-  getUserTimezoneSettings: (...args: unknown[]): unknown => mockGetUserTimezoneSettings(...args),
   patchUserTimezone: (...args: unknown[]): unknown => mockPatchUserTimezone(...args),
 }));
 
@@ -48,7 +51,7 @@ describe('useTimezoneAutoDetect', () => {
   });
 
   it('PATCHes detected timezone when no timezone is stored', async () => {
-    mockGetUserTimezoneSettings.mockResolvedValue({
+    mockGetUserSettings.mockResolvedValue({
       userId: 'user-123',
       timezone: undefined,
       createdAt: '2026-01-01T00:00:00Z',
@@ -62,7 +65,7 @@ describe('useTimezoneAutoDetect', () => {
       expect(mockPatchUserTimezone).toHaveBeenCalledOnce();
     });
 
-    expect(mockGetUserTimezoneSettings).toHaveBeenCalledWith('test-token', 'user-123');
+    expect(mockGetUserSettings).toHaveBeenCalledWith('test-token', 'user-123');
     expect(mockPatchUserTimezone).toHaveBeenCalledWith(
       'test-token',
       'user-123',
@@ -71,7 +74,7 @@ describe('useTimezoneAutoDetect', () => {
   });
 
   it('does not PATCH when timezone is already stored', async () => {
-    mockGetUserTimezoneSettings.mockResolvedValue({
+    mockGetUserSettings.mockResolvedValue({
       userId: 'user-123',
       timezone: 'America/New_York',
       createdAt: '2026-01-01T00:00:00Z',
@@ -81,7 +84,7 @@ describe('useTimezoneAutoDetect', () => {
     renderHook(() => useTimezoneAutoDetect());
 
     await waitFor(() => {
-      expect(mockGetUserTimezoneSettings).toHaveBeenCalledOnce();
+      expect(mockGetUserSettings).toHaveBeenCalledOnce();
     });
 
     expect(mockPatchUserTimezone).not.toHaveBeenCalled();
@@ -97,7 +100,7 @@ describe('useTimezoneAutoDetect', () => {
     renderHook(() => useTimezoneAutoDetect());
 
     expect(mockGetAccessToken).not.toHaveBeenCalled();
-    expect(mockGetUserTimezoneSettings).not.toHaveBeenCalled();
+    expect(mockGetUserSettings).not.toHaveBeenCalled();
   });
 
   it('does not run when user.sub is undefined', () => {
@@ -110,17 +113,17 @@ describe('useTimezoneAutoDetect', () => {
     renderHook(() => useTimezoneAutoDetect());
 
     expect(mockGetAccessToken).not.toHaveBeenCalled();
-    expect(mockGetUserTimezoneSettings).not.toHaveBeenCalled();
+    expect(mockGetUserSettings).not.toHaveBeenCalled();
   });
 
   it('silently ignores errors without blocking app load', async () => {
-    mockGetUserTimezoneSettings.mockRejectedValue(new Error('Network error'));
+    mockGetUserSettings.mockRejectedValue(new Error('Network error'));
 
     // Should not throw
     const { result } = renderHook(() => useTimezoneAutoDetect());
 
     await waitFor(() => {
-      expect(mockGetUserTimezoneSettings).toHaveBeenCalledOnce();
+      expect(mockGetUserSettings).toHaveBeenCalledOnce();
     });
 
     // Hook returns void, no error surfaced
@@ -130,9 +133,9 @@ describe('useTimezoneAutoDetect', () => {
 
   it('retries after a transient failure when deps change', async () => {
     // First call fails
-    mockGetUserTimezoneSettings.mockRejectedValueOnce(new Error('Network error'));
+    mockGetUserSettings.mockRejectedValueOnce(new Error('Network error'));
     // Second call succeeds with no timezone stored
-    mockGetUserTimezoneSettings.mockResolvedValueOnce({
+    mockGetUserSettings.mockResolvedValueOnce({
       userId: 'user-123',
       timezone: undefined,
       createdAt: '2026-01-01T00:00:00Z',
@@ -152,7 +155,7 @@ describe('useTimezoneAutoDetect', () => {
 
     // Wait for the first (failing) attempt
     await waitFor(() => {
-      expect(mockGetUserTimezoneSettings).toHaveBeenCalledOnce();
+      expect(mockGetUserSettings).toHaveBeenCalledOnce();
     });
 
     // Simulate a new getAccessToken reference (e.g. token refresh) which
@@ -168,7 +171,7 @@ describe('useTimezoneAutoDetect', () => {
     rerender();
 
     await waitFor(() => {
-      expect(mockGetUserTimezoneSettings).toHaveBeenCalledTimes(2);
+      expect(mockGetUserSettings).toHaveBeenCalledTimes(2);
     });
 
     await waitFor(() => {
@@ -177,7 +180,7 @@ describe('useTimezoneAutoDetect', () => {
   });
 
   it('runs only once even if the component re-renders', async () => {
-    mockGetUserTimezoneSettings.mockResolvedValue({
+    mockGetUserSettings.mockResolvedValue({
       userId: 'user-123',
       timezone: 'Europe/Berlin',
       createdAt: '2026-01-01T00:00:00Z',
@@ -187,12 +190,12 @@ describe('useTimezoneAutoDetect', () => {
     const { rerender } = renderHook(() => useTimezoneAutoDetect());
 
     await waitFor(() => {
-      expect(mockGetUserTimezoneSettings).toHaveBeenCalledOnce();
+      expect(mockGetUserSettings).toHaveBeenCalledOnce();
     });
 
     rerender();
     rerender();
 
-    expect(mockGetUserTimezoneSettings).toHaveBeenCalledOnce();
+    expect(mockGetUserSettings).toHaveBeenCalledOnce();
   });
 });
