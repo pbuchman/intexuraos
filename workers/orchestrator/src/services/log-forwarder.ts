@@ -16,11 +16,18 @@ export interface ForwardingState {
   position: number;
   buffer: string;
   partialLine: string;
+  pendingChunks: QueuedLogChunk[];
   totalBytes: number;
   droppedChunks: number;
+  formattedUploadsStopped: boolean;
   timer: NodeJS.Timeout | null;
   pollTimer: NodeJS.Timeout | null;
   webhookSecret: string;
+}
+
+interface QueuedLogChunk {
+  content: string;
+  raw: boolean;
 }
 
 const MAX_CHUNK_SIZE = 64 * 1024; // 64KB — must exceed largest single JSON message (hook_response with build output)
@@ -111,8 +118,10 @@ export class LogForwarder {
       position: 0,
       buffer: '',
       partialLine: '',
+      pendingChunks: [],
       totalBytes: 0,
       droppedChunks: 0,
+      formattedUploadsStopped: false,
       timer: null,
       pollTimer: null,
       webhookSecret,
@@ -195,8 +204,10 @@ export class LogForwarder {
         position: 0,
         buffer: '',
         partialLine: '',
+        pendingChunks: [],
         totalBytes: 0,
         droppedChunks: 0,
+        formattedUploadsStopped: false,
         timer: null,
         pollTimer: null,
         webhookSecret,
@@ -227,6 +238,46 @@ export class LogForwarder {
 
     // Flush if buffer exceeds max chunk size
     if (state.buffer.length >= MAX_CHUNK_SIZE) {
+      this.queueFormattedBufferChunks(state);
+      void this.flushBuffer(taskId);
+    }
+  }
+
+  appendRawChunk(taskId: string, content: string): void {
+    if (content === '') return;
+
+    let state = this.forwarders.get(taskId);
+
+    if (state === undefined) {
+      const webhookSecret = this.taskSecrets.get(taskId) ?? this.deriveWebhookSecret(taskId);
+      state = {
+        taskId,
+        logFilePath: '',
+        position: 0,
+        buffer: '',
+        partialLine: '',
+        pendingChunks: [],
+        totalBytes: 0,
+        droppedChunks: 0,
+        formattedUploadsStopped: false,
+        timer: null,
+        pollTimer: null,
+        webhookSecret,
+      };
+      this.forwarders.set(taskId, state);
+
+      state.timer = setInterval(() => {
+        void this.flushBuffer(taskId);
+      }, CHUNK_INTERVAL_MS);
+    }
+
+    this.drainPartialLine(state);
+    this.queueFormattedBufferChunks(state);
+    state.pendingChunks.push(
+      ...this.splitRawIntoChunks(content).map((chunk) => ({ content: chunk, raw: true }))
+    );
+
+    if (content.length >= MAX_CHUNK_SIZE) {
       void this.flushBuffer(taskId);
     }
   }
@@ -257,26 +308,39 @@ export class LogForwarder {
 
   private async flushBuffer(taskId: string, force = false): Promise<void> {
     const state = this.forwarders.get(taskId);
-    if (!state || state.buffer.length === 0) return;
+    if (!state) return;
 
-    // Check size limit (skipped when force=true, e.g. final flush from flushAndStop)
-    if (!force && state.totalBytes >= MAX_TOTAL_LOG_SIZE) {
-      this.logger.warn(
-        { taskId, totalBytes: state.totalBytes },
-        'Max total log size reached, stopping uploads'
-      );
-      state.droppedChunks += 1;
-      state.buffer = '';
-      return;
+    this.queueFormattedBufferChunks(state);
+
+    if (state.pendingChunks.length === 0) return;
+
+    const sendableChunks: QueuedLogChunk[] = [];
+
+    for (const chunk of state.pendingChunks) {
+      if (chunk.raw) {
+        sendableChunks.push(chunk);
+        continue;
+      }
+
+      if (!force && (state.formattedUploadsStopped || state.totalBytes >= MAX_TOTAL_LOG_SIZE)) {
+        if (!state.formattedUploadsStopped) {
+          this.logger.warn(
+            { taskId, totalBytes: state.totalBytes },
+            'Max total log size reached, stopping uploads'
+          );
+          state.formattedUploadsStopped = true;
+        }
+        state.droppedChunks += 1;
+        continue;
+      }
+
+      sendableChunks.push(chunk);
     }
 
-    // Split buffer into chunks
-    const chunks = this.splitIntoChunks(state.buffer);
-    state.buffer = ''; // Clear buffer after splitting
+    state.pendingChunks = [];
 
-    // Send chunks in batches
-    for (let i = 0; i < chunks.length; i += MAX_BATCH_SIZE) {
-      const batch = chunks.slice(i, i + MAX_BATCH_SIZE);
+    for (let i = 0; i < sendableChunks.length; i += MAX_BATCH_SIZE) {
+      const batch = sendableChunks.slice(i, i + MAX_BATCH_SIZE);
       await this.sendBatch(taskId, batch, state);
     }
   }
@@ -313,13 +377,31 @@ export class LogForwarder {
     return chunks;
   }
 
-  private async sendBatch(taskId: string, chunks: string[], state: ForwardingState): Promise<void> {
+  private splitRawIntoChunks(content: string): string[] {
+    const chunks: string[] = [];
+    for (let offset = 0; offset < content.length; offset += MAX_CHUNK_SIZE) {
+      chunks.push(content.slice(offset, offset + MAX_CHUNK_SIZE));
+    }
+    return chunks;
+  }
+
+  private queueFormattedBufferChunks(state: ForwardingState): void {
+    if (state.buffer === '') return;
+    const chunks = this.splitIntoChunks(state.buffer);
+    state.buffer = '';
+    state.pendingChunks.push(...chunks.map((content) => ({ content, raw: false })));
+  }
+
+  private async sendBatch(
+    taskId: string,
+    chunks: QueuedLogChunk[],
+    state: ForwardingState
+  ): Promise<void> {
     const now = Date.now();
     const chunkPayloads = chunks.map((chunk, index) => {
-      const truncated = this.enforceChunkSize(chunk);
       return {
         sequence: now + index,
-        content: truncated,
+        content: chunk.raw ? chunk.content : this.enforceChunkSize(chunk.content),
         timestamp: new Date().toISOString(),
       };
     });
@@ -332,7 +414,10 @@ export class LogForwarder {
     const result = await this.sendWithRetry(payload, state.webhookSecret);
 
     if (result.success) {
-      state.totalBytes += chunks.reduce((sum, c) => sum + c.length, 0);
+      state.totalBytes += chunks.reduce(
+        (sum, chunk) => sum + (chunk.raw ? 0 : chunk.content.length),
+        0
+      );
     } else {
       state.droppedChunks += chunks.length;
       const baseUrl = this.config.codeAgentUrl.replace(/\/+$/, '');
