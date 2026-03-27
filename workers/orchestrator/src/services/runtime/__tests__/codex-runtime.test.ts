@@ -30,9 +30,7 @@ describe('Codex runtime contract', () => {
     expect(events).toContainEqual({
       type: 'log',
       text:
-        '{"type":"thread.started","thread_id":"thread-123"}\n' +
-        '{"type":"turn.started"}\n' +
-        '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"READY"}}\n',
+        '[codex] Session started: thread=thread-123\n' + '[codex] Turn started\n' + '[msg] READY\n',
     });
     expect(events).toContainEqual({
       type: 'runtime_session_started',
