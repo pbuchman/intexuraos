@@ -139,13 +139,13 @@ export async function createRemediationTask(
 
   const { userId } = userResult.value;
 
-  // Resolution chain: explicit request > user setting > 'auto'
+  // Resolution chain: user setting > 'auto'
   let effectiveWorkerType: WorkerType = requestedWorkerType;
   if (requestedWorkerType === 'auto') {
     const settingsResult = await workerSettingsRepo.getSettings(userId);
-    if (settingsResult.ok && settingsResult.value?.defaultReviewWorkerType !== undefined) {
-      effectiveWorkerType = settingsResult.value.defaultReviewWorkerType;
-      logger.info({ userId, defaultReviewWorkerType: effectiveWorkerType }, 'Using user default review worker type for remediation task');
+    if (settingsResult.ok && settingsResult.value?.defaultRemediationWorkerType !== undefined) {
+      effectiveWorkerType = settingsResult.value.defaultRemediationWorkerType;
+      logger.info({ userId, defaultRemediationWorkerType: effectiveWorkerType }, 'Using user default remediation worker type');
     }
   }
 
