@@ -1,5 +1,5 @@
 import { memo, useState } from 'react';
-import { ChevronDown, ChevronRight, Play, RotateCcw, ExternalLink, Check, X, Loader2, Clock, ScrollText, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Play, RotateCcw, ExternalLink, Check, X, Loader2, Clock, ScrollText, Trash2, GitMerge } from 'lucide-react';
 import type { IssueGroup, StepState } from '@/utils/issueGroups';
 import { formatRelative } from '@/utils/dateFormat';
 import { IssueTimeline } from '@/components/code-tasks/IssueTimeline';
@@ -189,7 +189,9 @@ const IssueGroupRow = memo(function IssueGroupRow({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { latestTask, pipeline, aggregateStatus } = group;
-  const hasActionable = pipeline.steps.some((s) => s.state === 'actionable');
+  const actionableStep = pipeline.steps.find((s) => s.state === 'actionable');
+  const hasMergeAction = actionableStep?.agentType === 'merge';
+  const hasImplementAction = actionableStep !== undefined && !hasMergeAction;
   const isActioning = actioningTaskId !== null && actioningTaskId !== undefined && (actioningTaskId === latestTask.id || group.tasks.some((t) => t.id === actioningTaskId));
   const createdRelative = formatRelative(latestTask.createdAt);
 
@@ -261,7 +263,18 @@ const IssueGroupRow = memo(function IssueGroupRow({
           <div className="flex items-center justify-end gap-2">
             {isActioning ? (
               <PulsingDot />
-            ) : hasActionable ? (
+            ) : hasMergeAction && pipeline.pr !== null ? (
+              <a
+                href={pipeline.pr.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e): void => { e.stopPropagation(); }}
+                className="inline-flex items-center gap-1 rounded-md bg-purple-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-purple-500"
+              >
+                <GitMerge className="h-3 w-3" />
+                Merge
+              </a>
+            ) : hasImplementAction ? (
               <button
                 onClick={(e): void => {
                   e.stopPropagation();
@@ -377,7 +390,18 @@ const IssueGroupRow = memo(function IssueGroupRow({
               <div className="w-16 flex items-center justify-center">
                 {isActioning ? (
                   <PulsingDot />
-                ) : hasActionable ? (
+                ) : hasMergeAction && pipeline.pr !== null ? (
+                  <a
+                    href={pipeline.pr.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e): void => { e.stopPropagation(); }}
+                    className="inline-flex items-center gap-1 rounded-md bg-purple-600 px-2 py-1 text-xs font-medium text-white hover:bg-purple-500"
+                  >
+                    <GitMerge className="h-3 w-3" />
+                    Merge
+                  </a>
+                ) : hasImplementAction ? (
                   <button
                     onClick={(e): void => {
                       e.stopPropagation();
