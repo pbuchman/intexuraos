@@ -470,6 +470,8 @@ Codex uses a separate shared auth file mounted into code-worker containers. Boot
 workers/orchestrator/scripts/codex-login.sh
 ```
 
+Inside the container, run `codex login --device-auth` and complete the ChatGPT device-auth flow.
+
 This writes shared auth to `~/.code-orchestrator/codex-auth/auth.json`.
 
 Check worker auth status: `curl http://localhost:8199/health | jq .workerAuths`

@@ -64,7 +64,7 @@ export interface SystemPromptParams {
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-planning',
   description: 'Planning agent system prompt for autonomous code task planning',
-  version: '3.1.0',
+  version: '3.1.1',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     return `[SYSTEM CONTEXT]
@@ -209,7 +209,7 @@ Note: For complex planned outcomes, you MUST include explicit proof of the paral
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '5.1.0',
+  version: '5.1.1',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const hasContinuationPr =
@@ -356,7 +356,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pull-request',
   description: 'Pull request agent system prompt for addressing PR review feedback',
-  version: '4.0.1',
+  version: '4.0.2',
   build(params: SystemPromptParams): string {
     const {
       taskId,
@@ -489,7 +489,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const prReviewOverlayPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pr-review-overlay',
   description: 'Conditional PR review overlay appended to planning and execution prompts',
-  version: '3.0.1',
+  version: '3.0.2',
   build(params: SystemPromptParams): string {
     const { taskUrl } = params;
     return `
@@ -646,7 +646,7 @@ Rules:
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '8.1.0',
+  version: '8.1.1',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
       params;

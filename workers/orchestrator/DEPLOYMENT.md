@@ -203,6 +203,7 @@ pnpm --filter orchestrator test:e2e
 ### After VM Provisioning
 
 1. Run `claude login` on the VM before starting orchestrator (use SSH tunnel: `ssh -R 8080:localhost:8080 user@vm`)
+2. If the machine should run Codex tasks, bootstrap shared Codex auth with `workers/orchestrator/scripts/codex-login.sh`, then run `codex login --device-auth` inside the container
 
 ### When Both Change (e.g., INT-491)
 
