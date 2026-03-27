@@ -7,6 +7,7 @@
  * - Decryption happens only when credentials are needed for dispatch
  */
 
+import { FieldValue } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@intexuraos/infra-firestore';
 import { ok, err, getErrorMessage, type Result } from '@intexuraos/common-core';
 import type { Logger, CodeTaskWorkerType } from '@intexuraos/common-core';
@@ -546,6 +547,32 @@ export function createWorkerSettingsRepository(
       } catch (error) {
         const message = getErrorMessage(error);
         logger.error({ error, userId, field }, 'Failed to update default worker type');
+        return err({
+          code: 'internal_error',
+          message: `Firestore error: ${message}`,
+        });
+      }
+    },
+
+    async clearDefaultWorkerType(
+      userId: string,
+      field: DefaultWorkerTypeField
+    ): Promise<Result<void, WorkerSettingsError>> {
+      try {
+        const docRef = collection.doc(userId);
+        const doc = await docRef.get();
+
+        if (!doc.exists) {
+          return ok(undefined);
+        }
+
+        const now = new Date().toISOString();
+        await docRef.update({ [field]: FieldValue.delete(), updatedAt: now });
+
+        return ok(undefined);
+      } catch (error) {
+        const message = getErrorMessage(error);
+        logger.error({ error, userId, field }, 'Failed to clear default worker type');
         return err({
           code: 'internal_error',
           message: `Firestore error: ${message}`,
