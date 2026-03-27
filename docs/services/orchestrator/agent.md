@@ -299,7 +299,7 @@ interface TurnMetrics {
 ```typescript
 type WorkerAuthState = {
   status: 'active' | 'expired' | 'not_configured' | 'invalid' | 'refresh_failed';
-  authMode: 'oauth' | 'chatgpt' | 'api_key' | null;
+  authMode: 'oauth' | 'chatgpt' | null;
   refreshSupported: boolean;
   message?: string;
   expiresAt?: string;

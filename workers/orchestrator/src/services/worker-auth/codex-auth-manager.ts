@@ -75,7 +75,17 @@ export class CodexAuthManager implements WorkerAuthManager {
       }
 
       if (authMode === 'api_key') {
-        return this.loadApiKeyAuth(parsed);
+        this.state = buildState({
+          status: 'invalid',
+          authMode: null,
+          refreshSupported: false,
+          message: 'Codex shared auth must use ChatGPT device auth — rerun codex-login.sh',
+        });
+        this.logger.error(
+          { path: this.config.authPath, authMode },
+          'Codex auth file uses unsupported api_key auth_mode'
+        );
+        return false;
       }
 
       this.state = buildState({
@@ -235,37 +245,6 @@ export class CodexAuthManager implements WorkerAuthManager {
     });
     return true;
   }
-
-  private loadApiKeyAuth(parsed: Record<string, unknown>): boolean {
-    const tokens = parsed['tokens'];
-    const tokenValue =
-      typeof parsed['OPENAI_API_KEY'] === 'string'
-        ? parsed['OPENAI_API_KEY']
-        : tokens !== null &&
-            typeof tokens === 'object' &&
-            typeof (tokens as Record<string, unknown>)['access_token'] === 'string'
-          ? ((tokens as Record<string, unknown>)['access_token'] as string)
-          : null;
-
-    if (tokenValue === null || tokenValue === '') {
-      this.state = buildState({
-        status: 'invalid',
-        authMode: 'api_key',
-        refreshSupported: false,
-        message: 'Codex API-key auth is missing the OpenAI API key',
-      });
-      return false;
-    }
-
-    this.state = buildState({
-      status: 'active',
-      authMode: 'api_key',
-      refreshSupported: false,
-      message: 'Codex is configured with API-key auth',
-    });
-    return true;
-  }
-
   private parseChatGptState(expiresAt: string, lastRefreshRaw: unknown): ParsedChatGptAuth {
     const expiresInMinutes = Math.round((Date.parse(expiresAt) - Date.now()) / 60_000);
     const lastRefreshAt = typeof lastRefreshRaw === 'string' ? lastRefreshRaw : undefined;

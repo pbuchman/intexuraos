@@ -92,7 +92,7 @@ describe('CodexAuthManager', () => {
     });
   });
 
-  it('loads active API-key auth without refresh support', () => {
+  it('reports invalid when auth_mode is api_key', () => {
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(
       JSON.stringify({
@@ -105,12 +105,12 @@ describe('CodexAuthManager', () => {
 
     const result = manager.loadCredentials();
 
-    expect(result).toBe(true);
+    expect(result).toBe(false);
     expect(manager.getState()).toEqual({
-      status: 'active',
-      authMode: 'api_key',
+      status: 'invalid',
+      authMode: null,
       refreshSupported: false,
-      message: 'Codex is configured with API-key auth',
+      message: 'Codex shared auth must use ChatGPT device auth — rerun codex-login.sh',
     });
   });
 
@@ -220,7 +220,7 @@ describe('CodexAuthManager', () => {
     expect(manager.isExpiringSoon(5 * 60 * 1000)).toBe(true);
   });
 
-  it('returns false from isExpiringSoon for API-key auth', () => {
+  it('returns false from isExpiringSoon for invalid api_key auth_mode', () => {
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(
       JSON.stringify({
@@ -337,46 +337,6 @@ describe('CodexAuthManager', () => {
     });
   });
 
-  it('reports invalid when API-key auth is missing the key value', () => {
-    mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockReturnValue(
-      JSON.stringify({
-        auth_mode: 'api_key',
-        tokens: {},
-      })
-    );
-
-    const result = manager.loadCredentials();
-
-    expect(result).toBe(false);
-    expect(manager.getState()).toEqual({
-      status: 'invalid',
-      authMode: 'api_key',
-      refreshSupported: false,
-      message: 'Codex API-key auth is missing the OpenAI API key',
-    });
-  });
-
-  it('accepts API-key auth from top-level OPENAI_API_KEY', () => {
-    mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockReturnValue(
-      JSON.stringify({
-        auth_mode: 'api_key',
-        OPENAI_API_KEY: 'sk-top-level',
-      })
-    );
-
-    const result = manager.loadCredentials();
-
-    expect(result).toBe(true);
-    expect(manager.getState()).toEqual({
-      status: 'active',
-      authMode: 'api_key',
-      refreshSupported: false,
-      message: 'Codex is configured with API-key auth',
-    });
-  });
-
   it('returns false from isExpiringSoon for invalid refreshable state', () => {
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(
@@ -414,9 +374,10 @@ describe('CodexAuthManager', () => {
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(
       JSON.stringify({
-        auth_mode: 'api_key',
+        auth_mode: 'chatgpt',
+        last_refresh: '2026-03-26T11:45:00.000Z',
         tokens: {
-          access_token: 'sk-test',
+          access_token: createJwt(Date.parse('2026-03-26T16:00:00.000Z')),
         },
       })
     );
@@ -447,6 +408,10 @@ describe('CodexAuthManager', () => {
     manager.loadCredentials();
 
     await expect(manager.refresh()).resolves.toBe(false);
+  });
+
+  it('returns null from getCurrentAccessToken', () => {
+    expect(manager.getCurrentAccessToken()).toBeNull();
   });
 
   it('marks refresh_failed when refresher returns false', async () => {

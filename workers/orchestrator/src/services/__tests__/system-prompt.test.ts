@@ -1071,12 +1071,12 @@ describe('system-prompt', () => {
     }
   });
 
-  it('planning prompt version is 3.1.0', () => {
-    expect(planningPrompt.version).toBe('3.1.0');
+  it('planning prompt version is 3.1.1', () => {
+    expect(planningPrompt.version).toBe('3.1.1');
   });
 
-  it('execution prompt version is 5.1.0', () => {
-    expect(executionPrompt.version).toBe('5.1.0');
+  it('execution prompt version is 5.1.1', () => {
+    expect(executionPrompt.version).toBe('5.1.1');
   });
 
   it('review agent prompt includes Linear section when linearIssueId is provided', () => {
