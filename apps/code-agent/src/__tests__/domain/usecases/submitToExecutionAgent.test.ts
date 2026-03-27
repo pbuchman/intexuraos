@@ -1024,6 +1024,184 @@ describe('submitToExecutionAgent', () => {
     });
   });
 
+  describe('worker type resolution chain', () => {
+    it('uses Linear label worker type over request workerType and user setting', async () => {
+      setupHappyPathMocks({ workerType: 'sonnet' });
+      // Linear label = 'opus'
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'My Feature',
+          url: `https://linear.app/pbuchman/issue/${linearIssueId}`,
+          labels: ['code-task', 'opus'],
+          childCount: 0,
+          parentId: null,
+        })
+      );
+      // User setting = 'sonnet'
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({ workers: [enabledWorker], defaultExecutionWorkerType: 'sonnet' })
+      );
+
+      await submitToExecutionAgent(createDeps(), {
+        originalTaskId,
+        userId,
+        workerType: 'sonnet',
+      });
+
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ workerType: 'opus' })
+      );
+    });
+
+    it('uses request workerType when no label matches', async () => {
+      setupHappyPathMocks();
+      // Labels have no worker type label
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'My Feature',
+          url: `https://linear.app/pbuchman/issue/${linearIssueId}`,
+          labels: ['code-task'],
+          childCount: 0,
+          parentId: null,
+        })
+      );
+
+      await submitToExecutionAgent(createDeps(), {
+        originalTaskId,
+        userId,
+        workerType: 'sonnet',
+      });
+
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ workerType: 'sonnet' })
+      );
+    });
+
+    it('uses user defaultExecutionWorkerType when no label and no request workerType', async () => {
+      setupHappyPathMocks();
+      // No worker type label
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'My Feature',
+          url: `https://linear.app/pbuchman/issue/${linearIssueId}`,
+          labels: ['code-task'],
+          childCount: 0,
+          parentId: null,
+        })
+      );
+      // User setting = 'opus'
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({ workers: [enabledWorker], defaultExecutionWorkerType: 'opus' })
+      );
+
+      await submitToExecutionAgent(createDeps(), {
+        originalTaskId,
+        userId,
+        // no workerType in request
+      });
+
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ workerType: 'opus' })
+      );
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ userId, defaultExecutionWorkerType: 'opus' }),
+        'Using user default execution worker type'
+      );
+    });
+
+    it('falls back to auto when no label, no request workerType, and no user setting', async () => {
+      setupHappyPathMocks();
+      // No worker type label
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'My Feature',
+          url: `https://linear.app/pbuchman/issue/${linearIssueId}`,
+          labels: ['code-task'],
+          childCount: 0,
+          parentId: null,
+        })
+      );
+      // No default setting
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({ workers: [enabledWorker] })
+      );
+
+      await submitToExecutionAgent(createDeps(), {
+        originalTaskId,
+        userId,
+        // no workerType in request
+      });
+
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ workerType: 'auto' })
+      );
+    });
+
+    it('does NOT inherit workerType from originalTask', async () => {
+      // Original task has 'opus' but no label match, no request type, no user setting
+      setupHappyPathMocks({ workerType: 'opus' });
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'My Feature',
+          url: `https://linear.app/pbuchman/issue/${linearIssueId}`,
+          labels: ['code-task'],
+          childCount: 0,
+          parentId: null,
+        })
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({ workers: [enabledWorker] })
+      );
+
+      await submitToExecutionAgent(createDeps(), {
+        originalTaskId,
+        userId,
+        // no workerType in request — old behavior would inherit 'opus' from originalTask
+      });
+
+      // Should be 'auto', NOT 'opus' from originalTask
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ workerType: 'auto' })
+      );
+    });
+
+    it('uses request workerType even when originalTask has a different workerType', async () => {
+      setupHappyPathMocks({ workerType: 'opus' });
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'My Feature',
+          url: `https://linear.app/pbuchman/issue/${linearIssueId}`,
+          labels: ['code-task'],
+          childCount: 0,
+          parentId: null,
+        })
+      );
+
+      await submitToExecutionAgent(createDeps(), {
+        originalTaskId,
+        userId,
+        workerType: 'sonnet',
+      });
+
+      // Should use request workerType 'sonnet', NOT originalTask's 'opus'
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ workerType: 'sonnet' })
+      );
+    });
+  });
+
   describe('graceful degradation (Linear best-effort)', () => {
     it('succeeds even when updateIssueState fails', async () => {
       setupHappyPathMocks();

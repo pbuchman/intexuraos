@@ -5,7 +5,13 @@ import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-htt
 import { extractOrGenerateTraceId } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
 import { validateWebhookSignature, validateOrchestratorSignature } from '../infra/webhookValidation.js';
-import { formatLogChunk, createFormatterState, type FormatterState } from '../domain/services/logFormatter.js';
+import {
+  formatLogChunkForRuntime,
+  flushLogChunkFormatterForRuntime,
+  createFormatterState,
+  type FormatterState,
+  type LogRuntime,
+} from '../domain/services/logFormatter.js';
 import { loadConfig } from '../config.js';
 import type { TurnMetrics } from '../domain/models/turnMetrics.js';
 import { formatMetricsLogLines } from '../domain/formatters/metricsLogFormatter.js';
@@ -52,7 +58,6 @@ function recordRemediationDecision(params: {
   required: boolean;
   signal: '0' | '1' | 'missing';
   taskId?: string;
-  existingTaskId?: string;
 }): void {
   getServices().automationLog.record(
     { repository: params.repository, prNumber: params.prNumber },
@@ -62,7 +67,6 @@ function recordRemediationDecision(params: {
       source: 'review_result',
       signal: params.signal,
       ...(params.taskId !== undefined && { taskId: params.taskId }),
-      ...(params.existingTaskId !== undefined && { existingTaskId: params.existingTaskId }),
     },
     params.userId,
   ).catch((e: unknown) => {
@@ -73,10 +77,46 @@ function recordRemediationDecision(params: {
   });
 }
 
+function resolveLogRuntime(workerType: string): LogRuntime {
+  return workerType.startsWith('codex') ? 'codex' : 'claude';
+}
+
+interface TaskFormatterEntry {
+  runtime: LogRuntime;
+  state: FormatterState;
+  lastSequence: number;
+}
+
 export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // Per-task formatter state: persists tool_use_id→name mappings across HTTP requests
   // so Read suppression works even when assistant + tool_result land in different log chunks
-  const taskFormatterStates = new Map<string, FormatterState>();
+  const taskFormatterStates = new Map<string, TaskFormatterEntry>();
+
+  async function flushPendingTaskLogLines(taskId: string): Promise<void> {
+    const formatterEntry = taskFormatterStates.get(taskId);
+    if (formatterEntry === undefined) return;
+
+    taskFormatterStates.delete(taskId);
+
+    const pendingLines = flushLogChunkFormatterForRuntime(
+      formatterEntry.runtime,
+      formatterEntry.lastSequence + 1,
+      Timestamp.now(),
+      formatterEntry.state,
+    );
+
+    if (pendingLines.length === 0) {
+      return;
+    }
+
+    const lineResult = await getServices().logLineRepo.storeBatch(taskId, pendingLines);
+    if (!lineResult.ok) {
+      getServices().logger.error(
+        { taskId, error: lineResult.error },
+        'Failed to flush pending log lines on task completion',
+      );
+    }
+  }
 
   // ============================================================
   // INTERNAL WEBHOOK ROUTES (X-Internal-Auth + HMAC Signature)
@@ -1145,114 +1185,78 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 signal: remediationSignal,
               });
             } else {
-              const recentRemediationResult = await codeTaskRepo.findRecentRemediationForPR(task.repository, prNumber);
-              if (!recentRemediationResult.ok) {
-                request.log.warn(
-                  { taskId, prNumber, error: recentRemediationResult.error },
-                  'Failed to check recent remediation task, skipping remediation creation (best-effort)',
-                );
-                recordRemediationDecision({
-                  repository: task.repository,
-                  prNumber,
-                  userId: task.userId,
-                  required: true,
-                  signal: remediationSignal,
-                });
-              } else if (recentRemediationResult.value !== null) {
-                request.log.info(
-                  { taskId, prNumber, existingRemediationId: recentRemediationResult.value.id },
-                  'Recent remediation task already exists for PR, skipping creation',
-                );
-                recordRemediationDecision({
-                  repository: task.repository,
-                  prNumber,
-                  userId: task.userId,
-                  required: true,
-                  signal: remediationSignal,
-                  existingTaskId: recentRemediationResult.value.id,
-                });
-              } else {
-                const { createRemediationTaskFn, logger: remediationLogger } = getServices();
-                if (createRemediationTaskFn !== undefined) {
-                  let reviewBody = result.summary;
-                  let inlineComments: { path: string; line: number; body: string }[] | undefined;
-                  if (result.review_id !== undefined && /^\d+$/.test(result.review_id)) {
-                    const reviewId = Number(result.review_id);
-                    const enrichedReviewResult = await enrichReviewWithComments(
-                      { logger: remediationLogger, gitHubPREventRepo },
-                      {
-                        repository: task.repository,
-                        pullRequestNumber: prNumber,
-                        reviewId,
-                        reviewBody: null,
-                      },
-                    );
-                    if (enrichedReviewResult.ok) {
-                      reviewBody = enrichedReviewResult.value.reviewBody ?? reviewBody;
-                      if (enrichedReviewResult.value.comments.length > 0) {
-                        inlineComments = enrichedReviewResult.value.comments
-                          .filter(
-                            (
-                              comment,
-                            ): comment is typeof comment & { line: number } => comment.line !== null,
-                          )
-                          .map((comment) => ({
-                            path: comment.path,
-                            line: comment.line,
-                            body: comment.body,
-                          }));
-                      }
-                    } else {
-                      request.log.warn(
-                        { taskId, prNumber, reviewId, error: enrichedReviewResult.error },
-                        'Failed to enrich review context from stored GitHub events, falling back to verifier summary',
-                      );
-                      }
-                  }
-                  const remediationResult = await createRemediationTaskFn(
-                    remediationLogger,
+              const { createRemediationTaskFn, logger: remediationLogger } = getServices();
+              if (createRemediationTaskFn !== undefined) {
+                let reviewBody = result.summary;
+                let inlineComments: { path: string; line: number; body: string }[] | undefined;
+                if (result.review_id !== undefined && /^\d+$/.test(result.review_id)) {
+                  const reviewId = Number(result.review_id);
+                  const enrichedReviewResult = await enrichReviewWithComments(
+                    { logger: remediationLogger, gitHubPREventRepo },
                     {
                       repository: task.repository,
-                      prNumber,
-                      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard, repository always contains '/' @preserve */
-                      senderLogin: task.repository.split('/')[0] ?? task.userId,
-                      /* v8 ignore stop @preserve */
-                      workerType: task.workerType,
-                      eventId: taskId,
-                      ...(reviewBody !== undefined && { reviewBody }),
-                      ...(inlineComments !== undefined && inlineComments.length > 0 && { inlineComments }),
-                      ...(task.baseBranch !== undefined && { baseBranch: task.baseBranch }),
-                      ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+                      pullRequestNumber: prNumber,
+                      reviewId,
+                      reviewBody: null,
                     },
                   );
-                  if (remediationResult.ok) {
-                    request.log.info(
-                      { taskId, prNumber, remediationTaskId: remediationResult.value.taskId },
-                      'Created remediation task from review task-complete',
-                    );
-                    recordRemediationDecision({
-                      repository: task.repository,
-                      prNumber,
-                      userId: task.userId,
-                      required: true,
-                      signal: remediationSignal,
-                      taskId: remediationResult.value.taskId,
-                    });
+                  if (enrichedReviewResult.ok) {
+                    reviewBody = enrichedReviewResult.value.reviewBody ?? reviewBody;
+                    if (enrichedReviewResult.value.comments.length > 0) {
+                      inlineComments = enrichedReviewResult.value.comments
+                        .filter(
+                          (
+                            comment,
+                          ): comment is typeof comment & { line: number } => comment.line !== null,
+                        )
+                        .map((comment) => ({
+                          path: comment.path,
+                          line: comment.line,
+                          body: comment.body,
+                        }));
+                    }
                   } else {
                     request.log.warn(
-                      { taskId, prNumber, error: remediationResult.error },
-                      'Failed to create remediation task from review task-complete (best-effort)',
+                      { taskId, prNumber, reviewId, error: enrichedReviewResult.error },
+                      'Failed to enrich review context from stored GitHub events, falling back to verifier summary',
                     );
-                    recordRemediationDecision({
-                      repository: task.repository,
-                      prNumber,
-                      userId: task.userId,
-                      required: true,
-                      signal: remediationSignal,
-                    });
-                  }
+                    }
+                }
+                const remediationResult = await createRemediationTaskFn(
+                  remediationLogger,
+                  {
+                    repository: task.repository,
+                    prNumber,
+                    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard, repository always contains '/' @preserve */
+                    senderLogin: task.repository.split('/')[0] ?? task.userId,
+                    /* v8 ignore stop @preserve */
+                    // Always pass 'auto' — remediation resolves its own default via defaultRemediationWorkerType
+                    workerType: 'auto',
+                    eventId: taskId,
+                    ...(reviewBody !== undefined && { reviewBody }),
+                    ...(inlineComments !== undefined && inlineComments.length > 0 && { inlineComments }),
+                    ...(task.baseBranch !== undefined && { baseBranch: task.baseBranch }),
+                    ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+                  },
+                );
+                if (remediationResult.ok) {
+                  request.log.info(
+                    { taskId, prNumber, remediationTaskId: remediationResult.value.taskId },
+                    'Created remediation task from review task-complete',
+                  );
+                  recordRemediationDecision({
+                    repository: task.repository,
+                    prNumber,
+                    userId: task.userId,
+                    required: true,
+                    signal: remediationSignal,
+                    taskId: remediationResult.value.taskId,
+                  });
                 } else {
-                  request.log.warn({ taskId, prNumber }, 'createRemediationTaskFn not configured, skipping remediation creation');
+                  request.log.warn(
+                    { taskId, prNumber, error: remediationResult.error },
+                    'Failed to create remediation task from review task-complete (best-effort)',
+                  );
                   recordRemediationDecision({
                     repository: task.repository,
                     prNumber,
@@ -1261,6 +1265,15 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                     signal: remediationSignal,
                   });
                 }
+              } else {
+                request.log.warn({ taskId, prNumber }, 'createRemediationTaskFn not configured, skipping remediation creation');
+                recordRemediationDecision({
+                  repository: task.repository,
+                  prNumber,
+                  userId: task.userId,
+                  required: true,
+                  signal: remediationSignal,
+                });
               }
             }
           } catch (remediationError: unknown) {
@@ -1353,6 +1366,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           },
           'Task marked as completed'
         );
+        await flushPendingTaskLogLines(taskId);
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
@@ -1377,6 +1391,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               return reply.fail('INTERNAL_ERROR', failResult.error.message);
             }
             await cleanupLockIfPR();
+            await flushPendingTaskLogLines(taskId);
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
           }
@@ -1431,6 +1446,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
 
         request.log.info({ taskId, error: taskError }, 'Task marked as failed');
+        await flushPendingTaskLogLines(taskId);
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
@@ -1491,6 +1507,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
 
         request.log.info({ taskId }, 'Task marked as interrupted');
+        await flushPendingTaskLogLines(taskId);
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
@@ -1547,6 +1564,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
 
         request.log.info({ taskId }, 'Task marked as cancelled');
+        await flushPendingTaskLogLines(taskId);
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
@@ -1668,8 +1686,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // First log delivery for this task — task might still be dispatched.
       // Update to running and mirror to action.
+      let formatterEntry = taskFormatterStates.get(taskId);
       /* v8 ignore start -- test-infra: FakeFirestore cannot simulate stateful multi-request log delivery with dispatched task @preserve */
-      if (!taskFormatterStates.has(taskId)) {
+      if (formatterEntry === undefined) {
         const taskResult = await codeTaskRepo.findById(taskId);
         if (taskResult.ok && taskResult.value.status === 'dispatched') {
           await codeTaskRepo.update(taskId, { status: 'running' });
@@ -1679,6 +1698,15 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             taskStatus: 'running',
             traceId: extractOrGenerateTraceId(request.headers),
           });
+        }
+        if (taskResult.ok) {
+          const resolvedFormatterEntry: TaskFormatterEntry = {
+            runtime: resolveLogRuntime(taskResult.value.workerType),
+            state: createFormatterState(),
+            lastSequence: 0,
+          };
+          formatterEntry = resolvedFormatterEntry;
+          taskFormatterStates.set(taskId, resolvedFormatterEntry);
         }
       }
       /* v8 ignore stop @preserve */
@@ -1699,12 +1727,19 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return reply.fail('INTERNAL_ERROR', storeResult.error.message);
       }
 
-      const state = taskFormatterStates.get(taskId) ?? createFormatterState();
+      const formatter = formatterEntry ?? {
+        runtime: 'claude' as const,
+        state: createFormatterState(),
+        lastSequence: chunks[chunks.length - 1]?.sequence ?? 0,
+      };
       const allLines = chunks.flatMap((chunk) => {
         const chunkTimestamp = Timestamp.fromDate(new Date(chunk.timestamp));
-        return formatLogChunk(chunk.content, chunk.sequence, chunkTimestamp, state);
+        return formatLogChunkForRuntime(formatter.runtime, chunk.content, chunk.sequence, chunkTimestamp, formatter.state);
       });
-      taskFormatterStates.set(taskId, state);
+      formatter.lastSequence = chunks[chunks.length - 1]?.sequence ?? formatter.lastSequence;
+      if (formatterEntry !== undefined) {
+        taskFormatterStates.set(taskId, formatter);
+      }
 
       if (allLines.length > 0) {
         const lineResult = await logLineRepo.storeBatch(taskId, allLines);

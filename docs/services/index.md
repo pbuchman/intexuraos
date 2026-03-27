@@ -49,7 +49,7 @@ Complete documentation for all IntexuraOS services, workers, and packages.
 | **chat-agent**    | New: In-app AI assistant with RAG, guest access, command creation                   |
 | **code-agent**    | New: Autonomous code execution with worker dispatch and dedup                       |
 | **orchestrator**  | New: Local worker orchestration for code-worker sessions via Docker                 |
-| **code-worker** | New: Docker container image for isolated Claude/Codex execution                     |
+| **code-worker**   | New: Docker container image for isolated Claude/Codex execution                     |
 | **log-cleanup**   | New: Cloud Function for scheduled log retention management                          |
 | **vm-lifecycle**  | New: Cloud Functions for GCE VM start/stop lifecycle control                        |
 | **22 packages**   | New: All shared packages documented (common, infra, LLM stack)                      |
@@ -235,8 +235,8 @@ Cloud Functions and local services that run outside Cloud Run.
 
 | Worker                                     | Type            | Purpose                                                          | Trigger                     |
 | ------------------------------------------ | --------------- | ---------------------------------------------------------------- | --------------------------- |
-| [orchestrator](orchestrator/features.md) | Local service | Spawns code-worker sessions in Docker containers via worktrees | HTTP (HMAC-signed dispatch) |
-| [code-worker](code-worker/features.md)   | Docker image  | Isolated Claude/Codex execution environment with git and tools | Started by orchestrator     |
+| [orchestrator](orchestrator/features.md)   | Local service   | Spawns code-worker sessions in Docker containers via worktrees   | HTTP (HMAC-signed dispatch) |
+| [code-worker](code-worker/features.md)     | Docker image    | Isolated Claude/Codex execution environment with git and tools   | Started by orchestrator     |
 | [log-cleanup](log-cleanup/features.md)     | Cloud Function  | Deletes old task logs via code-agent cleanup API                 | Pub/Sub (scheduled)         |
 | [vm-lifecycle](vm-lifecycle/features.md)   | Cloud Functions | Starts and stops GCE VM instances with health polling            | HTTP (internal auth)        |
 | [transcription](transcription/features.md) | Cloud Function  | Converts WhatsApp voice notes to text via Speechmatics           | Pub/Sub (audio-stored)      |

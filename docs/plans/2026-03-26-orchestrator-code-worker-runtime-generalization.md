@@ -37,32 +37,32 @@
 
 ### Modified
 
-| Service | Method | Path | Change |
-| --- | --- | --- | --- |
-| `workers/orchestrator` | `POST` | `/tasks` | Accept a new public `workerType` value `codex` once the Codex runtime path is implemented and tested |
-| `workers/orchestrator` | `GET` | `/tasks/:id` | Task payload may gain runtime-specific persisted metadata unless the route is explicitly normalized; implementation should prefer keeping runtime internals out of the external response |
-| `apps/code-agent` | Internal contract | task payloads | No new field required; `workerType` enum broadens when `codex` is exposed |
-| `apps/web` | UI/API | code-task creation and display | Worker type pickers and labels broaden to include `codex` |
+| Service                | Method            | Path                           | Change                                                                                                                                                                                   |
+| ---------------------- | ----------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workers/orchestrator` | `POST`            | `/tasks`                       | Accept a new public `workerType` value `codex` once the Codex runtime path is implemented and tested                                                                                     |
+| `workers/orchestrator` | `GET`             | `/tasks/:id`                   | Task payload may gain runtime-specific persisted metadata unless the route is explicitly normalized; implementation should prefer keeping runtime internals out of the external response |
+| `apps/code-agent`      | Internal contract | task payloads                  | No new field required; `workerType` enum broadens when `codex` is exposed                                                                                                                |
+| `apps/web`             | UI/API            | code-task creation and display | Worker type pickers and labels broaden to include `codex`                                                                                                                                |
 
 ### Created
 
-| Service | Method | Path | Change |
-| --- | --- | --- | --- |
-| None required | - | - | No new HTTP endpoints are required for the first rollout slice |
+| Service       | Method | Path | Change                                                         |
+| ------------- | ------ | ---- | -------------------------------------------------------------- |
+| None required | -      | -    | No new HTTP endpoints are required for the first rollout slice |
 
 ### Removed
 
-| Service | Method | Path | Change |
-| --- | --- | --- | --- |
-| None | - | - | No endpoint removals |
+| Service | Method | Path | Change               |
+| ------- | ------ | ---- | -------------------- |
+| None    | -      | -    | No endpoint removals |
 
 ### Unchanged
 
-| Service | Method | Path | Change |
-| --- | --- | --- | --- |
-| `workers/orchestrator` | `GET` | `/health` | Keep the existing endpoint; extend internals only if Codex auth status is surfaced later |
-| `workers/orchestrator` | `POST` | `/tasks/:id/message` | Keep the endpoint; Codex runtime adapter must implement resume/message semantics behind the existing route |
-| `apps/code-agent` | Webhooks | existing task-complete/task-event paths | No endpoint shape changes beyond the new `workerType` value |
+| Service                | Method   | Path                                    | Change                                                                                                     |
+| ---------------------- | -------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `workers/orchestrator` | `GET`    | `/health`                               | Keep the existing endpoint; extend internals only if Codex auth status is surfaced later                   |
+| `workers/orchestrator` | `POST`   | `/tasks/:id/message`                    | Keep the endpoint; Codex runtime adapter must implement resume/message semantics behind the existing route |
+| `apps/code-agent`      | Webhooks | existing task-complete/task-event paths | No endpoint shape changes beyond the new `workerType` value                                                |
 
 ## File Map
 

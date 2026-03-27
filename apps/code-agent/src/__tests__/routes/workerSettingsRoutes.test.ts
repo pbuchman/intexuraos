@@ -876,6 +876,42 @@ describe('Worker Settings Routes', () => {
       expect(getBody.data.workers).toEqual([]);
     });
 
+    it('should preserve default review worker type when deleting the last worker', async () => {
+      const patchResponse = await app.inject({
+        method: 'PATCH',
+        url: '/code/worker-settings/default-review-worker-type',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: { workerType: 'glm' },
+      });
+
+      expect(patchResponse.statusCode).toBe(200);
+
+      const deleteResponse = await app.inject({
+        method: 'DELETE',
+        url: '/code/worker-settings/workers/home-mac',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      expect(deleteResponse.statusCode).toBe(200);
+
+      const getResponse = await app.inject({
+        method: 'GET',
+        url: '/code/worker-settings',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      expect(getResponse.statusCode).toBe(200);
+      const getBody = JSON.parse(getResponse.body) as {
+        success: boolean;
+        data: { workers: unknown[]; defaultReviewWorkerType?: string };
+      };
+      expect(getBody.data.workers).toEqual([]);
+      expect(getBody.data.defaultReviewWorkerType).toBe('glm');
+    });
+
     it('should return 404 for non-existent worker', async () => {
       const response = await app.inject({
         method: 'DELETE',
@@ -1280,9 +1316,9 @@ describe('Worker Settings Routes', () => {
       expect(response.statusCode).toBe(400);
     });
 
-    it('should return 500 when updateDefaultReviewWorkerType fails', async () => {
+    it('should return 500 when updateDefaultWorkerType fails', async () => {
       const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
-      vi.spyOn(workerSettingsRepo, 'updateDefaultReviewWorkerType').mockResolvedValueOnce(
+      vi.spyOn(workerSettingsRepo, 'updateDefaultWorkerType').mockResolvedValueOnce(
         err({ code: 'internal_error' as const, message: 'Firestore write failed' })
       );
 
@@ -1298,6 +1334,37 @@ describe('Worker Settings Routes', () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INTERNAL_ERROR');
       expect(body.error.message).toContain('Firestore write failed');
+    });
+
+    it('should save and return all 4 new default worker type fields via GET', async () => {
+      const fields = [
+        { endpoint: 'default-remediation-worker-type', field: 'defaultRemediationWorkerType', value: 'opus' },
+        { endpoint: 'default-execution-worker-type', field: 'defaultExecutionWorkerType', value: 'glm' },
+        { endpoint: 'default-planning-worker-type', field: 'defaultPlanningWorkerType', value: 'sonnet' },
+        { endpoint: 'default-pull-request-worker-type', field: 'defaultPullRequestWorkerType', value: 'codex' },
+      ] as const;
+
+      for (const { endpoint, value } of fields) {
+        const response = await app.inject({
+          method: 'PATCH',
+          url: `/code/worker-settings/${endpoint}`,
+          headers: { Authorization: 'Bearer valid-token' },
+          payload: { workerType: value },
+        });
+        expect(response.statusCode).toBe(200);
+      }
+
+      const getResponse = await app.inject({
+        method: 'GET',
+        url: '/code/worker-settings',
+        headers: { Authorization: 'Bearer valid-token' },
+      });
+
+      expect(getResponse.statusCode).toBe(200);
+      const getBody = JSON.parse(getResponse.body) as { success: boolean; data: Record<string, unknown> };
+      for (const { field, value } of fields) {
+        expect(getBody.data[field]).toBe(value);
+      }
     });
 
     it('should not include defaultReviewWorkerType in GET when not set', async () => {

@@ -134,7 +134,7 @@ describe('renderEvent', () => {
       const result = renderEvent(event);
       expect(result).toContain('**14:35** -- **Skipped** | NO_ACTION_NEEDED');
       expect(result).toContain('<details>');
-      expect(result).toContain('Cost: $0.042');
+      expect(result).toContain('Triage cost: $0.042');
       expect(result).toContain('This is a documentation-only change.');
       expect(result).toContain('- `readFile(README.md)`');
       expect(result).toContain('- `getDiff()`');
@@ -165,7 +165,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('Cost: $0.010');
+      expect(result).toContain('Triage cost: $0.010');
       expect(result).toContain('Trivial change.');
       // No tool calls section when array is empty
       expect(result).not.toContain('Tool calls');
@@ -188,7 +188,7 @@ describe('renderEvent', () => {
         '**14:35** -- Triage -> **Dispatching review** (`code_review, architecture`)'
       );
       expect(result).toContain('<details>');
-      expect(result).toContain('Cost: $0.123');
+      expect(result).toContain('Triage cost: $0.123');
       expect(result).toContain('Complex PR needs thorough review.');
       expect(result).toContain('- `readFile(src/index.ts)`');
       expect(result).toContain('- `getDiff()`');
@@ -238,8 +238,32 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toBe(
-        '**14:35** -- Task dispatched: [`task_abc123`](https://intexuraos.cloud/#/code-tasks/task_abc123) | opus'
+        '**14:35** -- Implementation dispatched: [`task_abc123`](https://intexuraos.cloud/#/code-tasks/task_abc123) | opus'
       );
+    });
+
+    it('renders review agent type label', () => {
+      useFakeTime();
+      const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'review' });
+      expect(result).toContain('Review dispatched:');
+    });
+
+    it('renders remediation agent type label', () => {
+      useFakeTime();
+      const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'remediation' });
+      expect(result).toContain('Remediation dispatched:');
+    });
+
+    it('renders plan agent type label', () => {
+      useFakeTime();
+      const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'planning' });
+      expect(result).toContain('Plan dispatched:');
+    });
+
+    it('renders PR agent type label', () => {
+      useFakeTime();
+      const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'pull_request' });
+      expect(result).toContain('PR dispatched:');
     });
   });
 
@@ -269,23 +293,7 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toBe(
-        '**14:35** -- Remediation required | dispatched: [`task_rem_123`](https://intexuraos.cloud/#/code-tasks/task_rem_123)'
-      );
-    });
-
-    it('renders remediation required with existing remediation task link', () => {
-      useFakeTime();
-      const event: AutomationEvent = {
-        type: 'remediation_decision',
-        required: true,
-        source: 'review_result',
-        signal: '1',
-        existingTaskId: 'task_existing_456',
-      };
-
-      const result = renderEvent(event);
-      expect(result).toBe(
-        '**14:35** -- Remediation required | recent remediation task already exists: [`task_existing_456`](https://intexuraos.cloud/#/code-tasks/task_existing_456)'
+        '**14:35** -- Remediation dispatched: [`task_rem_123`](https://intexuraos.cloud/#/code-tasks/task_rem_123)'
       );
     });
 
@@ -299,7 +307,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- Remediation required (review signal missing, fail-open)');
+      expect(result).toBe('**14:35** -- Remediation required (dispatch failed, review signal missing)');
     });
 
     it('renders remediation required without task link when no remediation task id is available', () => {
@@ -312,7 +320,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- Remediation required');
+      expect(result).toBe('**14:35** -- Remediation required (dispatch failed)');
     });
   });
 
@@ -359,6 +367,19 @@ describe('renderEvent', () => {
       const result = renderEvent(event);
       expect(result).toBe('**14:35** -- Task started | attempt 2');
     });
+
+    it('omits attempt number on first attempt', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'task_started',
+        taskId: 'task_abc123',
+        workerType: 'opus',
+        attempt: 1,
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe('**14:35** -- Task started');
+    });
   });
 
   describe('task_completed', () => {
@@ -373,7 +394,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Completed** | 8m 42s | [PR #99](https://github.com/pbuchman/intexuraos/pull/99)');
+      expect(result).toContain('**14:35** -- **Implementation completed** | 8m 42s | [PR #99](https://github.com/pbuchman/intexuraos/pull/99)');
     });
 
     it('renders commits with links when repository provided', () => {
@@ -424,7 +445,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Completed** | 1h 2m');
+      expect(result).toContain('**14:35** -- **Implementation completed** | 1h 2m');
       expect(result).not.toContain('PR #');
       expect(result).not.toContain('<details>');
     });
@@ -453,7 +474,25 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Completed** | 0s');
+      expect(result).toContain('**14:35** -- **Implementation completed** | 0s');
+    });
+
+    it('renders review completed label for reviewed status', () => {
+      useFakeTime();
+      const result = renderEvent({ type: 'task_completed', taskId: 'task_1', status: 'reviewed', duration: 60_000 });
+      expect(result).toContain('**Review completed**');
+    });
+
+    it('renders plan completed label for planned status', () => {
+      useFakeTime();
+      const result = renderEvent({ type: 'task_completed', taskId: 'task_1', status: 'planned', duration: 60_000 });
+      expect(result).toContain('**Plan completed**');
+    });
+
+    it('renders generic completed label for unknown status', () => {
+      useFakeTime();
+      const result = renderEvent({ type: 'task_completed', taskId: 'task_1', status: 'unknown', duration: 60_000 });
+      expect(result).toContain('**Completed**');
     });
   });
 
@@ -656,7 +695,7 @@ describe('renderEvent', () => {
       const result = renderEvent(event);
       expect(result).toContain('**14:35** -- **Skipped** | LOW_PRIORITY');
       expect(result).toContain('Rule: PriorityRule');
-      expect(result).toContain('Cost: $0.033');
+      expect(result).toContain('Triage cost: $0.033');
       expect(result).toContain('This is a minor formatting change.');
       expect(result).toContain('- `getDiff()`');
       expect(result).toContain('- `readFile(package.json)`');
@@ -673,7 +712,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('Cost: $1.000');
+      expect(result).toContain('Triage cost: $1.000');
     });
   });
 });

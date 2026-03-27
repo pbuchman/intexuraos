@@ -23,6 +23,10 @@ export interface MaskedWorkerConfig {
 export interface WorkerSettingsResponse {
   workers: MaskedWorkerConfig[];
   defaultReviewWorkerType?: string;
+  defaultRemediationWorkerType?: string;
+  defaultExecutionWorkerType?: string;
+  defaultPlanningWorkerType?: string;
+  defaultPullRequestWorkerType?: string;
 }
 
 /**
@@ -83,9 +87,9 @@ export interface ReorderWorkersResponse {
 }
 
 /**
- * Response from PATCH /code/worker-settings/default-review-worker-type
+ * Response from PATCH /code/worker-settings/default-*-worker-type
  */
-export interface UpdateDefaultReviewWorkerTypeResponse {
+export interface UpdateDefaultWorkerTypeResponse {
   updated: boolean;
 }
 

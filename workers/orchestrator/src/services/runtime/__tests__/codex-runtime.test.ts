@@ -30,9 +30,7 @@ describe('Codex runtime contract', () => {
     expect(events).toContainEqual({
       type: 'log',
       text:
-        '{"type":"thread.started","thread_id":"thread-123"}\n' +
-        '{"type":"turn.started"}\n' +
-        '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"READY"}}\n',
+        '[codex] Session started: thread=thread-123\n' + '[codex] Turn started\n' + '[msg] READY\n',
     });
     expect(events).toContainEqual({
       type: 'runtime_session_started',
@@ -74,26 +72,23 @@ describe('Codex runtime contract', () => {
     });
   });
 
-  it('buffers split Codex result lines and emits completion on flush', () => {
+  it('buffers split Codex result lines and emits formatted output after reassembly', () => {
     const runtime = getRuntime('codex');
     const state = runtime.createAttemptState('codex-task-4', createLogger());
 
+    // First chunk: incomplete JSON — no log event emitted (held in buffer)
     const partialEvents = runtime.processLogChunk(
       state,
       '{"type":"turn.completed","usage":{"input_tokens":1}'
     );
 
-    expect(partialEvents).toEqual([
-      {
-        type: 'log',
-        text: '{"type":"turn.completed","usage":{"input_tokens":1}',
-      },
-    ]);
+    expect(partialEvents).toEqual([]);
 
+    // Second chunk: completes the JSON line — formatted log + completion event
     const remainingEvents = runtime.processLogChunk(state, '}\n');
     expect(remainingEvents).toContainEqual({
       type: 'log',
-      text: '}\n',
+      text: '[codex] Turn completed | input: 1 tokens (0% cached) | output: ? tokens\n',
     });
     expect(remainingEvents).toContainEqual({
       type: 'attempt_completed',
@@ -103,6 +98,36 @@ describe('Codex runtime contract', () => {
     const completionEvents = runtime.flushAttemptState(state);
 
     expect(completionEvents).toEqual([]);
+  });
+
+  it('formats split item.completed JSON across chunks correctly', () => {
+    const runtime = getRuntime('codex');
+    const state = runtime.createAttemptState('codex-task-4b', createLogger());
+
+    const itemJson = JSON.stringify({
+      type: 'item.completed',
+      item: {
+        id: 'item_0',
+        type: 'agent_message',
+        text: 'Hello world',
+      },
+    });
+
+    // Split the JSON roughly in half
+    const midpoint = Math.floor(itemJson.length / 2);
+    const chunk1 = itemJson.slice(0, midpoint);
+    const chunk2 = itemJson.slice(midpoint) + '\n';
+
+    // First chunk: incomplete JSON — no log event
+    const events1 = runtime.processLogChunk(state, chunk1);
+    expect(events1).toEqual([]);
+
+    // Second chunk: completes the line — formatted output
+    const events2 = runtime.processLogChunk(state, chunk2);
+    expect(events2).toContainEqual({
+      type: 'log',
+      text: '[msg] Hello world\n',
+    });
   });
 
   it('falls back to the latest stream error when turn.failed omits its message', () => {
@@ -149,20 +174,19 @@ describe('Codex runtime contract', () => {
     });
   });
 
-  it('keeps buffering incomplete terminal markers without a JSON object prefix', () => {
+  it('flushes incomplete terminal markers without a JSON object prefix as log', () => {
     const runtime = getRuntime('codex');
     const state = runtime.createAttemptState('codex-task-8', createLogger());
 
+    // Incomplete line without newline — held in buffer, no log event yet
     const events = runtime.processLogChunk(state, '"type":"turn.completed"');
 
-    expect(events).toEqual([
-      {
-        type: 'log',
-        text: '"type":"turn.completed"',
-      },
-    ]);
+    expect(events).toEqual([]);
 
-    expect(runtime.flushAttemptState(state)).toEqual([]);
+    // flushState forwards buffered text as a log event rather than silently dropping it
+    expect(runtime.flushAttemptState(state)).toEqual([
+      { type: 'log', text: '"type":"turn.completed"\n' },
+    ]);
   });
 
   it('flushes whitespace-only buffered state without emitting completion', () => {

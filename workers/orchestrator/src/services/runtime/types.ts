@@ -19,3 +19,8 @@ export interface RuntimeAdapter<TState extends RuntimeAttemptState = RuntimeAtte
   processLogChunk(state: TState, chunk: string): RuntimeEvent[];
   flushAttemptState(state: TState): RuntimeEvent[];
 }
+
+export interface RuntimeLogProcessor<TState extends RuntimeAttemptState = RuntimeAttemptState> {
+  processChunk(state: TState, chunk: string): RuntimeEvent[];
+  flushState(state: TState): RuntimeEvent[];
+}

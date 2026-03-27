@@ -69,7 +69,7 @@ These app/worker directories have no Terraform Cloud Run or Cloud Function defin
 | ----------------------- | ----------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `apps/web`              | Web app SPA | N/A      | Deployed as static assets to GCS bucket, NOT Cloud Run. Uses `module "web_app"` + Cloud Build. Correct.                                                                                       |
 | `workers/orchestrator`  | Worker      | CRITICAL | No Cloud Run or Cloud Function module. Runs as a direct process on home-dev VM only. Not deployable to prod via Terraform.                                                                    |
-| `workers/code-worker` | Worker      | CRITICAL | No Cloud Run or Cloud Function module. Worker containers are launched dynamically by the orchestrator (not via Terraform-managed infrastructure). By design — these are ephemeral containers. |
+| `workers/code-worker`   | Worker      | CRITICAL | No Cloud Run or Cloud Function module. Worker containers are launched dynamically by the orchestrator (not via Terraform-managed infrastructure). By design — these are ephemeral containers. |
 
 **Clarification:** `apps/web` is intentionally not a Cloud Run service. It is a Vite SPA deployed to a GCS bucket via `module "web_app"`. This is correct and expected.
 
