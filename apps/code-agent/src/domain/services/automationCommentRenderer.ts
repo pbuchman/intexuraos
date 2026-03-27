@@ -284,26 +284,49 @@ function renderRemediationDecision(
 // Formatting helpers
 // ---------------------------------------------------------------------------
 
-// timeZoneName: 'short' produces named abbreviations (CET, CEST) for European/UTC
-// zones but GMT±N (e.g. "GMT-5") for most other regions — standard en-GB behavior.
-const fmtCache = new Map<string, Intl.DateTimeFormat>();
+// Two-pass timezone abbreviation: en-US produces named abbreviations (EST, PDT)
+// for Americas but GMT±N for Europe; en-GB does the reverse (CET, CEST for Europe
+// but GMT±N for Americas). We try en-US first and fall back to en-GB when the
+// result is a raw GMT offset, maximising human-readable labels across IANA zones.
+const timeFmtCache = new Map<string, Intl.DateTimeFormat>();
 
-function getFormatter(tz: string): Intl.DateTimeFormat {
-  let fmt = fmtCache.get(tz);
+function getTimeFormatter(tz: string): Intl.DateTimeFormat {
+  let fmt = timeFmtCache.get(tz);
   if (fmt === undefined) {
     fmt = new Intl.DateTimeFormat('en-GB', {
       hour: '2-digit',
       minute: '2-digit',
       timeZone: tz,
-      timeZoneName: 'short',
     });
-    fmtCache.set(tz, fmt);
+    timeFmtCache.set(tz, fmt);
   }
   return fmt;
 }
 
 function formatTimestamp(iso: string, timezone?: string): string {
-  return getFormatter(timezone ?? 'UTC').format(new Date(iso));
+  const date = new Date(iso);
+  const tz = timezone ?? 'UTC';
+  const timePart = getTimeFormatter(tz).format(date);
+  const tzName = resolveTimezoneAbbreviation(date, tz);
+  return `${timePart} ${tzName}`;
+}
+
+function extractTzName(date: Date, tz: string, locale: string): string {
+  return (
+    new Intl.DateTimeFormat(locale, { timeZone: tz, timeZoneName: 'short' })
+      .formatToParts(date)
+      .find((p) => p.type === 'timeZoneName')?.value ?? tz
+  );
+}
+
+function resolveTimezoneAbbreviation(date: Date, tz: string): string {
+  const usName = extractTzName(date, tz, 'en-US');
+  if (!usName.startsWith('GMT') || usName === 'GMT') return usName;
+  const gbName = extractTzName(date, tz, 'en-GB');
+  // Both locales produce GMT offsets for some zones (e.g. Asia/Tokyo → GMT+9).
+  // Keep the en-US offset in those cases; the GMT literal guard prevents
+  // misclassifying plain "GMT" (which is a valid named abbreviation).
+  return gbName.startsWith('GMT') ? usName : gbName;
 }
 
 function formatDuration(ms: number): string {

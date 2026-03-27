@@ -128,6 +128,54 @@ describe('useTimezoneAutoDetect', () => {
     expect(mockPatchUserTimezone).not.toHaveBeenCalled();
   });
 
+  it('retries after a transient failure when deps change', async () => {
+    // First call fails
+    mockGetUserTimezoneSettings.mockRejectedValueOnce(new Error('Network error'));
+    // Second call succeeds with no timezone stored
+    mockGetUserTimezoneSettings.mockResolvedValueOnce({
+      userId: 'user-123',
+      timezone: undefined,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    });
+    mockPatchUserTimezone.mockResolvedValue({ timezone: 'America/New_York' });
+
+    // Start with first token getter (triggers first attempt)
+    const tokenGetter1 = vi.fn().mockResolvedValue('test-token');
+    mockUseAuth = (): MockAuthResult => ({
+      isAuthenticated: true,
+      user: { sub: 'user-123' },
+      getAccessToken: tokenGetter1,
+    });
+
+    const { rerender } = renderHook(() => useTimezoneAutoDetect());
+
+    // Wait for the first (failing) attempt
+    await waitFor(() => {
+      expect(mockGetUserTimezoneSettings).toHaveBeenCalledOnce();
+    });
+
+    // Simulate a new getAccessToken reference (e.g. token refresh) which
+    // changes the effect deps, allowing the hook to re-fire since
+    // hasRun.current was reset to false on failure
+    const tokenGetter2 = vi.fn().mockResolvedValue('test-token-2');
+    mockUseAuth = (): MockAuthResult => ({
+      isAuthenticated: true,
+      user: { sub: 'user-123' },
+      getAccessToken: tokenGetter2,
+    });
+
+    rerender();
+
+    await waitFor(() => {
+      expect(mockGetUserTimezoneSettings).toHaveBeenCalledTimes(2);
+    });
+
+    await waitFor(() => {
+      expect(mockPatchUserTimezone).toHaveBeenCalledOnce();
+    });
+  });
+
   it('runs only once even if the component re-renders', async () => {
     mockGetUserTimezoneSettings.mockResolvedValue({
       userId: 'user-123',
