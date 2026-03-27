@@ -282,6 +282,7 @@ describe('TaskDispatcher', () => {
     registerTask: vi.fn(),
     unregisterTask: vi.fn(),
     appendChunk: vi.fn(),
+    appendRawChunk: vi.fn(),
   } as unknown as LogForwarder;
 
   // Mock WebhookClient
