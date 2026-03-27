@@ -1889,7 +1889,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       expect(deps.gitHubPRSummaryRepo.upsert).not.toHaveBeenCalled();
     });
 
-    it('warns and skips mergeability refresh when getPullRequestDetails fails', async () => {
+    it('logs and skips mergeability refresh when getPullRequestDetails fails', async () => {
       const logger = createLogger();
       const deps = createDeps(logger);
       deps.gitHubPRSummaryRepo.findRecentlyActive.mockResolvedValue(ok([
@@ -1907,7 +1907,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       const result = await detector.reconcile(logger);
 
       expect(result).toEqual(expect.objectContaining({ mergeConflictRefreshed: 0 }));
-      expect(logger.warn).toHaveBeenCalledWith(
+      expect(logger.info).toHaveBeenCalledWith(
         expect.objectContaining({ prNumber: 10 }),
         expect.stringContaining('Failed to fetch PR details for mergeability refresh')
       );

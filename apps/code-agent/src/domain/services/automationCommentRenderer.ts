@@ -5,6 +5,7 @@
  * suitable for appending to a single GitHub PR comment.
  */
 
+import type { AgentType } from '../models/codeTask.js';
 import type { AutomationEvent } from '../ports/automationLog.js';
 
 export interface RenderEventOptions {
@@ -44,7 +45,7 @@ export function renderEvent(
       return renderTriageFailed(ts, event);
 
     case 'task_dispatched':
-      return `**${ts}** -- Task dispatched: [\`${event.taskId}\`](https://intexuraos.cloud/#/code-tasks/${event.taskId}) | ${event.workerType}`;
+      return `**${ts}** -- ${agentTypeLabel(event.agentType)} dispatched: [\`${event.taskId}\`](https://intexuraos.cloud/#/code-tasks/${event.taskId}) | ${event.workerType}`;
 
     case 'task_dispatch_failed':
       return renderTaskDispatchFailed(ts, event);
@@ -53,7 +54,9 @@ export function renderEvent(
       return `**${ts}** -- ⚠️ Linear issue creation failed | ${event.error}`;
 
     case 'task_started':
-      return `**${ts}** -- Task started | attempt ${String(event.attempt)}`;
+      return event.attempt > 1
+        ? `**${ts}** -- Task started | attempt ${String(event.attempt)}`
+        : `**${ts}** -- Task started`;
 
     case 'task_completed':
       return renderTaskCompleted(ts, event, options);
@@ -116,7 +119,7 @@ function renderSkipped(
     details.push(`Rule: ${event.ruleName}`);
   }
   if (event.cost !== undefined) {
-    details.push(`Cost: ${formatCost(event.cost)}`);
+    details.push(`Triage cost: ${formatCost(event.cost)}`);
   }
   if (event.reasoning !== undefined) {
     details.push('', event.reasoning);
@@ -143,7 +146,7 @@ function renderTriageDispatch(
     : `**${ts}** -- Triage -> **Dispatching task**`;
 
   const details: string[] = [];
-  details.push(`Cost: ${formatCost(event.cost)}`);
+  details.push(`Triage cost: ${formatCost(event.cost)}`);
   details.push('', event.reasoning);
   if (event.toolCalls.length > 0) {
     details.push('', '**Tool calls:**', ...event.toolCalls.map((tc) => `- \`${tc}\``));
@@ -178,7 +181,8 @@ function renderTaskCompleted(
   event: Extract<AutomationEvent, { type: 'task_completed' }>,
   options?: RenderEventOptions
 ): string {
-  const parts: string[] = [`**${ts}** -- **Completed**`, formatDuration(event.duration)];
+  const completionLabel = completedLabel(event.status);
+  const parts: string[] = [`**${ts}** -- **${completionLabel}**`, formatDuration(event.duration)];
 
   if (event.prUrl !== undefined) {
     const prNumber = extractPrNumber(event.prUrl);
@@ -239,18 +243,14 @@ function renderRemediationDecision(
   }
 
   if (event.taskId !== undefined) {
-    return `**${ts}** -- Remediation required | dispatched: [\`${event.taskId}\`](https://intexuraos.cloud/#/code-tasks/${event.taskId})`;
-  }
-
-  if (event.existingTaskId !== undefined) {
-    return `**${ts}** -- Remediation required | recent remediation task already exists: [\`${event.existingTaskId}\`](https://intexuraos.cloud/#/code-tasks/${event.existingTaskId})`;
+    return `**${ts}** -- Remediation dispatched: [\`${event.taskId}\`](https://intexuraos.cloud/#/code-tasks/${event.taskId})`;
   }
 
   if (event.signal === 'missing') {
-    return `**${ts}** -- Remediation required (review signal missing, fail-open)`;
+    return `**${ts}** -- Remediation required (dispatch failed, review signal missing)`;
   }
 
-  return `**${ts}** -- Remediation required`;
+  return `**${ts}** -- Remediation required (dispatch failed)`;
 }
 
 // ---------------------------------------------------------------------------
@@ -292,4 +292,23 @@ function extractPrNumber(prUrl: string): string {
 
 function wrapDetails(label: string, content: string): string {
   return `<details><summary>${label}</summary>\n\n${content}\n</details>`;
+}
+
+function agentTypeLabel(agentType: AgentType): string {
+  switch (agentType) {
+    case 'review': return 'Review';
+    case 'remediation': return 'Remediation';
+    case 'execution': return 'Implementation';
+    case 'planning': return 'Plan';
+    case 'pull_request': return 'PR';
+  }
+}
+
+function completedLabel(status: 'implemented' | 'reviewed' | 'planned' | 'unknown'): string {
+  switch (status) {
+    case 'reviewed': return 'Review completed';
+    case 'implemented': return 'Implementation completed';
+    case 'planned': return 'Plan completed';
+    default: return 'Completed';
+  }
 }
