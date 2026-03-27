@@ -106,8 +106,21 @@ export interface UserSettings {
   llmTestResults?: LlmTestResults;
   llmPreferences?: LlmPreferences; // User's LLM model preferences
   transcriptionPreferences?: TranscriptionPreferences; // User's transcription provider preferences
+  timezone?: string; // IANA timezone (e.g., "Europe/Berlin")
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Set of valid IANA timezone strings, built from the runtime.
+ */
+const VALID_TIMEZONES: ReadonlySet<string> = new Set(Intl.supportedValuesOf('timeZone'));
+
+/**
+ * Type guard to check if a value is a valid IANA timezone string.
+ */
+export function isValidTimezone(value: string): boolean {
+  return VALID_TIMEZONES.has(value);
 }
 
 /**

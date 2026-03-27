@@ -64,6 +64,9 @@ export const mockUserServiceClient: UserServiceClient = {
   async resolveGitHubUsername() {
     return ok(null);
   },
+  async getUserTimezone() {
+    return undefined;
+  },
 };
 
 /**

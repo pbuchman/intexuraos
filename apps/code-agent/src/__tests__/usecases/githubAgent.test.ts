@@ -119,6 +119,7 @@ function createFakeUserServiceClient(): UserServiceClient {
     getLlmClient: vi.fn().mockResolvedValue(ok({})),
     reportLlmSuccess: vi.fn().mockResolvedValue(undefined),
     resolveGitHubUsername: vi.fn().mockResolvedValue(ok({ userId: 'user-1' })),
+      getUserTimezone: async (): Promise<string | undefined> => undefined,
     getOAuthToken: vi.fn().mockResolvedValue(ok({ accessToken: 'oauth-token-123', email: 'test@test.com' })),
   };
 }

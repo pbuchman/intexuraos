@@ -1101,4 +1101,62 @@ describe('workerSettingsRepository', () => {
     });
   });
 
+  describe('clearDefaultWorkerType', () => {
+    it('should remove a previously set default worker type field', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.updateDefaultWorkerType('user-clear', 'defaultRemediationWorkerType', 'glm');
+
+      // Verify it was set
+      const before = await repo.getSettings('user-clear');
+      expect(before.ok).toBe(true);
+      if (before.ok && before.value !== null) {
+        expect(before.value.defaultRemediationWorkerType).toBe('glm');
+      }
+
+      // Clear it
+      const clearResult = await repo.clearDefaultWorkerType('user-clear', 'defaultRemediationWorkerType');
+      expect(clearResult.ok).toBe(true);
+
+      // Verify it was removed
+      const after = await repo.getSettings('user-clear');
+      expect(after.ok).toBe(true);
+      if (after.ok && after.value !== null) {
+        expect(after.value.defaultRemediationWorkerType).toBeUndefined();
+      }
+    });
+
+    it('should not affect other default worker type fields when clearing one', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.updateDefaultWorkerType('user-clear-independent', 'defaultRemediationWorkerType', 'glm');
+      await repo.updateDefaultWorkerType('user-clear-independent', 'defaultExecutionWorkerType', 'opus');
+
+      await repo.clearDefaultWorkerType('user-clear-independent', 'defaultRemediationWorkerType');
+
+      const after = await repo.getSettings('user-clear-independent');
+      expect(after.ok).toBe(true);
+      if (after.ok && after.value !== null) {
+        expect(after.value.defaultRemediationWorkerType).toBeUndefined();
+        expect(after.value.defaultExecutionWorkerType).toBe('opus');
+      }
+    });
+
+    it('should succeed when no settings document exists', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.clearDefaultWorkerType('user-no-doc', 'defaultReviewWorkerType');
+      expect(result.ok).toBe(true);
+    });
+  });
+
 });

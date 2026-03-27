@@ -23,6 +23,7 @@ export type {
 export {
   createDefaultSettings,
   isTranscriptionProvider,
+  isValidTimezone,
   VALID_TRANSCRIPTION_PROVIDERS,
 } from './models/UserSettings.js';
 export type { SettingsError, SettingsErrorCode } from './models/SettingsError.js';

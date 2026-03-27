@@ -90,6 +90,10 @@ class FakeUserServiceClient implements UserServiceClient {
     return ok(null);
   }
 
+  async getUserTimezone(): Promise<string | undefined> {
+    return undefined;
+  }
+
   setLlmFailure(fail: boolean, error?: UserServiceError): void {
     this.shouldFailLlm = fail;
     if (error) this.llmError = error;

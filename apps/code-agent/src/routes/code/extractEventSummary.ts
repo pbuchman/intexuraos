@@ -47,8 +47,15 @@ export function extractEventSummary(eventType: string, payload: unknown): string
       const body = getString(review, 'body');
       if (state === null) return null;
       const stateUpper = state.toUpperCase();
-      if (body === null || body.trim() === '') return stateUpper;
-      return truncate(`${stateUpper}: ${body}`);
+      const hasBody = body !== null && body.trim() !== '';
+      if (stateUpper === 'APPROVED') {
+        return hasBody ? truncate(`\u2713 ${body}`) : '\u2713';
+      }
+      if (stateUpper === 'CHANGES_REQUESTED') {
+        return hasBody ? truncate(`\u2717 ${body}`) : '\u2717';
+      }
+      // COMMENTED, DISMISSED, PENDING: body speaks for itself; state is redundant
+      return hasBody ? truncate(body) : null;
     }
     case 'pull_request': {
       const pr = payload['pull_request'];
