@@ -397,7 +397,7 @@ describe('createRemediationTask', () => {
     const deps = createFakeDeps({
       workerSettingsRepo: createFakeWorkerSettingsRepo({
         getSettings: vi.fn().mockResolvedValue(ok({
-          defaultReviewWorkerType: 'sonnet',
+          defaultRemediationWorkerType: 'sonnet',
           workers: [],
         })),
       }),
@@ -417,7 +417,7 @@ describe('createRemediationTask', () => {
     const deps = createFakeDeps({
       workerSettingsRepo: createFakeWorkerSettingsRepo({
         getSettings: vi.fn().mockResolvedValue(ok({
-          defaultReviewWorkerType: 'sonnet',
+          defaultRemediationWorkerType: 'sonnet',
           workers: [],
         })),
       }),
