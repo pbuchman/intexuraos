@@ -174,7 +174,7 @@ describe('Codex runtime contract', () => {
     });
   });
 
-  it('keeps buffering incomplete terminal markers without a JSON object prefix', () => {
+  it('flushes incomplete terminal markers without a JSON object prefix as log', () => {
     const runtime = getRuntime('codex');
     const state = runtime.createAttemptState('codex-task-8', createLogger());
 
@@ -183,7 +183,10 @@ describe('Codex runtime contract', () => {
 
     expect(events).toEqual([]);
 
-    expect(runtime.flushAttemptState(state)).toEqual([]);
+    // flushState forwards buffered text as a log event rather than silently dropping it
+    expect(runtime.flushAttemptState(state)).toEqual([
+      { type: 'log', text: '"type":"turn.completed"\n' },
+    ]);
   });
 
   it('flushes whitespace-only buffered state without emitting completion', () => {
