@@ -21,14 +21,14 @@ Use this skill for code-task investigations backed by Firestore data.
    - `intexuraos.cloud` without `dev.` = prod
 3. Never fetch the SPA URL. The page is hash-routed; the task data lives in Firestore.
 4. Confirm the current machine with `uname -n`.
-5. Prefer the bundled wrapper `scripts/fetch-task.sh`, which resolves the local repo and runs the repo script.
+5. Use the bundled wrapper `.codex/skills/debug-code-task/scripts/fetch-task.sh`, which resolves the local repo and runs the Firestore fetcher from the checked-out repo.
 
 ## Task document
 
 Run:
 
 ```bash
-scripts/fetch-task.sh <taskId>
+.codex/skills/debug-code-task/scripts/fetch-task.sh <taskId>
 ```
 
 The wrapper uses the checked-out repo for `firebase-admin` module resolution and expects credentials at `~/.config/gcloud/sa-key.json`.
@@ -48,7 +48,7 @@ Summarize these fields for the user when present:
 Run:
 
 ```bash
-scripts/fetch-task.sh <taskId> --logs-only
+.codex/skills/debug-code-task/scripts/fetch-task.sh <taskId> --logs-only
 ```
 
 Use `--logs` if you want the task document and logs in one call. Logs are ordered by sequence number and printed as `[sequence] message`.
@@ -80,4 +80,5 @@ Derive the time window from the task document timestamps and pad it by about one
 - Never `curl` or web-fetch the code-task SPA URL.
 - Never run the Firestore script from `/tmp`.
 - Never use `node -e` for commands that may include `!`.
+- Treat `.codex/skills/debug-code-task/scripts/fetch-task.sh` as the canonical wrapper path.
 - Stay factual. Show the task document and logs before offering conclusions.

@@ -166,6 +166,22 @@ describe('createRemediationTask', () => {
     expect(createCall?.linearIssueId).toBe('INT-500');
   });
 
+  it('copies prBranch from the existing execution task when found', async () => {
+    const deps = createFakeDeps({
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(ok({ id: 'task-remediation-1' })),
+        findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(
+          ok({ id: 'task-exec-1', linearIssueId: 'INT-500', prBranch: 'feature/existing-pr' }),
+        ),
+      } as unknown as CodeTaskRepository,
+    });
+
+    await createRemediationTask(deps, createDefaultRequest());
+
+    const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0]?.[0];
+    expect(createCall?.prBranch).toBe('feature/existing-pr');
+  });
+
   it('creates task without linearIssueId when no execution task exists', async () => {
     const deps = createFakeDeps();
     // findLatestExecutionTaskByPR returns null (default)
@@ -309,6 +325,26 @@ describe('createRemediationTask', () => {
     );
   });
 
+  it('returns success when automation log recording fails after dispatch', async () => {
+    const deps = createFakeDeps({
+      automationLog: {
+        record: vi.fn().mockRejectedValue(new Error('automation down')),
+      },
+    });
+
+    const result = await createRemediationTask(deps, createDefaultRequest());
+
+    expect(result.ok).toBe(true);
+    await Promise.resolve();
+    expect(deps.logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: expect.any(Error),
+        taskId: 'task-remediation-1',
+      }),
+      'Failed to record automation log for remediation task dispatch',
+    );
+  });
+
   it('continues when findLatestExecutionTaskByPR fails for Linear issue linking', async () => {
     const deps = createFakeDeps({
       codeTaskRepo: {
@@ -330,6 +366,31 @@ describe('createRemediationTask', () => {
 
     const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0]?.[0];
     expect(createCall?.linearIssueId).toBe('INT-999');
+  });
+
+  it('continues when PR continuation lookup fails for an explicit linearIssueId', async () => {
+    const deps = createFakeDeps({
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(ok({ id: 'task-remediation-1' })),
+        findLatestExecutionTaskByPR: vi
+          .fn()
+          .mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'timeout' })),
+      } as unknown as CodeTaskRepository,
+    });
+
+    const result = await createRemediationTask(
+      deps,
+      createDefaultRequest({ linearIssueId: 'INT-999' }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(deps.logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: expect.objectContaining({ code: 'FIRESTORE_ERROR' }),
+        prNumber: 42,
+      }),
+      'Failed to look up existing execution task for remediation PR continuation',
+    );
   });
 
   it('uses user default worker type when request workerType is auto', async () => {

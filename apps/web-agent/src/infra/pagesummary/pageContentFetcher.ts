@@ -138,7 +138,7 @@ export function createPageContentFetcher(
         );
 
         if (markdown === undefined || markdown === '') {
-          logger.warn({ url }, 'No markdown content extracted from page');
+          logger.info({ url }, 'No markdown content extracted from page');
           return err({
             code: 'NO_CONTENT',
             message: 'No content could be extracted from the page',
