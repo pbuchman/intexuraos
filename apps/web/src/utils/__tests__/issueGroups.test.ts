@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CodeTask } from '@/types';
-import { groupByLinearIssue, sortIssueGroups, hasImplementationReadyLabel } from '../issueGroups.js';
+import { groupByLinearIssue, sortIssueGroups, hasImplementationReadyLabel, hasMergeReadyLabel } from '../issueGroups.js';
 import type { IssueGroup, PipelineStepData, SortOption } from '../issueGroups.js';
 
 function createMockTask(overrides: Partial<CodeTask> & { id: string }): CodeTask {
@@ -1150,5 +1150,200 @@ describe('label-gated actionable state', () => {
     });
     const groups = groupByLinearIssue([task]);
     expect(findStep(groups[0]?.pipeline, 'execution')).toBeUndefined();
+  });
+});
+
+describe('hasMergeReadyLabel', () => {
+  it('returns true when ready-to-merge label exists', () => {
+    expect(hasMergeReadyLabel([{ name: 'ready-to-merge' }])).toBe(true);
+  });
+
+  it('returns false when labels is undefined (no fallback)', () => {
+    expect(hasMergeReadyLabel(undefined)).toBe(false);
+  });
+
+  it('returns false when labels is empty (no fallback)', () => {
+    expect(hasMergeReadyLabel([])).toBe(false);
+  });
+
+  it('returns false when labels has items but not ready-to-merge', () => {
+    expect(hasMergeReadyLabel([{ name: 'some-other-label' }])).toBe(false);
+  });
+
+  it('normalizes label names (spaces, underscores, casing)', () => {
+    expect(hasMergeReadyLabel([{ name: 'Ready To Merge' }])).toBe(true);
+    expect(hasMergeReadyLabel([{ name: 'ready_to_merge' }])).toBe(true);
+    expect(hasMergeReadyLabel([{ name: 'READY-TO-MERGE' }])).toBe(true);
+  });
+});
+
+describe('pipeline merge step', () => {
+  const linearIssueSkeleton = {
+    identifier: 'INT-100',
+    title: 'Test',
+    state: { name: 'Todo', type: 'unstarted' as const },
+    priority: 3,
+    assignee: null,
+    url: 'https://linear.app/test',
+    commentCount: 0,
+    lastCommentAt: null,
+  };
+
+  it('shows actionable merge step when execution completed + ready-to-merge label exists', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'planning',
+        status: 'planned',
+        implementationTaskId: 't2',
+        createdAt: '2026-03-07T10:00:00Z',
+        updatedAt: '2026-03-07T10:05:00Z',
+        linearIssue: {
+          ...linearIssueSkeleton,
+          labels: [{ id: 'l1', name: 'ready-to-merge' }],
+        },
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-03-07T11:00:00Z',
+        updatedAt: '2026-03-07T11:05:00Z',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+        linearIssue: {
+          ...linearIssueSkeleton,
+          labels: [{ id: 'l1', name: 'ready-to-merge' }],
+        },
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    const mergeStep = findStep(groups[0]?.pipeline, 'merge');
+    expect(mergeStep).toBeDefined();
+    expect(mergeStep?.state).toBe('actionable');
+    expect(mergeStep?.label).toBe('Merge');
+  });
+
+  it('does NOT show merge step when execution completed but no ready-to-merge label', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'planning',
+        status: 'planned',
+        implementationTaskId: 't2',
+        createdAt: '2026-03-07T10:00:00Z',
+        updatedAt: '2026-03-07T10:05:00Z',
+        linearIssue: {
+          ...linearIssueSkeleton,
+          labels: [{ id: 'l1', name: 'ready-to-implement' }],
+        },
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-03-07T11:00:00Z',
+        updatedAt: '2026-03-07T11:05:00Z',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+        linearIssue: {
+          ...linearIssueSkeleton,
+          labels: [{ id: 'l1', name: 'ready-to-implement' }],
+        },
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(findStep(groups[0]?.pipeline, 'merge')).toBeUndefined();
+  });
+
+  it('does NOT show merge step when execution not yet completed (still running)', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'running',
+        linearIssue: {
+          ...linearIssueSkeleton,
+          labels: [{ id: 'l1', name: 'ready-to-merge' }],
+        },
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(findStep(groups[0]?.pipeline, 'merge')).toBeUndefined();
+  });
+
+  it('aggregate status is needs-action when merge step is actionable', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'planning',
+        status: 'planned',
+        implementationTaskId: 't2',
+        createdAt: '2026-03-07T10:00:00Z',
+        updatedAt: '2026-03-07T10:05:00Z',
+        linearIssue: {
+          ...linearIssueSkeleton,
+          labels: [{ id: 'l1', name: 'ready-to-merge' }],
+        },
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-03-07T11:00:00Z',
+        updatedAt: '2026-03-07T11:05:00Z',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+        linearIssue: {
+          ...linearIssueSkeleton,
+          labels: [{ id: 'l1', name: 'ready-to-merge' }],
+        },
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.aggregateStatus).toBe('needs-action');
+  });
+});
+
+describe('PR URL extraction fix', () => {
+  it('PR URL found when latest task is review (no prUrl) but earlier execution task has prUrl', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+        updatedAt: '2026-03-07T16:00:00Z',
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+        status: 'reviewed',
+        updatedAt: '2026-03-07T17:00:00Z',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.pipeline.pr).toEqual({ url: 'https://github.com/org/repo/pull/42', number: '42' });
   });
 });
