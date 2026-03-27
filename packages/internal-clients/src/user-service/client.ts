@@ -287,6 +287,34 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
       }
     },
 
+    async getUserTimezone(userId: string): Promise<string | undefined> {
+      try {
+        const response = await fetch(
+          `${config.baseUrl}/internal/users/${encodeURIComponent(userId)}/settings`,
+          {
+            headers: { 'X-Internal-Auth': config.internalAuthToken },
+          }
+        );
+
+        if (!response.ok) {
+          logger.warn({ userId, status: response.status }, 'Failed to fetch user timezone');
+          return undefined;
+        }
+
+        const body = (await response.json()) as {
+          success: boolean;
+          data: {
+            timezone?: string;
+          };
+        };
+
+        return body.data.timezone;
+      } catch (error) {
+        logger.warn({ userId, error: getErrorMessage(error) }, 'Failed to fetch user timezone');
+        return undefined;
+      }
+    },
+
     async getOAuthToken(
       userId: string,
       provider: OAuthProvider

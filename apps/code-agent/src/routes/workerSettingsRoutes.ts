@@ -163,6 +163,18 @@ async function handleDefaultWorkerTypeUpdate(
   /* v8 ignore stop @preserve */
   const { workerType } = request.body;
 
+  // "auto" is a special sentinel that clears the override, restoring fallback behavior
+  if (workerType === 'auto') {
+    request.log.info({ userId, field }, `Clearing default ${label} worker type (restoring auto)`);
+    const result = await workerSettingsRepo.clearDefaultWorkerType(userId, field);
+    if (!result.ok) {
+      request.log.error({ error: result.error, field }, `Failed to clear default ${label} worker type`);
+      return await reply.fail('INTERNAL_ERROR', result.error.message);
+    }
+    request.log.info({ userId, field }, `Default ${label} worker type cleared`);
+    return await reply.ok({ updated: true });
+  }
+
   /* v8 ignore start -- ts-type: Fastify schema validates enum — ?? fallback unreachable @preserve */
   if (!isCodeTaskWorkerType(workerType)) {
     return await reply.fail('INVALID_REQUEST', `Invalid worker type: ${workerType}`);

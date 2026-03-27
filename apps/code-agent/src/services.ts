@@ -348,6 +348,7 @@ export function initServices(config: ServiceConfig): void {
     gitHubPRClient,
     prAutomationCommentRepo,
     resolveOAuthToken: async (userId) => await fetchGitHubToken(userServiceClient, userId, logger),
+    userServiceClient,
     logger,
   });
 
