@@ -29,6 +29,9 @@ const DEDUP_WINDOW_MS = 5 * 60 * 1000; // 5 minutes (design line 1544)
 const DEDUP_CANDIDATE_LIMIT = 5; // Fetch up to 5 candidates for app-level active-status filtering
 const ACTIVE_TASK_STATUSES = ['queued', 'dispatched', 'running'] as const;
 
+/** Statuses representing tasks actively consuming worker capacity (excludes queued). */
+const DISPATCHED_OR_RUNNING_STATUSES = ['dispatched', 'running'] as const;
+
 function stripLegacyLinearFields(data: Record<string, unknown>): Record<string, unknown> {
   const {
     linearIssueTitle: _linearIssueTitle,
@@ -526,7 +529,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
         const snapshot = await collection
           // Note: 'queued' excluded — queued tasks don't heartbeat (no updatedAt changes),
           // so they'd be false positives. Queue TTL expiry in drainTaskQueue handles them.
-          .where('status', 'in', ['running', 'dispatched'])
+          .where('status', 'in', DISPATCHED_OR_RUNNING_STATUSES)
           .where('updatedAt', '<', Timestamp.fromDate(staleThreshold))
           .get();
 
@@ -910,6 +913,33 @@ export const createFirestoreCodeTaskRepository = (deps: {
         return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
       } catch (error) {
         logger.error({ error, repository, prNumber }, 'Failed to find active review task by PR');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    hasDispatchedOrRunningForPR: async (
+      repository: string,
+      prNumber: number
+    ): Promise<Result<{ hasActive: boolean; taskId?: string }, RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('repository', '==', repository)
+          .where('prNumber', '==', prNumber)
+          .where('status', 'in', DISPATCHED_OR_RUNNING_STATUSES)
+          .limit(1)
+          .get();
+
+        if (snapshot.empty) {
+          return ok({ hasActive: false });
+        }
+
+        const doc = snapshot.docs[0]!;
+        return ok({ hasActive: true, taskId: doc.id });
+      } catch (error) {
+        logger.error({ error, repository, prNumber }, 'Failed to check dispatched/running task for PR');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,

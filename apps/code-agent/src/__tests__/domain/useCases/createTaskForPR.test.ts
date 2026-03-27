@@ -93,6 +93,9 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async findActiveReviewForPR(): ReturnType<CodeTaskRepository['findActiveReviewForPR']> {
       return ok(null);
     },
+    async hasDispatchedOrRunningForPR(): ReturnType<CodeTaskRepository['hasDispatchedOrRunningForPR']> {
+      return ok({ hasActive: false });
+    },
     async deleteTask(): ReturnType<CodeTaskRepository['deleteTask']> {
       return ok(undefined);
     },
