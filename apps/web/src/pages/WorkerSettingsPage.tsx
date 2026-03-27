@@ -9,7 +9,6 @@ import type {
 } from '@/services/workerSettingsApi.types';
 import { WorkerRow } from '@/components/workers/WorkerRow.js';
 import { AddWorkerForm } from '@/components/workers/AddWorkerForm.js';
-import { DefaultReviewWorkerTypeCard } from '@/components/workers/DefaultReviewWorkerTypeCard.js';
 import { DefaultWorkerTypeCard } from '@/components/workers/DefaultWorkerTypeCard.js';
 import { TimezoneCard } from '@/components/workers/TimezoneCard.js';
 
@@ -25,11 +24,7 @@ export function WorkerSettingsPage(): React.JSX.Element {
     deleteWorker,
     testConnectivity,
     reorderWorkers,
-    updateDefaultReviewWorkerType,
-    updateDefaultRemediationWorkerType,
-    updateDefaultExecutionWorkerType,
-    updateDefaultPlanningWorkerType,
-    updateDefaultPullRequestWorkerType,
+    updateDefaultWorkerType,
   } = useWorkerSettings();
 
   const {
@@ -85,9 +80,12 @@ export function WorkerSettingsPage(): React.JSX.Element {
       ) : null}
 
       <div className="mb-6">
-        <DefaultReviewWorkerTypeCard
+        <DefaultWorkerTypeCard
+          title="Default Review Model"
+          description="Model used for automated PR reviews when no specific model is requested."
+          successMessage="Default review model saved"
           currentType={settings?.defaultReviewWorkerType ?? 'glm'}
-          onUpdate={updateDefaultReviewWorkerType}
+          onUpdate={(wt): Promise<void> => updateDefaultWorkerType('review', wt)}
         />
       </div>
       <div className="mb-6">
@@ -96,7 +94,7 @@ export function WorkerSettingsPage(): React.JSX.Element {
           description="Model used for automated code fixes after reviews find issues."
           successMessage="Default remediation model saved"
           currentType={settings?.defaultRemediationWorkerType ?? 'auto'}
-          onUpdate={updateDefaultRemediationWorkerType}
+          onUpdate={(wt): Promise<void> => updateDefaultWorkerType('remediation', wt)}
         />
       </div>
       <div className="mb-6">
@@ -105,7 +103,7 @@ export function WorkerSettingsPage(): React.JSX.Element {
           description="Model used for implementing approved plans and code tasks."
           successMessage="Default execution model saved"
           currentType={settings?.defaultExecutionWorkerType ?? 'auto'}
-          onUpdate={updateDefaultExecutionWorkerType}
+          onUpdate={(wt): Promise<void> => updateDefaultWorkerType('execution', wt)}
         />
       </div>
       <div className="mb-6">
@@ -114,7 +112,7 @@ export function WorkerSettingsPage(): React.JSX.Element {
           description="Model used for creating implementation plans from task descriptions."
           successMessage="Default planning model saved"
           currentType={settings?.defaultPlanningWorkerType ?? 'auto'}
-          onUpdate={updateDefaultPlanningWorkerType}
+          onUpdate={(wt): Promise<void> => updateDefaultWorkerType('planning', wt)}
         />
       </div>
       <div className="mb-6">
@@ -123,7 +121,7 @@ export function WorkerSettingsPage(): React.JSX.Element {
           description="Model used for tasks triggered by PR comments."
           successMessage="Default pull request model saved"
           currentType={settings?.defaultPullRequestWorkerType ?? 'auto'}
-          onUpdate={updateDefaultPullRequestWorkerType}
+          onUpdate={(wt): Promise<void> => updateDefaultWorkerType('pull-request', wt)}
         />
       </div>
 

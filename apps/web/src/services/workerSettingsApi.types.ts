@@ -87,9 +87,9 @@ export interface ReorderWorkersResponse {
 }
 
 /**
- * Response from PATCH /code/worker-settings/default-review-worker-type
+ * Response from PATCH /code/worker-settings/default-*-worker-type
  */
-export interface UpdateDefaultReviewWorkerTypeResponse {
+export interface UpdateDefaultWorkerTypeResponse {
   updated: boolean;
 }
 
