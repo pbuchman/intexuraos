@@ -105,6 +105,7 @@ describe('submitTaskFeedback', () => {
       findByIdForUser: vi.fn().mockResolvedValue(ok(createMockCompletedTask())),
       findById: vi.fn(),
       hasActiveTaskForLinearIssue: vi.fn().mockResolvedValue(ok({ hasActive: false })),
+      hasDispatchedOrRunningForPR: vi.fn().mockResolvedValue(ok({ hasActive: false })),
       findRecentTasksByLinearIssue: vi.fn().mockResolvedValue(ok([])),
       create: vi.fn().mockResolvedValue(ok(createMockCompletedTask({ id: 'task_followup-456', status: 'dispatched' }))),
       update: vi.fn().mockResolvedValue(ok(createMockCompletedTask({ id: 'task_followup-456' }))),

@@ -36,6 +36,7 @@ describe('submitToExecutionAgent', () => {
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     hasActiveTaskForLinearIssue: ReturnType<typeof vi.fn>;
+    hasDispatchedOrRunningForPR: ReturnType<typeof vi.fn>;
     countQueued: ReturnType<typeof vi.fn>;
   };
   let mockLinearAgentClient: {
@@ -202,6 +203,7 @@ describe('submitToExecutionAgent', () => {
       create: vi.fn(),
       update: vi.fn(),
       hasActiveTaskForLinearIssue: vi.fn(),
+      hasDispatchedOrRunningForPR: vi.fn(),
       countQueued: vi.fn(),
     };
 

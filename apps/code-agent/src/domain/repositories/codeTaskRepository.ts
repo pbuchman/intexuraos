@@ -185,6 +185,16 @@ export interface CodeTaskRepository {
   ): Promise<Result<CodeTask | null, RepositoryError>>;
 
   /**
+   * Check if there is a dispatched or running task (any agent type) for a given PR.
+   * Used by drainTaskQueue for per-PR concurrency guard.
+   * Excludes queued tasks — only tasks actively consuming worker capacity.
+   */
+  hasDispatchedOrRunningForPR(
+    repository: string,
+    prNumber: number
+  ): Promise<Result<{ hasActive: boolean; taskId?: string }, RepositoryError>>;
+
+  /**
    * Find the newest execution-eligible task for a PR.
    * Excludes review and remediation tasks — only returns planning, execution,
    * or pull_request tasks. Used to route generic PR comments to existing tasks.

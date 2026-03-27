@@ -2055,6 +2055,171 @@ describe('firestoreCodeTaskRepository', () => {
     });
   });
 
+  describe('hasDispatchedOrRunningForPR', () => {
+    it('returns hasActive true when dispatched task exists for matching repo and PR', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+      }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, { status: 'dispatched' });
+
+      const result = await repo.hasDispatchedOrRunningForPR('pbuchman/intexuraos', 42);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.hasActive).toBe(true);
+      expect(result.value.taskId).toBe(created.value.id);
+    });
+
+    it('returns hasActive true when running task exists', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+      }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, { status: 'running' });
+
+      const result = await repo.hasDispatchedOrRunningForPR('pbuchman/intexuraos', 42);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.hasActive).toBe(true);
+      expect(result.value.taskId).toBe(created.value.id);
+    });
+
+    it('returns hasActive false when only queued task exists', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.create(createTaskInput({
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+      }));
+
+      const result = await repo.hasDispatchedOrRunningForPR('pbuchman/intexuraos', 42);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.hasActive).toBe(false);
+    });
+
+    it('returns hasActive false when task is completed', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+      }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, { status: 'implemented' });
+
+      const result = await repo.hasDispatchedOrRunningForPR('pbuchman/intexuraos', 42);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.hasActive).toBe(false);
+    });
+
+    it('returns hasActive false for different repository', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({
+        repository: 'other/repo',
+        prNumber: 42,
+      }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, { status: 'dispatched' });
+
+      const result = await repo.hasDispatchedOrRunningForPR('pbuchman/intexuraos', 42);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.hasActive).toBe(false);
+    });
+
+    it('returns hasActive false for different prNumber', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+      }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, { status: 'dispatched' });
+
+      const result = await repo.hasDispatchedOrRunningForPR('pbuchman/intexuraos', 99);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.hasActive).toBe(false);
+    });
+
+    it('returns hasActive true regardless of agentType', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        agentType: 'review',
+        prompt: 'Review PR #42',
+        sanitizedPrompt: 'review pr #42',
+      }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, { status: 'dispatched' });
+
+      const result = await repo.hasDispatchedOrRunningForPR('pbuchman/intexuraos', 42);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.hasActive).toBe(true);
+      expect(result.value.taskId).toBe(created.value.id);
+    });
+  });
+
   describe('findLatestExecutionTaskByPR', () => {
     it('returns newest non-review task for PR', async () => {
       const repo = createFirestoreCodeTaskRepository({
