@@ -208,6 +208,34 @@ describe('Routes', () => {
       );
     });
 
+    it('should accept remediation as agentType', async () => {
+      const taskPayload = {
+        taskId: 'test-remediation',
+        workerType: 'codex',
+        prompt: 'Fix the review findings',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        agentType: 'remediation',
+      };
+
+      const { headers, body } = createSignedRequest(taskPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/tasks',
+        headers,
+        body,
+      });
+
+      expect(response.statusCode).toBe(202);
+      expect(dispatcher.submitTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'test-remediation',
+          agentType: 'remediation',
+        })
+      );
+    });
+
     it('should accept task without planningPr fields', async () => {
       const taskPayload = {
         taskId: 'test-no-planning-pr',

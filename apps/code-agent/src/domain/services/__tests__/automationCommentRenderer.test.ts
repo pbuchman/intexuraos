@@ -243,6 +243,79 @@ describe('renderEvent', () => {
     });
   });
 
+  describe('remediation_decision', () => {
+    it('renders remediation not required', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'remediation_decision',
+        required: false,
+        source: 'review_result',
+        signal: '0',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe('**14:35** -- Remediation not required');
+    });
+
+    it('renders remediation required with dispatched task link', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'remediation_decision',
+        required: true,
+        source: 'review_result',
+        signal: '1',
+        taskId: 'task_rem_123',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe(
+        '**14:35** -- Remediation required | dispatched: [`task_rem_123`](https://intexuraos.cloud/#/code-tasks/task_rem_123)'
+      );
+    });
+
+    it('renders remediation required with existing remediation task link', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'remediation_decision',
+        required: true,
+        source: 'review_result',
+        signal: '1',
+        existingTaskId: 'task_existing_456',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe(
+        '**14:35** -- Remediation required | recent remediation task already exists: [`task_existing_456`](https://intexuraos.cloud/#/code-tasks/task_existing_456)'
+      );
+    });
+
+    it('renders fail-open remediation requirement when review signal is missing', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'remediation_decision',
+        required: true,
+        source: 'review_result',
+        signal: 'missing',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe('**14:35** -- Remediation required (review signal missing, fail-open)');
+    });
+
+    it('renders remediation required without task link when no remediation task id is available', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'remediation_decision',
+        required: true,
+        source: 'review_result',
+        signal: '1',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe('**14:35** -- Remediation required');
+    });
+  });
+
   describe('task_dispatch_failed', () => {
     it('renders error and errorCode in details', () => {
       useFakeTime();

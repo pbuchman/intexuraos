@@ -119,10 +119,12 @@ export interface TaskResult {
   execution_superpowers_requesting_code_review_used?: '0' | '1';
   execution_linear_issue_url?: string;
   review_comments_posted?: string;
+  review_id?: string;
   review_types?: string;
   requirements_tracker_updated?: string;
   gh_actions_status?: string;
   needs_remediation?: string; // '0' or '1'
+  requires_re_review?: string; // '0' or '1'
   rebaseResult?: {
     attempted: boolean;
     success: boolean;

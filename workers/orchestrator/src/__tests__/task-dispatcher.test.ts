@@ -1821,18 +1821,17 @@ describe('TaskDispatcher', () => {
       );
     });
 
-    it('maps remediation agentType to execution for completion verification', async () => {
+    it('uses remediation completion verification for remediation agentType', async () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: true,
         missingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
         agentData: {
-          agentType: 'execution',
+          agentType: 'remediation',
           outcome: 'implemented',
-          superpowers_executing_plans: 'used',
-          superpowers_requesting_code_review: 'not used',
           gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
+          requires_re_review: '1',
           summary: 'Remediation completed',
         },
       });
@@ -1866,7 +1865,7 @@ describe('TaskDispatcher', () => {
 
       expect(singleAttemptCompletionControl.verifier.verify).toHaveBeenCalledWith(
         expect.objectContaining({
-          agentType: 'execution',
+          agentType: 'remediation',
           taskId: 'remediation-maps-to-execution',
         })
       );

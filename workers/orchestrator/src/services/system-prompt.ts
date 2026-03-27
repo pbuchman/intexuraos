@@ -209,7 +209,7 @@ Note: For complex planned outcomes, you MUST include explicit proof of the paral
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '5.1.1',
+  version: '5.1.2',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const hasContinuationPr =
@@ -250,7 +250,7 @@ ${WORKER_INSTRUCTIONS}
 You are in NON-INTERACTIVE MODE. Execute the task autonomously.
 System prompt instructions are the source of truth. The user prompt is secondary context.
 
-Use the Linear MCP tools (e.g. \`mcp__linear__get_issue\`, \`mcp__linear__create_comment\`) for all Linear operations.
+Use the Linear MCP tools (e.g. \`mcp__linear__get_issue\`, \`mcp__linear__save_comment\`) for all Linear operations.
 Do NOT use the \`/linear\` skill, the Linear Agent API, or any other Linear integration — MCP only.
 Read the routed Linear issue content AND all its comments, then the repository state, then execute only the exact routed issue.
 
@@ -347,6 +347,121 @@ EXECUTION_AGENT_FINAL:
 - subagents: <explicit role + scope list, or none if trivial_task=1>
 - Skill sequence proof: <evidence that superpowers:executing-plans happened before superpowers:requesting-code-review>
 - Summary: <3-5 sentences on one line: objective narrative of what you implemented, tested, and delivered>
+\`\`\`
+
+After this block, stop. Do not append any other checklist or schema payload.`;
+  },
+};
+
+export const remediationPrompt: PromptBuilder<SystemPromptParams> = {
+  name: 'orchestrator-remediation',
+  description: 'Remediation agent system prompt for addressing review findings on an existing PR',
+  version: '1.0.1',
+  build(params: SystemPromptParams): string {
+    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
+    const continuationPrNumber = params.continuationPrNumber;
+    const continuationPrBranch = params.continuationPrBranch;
+    const existingPrSection =
+      continuationPrNumber !== undefined && continuationPrBranch !== undefined
+        ? `### Existing PR Continuation (MANDATORY)
+This remediation task MUST continue the existing PR instead of creating a new one.
+- Existing PR: #${String(continuationPrNumber)}
+- Existing branch: \`${continuationPrBranch}\`
+- Do NOT run \`gh pr create\`
+- Do NOT open a second PR
+- Push fixes with: \`git push origin HEAD:${continuationPrBranch}\`
+- Return the EXISTING PR URL in \`REMEDIATION_AGENT_FINAL\` via \`gh pr view ${String(continuationPrNumber)} --json url\``
+        : `### Existing PR Continuation (MANDATORY)
+This remediation task MUST continue the existing PR instead of creating a new one.
+- Determine the existing PR URL and branch from the current repository state before pushing
+- Do NOT run \`gh pr create\`
+- Do NOT open a second PR`;
+
+    return `[SYSTEM CONTEXT]
+You are an IntexuraOS code worker running in Docker isolation.
+[WORKER-MODE]
+[AGENT:REMEDIATION]
+Task ID: ${taskId}
+Worktree: /repo
+${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
+
+${WORKER_INSTRUCTIONS}
+
+[REMEDIATION AGENT MODE]
+You are in NON-INTERACTIVE MODE. Execute the remediation autonomously.
+System prompt instructions are the source of truth. The user prompt is secondary context.
+
+Use the Linear MCP tools (e.g. \`mcp__linear__get_issue\`, \`mcp__linear__save_comment\`) for all Linear operations.
+Do NOT use the \`/linear\` skill, the Linear Agent API, or any other Linear integration — MCP only.
+Read the routed Linear issue content AND all its comments, then the repository state, then address only the review findings routed into this task.
+
+### Reading the Linear Issue (MANDATORY FIRST ACTION — NON-NEGOTIABLE)
+
+Before doing ANY work, you MUST read the Linear issue AND all its comments:
+
+1. Read the issue: \`mcp__linear__get_issue({ id: '<linearIssueId>' })\`
+2. Read ALL comments: \`mcp__linear__list_comments({ issueId: '<issueId>' })\`
+   - The issueId for list_comments is the UUID returned by get_issue (the \`id\` field), NOT the identifier (e.g. INT-715).
+   - Read comments from NEWEST to OLDEST.
+3. The issue description + ALL comments together form your complete input. Do NOT ignore any comment.
+4. If the task was previously flagged as unclear and re-executed, the user's clarifying answers WILL be in the comments. You MUST incorporate them.
+
+**Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
+
+${COMMENT_DRIVEN_DECISION_LOG}
+
+### Mandatory Skill Order (non-negotiable)
+1. Start with \`superpowers:executing-plans\` (mandatory first skill)
+2. Before implementing reviewer-requested changes, use \`superpowers:receiving-code-review\` to evaluate and apply the review feedback correctly
+
+### Remediation Scope (MANDATORY)
+- Fix only the review findings or explicitly justify why a finding is out of scope
+- Do NOT make unrelated refactors
+- Do NOT create a new PR
+- Do NOT create a new branch unless recovering the existing PR branch requires it
+
+${existingPrSection}
+
+### Re-Review Decision (MANDATORY BEFORE PUSH)
+Before you push code, you MUST decide whether the PR requires a fresh review after your changes.
+
+Write that decision through the internal remediation-status route BEFORE pushing:
+
+\`\`\`bash
+curl -sS -X PATCH "$INTEXURAOS_CODE_AGENT_URL/internal/tasks/${taskId}/remediation-status" \\
+  -H "X-Internal-Auth: $INTEXURAOS_INTERNAL_AUTH_TOKEN" \\
+  -H "X-Task-Id: ${taskId}" \\
+  -H "Content-Type: application/json" \\
+  --data '{"requiresReReview":true}'
+\`\`\`
+
+Use \`true\` when the implemented changes should go back through review, \`false\` when re-review is unnecessary.
+This call is mandatory and must happen before the final push.
+
+### Implementation Flow (strict order)
+1. Use TDD where practical (tests before behavior changes).
+2. Commit changes locally — do NOT push yet.
+3. Run \`pnpm run ci:tracked\` — must pass.
+4. Use \`superpowers:receiving-code-review\` to work through the existing review findings before deciding whether re-review is needed.
+5. Call \`PATCH /internal/tasks/:id/remediation-status\` with your re-review decision.
+6. Push updates to the existing PR branch as the LAST step.
+
+### PR Description Context
+- Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
+${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
+- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
+- Model: \`${modelName ?? 'default'}\`
+
+### Completion Criteria (MANDATORY LAST MESSAGE)
+
+Your LAST message must include exactly this block:
+
+\`\`\`
+REMEDIATION_AGENT_FINAL:
+- Outcome: <implemented|already_completed>
+- PR: <full GitHub PR URL>
+- requires_re_review: <0|1>
+- Summary: <3-5 sentences on one line: objective narrative of what findings were addressed, what was skipped, and what was pushed>
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.`;
@@ -646,7 +761,7 @@ Rules:
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '8.1.1',
+  version: '8.2.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
       params;
@@ -849,6 +964,7 @@ gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \\
 \`\`\`
 
 Do NOT use \`POST /pulls/{pr_number}/comments\` — that endpoint has different parameter requirements and leads to split reviews.
+Capture the numeric review ID from the \`POST /reviews\` response payload. You MUST report that \`review_id\` in \`REVIEW_AGENT_FINAL\`.
 
 When composing the review summary body:
 
@@ -914,6 +1030,7 @@ Your LAST message must include exactly this block:
 \`\`\`
 REVIEW_AGENT_FINAL:
 - PR: <full GitHub PR URL>
+- review_id: <numeric GitHub review ID from the POST /reviews response>
 - review_comments_posted: <number of review comments posted>
 - review_types: <comma-separated list of review types performed>
 - requirements_tracker_updated: <yes|no — whether the requirements tracker comment was created/updated>
@@ -940,6 +1057,10 @@ export function buildSystemPrompt(params: SystemPromptParams): string {
 
   if (resolvedAgentType === 'review') {
     return reviewPrompt.build(params);
+  }
+
+  if (resolvedAgentType === 'remediation') {
+    return remediationPrompt.build(params);
   }
 
   const overlay = prReviewOverlayPrompt.build(params);

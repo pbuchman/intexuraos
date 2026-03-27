@@ -1,6 +1,7 @@
 import type { Result, Logger } from '@intexuraos/common-core';
 import { ok } from '@intexuraos/common-core';
 import type { GitHubPREventRepository, RepositoryError } from '../repositories/gitHubPREventRepository.js';
+import type { GitHubPREvent } from '../models/gitHubPREvent.js';
 
 export interface ReviewComment {
   path: string;
@@ -45,6 +46,23 @@ function extractCommentFromEvent(payload: unknown): ReviewComment | null {
   return { path, line, body, author, commentId };
 }
 
+function extractReviewBodyFromEvents(events: GitHubPREvent[], reviewId: number): string | null {
+  for (const event of events) {
+    if (event.eventType !== 'pull_request_review' || event.action !== 'submitted') continue;
+    if (typeof event.payload !== 'object' || event.payload === null) continue;
+    const payload = event.payload as Record<string, unknown>;
+    const review = payload['review'];
+    if (typeof review !== 'object' || review === null) continue;
+    const reviewRecord = review as Record<string, unknown>;
+    if (reviewRecord['id'] !== reviewId) continue;
+    const body = reviewRecord['body'];
+    if (typeof body === 'string' && body.trim() !== '') {
+      return body;
+    }
+  }
+  return null;
+}
+
 const RETRY_DELAY_MS = 2000;
 
 export async function enrichReviewWithComments(
@@ -53,6 +71,13 @@ export async function enrichReviewWithComments(
 ): Promise<Result<EnrichedReview, RepositoryError>> {
   const { logger, gitHubPREventRepo } = deps;
   const { repository, pullRequestNumber, reviewId, reviewBody } = request;
+  let resolvedReviewBody = reviewBody;
+
+  if (resolvedReviewBody === null || resolvedReviewBody.trim() === '') {
+    const reviewEventsResult = await gitHubPREventRepo.findByPullRequest(repository, pullRequestNumber);
+    if (!reviewEventsResult.ok) return reviewEventsResult;
+    resolvedReviewBody = extractReviewBodyFromEvents(reviewEventsResult.value, reviewId);
+  }
 
   const result = await gitHubPREventRepo.findReviewComments(repository, pullRequestNumber, reviewId);
   if (!result.ok) return result;
@@ -61,12 +86,16 @@ export async function enrichReviewWithComments(
     .map((event) => extractCommentFromEvent(event.payload))
     .filter((c): c is ReviewComment => c !== null);
 
-  if (comments.length === 0 && (reviewBody === null || reviewBody === '')) {
+  if (comments.length === 0 && (resolvedReviewBody === null || resolvedReviewBody === '')) {
     logger.debug(
       { repository, pullRequestNumber, reviewId },
       'No inline comments found and review body is empty, retrying after delay'
     );
     await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+
+    const retryReviewEventsResult = await gitHubPREventRepo.findByPullRequest(repository, pullRequestNumber);
+    if (!retryReviewEventsResult.ok) return retryReviewEventsResult;
+    resolvedReviewBody = extractReviewBodyFromEvents(retryReviewEventsResult.value, reviewId);
 
     const retryResult = await gitHubPREventRepo.findReviewComments(repository, pullRequestNumber, reviewId);
     if (!retryResult.ok) return retryResult;
@@ -76,7 +105,7 @@ export async function enrichReviewWithComments(
       .filter((c): c is ReviewComment => c !== null);
   }
 
-  return ok({ reviewBody, comments });
+  return ok({ reviewBody: resolvedReviewBody, comments });
 }
 
 export function formatEnrichedReview(enriched: EnrichedReview): string {
