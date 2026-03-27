@@ -38,7 +38,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- PR opened by @octocat');
+      expect(result).toBe('**14:35 UTC** -- PR opened by @octocat');
     });
 
     it('renders human-readable label for issue_comment.created as link when eventUrl is present', () => {
@@ -54,7 +54,7 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toBe(
-        '**14:35** -- [Comment posted](https://github.com/pbuchman/intexuraos/pull/42#issuecomment-123) by @octocat'
+        '**14:35 UTC** -- [Comment posted](https://github.com/pbuchman/intexuraos/pull/42#issuecomment-123) by @octocat'
       );
     });
 
@@ -71,7 +71,7 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toBe(
-        '**14:35** -- Comment posted by @octocat \u2014 @ignore Automated Code review'
+        '**14:35 UTC** -- Comment posted by @octocat \u2014 @ignore Automated Code review'
       );
     });
 
@@ -89,7 +89,7 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toBe(
-        '**14:35** -- [Review submitted](https://github.com/pbuchman/intexuraos/pull/42#pullrequestreview-1) by @reviewer \u2014 APPROVED: Looks good'
+        '**14:35 UTC** -- [Review submitted](https://github.com/pbuchman/intexuraos/pull/42#pullrequestreview-1) by @reviewer \u2014 APPROVED: Looks good'
       );
     });
 
@@ -104,7 +104,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- `pull_request.labeled` by @octocat');
+      expect(result).toBe('**14:35 UTC** -- `pull_request.labeled` by @octocat');
     });
   });
 
@@ -146,7 +146,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Skipped** | NO_ACTION_NEEDED');
+      expect(result).toContain('**14:35 UTC** -- **Skipped** | NO_ACTION_NEEDED');
       expect(result).toContain('<details>');
       expect(result).toContain('Triage cost: $0.042');
       expect(result).toContain('This is a documentation-only change.');
@@ -163,7 +163,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- **Skipped** | NO_ACTION_NEEDED');
+      expect(result).toBe('**14:35 UTC** -- **Skipped** | NO_ACTION_NEEDED');
       expect(result).not.toContain('<details>');
     });
 
@@ -199,7 +199,7 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toContain(
-        '**14:35** -- Triage \u2192 dispatching review (`code_review, architecture`)'
+        '**14:35 UTC** -- Triage \u2192 dispatching review (`code_review, architecture`)'
       );
       expect(result).not.toContain('->');
       expect(result).not.toContain('**Dispatching review**');
@@ -221,7 +221,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- Triage \u2192 dispatching task');
+      expect(result).toContain('**14:35 UTC** -- Triage \u2192 dispatching task');
       expect(result).not.toContain('->');
       expect(result).not.toContain('**Dispatching task**');
       expect(result).not.toContain('dispatching review');
@@ -238,7 +238,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Triage failed** | dispatch');
+      expect(result).toContain('**14:35 UTC** -- **Triage failed** | dispatch');
       expect(result).toContain('<details>');
       expect(result).toContain('LLM timeout after 30s');
     });
@@ -256,7 +256,7 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toBe(
-        '**14:35** -- Implementation dispatched | opus | [View task](https://intexuraos.cloud/#/code-tasks/task_abc123)'
+        '**14:35 UTC** -- Implementation dispatched | opus | [View task](https://intexuraos.cloud/#/code-tasks/task_abc123)'
       );
     });
 
@@ -304,7 +304,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- Remediation not required');
+      expect(result).toBe('**14:35 UTC** -- Remediation not required');
     });
 
     it('returns null when required=true and taskId present (task_dispatched already logs this)', () => {
@@ -331,7 +331,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- Remediation required (dispatch failed, review signal missing)');
+      expect(result).toBe('**14:35 UTC** -- Remediation required (dispatch failed, review signal missing)');
     });
 
     it('renders remediation required without task link when no remediation task id is available', () => {
@@ -344,7 +344,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- Remediation required (dispatch failed)');
+      expect(result).toBe('**14:35 UTC** -- Remediation required (dispatch failed)');
     });
   });
 
@@ -358,7 +358,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Dispatch failed**');
+      expect(result).toContain('**14:35 UTC** -- **Dispatch failed**');
       expect(result).toContain('<details>');
       expect(result).toContain('Rate limit exceeded');
       expect(result).toContain('RATE_LIMIT');
@@ -372,7 +372,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Dispatch failed**');
+      expect(result).toContain('**14:35 UTC** -- **Dispatch failed**');
       expect(result).toContain('Unknown error');
       expect(result).not.toContain('Code:');
     });
@@ -389,7 +389,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- Task started | attempt 2');
+      expect(result).toBe('**14:35 UTC** -- Task started | attempt 2');
     });
 
     it('omits attempt number on first attempt', () => {
@@ -402,7 +402,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- Task started');
+      expect(result).toBe('**14:35 UTC** -- Task started');
     });
 
     it('renders agentType label when agentType is present (review)', () => {
@@ -416,7 +416,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- Review started');
+      expect(result).toBe('**14:35 UTC** -- Review started');
     });
 
     it('renders agentType label with attempt when agentType is present and attempt > 1', () => {
@@ -430,7 +430,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- Remediation started | attempt 3');
+      expect(result).toBe('**14:35 UTC** -- Remediation started | attempt 3');
     });
 
     it('falls back to "Task" when agentType is absent', () => {
@@ -443,7 +443,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- Task started');
+      expect(result).toBe('**14:35 UTC** -- Task started');
     });
   });
 
@@ -459,7 +459,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Implementation completed** | 8m 42s | [PR #99](https://github.com/pbuchman/intexuraos/pull/99)');
+      expect(result).toContain('**14:35 UTC** -- **Implementation completed** | 8m 42s | [PR #99](https://github.com/pbuchman/intexuraos/pull/99)');
     });
 
     it('renders commits with links when repository provided', () => {
@@ -510,7 +510,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Implementation completed** | 1h 2m');
+      expect(result).toContain('**14:35 UTC** -- **Implementation completed** | 1h 2m');
       expect(result).not.toContain('PR #');
       expect(result).not.toContain('<details>');
     });
@@ -539,7 +539,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Implementation completed** | 0s');
+      expect(result).toContain('**14:35 UTC** -- **Implementation completed** | 0s');
     });
 
     it('renders review completed label for reviewed status', () => {
@@ -615,7 +615,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Failed** | 45s | WORKER_CRASH');
+      expect(result).toContain('**14:35 UTC** -- **Failed** | 45s | WORKER_CRASH');
       expect(result).toContain('<details>');
       expect(result).toContain('Worker crashed');
     });
@@ -629,7 +629,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Failed**');
+      expect(result).toContain('**14:35 UTC** -- **Failed**');
       expect(result).not.toContain(' | 0s');
       expect(result).toContain('Something went wrong');
     });
@@ -645,7 +645,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- **Interrupted** | 2m 0s');
+      expect(result).toBe('**14:35 UTC** -- **Interrupted** | 2m 0s');
     });
 
     it('renders without duration when missing', () => {
@@ -656,7 +656,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- **Interrupted**');
+      expect(result).toBe('**14:35 UTC** -- **Interrupted**');
     });
   });
 
@@ -669,7 +669,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- ⚠️ Linear issue creation failed | Usage limit exceeded');
+      expect(result).toBe('**14:35 UTC** -- ⚠️ Linear issue creation failed | Usage limit exceeded');
     });
   });
 
@@ -682,7 +682,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- Review cancelled (replaced) | task_old456');
+      expect(result).toBe('**14:35 UTC** -- Review cancelled (replaced) | task_old456');
     });
   });
 
@@ -701,7 +701,7 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toBe(
-        '**14:35** -- ⚠️ CI check failed: ESLint | branch: task_abc123 | failure'
+        '**14:35 UTC** -- ⚠️ CI check failed: ESLint | branch: task_abc123 | failure'
       );
     });
   });
@@ -718,7 +718,7 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toBe(
-        '**14:35** -- Fix task dispatched for CI failure | parent: `task_parent456` → fix: `task_fix789`'
+        '**14:35 UTC** -- Fix task dispatched for CI failure | parent: `task_parent456` → fix: `task_fix789`'
       );
     });
   });
@@ -732,7 +732,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- CI failure skip: already_follow_up');
+      expect(result).toBe('**14:35 UTC** -- CI failure skip: already_follow_up');
     });
   });
 
@@ -800,7 +800,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Skipped** | LOW_PRIORITY');
+      expect(result).toContain('**14:35 UTC** -- **Skipped** | LOW_PRIORITY');
       expect(result).toContain('Rule: PriorityRule');
       expect(result).toContain('Triage cost: $0.033');
       expect(result).toContain('This is a minor formatting change.');
@@ -820,6 +820,77 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toContain('Triage cost: $1.000');
+    });
+  });
+
+  describe('timestamp formatting with timezone', () => {
+    it('formats timestamp in UTC with "UTC" label when no timezone provided', () => {
+      const event: AutomationEvent = {
+        type: 'webhook_received',
+        eventType: 'pull_request',
+        action: 'opened',
+        sender: 'octocat',
+        deliveryId: 'abc-123',
+      };
+
+      const result = renderEvent(event, { timestamp: '2026-03-14T14:35:00Z' });
+      expect(result).toBe('**14:35 UTC** -- PR opened by @octocat');
+    });
+
+    it('formats timestamp in user timezone with timezone abbreviation', () => {
+      const event: AutomationEvent = {
+        type: 'webhook_received',
+        eventType: 'pull_request',
+        action: 'opened',
+        sender: 'octocat',
+        deliveryId: 'abc-123',
+      };
+
+      // 14:35 UTC = 15:35 CET (Europe/Berlin in winter / standard time)
+      // Use a January date to ensure standard time (CET), not summer time (CEST)
+      const result = renderEvent(event, {
+        timestamp: '2026-01-15T14:35:00Z',
+        timezone: 'Europe/Berlin',
+      });
+      expect(result).toBe('**15:35 CET** -- PR opened by @octocat');
+    });
+
+    it('defaults to current time when no timestamp provided', () => {
+      useFakeTime(); // Sets to 2026-03-14T14:35:00Z
+      const event: AutomationEvent = {
+        type: 'webhook_received',
+        eventType: 'pull_request',
+        action: 'opened',
+        sender: 'octocat',
+        deliveryId: 'abc-123',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toContain('**14:35 UTC** -- PR opened by @octocat');
+    });
+
+    it('applies timezone to all event types (task_completed)', () => {
+      const event: AutomationEvent = {
+        type: 'task_completed',
+        taskId: 'task_abc',
+        status: 'implemented',
+        duration: 60_000,
+      };
+
+      const result = renderEvent(event, { timestamp: '2026-01-15T14:35:00Z', timezone: 'Europe/Berlin' });
+      expect(result).toContain('**15:35 CET**');
+    });
+
+    it('handles undefined timezone gracefully (falls back to UTC)', () => {
+      const event: AutomationEvent = {
+        type: 'task_started',
+        taskId: 'task_abc',
+        workerType: 'opus',
+        attempt: 1,
+      };
+
+      const result = renderEvent(event, { timestamp: '2026-03-14T14:35:00Z', timezone: undefined });
+      expect(result).toBe('**14:35 UTC** -- Task started');
     });
   });
 });

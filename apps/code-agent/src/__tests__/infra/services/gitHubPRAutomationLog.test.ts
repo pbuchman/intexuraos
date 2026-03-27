@@ -12,6 +12,7 @@ import { createMockLogger } from '../../helpers/mockLogger.js';
 import type { GitHubPRClient, GitHubPRClientError } from '../../../domain/ports/gitHubPRClient.js';
 import type { PRAutomationCommentRepository, PRAutomationComment } from '../../../domain/ports/prAutomationCommentRepository.js';
 import type { AutomationLog, PRRef, AutomationEvent } from '../../../domain/ports/automationLog.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 
 // ---------------------------------------------------------------------------
 // Fakes
@@ -32,6 +33,18 @@ function createFakeGitHubPRClient(overrides?: Partial<GitHubPRClient>): GitHubPR
     mergePullRequest: vi.fn().mockResolvedValue(ok({ sha: 'abc123', merged: true })),
     getCombinedCheckStatus: vi.fn().mockResolvedValue(ok({ state: 'success' })),
     listAllOpenPullRequests: vi.fn().mockResolvedValue(ok([])),
+    ...overrides,
+  };
+}
+
+function createFakeUserServiceClient(overrides?: Partial<UserServiceClient>): UserServiceClient {
+  return {
+    getApiKeys: vi.fn().mockResolvedValue(ok({})),
+    getLlmClient: vi.fn().mockRejectedValue(new Error('not implemented')),
+    reportLlmSuccess: vi.fn().mockResolvedValue(undefined),
+    getOAuthToken: vi.fn().mockResolvedValue(ok({ accessToken: 'token', email: 'test@test.com' })),
+    resolveGitHubUsername: vi.fn().mockResolvedValue(ok(null)),
+    getUserTimezone: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -75,22 +88,25 @@ describe('GitHubPRAutomationLog', () => {
   const logger = createMockLogger();
   let gitHubPRClient: GitHubPRClient;
   let repo: ReturnType<typeof createFakeRepo>;
+  let userServiceClient: UserServiceClient;
   const resolveOAuthToken = vi.fn().mockResolvedValue('ghp_test_token');
   const tokenUserId = 'user-123';
 
   beforeEach(() => {
     gitHubPRClient = createFakeGitHubPRClient();
     repo = createFakeRepo();
+    userServiceClient = createFakeUserServiceClient();
     vi.clearAllMocks();
     resolveOAuthToken.mockResolvedValue('ghp_test_token');
   });
 
-  function createLog(): AutomationLog {
+  function createLog(overrides?: { userServiceClient?: UserServiceClient }): AutomationLog {
     return createGitHubPRAutomationLog({
       gitHubPRClient,
       prAutomationCommentRepo: repo,
       resolveOAuthToken,
       logger,
+      userServiceClient: overrides?.userServiceClient ?? userServiceClient,
     });
   }
 
@@ -493,6 +509,68 @@ describe('GitHubPRAutomationLog', () => {
       const updateIssueComment = gitHubPRClient.updateIssueComment as ReturnType<typeof vi.fn>;
       const [, , , , body] = updateIssueComment.mock.calls[0] as [string, string, string, number, string];
       expect(body).toContain('github.com/pbuchman/intexuraos/commit/abc1234567890');
+    });
+  });
+
+  describe('timezone resolution', () => {
+    it('should fetch user timezone and pass it to renderEvent', async () => {
+      userServiceClient = createFakeUserServiceClient({
+        getUserTimezone: vi.fn().mockResolvedValue('Europe/Berlin'),
+      });
+
+      const log = createLog({ userServiceClient });
+      await log.record(prRef, webhookEvent, tokenUserId);
+
+      expect(userServiceClient.getUserTimezone).toHaveBeenCalledWith('user-123');
+
+      const postPRComment = gitHubPRClient.postPRComment as ReturnType<typeof vi.fn>;
+      const [, , , , body] = postPRComment.mock.calls[0] as [string, string, string, number, string];
+      // Timestamp should include a timezone abbreviation (not just bare HH:MM)
+      expect(body).toMatch(/\*\*\d{2}:\d{2} [A-Z]{2,5}\*\*/);
+    });
+
+    it('should pass timestamp to renderEvent', async () => {
+      const log = createLog();
+      await log.record(prRef, webhookEvent, tokenUserId);
+
+      const postPRComment = gitHubPRClient.postPRComment as ReturnType<typeof vi.fn>;
+      const [, , , , body] = postPRComment.mock.calls[0] as [string, string, string, number, string];
+      // Should have UTC label since no timezone set
+      expect(body).toMatch(/\*\*\d{2}:\d{2} UTC\*\*/);
+    });
+
+    it('should gracefully fall back to UTC when getUserTimezone returns undefined', async () => {
+      userServiceClient = createFakeUserServiceClient({
+        getUserTimezone: vi.fn().mockResolvedValue(undefined),
+      });
+
+      const log = createLog({ userServiceClient });
+      await log.record(prRef, webhookEvent, tokenUserId);
+
+      const postPRComment = gitHubPRClient.postPRComment as ReturnType<typeof vi.fn>;
+      const [, , , , body] = postPRComment.mock.calls[0] as [string, string, string, number, string];
+      expect(body).toMatch(/\*\*\d{2}:\d{2} UTC\*\*/);
+    });
+
+    it('should use stored tokenUserId for timezone lookup on existing comments', async () => {
+      await repo.create({
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        commentId: 100,
+        tokenUserId: 'stored-user',
+        eventCount: 1,
+        createdAt: '2026-03-14T12:00:00.000Z',
+        updatedAt: '2026-03-14T12:00:00.000Z',
+      });
+
+      userServiceClient = createFakeUserServiceClient({
+        getUserTimezone: vi.fn().mockResolvedValue('America/New_York'),
+      });
+
+      const log = createLog({ userServiceClient });
+      await log.record(prRef, webhookEvent);
+
+      expect(userServiceClient.getUserTimezone).toHaveBeenCalledWith('stored-user');
     });
   });
 });
