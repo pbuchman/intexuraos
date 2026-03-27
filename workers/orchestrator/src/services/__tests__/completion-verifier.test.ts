@@ -238,6 +238,38 @@ describe('REVIEW_SCHEMA', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts review data when review_id is omitted', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_comments_posted: '3',
+      review_types: 'code_quality,security',
+      summary: 'Reviewed the PR for code quality and security issues.',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts review data when review_id is empty string', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_id: '',
+      review_comments_posted: '3',
+      review_types: 'code_quality,security',
+      summary: 'Reviewed the PR for code quality and security issues.',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects non-empty non-numeric review_id', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_id: 'not-a-number',
+      review_comments_posted: '3',
+      review_types: 'code_quality,security',
+      summary: 'Reviewed the PR for code quality and security issues.',
+    });
+    expect(result.success).toBe(false);
+  });
+
   it('accepts review_comments_posted as numeric string', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/org/repo/pull/42',
@@ -722,6 +754,40 @@ describe('OrchestratorCompletionVerifier', () => {
         agentType: 'review',
         gh_pr_url: 'https://github.com/org/repo/pull/42',
         review_id: '123',
+        review_comments_posted: '3',
+        review_types: 'code_quality,security',
+        requirements_tracker_updated: '',
+        gh_actions_status: '',
+        needs_remediation: '1',
+        summary: 'Reviewed and posted 3 comments.',
+      });
+    });
+
+    it('returns passed when review agent response omits review_id', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            gh_pr_url: 'https://github.com/org/repo/pull/42',
+            review_comments_posted: '3',
+            review_types: 'code_quality,security',
+            summary: 'Reviewed and posted 3 comments.',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-4b',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'review',
+        rawLogs: 'review logs',
+      });
+      expect(result.passed).toBe(true);
+      expect(result.agentData).toEqual({
+        agentType: 'review',
+        gh_pr_url: 'https://github.com/org/repo/pull/42',
         review_comments_posted: '3',
         review_types: 'code_quality,security',
         requirements_tracker_updated: '',

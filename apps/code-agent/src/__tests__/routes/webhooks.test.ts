@@ -4219,6 +4219,21 @@ describe('POST /internal/webhooks/task-complete', () => {
       );
     });
 
+    it('falls back to verifier summary when review_id is empty', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_empty_review_id' });
+      const payload = makeRemediationPayload(task.id, '1', '');
+
+      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          reviewBody: 'Found 2 issues',
+        }),
+      );
+    });
+
     it('falls back to verifier summary when review_id is not numeric', async () => {
       const task = await createReviewTask({ traceId: 'trace_rem_invalid_review_id' });
       const payload = makeRemediationPayload(task.id, '1', 'not-a-number');

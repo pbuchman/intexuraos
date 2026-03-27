@@ -1260,7 +1260,9 @@ export class TaskDispatcher {
       if (agentData.gh_pr_url !== '') {
         base.prUrl = agentData.gh_pr_url;
       }
-      base.review_id = agentData.review_id;
+      if (agentData.review_id !== undefined) {
+        base.review_id = agentData.review_id;
+      }
       base.review_comments_posted = agentData.review_comments_posted;
       base.review_types = agentData.review_types;
       base.requirements_tracker_updated = agentData.requirements_tracker_updated;

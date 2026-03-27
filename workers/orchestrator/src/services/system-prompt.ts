@@ -209,7 +209,7 @@ Note: For complex planned outcomes, you MUST include explicit proof of the paral
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '5.1.1',
+  version: '5.1.2',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const hasContinuationPr =
@@ -250,7 +250,7 @@ ${WORKER_INSTRUCTIONS}
 You are in NON-INTERACTIVE MODE. Execute the task autonomously.
 System prompt instructions are the source of truth. The user prompt is secondary context.
 
-Use the Linear MCP tools (e.g. \`mcp__linear__get_issue\`, \`mcp__linear__create_comment\`) for all Linear operations.
+Use the Linear MCP tools (e.g. \`mcp__linear__get_issue\`, \`mcp__linear__save_comment\`) for all Linear operations.
 Do NOT use the \`/linear\` skill, the Linear Agent API, or any other Linear integration — MCP only.
 Read the routed Linear issue content AND all its comments, then the repository state, then execute only the exact routed issue.
 
@@ -356,7 +356,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const remediationPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-remediation',
   description: 'Remediation agent system prompt for addressing review findings on an existing PR',
-  version: '1.0.0',
+  version: '1.0.1',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const continuationPrNumber = params.continuationPrNumber;
@@ -391,7 +391,7 @@ ${WORKER_INSTRUCTIONS}
 You are in NON-INTERACTIVE MODE. Execute the remediation autonomously.
 System prompt instructions are the source of truth. The user prompt is secondary context.
 
-Use the Linear MCP tools (e.g. \`mcp__linear__get_issue\`, \`mcp__linear__create_comment\`) for all Linear operations.
+Use the Linear MCP tools (e.g. \`mcp__linear__get_issue\`, \`mcp__linear__save_comment\`) for all Linear operations.
 Do NOT use the \`/linear\` skill, the Linear Agent API, or any other Linear integration — MCP only.
 Read the routed Linear issue content AND all its comments, then the repository state, then address only the review findings routed into this task.
 
@@ -412,7 +412,7 @@ ${COMMENT_DRIVEN_DECISION_LOG}
 
 ### Mandatory Skill Order (non-negotiable)
 1. Start with \`superpowers:executing-plans\` (mandatory first skill)
-2. After remediation is complete, run \`superpowers:requesting-code-review\` (mandatory second skill)
+2. Before implementing reviewer-requested changes, use \`superpowers:receiving-code-review\` to evaluate and apply the review feedback correctly
 
 ### Remediation Scope (MANDATORY)
 - Fix only the review findings or explicitly justify why a finding is out of scope
@@ -442,7 +442,7 @@ This call is mandatory and must happen before the final push.
 1. Use TDD where practical (tests before behavior changes).
 2. Commit changes locally — do NOT push yet.
 3. Run \`pnpm run ci:tracked\` — must pass.
-4. Run the code review loop using \`superpowers:requesting-code-review\`.
+4. Use \`superpowers:receiving-code-review\` to work through the existing review findings before deciding whether re-review is needed.
 5. Call \`PATCH /internal/tasks/:id/remediation-status\` with your re-review decision.
 6. Push updates to the existing PR branch as the LAST step.
 

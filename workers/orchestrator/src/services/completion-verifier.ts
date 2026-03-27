@@ -73,7 +73,7 @@ export interface PullRequestAgentData {
 export interface ReviewAgentData {
   agentType: 'review';
   gh_pr_url: string;
-  review_id: string;
+  review_id?: string | undefined;
   review_comments_posted: string;
   review_types: string;
   requirements_tracker_updated: string;
@@ -130,7 +130,10 @@ export const PULL_REQUEST_SCHEMA = z.object({
 
 export const REVIEW_SCHEMA = z.object({
   gh_pr_url: z.string(),
-  review_id: z.string().regex(/^\d+$/, 'review_id must be a numeric string'),
+  review_id: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().regex(/^\d+$/, 'review_id must be a numeric string').optional()
+  ),
   review_comments_posted: z
     .string()
     .regex(/^\d+$/, 'review_comments_posted must be a numeric string'),
@@ -273,7 +276,7 @@ export function buildReviewPrompt(transcript: string): string {
     ...sharedPreamble(),
     'Fields:',
     '- gh_pr_url: the GitHub Pull Request URL (string, empty string if not found)',
-    '- review_id: numeric review identifier returned by the single POST /reviews API call (string, empty string if not found)',
+    '- review_id: numeric review identifier returned by the single POST /reviews API call (string, omit when not found)',
     '- review_comments_posted: number of review comments posted as a string (e.g., "3")',
     '- review_types: comma-separated list of review types performed (e.g., "code_quality,security")',
     '- requirements_tracker_updated: "yes" if tracker comment was created/updated, "no" if skipped, empty string if no requirements available',
@@ -284,7 +287,7 @@ export function buildReviewPrompt(transcript: string): string {
     'Example valid response:',
     '{"gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","review_id":"321654987","review_comments_posted":"3","review_types":"code_quality,security","requirements_tracker_updated":"yes","gh_actions_status":"all passed","needs_remediation":"1","summary":"The review agent analyzed PR #901 for code quality and security issues. Found 3 issues: a missing null check, an unused import, and a potential XSS vulnerability. All findings were posted as inline review comments."}',
     '',
-    'The review_id must be the numeric GitHub review ID created by the single POST /reviews call, not a comment ID.',
+    'The review_id must be the numeric GitHub review ID created by the single POST /reviews call, not a comment ID. If the transcript does not contain it, omit review_id instead of inventing or blanking it.',
     '',
     'Transcript (last 50 lines):',
     transcript,
