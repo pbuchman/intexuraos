@@ -404,6 +404,47 @@ describe('renderEvent', () => {
       const result = renderEvent(event);
       expect(result).toBe('**14:35** -- Task started');
     });
+
+    it('renders agentType label when agentType is present (review)', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'task_started',
+        taskId: 'task_abc123',
+        workerType: 'opus',
+        attempt: 1,
+        agentType: 'review',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe('**14:35** -- Review started');
+    });
+
+    it('renders agentType label with attempt when agentType is present and attempt > 1', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'task_started',
+        taskId: 'task_abc123',
+        workerType: 'opus',
+        attempt: 3,
+        agentType: 'remediation',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe('**14:35** -- Remediation started | attempt 3');
+    });
+
+    it('falls back to "Task" when agentType is absent', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'task_started',
+        taskId: 'task_abc123',
+        workerType: 'opus',
+        attempt: 1,
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe('**14:35** -- Task started');
+    });
   });
 
   describe('task_completed', () => {
@@ -517,6 +558,48 @@ describe('renderEvent', () => {
       useFakeTime();
       const result = renderEvent({ type: 'task_completed', taskId: 'task_1', status: 'unknown', duration: 60_000 });
       expect(result).toContain('**Completed**');
+    });
+
+    it('renders agentType label when agentType is present (remediation)', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'task_completed',
+        taskId: 'task_abc123',
+        status: 'implemented',
+        duration: 60_000,
+        agentType: 'remediation',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toContain('**Remediation completed**');
+      expect(result).not.toContain('**Implementation completed**');
+    });
+
+    it('renders agentType label when agentType is present (review)', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'task_completed',
+        taskId: 'task_abc123',
+        status: 'reviewed',
+        duration: 60_000,
+        agentType: 'review',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toContain('**Review completed**');
+    });
+
+    it('falls back to status-derived label when agentType is absent', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'task_completed',
+        taskId: 'task_abc123',
+        status: 'implemented',
+        duration: 60_000,
+      };
+
+      const result = renderEvent(event);
+      expect(result).toContain('**Implementation completed**');
     });
   });
 

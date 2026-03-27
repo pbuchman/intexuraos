@@ -13,6 +13,7 @@ import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-htt
 import { getServices } from '../../services.js';
 import { validateWebhookSignature } from '../../infra/webhookValidation.js';
 import type { AutomationEvent } from '../../domain/ports/automationLog.js';
+import type { AgentType } from '../../domain/models/codeTask.js';
 
 // ---------------------------------------------------------------------------
 // Request types
@@ -44,7 +45,7 @@ interface TaskEventWebhookBody {
 // Event mapping
 // ---------------------------------------------------------------------------
 
-function mapToAutomationEvent(body: TaskEventWebhookBody): AutomationEvent {
+function mapToAutomationEvent(body: TaskEventWebhookBody, agentType?: AgentType): AutomationEvent {
   const eventType = body.event as TaskEventType;
 
   switch (eventType) {
@@ -54,6 +55,7 @@ function mapToAutomationEvent(body: TaskEventWebhookBody): AutomationEvent {
         taskId: body.taskId,
         workerType: body.workerType ?? 'unknown',
         attempt: body.attempt ?? 1,
+        ...(agentType !== undefined && { agentType }),
       };
     case 'task_completed': {
       const status = (body.status ?? 'unknown') as Extract<AutomationEvent, { type: 'task_completed' }>['status'];
@@ -62,6 +64,7 @@ function mapToAutomationEvent(body: TaskEventWebhookBody): AutomationEvent {
         taskId: body.taskId,
         status,
         duration: body.duration ?? 0,
+        ...(agentType !== undefined && { agentType }),
       };
       if (body.prUrl !== undefined) {
         (event as { prUrl?: string }).prUrl = body.prUrl;
@@ -196,7 +199,7 @@ export const taskEventRoute: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Step 5: Map and record the event (best-effort)
       const prRef = { repository: task.repository, prNumber: task.prNumber };
-      const automationEvent = mapToAutomationEvent(request.body);
+      const automationEvent = mapToAutomationEvent(request.body, task.agentType);
 
       try {
         await automationLog.record(prRef, automationEvent, task.userId);

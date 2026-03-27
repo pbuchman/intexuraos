@@ -53,10 +53,14 @@ export function renderEvent(
     case 'linear_issue_failed':
       return `**${ts}** -- ⚠️ Linear issue creation failed | ${event.error}`;
 
-    case 'task_started':
+    case 'task_started': {
+      const label = event.agentType !== undefined
+        ? agentTypeLabel(event.agentType)
+        : 'Task';
       return event.attempt > 1
-        ? `**${ts}** -- Task started | attempt ${String(event.attempt)}`
-        : `**${ts}** -- Task started`;
+        ? `**${ts}** -- ${label} started | attempt ${String(event.attempt)}`
+        : `**${ts}** -- ${label} started`;
+    }
 
     case 'task_completed':
       return renderTaskCompleted(ts, event, options);
@@ -195,7 +199,9 @@ function renderTaskCompleted(
   event: Extract<AutomationEvent, { type: 'task_completed' }>,
   options?: RenderEventOptions
 ): string {
-  const completionLabel = completedLabel(event.status);
+  const completionLabel = event.agentType !== undefined
+    ? `${agentTypeLabel(event.agentType)} completed`
+    : completedLabel(event.status);
   const parts: string[] = [`**${ts}** -- **${completionLabel}**`, formatDuration(event.duration)];
 
   if (event.prUrl !== undefined) {
