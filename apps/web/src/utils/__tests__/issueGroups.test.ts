@@ -1155,7 +1155,7 @@ describe('label-gated actionable state', () => {
 
 describe('hasMergeReadyLabel', () => {
   it('returns true when ready-to-merge label exists', () => {
-    expect(hasMergeReadyLabel([{ name: 'ready-to-merge' }])).toBe(true);
+    expect(hasMergeReadyLabel([{ id: 'l1', name: 'ready-to-merge' }])).toBe(true);
   });
 
   it('returns false when labels is undefined (no fallback)', () => {
@@ -1167,13 +1167,20 @@ describe('hasMergeReadyLabel', () => {
   });
 
   it('returns false when labels has items but not ready-to-merge', () => {
-    expect(hasMergeReadyLabel([{ name: 'some-other-label' }])).toBe(false);
+    expect(hasMergeReadyLabel([{ id: 'l1', name: 'some-other-label' }])).toBe(false);
   });
 
   it('normalizes label names (spaces, underscores, casing)', () => {
-    expect(hasMergeReadyLabel([{ name: 'Ready To Merge' }])).toBe(true);
-    expect(hasMergeReadyLabel([{ name: 'ready_to_merge' }])).toBe(true);
-    expect(hasMergeReadyLabel([{ name: 'READY-TO-MERGE' }])).toBe(true);
+    expect(hasMergeReadyLabel([{ id: 'l1', name: 'Ready To Merge' }])).toBe(true);
+    expect(hasMergeReadyLabel([{ id: 'l1', name: 'ready_to_merge' }])).toBe(true);
+    expect(hasMergeReadyLabel([{ id: 'l1', name: 'READY-TO-MERGE' }])).toBe(true);
+  });
+
+  it('handles mixed labels with ready-to-merge present', () => {
+    expect(hasMergeReadyLabel([
+      { id: 'l1', name: 'bug' },
+      { id: 'l2', name: 'ready-to-merge' },
+    ])).toBe(true);
   });
 });
 
