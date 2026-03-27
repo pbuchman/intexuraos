@@ -31,10 +31,17 @@ export interface GitHubPRAutomationLogDeps {
 export function createGitHubPRAutomationLog(deps: GitHubPRAutomationLogDeps): AutomationLog {
   const { gitHubPRClient, prAutomationCommentRepo, resolveOAuthToken, userServiceClient, logger } = deps;
   const pending = new Map<string, Promise<void>>();
+  const timezoneCache = new Map<string, string | undefined>();
+
+  async function resolveTimezone(userId: string): Promise<string | undefined> {
+    if (timezoneCache.has(userId)) return timezoneCache.get(userId);
+    const tz = await userServiceClient.getUserTimezone(userId);
+    timezoneCache.set(userId, tz);
+    return tz;
+  }
 
   async function doRecord(prRef: PRRef, event: AutomationEvent, tokenUserId?: string): Promise<void> {
     try {
-      // For existing comments, use stored tokenUserId; for new comments, require caller-provided tokenUserId
       const existing = await prAutomationCommentRepo.get(prRef.repository, prRef.prNumber);
       const effectiveUserId = existing?.tokenUserId ?? tokenUserId;
 
@@ -64,11 +71,10 @@ export function createGitHubPRAutomationLog(deps: GitHubPRAutomationLogDeps): Au
         return;
       }
       const { owner, repo } = parsed;
-      const timezone = await userServiceClient.getUserTimezone(effectiveUserId);
+      const timezone = await resolveTimezone(effectiveUserId);
       const timestamp = new Date().toISOString();
       const eventLine = renderEvent(event, { repository: prRef.repository, timezone, timestamp });
 
-      // Filtered events (e.g., deterministic skips) return null — skip recording entirely
       if (eventLine === null) {
         return;
       }

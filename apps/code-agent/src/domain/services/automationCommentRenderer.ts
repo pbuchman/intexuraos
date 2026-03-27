@@ -284,18 +284,26 @@ function renderRemediationDecision(
 // Formatting helpers
 // ---------------------------------------------------------------------------
 
-// Note: timeZoneName: 'short' produces named abbreviations (CET, CEST, GMT) for
-// European/UTC zones but GMT±N (e.g. "GMT-5") for most other regions. This is
-// standard Intl.DateTimeFormat behavior with the en-GB locale.
+// timeZoneName: 'short' produces named abbreviations (CET, CEST) for European/UTC
+// zones but GMT±N (e.g. "GMT-5") for most other regions — standard en-GB behavior.
+const fmtCache = new Map<string, Intl.DateTimeFormat>();
+
+function getFormatter(tz: string): Intl.DateTimeFormat {
+  let fmt = fmtCache.get(tz);
+  if (fmt === undefined) {
+    fmt = new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: tz,
+      timeZoneName: 'short',
+    });
+    fmtCache.set(tz, fmt);
+  }
+  return fmt;
+}
+
 function formatTimestamp(iso: string, timezone?: string): string {
-  const date = new Date(iso);
-  const fmt = new Intl.DateTimeFormat('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: timezone ?? 'UTC',
-    timeZoneName: 'short',
-  });
-  return fmt.format(date);
+  return getFormatter(timezone ?? 'UTC').format(new Date(iso));
 }
 
 function formatDuration(ms: number): string {
