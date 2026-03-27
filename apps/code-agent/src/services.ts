@@ -310,7 +310,8 @@ export function initServices(config: ServiceConfig): void {
         logger,
       });
 
-  const metricsClient = isE2eMode ? createNoOpMetricsClient() : createMetricsClient();
+  const enableMetrics = process.env['INTEXURAOS_ENABLE_METRICS'] === 'true';
+  const metricsClient = isE2eMode || !enableMetrics ? createNoOpMetricsClient() : createMetricsClient();
 
   const whatsappPublisher = isE2eMode
     ? createE2eWhatsAppPublisher()

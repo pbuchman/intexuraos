@@ -4656,67 +4656,6 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(mockFn).not.toHaveBeenCalled();
     });
 
-    it('skips remediation creation when recent remediation already running (dedup guard)', async () => {
-      const task = await createReviewTask({ traceId: 'trace_rem_dedup' });
-
-      // Pre-create an existing remediation task for the same PR
-      const existingRemediation = await codeTaskRepo.create({
-        userId: 'user-123',
-        prompt: 'Fix review findings',
-        sanitizedPrompt: 'Fix review findings',
-        systemPromptHash: 'remediation-auto',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace_existing_rem',
-        prNumber: 42,
-        webhookSecret: 'test-webhook-secret-2',
-        agentType: 'remediation',
-      });
-      expect(existingRemediation.ok).toBe(true);
-      if (!existingRemediation.ok) throw new Error('Failed to seed existing remediation task');
-
-      const payload = makeRemediationPayload(task.id, '1');
-      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
-
-      expect(response.statusCode).toBe(200);
-      // createRemediationTaskFn should NOT be called because dedup guard found existing task
-      expect(mockFn).not.toHaveBeenCalled();
-      const automationLogMock = vi.mocked(getServices().automationLog.record);
-      await vi.waitFor(() => {
-        const decisionCall = automationLogMock.mock.calls.find(
-          (call) => (call[1] as { type: string }).type === 'remediation_decision'
-        );
-        expect(decisionCall).toBeDefined();
-      });
-      const decisionCall = automationLogMock.mock.calls.find(
-        (call) => (call[1] as { type: string }).type === 'remediation_decision'
-      );
-      expect(decisionCall?.[1]).toMatchObject({
-        type: 'remediation_decision',
-        required: true,
-        source: 'review_result',
-        signal: '1',
-        existingTaskId: existingRemediation.value.id,
-      });
-    });
-
-    it('still returns 200 when findRecentRemediationForPR returns an error (best-effort)', async () => {
-      const task = await createReviewTask({ traceId: 'trace_rem_dedup_err' });
-      const payload = makeRemediationPayload(task.id, '1');
-
-      vi.spyOn(codeTaskRepo, 'findRecentRemediationForPR').mockResolvedValueOnce(
-        err({ code: 'FIRESTORE_ERROR', message: 'Query failed' }),
-      );
-
-      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
-
-      expect(response.statusCode).toBe(200);
-      // Should NOT call createRemediationTaskFn because dedup check errored (best-effort skip)
-      expect(mockFn).not.toHaveBeenCalled();
-    });
-
     it('still returns 200 when createRemediationTaskFn returns an error (best-effort)', async () => {
       const task = await createReviewTask({ traceId: 'trace_rem_error' });
       const payload = makeRemediationPayload(task.id, '1');

@@ -1387,7 +1387,7 @@ export function createDetectMergeConflictsOnPush(
                 conflictWorkflowsTriggered += transitionResult.conflictWorkflowsTriggered;
               }
             } else {
-              logger.warn(
+              logger.info(
                 { error: detailsResult.error, prNumber: existingSummary.pullRequestNumber, repository },
                 'Failed to fetch PR details for mergeability refresh during reconcile; skipping'
               );
