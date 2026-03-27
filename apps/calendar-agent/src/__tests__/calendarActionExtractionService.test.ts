@@ -59,6 +59,7 @@ describe('calendarActionExtractionService', () => {
           reportLlmSuccess: vi.fn(),
           getOAuthToken: vi.fn(),
           resolveGitHubUsername: vi.fn().mockResolvedValue(ok(null)),
+      getUserTimezone: async (): Promise<string | undefined> => undefined,
         };
       case 'no_api_key':
         return {
@@ -69,6 +70,7 @@ describe('calendarActionExtractionService', () => {
           reportLlmSuccess: vi.fn(),
           getOAuthToken: vi.fn(),
           resolveGitHubUsername: vi.fn().mockResolvedValue(ok(null)),
+      getUserTimezone: async (): Promise<string | undefined> => undefined,
         };
       case 'api_error':
         return {
@@ -77,6 +79,7 @@ describe('calendarActionExtractionService', () => {
           reportLlmSuccess: vi.fn(),
           getOAuthToken: vi.fn(),
           resolveGitHubUsername: vi.fn().mockResolvedValue(ok(null)),
+      getUserTimezone: async (): Promise<string | undefined> => undefined,
         };
       case 'network_error':
         return {
@@ -87,6 +90,7 @@ describe('calendarActionExtractionService', () => {
           reportLlmSuccess: vi.fn(),
           getOAuthToken: vi.fn(),
           resolveGitHubUsername: vi.fn().mockResolvedValue(ok(null)),
+      getUserTimezone: async (): Promise<string | undefined> => undefined,
         };
       case 'invalid_model':
         return {
@@ -97,6 +101,7 @@ describe('calendarActionExtractionService', () => {
           reportLlmSuccess: vi.fn(),
           getOAuthToken: vi.fn(),
           resolveGitHubUsername: vi.fn().mockResolvedValue(ok(null)),
+      getUserTimezone: async (): Promise<string | undefined> => undefined,
         };
     }
   }
