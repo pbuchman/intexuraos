@@ -2148,11 +2148,16 @@ export class TaskDispatcher {
   private async handleRuntimeEvents(task: Task, events: RuntimeEvent[]): Promise<void> {
     let shouldPersistTask = false;
     const taskId = task.taskId;
+    const runtimeName = task.runtime ?? WORKER_TYPES[task.workerType].runtime;
 
     for (const event of events) {
       if (event.type === 'log') {
         if (event.text !== '') {
-          this.logForwarder.appendChunk(taskId, event.text);
+          if (runtimeName === 'codex') {
+            this.logForwarder.appendRawChunk(taskId, event.text);
+          } else {
+            this.logForwarder.appendChunk(taskId, event.text);
+          }
         }
         continue;
       }

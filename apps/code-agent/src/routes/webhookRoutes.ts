@@ -5,7 +5,13 @@ import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-htt
 import { extractOrGenerateTraceId } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
 import { validateWebhookSignature, validateOrchestratorSignature } from '../infra/webhookValidation.js';
-import { formatLogChunk, createFormatterState, type FormatterState } from '../domain/services/logFormatter.js';
+import {
+  formatLogChunkForRuntime,
+  flushLogChunkFormatterForRuntime,
+  createFormatterState,
+  type FormatterState,
+  type LogRuntime,
+} from '../domain/services/logFormatter.js';
 import { loadConfig } from '../config.js';
 import type { TurnMetrics } from '../domain/models/turnMetrics.js';
 import { formatMetricsLogLines } from '../domain/formatters/metricsLogFormatter.js';
@@ -71,10 +77,46 @@ function recordRemediationDecision(params: {
   });
 }
 
+function resolveLogRuntime(workerType: string): LogRuntime {
+  return workerType.startsWith('codex') ? 'codex' : 'claude';
+}
+
+interface TaskFormatterEntry {
+  runtime: LogRuntime;
+  state: FormatterState;
+  lastSequence: number;
+}
+
 export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // Per-task formatter state: persists tool_use_id→name mappings across HTTP requests
   // so Read suppression works even when assistant + tool_result land in different log chunks
-  const taskFormatterStates = new Map<string, FormatterState>();
+  const taskFormatterStates = new Map<string, TaskFormatterEntry>();
+
+  async function flushPendingTaskLogLines(taskId: string): Promise<void> {
+    const formatterEntry = taskFormatterStates.get(taskId);
+    if (formatterEntry === undefined) return;
+
+    taskFormatterStates.delete(taskId);
+
+    const pendingLines = flushLogChunkFormatterForRuntime(
+      formatterEntry.runtime,
+      formatterEntry.lastSequence + 1,
+      Timestamp.now(),
+      formatterEntry.state,
+    );
+
+    if (pendingLines.length === 0) {
+      return;
+    }
+
+    const lineResult = await getServices().logLineRepo.storeBatch(taskId, pendingLines);
+    if (!lineResult.ok) {
+      getServices().logger.error(
+        { taskId, error: lineResult.error },
+        'Failed to flush pending log lines on task completion',
+      );
+    }
+  }
 
   // ============================================================
   // INTERNAL WEBHOOK ROUTES (X-Internal-Auth + HMAC Signature)
@@ -1323,6 +1365,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           },
           'Task marked as completed'
         );
+        await flushPendingTaskLogLines(taskId);
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
@@ -1347,6 +1390,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               return reply.fail('INTERNAL_ERROR', failResult.error.message);
             }
             await cleanupLockIfPR();
+            await flushPendingTaskLogLines(taskId);
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
           }
@@ -1401,6 +1445,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
 
         request.log.info({ taskId, error: taskError }, 'Task marked as failed');
+        await flushPendingTaskLogLines(taskId);
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
@@ -1461,6 +1506,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
 
         request.log.info({ taskId }, 'Task marked as interrupted');
+        await flushPendingTaskLogLines(taskId);
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
@@ -1517,6 +1563,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
 
         request.log.info({ taskId }, 'Task marked as cancelled');
+        await flushPendingTaskLogLines(taskId);
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
@@ -1638,8 +1685,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // First log delivery for this task — task might still be dispatched.
       // Update to running and mirror to action.
+      let formatterEntry = taskFormatterStates.get(taskId);
       /* v8 ignore start -- test-infra: FakeFirestore cannot simulate stateful multi-request log delivery with dispatched task @preserve */
-      if (!taskFormatterStates.has(taskId)) {
+      if (formatterEntry === undefined) {
         const taskResult = await codeTaskRepo.findById(taskId);
         if (taskResult.ok && taskResult.value.status === 'dispatched') {
           await codeTaskRepo.update(taskId, { status: 'running' });
@@ -1649,6 +1697,15 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             taskStatus: 'running',
             traceId: extractOrGenerateTraceId(request.headers),
           });
+        }
+        if (taskResult.ok) {
+          const resolvedFormatterEntry: TaskFormatterEntry = {
+            runtime: resolveLogRuntime(taskResult.value.workerType),
+            state: createFormatterState(),
+            lastSequence: 0,
+          };
+          formatterEntry = resolvedFormatterEntry;
+          taskFormatterStates.set(taskId, resolvedFormatterEntry);
         }
       }
       /* v8 ignore stop @preserve */
@@ -1669,12 +1726,19 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return reply.fail('INTERNAL_ERROR', storeResult.error.message);
       }
 
-      const state = taskFormatterStates.get(taskId) ?? createFormatterState();
+      const formatter = formatterEntry ?? {
+        runtime: 'claude' as const,
+        state: createFormatterState(),
+        lastSequence: chunks[chunks.length - 1]?.sequence ?? 0,
+      };
       const allLines = chunks.flatMap((chunk) => {
         const chunkTimestamp = Timestamp.fromDate(new Date(chunk.timestamp));
-        return formatLogChunk(chunk.content, chunk.sequence, chunkTimestamp, state);
+        return formatLogChunkForRuntime(formatter.runtime, chunk.content, chunk.sequence, chunkTimestamp, formatter.state);
       });
-      taskFormatterStates.set(taskId, state);
+      formatter.lastSequence = chunks[chunks.length - 1]?.sequence ?? formatter.lastSequence;
+      if (formatterEntry !== undefined) {
+        taskFormatterStates.set(taskId, formatter);
+      }
 
       if (allLines.length > 0) {
         const lineResult = await logLineRepo.storeBatch(taskId, allLines);
