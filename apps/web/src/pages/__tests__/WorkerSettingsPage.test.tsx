@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockUseWorkerSettings } = vi.hoisted(() => ({
+const { mockUseWorkerSettings, mockDefaultWorkerTypeCard } = vi.hoisted(() => ({
   mockUseWorkerSettings: vi.fn(),
+  mockDefaultWorkerTypeCard: vi.fn(),
 }));
 
 vi.mock('@/hooks', () => ({
@@ -25,6 +26,16 @@ vi.mock('@/components/workers/AddWorkerForm.js', () => ({
   AddWorkerForm: (): null => null,
 }));
 
+vi.mock('@/components/workers/DefaultWorkerTypeCard.js', () => ({
+  DefaultWorkerTypeCard: (props: {
+    title: string;
+    currentType: string;
+  }): React.JSX.Element => {
+    mockDefaultWorkerTypeCard(props);
+    return <div>{props.title}</div>;
+  },
+}));
+
 import { WorkerSettingsPage } from '../WorkerSettingsPage.js';
 
 describe('WorkerSettingsPage', () => {
@@ -44,13 +55,13 @@ describe('WorkerSettingsPage', () => {
   });
 
   it('shows auto as the selected review worker type when no default is saved', () => {
-    const markup = renderToStaticMarkup(<WorkerSettingsPage />);
+    renderToStaticMarkup(<WorkerSettingsPage />);
 
-    expect(markup).toMatch(
-      /<button[^>]*border-blue-500 bg-blue-50 text-blue-700[^>]*>\s*Auto\s*<\/button>/
-    );
-    expect(markup).toMatch(
-      /<button[^>]*border-slate-200 bg-white text-slate-700 hover:bg-slate-50[^>]*>\s*GLM\s*<\/button>/
+    expect(mockDefaultWorkerTypeCard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Default Review Model',
+        currentType: 'auto',
+      })
     );
   });
 });
