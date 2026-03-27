@@ -201,7 +201,12 @@ function parseCodexLogLine(state: CodexAttemptState, line: string): RuntimeEvent
   }
 }
 
-function processBufferedLines(state: CodexAttemptState, chunk: string): RuntimeEvent[] {
+interface BufferResult {
+  completeText: string;
+  events: RuntimeEvent[];
+}
+
+function processBufferedLines(state: CodexAttemptState, chunk: string): BufferResult {
   const buffered = `${state.logBuffer}${chunk}`;
   const lines = buffered.split('\n');
   /* v8 ignore start -- ts-type: split() always returns at least one element, but pop() remains nullable in types @preserve */
@@ -210,7 +215,10 @@ function processBufferedLines(state: CodexAttemptState, chunk: string): RuntimeE
   state.logBuffer = remainder;
 
   const events: RuntimeEvent[] = [];
+  const completedLines: string[] = [];
+
   for (const line of lines) {
+    completedLines.push(line);
     events.push(...parseCodexLogLine(state, line));
   }
 
@@ -219,6 +227,7 @@ function processBufferedLines(state: CodexAttemptState, chunk: string): RuntimeE
       const jsonStart = remainder.indexOf('{');
       if (jsonStart !== -1) {
         JSON.parse(remainder.slice(jsonStart));
+        completedLines.push(remainder);
         events.push(...parseCodexLogLine(state, remainder));
         state.logBuffer = '';
       }
@@ -227,17 +236,24 @@ function processBufferedLines(state: CodexAttemptState, chunk: string): RuntimeE
     }
   }
 
-  return events;
+  const completeText = completedLines.length > 0 ? completedLines.join('\n') + '\n' : '';
+
+  return { completeText, events };
 }
 
 export const codexLogProcessor: RuntimeLogProcessor<CodexAttemptState> = {
   processChunk(state, chunk) {
-    const events: RuntimeEvent[] = [];
-    if (chunk !== '') {
-      events.push({ type: 'log', text: formatCodexMessages(chunk) });
+    if (chunk === '') return [];
+
+    const { completeText, events } = processBufferedLines(state, chunk);
+    const result: RuntimeEvent[] = [];
+
+    if (completeText !== '') {
+      result.push({ type: 'log', text: formatCodexMessages(completeText) });
     }
-    events.push(...processBufferedLines(state, chunk));
-    return events;
+    result.push(...events);
+
+    return result;
   },
   flushState(state) {
     if (state.logBuffer.trim() === '') {
