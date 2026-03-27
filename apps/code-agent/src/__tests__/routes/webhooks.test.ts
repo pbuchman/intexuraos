@@ -3979,7 +3979,93 @@ describe('POST /internal/webhooks/task-complete', () => {
       return result.value;
     }
 
-    function makeRemediationPayload(taskId: string, needs_remediation?: string): { taskId: string; status: 'completed'; result: { summary: string; review_comments_posted: string; review_types: string; needs_remediation?: string } } {
+    async function saveReviewEvent(reviewId: number, body: string | null): Promise<void> {
+      const saveResult = await getServices().gitHubPREventRepo.save({
+        githubEventId: reviewId,
+        deliveryId: `delivery-review-${String(reviewId)}`,
+        repository: 'pbuchman/intexuraos',
+        repositoryId: 1,
+        pullRequestNumber: 42,
+        pullRequestId: 420,
+        eventType: 'pull_request_review',
+        action: 'submitted',
+        senderLogin: 'intexuraos-code-worker[bot]',
+        senderId: 1000,
+        senderType: 'Bot',
+        prAuthorLogin: 'pbuchman',
+        title: null,
+        body,
+        state: 'open',
+        baseBranch: 'development',
+        mergedAt: null,
+        createdAt: new Date('2026-03-27T00:00:00Z'),
+        payload: {
+          review: {
+            id: reviewId,
+            body,
+          },
+        },
+      });
+      if (!saveResult.ok) throw new Error(`Failed to save review event: ${saveResult.error.message}`);
+    }
+
+    async function saveReviewCommentEvent(
+      reviewId: number,
+      commentId: number,
+      path: string,
+      line: number,
+      body: string,
+    ): Promise<void> {
+      const saveResult = await getServices().gitHubPREventRepo.save({
+        githubEventId: commentId,
+        deliveryId: `delivery-comment-${String(commentId)}`,
+        repository: 'pbuchman/intexuraos',
+        repositoryId: 1,
+        pullRequestNumber: 42,
+        pullRequestId: 420,
+        eventType: 'pull_request_review_comment',
+        action: 'created',
+        senderLogin: 'intexuraos-code-worker[bot]',
+        senderId: 1000,
+        senderType: 'Bot',
+        prAuthorLogin: 'pbuchman',
+        title: null,
+        body,
+        state: 'open',
+        baseBranch: 'development',
+        mergedAt: null,
+        createdAt: new Date('2026-03-27T00:00:01Z'),
+        payload: {
+          comment: {
+            id: commentId,
+            pull_request_review_id: reviewId,
+            path,
+            line,
+            body,
+            user: { login: 'intexuraos-code-worker[bot]' },
+          },
+        },
+      });
+      if (!saveResult.ok) {
+        throw new Error(`Failed to save review comment event: ${saveResult.error.message}`);
+      }
+    }
+
+    function makeRemediationPayload(
+      taskId: string,
+      needs_remediation?: string,
+      review_id?: string,
+    ): {
+      taskId: string;
+      status: 'completed';
+      result: {
+        summary: string;
+        review_comments_posted: string;
+        review_types: string;
+        needs_remediation?: string;
+        review_id?: string;
+      };
+    } {
       return {
         taskId,
         status: 'completed' as const,
@@ -3988,6 +4074,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           review_comments_posted: '2',
           review_types: 'code_quality',
           ...(needs_remediation !== undefined && { needs_remediation }),
+          ...(review_id !== undefined && { review_id }),
         },
       };
     }
@@ -4035,6 +4122,68 @@ describe('POST /internal/webhooks/task-complete', () => {
       );
     });
 
+    it('passes stored review body and inline comments when review_id is present', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_review_ctx' });
+      await saveReviewEvent(777, 'Please address both blocking issues before merge.');
+      await saveReviewCommentEvent(777, 2001, 'src/auth.ts', 44, 'Guard against missing token here.');
+      await saveReviewCommentEvent(777, 2002, 'src/session.ts', 19, 'This branch needs a regression test.');
+      const payload = makeRemediationPayload(task.id, '1', '777');
+
+      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).toHaveBeenCalledOnce();
+      expect(mockFn).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          reviewBody: 'Please address both blocking issues before merge.',
+          inlineComments: [
+            { path: 'src/auth.ts', line: 44, body: 'Guard against missing token here.' },
+            { path: 'src/session.ts', line: 19, body: 'This branch needs a regression test.' },
+          ],
+        }),
+      );
+    });
+
+    it('keeps verifier summary when enriched review body is missing but inline comments exist', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_review_ctx_summary_fallback' });
+      await saveReviewCommentEvent(778, 2003, 'src/auth.ts', 51, 'Cover this branch with a test.');
+      const payload = makeRemediationPayload(task.id, '1', '778');
+
+      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          reviewBody: 'Found 2 issues',
+          inlineComments: [{ path: 'src/auth.ts', line: 51, body: 'Cover this branch with a test.' }],
+        }),
+      );
+    });
+
+    it('passes stored review body without inline comments when review_id has no comment events', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_review_ctx_no_comments' });
+      await saveReviewEvent(779, 'Please fix the blocking issue before merge.');
+      const payload = makeRemediationPayload(task.id, '1', '779');
+
+      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          reviewBody: 'Please fix the blocking issue before merge.',
+        }),
+      );
+      expect(mockFn).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.not.objectContaining({
+          inlineComments: expect.anything(),
+        }),
+      );
+    });
+
     it('does NOT create remediation task when needs_remediation is "0"', async () => {
       const task = await createReviewTask({ traceId: 'trace_rem_0' });
       const payload = makeRemediationPayload(task.id, '0');
@@ -4053,6 +4202,75 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
       expect(mockFn).toHaveBeenCalledOnce();
+    });
+
+    it('falls back to verifier summary when review_id is absent', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_no_review_id' });
+      const payload = makeRemediationPayload(task.id, '1');
+
+      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          reviewBody: 'Found 2 issues',
+        }),
+      );
+    });
+
+    it('falls back to verifier summary when review_id is not numeric', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_invalid_review_id' });
+      const payload = makeRemediationPayload(task.id, '1', 'not-a-number');
+
+      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          reviewBody: 'Found 2 issues',
+        }),
+      );
+    });
+
+    it('falls back to verifier summary when review enrichment fails', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_enrich_failure' });
+      const payload = makeRemediationPayload(task.id, '1', '780');
+      const mockFn = vi
+        .fn()
+        .mockResolvedValue(ok({ status: 'queued', taskId: 'remediation-task-1', workerType: 'auto' }));
+      const failingRepo = {
+        ...getServices().gitHubPREventRepo,
+        findByPullRequest: vi
+          .fn()
+          .mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'boom' })),
+      };
+      setServices({
+        ...getServices(),
+        gitHubPREventRepo: failingRepo,
+        createRemediationTaskFn: mockFn as RemediationFn,
+      });
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const retryResponse = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(retryResponse.statusCode).toBe(200);
+      expect(mockFn).toHaveBeenLastCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          reviewBody: 'Found 2 issues',
+        }),
+      );
     });
 
     it('does NOT create remediation task when result is absent (verification failed)', async () => {
@@ -4218,6 +4436,99 @@ describe('POST /internal/webhooks/task-complete', () => {
       });
 
       expect(response.statusCode).toBe(200);
+    });
+  });
+
+  describe('remediation task-complete → requiresReReview persistence', () => {
+    async function createRemediationTaskRecord(
+      traceId: string,
+      requiresReReview?: boolean,
+    ): Promise<import('../../domain/models/codeTask.js').CodeTask> {
+      const result = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix review findings',
+        sanitizedPrompt: 'Fix review findings',
+        systemPromptHash: 'remediation-auto',
+        workerType: 'codex',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId,
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'remediation',
+      });
+      if (!result.ok) throw new Error('Failed to create remediation task');
+      if (requiresReReview === undefined) {
+        return result.value;
+      }
+      const updateResult = await codeTaskRepo.update(result.value.id, { requiresReReview });
+      if (!updateResult.ok) throw new Error('Failed to seed remediation requiresReReview');
+      return updateResult.value;
+    }
+
+    it('backfills requiresReReview from remediation result when the task has no prior value', async () => {
+      const task = await createRemediationTaskRecord('trace_remediation_backfill');
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Fixed the review findings.',
+          requires_re_review: '1',
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/504',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const stored = await codeTaskRepo.findById(task.id);
+      expect(stored.ok).toBe(true);
+      if (!stored.ok) throw new Error('Failed to get remediation task');
+      expect(stored.value.requiresReReview).toBe(true);
+      expect(stored.value.result?.requires_re_review).toBe('1');
+    });
+
+    it('preserves existing requiresReReview when remediation result disagrees', async () => {
+      const task = await createRemediationTaskRecord('trace_remediation_preserve', false);
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Fixed the review findings.',
+          requires_re_review: '1',
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/505',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const stored = await codeTaskRepo.findById(task.id);
+      expect(stored.ok).toBe(true);
+      if (!stored.ok) throw new Error('Failed to get remediation task');
+      expect(stored.value.requiresReReview).toBe(false);
+      expect(stored.value.result?.requires_re_review).toBe('1');
     });
   });
 

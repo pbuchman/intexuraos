@@ -230,6 +230,7 @@ describe('REVIEW_SCHEMA', () => {
   it('accepts valid review data', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_id: '123',
       review_comments_posted: '3',
       review_types: 'code_quality,security',
       summary: 'Reviewed the PR for code quality and security issues.',
@@ -240,6 +241,7 @@ describe('REVIEW_SCHEMA', () => {
   it('accepts review_comments_posted as numeric string', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_id: '123',
       review_comments_posted: '0',
       review_types: 'code_quality',
       summary: 'No issues found.',
@@ -250,6 +252,7 @@ describe('REVIEW_SCHEMA', () => {
   it('rejects empty review_comments_posted', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_id: '123',
       review_comments_posted: '',
       review_types: 'code_quality',
       summary: 'Reviewed.',
@@ -260,6 +263,7 @@ describe('REVIEW_SCHEMA', () => {
   it('rejects non-numeric review_comments_posted', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_id: '123',
       review_comments_posted: 'three',
       review_types: 'code_quality',
       summary: 'Reviewed.',
@@ -270,6 +274,7 @@ describe('REVIEW_SCHEMA', () => {
   it('rejects empty review_types', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_id: '123',
       review_comments_posted: '3',
       review_types: '',
       summary: 'Reviewed.',
@@ -280,6 +285,7 @@ describe('REVIEW_SCHEMA', () => {
   it('rejects whitespace-only review_types', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_id: '123',
       review_comments_posted: '3',
       review_types: '   ',
       summary: 'Reviewed.',
@@ -297,6 +303,7 @@ describe('REVIEW_SCHEMA', () => {
   it('accepts requirements_tracker_updated field', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/901',
+      review_id: '123',
       review_comments_posted: '3',
       review_types: 'code_quality,security',
       requirements_tracker_updated: 'yes',
@@ -308,6 +315,7 @@ describe('REVIEW_SCHEMA', () => {
   it('accepts empty requirements_tracker_updated', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/901',
+      review_id: '123',
       review_comments_posted: '3',
       review_types: 'code_quality,security',
       requirements_tracker_updated: '',
@@ -319,6 +327,7 @@ describe('REVIEW_SCHEMA', () => {
   it('defaults requirements_tracker_updated to empty string when omitted', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/901',
+      review_id: '123',
       review_comments_posted: '3',
       review_types: 'code_quality,security',
       summary: 'Review summary.',
@@ -332,6 +341,7 @@ describe('REVIEW_SCHEMA', () => {
   it('accepts gh_actions_status field', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/901',
+      review_id: '123',
       review_comments_posted: '3',
       review_types: 'code_quality,security',
       gh_actions_status: 'all checks passed',
@@ -343,6 +353,7 @@ describe('REVIEW_SCHEMA', () => {
   it('defaults gh_actions_status to empty string when omitted', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/901',
+      review_id: '123',
       review_comments_posted: '3',
       review_types: 'code_quality,security',
       summary: 'Review summary.',
@@ -684,6 +695,7 @@ describe('OrchestratorCompletionVerifier', () => {
   describe('verify — review agent', () => {
     const validReviewResponse = JSON.stringify({
       gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_id: '123',
       review_comments_posted: '3',
       review_types: 'code_quality,security',
       summary: 'Reviewed and posted 3 comments.',
@@ -709,12 +721,53 @@ describe('OrchestratorCompletionVerifier', () => {
       expect(result.agentData).toEqual({
         agentType: 'review',
         gh_pr_url: 'https://github.com/org/repo/pull/42',
+        review_id: '123',
         review_comments_posted: '3',
         review_types: 'code_quality,security',
         requirements_tracker_updated: '',
         gh_actions_status: '',
         needs_remediation: '1',
         summary: 'Reviewed and posted 3 comments.',
+      });
+    });
+  });
+
+  describe('verify — remediation agent', () => {
+    const validRemediationResponse = JSON.stringify({
+      outcome: 'implemented',
+      gh_pr_url: 'https://github.com/org/repo/pull/77',
+      requires_re_review: '0',
+      summary: 'Fixed the reported review findings and pushed to the PR branch.',
+    });
+
+    it('returns passed with remediation agentData', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: validRemediationResponse,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-5',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'remediation',
+        rawLogs: 'remediation logs',
+      });
+      expect(result.passed).toBe(true);
+      expect(result.agentData).toEqual({
+        agentType: 'remediation',
+        outcome: 'implemented',
+        gh_pr_url: 'https://github.com/org/repo/pull/77',
+        requires_re_review: '0',
+        summary: 'Fixed the reported review findings and pushed to the PR branch.',
+      });
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: validRemediationResponse,
       });
     });
   });

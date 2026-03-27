@@ -60,7 +60,7 @@ function createCommentEvent(overrides: {
 function createMockRepo(findReviewCommentsFn: GitHubPREventRepository['findReviewComments']): GitHubPREventRepository {
   return {
     save: vi.fn(),
-    findByPullRequest: vi.fn(),
+    findByPullRequest: vi.fn().mockResolvedValue(ok([])),
     findByRepository: vi.fn(),
     findAll: vi.fn(),
     findReviewComments: findReviewCommentsFn,
@@ -165,6 +165,237 @@ describe('enrichReviewWithComments', () => {
     expect(findReviewComments).toHaveBeenCalledTimes(1);
   });
 
+  it('should recover review body from the stored review event when reviewBody is null', async () => {
+    const findByPullRequest = vi.fn().mockResolvedValue(
+      ok([
+        {
+          id: 'review-event-1',
+          githubEventId: 123,
+          deliveryId: null,
+          repository: 'intexuraos/test-repo',
+          repositoryId: 123,
+          pullRequestNumber: 42,
+          pullRequestId: 456,
+          eventType: 'pull_request_review',
+          action: 'submitted',
+          senderLogin: 'reviewer',
+          senderId: 999,
+          senderType: 'User',
+          prAuthorLogin: null,
+          title: null,
+          body: 'Please address the blocking findings.',
+          state: 'open',
+          baseBranch: null,
+          mergedAt: null,
+          createdAt: new Date('2024-01-01T00:00:00Z'),
+          processedAt: new Date('2024-01-01T00:00:00Z'),
+          payload: {
+            review: {
+              id: 100,
+              body: 'Please address the blocking findings.',
+            },
+          },
+        },
+      ]),
+    );
+    const repo: GitHubPREventRepository = {
+      save: vi.fn(),
+      findByPullRequest,
+      findByRepository: vi.fn(),
+      findAll: vi.fn(),
+      findReviewComments: vi.fn().mockResolvedValue(ok([])),
+    };
+
+    const result = await enrichReviewWithComments(
+      { logger: mockLogger, gitHubPREventRepo: repo },
+      { repository: 'intexuraos/test-repo', pullRequestNumber: 42, reviewId: 100, reviewBody: null }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.reviewBody).toBe('Please address the blocking findings.');
+    }
+    expect(findByPullRequest).toHaveBeenCalledWith('intexuraos/test-repo', 42);
+  });
+
+  it('should skip malformed and unrelated review submission events before finding the matching review body', async () => {
+    const findByPullRequest = vi.fn().mockResolvedValue(
+      ok([
+        {
+          id: 'review-event-ignored-1',
+          githubEventId: 1,
+          deliveryId: null,
+          repository: 'intexuraos/test-repo',
+          repositoryId: 123,
+          pullRequestNumber: 42,
+          pullRequestId: 456,
+          eventType: 'pull_request_review',
+          action: 'submitted',
+          senderLogin: 'reviewer',
+          senderId: 999,
+          senderType: 'User',
+          prAuthorLogin: null,
+          title: null,
+          body: null,
+          state: 'open',
+          baseBranch: null,
+          mergedAt: null,
+          createdAt: new Date('2024-01-01T00:00:00Z'),
+          processedAt: new Date('2024-01-01T00:00:00Z'),
+          payload: null,
+        },
+        {
+          id: 'review-event-ignored-2',
+          githubEventId: 2,
+          deliveryId: null,
+          repository: 'intexuraos/test-repo',
+          repositoryId: 123,
+          pullRequestNumber: 42,
+          pullRequestId: 456,
+          eventType: 'pull_request_review',
+          action: 'submitted',
+          senderLogin: 'reviewer',
+          senderId: 999,
+          senderType: 'User',
+          prAuthorLogin: null,
+          title: null,
+          body: null,
+          state: 'open',
+          baseBranch: null,
+          mergedAt: null,
+          createdAt: new Date('2024-01-01T00:00:00Z'),
+          processedAt: new Date('2024-01-01T00:00:00Z'),
+          payload: {
+            review: null,
+          },
+        },
+        {
+          id: 'review-event-ignored-3',
+          githubEventId: 3,
+          deliveryId: null,
+          repository: 'intexuraos/test-repo',
+          repositoryId: 123,
+          pullRequestNumber: 42,
+          pullRequestId: 456,
+          eventType: 'pull_request_review',
+          action: 'submitted',
+          senderLogin: 'reviewer',
+          senderId: 999,
+          senderType: 'User',
+          prAuthorLogin: null,
+          title: null,
+          body: 'Different review body',
+          state: 'open',
+          baseBranch: null,
+          mergedAt: null,
+          createdAt: new Date('2024-01-01T00:00:00Z'),
+          processedAt: new Date('2024-01-01T00:00:00Z'),
+          payload: {
+            review: {
+              id: 101,
+              body: 'Different review body',
+            },
+          },
+        },
+        {
+          id: 'review-event-ignored-4',
+          githubEventId: 4,
+          deliveryId: null,
+          repository: 'intexuraos/test-repo',
+          repositoryId: 123,
+          pullRequestNumber: 42,
+          pullRequestId: 456,
+          eventType: 'pull_request_review',
+          action: 'submitted',
+          senderLogin: 'reviewer',
+          senderId: 999,
+          senderType: 'User',
+          prAuthorLogin: null,
+          title: null,
+          body: '',
+          state: 'open',
+          baseBranch: null,
+          mergedAt: null,
+          createdAt: new Date('2024-01-01T00:00:00Z'),
+          processedAt: new Date('2024-01-01T00:00:00Z'),
+          payload: {
+            review: {
+              id: 100,
+              body: '',
+            },
+          },
+        },
+        {
+          id: 'review-event-match',
+          githubEventId: 5,
+          deliveryId: null,
+          repository: 'intexuraos/test-repo',
+          repositoryId: 123,
+          pullRequestNumber: 42,
+          pullRequestId: 456,
+          eventType: 'pull_request_review',
+          action: 'submitted',
+          senderLogin: 'reviewer',
+          senderId: 999,
+          senderType: 'User',
+          prAuthorLogin: null,
+          title: null,
+          body: 'Use the matching review body.',
+          state: 'open',
+          baseBranch: null,
+          mergedAt: null,
+          createdAt: new Date('2024-01-01T00:00:00Z'),
+          processedAt: new Date('2024-01-01T00:00:00Z'),
+          payload: {
+            review: {
+              id: 100,
+              body: 'Use the matching review body.',
+            },
+          },
+        },
+      ]),
+    );
+    const repo: GitHubPREventRepository = {
+      save: vi.fn(),
+      findByPullRequest,
+      findByRepository: vi.fn(),
+      findAll: vi.fn(),
+      findReviewComments: vi.fn().mockResolvedValue(ok([])),
+    };
+
+    const result = await enrichReviewWithComments(
+      { logger: mockLogger, gitHubPREventRepo: repo },
+      { repository: 'intexuraos/test-repo', pullRequestNumber: 42, reviewId: 100, reviewBody: '   ' }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.reviewBody).toBe('Use the matching review body.');
+    }
+  });
+
+  it('should return an error when review body recovery fails on the first lookup', async () => {
+    const repo: GitHubPREventRepository = {
+      save: vi.fn(),
+      findByPullRequest: vi
+        .fn()
+        .mockResolvedValue(err({ code: 'FIRESTORE_ERROR' as const, message: 'Review lookup failed' })),
+      findByRepository: vi.fn(),
+      findAll: vi.fn(),
+      findReviewComments: vi.fn(),
+    };
+
+    const result = await enrichReviewWithComments(
+      { logger: mockLogger, gitHubPREventRepo: repo },
+      { repository: 'intexuraos/test-repo', pullRequestNumber: 42, reviewId: 100, reviewBody: null }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('FIRESTORE_ERROR');
+    }
+  });
+
   it('should handle repository errors on first attempt', async () => {
     const repo = createMockRepo(
       vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR' as const, message: 'Connection failed' }))
@@ -187,6 +418,34 @@ describe('enrichReviewWithComments', () => {
       .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR' as const, message: 'Retry failed' }));
 
     const repo = createMockRepo(findReviewComments);
+
+    const resultPromise = enrichReviewWithComments(
+      { logger: mockLogger, gitHubPREventRepo: repo },
+      { repository: 'intexuraos/test-repo', pullRequestNumber: 42, reviewId: 100, reviewBody: null }
+    );
+
+    await vi.advanceTimersByTimeAsync(2000);
+    const result = await resultPromise;
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('FIRESTORE_ERROR');
+    }
+  });
+
+  it('should return an error when review body recovery fails on retry', async () => {
+    const repo: GitHubPREventRepository = {
+      save: vi.fn(),
+      findByPullRequest: vi
+        .fn()
+        .mockResolvedValueOnce(ok([]))
+        .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR' as const, message: 'Retry review lookup failed' })),
+      findByRepository: vi.fn(),
+      findAll: vi.fn(),
+      findReviewComments: vi
+        .fn()
+        .mockResolvedValueOnce(ok([])),
+    };
 
     const resultPromise = enrichReviewWithComments(
       { logger: mockLogger, gitHubPREventRepo: repo },
