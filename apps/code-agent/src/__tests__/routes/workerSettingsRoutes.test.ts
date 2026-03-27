@@ -876,6 +876,42 @@ describe('Worker Settings Routes', () => {
       expect(getBody.data.workers).toEqual([]);
     });
 
+    it('should preserve default review worker type when deleting the last worker', async () => {
+      const patchResponse = await app.inject({
+        method: 'PATCH',
+        url: '/code/worker-settings/default-review-worker-type',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: { workerType: 'glm' },
+      });
+
+      expect(patchResponse.statusCode).toBe(200);
+
+      const deleteResponse = await app.inject({
+        method: 'DELETE',
+        url: '/code/worker-settings/workers/home-mac',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      expect(deleteResponse.statusCode).toBe(200);
+
+      const getResponse = await app.inject({
+        method: 'GET',
+        url: '/code/worker-settings',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      expect(getResponse.statusCode).toBe(200);
+      const getBody = JSON.parse(getResponse.body) as {
+        success: boolean;
+        data: { workers: unknown[]; defaultReviewWorkerType?: string };
+      };
+      expect(getBody.data.workers).toEqual([]);
+      expect(getBody.data.defaultReviewWorkerType).toBe('glm');
+    });
+
     it('should return 404 for non-existent worker', async () => {
       const response = await app.inject({
         method: 'DELETE',
