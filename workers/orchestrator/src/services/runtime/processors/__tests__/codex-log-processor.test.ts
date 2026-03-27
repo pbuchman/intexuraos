@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { formatCodexMessages } from '../codex-log-processor.js';
+import type { Logger } from '@intexuraos/common-core';
+import { codexLogProcessor, formatCodexMessages } from '../codex-log-processor.js';
+import type { CodexAttemptState } from '../codex-log-processor.js';
 
 describe('formatCodexMessages', () => {
   describe('session lifecycle events', () => {
@@ -390,6 +392,88 @@ describe('formatCodexMessages', () => {
       // (multiline regex requires line boundaries), so it passes through
       const result = formatCodexMessages(input);
       expect(result).toBe('[codex] Turn started');
+    });
+  });
+});
+
+describe('codexLogProcessor', () => {
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  const noop = (): void => {};
+  const fakeLogger = { info: noop, warn: noop, error: noop, debug: noop } as unknown as Logger;
+
+  function createState(): CodexAttemptState {
+    return {
+      taskId: 'test-task',
+      logger: fakeLogger,
+      logBuffer: '',
+      completionSignaled: false,
+    };
+  }
+
+  describe('flushState', () => {
+    it('emits log event for buffered trailing text without newline', () => {
+      const state = createState();
+      // Simulate a chunk that ends without a newline — text stays in logBuffer
+      codexLogProcessor.processChunk(state, '[entrypoint] final line');
+      expect(state.logBuffer).toBe('[entrypoint] final line');
+
+      const events = codexLogProcessor.flushState(state);
+      const logEvent = events.find((e) => e.type === 'log');
+      expect(logEvent).toBeDefined();
+      expect(logEvent).toEqual({ type: 'log', text: '[entrypoint] final line\n' });
+      expect(state.logBuffer).toBe('');
+    });
+
+    it('emits formatted log event for buffered JSON line', () => {
+      const state = createState();
+      codexLogProcessor.processChunk(state, '{"type":"turn.started"}');
+      expect(state.logBuffer).toBe('{"type":"turn.started"}');
+
+      const events = codexLogProcessor.flushState(state);
+      const logEvent = events.find((e) => e.type === 'log');
+      expect(logEvent).toBeDefined();
+      expect(logEvent).toEqual({ type: 'log', text: '[codex] Turn started\n' });
+    });
+
+    it('returns empty array for empty buffer', () => {
+      const state = createState();
+      const events = codexLogProcessor.flushState(state);
+      expect(events).toEqual([]);
+    });
+
+    it('returns empty array for whitespace-only buffer', () => {
+      const state = createState();
+      state.logBuffer = '   ';
+      const events = codexLogProcessor.flushState(state);
+      expect(events).toEqual([]);
+    });
+
+    it('omits log event when buffered line formats to empty (item.started)', () => {
+      const state = createState();
+      state.logBuffer = JSON.stringify({
+        type: 'item.started',
+        item: { id: 'i1', type: 'command_execution' },
+      });
+
+      const events = codexLogProcessor.flushState(state);
+      // item.started is removed by formatCodexMessages, so no log event is emitted
+      const logEvent = events.find((e) => e.type === 'log');
+      expect(logEvent).toBeUndefined();
+      expect(state.logBuffer).toBe('');
+    });
+
+    it('emits both log and runtime events for buffered error line', () => {
+      const state = createState();
+      // Directly set the buffer to simulate an unterminated JSON line that
+      // processBufferedLines did not eagerly parse (only turn.completed/failed
+      // get the early-extraction treatment).
+      state.logBuffer = '{"type":"error","message":"Rate limit exceeded"}';
+
+      const events = codexLogProcessor.flushState(state);
+      const logEvent = events.find((e) => e.type === 'log');
+      expect(logEvent).toBeDefined();
+      expect(logEvent).toEqual({ type: 'log', text: '[error] Rate limit exceeded\n' });
+      expect(state.logBuffer).toBe('');
     });
   });
 });

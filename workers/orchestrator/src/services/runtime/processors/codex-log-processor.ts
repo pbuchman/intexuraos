@@ -261,8 +261,15 @@ export const codexLogProcessor: RuntimeLogProcessor<CodexAttemptState> = {
       return [];
     }
 
-    const events = parseCodexLogLine(state, state.logBuffer);
+    const remaining = state.logBuffer;
     state.logBuffer = '';
-    return events;
+
+    const result: RuntimeEvent[] = [];
+    const formatted = formatCodexMessages(remaining + '\n');
+    if (formatted !== '') {
+      result.push({ type: 'log', text: formatted });
+    }
+    result.push(...parseCodexLogLine(state, remaining));
+    return result;
   },
 };
