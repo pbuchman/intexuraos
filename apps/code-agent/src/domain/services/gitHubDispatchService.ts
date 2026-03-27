@@ -488,6 +488,7 @@ async function handleNewTask(
       userServiceClient: deps.userServiceClient,
       firestore: deps.firestore,
       automationLog: deps.automationLog,
+      workerSettingsRepo: deps.workerSettingsRepo,
     },
     {
       repository: event.repository,
