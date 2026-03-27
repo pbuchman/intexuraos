@@ -241,6 +241,30 @@ describe('renderEvent', () => {
         '**14:35** -- Implementation dispatched: [`task_abc123`](https://intexuraos.cloud/#/code-tasks/task_abc123) | opus'
       );
     });
+
+    it('renders review agent type label', () => {
+      useFakeTime();
+      const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'review' });
+      expect(result).toContain('Review dispatched:');
+    });
+
+    it('renders remediation agent type label', () => {
+      useFakeTime();
+      const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'remediation' });
+      expect(result).toContain('Remediation dispatched:');
+    });
+
+    it('renders plan agent type label', () => {
+      useFakeTime();
+      const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'planning' });
+      expect(result).toContain('Plan dispatched:');
+    });
+
+    it('renders PR agent type label', () => {
+      useFakeTime();
+      const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'pull_request' });
+      expect(result).toContain('PR dispatched:');
+    });
   });
 
   describe('remediation_decision', () => {
@@ -451,6 +475,24 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toContain('**14:35** -- **Implementation completed** | 0s');
+    });
+
+    it('renders review completed label for reviewed status', () => {
+      useFakeTime();
+      const result = renderEvent({ type: 'task_completed', taskId: 'task_1', status: 'reviewed', duration: 60_000 });
+      expect(result).toContain('**Review completed**');
+    });
+
+    it('renders plan completed label for planned status', () => {
+      useFakeTime();
+      const result = renderEvent({ type: 'task_completed', taskId: 'task_1', status: 'planned', duration: 60_000 });
+      expect(result).toContain('**Plan completed**');
+    });
+
+    it('renders generic completed label for unknown status', () => {
+      useFakeTime();
+      const result = renderEvent({ type: 'task_completed', taskId: 'task_1', status: 'unknown', duration: 60_000 });
+      expect(result).toContain('**Completed**');
     });
   });
 
