@@ -1195,10 +1195,14 @@ describe('createReviewTask', () => {
         prTitle: 'Fix bug',
       });
 
+      expect(deps.linearAgentClient?.generateTitle).toHaveBeenCalledWith({
+        userId: 'user-1',
+        description: expect.stringContaining('Fix bug'),
+      });
       expect(deps.linearAgentClient?.createIssue).toHaveBeenCalledWith({
         userId: 'user-1',
-        title: '[Review] PR #42: Fix bug',
-        description: expect.stringContaining('Automated PR review created by GitHub Agent triage system.'),
+        title: 'Generated',
+        description: expect.stringContaining('Review created automatically by code-agent'),
       });
 
       const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
@@ -1353,7 +1357,7 @@ describe('createReviewTask', () => {
       }
     });
 
-    it('uses fallback title when prTitle not provided', async () => {
+    it('generates LLM title even when prTitle not provided', async () => {
       const deps = createFakeDeps();
 
       await createReviewTask(deps, {
@@ -1364,10 +1368,14 @@ describe('createReviewTask', () => {
         eventId: 'evt-link-7',
       });
 
+      expect(deps.linearAgentClient?.generateTitle).toHaveBeenCalledWith({
+        userId: 'user-1',
+        description: expect.stringContaining('Review PR #42 in intexuraos/intexuraos'),
+      });
       expect(deps.linearAgentClient?.createIssue).toHaveBeenCalledWith({
         userId: 'user-1',
-        title: '[Review] PR #42 in intexuraos/intexuraos',
-        description: expect.stringContaining('Automated PR review created by GitHub Agent triage system.'),
+        title: 'Generated',
+        description: expect.stringContaining('Review created automatically by code-agent'),
       });
     });
 
@@ -1389,12 +1397,13 @@ describe('createReviewTask', () => {
       expect(createIssueCall).toBeDefined();
       if (createIssueCall !== undefined) {
         const description = createIssueCall[0].description;
-        expect(description).toContain('Automated PR review created by GitHub Agent triage system.');
+        expect(description).toContain('## PR Review: Fix auth bug');
         expect(description).toContain('#42');
         expect(description).toContain('intexuraos/intexuraos');
         expect(description).toContain('This PR fixes the authentication bypass vulnerability in the login flow.');
         expect(description).toContain('code_quality');
         expect(description).toContain('security');
+        expect(description).toContain('Review created automatically by code-agent');
       }
     });
 
@@ -1420,6 +1429,80 @@ describe('createReviewTask', () => {
         expect(description).not.toContain(longBody);
         expect(description).toContain('...');
       }
+    });
+
+    it('calls generateTitle with PR context for LLM title generation', async () => {
+      const linearAgentClient = createFakeLinearAgentClient();
+      const deps = createFakeDeps({ linearAgentClient });
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality', 'security'],
+        eventId: 'evt-gen-title',
+        prTitle: 'Fix auth bug',
+        prBody: 'This PR fixes the authentication bypass.',
+      });
+
+      const generateCall = vi.mocked(linearAgentClient.generateTitle).mock.calls[0];
+      expect(generateCall).toBeDefined();
+      if (generateCall !== undefined) {
+        const description = generateCall[0].description;
+        expect(description).toContain('Fix auth bug');
+        expect(description).toContain('authentication bypass');
+        expect(description).toContain('code_quality');
+        expect(description).toContain('security');
+      }
+    });
+
+    it('falls back to template title when generateTitle fails', async () => {
+      const linearAgentClient = createFakeLinearAgentClient();
+      vi.mocked(linearAgentClient.generateTitle).mockResolvedValue(
+        err({ code: 'UNAVAILABLE' as const, message: 'LLM down' })
+      );
+      const deps = createFakeDeps({ linearAgentClient });
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-fallback-title',
+        prTitle: 'Fix bug',
+      });
+
+      expect(linearAgentClient.generateTitle).toHaveBeenCalledWith({
+        userId: 'user-1',
+        description: expect.stringContaining('Fix bug'),
+      });
+      expect(linearAgentClient.createIssue).toHaveBeenCalledWith(
+        expect.objectContaining({ title: '[Review] PR #42: Fix bug' })
+      );
+    });
+
+    it('falls back to repository-based title when generateTitle fails and no prTitle', async () => {
+      const linearAgentClient = createFakeLinearAgentClient();
+      vi.mocked(linearAgentClient.generateTitle).mockResolvedValue(
+        err({ code: 'UNAVAILABLE' as const, message: 'LLM down' })
+      );
+      const deps = createFakeDeps({ linearAgentClient });
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-fallback-title-2',
+      });
+
+      expect(linearAgentClient.generateTitle).toHaveBeenCalledWith({
+        userId: 'user-1',
+        description: expect.stringContaining('Review PR #42 in intexuraos/intexuraos'),
+      });
+      expect(linearAgentClient.createIssue).toHaveBeenCalledWith(
+        expect.objectContaining({ title: '[Review] PR #42 in intexuraos/intexuraos' })
+      );
     });
   });
 
@@ -1729,11 +1812,10 @@ describe('createReviewTask', () => {
       }
     });
 
-    it('uses created description as fallback when getIssueDescription returns undefined for newly-created issue', async () => {
-      // Tier 3: createIssue succeeds, but getIssueDescription returns undefined
-      // (simulates Linear webhook race — issue.create webhook has description: null)
+    it('uses created description directly for Tier 3 issues without fetching from Linear', async () => {
+      // Tier 3: createIssue succeeds — getIssueDescription should NOT be called
+      // because the description is already available from the create call
       const linearAgentClient = createFakeLinearAgentClient();
-      vi.mocked(linearAgentClient.getIssueDescription).mockResolvedValue(ok(undefined));
       const deps = createFakeDeps({ linearAgentClient });
 
       await createReviewTask(deps, {
@@ -1748,13 +1830,14 @@ describe('createReviewTask', () => {
 
       // Tier 3 should have been used (no existing task, no INT-XXX in title/body)
       expect(linearAgentClient.createIssue).toHaveBeenCalled();
+      expect(linearAgentClient.getIssueDescription).not.toHaveBeenCalled();
 
       const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
       expect(createCall).toBeDefined();
       if (createCall !== undefined) {
         // The fallback description from buildLinearIssueDescription should be embedded
         expect(createCall[0].prompt).toContain('### Issue Requirements');
-        expect(createCall[0].prompt).toContain('Automated PR review created by GitHub Agent triage system.');
+        expect(createCall[0].prompt).toContain('## PR Review: Fix auth bug');
         expect(createCall[0].prompt).toContain('This PR fixes the authentication bypass.');
       }
     });
