@@ -112,7 +112,7 @@ The verification pipeline deliberately uses two different AI providers:
 
 | Role                        | Provider             | Model                                        | Why                                                                                   |
 | --------------------------- | -------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------- |
-| **Execution**               | Anthropic            | Claude (Opus/Sonnet/Haiku via code-worker) | Optimized for autonomous coding — tool use, file editing, test execution              |
+| **Execution**               | Anthropic            | Claude (Opus/Sonnet/Haiku via code-worker)   | Optimized for autonomous coding — tool use, file editing, test execution              |
 | **Completion Verification** | Google               | Gemini 2.5 Flash                             | Fast structured extraction from logs; independent provider prevents self-verification |
 | **Deep Validation**         | Google               | Gemini 2.5 Flash                             | Reads full transcript with 200K context; same independence guarantee                  |
 | **Enforcement**             | None (deterministic) | Code-agent business logic                    | No AI — pure TypeScript validation of data structures and Linear state                |

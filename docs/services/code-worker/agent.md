@@ -8,7 +8,7 @@
 
 | Field    | Value                                                                           |
 | -------- | ------------------------------------------------------------------------------- |
-| **Name** | code-worker                                                                    |
+| **Name** | code-worker                                                                     |
 | **Role** | Isolated Docker Container for Claude Code and Codex Sessions                    |
 | **Goal** | Execute AI coding tasks in sandboxed environments with enforced security limits |
 
@@ -312,11 +312,11 @@ None. Code Worker does not publish Pub/Sub events. Communication is via containe
 
 ## Dependencies
 
-| Dependency           | Why Needed                 | Failure Behavior                               |
-| -------------------- | -------------------------- | ---------------------------------------------- |
-| Docker Engine        | Container runtime          | Cannot start worker                            |
-| Anthropic / OpenAI auth endpoints | Claude or Codex runtime access | Selected runtime exits with error |
-| GitHub (public)      | Push commits, create PRs   | Git operations fail                            |
-| npm registry         | pnpm install               | Dependency install fails (non-fatal for retry) |
-| GCP Secret Manager   | Environment variable sync  | Falls back to existing .envrc                  |
-| Artifact Registry    | Image pull                 | Uses cached local image                        |
+| Dependency                        | Why Needed                     | Failure Behavior                               |
+| --------------------------------- | ------------------------------ | ---------------------------------------------- |
+| Docker Engine                     | Container runtime              | Cannot start worker                            |
+| Anthropic / OpenAI auth endpoints | Claude or Codex runtime access | Selected runtime exits with error              |
+| GitHub (public)                   | Push commits, create PRs       | Git operations fail                            |
+| npm registry                      | pnpm install                   | Dependency install fails (non-fatal for retry) |
+| GCP Secret Manager                | Environment variable sync      | Falls back to existing .envrc                  |
+| Artifact Registry                 | Image pull                     | Uses cached local image                        |
