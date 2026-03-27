@@ -4,7 +4,7 @@ Local worker orchestration service for code task execution.
 
 ## Overview
 
-The orchestrator runs on local machines (Mac or VM) behind Cloudflare Tunnel. It receives task dispatch requests from `code-agent`, spawns Claude Code sessions in isolated Docker containers, and reports results via webhooks.
+The orchestrator runs on local machines (Mac or VM) behind Cloudflare Tunnel. It receives task dispatch requests from `code-agent`, spawns Claude Code or Codex sessions in isolated Docker containers, and reports results via webhooks.
 
 ### Agent-Based Routing (Current)
 
@@ -36,7 +36,7 @@ For all Planning Agent runs, orchestrator flattens verifier metadata into webhoo
 Execution Agent notes:
 
 - `implemented` is sent as webhook `status=completed`
-- Execution verification is Gemini semantic validation of Claude responses (latest response first, prior responses fallback)
+- Execution verification is Gemini semantic validation of worker responses (latest response first, prior responses fallback)
 - Orchestrator flattens execution verifier metadata into webhook `result` using `execution_*` fields:
   - `execution_outcome_label`
   - `execution_superpowers_executing_plans_used`
@@ -55,7 +55,7 @@ code-agent (Cloud Run)
     v POST /tasks (HMAC signed)
 orchestrator (local)
     |
-    +- TaskDispatcher: manages Claude Code sessions via Docker
+    +- TaskDispatcher: manages code-worker runtime sessions via Docker
     +- WorktreeManager: creates isolated git worktrees (source only, no deps)
     +- GitHubTokenService: manages GitHub App installation tokens
     +- WebhookClient: reports status to code-agent
@@ -98,16 +98,16 @@ All vars come from `.envrc` (synced from GCP via `sync-secrets.sh`) and `.envrc.
 
 ### Optional
 
-| Variable                                | Default                       | Description                                                |
-| --------------------------------------- | ----------------------------- | ---------------------------------------------------------- |
-| `INTEXURAOS_REPOSITORY_PATH`            | `~/.claude-orchestrator/repo` | Local repo clone path                                      |
-| `INTEXURAOS_WORKER_CAPACITY`            | `2`                           | Max concurrent tasks                                       |
-| `INTEXURAOS_CLAUDE_WORKER_IMAGE`        | `.../claude-worker:latest`    | Worker image reference (tag or digest)                     |
-| `INTEXURAOS_PRESERVE_WORKER_CONTAINERS` | `1`                           | Keep worker containers after task completion for debugging |
-| `INTEXURAOS_GIT_USER_NAME`              | Host `git config user.name`   | Git author name for worker commits                         |
-| `INTEXURAOS_GIT_USER_EMAIL`             | Host `git config user.email`  | Git author email for worker commits                        |
-| `PORT`                                  | `8199`                        | HTTP server port                                           |
-| `LOG_LEVEL`                             | `info`                        | Pino log level                                             |
+| Variable                                | Default                      | Description                                                |
+| --------------------------------------- | ---------------------------- | ---------------------------------------------------------- |
+| `INTEXURAOS_REPOSITORY_PATH`            | `~/.code-orchestrator/repo`  | Local repo clone path                                      |
+| `INTEXURAOS_WORKER_CAPACITY`            | `2`                          | Max concurrent tasks                                       |
+| `INTEXURAOS_CODE_WORKER_IMAGE`          | `.../code-worker:latest`     | Worker image reference (tag or digest)                     |
+| `INTEXURAOS_PRESERVE_WORKER_CONTAINERS` | `1`                          | Keep worker containers after task completion for debugging |
+| `INTEXURAOS_GIT_USER_NAME`              | Host `git config user.name`  | Git author name for worker commits                         |
+| `INTEXURAOS_GIT_USER_EMAIL`             | Host `git config user.email` | Git author email for worker commits                        |
+| `PORT`                                  | `8199`                       | HTTP server port                                           |
+| `LOG_LEVEL`                             | `info`                       | Pino log level                                             |
 
 ---
 
@@ -134,11 +134,11 @@ PROJECT_ID=intexuraos-dev-pbuchman ./scripts/sync-secrets.sh --add-new
 # 3. Add orchestrator vars to .envrc.local (see .envrc.local.example for full list)
 cat >> .envrc.local << 'EOF'
 export INTEXURAOS_REPOSITORY_URL=https://github.com/pbuchman/intexuraos.git
-export INTEXURAOS_REPOSITORY_PATH=$HOME/claude-orchestrator/intexuraos
+export INTEXURAOS_REPOSITORY_PATH=$HOME/.code-orchestrator/repo
 export INTEXURAOS_PROJECT_ID=$PROJECT_ID
 export INTEXURAOS_CODE_AGENT_URL=https://intexuraos-code-agent-cj44trunra-lm.a.run.app/
 # Optional but recommended: pin to immutable digest
-# export INTEXURAOS_CLAUDE_WORKER_IMAGE=europe-central2-docker.pkg.dev/.../claude-worker@sha256:<digest>
+# export INTEXURAOS_CODE_WORKER_IMAGE=europe-central2-docker.pkg.dev/.../code-worker@sha256:<digest>
 export GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json
 EOF
 
@@ -146,7 +146,7 @@ EOF
 direnv allow
 
 # 5. Create directories
-mkdir -p ~/.claude-orchestrator/logs ~/claude-workers/worktrees
+mkdir -p ~/.code-orchestrator/logs ~/code-workers/worktrees
 
 # 6. Start orchestrator (dev mode with hot-reload)
 pnpm --filter orchestrator dev
@@ -174,7 +174,7 @@ The orchestrator runs as a systemd template service. The service file lives at `
 **Key details:**
 
 - Runs `node dist/index.js` from `~/deploy/intexuraos/workers/orchestrator/`
-- Env vars loaded from `~/.claude-orchestrator/env` (43 vars, extracted from Secret Manager)
+- Env vars loaded from `~/.code-orchestrator/env` (43 vars, extracted from Secret Manager)
 - Auto-restarts on failure (`Restart=on-failure`, `RestartSec=10`)
 - Rate-limited to 5 restarts per 5 minutes (`StartLimitBurst=5`, `StartLimitIntervalSec=300`)
 - Logs to journald (`journalctl -u intexuraos-orchestrator@pbuchman`)
@@ -233,7 +233,7 @@ sudo systemctl stop intexuraos-orchestrator@pbuchman
 
 # 2. Load env vars
 cd ~/deploy/intexuraos   # or any workspace
-set -a && source ~/.claude-orchestrator/env && set +a
+set -a && source ~/.code-orchestrator/env && set +a
 
 # 3. Run with tsx watch (hot-reload on source changes)
 pnpm --filter orchestrator dev
@@ -253,15 +253,15 @@ cd ~/deploy/intexuraos
 ./scripts/sync-secrets.sh
 
 # 2. Re-extract orchestrator vars
-grep -E '^export INTEXURAOS_' .envrc | sed 's/^export //' > ~/.claude-orchestrator/env
-echo "GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json" >> ~/.claude-orchestrator/env
-echo "PORT=8199" >> ~/.claude-orchestrator/env
-echo "INTEXURAOS_WORKER_CAPACITY=3" >> ~/.claude-orchestrator/env
-echo "INTEXURAOS_REPOSITORY_PATH=$HOME/.claude-orchestrator/repo" >> ~/.claude-orchestrator/env
-echo "LOG_LEVEL=info" >> ~/.claude-orchestrator/env
-echo "INTEXURAOS_CODE_AGENT_URL=http://localhost:8128" >> ~/.claude-orchestrator/env
-echo "INTEXURAOS_PROJECT_ID=intexuraos-dev-pbuchman" >> ~/.claude-orchestrator/env
-chmod 600 ~/.claude-orchestrator/env
+grep -E '^export INTEXURAOS_' .envrc | sed 's/^export //' > ~/.code-orchestrator/env
+echo "GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json" >> ~/.code-orchestrator/env
+echo "PORT=8199" >> ~/.code-orchestrator/env
+echo "INTEXURAOS_WORKER_CAPACITY=3" >> ~/.code-orchestrator/env
+echo "INTEXURAOS_REPOSITORY_PATH=$HOME/.code-orchestrator/repo" >> ~/.code-orchestrator/env
+echo "LOG_LEVEL=info" >> ~/.code-orchestrator/env
+echo "INTEXURAOS_CODE_AGENT_URL=http://localhost:8128" >> ~/.code-orchestrator/env
+echo "INTEXURAOS_PROJECT_ID=intexuraos-dev-pbuchman" >> ~/.code-orchestrator/env
+chmod 600 ~/.code-orchestrator/env
 
 # 3. Restart
 sudo systemctl restart intexuraos-orchestrator@pbuchman
@@ -273,11 +273,11 @@ If the orchestrator needs to be set up from zero on a new machine:
 
 ```bash
 # 1. Create directories
-mkdir -p ~/.claude-orchestrator/secrets ~/.claude-orchestrator/logs
-mkdir -p ~/claude-workers/worktrees
+mkdir -p ~/.code-orchestrator/secrets ~/.code-orchestrator/logs
+mkdir -p ~/code-workers/worktrees
 
 # 2. Clone orchestrator repo
-git clone git@github.com:pbuchman/intexuraos.git ~/.claude-orchestrator/repo
+git clone git@github.com:pbuchman/intexuraos.git ~/.code-orchestrator/repo
 
 # 3. Build
 cd ~/deploy/intexuraos
@@ -294,6 +294,9 @@ curl -fsSL https://claude.ai/install.sh | bash
 # Use SSH reverse tunnel for headless login:
 # From workstation: ssh -R 8080:localhost:8080 user@vm
 # On VM: claude login
+
+# Optional: bootstrap shared Codex auth for code-worker
+workers/orchestrator/scripts/codex-login.sh
 
 # 7. Install systemd service
 sudo cp ~/personal/pbuchman-dev/machine-setup/config/intexuraos-orchestrator.service \
@@ -329,9 +332,9 @@ Create `~/Library/LaunchAgents/com.intexuraos.orchestrator.plist`:
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/Users/YOUR_USERNAME/.claude-orchestrator/logs/orchestrator.out.log</string>
+    <string>/Users/YOUR_USERNAME/.code-orchestrator/logs/orchestrator.out.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/YOUR_USERNAME/.claude-orchestrator/logs/orchestrator.err.log</string>
+    <string>/Users/YOUR_USERNAME/.code-orchestrator/logs/orchestrator.err.log</string>
 </dict>
 </plist>
 ```
@@ -359,7 +362,7 @@ Both must match or task dispatch fails signature verification.
 
 ### GitHub Private Key
 
-The GitHub App private key is fetched automatically from GCP Secret Manager on startup (not from a local file). The code caches it at `~/.claude-orchestrator/github-app.pem`.
+The GitHub App private key is fetched automatically from GCP Secret Manager on startup (not from a local file). The code caches it at `~/.code-orchestrator/github-app.pem`.
 
 ---
 
@@ -408,7 +411,9 @@ brew install cloudflared && sudo cloudflared service install
 
 ---
 
-## Anthropic OAuth (Max Subscription)
+## Worker Auth
+
+### Claude Auth (Anthropic Max Subscription)
 
 The orchestrator uses Claude Code OAuth credentials (Max subscription) instead of a static API key.
 
@@ -451,17 +456,27 @@ The orchestrator:
 - Rejects new Anthropic tasks when credentials are degraded
 
 **Credential isolation:** The orchestrator reads from the global `~/.claude/.credentials.json` on the host.
-For each task, it copies the credentials into the task's session directory (`~/.claude-orchestrator/secrets/{taskId}/`),
+For each task, it copies the credentials into the task's session directory (`~/.code-orchestrator/secrets/{taskId}/`),
 which is bind-mounted into the Docker container at `/home/claude/.claude/`. Containers never access the host's global file directly.
 When tokens are refreshed, the orchestrator updates both the global file and all active task session directories.
 
 **Re-authentication:** If the refresh token is revoked, SSH tunnel into the VM and run `claude login` again.
 
-Check credential status: `curl http://localhost:8199/health | jq .anthropicOAuth`
+### Codex Auth
+
+Codex uses a separate shared auth file mounted into code-worker containers. Bootstrap it with:
+
+```bash
+workers/orchestrator/scripts/codex-login.sh
+```
+
+This writes shared auth to `~/.code-orchestrator/codex-auth/auth.json`.
+
+Check worker auth status: `curl http://localhost:8199/health | jq .workerAuths`
 
 #### Health Endpoint Examples
 
-**Healthy (credentials active):**
+**Healthy (worker auth active):**
 
 ```json
 {
@@ -470,33 +485,63 @@ Check credential status: `curl http://localhost:8199/health | jq .anthropicOAuth
   "running": 0,
   "available": 2,
   "githubTokenExpiresAt": "2026-02-13T14:30:00.000Z",
-  "anthropicOAuth": {
-    "status": "active",
-    "expiresAt": "2026-02-13T18:00:00.000Z",
-    "expiresInMinutes": 210,
-    "subscriptionType": "max"
+  "workerAuths": {
+    "claude": {
+      "status": "active",
+      "authMode": "oauth",
+      "refreshSupported": true,
+      "expiresAt": "2026-02-13T18:00:00.000Z",
+      "expiresInMinutes": 210,
+      "subscriptionType": "max"
+    },
+    "codex": {
+      "status": "active",
+      "authMode": "chatgpt",
+      "refreshSupported": true,
+      "expiresAt": "2026-02-13T17:40:00.000Z",
+      "expiresInMinutes": 190,
+      "lastRefreshAt": "2026-02-13T14:25:00.000Z"
+    }
   }
 }
 ```
 
-**Degraded (token expired, awaiting refresh):**
+**Degraded (one provider expired, awaiting refresh):**
 
 ```json
 {
-  "anthropicOAuth": {
-    "status": "expired",
-    "message": "Access token expired — awaiting refresh"
+  "workerAuths": {
+    "claude": {
+      "status": "expired",
+      "authMode": "oauth",
+      "refreshSupported": true,
+      "message": "Access token expired - awaiting refresh"
+    },
+    "codex": {
+      "status": "active",
+      "authMode": "chatgpt",
+      "refreshSupported": true
+    }
   }
 }
 ```
 
-**Not configured (credentials file missing):**
+**Not configured (provider auth missing):**
 
 ```json
 {
-  "anthropicOAuth": {
-    "status": "not_configured",
-    "message": "Anthropic OAuth credentials not found"
+  "workerAuths": {
+    "claude": {
+      "status": "active",
+      "authMode": "oauth",
+      "refreshSupported": true
+    },
+    "codex": {
+      "status": "not_configured",
+      "authMode": null,
+      "refreshSupported": false,
+      "message": "Codex auth not found"
+    }
   }
 }
 ```
@@ -505,7 +550,7 @@ Check credential status: `curl http://localhost:8199/health | jq .anthropicOAuth
 
 ## Container Cleanup Cron
 
-The orchestrator's in-process `cleanupOrphanedContainers()` removes stale containers on startup, but containers can also accumulate between restarts (e.g., orchestrator crash, long-running preserved containers). A cron-based cleanup script provides continuous garbage collection of exited `claude-worker-*` containers older than a configurable retention period.
+The orchestrator's in-process `cleanupOrphanedContainers()` removes stale containers on startup, but containers can also accumulate between restarts (e.g., orchestrator crash, long-running preserved containers). A cron-based cleanup script provides continuous garbage collection of exited `code-worker-*` containers older than a configurable retention period.
 
 ### Scripts
 
@@ -520,7 +565,7 @@ The orchestrator's in-process `cleanupOrphanedContainers()` removes stale contai
 
 ### How It Works
 
-1. Lists all Docker containers matching the `CONTAINER_PREFIX` (default: `claude-worker-`)
+1. Lists all Docker containers matching the `CONTAINER_PREFIX` (default: `code-worker-`)
 2. Skips **running** containers unconditionally (never killed)
 3. Skips containers younger than `RETENTION_DAYS` (default: 1 day)
 4. Re-checks container state immediately before removal (TOCTOU protection)
@@ -533,7 +578,7 @@ All via environment variables (all optional):
 
 | Variable           | Default                 | Description                   |
 | ------------------ | ----------------------- | ----------------------------- |
-| `CONTAINER_PREFIX` | `claude-worker-`        | Docker name prefix to match   |
+| `CONTAINER_PREFIX` | `code-worker-`          | Docker name prefix to match   |
 | `RETENTION_DAYS`   | `1`                     | Age threshold in days         |
 | `DRY_RUN`          | `false`                 | Set to `true` to preview only |
 | `LOG_FILE`         | (stdout)                | Path to log file              |
@@ -610,16 +655,16 @@ pnpm typecheck    # Type checking
 
 ### E2E Prerequisites
 
-| Requirement    | Check Command                              | Install                             |
-| -------------- | ------------------------------------------ | ----------------------------------- |
-| Docker daemon  | `docker info`                              | Docker Desktop                      |
-| Docker network | `docker network inspect claude-worker-net` | `./scripts/setup-worker-network.sh` |
-| Test image     | `docker image inspect claude-worker:test`  | See below                           |
+| Requirement    | Check Command                            | Install                             |
+| -------------- | ---------------------------------------- | ----------------------------------- |
+| Docker daemon  | `docker info`                            | Docker Desktop                      |
+| Docker network | `docker network inspect code-worker-net` | `./scripts/setup-worker-network.sh` |
+| Test image     | `docker image inspect code-worker:test`  | See below                           |
 
 ```bash
 # Setup
 ./scripts/setup-worker-network.sh
-cd workers/claude-worker && docker build -t claude-worker:test -f Dockerfile.test .
+cd workers/code-worker && docker build -t code-worker:test -f Dockerfile.test .
 cd ../orchestrator && pnpm test:e2e
 ```
 
@@ -631,10 +676,10 @@ cd ../orchestrator && pnpm test:e2e
 ~/.claude/
 +-- .credentials.json       # OAuth credentials (created by `claude login`)
 
-~/claude-workers/
+~/code-workers/
 +-- worktrees/              # Git worktrees for tasks (auto-created)
 
-~/.claude-orchestrator/
+~/.code-orchestrator/
 +-- github-app.pem          # GitHub App private key (auto-fetched)
 +-- state.json              # Task state (auto-created)
 +-- github-token            # Current GitHub token (auto-created)
@@ -655,8 +700,8 @@ cd ../orchestrator && pnpm test:e2e
 | "Secret Manager" fetch failed       | Check `GOOGLE_APPLICATION_CREDENTIALS` path exists                           |
 | Tests skipped                       | Check E2E prerequisites above                                                |
 | "Network not found"                 | `./scripts/setup-worker-network.sh`                                          |
-| "Image not found"                   | `docker build -t claude-worker:test -f Dockerfile.test .`                    |
-| Container name conflict             | `docker rm -f $(docker ps -aq --filter name=claude-worker-)`                 |
+| "Image not found"                   | `docker build -t code-worker:test -f Dockerfile.test .`                      |
+| Container name conflict             | `docker rm -f $(docker ps -aq --filter name=code-worker-)`                   |
 | OAuth credentials missing           | Run `claude login` on VM (use SSH tunnel for headless)                       |
 | OAuth token expired                 | Orchestrator auto-refreshes; if refresh token revoked, re-run `claude login` |
 

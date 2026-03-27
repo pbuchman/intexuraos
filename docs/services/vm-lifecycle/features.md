@@ -4,7 +4,7 @@ The infrastructure timekeeper for IntexuraOS — automated start and stop of the
 
 ## The Problem
 
-IntexuraOS runs its coding agents on a dedicated virtual machine. The orchestrator, the Claude Code workers, and the entire pipeline that turns requests into working code all live on a single cloud server. That server costs money every hour it runs, whether someone is using it or not.
+IntexuraOS runs its coding agents on a dedicated virtual machine. The orchestrator, the code-worker containers, and the entire pipeline that turns requests into working code all live on a single cloud server. That server costs money every hour it runs, whether someone is using it or not.
 
 Leave it on overnight, and you pay for an empty office. Leave it on over the weekend, and the bill compounds for 48 hours of silence. The obvious solution is to turn it off when nobody needs it. But "obvious" and "reliable" are different things.
 

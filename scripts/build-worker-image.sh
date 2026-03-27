@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ==============================================================================
-# Build Claude Worker Docker Image
+# Build Code Worker Docker Image
 # ==============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,11 +14,11 @@ ENVIRONMENT="${ENVIRONMENT:-dev}"
 
 # Use Artifact Registry URL (from env var or default)
 ARTIFACT_REGISTRY_URL="${ARTIFACT_REGISTRY_URL:-${REGION}-docker.pkg.dev/${PROJECT_ID}/intexuraos-${ENVIRONMENT}}"
-IMAGE_NAME="${ARTIFACT_REGISTRY_URL}/claude-worker"
+IMAGE_NAME="${ARTIFACT_REGISTRY_URL}/code-worker"
 IMAGE_TAG="${1:-latest}"
 
 echo "========================================"
-echo "Building Claude worker image"
+echo "Building Code Worker image"
 echo "========================================"
 echo "Image: ${IMAGE_NAME}:${IMAGE_TAG}"
 echo "Context: ${PROJECT_ROOT} (root)"
@@ -42,7 +42,7 @@ if [ "${PUSH:-false}" = "true" ]; then
         --platform "${PLATFORMS}" \
         -t "${IMAGE_NAME}:${IMAGE_TAG}" \
         --push \
-        -f workers/claude-worker/Dockerfile \
+        -f workers/code-worker/Dockerfile \
         .
     echo ""
     echo "Push complete: ${IMAGE_NAME}:${IMAGE_TAG}"
@@ -52,7 +52,7 @@ else
     docker buildx build \
         -t "${IMAGE_NAME}:${IMAGE_TAG}" \
         --load \
-        -f workers/claude-worker/Dockerfile \
+        -f workers/code-worker/Dockerfile \
         .
     echo ""
     echo "Build complete: ${IMAGE_NAME}:${IMAGE_TAG}"
@@ -60,7 +60,7 @@ else
 
     # Verify the image
     echo "Verifying image..."
-    docker run --rm "${IMAGE_NAME}:${IMAGE_TAG}" --help 2>/dev/null || echo "(Claude help check - may fail without full setup)"
+    docker run --rm "${IMAGE_NAME}:${IMAGE_TAG}" --help 2>/dev/null || echo "(Worker help check - may fail without full setup)"
 
     # Show image size
     echo ""

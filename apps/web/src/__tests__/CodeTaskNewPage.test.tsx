@@ -305,5 +305,22 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Kimi' }));
     expect(screen.getByText('Moonshot\'s latest recommended model with image understanding')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Codex' }));
+    expect(screen.getByText('OpenAI Codex runtime for code-task execution with persisted thread resume')).toBeInTheDocument();
+  });
+
+  it('uses worker-neutral copy on the task creation page', () => {
+    render(<CodeTaskNewPage />);
+
+    expect(screen.getByText('Submit a coding task to be executed by the selected worker')).toBeInTheDocument();
+    const editors = screen.getAllByTestId('md-editor');
+    expect(editors).toHaveLength(2);
+    for (const editor of editors) {
+      expect(editor).toHaveAttribute(
+        'placeholder',
+        'Describe what you want to build. The selected worker will analyze the instructions, create a Linear issue with acceptance criteria, and prepare a design — no code will be written prior to your approval.'
+      );
+    }
   });
 });

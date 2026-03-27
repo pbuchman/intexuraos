@@ -69,13 +69,13 @@ These app/worker directories have no Terraform Cloud Run or Cloud Function defin
 | ----------------------- | ----------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `apps/web`              | Web app SPA | N/A      | Deployed as static assets to GCS bucket, NOT Cloud Run. Uses `module "web_app"` + Cloud Build. Correct.                                                                                       |
 | `workers/orchestrator`  | Worker      | CRITICAL | No Cloud Run or Cloud Function module. Runs as a direct process on home-dev VM only. Not deployable to prod via Terraform.                                                                    |
-| `workers/claude-worker` | Worker      | CRITICAL | No Cloud Run or Cloud Function module. Worker containers are launched dynamically by the orchestrator (not via Terraform-managed infrastructure). By design — these are ephemeral containers. |
+| `workers/code-worker` | Worker      | CRITICAL | No Cloud Run or Cloud Function module. Worker containers are launched dynamically by the orchestrator (not via Terraform-managed infrastructure). By design — these are ephemeral containers. |
 
 **Clarification:** `apps/web` is intentionally not a Cloud Run service. It is a Vite SPA deployed to a GCS bucket via `module "web_app"`. This is correct and expected.
 
 **Orchestrator:** Runs as a persistent process (`tsx watch`) on the home-dev VM, managed via PM2 locally. No cloud deployment path exists via Terraform. This is the most significant gap — the orchestrator cannot be deployed to prod Cloud Run without Terraform changes.
 
-**claude-worker:** These are ephemeral worker containers spawned at runtime by the orchestrator (not long-running services). Intended to be excluded from Terraform. Correct by design.
+**code-worker:** These are ephemeral worker containers spawned at runtime by the orchestrator (not long-running services). Intended to be excluded from Terraform. Correct by design.
 
 ---
 
@@ -282,6 +282,6 @@ env_vars = merge(local.common_service_env_vars, {
 - **All 19 Cloud Run modules** reference valid `apps/` directories with matching names (kebab-case directory = underscore Terraform key).
 - **Default resource limits** (512Mi memory, 1 CPU) are uniform across all services. No service overrides memory or CPU — only `whatsapp_service` and `research_agent` override `timeout = "900s"`.
 - **All services use `min_scale = 0, max_scale = 1`** — designed for cost-efficient dev environment, scaling to zero when idle.
-- **`claude-worker`** intentionally has no Terraform module — it is an ephemeral container spawned by the orchestrator at runtime.
+- **`code-worker`** intentionally has no Terraform module — it is an ephemeral container spawned by the orchestrator at runtime.
 - **`apps/web`** is correctly deployed as a GCS-hosted SPA, not Cloud Run. The `module "web_app"` handles its deployment.
 - **Common secrets** (auth, Sentry DSN, ZAI key, Gemini key, Dash0) are injected to all 19 services via `local.common_service_secrets`. This is consistent with service code which reads these from environment.

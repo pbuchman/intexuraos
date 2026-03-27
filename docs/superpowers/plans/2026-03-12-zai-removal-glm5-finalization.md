@@ -6,12 +6,12 @@
 
 **Goal:** Remove ZAI and all `glm-4.7*` usage from the repo, keep only Alibaba DashScope-backed `glm-5` in the code-task stack, and run a one-off Firestore migration so persisted user-facing data no longer exposes ZAI or legacy GLM values while historical usage data remains intact.
 
-**Architecture:** Collapse the shared LLM contract to four application providers (`google`, `openai`, `anthropic`, `perplexity`) and remove the ZAI provider branch from pricing, key management, research selection, and app-service wiring. In the code-task subsystem, make `glm-5` the canonical stored/displayed worker type, keep it routed through DashScope in orchestrator/claude-worker, and allow the legacy string `glm` only as an input alias at configuration/parsing boundaries that is normalized immediately to `glm-5`. The immutable Firestore migration removes ZAI pricing/config data, rewrites legacy task records, and sanitizes persisted research/settings documents that would otherwise keep surfacing GLM in the app, but it does not delete historical usage records.
+**Architecture:** Collapse the shared LLM contract to four application providers (`google`, `openai`, `anthropic`, `perplexity`) and remove the ZAI provider branch from pricing, key management, research selection, and app-service wiring. In the code-task subsystem, make `glm-5` the canonical stored/displayed worker type, keep it routed through DashScope in orchestrator/code-worker, and allow the legacy string `glm` only as an input alias at configuration/parsing boundaries that is normalized immediately to `glm-5`. The immutable Firestore migration removes ZAI pricing/config data, rewrites legacy task records, and sanitizes persisted research/settings documents that would otherwise keep surfacing GLM in the app, but it does not delete historical usage records.
 
 **Tech Stack:** TypeScript, Fastify, React/Vite, Firestore migrations (`migrations/*.mjs`), Vitest, pnpm, rg
 
 **Implementation rules:**
-- `glm-5` is allowed only in the code-task subsystem: `apps/code-agent/**`, `workers/orchestrator/**`, `workers/claude-worker/**`, the code-task UI in `apps/web/**`, and their code-task-specific docs.
+- `glm-5` is allowed only in the code-task subsystem: `apps/code-agent/**`, `workers/orchestrator/**`, `workers/code-worker/**`, the code-task UI in `apps/web/**`, and their code-task-specific docs.
 - `glm` is allowed only as a configuration/input alias inside the code-task subsystem. Persisted documents, emitted API payloads, UI labels, and primary docs should use `glm-5`.
 - App-wide fallback clients remain Gemini-only. Do not introduce a DashScope client outside the code-task stack.
 - Firestore migration behavior is strict:
@@ -116,7 +116,7 @@
 - Modify: `workers/orchestrator/src/services/isolation/docker-provider.ts`
 - Modify: `workers/orchestrator/src/__tests__/task-dispatcher.test.ts`
 - Modify: `workers/orchestrator/src/services/isolation/__tests__/docker-provider.test.ts`
-- Modify: `workers/claude-worker/entrypoint.sh`
+- Modify: `workers/code-worker/entrypoint.sh`
 - Modify: `terraform/environments/dev/main.tf`
 - Modify: `ecosystem.config.cjs`
 - Modify: `scripts/verify-env-vars.mjs`
@@ -137,8 +137,8 @@
 - Modify: `docs/services/orchestrator/features.md`
 - Modify: `docs/services/orchestrator/tutorial.md`
 - Modify: `docs/services/orchestrator/agent.md`
-- Modify: `docs/services/claude-worker/technical.md`
-- Modify: `docs/services/claude-worker/agent.md`
+- Modify: `docs/services/code-worker/technical.md`
+- Modify: `docs/services/code-worker/agent.md`
 - Modify: `docs/packages/llm-contract/README.md`
 - Modify: `docs/packages/llm-contract/agent.md`
 - Modify: `docs/packages/llm-factory/README.md`
@@ -636,7 +636,7 @@ Expected: FAIL because the stack still uses `glm`.
 - Modify: `workers/orchestrator/src/types/schemas.ts`
 - Modify: `workers/orchestrator/src/services/task-dispatcher.ts`
 - Modify: `workers/orchestrator/src/services/isolation/docker-provider.ts`
-- Modify: `workers/claude-worker/entrypoint.sh`
+- Modify: `workers/code-worker/entrypoint.sh`
 
 - [ ] **Step 1: Rename the canonical code-task worker enum/value to `glm-5` and centralize the alias**
 
@@ -644,7 +644,7 @@ Update every persisted/output union, schema enum, route type, and UI selector va
 
 - [ ] **Step 2: Keep the DashScope runtime mapping**
 
-In orchestrator/claude-worker, preserve the existing DashScope base URL and `DASHSCOPE_API_KEY`, but key it under `glm-5`.
+In orchestrator/code-worker, preserve the existing DashScope base URL and `DASHSCOPE_API_KEY`, but key it under `glm-5`.
 
 - [ ] **Step 3: Update user-facing code-task labels**
 
@@ -756,7 +756,7 @@ git add \
   workers/orchestrator/src/services/isolation/docker-provider.ts \
   workers/orchestrator/src/__tests__/task-dispatcher.test.ts \
   workers/orchestrator/src/services/isolation/__tests__/docker-provider.test.ts \
-  workers/claude-worker/entrypoint.sh \
+  workers/code-worker/entrypoint.sh \
   migrations/059_remove-zai-and-finalize-glm5.mjs \
   migrations/__tests__/059_remove-zai-and-finalize-glm5.test.ts
 git commit -m "refactor: finalize glm-5 worker migration"
@@ -796,7 +796,7 @@ Use that file list to drive edits until the command returns nothing.
 
 Allowed docs after this step:
 - `docs/services/orchestrator/**`
-- `docs/services/claude-worker/**`
+- `docs/services/code-worker/**`
 - any code-task-specific UI docs you touched while renaming the worker contract
 
 Everything else should stop mentioning GLM entirely.
@@ -830,9 +830,9 @@ Expected: hits only under the code-task allowlist:
 - `apps/web/src/pages/CodeTask*.tsx`
 - `apps/web/src/types/index.ts`
 - `workers/orchestrator/**`
-- `workers/claude-worker/**`
+- `workers/code-worker/**`
 - `docs/services/orchestrator/**`
-- `docs/services/claude-worker/**`
+- `docs/services/code-worker/**`
 
 If `docs/site-index.json` or any non-code-task file still appears, fix it before continuing.
 

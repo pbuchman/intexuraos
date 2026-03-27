@@ -24,18 +24,18 @@
 describe('listWorkerContainers', () => {
   it('returns running and exited containers with taskId extracted from name', async () => {
     // Mock docker.listContainers to return two containers:
-    // - claude-worker-task_abc running
-    // - claude-worker-task_def exited
+    // - code-worker-task_abc running
+    // - code-worker-task_def exited
     mockDocker.listContainers.mockResolvedValue([
       {
         Id: 'container-1',
-        Names: ['/claude-worker-task_abc'],
+        Names: ['/code-worker-task_abc'],
         State: 'running',
         Created: Math.floor(Date.now() / 1000),
       },
       {
         Id: 'container-2',
-        Names: ['/claude-worker-task_def'],
+        Names: ['/code-worker-task_def'],
         State: 'exited',
         Created: Math.floor(Date.now() / 1000),
       },
@@ -49,7 +49,7 @@ describe('listWorkerContainers', () => {
     ]);
     expect(mockDocker.listContainers).toHaveBeenCalledWith({
       all: true,
-      filters: { name: ['claude-worker-'] },
+      filters: { name: ['code-worker-'] },
     });
   });
 
@@ -83,12 +83,12 @@ async listWorkerContainers(): Promise<DiscoveredContainer[]> {
   try {
     const containers = await this.docker.listContainers({
       all: true,
-      filters: { name: ['claude-worker-'] },
+      filters: { name: ['code-worker-'] },
     });
 
     return containers.map((c) => ({
       containerId: c.Id,
-      taskId: c.Names[0]!.replace(/^\/claude-worker-/, ''),
+      taskId: c.Names[0]!.replace(/^\/code-worker-/, ''),
       state: c.State,
     }));
   } catch (error) {

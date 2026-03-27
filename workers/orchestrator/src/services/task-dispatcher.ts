@@ -21,6 +21,7 @@ import type { IsolationProvider, WorkerConfig, WorkerHandle } from './isolation/
 import { WORKER_TYPES } from './isolation/types.js';
 import type { TokenRefresher } from './isolation/token-refresher.js';
 import type { ApiKeyValidator } from './api-key-validator.js';
+import type { WorkerAuthProvider, WorkerAuthRegistry } from './worker-auth/index.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { stripDockerHeaders } from './log-formatter.js';
 import {
@@ -29,6 +30,7 @@ import {
   type CompletionVerifierVerdict,
   getLast50Lines,
 } from './completion-verifier.js';
+import { getRuntime, type RuntimeEvent, type WorkerRuntime } from './runtime/index.js';
 import type { TurnMetricsCollector } from './turn-metrics-collector.js';
 import type { ExecutionDeepValidator, DeepValidationInput } from './execution-deep-validator.js';
 import type { ExecutionAgentData } from './completion-verifier.js';
@@ -59,6 +61,7 @@ export interface DispatchError {
   type:
     | 'at_capacity'
     | 'docker_unavailable'
+    | 'auth_unavailable'
     | 'invalid_request'
     | 'invalid_status'
     | 'service_error';
@@ -76,6 +79,7 @@ export interface IsolationConfig {
   provider: IsolationProvider;
   tokenRefresher: TokenRefresher;
   apiKeyValidator: ApiKeyValidator;
+  workerAuthRegistry: WorkerAuthRegistry;
   getSecrets: () => {
     ANTHROPIC_API_KEY: string;
     LINEAR_API_KEY: string;
@@ -99,7 +103,6 @@ export class TaskDispatcher {
   private readonly activeTasks = new Map<string, NodeJS.Timeout>();
   private readonly claudeErrors = new Map<string, string>();
   private readonly taskExitCodes = new Map<string, number>();
-  private readonly claudeLogBuffers = new Map<string, string>();
   private readonly attemptCompletionSignals = new Set<string>();
   private readonly completionInProgress = new Set<string>();
   private readonly pendingMessages = new Map<string, string[]>();
@@ -136,9 +139,54 @@ export class TaskDispatcher {
     return null;
   }
 
+  private getRequiredWorkerAuthProvider(
+    workerType: CreateTaskRequest['workerType']
+  ): WorkerAuthProvider | null {
+    const workerTypeConfig = WORKER_TYPES[workerType];
+    if (workerTypeConfig.runtime === 'codex') {
+      return 'codex';
+    }
+    if (workerTypeConfig.apiKeyEnvVar === 'ANTHROPIC_API_KEY') {
+      return 'claude';
+    }
+    return null;
+  }
+
+  private checkWorkerAuthAvailability(
+    workerType: CreateTaskRequest['workerType']
+  ): Result<void, DispatchError> | null {
+    const provider = this.getRequiredWorkerAuthProvider(workerType);
+    if (provider === null) {
+      return null;
+    }
+
+    const authState = this.isolation.workerAuthRegistry.getState(provider);
+    const isReady =
+      provider === 'codex'
+        ? authState.status === 'active' ||
+          (authState.status === 'expired' && authState.refreshSupported)
+        : authState.status === 'active';
+
+    if (isReady) {
+      return null;
+    }
+
+    const providerName = provider === 'claude' ? 'Claude' : 'Codex';
+    return {
+      ok: false,
+      error: {
+        type: 'auth_unavailable',
+        message: `${providerName} auth is not ready: ${authState.message ?? authState.status}`,
+      },
+    };
+  }
+
   async submitTask(request: CreateTaskRequest): Promise<Result<void, DispatchError>> {
     const healthErr = this.checkDockerAvailability();
     if (healthErr !== null) return healthErr;
+
+    const workerAuthErr = this.checkWorkerAuthAvailability(request.workerType);
+    if (workerAuthErr !== null) return workerAuthErr;
 
     // Atomic capacity check
     const capacityCheck = await this.capacityMutex.runExclusive(() => {
@@ -287,27 +335,11 @@ export class TaskDispatcher {
         );
       }
 
-      const workerTypeConfig = WORKER_TYPES[request.workerType];
-      if (workerTypeConfig.apiKeyEnvVar === 'ANTHROPIC_API_KEY') {
-        const validation = await this.isolation.apiKeyValidator.validate('anthropic');
-        if (!validation.valid) {
-          /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
-          if (this.runningCount > 0) this.runningCount--;
-          /* v8 ignore stop @preserve */
-          this.logForwarder.unregisterTask(taskId);
-          await this.sendSetupFailureWebhook(
-            request,
-            `Anthropic API key is invalid: ${validation.errorMessage ?? 'authentication failed'}`,
-            new Error('INVALID_API_KEY')
-          );
-          return;
-        }
-      }
-
       // Create task object
       const task: Task = {
         taskId,
         workerType: request.workerType,
+        runtime: WORKER_TYPES[request.workerType].runtime,
         prompt: request.prompt,
         repository,
         baseBranch,
@@ -498,7 +530,6 @@ export class TaskDispatcher {
       this.isolation.tokenRefresher.unregisterTask(taskId);
       this.claudeErrors.delete(taskId);
       this.taskExitCodes.delete(taskId);
-      this.claudeLogBuffers.delete(taskId);
       this.attemptCompletionSignals.delete(taskId);
       this.completionInProgress.delete(taskId);
       this.pendingMessages.delete(taskId);
@@ -667,6 +698,14 @@ export class TaskDispatcher {
     return 'pbuchman/intexuraos';
   }
 
+  private resolveTaskRuntime(task: Task): WorkerRuntime {
+    return task.runtime ?? WORKER_TYPES[task.workerType].runtime;
+  }
+
+  private getRuntimeDisplayName(task: Task): string {
+    return this.resolveTaskRuntime(task) === 'codex' ? 'Codex' : 'Claude';
+  }
+
   private async saveTask(task: Task): Promise<void> {
     await this.statePersistence.modify((state) => {
       state.tasks[task.taskId] = task;
@@ -757,7 +796,6 @@ export class TaskDispatcher {
           this.isolation.tokenRefresher.unregisterTask(taskId);
           this.claudeErrors.delete(taskId);
           this.taskExitCodes.delete(taskId);
-          this.claudeLogBuffers.delete(taskId);
           this.attemptCompletionSignals.delete(taskId);
           this.completionInProgress.delete(taskId);
           this.lastOutputAt.delete(taskId);
@@ -1068,13 +1106,14 @@ export class TaskDispatcher {
       return;
     }
 
-    // Missing fields: re-launch Claude with adjusted prompt if attempts remain
+    // Missing fields: re-launch the selected runtime with an adjusted prompt if attempts remain
     if (verification.missingFields.length > 0 && attempt < maxAttempts) {
       this.logForwarder.appendChunk(task.taskId, '\n\n');
       const nextAttempt = attempt + 1;
+      const runtimeName = this.getRuntimeDisplayName(task);
       this.appendOrchestratorTaskLog(
         task.taskId,
-        `Missing fields; re-launching Claude (${String(nextAttempt)}/${String(maxAttempts)}): ${verification.missingFields.join(', ')}`
+        `Missing fields; re-launching ${runtimeName} (${String(nextAttempt)}/${String(maxAttempts)}): ${verification.missingFields.join(', ')}`
       );
       await this.flushTaskLogs(task.taskId);
       await this.teardownAttempt(task.taskId, true);
@@ -1444,7 +1483,7 @@ export class TaskDispatcher {
     );
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `Resumed-after-success completion: using loosened verification (exit code + Claude error only)`
+      'Resumed-after-success completion: using loosened verification (exit code + runtime hard error only)'
     );
 
     try {
@@ -1466,6 +1505,7 @@ export class TaskDispatcher {
     }
     const claudeError = this.claudeErrors.get(task.taskId);
     const exitCode = this.taskExitCodes.get(task.taskId);
+    const runtimeName = this.getRuntimeDisplayName(task);
 
     const hasHardError =
       (typeof exitCode === 'number' && exitCode !== 0) || claudeError !== undefined;
@@ -1494,7 +1534,7 @@ export class TaskDispatcher {
           ...(typeof exitCode === 'number' && exitCode !== 0
             ? [`Non-zero exit code: ${String(exitCode)}`]
             : []),
-          ...(claudeError !== undefined ? [`Claude error: ${claudeError}`] : []),
+          ...(claudeError !== undefined ? [`${runtimeName} error: ${claudeError}`] : []),
         ].join('; '),
         remediation: { action: 'retry' },
       };
@@ -1579,10 +1619,19 @@ export class TaskDispatcher {
       task.taskId,
       `Starting worker attempt: continueSession=${String(params.continueSession)}`
     );
+    const runtimeName = this.resolveTaskRuntime(task);
     const workerTypeConfig = WORKER_TYPES[task.workerType];
+    const runtime = getRuntime(runtimeName);
+    const runtimeAttemptState = runtime.createAttemptState(task.taskId, this.logger);
+    if (params.continueSession && runtimeName === 'codex' && task.runtimeSessionId === undefined) {
+      return {
+        ok: false,
+        error: new Error('Codex resume requires a persisted runtime session ID'),
+      };
+    }
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `Worker config: type=${task.workerType} model=${workerTypeConfig.model ?? 'default'} apiUrl=${workerTypeConfig.apiBaseUrl}`
+      `Worker config: type=${task.workerType} runtime=${runtimeName} model=${workerTypeConfig.model ?? 'default'} apiUrl=${workerTypeConfig.apiBaseUrl}`
     );
     this.appendOrchestratorTaskLog(
       task.taskId,
@@ -1632,19 +1681,19 @@ export class TaskDispatcher {
         /* v8 ignore stop @preserve */
         (params.injectActiveGoal === true ? this.buildActiveGoalSection(task, params.prompt) : ''),
       workerType: task.workerType,
+      runtimeOverride: runtimeName,
+      ...(task.runtimeSessionId !== undefined && { runtimeSessionId: task.runtimeSessionId }),
       secrets: this.isolation.getSecrets(),
       gcpSaKeyPath: this.isolation.gcpSaKeyPath,
       githubAppKeyPath: this.isolation.githubAppKeyPath,
       continueSession: params.continueSession,
       onLog: (chunk) => {
         const cleaned = stripDockerHeaders(chunk);
-        const formatted = this.formatClaudeSystemMessages(cleaned);
-        this.logForwarder.appendChunk(task.taskId, formatted);
         this.lastOutputAt.set(task.taskId, Date.now());
-        this.detectClaudeError(task.taskId, cleaned);
+        void this.handleRuntimeEvents(task, runtime.processLogChunk(runtimeAttemptState, cleaned));
       },
       onComplete: (exitCode) => {
-        this.flushClaudeErrorBuffer(task.taskId);
+        void this.handleRuntimeEvents(task, runtime.flushAttemptState(runtimeAttemptState));
         this.taskExitCodes.set(task.taskId, exitCode);
         this.attemptCompletionSignals.add(task.taskId);
         this.appendOrchestratorTaskLog(
@@ -1669,7 +1718,6 @@ export class TaskDispatcher {
 
     this.claudeErrors.delete(task.taskId);
     this.taskExitCodes.delete(task.taskId);
-    this.claudeLogBuffers.delete(task.taskId);
     this.lastOutputAt.set(task.taskId, Date.now());
 
     // Store promise to enable zombie cleanup if timeout fires mid-creation.
@@ -1843,7 +1891,6 @@ export class TaskDispatcher {
     this.isolation.tokenRefresher.unregisterTask(task.taskId);
     this.claudeErrors.delete(task.taskId);
     this.taskExitCodes.delete(task.taskId);
-    this.claudeLogBuffers.delete(task.taskId);
     this.attemptCompletionSignals.delete(task.taskId);
     this.pendingMessages.delete(task.taskId);
     this.lastOutputAt.delete(task.taskId);
@@ -2071,161 +2118,53 @@ export class TaskDispatcher {
     }
   }
 
-  private detectClaudeError(taskId: string, chunk: string): void {
-    const buffered = `${this.claudeLogBuffers.get(taskId) ?? ''}${chunk}`;
-    const lines = buffered.split('\n');
-    const remainder = lines.pop() ?? '';
-    this.claudeLogBuffers.set(taskId, remainder);
+  private async handleRuntimeEvents(task: Task, events: RuntimeEvent[]): Promise<void> {
+    let shouldPersistTask = false;
+    const taskId = task.taskId;
 
-    for (const line of lines) {
-      this.parseClaudeLogLine(taskId, line);
-    }
-
-    // Eagerly parse buffered remainder if it looks like a result line,
-    // in case the exec stream stalls before delivering the trailing newline.
-    if (remainder.includes('"type":"result"')) {
-      try {
-        const jsonStart = remainder.indexOf('{');
-        if (jsonStart !== -1) {
-          JSON.parse(remainder.slice(jsonStart));
-          this.parseClaudeLogLine(taskId, remainder);
-          this.claudeLogBuffers.set(taskId, '');
-          return;
+    for (const event of events) {
+      if (event.type === 'log') {
+        if (event.text !== '') {
+          this.logForwarder.appendChunk(taskId, event.text);
         }
-      } catch {
-        // Incomplete JSON — keep buffering.
+        continue;
       }
-    }
-  }
 
-  private flushClaudeErrorBuffer(taskId: string): void {
-    const remainder = this.claudeLogBuffers.get(taskId);
-    if (remainder !== undefined && remainder.trim() !== '') {
-      this.parseClaudeLogLine(taskId, remainder);
-    }
-    this.claudeLogBuffers.delete(taskId);
-  }
+      if (event.type === 'runtime_session_started') {
+        if (task.runtimeSessionId !== event.sessionId) {
+          task.runtimeSessionId = event.sessionId;
+          shouldPersistTask = true;
+        }
+        this.logger.info({ taskId, sessionId: event.sessionId }, 'Detected runtime session start');
+        continue;
+      }
 
-  private parseClaudeLogLine(taskId: string, line: string): void {
-    const trimmed = line.trim();
-    if (trimmed === '') return;
-
-    if (trimmed.includes('<tool_use_error>')) {
-      this.logger.warn(
-        { taskId },
-        'Claude tool_use_error in stream (non-fatal sibling call failure)'
-      );
-      return;
-    }
-
-    const jsonStart = trimmed.indexOf('{');
-    if (jsonStart === -1) return;
-
-    try {
-      const obj = JSON.parse(trimmed.slice(jsonStart)) as {
-        type?: string;
-        is_error?: boolean;
-        result?: string;
-        error?: { message?: string };
-      };
-      if (obj.type === 'result') {
+      if (event.type === 'attempt_completed') {
         if (!this.attemptCompletionSignals.has(taskId)) {
-          this.taskExitCodes.set(taskId, obj.is_error === true ? 1 : 0);
+          this.taskExitCodes.set(taskId, event.exitCode);
           this.attemptCompletionSignals.add(taskId);
           this.logger.info(
-            { taskId, isError: obj.is_error === true },
-            'Detected Claude stream result; signaling attempt completion'
+            { taskId, exitCode: event.exitCode },
+            'Detected runtime stream result; signaling attempt completion'
           );
         }
-        if (obj.is_error === true) {
-          const message = obj.result ?? obj.error?.message ?? 'Task failed';
-          this.claudeErrors.set(taskId, message);
-        }
+        continue;
       }
-    } catch {
-      // Ignore non-JSON stream lines.
+
+      if (!this.attemptCompletionSignals.has(taskId)) {
+        this.taskExitCodes.set(taskId, event.exitCode);
+        this.attemptCompletionSignals.add(taskId);
+        this.logger.info(
+          { taskId, exitCode: event.exitCode },
+          'Detected runtime stream result; signaling attempt completion'
+        );
+      }
+      this.claudeErrors.set(taskId, event.errorMessage);
     }
-  }
 
-  /**
-   * Convert Claude Code JSON system messages into readable log lines.
-   * Replaces hook_started/hook_response JSON blobs with concise summaries.
-   * Strips redundant tool_use_result from user messages (bulk diffs).
-   * Non-JSON lines pass through unchanged.
-   */
-  private formatClaudeSystemMessages(text: string): string {
-    return text.replace(/^(\{.+\})$/gm, (jsonLine) => {
-      try {
-        const obj = JSON.parse(jsonLine) as Record<string, unknown>;
-        const type = obj['type'] as string | undefined;
-
-        if (type === 'system') {
-          const subtype = obj['subtype'] as string | undefined;
-          if (subtype === 'hook_started') {
-            return `[hook] ${(obj['hook_name'] as string | undefined) ?? 'unknown'} started`;
-          }
-          if (subtype === 'hook_response') {
-            const output = (obj['output'] as string | undefined) ?? '';
-            const lineCount = output.split('\n').filter((l) => l.trim() !== '').length;
-            return `[hook] ${(obj['hook_name'] as string | undefined) ?? 'unknown'} completed (${String(lineCount)} lines)`;
-          }
-          if (subtype === 'init') {
-            return this.formatInitMessage(obj);
-          }
-          return jsonLine;
-        }
-
-        if (type === 'user' && 'tool_use_result' in obj) {
-          delete obj['tool_use_result'];
-          return JSON.stringify(obj);
-        }
-
-        if (type === 'rate_limit_event') {
-          return this.formatRateLimitEvent(obj);
-        }
-
-        return jsonLine;
-      } catch {
-        return jsonLine;
-      }
-    });
-  }
-
-  private formatRateLimitEvent(obj: Record<string, unknown>): string {
-    const info = (obj['rate_limit_info'] as Record<string, unknown> | undefined) ?? {};
-    const status = (info['status'] as string | undefined) ?? 'unknown';
-    const rateLimitType = (info['rateLimitType'] as string | undefined) ?? '';
-    const resetsAt = info['resetsAt'] as number | undefined;
-    const overageStatus = info['overageStatus'] as string | undefined;
-    const overageDisabledReason = info['overageDisabledReason'] as string | undefined;
-
-    const parts = [`[rate-limit] status=${status}`];
-    if (rateLimitType !== '') parts.push(`type=${rateLimitType}`);
-    if (resetsAt !== undefined) parts.push(`resets=${new Date(resetsAt * 1000).toISOString()}`);
-    if (overageStatus !== undefined) parts.push(`overage=${overageStatus}`);
-    if (overageDisabledReason !== undefined) parts.push(`reason=${overageDisabledReason}`);
-
-    return parts.join(' ');
-  }
-
-  private formatInitMessage(obj: Record<string, unknown>): string {
-    const model = (obj['model'] as string | undefined) ?? 'unknown';
-    const tools = Array.isArray(obj['tools']) ? obj['tools'].length : 0;
-    const mode = (obj['permissionMode'] as string | undefined) ?? 'unknown';
-    const version = (obj['version'] as string | undefined) ?? '?';
-
-    const mcpServers = Array.isArray(obj['mcp_servers'])
-      ? (obj['mcp_servers'] as Record<string, unknown>[])
-          .map((s) => {
-            const name = (s['name'] as string | undefined) ?? '?';
-            const status = (s['status'] as string | undefined) === 'connected' ? 'ok' : 'fail';
-            return `${name}:${status}`;
-          })
-          .join(', ')
-      : '';
-
-    const mcpPart = mcpServers !== '' ? ` mcp=[${mcpServers}]` : '';
-    return `[claude] Session init: model=${model} tools=${String(tools)}${mcpPart} mode=${mode} v${version}`;
+    if (shouldPersistTask) {
+      await this.saveTask(task);
+    }
   }
 
   private formatLocalTime(date: Date): string {

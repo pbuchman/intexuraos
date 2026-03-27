@@ -19,6 +19,7 @@ import type { OrchestratorState } from '../types/state.js';
 import type { IsolationProvider, WorkerHandle } from '../services/isolation/types.js';
 import type { TokenRefresher } from '../services/isolation/token-refresher.js';
 import type { ApiKeyValidator } from '../services/api-key-validator.js';
+import type { WorkerAuthRegistry } from '../services/worker-auth/index.js';
 import type { TurnMetricsCollector } from '../services/turn-metrics-collector.js';
 import type { CompletionVerifierVerdict } from '../services/completion-verifier.js';
 import type { ExecutionDeepValidator } from '../services/execution-deep-validator.js';
@@ -231,11 +232,34 @@ describe('TaskDispatcher', () => {
     validate: vi.fn(async () => ({ valid: true })),
   } as unknown as ApiKeyValidator;
 
+  const mockWorkerAuthRegistry = {
+    getState: vi.fn((provider: 'claude' | 'codex') =>
+      provider === 'claude'
+        ? {
+            status: 'active' as const,
+            authMode: 'oauth' as const,
+            refreshSupported: true,
+            expiresAt: new Date(Date.now() + 4 * 3600000).toISOString(),
+            expiresInMinutes: 240,
+            subscriptionType: 'max',
+          }
+        : {
+            status: 'active' as const,
+            authMode: 'chatgpt' as const,
+            refreshSupported: true,
+            expiresAt: new Date(Date.now() + 4 * 3600000).toISOString(),
+            expiresInMinutes: 240,
+            lastRefreshAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+          }
+    ),
+  } as unknown as WorkerAuthRegistry;
+
   // Create mock isolation config
   const mockIsolationConfig: IsolationConfig = {
     provider: mockIsolationProvider,
     tokenRefresher: mockTokenRefresher,
     apiKeyValidator: mockApiKeyValidator,
+    workerAuthRegistry: mockWorkerAuthRegistry,
     getSecrets: () => ({
       ANTHROPIC_API_KEY: 'test-anthropic-key',
       LINEAR_API_KEY: 'test-linear-key',
@@ -3401,15 +3425,31 @@ describe('TaskDispatcher', () => {
     });
   });
 
-  describe('API key validation', () => {
-    it('should fail non-GLM task when Anthropic API key is invalid', async () => {
-      const invalidValidator = {
-        validate: vi.fn(async () => ({ valid: false, errorMessage: 'HTTP 401 Unauthorized' })),
-      } as unknown as ApiKeyValidator;
+  describe('worker auth preflight', () => {
+    it('should reject Claude-backed tasks when shared Claude auth is unavailable', async () => {
+      const unavailableRegistry = {
+        getState: vi.fn((provider: 'claude' | 'codex') =>
+          provider === 'claude'
+            ? {
+                status: 'not_configured' as const,
+                authMode: null,
+                refreshSupported: false,
+                message: 'Claude credentials not found',
+              }
+            : {
+                status: 'active' as const,
+                authMode: 'chatgpt' as const,
+                refreshSupported: true,
+                expiresAt: new Date(Date.now() + 4 * 3600000).toISOString(),
+                expiresInMinutes: 240,
+                lastRefreshAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+              }
+        ),
+      } as unknown as WorkerAuthRegistry;
 
-      const invalidIsolationConfig: IsolationConfig = {
+      const unavailableIsolationConfig: IsolationConfig = {
         ...mockIsolationConfig,
-        apiKeyValidator: invalidValidator,
+        workerAuthRegistry: unavailableRegistry,
       };
 
       const validationDispatcher = new TaskDispatcher(
@@ -3420,14 +3460,128 @@ describe('TaskDispatcher', () => {
         mockWebhookClient,
         mockGitHubTokenService,
         mockLogger,
-        invalidIsolationConfig,
+        unavailableIsolationConfig,
         singleAttemptCompletionControl
       );
 
       const request: CreateTaskRequest = {
-        taskId: 'invalid-key-test',
+        taskId: 'missing-claude-auth',
         workerType: 'auto',
-        prompt: 'Test invalid key',
+        prompt: 'Test invalid auth',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      const result = await validationDispatcher.submitTask(request);
+
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          type: 'auth_unavailable',
+          message: 'Claude auth is not ready: Claude credentials not found',
+        },
+      });
+      expect(validationDispatcher.getRunningCount()).toBe(0);
+    });
+
+    it('should reject Codex tasks when shared Codex auth is unavailable', async () => {
+      const unavailableRegistry = {
+        getState: vi.fn((provider: 'claude' | 'codex') =>
+          provider === 'codex'
+            ? {
+                status: 'not_configured' as const,
+                authMode: null,
+                refreshSupported: false,
+                message: 'Codex auth file not found',
+              }
+            : {
+                status: 'active' as const,
+                authMode: 'oauth' as const,
+                refreshSupported: true,
+                expiresAt: new Date(Date.now() + 4 * 3600000).toISOString(),
+                expiresInMinutes: 240,
+                subscriptionType: 'max',
+              }
+        ),
+      } as unknown as WorkerAuthRegistry;
+
+      const unavailableIsolationConfig: IsolationConfig = {
+        ...mockIsolationConfig,
+        workerAuthRegistry: unavailableRegistry,
+      };
+
+      const validationDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        unavailableIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'missing-codex-auth',
+        workerType: 'codex',
+        prompt: 'Test invalid auth',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      const result = await validationDispatcher.submitTask(request);
+
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          type: 'auth_unavailable',
+          message: 'Codex auth is not ready: Codex auth file not found',
+        },
+      });
+      expect(validationDispatcher.getRunningCount()).toBe(0);
+    });
+
+    it('should allow Codex tasks when shared Codex auth is expired but refreshable', async () => {
+      const refreshableRegistry = {
+        getState: vi.fn((provider: 'claude' | 'codex') =>
+          provider === 'codex'
+            ? {
+                status: 'expired' as const,
+                authMode: 'chatgpt' as const,
+                refreshSupported: true,
+              }
+            : {
+                status: 'active' as const,
+                authMode: 'oauth' as const,
+                refreshSupported: true,
+                expiresAt: new Date(Date.now() + 4 * 3600000).toISOString(),
+                expiresInMinutes: 240,
+                subscriptionType: 'max',
+              }
+        ),
+      } as unknown as WorkerAuthRegistry;
+
+      const validationDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        { ...mockIsolationConfig, workerAuthRegistry: refreshableRegistry },
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'refreshable-codex-auth',
+        workerType: 'codex',
+        prompt: 'Test expired but refreshable auth',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
         linearIssueLabels: [],
@@ -3438,33 +3592,18 @@ describe('TaskDispatcher', () => {
       await flushAsync();
 
       expect(result.ok).toBe(true);
-      expect(validationDispatcher.getRunningCount()).toBe(0);
-      expect(invalidValidator.validate).toHaveBeenCalledWith('anthropic');
-      expect(mockWebhookClient.send).toHaveBeenCalledWith(
-        expect.objectContaining({
-          payload: expect.objectContaining({
-            taskId: 'invalid-key-test',
-            status: 'failed',
-            error: expect.objectContaining({
-              code: 'SETUP_FAILED',
-              message: 'Anthropic API key is invalid: HTTP 401 Unauthorized',
-            }),
-          }),
-        })
-      );
     });
 
-    it('should use fallback message when errorMessage is undefined', async () => {
-      const noMsgValidator = {
-        validate: vi.fn(async () => ({ valid: false })),
-      } as unknown as ApiKeyValidator;
+    it('should fall back to auth status when unavailable auth has no message', async () => {
+      const unavailableRegistry = {
+        getState: vi.fn((_provider: 'claude' | 'codex') => ({
+          status: 'expired' as const,
+          authMode: 'chatgpt' as const,
+          refreshSupported: false,
+        })),
+      } as unknown as WorkerAuthRegistry;
 
-      const noMsgIsolationConfig: IsolationConfig = {
-        ...mockIsolationConfig,
-        apiKeyValidator: noMsgValidator,
-      };
-
-      const noMsgDispatcher = new TaskDispatcher(
+      const validationDispatcher = new TaskDispatcher(
         mockConfig,
         statePersistence,
         mockWorktreeManager,
@@ -3472,36 +3611,32 @@ describe('TaskDispatcher', () => {
         mockWebhookClient,
         mockGitHubTokenService,
         mockLogger,
-        noMsgIsolationConfig,
+        { ...mockIsolationConfig, workerAuthRegistry: unavailableRegistry },
         singleAttemptCompletionControl
       );
 
       const request: CreateTaskRequest = {
-        taskId: 'no-msg-key-test',
-        workerType: 'opus',
-        prompt: 'Test no message',
+        taskId: 'codex-auth-status-fallback',
+        workerType: 'codex',
+        prompt: 'Test status fallback',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
         linearIssueLabels: [],
         hasChildren: false,
       };
 
-      await noMsgDispatcher.submitTask(request);
-      await flushAsync();
+      const result = await validationDispatcher.submitTask(request);
 
-      expect(mockWebhookClient.send).toHaveBeenCalledWith(
-        expect.objectContaining({
-          payload: expect.objectContaining({
-            status: 'failed',
-            error: expect.objectContaining({
-              message: 'Anthropic API key is invalid: authentication failed',
-            }),
-          }),
-        })
-      );
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          type: 'auth_unavailable',
+          message: 'Codex auth is not ready: expired',
+        },
+      });
     });
 
-    it('should skip API key validation for GLM tasks', async () => {
+    it('should skip shared auth preflight for GLM tasks', async () => {
       const request: CreateTaskRequest = {
         taskId: 'glm-skip-validation',
         workerType: 'glm',
@@ -3517,14 +3652,14 @@ describe('TaskDispatcher', () => {
 
       expect(result.ok).toBe(true);
       expect(dispatcher.getRunningCount()).toBe(1);
-      expect(mockApiKeyValidator.validate).not.toHaveBeenCalled();
+      expect(mockWorkerAuthRegistry.getState).not.toHaveBeenCalled();
     });
 
-    it('should proceed when Anthropic API key is valid', async () => {
+    it('should allow Codex tasks when Codex auth is active', async () => {
       const request: CreateTaskRequest = {
-        taskId: 'valid-key-test',
-        workerType: 'opus',
-        prompt: 'Test valid key',
+        taskId: 'valid-codex-auth',
+        workerType: 'codex',
+        prompt: 'Test valid auth',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
         linearIssueLabels: [],
@@ -3536,7 +3671,7 @@ describe('TaskDispatcher', () => {
 
       expect(result.ok).toBe(true);
       expect(dispatcher.getRunningCount()).toBe(1);
-      expect(mockApiKeyValidator.validate).toHaveBeenCalledWith('anthropic');
+      expect(mockWorkerAuthRegistry.getState).toHaveBeenCalledWith('codex');
     });
   });
 
@@ -4937,6 +5072,50 @@ describe('TaskDispatcher', () => {
       );
     });
 
+    it('fails on Codex error with TASK_RESUMED_HARD_ERROR', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'resumed-codex-error-test',
+        workerType: 'codex',
+        prompt: 'Test resumed Codex error',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      expect(onLog).toBeDefined();
+      onLog?.('{"type":"turn.failed","error":{"message":"Task failed: rate limited"}}\n');
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['resumed-codex-error-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const finalTask = await resumedDispatcher.getTask('resumed-codex-error-test');
+      expect(finalTask?.status).toBe('failed');
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'TASK_RESUMED_HARD_ERROR',
+              message: expect.stringContaining('Codex error'),
+            }),
+          }),
+        })
+      );
+    });
+
     it('delivers pending messages before finalizing', async () => {
       const request: CreateTaskRequest = {
         taskId: 'resumed-pending-msg-test',
@@ -6225,6 +6404,94 @@ describe('TaskDispatcher', () => {
     });
   });
 
+  describe('codex runtime metadata', () => {
+    const createCodexTask = (overrides?: Partial<Task>): Task => ({
+      taskId: 'codex-runtime-task',
+      workerType: 'auto',
+      runtime: 'codex',
+      prompt: 'Test Codex runtime handling',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      webhookUrl: 'https://example.com/webhook',
+      webhookSecret: 'secret-123',
+      status: 'running',
+      worktreePath: '/tmp/worktrees/codex-runtime-task',
+      containerId: '',
+      startedAt: new Date().toISOString(),
+      attemptCount: 1,
+      maxAttempts: 3,
+      verificationHistory: [],
+      linearIssueLabels: [],
+      hasChildren: false,
+      ...overrides,
+    });
+
+    it('persists runtimeSessionId when codex emits a session start event', async () => {
+      const task = createCodexTask();
+      await statePersistence.modify((state) => {
+        state.tasks[task.taskId] = task;
+      });
+
+      await (
+        dispatcher as unknown as {
+          handleRuntimeEvents: (task: Task, events: unknown[]) => Promise<void>;
+        }
+      ).handleRuntimeEvents(task, [{ type: 'runtime_session_started', sessionId: 'thread_123' }]);
+
+      const persisted = await dispatcher.getTask(task.taskId);
+      expect(task.runtimeSessionId).toBe('thread_123');
+      expect(persisted?.runtimeSessionId).toBe('thread_123');
+    });
+
+    it('passes hidden codex runtime metadata into worker creation for resumed attempts', async () => {
+      const task = createCodexTask({ runtimeSessionId: 'thread_123' });
+
+      const result = await (
+        dispatcher as unknown as {
+          startWorkerAttempt: (
+            task: Task,
+            params: { prompt: string; continueSession: boolean; injectActiveGoal?: boolean }
+          ) => Promise<{ ok: true; containerId: string } | { ok: false; error: unknown }>;
+        }
+      ).startWorkerAttempt(task, {
+        prompt: 'Resume Codex work',
+        continueSession: true,
+      });
+
+      expect(result).toEqual({ ok: true, containerId: 'container-codex-runtime-task' });
+      expect(mockIsolationProvider.createWorker).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'codex-runtime-task',
+          continueSession: true,
+          runtimeOverride: 'codex',
+          runtimeSessionId: 'thread_123',
+        })
+      );
+    });
+
+    it('rejects codex resume when runtimeSessionId is missing', async () => {
+      const task = createCodexTask();
+
+      const result = await (
+        dispatcher as unknown as {
+          startWorkerAttempt: (
+            task: Task,
+            params: { prompt: string; continueSession: boolean; injectActiveGoal?: boolean }
+          ) => Promise<{ ok: true; containerId: string } | { ok: false; error: unknown }>;
+        }
+      ).startWorkerAttempt(task, {
+        prompt: 'Resume Codex work',
+        continueSession: true,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(String(result.error)).toContain('persisted runtime session');
+      }
+      expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
+    });
+  });
+
   describe('prompt truncation in task log', () => {
     it('should truncate prompt longer than 500 characters in the log', async () => {
       const longPrompt = 'A'.repeat(600);
@@ -6361,13 +6628,18 @@ describe('TaskDispatcher', () => {
       expect(dispatcher.getRunningCount()).toBe(0);
     });
 
-    it('API key validation failure decrements runningCount to zero', async () => {
-      const invalidValidator = {
-        validate: vi.fn(async () => ({ valid: false, errorMessage: 'bad key' })),
-      } as unknown as ApiKeyValidator;
+    it('shared worker auth rejection leaves runningCount at zero', async () => {
+      const unavailableRegistry = {
+        getState: vi.fn(() => ({
+          status: 'not_configured' as const,
+          authMode: null,
+          refreshSupported: false,
+          message: 'Claude credentials not found',
+        })),
+      } as unknown as WorkerAuthRegistry;
       const localIsolation: IsolationConfig = {
         ...mockIsolationConfig,
-        apiKeyValidator: invalidValidator,
+        workerAuthRegistry: unavailableRegistry,
       };
       const localDispatcher = new TaskDispatcher(
         mockConfig,
@@ -6391,9 +6663,15 @@ describe('TaskDispatcher', () => {
         hasChildren: false,
       };
 
-      await localDispatcher.submitTask(request);
-      await flushAsync();
+      const result = await localDispatcher.submitTask(request);
 
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          type: 'auth_unavailable',
+          message: 'Claude auth is not ready: Claude credentials not found',
+        },
+      });
       expect(localDispatcher.getRunningCount()).toBe(0);
     });
 
