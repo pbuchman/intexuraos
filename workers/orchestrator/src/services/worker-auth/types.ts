@@ -1,6 +1,6 @@
 export type WorkerAuthProvider = 'claude' | 'codex';
 
-export type WorkerAuthMode = 'oauth' | 'chatgpt' | 'api_key';
+export type WorkerAuthMode = 'oauth' | 'chatgpt';
 
 export type WorkerAuthStatus =
   | 'active'

@@ -81,7 +81,7 @@
 - `workers/orchestrator/src/services/runtime/__tests__/codex-runtime.test.ts`
   Contract tests for Codex JSON stream parsing, `threadId` capture, and resume behavior.
 - `workers/orchestrator/scripts/codex-login.sh`
-  Shared-auth bootstrap for Codex API-key login into a host-mounted auth directory.
+  Shared-auth bootstrap for Codex ChatGPT device-auth into a host-mounted auth directory.
 
 ### Modify
 
@@ -278,7 +278,7 @@
   Behavior:
   - launches the shared image in an interactive shell
   - mounts host Codex auth dir only
-  - supports `codex login --with-api-key`
+  - supports `codex login --device-auth`
   - verifies an auth artifact exists afterward
 
 - [ ] **Step 5: Re-run the focused tests**

@@ -554,7 +554,7 @@ Manages Claude shared auth:
 Manages Codex shared auth:
 
 - Reads `~/.code-orchestrator/codex-auth/auth.json`
-- Supports ChatGPT auth and API-key auth modes
+- Supports ChatGPT device-auth mode only
 - Tracks runtime auth health independently from Claude
 - Refreshes ChatGPT-backed auth via a lightweight `code-worker` container
 
