@@ -67,6 +67,9 @@ export function renderEvent(
     case 'review_replaced':
       return `**${ts}** -- Review cancelled (replaced) | ${event.replacedTaskId}`;
 
+    case 'remediation_decision':
+      return renderRemediationDecision(ts, event);
+
     case 'ci_failure_detected':
       return `**${ts}** -- ⚠️ CI check failed: ${event.checkName} | branch: ${event.headBranch} | ${event.conclusion}`;
 
@@ -225,6 +228,29 @@ function renderTaskInterrupted(
     return `**${ts}** -- **Interrupted** | ${formatDuration(event.duration)}`;
   }
   return `**${ts}** -- **Interrupted**`;
+}
+
+function renderRemediationDecision(
+  ts: string,
+  event: Extract<AutomationEvent, { type: 'remediation_decision' }>
+): string {
+  if (!event.required) {
+    return `**${ts}** -- Remediation not required`;
+  }
+
+  if (event.taskId !== undefined) {
+    return `**${ts}** -- Remediation required | dispatched: [\`${event.taskId}\`](https://intexuraos.cloud/#/code-tasks/${event.taskId})`;
+  }
+
+  if (event.existingTaskId !== undefined) {
+    return `**${ts}** -- Remediation required | recent remediation task already exists: [\`${event.existingTaskId}\`](https://intexuraos.cloud/#/code-tasks/${event.existingTaskId})`;
+  }
+
+  if (event.signal === 'missing') {
+    return `**${ts}** -- Remediation required (review signal missing, fail-open)`;
+  }
+
+  return `**${ts}** -- Remediation required`;
 }
 
 // ---------------------------------------------------------------------------

@@ -590,8 +590,8 @@ async function shouldSkipReviewForRemediation(
     return false;
   }
 
-  // Only an explicit true requests a fresh review. Undefined preserves the duplicate-review guard.
-  return task.requiresReReview !== true;
+  // Only an explicit false suppresses a fresh review. Undefined fails open to review.
+  return task.requiresReReview === false;
 }
 
 /** Deduplicate tool calls into string summaries for automation log events. */

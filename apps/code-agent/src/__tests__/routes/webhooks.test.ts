@@ -4120,6 +4120,24 @@ describe('POST /internal/webhooks/task-complete', () => {
           reviewBody: 'Found 2 issues',
         }),
       );
+      const automationLogMock = vi.mocked(getServices().automationLog.record);
+      await vi.waitFor(() => {
+        const decisionCall = automationLogMock.mock.calls.find(
+          (call) => (call[1] as { type: string }).type === 'remediation_decision'
+        );
+        expect(decisionCall).toBeDefined();
+      });
+      const decisionCall = automationLogMock.mock.calls.find(
+        (call) => (call[1] as { type: string }).type === 'remediation_decision'
+      );
+      expect(decisionCall).toBeDefined();
+      expect(decisionCall?.[1]).toMatchObject({
+        type: 'remediation_decision',
+        required: true,
+        source: 'review_result',
+        signal: '1',
+        taskId: 'remediation-task-1',
+      });
     });
 
     it('passes stored review body and inline comments when review_id is present', async () => {
@@ -4192,6 +4210,22 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
       expect(mockFn).not.toHaveBeenCalled();
+      const automationLogMock = vi.mocked(getServices().automationLog.record);
+      await vi.waitFor(() => {
+        const decisionCall = automationLogMock.mock.calls.find(
+          (call) => (call[1] as { type: string }).type === 'remediation_decision'
+        );
+        expect(decisionCall).toBeDefined();
+      });
+      const decisionCall = automationLogMock.mock.calls.find(
+        (call) => (call[1] as { type: string }).type === 'remediation_decision'
+      );
+      expect(decisionCall?.[1]).toMatchObject({
+        type: 'remediation_decision',
+        required: false,
+        source: 'review_result',
+        signal: '0',
+      });
     });
 
     it('creates remediation task when needs_remediation is undefined (fail-open)', async () => {
@@ -4202,6 +4236,23 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
       expect(mockFn).toHaveBeenCalledOnce();
+      const automationLogMock = vi.mocked(getServices().automationLog.record);
+      await vi.waitFor(() => {
+        const decisionCall = automationLogMock.mock.calls.find(
+          (call) => (call[1] as { type: string }).type === 'remediation_decision'
+        );
+        expect(decisionCall).toBeDefined();
+      });
+      const decisionCall = automationLogMock.mock.calls.find(
+        (call) => (call[1] as { type: string }).type === 'remediation_decision'
+      );
+      expect(decisionCall?.[1]).toMatchObject({
+        type: 'remediation_decision',
+        required: true,
+        source: 'review_result',
+        signal: 'missing',
+        taskId: 'remediation-task-1',
+      });
     });
 
     it('falls back to verifier summary when review_id is absent', async () => {
@@ -4397,6 +4448,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         agentType: 'remediation',
       });
       expect(existingRemediation.ok).toBe(true);
+      if (!existingRemediation.ok) throw new Error('Failed to seed existing remediation task');
 
       const payload = makeRemediationPayload(task.id, '1');
       const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
@@ -4404,6 +4456,23 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(response.statusCode).toBe(200);
       // createRemediationTaskFn should NOT be called because dedup guard found existing task
       expect(mockFn).not.toHaveBeenCalled();
+      const automationLogMock = vi.mocked(getServices().automationLog.record);
+      await vi.waitFor(() => {
+        const decisionCall = automationLogMock.mock.calls.find(
+          (call) => (call[1] as { type: string }).type === 'remediation_decision'
+        );
+        expect(decisionCall).toBeDefined();
+      });
+      const decisionCall = automationLogMock.mock.calls.find(
+        (call) => (call[1] as { type: string }).type === 'remediation_decision'
+      );
+      expect(decisionCall?.[1]).toMatchObject({
+        type: 'remediation_decision',
+        required: true,
+        source: 'review_result',
+        signal: '1',
+        existingTaskId: existingRemediation.value.id,
+      });
     });
 
     it('still returns 200 when findRecentRemediationForPR returns an error (best-effort)', async () => {
@@ -4431,6 +4500,62 @@ describe('POST /internal/webhooks/task-complete', () => {
       );
 
       expect(response.statusCode).toBe(200);
+    });
+
+    it('still records remediation decision when createRemediationTaskFn throws unexpectedly', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_throw_missing' });
+      const payload = makeRemediationPayload(task.id, undefined);
+
+      const { response } = await sendTaskCompleteWithRemediation(
+        payload,
+        vi.fn().mockRejectedValue(new Error('boom')),
+      );
+
+      expect(response.statusCode).toBe(200);
+      const automationLogMock = vi.mocked(getServices().automationLog.record);
+      await vi.waitFor(() => {
+        const decisionCall = automationLogMock.mock.calls.find(
+          (call) => (call[1] as { type: string }).type === 'remediation_decision'
+        );
+        expect(decisionCall).toBeDefined();
+      });
+      const decisionCall = automationLogMock.mock.calls.find(
+        (call) => (call[1] as { type: string }).type === 'remediation_decision'
+      );
+      expect(decisionCall?.[1]).toMatchObject({
+        type: 'remediation_decision',
+        required: true,
+        source: 'review_result',
+        signal: 'missing',
+      });
+    });
+
+    it('preserves explicit remediation signal when createRemediationTaskFn throws unexpectedly', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_throw_signal_1' });
+      const payload = makeRemediationPayload(task.id, '1');
+
+      const { response } = await sendTaskCompleteWithRemediation(
+        payload,
+        vi.fn().mockRejectedValue(new Error('boom')),
+      );
+
+      expect(response.statusCode).toBe(200);
+      const automationLogMock = vi.mocked(getServices().automationLog.record);
+      await vi.waitFor(() => {
+        const decisionCall = automationLogMock.mock.calls.find(
+          (call) => (call[1] as { type: string }).type === 'remediation_decision'
+        );
+        expect(decisionCall).toBeDefined();
+      });
+      const decisionCall = automationLogMock.mock.calls.find(
+        (call) => (call[1] as { type: string }).type === 'remediation_decision'
+      );
+      expect(decisionCall?.[1]).toMatchObject({
+        type: 'remediation_decision',
+        required: true,
+        source: 'review_result',
+        signal: '1',
+      });
     });
 
     it('still returns 200 when createRemediationTaskFn is not configured', async () => {
