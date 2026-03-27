@@ -139,7 +139,7 @@ export async function createRemediationTask(
 
   const { userId } = userResult.value;
 
-  // Resolution chain: user setting > 'auto'
+  // Resolution chain: explicit request > user setting > 'auto'
   let effectiveWorkerType: WorkerType = requestedWorkerType;
   if (requestedWorkerType === 'auto') {
     const settingsResult = await workerSettingsRepo.getSettings(userId);

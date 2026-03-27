@@ -10,7 +10,7 @@ import type {
   DeleteWorkerResponse,
   ReorderWorkersResponse,
   TestWorkerConnectivityResponse,
-  UpdateDefaultReviewWorkerTypeResponse,
+  UpdateDefaultWorkerTypeResponse,
 } from './workerSettingsApi.types.js';
 
 /**
@@ -110,75 +110,16 @@ export async function testWorkerConnectivity(
 }
 
 /**
- * Update default review worker type.
+ * Update default worker type for a given category.
  */
-export async function updateDefaultReviewWorkerType(
+export async function updateDefaultWorkerType(
   accessToken: string,
+  category: 'review' | 'remediation' | 'execution' | 'planning' | 'pull-request',
   workerType: string,
-): Promise<UpdateDefaultReviewWorkerTypeResponse> {
-  return await apiRequest<UpdateDefaultReviewWorkerTypeResponse>(
+): Promise<UpdateDefaultWorkerTypeResponse> {
+  return await apiRequest<UpdateDefaultWorkerTypeResponse>(
     config.codeAgentUrl,
-    '/code/worker-settings/default-review-worker-type',
-    accessToken,
-    { method: 'PATCH', body: { workerType } },
-  );
-}
-
-/**
- * Update default remediation worker type.
- */
-export async function updateDefaultRemediationWorkerType(
-  accessToken: string,
-  workerType: string,
-): Promise<UpdateDefaultReviewWorkerTypeResponse> {
-  return await apiRequest<UpdateDefaultReviewWorkerTypeResponse>(
-    config.codeAgentUrl,
-    '/code/worker-settings/default-remediation-worker-type',
-    accessToken,
-    { method: 'PATCH', body: { workerType } },
-  );
-}
-
-/**
- * Update default execution worker type.
- */
-export async function updateDefaultExecutionWorkerType(
-  accessToken: string,
-  workerType: string,
-): Promise<UpdateDefaultReviewWorkerTypeResponse> {
-  return await apiRequest<UpdateDefaultReviewWorkerTypeResponse>(
-    config.codeAgentUrl,
-    '/code/worker-settings/default-execution-worker-type',
-    accessToken,
-    { method: 'PATCH', body: { workerType } },
-  );
-}
-
-/**
- * Update default planning worker type.
- */
-export async function updateDefaultPlanningWorkerType(
-  accessToken: string,
-  workerType: string,
-): Promise<UpdateDefaultReviewWorkerTypeResponse> {
-  return await apiRequest<UpdateDefaultReviewWorkerTypeResponse>(
-    config.codeAgentUrl,
-    '/code/worker-settings/default-planning-worker-type',
-    accessToken,
-    { method: 'PATCH', body: { workerType } },
-  );
-}
-
-/**
- * Update default pull request worker type.
- */
-export async function updateDefaultPullRequestWorkerType(
-  accessToken: string,
-  workerType: string,
-): Promise<UpdateDefaultReviewWorkerTypeResponse> {
-  return await apiRequest<UpdateDefaultReviewWorkerTypeResponse>(
-    config.codeAgentUrl,
-    '/code/worker-settings/default-pull-request-worker-type',
+    `/code/worker-settings/default-${category}-worker-type`,
     accessToken,
     { method: 'PATCH', body: { workerType } },
   );
@@ -195,5 +136,5 @@ export type {
   DeleteWorkerResponse,
   ReorderWorkersResponse,
   TestWorkerConnectivityResponse,
-  UpdateDefaultReviewWorkerTypeResponse,
+  UpdateDefaultWorkerTypeResponse,
 } from './workerSettingsApi.types.js';
