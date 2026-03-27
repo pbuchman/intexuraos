@@ -445,13 +445,13 @@ On startup, the orchestrator:
 | `INTEXURAOS_MINIMAX_APP_API_KEY`          | Yes      | -                                  |
 | `INTEXURAOS_DASHSCOPE_APP_API_KEY`        | Yes      | -                                  |
 | `GOOGLE_APPLICATION_CREDENTIALS`          | Yes      | -                                  |
-| `INTEXURAOS_REPOSITORY_PATH`              | No       | `~/.code-orchestrator/repo`      |
+| `INTEXURAOS_REPOSITORY_PATH`              | No       | `~/.code-orchestrator/repo`        |
 | `INTEXURAOS_WORKER_CAPACITY`              | No       | `2`                                |
 | `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`      | No       | `3`                                |
 | `INTEXURAOS_PRESERVE_WORKER_CONTAINERS`   | No       | `1`                                |
-| `INTEXURAOS_CODE_WORKER_IMAGE`          | No       | (GCR Artifact Registry)            |
-| `INTEXURAOS_CODE_WORKER_FORENSICS`      | No       | `0`                                |
-| `INTEXURAOS_CODE_WORKER_FORENSICS_PATH` | No       | `~/.code-orchestrator/forensics` |
+| `INTEXURAOS_CODE_WORKER_IMAGE`            | No       | (GCR Artifact Registry)            |
+| `INTEXURAOS_CODE_WORKER_FORENSICS`        | No       | `0`                                |
+| `INTEXURAOS_CODE_WORKER_FORENSICS_PATH`   | No       | `~/.code-orchestrator/forensics`   |
 | `INTEXURAOS_GIT_USER_NAME`                | No       | (host git config)                  |
 | `INTEXURAOS_GIT_USER_EMAIL`               | No       | (host git config)                  |
 | `INTEXURAOS_GITHUB_APP_PRIVATE_KEY`       | No       | (Secret Manager)                   |
