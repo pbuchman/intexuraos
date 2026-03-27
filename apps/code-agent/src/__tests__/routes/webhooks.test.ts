@@ -68,6 +68,7 @@ describe('POST /internal/webhooks/task-complete', () => {
   let codeTaskRepo: CodeTaskRepository;
   let taskDispatcher: TaskDispatcherService;
   let logChunkRepo: LogChunkRepository;
+  let logLineRepo: LogLineRepository;
   let actionsAgentClient: ActionsAgentClient;
   let mockFetchWithAuth: ReturnType<typeof vi.fn>;
   let mockWhatsAppPublisher: { publishSendMessage: ReturnType<typeof vi.fn> };
@@ -99,7 +100,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       logger,
     });
 
-    const logLineRepo = createFirestoreLogLineRepository({
+    logLineRepo = createFirestoreLogLineRepository({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
     });
@@ -775,6 +776,232 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.status).toBe('implemented');
       expect(getResult.value.result?.branch).toBe('test-branch');
       expect(getResult.value.callbackReceived).toBe(true);
+    });
+
+    it('flushes a trailing Codex log fragment when the task completes', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'default',
+        workerType: 'codex',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_codex_flush_123',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const lineStoreSpy = vi.spyOn(logLineRepo, 'storeBatch');
+
+      const rawFragment = JSON.stringify({
+        type: 'turn.failed',
+        error: { message: 'boom' },
+      });
+
+      const logsPayload = {
+        taskId: task.id,
+        chunks: [
+          {
+            sequence: 1,
+            content: rawFragment,
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      };
+
+      const logsSig = generateWebhookSignature(logsPayload, 'test-webhook-secret');
+      const logsResponse = await app.inject({
+        method: 'POST',
+        url: '/internal/logs',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': logsSig.timestamp,
+          'x-request-signature': logsSig.signature,
+        },
+        payload: logsPayload,
+      });
+
+      expect(logsResponse.statusCode).toBe(200);
+      expect(lineStoreSpy).not.toHaveBeenCalled();
+
+      const completePayload = {
+        taskId: task.id,
+        status: 'failed' as const,
+        error: {
+          code: 'CODEX_FAILED',
+          message: 'Codex failed',
+        },
+      };
+
+      const completeSig = generateWebhookSignature(completePayload, 'test-webhook-secret');
+      const completeResponse = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': completeSig.timestamp,
+          'x-request-signature': completeSig.signature,
+        },
+        payload: completePayload,
+      });
+
+      expect(completeResponse.statusCode).toBe(200);
+      expect(lineStoreSpy).toHaveBeenCalledOnce();
+      const flushedLines = lineStoreSpy.mock.calls[0]?.[1];
+      expect(flushedLines?.[0]?.text).toBe(rawFragment);
+    });
+
+    it('does not flush extra log lines on task completion when Codex logs already ended with a newline', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'default',
+        workerType: 'codex',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_codex_no_flush_123',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const lineStoreSpy = vi.spyOn(logLineRepo, 'storeBatch');
+      const rawLine = JSON.stringify({
+        type: 'turn.completed',
+        usage: { output_tokens: 1 },
+      }) + '\n';
+
+      const logsPayload = {
+        taskId: task.id,
+        chunks: [
+          {
+            sequence: 1,
+            content: rawLine,
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      };
+      const logsSig = generateWebhookSignature(logsPayload, 'test-webhook-secret');
+      await app.inject({
+        method: 'POST',
+        url: '/internal/logs',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': logsSig.timestamp,
+          'x-request-signature': logsSig.signature,
+        },
+        payload: logsPayload,
+      });
+
+      const completePayload = {
+        taskId: task.id,
+        status: 'failed' as const,
+        error: {
+          code: 'CODEX_FAILED',
+          message: 'Codex failed',
+        },
+      };
+      const completeSig = generateWebhookSignature(completePayload, 'test-webhook-secret');
+      const completeResponse = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': completeSig.timestamp,
+          'x-request-signature': completeSig.signature,
+        },
+        payload: completePayload,
+      });
+
+      expect(completeResponse.statusCode).toBe(200);
+      expect(lineStoreSpy).toHaveBeenCalledTimes(1);
+      expect(lineStoreSpy.mock.calls[0]?.[1]?.[0]?.text).toBe(rawLine.trimEnd());
+    });
+
+    it('logs an error when flushing pending Codex log lines fails on task completion', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'default',
+        workerType: 'codex',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_codex_flush_error_123',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const lineStoreSpy = vi.spyOn(logLineRepo, 'storeBatch');
+      const loggerErrorSpy = vi.spyOn(logger, 'error');
+
+      const rawFragment = JSON.stringify({
+        type: 'turn.failed',
+        error: { message: 'boom' },
+      });
+
+      const logsPayload = {
+        taskId: task.id,
+        chunks: [
+          {
+            sequence: 1,
+            content: rawFragment,
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      };
+      const logsSig = generateWebhookSignature(logsPayload, 'test-webhook-secret');
+      await app.inject({
+        method: 'POST',
+        url: '/internal/logs',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': logsSig.timestamp,
+          'x-request-signature': logsSig.signature,
+        },
+        payload: logsPayload,
+      });
+
+      lineStoreSpy.mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'write failed' }));
+
+      const completePayload = {
+        taskId: task.id,
+        status: 'failed' as const,
+        error: {
+          code: 'CODEX_FAILED',
+          message: 'Codex failed',
+        },
+      };
+      const completeSig = generateWebhookSignature(completePayload, 'test-webhook-secret');
+      const completeResponse = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': completeSig.timestamp,
+          'x-request-signature': completeSig.signature,
+        },
+        payload: completePayload,
+      });
+
+      expect(completeResponse.statusCode).toBe(200);
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: task.id }),
+        'Failed to flush pending log lines on task completion',
+      );
     });
 
     it('maps planning-agent planned completion to planned status and stores flattened planning result', async () => {
@@ -6173,6 +6400,99 @@ describe('POST /internal/logs', () => {
     expect(body.count).toBe(2);
   });
 
+  it('accepts an empty chunk batch without storing formatted lines', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Fix the bug',
+      sanitizedPrompt: 'Fix the bug',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_empty_logs_123',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    vi.spyOn(logChunkRepo, 'storeBatch').mockResolvedValueOnce(ok(undefined));
+    const entryStoreSpy = vi.spyOn(logLineRepo, 'storeBatch');
+
+    const payload = {
+      taskId: task.id,
+      chunks: [],
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/logs',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(entryStoreSpy).not.toHaveBeenCalled();
+  });
+
+  it('accepts an empty chunk batch even when runtime lookup falls back transiently', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Fix the bug',
+      sanitizedPrompt: 'Fix the bug',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_empty_logs_fallback_123',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    const originalFindById = codeTaskRepo.findById.bind(codeTaskRepo);
+    const findByIdSpy = vi.spyOn(codeTaskRepo, 'findById');
+    findByIdSpy
+      .mockResolvedValueOnce(ok(task))
+      .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'transient lookup failure' }))
+      .mockImplementation(originalFindById);
+
+    vi.spyOn(logChunkRepo, 'storeBatch').mockResolvedValueOnce(ok(undefined));
+    const entryStoreSpy = vi.spyOn(logLineRepo, 'storeBatch');
+
+    const payload = {
+      taskId: task.id,
+      chunks: [],
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/logs',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(entryStoreSpy).not.toHaveBeenCalled();
+  });
+
   it('stores formatted log lines alongside raw chunks', async () => {
     const createResult = await codeTaskRepo.create({
       userId: 'user-123',
@@ -6229,6 +6549,153 @@ describe('POST /internal/logs', () => {
     expect(storedEntries).toHaveLength(2);
     expect(storedEntries?.[0]?.text).toBe('[init] Model: claude-opus-4-6 | Tools: 2');
     expect(storedEntries?.[1]?.text).toBe('[claude] Hello');
+  });
+
+  it('stores raw Codex JSON log lines without Claude formatting', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Review the PR',
+      sanitizedPrompt: 'Review the PR',
+      systemPromptHash: 'default',
+      workerType: 'codex',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_codex_123',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    vi.spyOn(logChunkRepo, 'storeBatch').mockResolvedValueOnce(ok(undefined));
+    const entryStoreSpy = vi.spyOn(logLineRepo, 'storeBatch');
+
+    const jsonContent = JSON.stringify({
+      type: 'item.completed',
+      item: { type: 'agent_message', text: 'READY' },
+    }) + '\n';
+
+    const payload = {
+      taskId: task.id,
+      chunks: [
+        {
+          sequence: 1,
+          content: jsonContent,
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/logs',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(entryStoreSpy).toHaveBeenCalledOnce();
+    const storedEntries = entryStoreSpy.mock.calls[0]?.[1];
+    expect(storedEntries).toHaveLength(1);
+    expect(storedEntries?.[0]?.text).toBe(jsonContent.trimEnd());
+  });
+
+  it('does not cache the Claude fallback when runtime lookup fails transiently for a Codex task', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Review the PR',
+      sanitizedPrompt: 'Review the PR',
+      systemPromptHash: 'default',
+      workerType: 'codex',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_codex_runtime_retry_123',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    const originalFindById = codeTaskRepo.findById.bind(codeTaskRepo);
+    const findByIdSpy = vi.spyOn(codeTaskRepo, 'findById');
+    findByIdSpy
+      .mockResolvedValueOnce(ok(task))
+      .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'transient lookup failure' }))
+      .mockImplementation(originalFindById);
+
+    vi.spyOn(logChunkRepo, 'storeBatch').mockResolvedValueOnce(ok(undefined));
+    const entryStoreSpy = vi.spyOn(logLineRepo, 'storeBatch');
+
+    const firstJson = JSON.stringify({
+      type: 'item.completed',
+      item: { type: 'agent_message', text: 'FIRST' },
+    }) + '\n';
+    const firstPayload = {
+      taskId: task.id,
+      chunks: [
+        {
+          sequence: 1,
+          content: firstJson,
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    };
+
+    const firstSig = generateWebhookSignature(firstPayload, 'test-webhook-secret');
+
+    const firstResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/logs',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': firstSig.timestamp,
+        'x-request-signature': firstSig.signature,
+      },
+      payload: firstPayload,
+    });
+
+    expect(firstResponse.statusCode).toBe(200);
+    expect(entryStoreSpy.mock.calls[0]?.[1]?.[0]?.text).toBe('[event] item.completed');
+
+    const secondJson = JSON.stringify({
+      type: 'item.completed',
+      item: { type: 'agent_message', text: 'SECOND' },
+    }) + '\n';
+    const secondPayload = {
+      taskId: task.id,
+      chunks: [
+        {
+          sequence: 2,
+          content: secondJson,
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    };
+    const secondSig = generateWebhookSignature(secondPayload, 'test-webhook-secret');
+
+    const secondResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/logs',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': secondSig.timestamp,
+        'x-request-signature': secondSig.signature,
+      },
+      payload: secondPayload,
+    });
+
+    expect(secondResponse.statusCode).toBe(200);
+    expect(entryStoreSpy.mock.calls[1]?.[1]?.[0]?.text).toBe(secondJson.trimEnd());
   });
 
   it('validates HMAC signature', async () => {
