@@ -10,6 +10,8 @@ import type { AutomationEvent } from '../ports/automationLog.js';
 
 export interface RenderEventOptions {
   repository?: string;
+  timezone?: string | undefined;   // IANA timezone, e.g. "Europe/Berlin"
+  timestamp?: string | undefined;  // ISO 8601 datetime of the event
 }
 
 /**
@@ -29,7 +31,10 @@ export function renderEvent(
   event: AutomationEvent,
   options?: RenderEventOptions
 ): string | null {
-  const ts = formatTimestamp();
+  const ts = formatTimestamp(
+    options?.timestamp ?? new Date().toISOString(),
+    options?.timezone
+  );
 
   switch (event.type) {
     case 'webhook_received':
@@ -279,11 +284,18 @@ function renderRemediationDecision(
 // Formatting helpers
 // ---------------------------------------------------------------------------
 
-function formatTimestamp(): string {
-  const now = new Date();
-  const hours = String(now.getUTCHours()).padStart(2, '0');
-  const minutes = String(now.getUTCMinutes()).padStart(2, '0');
-  return `${hours}:${minutes}`;
+// Note: timeZoneName: 'short' produces named abbreviations (CET, CEST, GMT) for
+// European/UTC zones but GMT±N (e.g. "GMT-5") for most other regions. This is
+// standard Intl.DateTimeFormat behavior with the en-GB locale.
+function formatTimestamp(iso: string, timezone?: string): string {
+  const date = new Date(iso);
+  const fmt = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: timezone ?? 'UTC',
+    timeZoneName: 'short',
+  });
+  return fmt.format(date);
 }
 
 function formatDuration(ms: number): string {
