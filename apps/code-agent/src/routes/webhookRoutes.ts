@@ -45,6 +45,34 @@ function recordTaskFailed(params: {
   });
 }
 
+function recordRemediationDecision(params: {
+  repository: string;
+  prNumber: number;
+  userId: string;
+  required: boolean;
+  signal: '0' | '1' | 'missing';
+  taskId?: string;
+  existingTaskId?: string;
+}): void {
+  getServices().automationLog.record(
+    { repository: params.repository, prNumber: params.prNumber },
+    {
+      type: 'remediation_decision',
+      required: params.required,
+      source: 'review_result',
+      signal: params.signal,
+      ...(params.taskId !== undefined && { taskId: params.taskId }),
+      ...(params.existingTaskId !== undefined && { existingTaskId: params.existingTaskId }),
+    },
+    params.userId,
+  ).catch((e: unknown) => {
+    getServices().logger.warn(
+      { error: e, repository: params.repository, prNumber: params.prNumber },
+      'Failed to record remediation decision automation log',
+    );
+  });
+}
+
 export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // Per-task formatter state: persists tool_use_id→name mappings across HTTP requests
   // so Read suppression works even when assistant + tool_result land in different log chunks
@@ -1104,18 +1132,45 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         // Best-effort: create remediation task when review finds actionable issues
         if (task.agentType === 'review' && prNumber !== undefined && result !== undefined) {
           try {
-            if (result.needs_remediation !== '0') {
+            const remediationSignal: '0' | '1' | 'missing' =
+              result.needs_remediation === '0' || result.needs_remediation === '1'
+                ? result.needs_remediation
+                : 'missing';
+            if (result.needs_remediation === '0') {
+              recordRemediationDecision({
+                repository: task.repository,
+                prNumber,
+                userId: task.userId,
+                required: false,
+                signal: remediationSignal,
+              });
+            } else {
               const recentRemediationResult = await codeTaskRepo.findRecentRemediationForPR(task.repository, prNumber);
               if (!recentRemediationResult.ok) {
                 request.log.warn(
                   { taskId, prNumber, error: recentRemediationResult.error },
                   'Failed to check recent remediation task, skipping remediation creation (best-effort)',
                 );
+                recordRemediationDecision({
+                  repository: task.repository,
+                  prNumber,
+                  userId: task.userId,
+                  required: true,
+                  signal: remediationSignal,
+                });
               } else if (recentRemediationResult.value !== null) {
                 request.log.info(
                   { taskId, prNumber, existingRemediationId: recentRemediationResult.value.id },
                   'Recent remediation task already exists for PR, skipping creation',
                 );
+                recordRemediationDecision({
+                  repository: task.repository,
+                  prNumber,
+                  userId: task.userId,
+                  required: true,
+                  signal: remediationSignal,
+                  existingTaskId: recentRemediationResult.value.id,
+                });
               } else {
                 const { createRemediationTaskFn, logger: remediationLogger } = getServices();
                 if (createRemediationTaskFn !== undefined) {
@@ -1175,19 +1230,51 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                       { taskId, prNumber, remediationTaskId: remediationResult.value.taskId },
                       'Created remediation task from review task-complete',
                     );
+                    recordRemediationDecision({
+                      repository: task.repository,
+                      prNumber,
+                      userId: task.userId,
+                      required: true,
+                      signal: remediationSignal,
+                      taskId: remediationResult.value.taskId,
+                    });
                   } else {
                     request.log.warn(
                       { taskId, prNumber, error: remediationResult.error },
                       'Failed to create remediation task from review task-complete (best-effort)',
                     );
+                    recordRemediationDecision({
+                      repository: task.repository,
+                      prNumber,
+                      userId: task.userId,
+                      required: true,
+                      signal: remediationSignal,
+                    });
                   }
                 } else {
                   request.log.warn({ taskId, prNumber }, 'createRemediationTaskFn not configured, skipping remediation creation');
+                  recordRemediationDecision({
+                    repository: task.repository,
+                    prNumber,
+                    userId: task.userId,
+                    required: true,
+                    signal: remediationSignal,
+                  });
                 }
               }
             }
           } catch (remediationError: unknown) {
             request.log.warn({ error: remediationError, taskId, prNumber }, 'Unexpected error during remediation task creation (best-effort)');
+            recordRemediationDecision({
+              repository: task.repository,
+              prNumber,
+              userId: task.userId,
+              required: true,
+              signal:
+                result.needs_remediation === '0' || result.needs_remediation === '1'
+                  ? result.needs_remediation
+                  : 'missing',
+            });
           }
         }
 
