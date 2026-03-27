@@ -1280,9 +1280,9 @@ describe('Worker Settings Routes', () => {
       expect(response.statusCode).toBe(400);
     });
 
-    it('should return 500 when updateDefaultReviewWorkerType fails', async () => {
+    it('should return 500 when updateDefaultWorkerType fails', async () => {
       const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
-      vi.spyOn(workerSettingsRepo, 'updateDefaultReviewWorkerType').mockResolvedValueOnce(
+      vi.spyOn(workerSettingsRepo, 'updateDefaultWorkerType').mockResolvedValueOnce(
         err({ code: 'internal_error' as const, message: 'Firestore write failed' })
       );
 
