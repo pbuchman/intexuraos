@@ -149,33 +149,27 @@ export async function drainTaskQueue(
 
     const activeCandidates = candidates.filter((c) => !cancelledReviewIds.has(c.id));
 
-    // Round-robin: group candidates by PR, pick first from each group
+    // Round-robin: group PR-bound candidates by PR, pick first from each group,
+    // then merge with non-PR tasks sorted by age so older work is never starved.
     const prBoundCandidates = activeCandidates.filter((c) => c.prNumber !== undefined);
     const noPrCandidates = activeCandidates.filter((c) => c.prNumber === undefined);
     const prGroups = groupTasksByPR(prBoundCandidates);
 
-    // Sort PR groups so the PR with the oldest queued task goes first
-    const sortedGroups = [...prGroups.values()].sort(
-      (a, b) => {
-        const aFirst = a[0];
-        const bFirst = b[0];
-        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — Map groups are always non-empty by construction @preserve */
-        if (aFirst === undefined || bFirst === undefined) return 0;
-        /* v8 ignore stop @preserve */
-        return aFirst.createdAt.toMillis() - bFirst.createdAt.toMillis();
-      }
-    );
-
-    // Build round-robin: first task from each PR, then tasks without PR
-    const roundRobinCandidates: CodeTask[] = [];
-    for (const group of sortedGroups) {
+    // Collect the first (oldest) task from each PR group
+    const prRepresentatives: CodeTask[] = [];
+    for (const group of prGroups.values()) {
       const first = group[0];
       /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — Map groups are always non-empty by construction @preserve */
       if (first === undefined) continue;
       /* v8 ignore stop @preserve */
-      roundRobinCandidates.push(first);
+      prRepresentatives.push(first);
     }
-    roundRobinCandidates.push(...noPrCandidates);
+
+    // Merge PR representatives with non-PR tasks, sorted by createdAt (oldest first)
+    // so that older non-PR tasks (planning/execution) are not starved by newer PR work.
+    const roundRobinCandidates = [...prRepresentatives, ...noPrCandidates].sort(
+      (a, b) => a.createdAt.toMillis() - b.createdAt.toMillis()
+    );
 
     // Find first dispatchable candidate with TTL-first + per-PR guard
     let task: CodeTask | null = null;
