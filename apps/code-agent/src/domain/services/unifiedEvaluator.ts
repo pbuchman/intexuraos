@@ -590,8 +590,8 @@ async function shouldSkipReviewForRemediation(
     return false;
   }
 
-  // requiresReReview !== true → skip review; true → proceed with review; undefined → skip (review agent controls via needs_remediation)
-  return task.requiresReReview !== true;
+  // Only an explicit false skips review. Undefined fails open and proceeds with review.
+  return task.requiresReReview === false;
 }
 
 /** Deduplicate tool calls into string summaries for automation log events. */

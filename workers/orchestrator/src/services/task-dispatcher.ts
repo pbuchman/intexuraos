@@ -444,21 +444,25 @@ export class TaskDispatcher {
         ? 'Pull Request Agent'
         : task.agentType === 'review'
           ? 'Review Agent'
-          : task.agentType === 'execution'
-            ? 'Execution Agent'
-            : task.agentType === 'planning'
-              ? 'Planning Agent'
-              : hasCodeTaskLabel(task.linearIssueLabels)
-                ? 'Execution Agent'
-                : 'Planning Agent';
+          : task.agentType === 'remediation'
+            ? 'Remediation Agent'
+            : task.agentType === 'execution'
+              ? 'Execution Agent'
+              : task.agentType === 'planning'
+                ? 'Planning Agent'
+                : hasCodeTaskLabel(task.linearIssueLabels)
+                  ? 'Execution Agent'
+                  : 'Planning Agent';
       const agentDesc =
         agentLabel === 'Pull Request Agent'
           ? 'Pull Request Agent \u2014 respond to PR comment/review and push to existing PR branch'
           : agentLabel === 'Review Agent'
             ? 'Review Agent \u2014 read-only PR review, post review comments'
-            : agentLabel === 'Execution Agent'
-              ? 'Execution Agent \u2014 implement autonomously, run CI, create PR'
-              : 'Planning Agent \u2014 create planning artifacts only, no implementation coding';
+            : agentLabel === 'Remediation Agent'
+              ? 'Remediation Agent \u2014 address review findings on the existing PR branch and decide if re-review is needed'
+              : agentLabel === 'Execution Agent'
+                ? 'Execution Agent \u2014 implement autonomously, run CI, create PR'
+                : 'Planning Agent \u2014 create planning artifacts only, no implementation coding';
       /* v8 ignore stop @preserve */
       this.appendTaggedTaskLog(taskId, 'instructions', `${agentLabel}: ${agentDesc}`);
       this.logger.info({}, `Task started: id=${taskId} runningCount=${String(this.runningCount)}`);
@@ -900,13 +904,15 @@ export class TaskDispatcher {
       ? 'pull_request'
       : task.agentType === 'review'
         ? 'review'
-        : task.agentType === 'execution' || task.agentType === 'remediation'
-          ? 'execution'
-          : task.agentType === 'planning'
-            ? 'planning'
-            : hasCodeTaskLabel(task.linearIssueLabels)
-              ? 'execution'
-              : 'planning';
+        : task.agentType === 'remediation'
+          ? 'remediation'
+          : task.agentType === 'execution'
+            ? 'execution'
+            : task.agentType === 'planning'
+              ? 'planning'
+              : hasCodeTaskLabel(task.linearIssueLabels)
+                ? 'execution'
+                : 'planning';
     this.attemptCompletionSignals.delete(task.taskId);
 
     this.logger.info(
@@ -1254,11 +1260,18 @@ export class TaskDispatcher {
       if (agentData.gh_pr_url !== '') {
         base.prUrl = agentData.gh_pr_url;
       }
+      base.review_id = agentData.review_id;
       base.review_comments_posted = agentData.review_comments_posted;
       base.review_types = agentData.review_types;
       base.requirements_tracker_updated = agentData.requirements_tracker_updated;
       base.gh_actions_status = agentData.gh_actions_status;
       base.needs_remediation = agentData.needs_remediation;
+    } else if (agentData.agentType === 'remediation') {
+      base.execution_outcome_label = agentData.outcome;
+      if (agentData.gh_pr_url !== '') {
+        base.prUrl = agentData.gh_pr_url;
+      }
+      base.requires_re_review = agentData.requires_re_review;
     } else {
       if (agentData.gh_pr_url !== '') {
         base.prUrl = agentData.gh_pr_url;
@@ -1278,6 +1291,9 @@ export class TaskDispatcher {
       result.execution_linear_issue_url = `https://linear.app/pbuchman/issue/${task.linearIssueId}`;
     }
     if (task.agentType === 'review' && task.lastSuccessResult !== undefined) {
+      if (result.review_id === undefined && task.lastSuccessResult.review_id !== undefined) {
+        result.review_id = task.lastSuccessResult.review_id;
+      }
       if (
         result.review_comments_posted === undefined &&
         task.lastSuccessResult.review_comments_posted !== undefined
@@ -1304,6 +1320,14 @@ export class TaskDispatcher {
         task.lastSuccessResult.needs_remediation !== undefined
       ) {
         result.needs_remediation = task.lastSuccessResult.needs_remediation;
+      }
+    }
+    if (task.agentType === 'remediation' && task.lastSuccessResult !== undefined) {
+      if (
+        result.requires_re_review === undefined &&
+        task.lastSuccessResult.requires_re_review !== undefined
+      ) {
+        result.requires_re_review = task.lastSuccessResult.requires_re_review;
       }
     }
     if (task.agentType === 'pull_request' && task.lastSuccessResult !== undefined) {
@@ -1925,6 +1949,7 @@ export class TaskDispatcher {
     if (taskLifecycleEvent !== undefined) {
       const agentStatusMap: Record<string, string> = {
         execution: 'implemented',
+        remediation: 'implemented',
         review: 'reviewed',
         planning: 'planned',
       };

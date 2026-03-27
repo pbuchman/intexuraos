@@ -3,6 +3,7 @@ import {
   buildSystemPrompt,
   planningPrompt,
   executionPrompt,
+  remediationPrompt,
   pullRequestPrompt,
   prReviewOverlayPrompt,
   reviewPrompt,
@@ -15,6 +16,7 @@ describe('system-prompt', () => {
     it.each([
       { name: 'planningPrompt', prompt: planningPrompt },
       { name: 'executionPrompt', prompt: executionPrompt },
+      { name: 'remediationPrompt', prompt: remediationPrompt },
       { name: 'pullRequestPrompt', prompt: pullRequestPrompt },
       { name: 'prReviewOverlayPrompt', prompt: prReviewOverlayPrompt },
       { name: 'reviewPrompt', prompt: reviewPrompt },
@@ -25,6 +27,7 @@ describe('system-prompt', () => {
     it.each([
       { name: 'planningPrompt', prompt: planningPrompt },
       { name: 'executionPrompt', prompt: executionPrompt },
+      { name: 'remediationPrompt', prompt: remediationPrompt },
       { name: 'pullRequestPrompt', prompt: pullRequestPrompt },
       { name: 'prReviewOverlayPrompt', prompt: prReviewOverlayPrompt },
       { name: 'reviewPrompt', prompt: reviewPrompt },
@@ -187,6 +190,53 @@ describe('system-prompt', () => {
 
     expect(result).not.toContain('Linear Issue: INT-123');
     expect(result).toContain('[AGENT:REVIEW]');
+  });
+
+  it('remediation prompt includes remediation-specific completion and pre-push contract', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'remediation',
+      continuationPrNumber: 901,
+      continuationPrBranch: 'fix/remediation-901',
+    });
+
+    expect(result).toContain('[AGENT:REMEDIATION]');
+    expect(result).toContain('PATCH /internal/tasks/:id/remediation-status');
+    expect(result).toContain('requires_re_review');
+    expect(result).toContain('Do NOT create a new PR');
+    expect(result).toContain('REMEDIATION_AGENT_FINAL:');
+  });
+
+  it('remediation prompt renders linearIssueTitle in PR Description when provided', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'remediation',
+      linearIssueTitle: 'Fix review follow-up',
+      continuationPrNumber: 901,
+      continuationPrBranch: 'fix/remediation-901',
+    });
+
+    expect(result).toContain('[INT-123 Fix review follow-up]');
+  });
+
+  it('remediation prompt renders fallback PR description values when Linear issue and worker type are absent', () => {
+    const {
+      linearIssueId: _issueId,
+      workerType: _workerType,
+      ...paramsWithoutIssueAndWorker
+    } = baseParams;
+    void _issueId;
+    void _workerType;
+
+    const result = buildSystemPrompt({
+      ...paramsWithoutIssueAndWorker,
+      agentType: 'remediation',
+      continuationPrNumber: 901,
+      continuationPrBranch: 'fix/remediation-901',
+    });
+
+    expect(result).toContain('[INT-XXX]');
+    expect(result).toContain('`<auto|opus|sonnet|minimax|glm|qwen|kimi>`');
   });
 
   it('execution prompt renders linearIssueTitle in PR Description when provided', () => {
@@ -1077,6 +1127,10 @@ describe('system-prompt', () => {
 
   it('execution prompt version is 5.1.1', () => {
     expect(executionPrompt.version).toBe('5.1.1');
+  });
+
+  it('remediation prompt version is 1.0.0', () => {
+    expect(remediationPrompt.version).toBe('1.0.0');
   });
 
   it('review agent prompt includes Linear section when linearIssueId is provided', () => {
