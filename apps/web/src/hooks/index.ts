@@ -44,3 +44,5 @@ export { useHellscriptBuffers } from './useHellscriptBuffers.js';
 export { useHellscriptWorkspace } from './useHellscriptWorkspace.js';
 export { useWritingConfig } from './useWritingConfig.js';
 export { useWritingSamples } from './useWritingSamples.js';
+export { useTimezone } from './useTimezone.js';
+export { useTimezoneAutoDetect } from './useTimezoneAutoDetect.js';
