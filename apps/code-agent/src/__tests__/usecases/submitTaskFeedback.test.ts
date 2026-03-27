@@ -30,6 +30,7 @@ describe('submitTaskFeedback use case', () => {
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     hasActiveTaskForLinearIssue: ReturnType<typeof vi.fn>;
+    hasDispatchedOrRunningForPR: ReturnType<typeof vi.fn>;
     findRecentTasksByLinearIssue: ReturnType<typeof vi.fn>;
   };
   let mockLinearAgentClient: {
@@ -85,6 +86,7 @@ describe('submitTaskFeedback use case', () => {
       create: vi.fn(),
       update: vi.fn(),
       hasActiveTaskForLinearIssue: vi.fn(),
+      hasDispatchedOrRunningForPR: vi.fn().mockResolvedValue(ok({ hasActive: false })),
       findRecentTasksByLinearIssue: vi.fn().mockResolvedValue(ok([])),
     };
 
