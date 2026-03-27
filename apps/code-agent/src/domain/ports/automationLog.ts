@@ -115,7 +115,6 @@ export type AutomationEvent =
       source: 'review_result';
       signal: '0' | '1' | 'missing';
       taskId?: string;
-      existingTaskId?: string;
     }
 
   // Phase 7: CI Failure handling (INT-853)
