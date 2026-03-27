@@ -981,6 +981,119 @@ describe('workerSettingsRepository', () => {
         expect(settingsResult.value.defaultReviewWorkerType).toBeUndefined();
       }
     });
+
+    it('should still work after refactor to delegate to updateDefaultWorkerType', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const updateResult = await repo.updateDefaultReviewWorkerType('user-delegate', 'glm');
+      expect(updateResult.ok).toBe(true);
+
+      const settingsResult = await repo.getSettings('user-delegate');
+      expect(settingsResult.ok).toBe(true);
+      if (settingsResult.ok && settingsResult.value !== null) {
+        expect(settingsResult.value.defaultReviewWorkerType).toBe('glm');
+        expect(settingsResult.value.workers).toEqual([]);
+      }
+    });
+  });
+
+  describe('updateDefaultWorkerType', () => {
+    it('should set defaultRemediationWorkerType on a new doc', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const updateResult = await repo.updateDefaultWorkerType(
+        'user-remediation-new',
+        'defaultRemediationWorkerType',
+        'glm'
+      );
+      expect(updateResult.ok).toBe(true);
+
+      const settingsResult = await repo.getSettings('user-remediation-new');
+      expect(settingsResult.ok).toBe(true);
+      if (settingsResult.ok && settingsResult.value !== null) {
+        expect(settingsResult.value.defaultRemediationWorkerType).toBe('glm');
+        expect(settingsResult.value.workers).toEqual([]);
+      }
+    });
+
+    it('should update defaultExecutionWorkerType on an existing doc', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create the doc first via addWorker
+      await repo.addWorker('user-execution-existing', createWorkerConfig());
+
+      const updateResult = await repo.updateDefaultWorkerType(
+        'user-execution-existing',
+        'defaultExecutionWorkerType',
+        'opus'
+      );
+      expect(updateResult.ok).toBe(true);
+
+      const settingsResult = await repo.getSettings('user-execution-existing');
+      expect(settingsResult.ok).toBe(true);
+      if (settingsResult.ok && settingsResult.value !== null) {
+        expect(settingsResult.value.defaultExecutionWorkerType).toBe('opus');
+        // Existing workers should still be present
+        expect(settingsResult.value.workers).toHaveLength(1);
+      }
+    });
+
+    it('should round-trip defaultPlanningWorkerType via getSettings', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.updateDefaultWorkerType('user-planning-roundtrip', 'defaultPlanningWorkerType', 'glm');
+
+      const settingsResult = await repo.getSettings('user-planning-roundtrip');
+      expect(settingsResult.ok).toBe(true);
+      if (settingsResult.ok && settingsResult.value !== null) {
+        expect(settingsResult.value.defaultPlanningWorkerType).toBe('glm');
+      }
+    });
+
+    it('should round-trip defaultPullRequestWorkerType via getSettings', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.updateDefaultWorkerType('user-pr-roundtrip', 'defaultPullRequestWorkerType', 'opus');
+
+      const settingsResult = await repo.getSettings('user-pr-roundtrip');
+      expect(settingsResult.ok).toBe(true);
+      if (settingsResult.ok && settingsResult.value !== null) {
+        expect(settingsResult.value.defaultPullRequestWorkerType).toBe('opus');
+      }
+    });
+
+    it('should not include unset fields in getSettings', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.updateDefaultWorkerType('user-unset-fields', 'defaultRemediationWorkerType', 'glm');
+
+      const settingsResult = await repo.getSettings('user-unset-fields');
+      expect(settingsResult.ok).toBe(true);
+      if (settingsResult.ok && settingsResult.value !== null) {
+        expect(settingsResult.value.defaultRemediationWorkerType).toBe('glm');
+        expect(settingsResult.value.defaultExecutionWorkerType).toBeUndefined();
+        expect(settingsResult.value.defaultPlanningWorkerType).toBeUndefined();
+        expect(settingsResult.value.defaultPullRequestWorkerType).toBeUndefined();
+      }
+    });
   });
 
 });
