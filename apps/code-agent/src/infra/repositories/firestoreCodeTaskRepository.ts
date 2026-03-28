@@ -3,11 +3,6 @@
  */
 
 /* eslint-disable */
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 
 import type { Firestore, QueryDocumentSnapshot, Transaction as FirestoreTransaction } from '@google-cloud/firestore';
 import { FieldValue, Timestamp } from '@google-cloud/firestore';
@@ -65,6 +60,10 @@ function generateDedupKey(userId: string, prompt: string, linearIssueId?: string
     : userId + normalized;
   const hash = createHash('sha256').update(input).digest('hex');
   return hash.substring(0, 16);
+}
+
+function isMergeConflictTaskData(data: Record<string, unknown>): boolean {
+  return data['followUpReason'] === 'merge_conflict' || data['systemPromptHash'] === MERGE_CONFLICT_SYSTEM_PROMPT_HASH;
 }
 
 export const createFirestoreCodeTaskRepository = (deps: {
@@ -758,22 +757,23 @@ export const createFirestoreCodeTaskRepository = (deps: {
           .where('agentType', '==', 'pull_request')
           .where('status', '==', 'implemented')
           .orderBy('completedAt', 'desc')
-          .limit(1)
+          .limit(50)
           .get();
 
-        if (snapshot.empty) {
-          return ok(null);
+        for (const doc of snapshot.docs) {
+          const data = doc.data();
+          if (!isMergeConflictTaskData(data)) {
+            return ok({
+              id: doc.id,
+              /* v8 ignore start -- upstream: FakeFirestore always returns complete documents, cannot simulate missing Firestore fields @preserve */
+              workerLocation: String(data['workerLocation'] ?? ''),
+              userId: String(data['userId'] ?? ''),
+              /* v8 ignore stop @preserve */
+            });
+          }
         }
 
-        const doc = snapshot.docs[0]!;
-        const data = doc.data();
-        return ok({
-          id: doc.id,
-          /* v8 ignore start -- upstream: FakeFirestore always returns complete documents, cannot simulate missing Firestore fields @preserve */
-          workerLocation: String(data['workerLocation'] ?? ''),
-          userId: String(data['userId'] ?? ''),
-          /* v8 ignore stop @preserve */
-        });
+        return ok(null);
       } catch (error) {
         logger.error({ error, repository, prNumber }, 'Failed to find preserved pull_request task');
         return err({
@@ -902,23 +902,17 @@ export const createFirestoreCodeTaskRepository = (deps: {
           .where('repository', '==', repository)
           .where('prNumber', '==', prNumber)
           .orderBy('createdAt', 'desc')
-          .limit(1)
+          .limit(50)
           .get();
 
-        if (snapshot.empty) {
-          return ok(null);
+        for (const doc of snapshot.docs) {
+          const data = doc.data();
+          if (!isMergeConflictTaskData(data)) {
+            return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
+          }
         }
 
-        const doc = snapshot.docs[0]!;
-        const data = doc.data();
-        const task: CodeTask = {
-          ...data,
-          id: doc.id,
-          createdAt: data['createdAt'],
-          updatedAt: data['updatedAt'],
-        } as CodeTask;
-
-        return ok(task);
+        return ok(null);
       } catch (error) {
         logger.error({ error, repository, prNumber }, 'Failed to find task by PR');
         return err({
@@ -1000,12 +994,13 @@ export const createFirestoreCodeTaskRepository = (deps: {
           .limit(50)
           .get();
 
-        // Find the first execution-eligible task (excludes 'review' and 'remediation')
+        // Find the first execution-eligible task.
+        // Excludes review, remediation, and merge-conflict follow-up tasks.
         for (const doc of snapshot.docs) {
           const data = doc.data();
           const agentType = data['agentType'] as string | undefined;
           // Treat missing agentType as execution-eligible (backward compatibility)
-          if (agentType !== 'review' && agentType !== 'remediation') {
+          if (agentType !== 'review' && agentType !== 'remediation' && !isMergeConflictTaskData(data)) {
             return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
           }
         }
