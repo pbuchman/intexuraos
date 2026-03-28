@@ -4647,7 +4647,7 @@ describe('POST /internal/webhooks/task-complete', () => {
   describe('review task-complete → review-outcome labels on Linear issue', () => {
     async function createOriginTask(overrides: {
       traceId: string;
-      agentType: 'planning' | 'execution';
+      agentType: 'planning' | 'execution' | 'pull_request';
       linearIssueId?: string;
     }): Promise<import('../../domain/models/codeTask.js').CodeTask> {
       const result = await codeTaskRepo.create({
@@ -4780,22 +4780,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       await codeTaskRepo.update(planningTask.id, { status: 'planned' });
 
       // Create a newer pull_request task on the same PR
-      const prTaskResult = await codeTaskRepo.create({
-        userId: 'user-123',
-        prompt: 'PR comment follow-up',
-        sanitizedPrompt: 'PR comment follow-up',
-        systemPromptHash: 'pr-auto',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace_label_pr_task_newer',
-        prNumber: 42,
-        webhookSecret: 'test-webhook-secret',
-        agentType: 'pull_request',
-        linearIssueId: 'INT-500',
-      });
-      if (!prTaskResult.ok) throw new Error('Failed to create pull_request task');
+      await createOriginTask({ traceId: 'trace_label_pr_task_newer', agentType: 'pull_request' });
 
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_pr_task_review' });
       const payload = makeLabelPayload(reviewTask.id);
@@ -4810,6 +4795,31 @@ describe('POST /internal/webhooks/task-complete', () => {
         userId: 'user-123',
         issueId: 'linear-issue-uuid',
         addLabels: ['ready-to-implement'],
+      });
+    });
+
+    it('adds ready-to-merge label when origin is a pull_request task (fallback)', async () => {
+      // Create only a pull_request origin task — no planning/execution.
+      // findOriginTaskByPR should return the pull_request task as fallback.
+      await createOriginTask({ traceId: 'trace_label_pr_only_origin', agentType: 'pull_request' });
+
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_pr_only_review' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const validateSpy = vi.mocked(lac.validateIssue);
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      expect(validateSpy).toHaveBeenCalledWith({
+        userId: 'user-123',
+        identifier: 'INT-500',
+      });
+      expect(metadataSpy).toHaveBeenCalledWith({
+        userId: 'user-123',
+        issueId: 'linear-issue-uuid',
+        addLabels: ['ready-to-merge'],
       });
     });
 
