@@ -1183,34 +1183,67 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 signal: remediationSignal,
               });
 
-              // Best-effort: set review-outcome label on the origin Linear issue
+              // Best-effort: set review-outcome label on the associated Linear issue
               try {
                 const originResult = await codeTaskRepo.findOriginTaskByPR(task.repository, prNumber);
+                let targetLinearIssueId: string | undefined;
+                let targetUserId: string;
+                let label: string;
+                let source: string;
+
                 if (originResult.ok && originResult.value !== null && originResult.value.linearIssueId !== undefined) {
-                  const originTask = originResult.value;
-                  const originLinearIssueId: string = originResult.value.linearIssueId;
-                  const label: string =
-                    originTask.agentType === 'planning' ? 'ready-to-implement' : 'ready-to-merge';
+                  targetLinearIssueId = originResult.value.linearIssueId;
+                  targetUserId = originResult.value.userId;
+                  label = originResult.value.agentType === 'planning' ? 'ready-to-implement' : 'ready-to-merge';
+                  source = 'origin';
+                } else {
+                  // Fallback: use review task's own issue (common for external PRs)
+                  targetLinearIssueId = task.linearIssueId;
+                  targetUserId = task.userId;
+                  label = 'ready-to-merge';
+                  source = 'review-fallback';
+
+                  if (!originResult.ok) {
+                    request.log.warn({ taskId, prNumber, error: originResult.error },
+                      'Origin task lookup failed, falling back to review task issue');
+                  } else {
+                    request.log.info({ taskId, prNumber,
+                      originFound: originResult.value !== null,
+                      originHasLinearId: originResult.value?.linearIssueId !== undefined },
+                      'No origin task with linearIssueId, falling back to review task issue');
+                  }
+                }
+
+                if (targetLinearIssueId === undefined) {
+                  request.log.warn({ taskId, prNumber },
+                    'No Linear issue available for review-outcome label — skipping');
+                } else {
                   const issueValidation = await linearAgentClient.validateIssue({
-                    userId: originTask.userId,
-                    identifier: originLinearIssueId,
+                    userId: targetUserId,
+                    identifier: targetLinearIssueId,
                   });
                   if (issueValidation.ok) {
                     const labelResult = await linearAgentClient.updateIssueMetadata({
-                      userId: originTask.userId,
+                      userId: targetUserId,
                       issueId: issueValidation.value.id,
                       addLabels: [label],
                     });
                     if (labelResult.ok) {
-                      request.log.info({ taskId, prNumber, label, linearIssueId: originLinearIssueId }, 'Set review-outcome label on origin issue');
+                      if (labelResult.value.droppedLabels.length > 0) {
+                        request.log.warn({ taskId, prNumber, droppedLabels: labelResult.value.droppedLabels, linearIssueId: targetLinearIssueId },
+                          'Review-outcome label not found in Linear team — label not applied');
+                      } else {
+                        request.log.info({ taskId, prNumber, label, linearIssueId: targetLinearIssueId, source },
+                          'Set review-outcome label');
+                      }
                     } else {
-                      request.log.warn({ taskId, prNumber, label, error: labelResult.error }, 'Failed to set review-outcome label (best-effort)');
+                      request.log.warn({ taskId, prNumber, label, error: labelResult.error },
+                        'Failed to set review-outcome label (best-effort)');
                     }
                   } else {
-                    request.log.warn({ taskId, prNumber, linearIssueId: originLinearIssueId, error: issueValidation.error }, 'Failed to validate origin issue for review-outcome label (best-effort)');
+                    request.log.warn({ taskId, prNumber, linearIssueId: targetLinearIssueId, error: issueValidation.error },
+                      'Failed to validate issue for review-outcome label (best-effort)');
                   }
-                } else if (!originResult.ok) {
-                  request.log.warn({ taskId, prNumber, error: originResult.error }, 'Failed to look up origin task for review-outcome label (best-effort)');
                 }
               } catch (labelError: unknown) {
                 request.log.warn({ error: labelError, taskId, prNumber }, 'Failed to set review-outcome label (best-effort)');
