@@ -7435,6 +7435,90 @@ describe('TaskDispatcher', () => {
         expect(result.error.type).toBe('service_error');
       }
     });
+
+    it('rejects sendMessage for review agentType', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-review-agent',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const state = await statePersistence.load();
+      const task = state.tasks['msg-review-agent'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      task.agentType = 'review';
+      await statePersistence.save(state);
+
+      const result = await dispatcher.sendMessage('msg-review-agent', 'Follow-up');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('invalid_agent_type');
+      }
+    });
+
+    it('rejects sendMessage for remediation agentType', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-remediation-agent',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const state = await statePersistence.load();
+      const task = state.tasks['msg-remediation-agent'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      task.agentType = 'remediation';
+      await statePersistence.save(state);
+
+      const result = await dispatcher.sendMessage('msg-remediation-agent', 'Follow-up');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('invalid_agent_type');
+      }
+    });
+
+    it('allows sendMessage for pull_request agentType', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-pull-request-agent',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const state = await statePersistence.load();
+      const task = state.tasks['msg-pull-request-agent'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      task.agentType = 'pull_request';
+      await statePersistence.save(state);
+
+      const result = await dispatcher.sendMessage('msg-pull-request-agent', 'Follow-up');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'resumed' });
+      }
+    });
   });
 
   describe('resumeTaskWithUserMessage pendingResumeStart guard', () => {

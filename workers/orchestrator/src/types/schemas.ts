@@ -65,6 +65,6 @@ export interface SendMessageResult {
 }
 
 export interface SendMessageError {
-  type: 'not_found' | 'invalid_status' | 'service_error';
+  type: 'not_found' | 'invalid_status' | 'service_error' | 'invalid_agent_type';
   message: string;
 }
