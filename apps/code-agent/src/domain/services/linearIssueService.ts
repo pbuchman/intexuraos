@@ -66,6 +66,11 @@ export interface LinearIssueService {
    * Transition issue to QA when PR is merged.
    */
   markQa(userId: string, linearIssueId: string): Promise<void>;
+
+  /**
+   * Remove a label from an issue by name. Best-effort: logs and swallows errors.
+   */
+  removeLabel(userId: string, linearIssueId: string, labelName: string): Promise<void>;
 }
 
 export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIssueService {
@@ -208,6 +213,22 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
 
     async markQa(userId: string, linearIssueId: string): Promise<void> {
       await transitionState(userId, linearIssueId, 'qa', 'QA');
+    },
+
+    async removeLabel(userId: string, linearIssueId: string, labelName: string): Promise<void> {
+      if (!linearIssueId) {
+        return;
+      }
+
+      const result = await linearAgentClient.updateIssueMetadata({
+        userId,
+        issueId: linearIssueId,
+        removeLabels: [labelName],
+      });
+
+      if (!result.ok) {
+        logger.warn({ linearIssueId, labelName, error: result.error }, 'Failed to remove label from Linear issue');
+      }
     },
   };
 }
