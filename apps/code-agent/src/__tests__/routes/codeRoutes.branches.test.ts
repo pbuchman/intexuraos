@@ -343,6 +343,7 @@ describe('codeRoutes branch coverage', () => {
         baseBranch: 'main',
         traceId: 'trace-123',
         linearIssueId: 'INT-100',
+        prNumber: 42,
         agentType: 'planning',
         actionId: 'action-abc',
         approvalEventId: 'approval-xyz',
@@ -377,6 +378,7 @@ describe('codeRoutes branch coverage', () => {
       expect(task.error).toBeDefined();
       expect(task.error.code).toBe('WORKER_ERROR');
       expect(task.linearIssueId).toBe('INT-100');
+      expect(task.prNumber).toBe(42);
       expect(task.agentType).toBe('planning');
       expect(task.createdAt).toBeDefined();
       expect(task.updatedAt).toBeDefined();

@@ -146,7 +146,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
 
       {task.result?.summary !== undefined && task.result.summary !== '' ? <MemoRunSummaryCard summary={task.result.summary} /> : null}
 
-      {task.result !== undefined ? <MemoTaskResultSection task={task} /> : null}
+      <MemoTaskResultSection task={task} />
       {task.error !== undefined ? <MemoTaskErrorCard task={task} /> : null}
 
       <MemoV2LogStream
@@ -363,15 +363,14 @@ const MemoRunSummaryCard = memo(function RunSummaryCard({ summary }: { summary: 
 
 const MemoTaskResultSection = memo(function TaskResultSection({ task }: { task: CodeTask }): React.JSX.Element | null {
   const result = task.result;
-  if (result === undefined) return null;
 
-  const prNumber = result.prUrl !== undefined
-    ? parseInt(/\/pull\/(\d+)/.exec(result.prUrl)?.[1] ?? '', 10)
-    : undefined;
+  const prNumber = task.prNumber
+    ?? (result?.prUrl !== undefined
+      ? parseInt(/\/pull\/(\d+)/.exec(result.prUrl)?.[1] ?? '', 10)
+      : undefined);
 
   const hasValidPr = prNumber !== undefined && !isNaN(prNumber);
 
-  // V2 fix: Only render PREventsGroup here, NOT the summary (which is in RunSummaryCard)
   if (!hasValidPr) return null;
 
   return (
@@ -383,7 +382,7 @@ const MemoTaskResultSection = memo(function TaskResultSection({ task }: { task: 
     </div>
   );
 }, (prev, next) =>
-  prev.task.result === next.task.result
+  prev.task.result === next.task.result && prev.task.prNumber === next.task.prNumber
 );
 
 const MemoTaskErrorCard = memo(function TaskErrorCard({ task }: { task: CodeTask }): React.JSX.Element | null {
