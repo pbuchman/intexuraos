@@ -60,6 +60,7 @@ interface WorkerTaskRequest {
   traceId?: string;
   agentType?: AgentType;
   trackingCommentId?: string;
+  prNumber?: number;
   continuationPrNumber?: number;
   continuationPrBranch?: string;
   planningPrBranch?: string;
@@ -132,6 +133,9 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     }
     if (request.trackingCommentId !== undefined) {
       taskRequest.trackingCommentId = request.trackingCommentId;
+    }
+    if (request.prNumber !== undefined) {
+      taskRequest.prNumber = request.prNumber;
     }
     if (request.continuationPrNumber !== undefined) {
       taskRequest.continuationPrNumber = request.continuationPrNumber;

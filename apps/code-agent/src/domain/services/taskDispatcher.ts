@@ -49,6 +49,8 @@ export interface DispatchRequest {
   agentType?: AgentType;
   /** Existing PR tracking comment to reuse for pull_request tasks. */
   trackingCommentId?: string;
+  /** PR number this task is operating on. Used to enforce one-per-PR container preservation. */
+  prNumber?: number;
   /** Existing PR number to continue instead of creating a fresh PR. */
   continuationPrNumber?: number;
   /** Existing PR branch to continue instead of creating a fresh PR. */

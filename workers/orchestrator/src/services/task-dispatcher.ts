@@ -361,6 +361,7 @@ export class TaskDispatcher {
         ...(request.trackingCommentId !== undefined && {
           trackingCommentId: request.trackingCommentId,
         }),
+        ...(request.prNumber !== undefined && { prNumber: request.prNumber }),
         ...(request.continuationPrNumber !== undefined && {
           continuationPrNumber: request.continuationPrNumber,
         }),
@@ -589,7 +590,18 @@ export class TaskDispatcher {
     const task = loadResult.tasks[taskId];
 
     if (task === undefined) {
+      // TODO(INT-1130): call code-agent /internal/tasks/:id/dispatch-metadata when task not in state
       return { ok: false, error: { type: 'not_found', message: 'Task not found' } };
+    }
+
+    if (task.agentType === 'review' || task.agentType === 'remediation') {
+      return {
+        ok: false,
+        error: {
+          type: 'invalid_agent_type' as const,
+          message: 'Cannot send messages to review/remediation tasks',
+        },
+      };
     }
 
     if (task.status === 'running') {
@@ -1877,9 +1889,7 @@ export class TaskDispatcher {
   ): Promise<void> {
     const finalStatus = statusParam;
     const isNonPreservableAgentType =
-      task.agentType === 'review' ||
-      task.agentType === 'pull_request' ||
-      task.agentType === 'remediation';
+      task.agentType === 'review' || task.agentType === 'remediation';
     const shouldPreserve =
       this.preserveWorkerContainers &&
       !isNonPreservableAgentType &&
@@ -1909,6 +1919,26 @@ export class TaskDispatcher {
       this.logForwarder.close(task.taskId);
     }
 
+    if (shouldPreserve && task.agentType === 'pull_request' && task.prNumber !== undefined) {
+      const preserved = (await this.isolation.provider.listPreservedWorkers?.()) ?? [];
+      if (preserved.length > 0) {
+        const savedState = await this.statePersistence.load();
+        for (const p of preserved) {
+          const preservedTask = savedState.tasks[p.taskId];
+          if (
+            preservedTask?.agentType === 'pull_request' &&
+            preservedTask.prNumber === task.prNumber &&
+            preservedTask.taskId !== task.taskId
+          ) {
+            this.logger.info(
+              { oldTaskId: p.taskId, newTaskId: task.taskId, prNumber: task.prNumber },
+              'Destroying previous preserved pull_request container for same PR'
+            );
+            await this.isolation.provider.destroyWorker(p.taskId);
+          }
+        }
+      }
+    }
     if (shouldPreserve) {
       await this.isolation.provider.preserveWorker?.(task.taskId);
     } else {

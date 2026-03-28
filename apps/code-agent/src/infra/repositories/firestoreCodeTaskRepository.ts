@@ -747,6 +747,42 @@ export const createFirestoreCodeTaskRepository = (deps: {
       }
     },
 
+    findPreservedPullRequestTask: async (
+      repository: string,
+      prNumber: number,
+    ): Promise<Result<{ id: string; workerLocation: string; userId: string } | null, RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('repository', '==', repository)
+          .where('prNumber', '==', prNumber)
+          .where('agentType', '==', 'pull_request')
+          .where('status', '==', 'implemented')
+          .orderBy('completedAt', 'desc')
+          .limit(1)
+          .get();
+
+        if (snapshot.empty) {
+          return ok(null);
+        }
+
+        const doc = snapshot.docs[0]!;
+        const data = doc.data();
+        return ok({
+          id: doc.id,
+          /* v8 ignore start -- upstream: FakeFirestore always returns complete documents, cannot simulate missing Firestore fields @preserve */
+          workerLocation: String(data['workerLocation'] ?? ''),
+          userId: String(data['userId'] ?? ''),
+          /* v8 ignore stop @preserve */
+        });
+      } catch (error) {
+        logger.error({ error, repository, prNumber }, 'Failed to find preserved pull_request task');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
     deleteTask: async (taskId: string, userId: string): Promise<Result<void, RepositoryError>> => {
       try {
         const doc = await collection.doc(taskId).get();
