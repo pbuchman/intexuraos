@@ -3203,42 +3203,6 @@ describe('TaskDispatcher', () => {
       expect(destroyWorker).toHaveBeenCalledWith(taskId);
     });
 
-    it('does not preserve pull_request agent containers when preserveWorkerContainers is enabled', async () => {
-      const { destroyWorker, preserveWorker, dispatcher } = createPreserveTestFixture();
-
-      const taskId = 'pr-no-preserve';
-      await dispatcher.submitTask({
-        taskId,
-        workerType: 'auto',
-        prompt: 'PR task should not preserve',
-        webhookUrl: 'https://example.com/webhook',
-        webhookSecret: 'secret',
-        linearIssueLabels: [],
-        hasChildren: false,
-        agentType: 'pull_request',
-      });
-      await flushAsync();
-
-      const task = await dispatcher.getTask(taskId);
-      if (task === null) {
-        throw new Error('Task not found');
-      }
-
-      const internalDispatcher = dispatcher as unknown as {
-        finalizeTask: (
-          taskArg: Record<string, unknown>,
-          finalStatus: 'failed',
-          payload: { result?: unknown; error?: unknown }
-        ) => Promise<void>;
-      };
-      await internalDispatcher.finalizeTask(task as unknown as Record<string, unknown>, 'failed', {
-        error: { code: 'TEST', message: 'test', remediation: { action: 'retry' as const } },
-      });
-
-      expect(preserveWorker).not.toHaveBeenCalled();
-      expect(destroyWorker).toHaveBeenCalledWith(taskId);
-    });
-
     it('does not preserve remediation agent containers when preserveWorkerContainers is enabled', async () => {
       const { destroyWorker, preserveWorker, dispatcher } = createPreserveTestFixture();
 
@@ -3275,6 +3239,44 @@ describe('TaskDispatcher', () => {
 
       expect(preserveWorker).not.toHaveBeenCalled();
       expect(destroyWorker).toHaveBeenCalledWith(taskId);
+    });
+
+    it('preserves pull_request agent containers on completion', async () => {
+      const { destroyWorker, preserveWorker, dispatcher } = createPreserveTestFixture();
+
+      const taskId = 'pr-preserve';
+      await dispatcher.submitTask({
+        taskId,
+        workerType: 'auto',
+        prompt: 'PR task should preserve',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'pull_request',
+      });
+      await flushAsync();
+
+      const task = await dispatcher.getTask(taskId);
+      if (task === null) {
+        throw new Error('Task not found');
+      }
+
+      const internalDispatcher = dispatcher as unknown as {
+        finalizeTask: (
+          taskArg: Record<string, unknown>,
+          finalStatus: 'completed',
+          payload: { result?: unknown; error?: unknown }
+        ) => Promise<void>;
+      };
+      await internalDispatcher.finalizeTask(
+        task as unknown as Record<string, unknown>,
+        'completed',
+        {}
+      );
+
+      expect(preserveWorker).toHaveBeenCalledWith(taskId);
+      expect(destroyWorker).not.toHaveBeenCalled();
     });
 
     it('uses fallback attempt metadata when persisted task is missing fields', async () => {

@@ -1877,9 +1877,7 @@ export class TaskDispatcher {
   ): Promise<void> {
     const finalStatus = statusParam;
     const isNonPreservableAgentType =
-      task.agentType === 'review' ||
-      task.agentType === 'pull_request' ||
-      task.agentType === 'remediation';
+      task.agentType === 'review' || task.agentType === 'remediation';
     const shouldPreserve =
       this.preserveWorkerContainers &&
       !isNonPreservableAgentType &&
