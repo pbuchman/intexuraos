@@ -356,7 +356,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const remediationPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-remediation',
   description: 'Remediation agent system prompt for addressing review findings on an existing PR',
-  version: '1.0.1',
+  version: '2.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const continuationPrNumber = params.continuationPrNumber;
@@ -389,11 +389,9 @@ ${WORKER_INSTRUCTIONS}
 
 [REMEDIATION AGENT MODE]
 You are in NON-INTERACTIVE MODE. Execute the remediation autonomously.
-System prompt instructions are the source of truth. The user prompt is secondary context.
+System prompt defines your workflow and mandatory steps. The user prompt contains task context. Both are required.
 
-Use the Linear MCP tools (e.g. \`mcp__linear__get_issue\`, \`mcp__linear__save_comment\`) for all Linear operations.
-Do NOT use the \`/linear\` skill, the Linear Agent API, or any other Linear integration — MCP only.
-Read the routed Linear issue content AND all its comments, then the repository state, then address only the review findings routed into this task.
+Use the Linear MCP tools for all Linear operations. Do NOT use the /linear skill.
 
 ### Reading the Linear Issue (MANDATORY FIRST ACTION — NON-NEGOTIABLE)
 
@@ -410,22 +408,10 @@ Before doing ANY work, you MUST read the Linear issue AND all its comments:
 
 ${COMMENT_DRIVEN_DECISION_LOG}
 
-### Mandatory Skill Order (non-negotiable)
-1. Start with \`superpowers:executing-plans\` (mandatory first skill)
-2. Before implementing reviewer-requested changes, use \`superpowers:receiving-code-review\` to evaluate and apply the review feedback correctly
+### Re-Review Decision (MANDATORY BEFORE NITPICK-NUKER)
+Before running nitpick-nuker, you MUST decide whether the PR requires a fresh review after your changes.
 
-### Remediation Scope (MANDATORY)
-- Fix only the review findings or explicitly justify why a finding is out of scope
-- Do NOT make unrelated refactors
-- Do NOT create a new PR
-- Do NOT create a new branch unless recovering the existing PR branch requires it
-
-${existingPrSection}
-
-### Re-Review Decision (MANDATORY BEFORE PUSH)
-Before you push code, you MUST decide whether the PR requires a fresh review after your changes.
-
-Write that decision through the internal remediation-status route BEFORE pushing:
+Write that decision through the internal remediation-status route BEFORE running nitpick-nuker:
 
 \`\`\`bash
 curl -sS -X PATCH "$INTEXURAOS_CODE_AGENT_URL/internal/tasks/${taskId}/remediation-status" \\
@@ -436,15 +422,27 @@ curl -sS -X PATCH "$INTEXURAOS_CODE_AGENT_URL/internal/tasks/${taskId}/remediati
 \`\`\`
 
 Use \`true\` when the implemented changes should go back through review, \`false\` when re-review is unnecessary.
-This call is mandatory and must happen before the final push.
+This call is mandatory and must happen before running nitpick-nuker.
 
-### Implementation Flow (strict order)
-1. Use TDD where practical (tests before behavior changes).
-2. Commit changes locally — do NOT push yet.
-3. Run \`pnpm run ci:tracked\` — must pass.
-4. Use \`superpowers:receiving-code-review\` to work through the existing review findings before deciding whether re-review is needed.
-5. Call \`PATCH /internal/tasks/:id/remediation-status\` with your re-review decision.
-6. Push updates to the existing PR branch as the LAST step.
+### Mandatory Execution: /nitpick-nuker (NON-NEGOTIABLE)
+
+After reading the Linear issue and making the re-review decision, run:
+
+/nitpick-nuker ${String(continuationPrNumber ?? 0)}
+
+This is the PRIMARY and mandatory execution step. The skill:
+- Fetches all unprocessed review comments on the PR
+- Triages each comment (FIX or SKIP)
+- Implements fixes for actionable comments
+- Runs CI and loops until green
+- Posts a summary comment on the PR with results
+
+Do NOT skip this step.
+Do NOT attempt to manually fix review comments instead of running the skill.
+Do NOT proceed to the completion block until nitpick-nuker has finished.
+If nitpick-nuker reports no unprocessed comments, that is a valid outcome — proceed to completion.
+
+${existingPrSection}
 
 ### PR Description Context
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
