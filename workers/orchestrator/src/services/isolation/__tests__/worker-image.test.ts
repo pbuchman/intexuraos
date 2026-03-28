@@ -31,4 +31,12 @@ describe('code-worker image Codex skill bootstrap', () => {
     expect(entrypoint).toContain('cp -a /opt/codex-home/.agents/. /home/claude/.agents/');
     expect(entrypoint).toContain('Codex skill discovery restored');
   });
+
+  it('translates CODEX_REASONING_EFFORT into -c model_reasoning_effort for codex exec', () => {
+    const entrypoint = readFileSync(entrypointPath, 'utf8');
+
+    expect(entrypoint).toContain('CODEX_REASONING_EFFORT');
+    expect(entrypoint).toContain('model_reasoning_effort=${CODEX_REASONING_EFFORT}');
+    expect(entrypoint).toContain('"${effort_args[@]}"');
+  });
 });

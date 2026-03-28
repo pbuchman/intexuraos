@@ -16,6 +16,7 @@ const REVIEW_WORKER_TYPE_ALIASES: Record<string, WorkerType> = {
   qwen: 'qwen',
   kimi: 'kimi',
   codex: 'codex',
+  'codex-xhigh': 'codex-xhigh',
 };
 
 export function isReviewCommandComment(commentBody: string): boolean {

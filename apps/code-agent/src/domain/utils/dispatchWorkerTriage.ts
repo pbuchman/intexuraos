@@ -16,6 +16,7 @@ const WORKER_TYPE_ALIASES: Record<string, WorkerType> = {
   qwen: 'qwen',
   kimi: 'kimi',
   codex: 'codex',
+  'codex-xhigh': 'codex-xhigh',
 };
 
 // Build regex from patterns for maintainability
