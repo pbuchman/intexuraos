@@ -92,6 +92,7 @@ function createMockDeps(overrides: Partial<WebhookDispatchServiceDeps> = {}): We
     codeTaskRepo: {
       findByPR: vi.fn().mockResolvedValue(ok(null)),
       findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
       findPreservedPullRequestTask: vi.fn().mockResolvedValue(ok(null)),
       create: vi.fn(),
       findById: vi.fn(),
@@ -138,6 +139,7 @@ function createMockDepsForCIFailure(): WebhookDispatchServiceDeps {
     codeTaskRepo: {
       findByPR: vi.fn().mockResolvedValue(ok(null)),
       findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
       findPreservedPullRequestTask: vi.fn().mockResolvedValue(ok(null)),
       create: vi.fn(),
       findById: vi.fn(),

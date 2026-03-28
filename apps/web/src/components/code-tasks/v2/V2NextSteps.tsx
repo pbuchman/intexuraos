@@ -1,5 +1,6 @@
 import {
   ChevronDown,
+  GitMerge,
   Loader2,
   Play,
   XCircle,
@@ -20,6 +21,8 @@ interface V2NextStepsProps {
   onImplement: () => void;
   prUrl?: string;
   linearIssueUrl?: string;
+  isMergeable?: boolean;
+  mergeUrl?: string;
 }
 
 export function V2NextSteps({
@@ -35,8 +38,10 @@ export function V2NextSteps({
   onImplement,
   prUrl,
   linearIssueUrl,
+  isMergeable,
+  mergeUrl,
 }: V2NextStepsProps): React.JSX.Element | null {
-  if (!isImplementable && implementationTaskId === undefined && implementError === null) return null;
+  if (!isImplementable && isMergeable !== true && implementationTaskId === undefined && implementError === null) return null;
 
   return (
     <div className="mt-4">
@@ -51,6 +56,19 @@ export function V2NextSteps({
           </a>
           {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
           {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
+        </div>
+      ) : isMergeable === true && mergeUrl !== undefined ? (
+        <div className="flex items-center gap-3">
+          <a
+            href={mergeUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50 px-4 py-2 text-sm font-semibold text-purple-700 transition-colors hover:bg-purple-100 dark:border-purple-600/30 dark:bg-purple-500/15 dark:text-purple-400 dark:hover:bg-purple-500/25"
+          >
+            <GitMerge className="h-4 w-4" />
+            Merge on GitHub
+          </a>
+          {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
         </div>
       ) : isImplementable ? (
         <div className="relative flex items-center gap-3">

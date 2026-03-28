@@ -1182,6 +1182,39 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 required: false,
                 signal: remediationSignal,
               });
+
+              // Best-effort: set review-outcome label on the origin Linear issue
+              try {
+                const originResult = await codeTaskRepo.findOriginTaskByPR(task.repository, prNumber);
+                if (originResult.ok && originResult.value !== null && originResult.value.linearIssueId !== undefined) {
+                  const originTask = originResult.value;
+                  const originLinearIssueId: string = originResult.value.linearIssueId;
+                  const label: string =
+                    originTask.agentType === 'planning' ? 'ready-to-implement' : 'ready-to-merge';
+                  const issueValidation = await linearAgentClient.validateIssue({
+                    userId: originTask.userId,
+                    identifier: originLinearIssueId,
+                  });
+                  if (issueValidation.ok) {
+                    const labelResult = await linearAgentClient.updateIssueMetadata({
+                      userId: originTask.userId,
+                      issueId: issueValidation.value.id,
+                      addLabels: [label],
+                    });
+                    if (labelResult.ok) {
+                      request.log.info({ taskId, prNumber, label, linearIssueId: originLinearIssueId }, 'Set review-outcome label on origin issue');
+                    } else {
+                      request.log.warn({ taskId, prNumber, label, error: labelResult.error }, 'Failed to set review-outcome label (best-effort)');
+                    }
+                  } else {
+                    request.log.warn({ taskId, prNumber, linearIssueId: originLinearIssueId, error: issueValidation.error }, 'Failed to validate origin issue for review-outcome label (best-effort)');
+                  }
+                } else if (!originResult.ok) {
+                  request.log.warn({ taskId, prNumber, error: originResult.error }, 'Failed to look up origin task for review-outcome label (best-effort)');
+                }
+              } catch (labelError: unknown) {
+                request.log.warn({ error: labelError, taskId, prNumber }, 'Failed to set review-outcome label (best-effort)');
+              }
             } else {
               const { createRemediationTaskFn, logger: remediationLogger } = getServices();
               if (createRemediationTaskFn !== undefined) {

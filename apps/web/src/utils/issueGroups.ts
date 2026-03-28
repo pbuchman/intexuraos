@@ -55,6 +55,7 @@ const AGENT_TYPE_LABELS: Record<string, string> = {
   pull_request: 'PR Task',
   review: 'Review',
   remediation: 'Remediation',
+  merge: 'Merge',
 };
 
 export function getAgentTypeLabel(agentType: string): string {
@@ -94,6 +95,63 @@ export function hasImplementationReadyLabel(labels: { name: string }[] | undefin
     return true;
   }
   return labels.some((l) => IMPLEMENTATION_READY_LABELS.has(normalizeLabel(l.name)));
+}
+
+/**
+ * Checks if a task's Linear labels indicate it's ready for merge.
+ *
+ * Unlike `hasImplementationReadyLabel`, this returns false for undefined/empty labels —
+ * the `ready-to-merge` label is set deterministically by the review-outcome handler,
+ * so there is no legacy-data fallback needed.
+ */
+export function hasMergeReadyLabel(labels: { name: string }[] | undefined): boolean {
+  if (labels === undefined || labels.length === 0) {
+    return false;
+  }
+  return labels.some((l) => normalizeLabel(l.name) === 'ready-to-merge');
+}
+
+/**
+ * Determines if a single task is merge-ready for the detail view.
+ *
+ * Covers two cases:
+ * 1. An `implemented` task with its own `result.prUrl` and `ready-to-merge` label
+ * 2. A `reviewed` task with a `prNumber` and `ready-to-merge` label — the reviewed
+ *    task won't have `result.prUrl` but the merge URL can be constructed from
+ *    `repository` + `prNumber`.
+ */
+export function isTaskMergeable(task: {
+  status: string;
+  prNumber?: number;
+  result?: { prUrl?: string };
+  linearIssue?: { labels: { name: string }[] };
+}): boolean {
+  if (!hasMergeReadyLabel(task.linearIssue?.labels)) {
+    return false;
+  }
+  return (
+    (task.status === 'implemented' && task.result?.prUrl !== undefined) ||
+    (task.status === 'reviewed' && task.prNumber !== undefined)
+  );
+}
+
+/**
+ * Extracts the merge URL for a single task (detail view).
+ *
+ * Prefers `result.prUrl`; falls back to constructing from `repository` + `prNumber`.
+ */
+export function getTaskMergeUrl(task: {
+  repository: string;
+  prNumber?: number;
+  result?: { prUrl?: string };
+}): string | undefined {
+  if (task.result?.prUrl !== undefined) {
+    return task.result.prUrl;
+  }
+  if (task.prNumber !== undefined) {
+    return `https://github.com/${task.repository}/pull/${String(task.prNumber)}`;
+  }
+  return undefined;
 }
 
 function deriveStepState(status: CodeTaskStatus): StepState {
@@ -160,22 +218,31 @@ function derivePipeline(tasks: CodeTask[]): PipelineState {
     });
   }
 
-  // PR step — extract from latest non-archived task's result.prUrl
+  // Merge-ready logic: if execution step is completed, PR exists, and ready-to-merge label present
+  if (
+    executionEntry?.step.state === 'completed' &&
+    executionEntry.task.result?.prUrl !== undefined &&
+    hasMergeReadyLabel(executionEntry.task.linearIssue?.labels)
+  ) {
+    steps.push({
+      agentType: 'merge',
+      state: 'actionable',
+      label: 'Merge',
+    });
+  }
+
+  // PR step — extract from first non-archived task that has a prUrl
+  // Tasks are already sorted by updatedAt desc from the caller, so iterating
+  // finds the most-recently-updated task with a prUrl (not just the latest task overall).
   let pr: PipelineState['pr'] = null;
-  const nonArchivedTasks = tasks.filter((t) => t.status !== 'archived');
-  if (nonArchivedTasks.length > 0) {
-    // Find the latest task by updatedAt
-    const latestTask = nonArchivedTasks.reduce((latest, task) =>
-      new Date(task.updatedAt) > new Date(latest.updatedAt) ? task : latest
-    );
-    const prUrl = latestTask.result?.prUrl;
+  for (const task of tasks) {
+    if (task.status === 'archived') continue;
+    const prUrl = task.result?.prUrl;
     if (prUrl !== undefined) {
       const match = PR_URL_REGEX.exec(prUrl);
-      if (match !== null) {
-        const prNumber = match[1];
-        if (prNumber !== undefined) {
-          pr = { url: prUrl, number: prNumber };
-        }
+      if (match?.[1] !== undefined) {
+        pr = { url: prUrl, number: match[1] };
+        break;
       }
     }
   }

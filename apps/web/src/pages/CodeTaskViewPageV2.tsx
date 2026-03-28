@@ -19,7 +19,7 @@ import { V2TaskActions } from '@/components/code-tasks/v2/V2TaskActions.js';
 import { V2NextSteps } from '@/components/code-tasks/v2/V2NextSteps.js';
 import { isActiveStatus } from '@/components/code-tasks/v2/shared.js';
 import type { WorkerType } from '@/components/code-tasks/v2/shared.js';
-import { hasImplementationReadyLabel } from '@/utils/issueGroups.js';
+import { hasImplementationReadyLabel, isTaskMergeable, getTaskMergeUrl } from '@/utils/issueGroups.js';
 
 /** Terminal statuses eligible for archive/delete actions. */
 const ARCHIVABLE_STATUSES: ReadonlySet<string> = new Set(['failed', 'cancelled', 'interrupted', 'planned', 'implemented', 'reviewed']);
@@ -125,6 +125,8 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
     task.implementationTaskId === undefined &&
     task.linearIssueId !== undefined &&
     hasImplementationReadyLabel(task.linearIssue?.labels);
+  const isMergeable = isTaskMergeable(task);
+  const mergeUrl = isMergeable ? getTaskMergeUrl(task) : undefined;
   const isArchivable = ARCHIVABLE_STATUSES.has(task.status);
 
   return (
@@ -174,6 +176,8 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
         onImplement={(): void => { void handleImplement(); }}
         {...(task.result?.prUrl !== undefined ? { prUrl: task.result.prUrl } : {})}
         {...(task.linearIssue?.url !== undefined ? { linearIssueUrl: task.linearIssue.url } : {})}
+        isMergeable={isMergeable}
+        {...(mergeUrl !== undefined ? { mergeUrl } : {})}
       />
 
       <MemoV2TaskActions
@@ -202,7 +206,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
         onArchive={(): void => { void handleArchive(); }}
         {...(task.result?.prUrl !== undefined ? { prUrl: task.result.prUrl } : {})}
         {...(task.linearIssue?.url !== undefined ? { linearIssueUrl: task.linearIssue.url } : {})}
-        linksInNextSteps={isImplementable || task.implementationTaskId !== undefined}
+        linksInNextSteps={isImplementable || task.implementationTaskId !== undefined || isMergeable}
       />
     </Layout>
   );
