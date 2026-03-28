@@ -211,6 +211,14 @@
       "owner": "code-agent",
       "description": "Merge queue watch state for automated PR merging"
     },
+    "execution_memories": {
+      "owner": "code-agent",
+      "description": "Execution memory lessons distilled from completed code tasks with vector embeddings for similarity retrieval"
+    },
+    "execution_memory_applications": {
+      "owner": "code-agent",
+      "description": "Tracks how execution memories were applied to tasks and their post-run evaluation results"
+    },
     "cron_schedules": {
       "owner": "cron-agent",
       "description": "User-defined recurring schedules with cron expressions and action definitions"

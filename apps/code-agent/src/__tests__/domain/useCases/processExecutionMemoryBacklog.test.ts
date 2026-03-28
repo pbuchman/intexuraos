@@ -399,8 +399,8 @@ describe('processExecutionMemoryBacklog', () => {
       limit: 10,
     });
 
-    expect(result.ok).toBe(true);
-    expect(result.ok && result.value).toEqual({
+    if (!result.ok) throw new Error(`Expected ok result, got: ${result.error.message}`);
+    expect(result.value).toEqual({
       claimed: 1,
       completed: 1,
       skipped: 0,
@@ -456,8 +456,8 @@ describe('processExecutionMemoryBacklog', () => {
       limit: 10,
     });
 
-    expect(result.ok).toBe(true);
-    expect(result.ok && result.value).toEqual({
+    if (!result.ok) throw new Error(`Expected ok result, got: ${result.error.message}`);
+    expect(result.value).toEqual({
       claimed: 1,
       completed: 0,
       skipped: 1,
@@ -501,8 +501,8 @@ describe('processExecutionMemoryBacklog', () => {
       limit: 10,
     });
 
-    expect(result.ok).toBe(true);
-    expect(result.ok && result.value).toEqual({
+    if (!result.ok) throw new Error(`Expected ok result, got: ${result.error.message}`);
+    expect(result.value).toEqual({
       claimed: 1,
       completed: 0,
       skipped: 0,
@@ -542,7 +542,7 @@ describe('processExecutionMemoryBacklog', () => {
       limit: 10,
     });
 
-    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Expected ok result, got: ${result.error.message}`);
     expect(codeTaskRepo.update).toHaveBeenNthCalledWith(1, 'task-1', expect.objectContaining({
       executionMemoryPostRun: expect.objectContaining({
         status: 'processing',
@@ -1379,7 +1379,7 @@ describe('processExecutionMemoryBacklog', () => {
       limit: 10,
     });
 
-    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Expected ok result, got: ${result.error.message}`);
     expect(codeTaskRepo.update).toHaveBeenLastCalledWith('task-1', expect.objectContaining({
       executionMemoryPostRun: expect.objectContaining({
         status: 'pending',
