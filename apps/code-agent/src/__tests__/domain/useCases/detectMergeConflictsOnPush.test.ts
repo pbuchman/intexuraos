@@ -27,6 +27,7 @@ interface TestDeps {
     findById: ReturnType<typeof vi.fn>;
     findByPR: ReturnType<typeof vi.fn>;
     findLatestExecutionTaskByPR: ReturnType<typeof vi.fn>;
+    findOriginTaskByPR: ReturnType<typeof vi.fn>;
     findByIdForUser: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
@@ -228,6 +229,7 @@ function createDeps(logger: Logger, options?: { includeSleep?: boolean }): TestD
       // (lineage lookups use findLatestExecutionTaskByPR instead).
       findByPR: vi.fn().mockResolvedValue(ok(null)),
       findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
       findByIdForUser: vi.fn(),
       create: vi.fn().mockResolvedValue(ok(createTask({ id: 'task-created', status: 'queued' }))),
       update: vi.fn().mockResolvedValue(ok(createTask({ id: 'task-created', status: 'dispatched' }))),

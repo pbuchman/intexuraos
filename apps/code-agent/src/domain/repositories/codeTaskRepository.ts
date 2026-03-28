@@ -196,6 +196,16 @@ export interface CodeTaskRepository {
   ): Promise<Result<CodeTask | null, RepositoryError>>;
 
   /**
+   * Find the latest planning or execution origin task for a PR.
+   * Excludes review, remediation, and pull_request tasks.
+   * Used to resolve the true origin task for review-outcome labeling.
+   */
+  findOriginTaskByPR(
+    repository: string,
+    prNumber: number
+  ): Promise<Result<CodeTask | null, RepositoryError>>;
+
+  /**
    * Find newest tasks for a Linear issue.
    * Used to recover open PR continuity across retries and follow-ups.
    */

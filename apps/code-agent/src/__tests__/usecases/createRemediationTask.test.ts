@@ -42,6 +42,7 @@ function createFakeDeps(overrides: Partial<CreateRemediationTaskDeps> = {}): Cre
     codeTaskRepo: {
       create: vi.fn().mockResolvedValue(ok({ id: 'task-remediation-1' })),
       findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
     } as unknown as CodeTaskRepository,
     userLookupService: {
       resolveByGitHubUsername: vi.fn().mockResolvedValue(ok({
