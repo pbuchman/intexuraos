@@ -397,6 +397,41 @@ describe('DockerProvider', () => {
       expect(envArr.some((entry) => entry.startsWith('ANTHROPIC_API_KEY='))).toBe(false);
     });
 
+    it('sets CODEX_REASONING_EFFORT for codex-xhigh worker', async () => {
+      const codexProvider = new TestableDockerProvider(
+        { sharedCodexAuthPath: '/shared/codex-auth' } as Partial<DockerProviderConfig>,
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await codexProvider.createWorker(createTestConfig({ workerType: 'codex-xhigh' }));
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0] as {
+        Env?: string[];
+      };
+      const envArr = createCall.Env ?? [];
+
+      expect(envArr).toContain('WORKER_RUNTIME=codex');
+      expect(envArr).toContain('CODEX_REASONING_EFFORT=xhigh');
+    });
+
+    it('does not set CODEX_REASONING_EFFORT for base codex worker', async () => {
+      const codexProvider = new TestableDockerProvider(
+        { sharedCodexAuthPath: '/shared/codex-auth' } as Partial<DockerProviderConfig>,
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await codexProvider.createWorker(createTestConfig({ workerType: 'codex' }));
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0] as {
+        Env?: string[];
+      };
+      const envArr = createCall.Env ?? [];
+
+      expect(envArr.some((entry) => entry.startsWith('CODEX_REASONING_EFFORT='))).toBe(false);
+    });
+
     it('fails codex runtime creation when shared Codex auth is not configured', async () => {
       await expect(provider.createWorker(createRuntimeOverrideConfig('codex'))).rejects.toThrow(
         'Codex runtime requires sharedCodexAuthPath but it is not configured'

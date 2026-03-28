@@ -31,6 +31,7 @@ describe('CodeTask model', () => {
       'qwen',
       'kimi',
       'codex',
+      'codex-xhigh',
     ];
     validTypes.forEach((type) => {
       expect(typeof type).toBe('string');

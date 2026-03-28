@@ -7,6 +7,7 @@ export const CODE_TASK_WORKER_TYPES = [
   'qwen',
   'kimi',
   'codex',
+  'codex-xhigh',
 ] as const;
 
 export type CodeTaskWorkerType = (typeof CODE_TASK_WORKER_TYPES)[number];
