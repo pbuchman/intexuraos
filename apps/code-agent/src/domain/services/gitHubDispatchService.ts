@@ -444,6 +444,51 @@ async function handleNewTask(
     ? deps.messageBuilder.build(event)
     : event.body ?? '';
 
+  // Check for preserved pull_request container to reuse (non-@worker comments only)
+  if (workerType === undefined) {
+    const preservedResult = await deps.codeTaskRepo.findPreservedPullRequestTask(
+      event.repository,
+      event.pullRequestNumber,
+    );
+    if (preservedResult.ok && preservedResult.value !== null) {
+      const preserved = preservedResult.value;
+      try {
+        const sendResult = await sendTaskMessage(
+          {
+            logger,
+            codeTaskRepo: deps.codeTaskRepo,
+            logLineRepo: deps.logLineRepo,
+            taskDispatcher: deps.taskDispatcher,
+            workerSettingsRepo: deps.workerSettingsRepo,
+            statusMirrorService: deps.statusMirrorService,
+            whatsappNotifier: deps.whatsappNotifier,
+          },
+          {
+            taskId: preserved.id,
+            userId: preserved.userId,
+            message: comment,
+          },
+        );
+        if (sendResult.ok) {
+          logger.info(
+            { taskId: preserved.id, prNumber: event.pullRequestNumber },
+            'Reused preserved container for PR comment',
+          );
+          return { success: true, dispatched: true };
+        }
+        logger.warn(
+          { taskId: preserved.id, error: sendResult.error },
+          'Failed to send message to preserved container, falling through to new task',
+        );
+      } catch (error) {
+        logger.warn(
+          { taskId: preserved.id, error },
+          'Error sending to preserved container, falling through',
+        );
+      }
+    }
+  }
+
   const createResult = await createTaskForPR(
     {
       logger,

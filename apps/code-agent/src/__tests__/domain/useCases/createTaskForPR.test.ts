@@ -117,6 +117,9 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async findRecentRemediationForPR(): ReturnType<CodeTaskRepository['findRecentRemediationForPR']> {
       return ok(null);
     },
+    async findPreservedPullRequestTask(): ReturnType<CodeTaskRepository['findPreservedPullRequestTask']> {
+      return ok(null);
+    },
   };
 }
 
