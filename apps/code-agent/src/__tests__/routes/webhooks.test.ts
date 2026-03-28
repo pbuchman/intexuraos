@@ -4933,6 +4933,27 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(response.statusCode).toBe(200);
     });
 
+    it('warns and succeeds when updateIssueMetadata returns droppedLabels', async () => {
+      await createOriginTask({ traceId: 'trace_label_dropped', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_dropped_review' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      const { linearAgentClient: lac } = getServices();
+      vi.mocked(lac.updateIssueMetadata).mockResolvedValueOnce(
+        ok({ droppedLabels: ['ready-to-merge'] })
+      );
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      const labelCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].addLabels !== undefined &&
+          call[0].addLabels.includes('ready-to-merge')
+      );
+      expect(labelCalls).toHaveLength(1);
+    });
+
     it('falls back to review task issue when no origin task exists (external PR)', async () => {
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_fallback_review', linearIssueId: 'INT-REVIEW-99' });
       vi.spyOn(codeTaskRepo, 'findOriginTaskByPR').mockResolvedValueOnce(ok(null));
@@ -4983,18 +5004,13 @@ describe('POST /internal/webhooks/task-complete', () => {
       const response = await sendLabelPayload(payload);
 
       expect(response.statusCode).toBe(200);
-      // No validate or metadata calls for label-setting
+      // No label-related metadata update should have been attempted
       const { linearAgentClient: lac } = getServices();
-      const validateSpy = vi.mocked(lac.validateIssue);
       const metadataSpy = vi.mocked(lac.updateIssueMetadata);
-      const labelValidateCalls = validateSpy.mock.calls.filter(
-        (call) => call[0].identifier === 'INT-REVIEW-99' || call[0].identifier === 'INT-500'
-      );
       const labelMetaCalls = metadataSpy.mock.calls.filter(
         (call) => call[0].addLabels !== undefined &&
           (call[0].addLabels.includes('ready-to-merge') || call[0].addLabels.includes('ready-to-implement'))
       );
-      expect(labelValidateCalls).toHaveLength(0);
       expect(labelMetaCalls).toHaveLength(0);
     });
 

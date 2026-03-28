@@ -72,7 +72,7 @@ describe('resolveDesiredLabelIds', () => {
   });
 
   it('reports only the dropped labels when some addLabels exist and some do not', () => {
-    const current = [];
+    const current: { name: string }[] = [];
     const result = resolveDesiredLabelIds(current, ['bug', 'ready-to-merge'], [], availableLabels);
     expect(result.labelIds).toEqual(['l1']);
     expect(result.droppedLabels).toEqual(['ready-to-merge']);
