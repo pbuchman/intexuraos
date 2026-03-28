@@ -154,7 +154,7 @@ export interface CodeTask {
 
   // Resume/Follow-up tracking (for PR comment auto-response - INT-465)
   parentTaskId?: string;       // If this task is a follow-up to another
-  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement' | 'ci_failure';
+  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement' | 'ci_failure' | 'merge_conflict';
   agentType?: AgentType;
   implementationTaskId?: string;
 
