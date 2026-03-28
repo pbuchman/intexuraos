@@ -6,7 +6,7 @@
 
 **Architecture:** The orchestrator's `sendMessage` handler gets a fallback path: when a task is not found in local state persistence, it calls code-agent's `GET /internal/tasks/:id/dispatch-metadata` endpoint to retrieve original task configuration, reconstructs a minimal `Task` object, creates a fresh worktree, builds a system prompt, and starts a new container with the user's message. The code-agent endpoint is extended with three additional fields required for complete task reconstruction. The web-app requires no changes — it already handles the `{ action: 'resumed' }` response.
 
-**Tech Stack:** TypeScript, Fastify (code-agent), Docker container lifecycle (orchestrator), nock (HTTP mocking), vitest
+**Tech Stack:** TypeScript, Fastify (code-agent), Docker container lifecycle (orchestrator), vitest (with `global.fetch` mocking)
 
 ---
 
@@ -213,8 +213,7 @@ with three additional fields needed for fallback container recreation:
 Create `workers/orchestrator/src/__tests__/dispatch-metadata-client.test.ts`:
 
 ```typescript
-import { describe, it, expect, afterEach } from 'vitest';
-import nock from 'nock';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { fetchDispatchMetadata } from '../services/dispatch-metadata-client.js';
 
 const CODE_AGENT_URL = 'http://localhost:8080';
@@ -229,9 +228,14 @@ const mockLogger = {
   child: () => mockLogger,
 } as never;
 
+// Mock global.fetch — nock does not intercept native fetch in Node 18+
+const mockFetch = vi.fn();
+const originalFetch = global.fetch;
+
 describe('fetchDispatchMetadata', () => {
   afterEach(() => {
-    nock.cleanAll();
+    global.fetch = originalFetch;
+    mockFetch.mockReset();
   });
 
   it('returns dispatch metadata on success', async () => {
@@ -250,10 +254,11 @@ describe('fetchDispatchMetadata', () => {
       trackingCommentId: 'comment-123',
     };
 
-    nock(CODE_AGENT_URL)
-      .get(`/internal/tasks/${TASK_ID}/dispatch-metadata`)
-      .matchHeader('x-internal-auth', AUTH_TOKEN)
-      .reply(200, metadata);
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => metadata,
+    });
+    global.fetch = mockFetch as typeof global.fetch;
 
     const result = await fetchDispatchMetadata(
       TASK_ID,
@@ -262,12 +267,21 @@ describe('fetchDispatchMetadata', () => {
     );
 
     expect(result).toEqual(metadata);
+    expect(mockFetch).toHaveBeenCalledWith(
+      `${CODE_AGENT_URL}/internal/tasks/${TASK_ID}/dispatch-metadata`,
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ 'X-Internal-Auth': AUTH_TOKEN }),
+      })
+    );
   });
 
   it('returns null when task not found (404)', async () => {
-    nock(CODE_AGENT_URL)
-      .get(`/internal/tasks/${TASK_ID}/dispatch-metadata`)
-      .reply(404, { success: false, error: { code: 'NOT_FOUND', message: 'Task not found' } });
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+    });
+    global.fetch = mockFetch as typeof global.fetch;
 
     const result = await fetchDispatchMetadata(
       TASK_ID,
@@ -279,9 +293,8 @@ describe('fetchDispatchMetadata', () => {
   });
 
   it('returns null on network error', async () => {
-    nock(CODE_AGENT_URL)
-      .get(`/internal/tasks/${TASK_ID}/dispatch-metadata`)
-      .replyWithError('Connection refused');
+    mockFetch.mockRejectedValueOnce(new Error('Connection refused'));
+    global.fetch = mockFetch as typeof global.fetch;
 
     const result = await fetchDispatchMetadata(
       TASK_ID,
@@ -293,9 +306,11 @@ describe('fetchDispatchMetadata', () => {
   });
 
   it('returns null on non-200 response', async () => {
-    nock(CODE_AGENT_URL)
-      .get(`/internal/tasks/${TASK_ID}/dispatch-metadata`)
-      .reply(500, { error: 'Internal server error' });
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+    });
+    global.fetch = mockFetch as typeof global.fetch;
 
     const result = await fetchDispatchMetadata(
       TASK_ID,
@@ -382,7 +397,7 @@ Run: `cd /repo && npx vitest run workers/orchestrator/src/__tests__/dispatch-met
 
 Expected: All 4 tests pass.
 
-**Note:** If `nock` does not intercept native `fetch` in this Node version, the implementer should check how `deep-validator-helpers.ts` tests handle this (it uses the same `fetch` pattern). An alternative is using `vi.spyOn(globalThis, 'fetch')` for mocking.
+**Note:** The test uses `global.fetch = vi.fn()` (same pattern as `webhook-client.test.ts`) because `nock` does not intercept native `fetch` in Node 18+.
 
 - [ ] **Step 5: Commit**
 
@@ -476,12 +491,14 @@ Expected: Fails because `sendMessage` still returns `not_found` for unknown task
 
 In `workers/orchestrator/src/services/task-dispatcher.ts`:
 
-**Add import** at the top of the file:
+**Add imports** at the top of the file:
 
 ```typescript
 import { fetchDispatchMetadata } from './dispatch-metadata-client.js';
 import type { DispatchMetadata } from './dispatch-metadata-client.js';
 ```
+
+Also add `WorkerType` to the existing `./isolation/types.js` import (see import note below Step 8).
 
 **Replace the TODO block** (lines 598-601) in `sendMessage`:
 
@@ -603,22 +620,12 @@ import type { DispatchMetadata } from './dispatch-metadata-client.js';
 
       task.worktreePath = worktreePath;
 
-      // Build system prompt from available metadata
-      const systemPrompt = buildSystemPrompt({
-        taskId: task.taskId,
-        linearIssueId: task.linearIssueId,
-        linearIssueLabels: task.linearIssueLabels,
-        workerType: task.workerType,
-        agentType: task.agentType,
-        trackingCommentId: task.trackingCommentId,
-        continuationPrNumber: task.continuationPrNumber,
-        continuationPrBranch: task.continuationPrBranch,
-      });
-
       // Start fresh container (continueSession: false — no existing container to reuse)
+      // NOTE: Do NOT call buildSystemPrompt() here — startWorkerAttempt already builds
+      // the system prompt internally from the task's fields (agentType, trackingCommentId,
+      // continuationPrNumber, continuationPrBranch, etc.)
       const workerResult = await this.startWorkerAttempt(task, {
         prompt,
-        systemPrompt,
         continueSession: false,
       });
 
@@ -642,13 +649,13 @@ import type { DispatchMetadata } from './dispatch-metadata-client.js';
   }
 ```
 
-**Import `buildSystemPrompt`** — verify the existing import at the top of task-dispatcher.ts. If not already imported:
+**Import `WorkerType`** — explicitly add `WorkerType` to the existing import from `./isolation/types.js` for the type cast. The current import includes `WORKER_TYPES` and `IsolationProvider` but not `WorkerType`:
 
 ```typescript
-import { buildSystemPrompt } from './system-prompt.js';
+import type { IsolationProvider, WorkerConfig, WorkerHandle, WorkerType } from './isolation/types.js';
 ```
 
-Also verify that `WorkerType` is imported from `./isolation/types.js` for the type cast.
+**Note:** `buildSystemPrompt` is NOT needed — `startWorkerAttempt` already builds the system prompt internally from the task's fields.
 
 - [ ] **Step 9: Run test to verify it passes**
 
