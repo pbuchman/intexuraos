@@ -23,7 +23,6 @@ import { loadConfig } from '../../config.js';
 
 import { extractDispatchWorkerType } from '../utils/dispatchWorkerTriage.js';
 import type { AutomationLog } from '../ports/automationLog.js';
-import type { CreateRemediationTaskRequest, CreateRemediationTaskError, CreateRemediationTaskResult } from '../usecases/createRemediationTask.js';
 
 export interface DispatchContext {
   event: GitHubPREvent;
@@ -88,7 +87,6 @@ export interface WebhookDispatchServiceDeps {
   serviceUrl: string;
   dispatchRetryRepo?: DispatchRetryRepository;
   automationLog: AutomationLog;
-  createRemediationTask: (logger: Logger, request: CreateRemediationTaskRequest) => Promise<import('@intexuraos/common-core').Result<CreateRemediationTaskResult, CreateRemediationTaskError>>;
 }
 
 export function resolveLoginForTaskCreation(senderLogin: string, repository: string, allowedBots: Set<string>): string {
@@ -113,38 +111,11 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
           'Starting GitHub dispatch workflow'
         );
 
-        // Only user @worker directives reach dispatch(); review events are gated out by CodeWorkerOutputRule
+        // Extract @worker directive if present; will be passed to pull_request task creation.
+        // Note: if an existing task is already executing for this PR, the @worker directive
+        // is intentionally ignored — the comment is sent as a message to the running task
+        // rather than creating a competing task.
         const workerDirective = extractDispatchWorkerType(event.body ?? '');
-        const isRemediationDispatch = workerDirective !== undefined;
-
-        if (isRemediationDispatch) {
-          const senderLogin = resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots);
-          const remediationResult = await deps.createRemediationTask(logger, {
-            repository: event.repository,
-            prNumber: event.pullRequestNumber,
-            senderLogin,
-            workerType: workerDirective,
-            eventId: event.id,
-            ...(event.body !== null && {
-              triggerComment: { body: event.body, author: event.senderLogin },
-            }),
-            ...(event.baseBranch !== null && { baseBranch: event.baseBranch }),
-          });
-
-          if (!remediationResult.ok) {
-            logger.error(
-              { prNumber: event.pullRequestNumber, error: remediationResult.error },
-              'Failed to create remediation task'
-            );
-            return { success: false, dispatched: false, error: remediationResult.error.message };
-          }
-
-          logger.info(
-            { prNumber: event.pullRequestNumber, taskId: remediationResult.value.taskId, workerType: remediationResult.value.workerType },
-            'Created remediation task from dispatch'
-          );
-          return { success: true, dispatched: true, taskId: remediationResult.value.taskId };
-        }
 
         // Use non-review lookup to avoid routing generic comments into review tasks
         const taskResult = await deps.codeTaskRepo.findLatestExecutionTaskByPR(event.repository, event.pullRequestNumber);
@@ -160,7 +131,7 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
         const task = taskResult.value;
 
         if (task === null) {
-          return await handleNewTask(deps, event, logger);
+          return await handleNewTask(deps, event, logger, workerDirective);
         }
 
         const existingResult = await handleExistingTask(deps, event, task, logger);
@@ -171,7 +142,7 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
             { staleTaskId: task.id, prNumber: event.pullRequestNumber },
             'Existing task is stale on worker, falling back to new task creation'
           );
-          return await handleNewTask(deps, event, logger);
+          return await handleNewTask(deps, event, logger, workerDirective);
         }
 
         return existingResult;
@@ -442,6 +413,7 @@ async function handleNewTask(
   deps: WebhookDispatchServiceDeps,
   event: GitHubPREvent,
   logger: Logger,
+  workerType?: import('../models/codeTask.js').WorkerType,
 ): Promise<WebhookDispatchResult> {
   if (deps.userLookupService === undefined) {
     logger.warn({ repo: event.repository, prNumber: event.pullRequestNumber }, 'UserLookupService not configured, cannot create task');
@@ -472,8 +444,6 @@ async function handleNewTask(
     ? deps.messageBuilder.build(event)
     : event.body ?? '';
 
-  // Note: @worker directives are intercepted by remediation dispatch
-  // before reaching handleNewTask, so workerType extraction is not needed here.
   const createResult = await createTaskForPR(
     {
       logger,
@@ -497,6 +467,7 @@ async function handleNewTask(
       eventId: event.id,
       ...(event.title !== null && { prTitle: event.title }),
       ...(resolvedBaseBranch !== null && { baseBranch: resolvedBaseBranch }),
+      ...(workerType !== undefined && { workerType }),
     },
   );
 

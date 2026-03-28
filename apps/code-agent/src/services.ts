@@ -441,18 +441,6 @@ export function initServices(config: ServiceConfig): void {
     serviceUrl: config.serviceUrl,
     dispatchRetryRepo,
     automationLog,
-    createRemediationTask: (taskLogger, request) => createRemediationTask(
-      {
-        logger: taskLogger,
-        codeTaskRepo,
-        userLookupService,
-        taskEnqueueService,
-        workerSettingsRepo,
-        orchestratorSecret: config.orchestratorSecret,
-        automationLog,
-      },
-      request,
-    ),
   });
 
   const dispatchService: WebhookDispatchService & CIFailureDispatchService = dispatchServiceResult;
