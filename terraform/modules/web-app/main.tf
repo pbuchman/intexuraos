@@ -36,7 +36,7 @@ resource "google_storage_bucket" "web_app" {
     enabled = true
   }
 
-  # Lifecycle rule to clean up old versions
+  # Lifecycle rule to clean up old versions (same-key objects via GCS versioning)
   lifecycle_rule {
     condition {
       num_newer_versions = 5
