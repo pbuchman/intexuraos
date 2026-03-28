@@ -239,7 +239,7 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
         { issueId: request.issueId, addLabels: request.addLabels, removeLabels: request.removeLabels, assigneeId: request.assigneeId },
         '[E2E] Mock Linear metadata update'
       );
-      return Promise.resolve(ok(undefined));
+      return Promise.resolve(ok({ droppedLabels: [] }));
     },
     fetchIssueForDisplay(request): ReturnType<LinearAgentClient['fetchIssueForDisplay']> {
       logger.info({ identifier: request.identifier }, '[E2E] Mock Linear issue fetch for display');

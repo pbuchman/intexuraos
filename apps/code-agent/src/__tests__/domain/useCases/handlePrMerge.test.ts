@@ -55,6 +55,7 @@ describe('handlePrMerge', () => {
   let mockLinearIssueService: {
     markQa: ReturnType<typeof vi.fn>;
     markTodo: ReturnType<typeof vi.fn>;
+    removeLabel: ReturnType<typeof vi.fn>;
   };
   let mockUserServiceClient: {
     resolveGitHubUsername: ReturnType<typeof vi.fn>;
@@ -77,6 +78,7 @@ describe('handlePrMerge', () => {
     mockLinearIssueService = {
       markQa: vi.fn().mockResolvedValue(undefined),
       markTodo: vi.fn().mockResolvedValue(undefined),
+      removeLabel: vi.fn().mockResolvedValue(undefined),
     };
     mockUserServiceClient = {
       resolveGitHubUsername: vi.fn().mockResolvedValue(ok({ userId: 'resolved-user' })),
@@ -374,6 +376,54 @@ describe('handlePrMerge', () => {
         undefined,
       );
     });
+  });
+
+  describe('ready-to-merge label removal', () => {
+    it('should remove ready-to-merge label from all discovered issues after transition', async () => {
+      mockCodeTaskRepo.findByPR.mockResolvedValue(
+        ok(createBaseTask({ linearIssueId: 'INT-100', userId: 'user-from-task' }))
+      );
+
+      await handlePrMerge(buildDeps(), createDefaultInput());
+
+      expect(mockLinearIssueService.removeLabel).toHaveBeenCalledWith('user-from-task', 'INT-100', 'ready-to-merge');
+      expect(mockLinearIssueService.removeLabel).toHaveBeenCalledTimes(1);
+    });
+
+    it('should remove ready-to-merge label from multiple issues', async () => {
+      mockCodeTaskRepo.findByPR.mockResolvedValue(
+        ok(createBaseTask({ linearIssueId: 'INT-800', userId: 'task-user' }))
+      );
+
+      await handlePrMerge(
+        buildDeps(),
+        createDefaultInput({ prBody: 'Fixes INT-900', prAuthorLogin: 'author' }),
+      );
+
+      expect(mockLinearIssueService.removeLabel).toHaveBeenCalledWith('task-user', 'INT-800', 'ready-to-merge');
+      expect(mockLinearIssueService.removeLabel).toHaveBeenCalledWith('resolved-user', 'INT-900', 'ready-to-merge');
+      expect(mockLinearIssueService.removeLabel).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not call removeLabel when no issues found', async () => {
+      await handlePrMerge(buildDeps(), createDefaultInput());
+
+      expect(mockLinearIssueService.removeLabel).not.toHaveBeenCalled();
+    });
+
+    it('should still remove label on plan PRs', async () => {
+      mockCodeTaskRepo.findByPR.mockResolvedValue(
+        ok(createBaseTask({ linearIssueId: 'INT-100', userId: 'user-from-task' }))
+      );
+
+      await handlePrMerge(
+        buildDeps(),
+        createDefaultInput({ prTitle: '[INT-100] [plan] Add feature' }),
+      );
+
+      expect(mockLinearIssueService.removeLabel).toHaveBeenCalledWith('user-from-task', 'INT-100', 'ready-to-merge');
+    });
+
   });
 
   describe('plan PR detection', () => {

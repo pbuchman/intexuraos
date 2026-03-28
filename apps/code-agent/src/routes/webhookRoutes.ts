@@ -303,7 +303,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const {
         codeTaskRepo,
-        actionsAgentClient,
+        statusMirrorService,
         whatsappNotifier,
         rateLimitService,
         metricsClient,
@@ -1139,9 +1139,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           ...(prNumber !== undefined && { prNumber }),
           ...(result?.branch !== undefined && { prBranch: result.branch }),
           ...(executionMemoryPostRun !== undefined && { executionMemoryPostRun }),
-          ...(task.agentType === 'remediation' &&
-            remediationRequiresReReview !== undefined &&
-            task.requiresReReview === undefined && {
+          ...(remediationRequiresReReview !== undefined && {
               requiresReReview: remediationRequiresReReview,
             }),
           callbackReceived: true,
@@ -1150,21 +1148,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (!updateResult.ok) {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as completed');
           return reply.fail('INTERNAL_ERROR', updateResult.error.message);
-        }
-        if (
-          task.agentType === 'remediation' &&
-          remediationRequiresReReview !== undefined &&
-          task.requiresReReview !== undefined &&
-          task.requiresReReview !== remediationRequiresReReview
-        ) {
-          request.log.warn(
-            {
-              taskId,
-              persistedRequiresReReview: task.requiresReReview,
-              resultRequiresReReview: remediationRequiresReReview,
-            },
-            'Remediation result requires_re_review disagrees with previously persisted requiresReReview; keeping persisted value',
-          );
         }
         await cleanupLockIfPR();
 
@@ -1211,34 +1194,67 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 signal: remediationSignal,
               });
 
-              // Best-effort: set review-outcome label on the origin Linear issue
+              // Best-effort: set review-outcome label on the associated Linear issue
               try {
                 const originResult = await codeTaskRepo.findOriginTaskByPR(task.repository, prNumber);
+                let targetLinearIssueId: string | undefined;
+                let targetUserId: string;
+                let label: string;
+                let source: string;
+
                 if (originResult.ok && originResult.value !== null && originResult.value.linearIssueId !== undefined) {
-                  const originTask = originResult.value;
-                  const originLinearIssueId: string = originResult.value.linearIssueId;
-                  const label: string =
-                    originTask.agentType === 'planning' ? 'ready-to-implement' : 'ready-to-merge';
+                  targetLinearIssueId = originResult.value.linearIssueId;
+                  targetUserId = originResult.value.userId;
+                  label = originResult.value.agentType === 'planning' ? 'ready-to-implement' : 'ready-to-merge';
+                  source = 'origin';
+                } else {
+                  // Fallback: use review task's own issue (common for external PRs)
+                  targetLinearIssueId = task.linearIssueId;
+                  targetUserId = task.userId;
+                  label = 'ready-to-merge';
+                  source = 'review-fallback';
+
+                  if (!originResult.ok) {
+                    request.log.warn({ taskId, prNumber, error: originResult.error },
+                      'Origin task lookup failed, falling back to review task issue');
+                  } else {
+                    request.log.info({ taskId, prNumber,
+                      originFound: originResult.value !== null,
+                      originHasLinearId: originResult.value?.linearIssueId !== undefined },
+                      'No origin task with linearIssueId, falling back to review task issue');
+                  }
+                }
+
+                if (targetLinearIssueId === undefined) {
+                  request.log.warn({ taskId, prNumber },
+                    'No Linear issue available for review-outcome label — skipping');
+                } else {
                   const issueValidation = await linearAgentClient.validateIssue({
-                    userId: originTask.userId,
-                    identifier: originLinearIssueId,
+                    userId: targetUserId,
+                    identifier: targetLinearIssueId,
                   });
                   if (issueValidation.ok) {
                     const labelResult = await linearAgentClient.updateIssueMetadata({
-                      userId: originTask.userId,
+                      userId: targetUserId,
                       issueId: issueValidation.value.id,
                       addLabels: [label],
                     });
                     if (labelResult.ok) {
-                      request.log.info({ taskId, prNumber, label, linearIssueId: originLinearIssueId }, 'Set review-outcome label on origin issue');
+                      if (labelResult.value.droppedLabels.length > 0) {
+                        request.log.warn({ taskId, prNumber, droppedLabels: labelResult.value.droppedLabels, linearIssueId: targetLinearIssueId },
+                          'Review-outcome label not found in Linear team — label not applied');
+                      } else {
+                        request.log.info({ taskId, prNumber, label, linearIssueId: targetLinearIssueId, source },
+                          'Set review-outcome label');
+                      }
                     } else {
-                      request.log.warn({ taskId, prNumber, label, error: labelResult.error }, 'Failed to set review-outcome label (best-effort)');
+                      request.log.warn({ taskId, prNumber, label, error: labelResult.error },
+                        'Failed to set review-outcome label (best-effort)');
                     }
                   } else {
-                    request.log.warn({ taskId, prNumber, linearIssueId: originLinearIssueId, error: issueValidation.error }, 'Failed to validate origin issue for review-outcome label (best-effort)');
+                    request.log.warn({ taskId, prNumber, linearIssueId: targetLinearIssueId, error: issueValidation.error },
+                      'Failed to validate issue for review-outcome label (best-effort)');
                   }
-                } else if (!originResult.ok) {
-                  request.log.warn({ taskId, prNumber, error: originResult.error }, 'Failed to look up origin task for review-outcome label (best-effort)');
                 }
               } catch (labelError: unknown) {
                 request.log.warn({ error: labelError, taskId, prNumber }, 'Failed to set review-outcome label (best-effort)');
@@ -1318,19 +1334,12 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           await linearIssueService.markInReview(task.userId, task.linearIssueId);
         }
 
-        // Notify actions-agent if task has actionId
-        if (task.actionId) {
-          const actionsResult = await actionsAgentClient.updateActionStatus(task.actionId, 'completed', result?.prUrl ? {
-            prUrl: result.prUrl,
-          } : undefined, traceId);
-
-          if (!actionsResult.ok) {
-            request.log.warn(
-              { taskId, actionId: task.actionId, error: actionsResult.error },
-              'Failed to notify actions-agent - action status may be stale'
-            );
-          }
-        }
+        await statusMirrorService.mirrorStatus({
+          actionId: task.actionId,
+          taskStatus: resolvedStatus,
+          ...(result?.prUrl !== undefined && { resourceUrl: result.prUrl }),
+          traceId,
+        });
 
         // Send WhatsApp notification (use updated task with result populated)
         const completedTask = { ...task, status: resolvedStatus, ...(result !== undefined && { result }) } as typeof task;
@@ -1448,19 +1457,12 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
         await cleanupLockIfPR();
 
-        // Notify actions-agent if task has actionId
-        if (task.actionId) {
-          const actionsResult = await actionsAgentClient.updateActionStatus(task.actionId, 'failed', {
-            error: taskError.message,
-          }, traceId);
-
-          if (!actionsResult.ok) {
-            request.log.warn(
-              { taskId, actionId: task.actionId, error: actionsResult.error },
-              'Failed to notify actions-agent - action status may be stale'
-            );
-          }
-        }
+        await statusMirrorService.mirrorStatus({
+          actionId: task.actionId,
+          taskStatus: 'failed',
+          errorMessage: taskError.message,
+          traceId,
+        });
 
         await whatsappNotifier.notifyTaskFailed(
           task.userId,
@@ -1503,21 +1505,12 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
         await cleanupLockIfPR();
 
-        // Notify actions-agent if task has actionId
-        // Design line 328: interrupted → failed
-        if (task.actionId) {
-          const actionsResult = await actionsAgentClient.updateActionStatus(task.actionId, 'failed', {
-            error: 'Worker was interrupted during task execution',
-          }, traceId);
-
-          if (!actionsResult.ok) {
-            request.log.warn(
-              { taskId, actionId: task.actionId, error: actionsResult.error },
-              'Failed to notify actions-agent - action status may be stale'
-            );
-            // Don't fail the webhook - task update succeeded
-          }
-        }
+        await statusMirrorService.mirrorStatus({
+          actionId: task.actionId,
+          taskStatus: 'interrupted',
+          errorMessage: 'Worker was interrupted during task execution',
+          traceId,
+        });
 
         // Send WhatsApp notification for interrupted task
         await whatsappNotifier.notifyTaskFailed(
@@ -1566,16 +1559,11 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
         await cleanupLockIfPR();
 
-        if (task.actionId) {
-          const actionsResult = await actionsAgentClient.updateActionStatus(task.actionId, 'cancelled', undefined, traceId);
-
-          if (!actionsResult.ok) {
-            request.log.warn(
-              { taskId, actionId: task.actionId, error: actionsResult.error },
-              'Failed to notify actions-agent - action status may be stale'
-            );
-          }
-        }
+        await statusMirrorService.mirrorStatus({
+          actionId: task.actionId,
+          taskStatus: 'cancelled',
+          traceId,
+        });
 
         await whatsappNotifier.notifyTaskFailed(
           task.userId,

@@ -204,9 +204,6 @@ describe('system-prompt', () => {
     });
 
     expect(result).toContain('[AGENT:REMEDIATION]');
-    expect(result).toContain(
-      'PATCH "$INTEXURAOS_CODE_AGENT_URL/internal/tasks/task-123/remediation-status"'
-    );
     expect(result).toContain('requires_re_review');
     expect(result).toContain('Do NOT open a second PR');
     expect(result).toContain('REMEDIATION_AGENT_FINAL:');
@@ -1178,8 +1175,8 @@ describe('system-prompt', () => {
     expect(executionPrompt.version).toBe('6.0.0');
   });
 
-  it('remediation prompt version is 2.0.1', () => {
-    expect(remediationPrompt.version).toBe('2.0.1');
+  it('remediation prompt version is 3.0.0', () => {
+    expect(remediationPrompt.version).toBe('3.0.0');
   });
 
   it('injects execution memory section only for execution tasks', () => {

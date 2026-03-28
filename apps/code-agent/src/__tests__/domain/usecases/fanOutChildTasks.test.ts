@@ -447,6 +447,30 @@ describe('fanOutChildTasks', () => {
       );
     });
 
+    it('does not set actionId on child tasks (INT-1119: prevents false status mirror attempts)', async () => {
+      const parentTask = createParentTask();
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({ id: parentUuid, identifier: 'INT-956', title: 'Parent', url: '', labels: ['code-task'], childCount: 1, parentId: null }),
+      );
+      mockLinearAgentClient.fetchIssueTree.mockResolvedValue(
+        ok({ root: { id: parentUuid, identifier: 'INT-956', url: '', parentId: null, labels: ['code-task'], assigneeId: null, state: 'Backlog' }, descendants: [childNode1] }),
+      );
+      mockCodeTaskRepo.create.mockResolvedValue(ok(createParentTask({ id: 'child-task-1' })));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createParentTask({ status: 'implemented' })));
+
+      await fanOutChildTasks(createDeps(), {
+        parentTask,
+        userId: 'user-456',
+        linearIssueId: 'INT-956',
+      });
+
+      const createCall = mockCodeTaskRepo.create.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(createCall).toBeDefined();
+      expect(createCall['actionId']).toBeUndefined();
+      // approvalEventId still exists for dedup
+      expect(createCall['approvalEventId']).toMatch(/^fanout_approval_/);
+    });
+
     it('passes parent workerType, repository, and baseBranch to child tasks', async () => {
       const parentTask = createParentTask({
         prompt: 'Custom parent prompt',
