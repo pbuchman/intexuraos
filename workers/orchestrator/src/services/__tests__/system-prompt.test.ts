@@ -201,7 +201,9 @@ describe('system-prompt', () => {
     });
 
     expect(result).toContain('[AGENT:REMEDIATION]');
-    expect(result).toContain('PATCH "$INTEXURAOS_CODE_AGENT_URL/internal/tasks/task-123/remediation-status"');
+    expect(result).toContain(
+      'PATCH "$INTEXURAOS_CODE_AGENT_URL/internal/tasks/task-123/remediation-status"'
+    );
     expect(result).toContain('requires_re_review');
     expect(result).toContain('Do NOT open a second PR');
     expect(result).toContain('REMEDIATION_AGENT_FINAL:');

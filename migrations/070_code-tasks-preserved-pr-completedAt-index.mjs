@@ -13,7 +13,8 @@
 export const metadata = {
   id: '070',
   name: 'code-tasks-preserved-pr-completedAt-index',
-  description: 'Composite index for code_tasks preserved pull_request lookup by PR with completedAt ordering',
+  description:
+    'Composite index for code_tasks preserved pull_request lookup by PR with completedAt ordering',
   createdAt: '2026-03-28',
 };
 

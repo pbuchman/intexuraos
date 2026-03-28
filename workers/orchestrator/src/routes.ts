@@ -165,6 +165,7 @@ export function registerRoutes(
       }),
       ...(parsed.planningPrBranch !== undefined && { planningPrBranch: parsed.planningPrBranch }),
       ...(parsed.planningPrUrl !== undefined && { planningPrUrl: parsed.planningPrUrl }),
+      ...(parsed.prNumber !== undefined && { prNumber: parsed.prNumber }),
     };
 
     logger.info(
