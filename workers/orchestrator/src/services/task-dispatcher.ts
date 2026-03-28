@@ -361,6 +361,7 @@ export class TaskDispatcher {
         ...(request.trackingCommentId !== undefined && {
           trackingCommentId: request.trackingCommentId,
         }),
+        ...(request.prNumber !== undefined && { prNumber: request.prNumber }),
         ...(request.continuationPrNumber !== undefined && {
           continuationPrNumber: request.continuationPrNumber,
         }),
@@ -1907,6 +1908,24 @@ export class TaskDispatcher {
       this.logForwarder.close(task.taskId);
     }
 
+    if (shouldPreserve && task.agentType === 'pull_request' && task.prNumber !== undefined) {
+      const preserved = (await this.isolation.provider.listPreservedWorkers?.()) ?? [];
+      const savedState = await this.statePersistence.load();
+      for (const p of preserved) {
+        const preservedTask = savedState.tasks[p.taskId];
+        if (
+          preservedTask?.agentType === 'pull_request' &&
+          preservedTask.prNumber === task.prNumber &&
+          preservedTask.taskId !== task.taskId
+        ) {
+          this.logger.info(
+            { oldTaskId: p.taskId, newTaskId: task.taskId, prNumber: task.prNumber },
+            'Destroying previous preserved pull_request container for same PR'
+          );
+          await this.isolation.provider.destroyWorker(p.taskId);
+        }
+      }
+    }
     if (shouldPreserve) {
       await this.isolation.provider.preserveWorker?.(task.taskId);
     } else {

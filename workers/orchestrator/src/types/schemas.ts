@@ -40,6 +40,7 @@ export const CreateTaskRequestSchema = z.object({
   actionId: z.string().optional(),
   agentType: z.enum(['planning', 'execution', 'pull_request', 'review', 'remediation']).optional(),
   trackingCommentId: z.string().min(1).optional(),
+  prNumber: z.number().int().positive().optional(),
   continuationPrNumber: z.number().int().positive().optional(),
   continuationPrBranch: z.string().min(1).optional(),
   planningPrBranch: z.string().optional(),
