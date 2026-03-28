@@ -766,8 +766,10 @@ export const createFirestoreCodeTaskRepository = (deps: {
         const data = doc.data();
         return ok({
           id: doc.id,
+          /* v8 ignore start -- upstream: FakeFirestore always returns complete documents, cannot simulate missing Firestore fields @preserve */
           workerLocation: String(data['workerLocation'] ?? ''),
           userId: String(data['userId'] ?? ''),
+          /* v8 ignore stop @preserve */
         });
       } catch (error) {
         logger.error({ error, repository, prNumber }, 'Failed to find preserved pull_request task');
