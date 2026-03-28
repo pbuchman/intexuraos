@@ -760,6 +760,34 @@ describe('groupByLinearIssue', () => {
     expect(groups[0]?.pipeline.pr).toEqual({ url: 'https://github.com/org/repo/pull/999', number: '999' });
   });
 
+  it('falls through to older execution task when newest review task has no prUrl', () => {
+    // Real-world post-review flow: execution (implemented, has prUrl) → review (reviewed, no prUrl)
+    // pipeline.pr should still surface the execution task's prUrl
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+        updatedAt: '2026-03-07T16:00:00Z',
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+        status: 'reviewed',
+        updatedAt: '2026-03-07T17:00:00Z',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    // Review task (t2) has no prUrl, so iteration falls through to execution task (t1)
+    expect(groups[0]?.pipeline.pr).toEqual({ url: 'https://github.com/org/repo/pull/42', number: '42' });
+  });
+
   it('does not extract PR from archived tasks', () => {
     const tasks = [
       createMockTask({
