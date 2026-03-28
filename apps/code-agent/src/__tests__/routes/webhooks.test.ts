@@ -153,7 +153,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         descendants: [],
       })
     );
-    vi.spyOn(linearAgentClient, 'updateIssueMetadata').mockResolvedValue(ok(undefined));
+    vi.spyOn(linearAgentClient, 'updateIssueMetadata').mockResolvedValue(ok({ droppedLabels: [] }));
     vi.spyOn(linearAgentClient, 'addComment').mockResolvedValue(ok({ commentId: 'comment-1' }));
     vi.spyOn(linearAgentClient, 'updateIssueState').mockResolvedValue(ok(undefined));
 
@@ -4792,7 +4792,7 @@ describe('POST /internal/webhooks/task-complete', () => {
   describe('review task-complete → review-outcome labels on Linear issue', () => {
     async function createOriginTask(overrides: {
       traceId: string;
-      agentType: 'planning' | 'execution';
+      agentType: 'planning' | 'execution' | 'pull_request';
       linearIssueId?: string;
     }): Promise<import('../../domain/models/codeTask.js').CodeTask> {
       const result = await codeTaskRepo.create({
@@ -4816,6 +4816,7 @@ describe('POST /internal/webhooks/task-complete', () => {
 
     async function createReviewTaskForLabel(overrides: {
       traceId: string;
+      linearIssueId?: string;
     }): Promise<import('../../domain/models/codeTask.js').CodeTask> {
       const result = await codeTaskRepo.create({
         userId: 'user-123',
@@ -4830,6 +4831,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         prNumber: 42,
         webhookSecret: 'test-webhook-secret',
         agentType: 'review',
+        ...(overrides.linearIssueId !== undefined && { linearIssueId: overrides.linearIssueId }),
       });
       if (!result.ok) throw new Error('Failed to create review task');
       return result.value;
@@ -4925,22 +4927,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       await codeTaskRepo.update(planningTask.id, { status: 'planned' });
 
       // Create a newer pull_request task on the same PR
-      const prTaskResult = await codeTaskRepo.create({
-        userId: 'user-123',
-        prompt: 'PR comment follow-up',
-        sanitizedPrompt: 'PR comment follow-up',
-        systemPromptHash: 'pr-auto',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace_label_pr_task_newer',
-        prNumber: 42,
-        webhookSecret: 'test-webhook-secret',
-        agentType: 'pull_request',
-        linearIssueId: 'INT-500',
-      });
-      if (!prTaskResult.ok) throw new Error('Failed to create pull_request task');
+      await createOriginTask({ traceId: 'trace_label_pr_task_newer', agentType: 'pull_request' });
 
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_pr_task_review' });
       const payload = makeLabelPayload(reviewTask.id);
@@ -4955,6 +4942,31 @@ describe('POST /internal/webhooks/task-complete', () => {
         userId: 'user-123',
         issueId: 'linear-issue-uuid',
         addLabels: ['ready-to-implement'],
+      });
+    });
+
+    it('adds ready-to-merge label when origin is a pull_request task (fallback)', async () => {
+      // Create only a pull_request origin task — no planning/execution.
+      // findOriginTaskByPR should return the pull_request task as fallback.
+      await createOriginTask({ traceId: 'trace_label_pr_only_origin', agentType: 'pull_request' });
+
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_pr_only_review' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const validateSpy = vi.mocked(lac.validateIssue);
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      expect(validateSpy).toHaveBeenCalledWith({
+        userId: 'user-123',
+        identifier: 'INT-500',
+      });
+      expect(metadataSpy).toHaveBeenCalledWith({
+        userId: 'user-123',
+        issueId: 'linear-issue-uuid',
+        addLabels: ['ready-to-merge'],
       });
     });
 
@@ -5066,6 +5078,87 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(response.statusCode).toBe(200);
     });
 
+    it('warns and succeeds when updateIssueMetadata returns droppedLabels', async () => {
+      await createOriginTask({ traceId: 'trace_label_dropped', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_dropped_review' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      const { linearAgentClient: lac } = getServices();
+      vi.mocked(lac.updateIssueMetadata).mockResolvedValueOnce(
+        ok({ droppedLabels: ['ready-to-merge'] })
+      );
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      const labelCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].addLabels !== undefined &&
+          call[0].addLabels.includes('ready-to-merge')
+      );
+      expect(labelCalls).toHaveLength(1);
+    });
+
+    it('falls back to review task issue when no origin task exists (external PR)', async () => {
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_fallback_review', linearIssueId: 'INT-REVIEW-99' });
+      vi.spyOn(codeTaskRepo, 'findOriginTaskByPR').mockResolvedValueOnce(ok(null));
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const validateSpy = vi.mocked(lac.validateIssue);
+      expect(validateSpy).toHaveBeenCalledWith({
+        userId: 'user-123',
+        identifier: 'INT-REVIEW-99',
+      });
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      expect(metadataSpy).toHaveBeenCalledWith({
+        userId: 'user-123',
+        issueId: 'linear-issue-uuid',
+        addLabels: ['ready-to-merge'],
+      });
+    });
+
+    it('falls back to review task issue when origin lookup fails', async () => {
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_fallback_error', linearIssueId: 'INT-REVIEW-ERR' });
+      vi.spyOn(codeTaskRepo, 'findOriginTaskByPR').mockResolvedValueOnce(
+        err({ code: 'FIRESTORE_ERROR' as const, message: 'Simulated query error' })
+      );
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      // Should still attempt to set label on review task's issue
+      const validateSpy = vi.mocked(lac.validateIssue);
+      expect(validateSpy).toHaveBeenCalledWith({
+        userId: 'user-123',
+        identifier: 'INT-REVIEW-ERR',
+      });
+    });
+
+    it('skips label when neither origin nor review task has linearIssueId', async () => {
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_no_issue_at_all' });
+      // No origin task exists either
+      vi.spyOn(codeTaskRepo, 'findOriginTaskByPR').mockResolvedValueOnce(ok(null));
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      // No label-related metadata update should have been attempted
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      const labelMetaCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].addLabels !== undefined &&
+          (call[0].addLabels.includes('ready-to-merge') || call[0].addLabels.includes('ready-to-implement'))
+      );
+      expect(labelMetaCalls).toHaveLength(0);
+    });
+
     it('does NOT set labels when needs_remediation is not "0"', async () => {
       await createOriginTask({ traceId: 'trace_label_remediation', agentType: 'execution' });
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_remediation_review' });
@@ -5121,7 +5214,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       return updateResult.value;
     }
 
-    it('backfills requiresReReview from remediation result when the task has no prior value', async () => {
+    it('writes requiresReReview from remediation result', async () => {
       const task = await createRemediationTaskRecord('trace_remediation_backfill');
       const payload = {
         taskId: task.id,
@@ -5153,8 +5246,8 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(stored.value.result?.requires_re_review).toBe('1');
     });
 
-    it('preserves existing requiresReReview when remediation result disagrees', async () => {
-      const task = await createRemediationTaskRecord('trace_remediation_preserve', false);
+    it('overwrites existing requiresReReview with result value', async () => {
+      const task = await createRemediationTaskRecord('trace_remediation_overwrite', false);
       const payload = {
         taskId: task.id,
         status: 'completed' as const,
@@ -5181,7 +5274,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       const stored = await codeTaskRepo.findById(task.id);
       expect(stored.ok).toBe(true);
       if (!stored.ok) throw new Error('Failed to get remediation task');
-      expect(stored.value.requiresReReview).toBe(false);
+      expect(stored.value.requiresReReview).toBe(true);
       expect(stored.value.result?.requires_re_review).toBe('1');
     });
   });
@@ -5263,7 +5356,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         baseBranch: 'development',
         traceId: 'trace_123',
         webhookSecret: 'test-webhook-secret',
-        actionId: 'action-123',
+        actionId: '550e8400-e29b-41d4-a716-446655440000',
       });
 
       expect(createResult.ok).toBe(true);
@@ -5302,7 +5395,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           baseUrl: 'http://actions-agent',
           internalAuthToken: 'test-token',
         }),
-        `/internal/actions/action-123/status`,
+        `/internal/actions/550e8400-e29b-41d4-a716-446655440000/status`,
         expect.objectContaining({
           method: 'PATCH',
           body: JSON.stringify({
@@ -5380,7 +5473,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         baseBranch: 'development',
         traceId: 'trace_123',
         webhookSecret: 'test-webhook-secret',
-        actionId: 'action-pr-less',
+        actionId: '660e8400-e29b-41d4-a716-446655440001',
       });
 
       expect(createResult.ok).toBe(true);
@@ -5418,7 +5511,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           baseUrl: 'http://actions-agent',
           internalAuthToken: 'test-token',
         }),
-        `/internal/actions/action-pr-less/status`,
+        `/internal/actions/660e8400-e29b-41d4-a716-446655440001/status`,
         expect.objectContaining({
           method: 'PATCH',
           body: JSON.stringify({
@@ -5440,7 +5533,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         baseBranch: 'development',
         traceId: 'trace_123',
         webhookSecret: 'test-webhook-secret',
-        actionId: 'action-789',
+        actionId: '770e8400-e29b-41d4-a716-446655440002',
       });
 
       expect(createResult.ok).toBe(true);
@@ -5477,7 +5570,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           baseUrl: 'http://actions-agent',
           internalAuthToken: 'test-token',
         }),
-        `/internal/actions/action-789/status`,
+        `/internal/actions/770e8400-e29b-41d4-a716-446655440002/status`,
         expect.objectContaining({
           method: 'PATCH',
           body: JSON.stringify({
@@ -5502,7 +5595,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         baseBranch: 'development',
         traceId: 'trace_123',
         webhookSecret: 'test-webhook-secret',
-        actionId: 'action-update-fail',
+        actionId: '880e8400-e29b-41d4-a716-446655440003',
       });
 
       expect(createResult.ok).toBe(true);
@@ -5561,7 +5654,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         baseBranch: 'development',
         traceId: 'trace_123',
         webhookSecret: 'test-webhook-secret',
-        actionId: 'action-456',
+        actionId: '990e8400-e29b-41d4-a716-446655440004',
       });
 
       expect(createResult.ok).toBe(true);
@@ -5588,13 +5681,13 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Verify actions-agent was called with 'failed' status
+      // Verify actions-agent was called with 'interrupted' status (INT-1119: statusMirrorService maps correctly)
       expect(mockFetchWithAuth).toHaveBeenCalledWith(
         expect.any(Object),
-        '/internal/actions/action-456/status',
+        '/internal/actions/990e8400-e29b-41d4-a716-446655440004/status',
         expect.objectContaining({
           body: JSON.stringify({
-            resource_status: 'failed',
+            resource_status: 'interrupted',
             resource_result: {
               error: 'Worker was interrupted during task execution',
             },
@@ -5615,7 +5708,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         baseBranch: 'development',
         traceId: 'trace_123',
         webhookSecret: 'test-webhook-secret',
-        actionId: 'action-789',
+        actionId: 'aa0e8400-e29b-41d4-a716-446655440005',
       });
 
       expect(createResult.ok).toBe(true);
@@ -8239,7 +8332,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
         descendants: [],
       })
     );
-    vi.spyOn(linearAgentClient, 'updateIssueMetadata').mockResolvedValue(ok(undefined));
+    vi.spyOn(linearAgentClient, 'updateIssueMetadata').mockResolvedValue(ok({ droppedLabels: [] }));
     vi.spyOn(linearAgentClient, 'addComment').mockResolvedValue(ok({ commentId: 'comment-1' }));
     vi.spyOn(linearAgentClient, 'updateIssueState').mockResolvedValue(ok(undefined));
 
@@ -8475,7 +8568,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     vi.mocked(lac.updateIssueState).mockReset();
     vi.mocked(lac.updateIssueState).mockResolvedValue(ok(undefined));
     vi.mocked(lac.updateIssueMetadata).mockReset();
-    vi.mocked(lac.updateIssueMetadata).mockResolvedValueOnce(ok(undefined)).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'meta fail' }));
+    vi.mocked(lac.updateIssueMetadata).mockResolvedValueOnce(ok({ droppedLabels: [] })).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'meta fail' }));
     const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: 'https://linear.app/pbuchman/issue/INT-200/sub', planning_pr_url: '' } };
     const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
     const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
@@ -8573,7 +8666,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     vi.mocked(lac.updateIssueState).mockReset();
     vi.mocked(lac.updateIssueState).mockResolvedValue(ok(undefined));
     vi.mocked(lac.updateIssueMetadata).mockReset();
-    vi.mocked(lac.updateIssueMetadata).mockResolvedValueOnce(ok(undefined)).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'meta fail' }));
+    vi.mocked(lac.updateIssueMetadata).mockResolvedValueOnce(ok({ droppedLabels: [] })).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'meta fail' }));
     const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: '', planning_pr_url: '' } };
     const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
     const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
@@ -8600,7 +8693,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     vi.mocked(lac.updateIssueState).mockReset();
     vi.mocked(lac.updateIssueState).mockResolvedValue(ok(undefined));
     vi.mocked(lac.updateIssueMetadata).mockReset();
-    vi.mocked(lac.updateIssueMetadata).mockResolvedValue(ok(undefined));
+    vi.mocked(lac.updateIssueMetadata).mockResolvedValue(ok({ droppedLabels: [] }));
     vi.mocked(lac.addComment).mockReset();
     vi.mocked(lac.addComment).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'comment fail' }));
     const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: '', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/42' } };
@@ -8627,7 +8720,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     vi.mocked(lac.updateIssueState).mockReset();
     vi.mocked(lac.updateIssueState).mockResolvedValue(ok(undefined));
     vi.mocked(lac.updateIssueMetadata).mockReset();
-    vi.mocked(lac.updateIssueMetadata).mockResolvedValueOnce(ok(undefined)).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'stamp fail' }));
+    vi.mocked(lac.updateIssueMetadata).mockResolvedValueOnce(ok({ droppedLabels: [] })).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'stamp fail' }));
     const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '0' as const, planning_subtask_urls: '', planning_pr_url: '' } };
     const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
     const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
@@ -8652,7 +8745,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     vi.mocked(lac.addComment).mockReset();
     vi.mocked(lac.addComment).mockResolvedValue(ok({ commentId: 'c1' }));
     vi.mocked(lac.updateIssueMetadata).mockReset();
-    vi.mocked(lac.updateIssueMetadata).mockResolvedValue(ok(undefined));
+    vi.mocked(lac.updateIssueMetadata).mockResolvedValue(ok({ droppedLabels: [] }));
     const payload = { taskId: task.id, status: 'failed' as const, result: { planning_outcome_label: 'unclear' as const }, error: { code: 'PLANNING_AGENT_UNCLEAR', message: 'Ambiguous reqs' } };
     const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
     const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
@@ -9406,7 +9499,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     vi.mocked(lac.addComment).mockReset();
     vi.mocked(lac.addComment).mockResolvedValue(ok({ commentId: 'c1' }));
     vi.mocked(lac.updateIssueMetadata).mockReset();
-    vi.mocked(lac.updateIssueMetadata).mockResolvedValue(ok(undefined));
+    vi.mocked(lac.updateIssueMetadata).mockResolvedValue(ok({ droppedLabels: [] }));
 
     // Send unclear result WITHOUT planning_unclear_clarification but WITH error.message
     const payload = {
@@ -9443,7 +9536,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     vi.mocked(lac.updateIssueState).mockReset();
     vi.mocked(lac.updateIssueState).mockResolvedValue(ok(undefined));
     vi.mocked(lac.updateIssueMetadata).mockReset();
-    vi.mocked(lac.updateIssueMetadata).mockResolvedValue(ok(undefined));
+    vi.mocked(lac.updateIssueMetadata).mockResolvedValue(ok({ droppedLabels: [] }));
 
     // Send already_completed WITHOUT summary
     const payload = {

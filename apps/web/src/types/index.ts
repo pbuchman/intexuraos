@@ -1230,7 +1230,7 @@ export interface CodeTask {
   agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
   implementationTaskId?: string;
   parentTaskId?: string;
-  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement';
+  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement' | 'merge_conflict';
   result?: CodeTaskResult;
   error?: CodeTaskError;
   executionMemoryContext?: CodeTaskExecutionMemoryContext;

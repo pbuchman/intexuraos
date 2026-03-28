@@ -1234,11 +1234,12 @@ describe('internalIssuesRoutes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { id: string; labels: unknown[]; assignee: null };
+        data: { id: string; labels: unknown[]; assignee: null; droppedLabels: string[] };
       };
       expect(body.success).toBe(true);
       expect(body.data.id).toBe('issue-meta-update');
       expect(body.data.assignee).toBeNull();
+      expect(body.data.droppedLabels).toEqual([]);
     });
 
     it('applies addLabels and removeLabels correctly', async () => {
@@ -1305,13 +1306,73 @@ describe('internalIssuesRoutes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { id: string; labels: { id: string; name: string; color: string }[] };
+        data: { id: string; labels: { id: string; name: string; color: string }[]; droppedLabels: string[] };
       };
       expect(body.success).toBe(true);
       expect(body.data.id).toBe('issue-label-mutation');
       // Verify final labels are ['feature', 'docs'] (by ID)
       const labelIds = body.data.labels.map((l) => l.id).sort();
       expect(labelIds).toEqual(['label-docs', 'label-feature']);
+      expect(body.data.droppedLabels).toEqual([]);
+    });
+
+    it('returns droppedLabels when addLabels include names not in team labels', async () => {
+      fakeIssueRepo.seedIssue({
+        id: 'issue-label-drop',
+        identifier: 'ENG-460',
+        title: 'Label Drop Test',
+        description: null,
+        state: 'In Progress',
+        stateType: 'started',
+        priority: 2,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/test/ENG-460',
+        userId: testUserId,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        syncedAt: '2024-01-01T00:00:00.000Z',
+        teamId: 'team-1',
+        parentId: null,
+      });
+
+      fakeLinearClient.seedIssue({
+        id: 'issue-label-drop',
+        identifier: 'ENG-460',
+        title: 'Label Drop Test',
+        description: null,
+        priority: 2,
+        state: { id: 'state-1', name: 'In Progress', type: 'started' },
+        url: 'https://linear.app/test/ENG-460',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        completedAt: null,
+        childCount: 0,
+        children: [],
+        labels: [],
+      });
+
+      // Available labels do NOT include 'ready-to-merge'
+      fakeLinearClient.setLabels([
+        { id: 'label-bug', name: 'bug', color: '#ff0000' },
+      ]);
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/linear/issues/issue-label-drop/metadata',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+        payload: { addLabels: ['bug', 'ready-to-merge'] },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { id: string; labels: { id: string; name: string }[]; droppedLabels: string[] };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.labels.map((l) => l.name)).toEqual(['bug']);
+      expect(body.data.droppedLabels).toEqual(['ready-to-merge']);
     });
   });
 

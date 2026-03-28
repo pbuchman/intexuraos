@@ -126,7 +126,8 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
     task.linearIssueId !== undefined &&
     hasImplementationReadyLabel(task.linearIssue?.labels);
   const isMergeable = isTaskMergeable(task);
-  const mergeUrl = isMergeable ? getTaskMergeUrl(task) : undefined;
+  const prUrl = getTaskMergeUrl(task);
+  const mergeUrl = isMergeable ? prUrl : undefined;
   const isArchivable = ARCHIVABLE_STATUSES.has(task.status);
 
   return (
@@ -149,7 +150,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
         ? <MemoExecutionMemoryCard task={task} />
         : null}
 
-      {task.result !== undefined ? <MemoTaskResultSection task={task} /> : null}
+      <MemoTaskResultSection task={task} />
       {task.error !== undefined ? <MemoTaskErrorCard task={task} /> : null}
 
       <MemoV2LogStream
@@ -177,7 +178,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
         onToggleDropdown={(): void => { setShowImplementDropdown(!showImplementDropdown); }}
         onSelectWorkerType={(type): void => { setSelectedWorkerType(type); setShowImplementDropdown(false); }}
         onImplement={(): void => { void handleImplement(); }}
-        {...(task.result?.prUrl !== undefined ? { prUrl: task.result.prUrl } : {})}
+        {...(prUrl !== undefined ? { prUrl } : {})}
         {...(task.linearIssue?.url !== undefined ? { linearIssueUrl: task.linearIssue.url } : {})}
         isMergeable={isMergeable}
         {...(mergeUrl !== undefined ? { mergeUrl } : {})}
@@ -207,7 +208,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
         archiving={archiving}
         archiveError={archiveError}
         onArchive={(): void => { void handleArchive(); }}
-        {...(task.result?.prUrl !== undefined ? { prUrl: task.result.prUrl } : {})}
+        {...(prUrl !== undefined ? { prUrl } : {})}
         {...(task.linearIssue?.url !== undefined ? { linearIssueUrl: task.linearIssue.url } : {})}
         linksInNextSteps={isImplementable || task.implementationTaskId !== undefined || isMergeable}
       />
@@ -441,15 +442,14 @@ const MemoRunSummaryCard = memo(function RunSummaryCard({ summary }: { summary: 
 
 const MemoTaskResultSection = memo(function TaskResultSection({ task }: { task: CodeTask }): React.JSX.Element | null {
   const result = task.result;
-  if (result === undefined) return null;
 
-  const prNumber = result.prUrl !== undefined
-    ? parseInt(/\/pull\/(\d+)/.exec(result.prUrl)?.[1] ?? '', 10)
-    : undefined;
+  const prNumber = task.prNumber
+    ?? (result?.prUrl !== undefined
+      ? parseInt(/\/pull\/(\d+)/.exec(result.prUrl)?.[1] ?? '', 10)
+      : undefined);
 
   const hasValidPr = prNumber !== undefined && !isNaN(prNumber);
 
-  // V2 fix: Only render PREventsGroup here, NOT the summary (which is in RunSummaryCard)
   if (!hasValidPr) return null;
 
   return (
@@ -461,7 +461,7 @@ const MemoTaskResultSection = memo(function TaskResultSection({ task }: { task: 
     </div>
   );
 }, (prev, next) =>
-  prev.task.result === next.task.result
+  prev.task.result === next.task.result && prev.task.prNumber === next.task.prNumber
 );
 
 const MemoTaskErrorCard = memo(function TaskErrorCard({ task }: { task: CodeTask }): React.JSX.Element | null {

@@ -628,6 +628,51 @@ describe('linearIssueService', () => {
     });
   });
 
+  describe('removeLabel', () => {
+    it('should call updateIssueMetadata with removeLabels', async () => {
+      mockUpdateIssueMetadata = vi.fn().mockResolvedValue(ok(undefined));
+
+      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
+
+      await service.removeLabel(testUserId, 'issue-123', 'ready-to-merge');
+
+      expect(mockUpdateIssueMetadata).toHaveBeenCalledWith({
+        userId: 'test-user-123',
+        issueId: 'issue-123',
+        removeLabels: ['ready-to-merge'],
+      });
+    });
+
+    it('should skip when no issue ID provided', async () => {
+      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
+
+      await service.removeLabel(testUserId, '', 'ready-to-merge');
+
+      expect(mockUpdateIssueMetadata).not.toHaveBeenCalled();
+    });
+
+    it('should log warning and continue on failure', async () => {
+      mockUpdateIssueMetadata = vi.fn().mockResolvedValue(
+        err({
+          code: 'UNAVAILABLE',
+          message: 'Service down',
+        })
+      );
+
+      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
+
+      await expect(service.removeLabel(testUserId, 'issue-123', 'ready-to-merge')).resolves.toBeUndefined();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        {
+          linearIssueId: 'issue-123',
+          labelName: 'ready-to-merge',
+          error: { code: 'UNAVAILABLE', message: 'Service down' },
+        },
+        'Failed to remove label from Linear issue'
+      );
+    });
+  });
+
   describe('markQa', () => {
     it('should call updateIssueState with qa', async () => {
       mockUpdateIssueState = vi.fn().mockResolvedValue(ok(undefined));

@@ -1049,12 +1049,12 @@ describe('linearAgentHttpClient', () => {
   });
 
   describe('updateIssueMetadata', () => {
-    it('should update metadata successfully', async () => {
+    it('should update metadata successfully and parse droppedLabels', async () => {
       nock(baseUrl)
         .patch('/internal/linear/issues/issue-123/metadata')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .matchHeader('X-User-Id', 'test-user-123')
-        .reply(200, { success: true });
+        .reply(200, { success: true, data: { droppedLabels: ['nonexistent'] } });
 
       const result = await client.updateIssueMetadata({
         userId: 'test-user-123',
@@ -1065,7 +1065,27 @@ describe('linearAgentHttpClient', () => {
       });
 
       if (result.ok) {
-        expect(result.value).toBeUndefined();
+        expect(result.value.droppedLabels).toEqual(['nonexistent']);
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
+
+    it('should default droppedLabels to empty array when not in response', async () => {
+      nock(baseUrl)
+        .patch('/internal/linear/issues/issue-123/metadata')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(200, { success: true });
+
+      const result = await client.updateIssueMetadata({
+        userId: 'test-user-123',
+        issueId: 'issue-123',
+        addLabels: ['bug'],
+      });
+
+      if (result.ok) {
+        expect(result.value.droppedLabels).toEqual([]);
       } else {
         expect.fail('Expected successful result');
       }

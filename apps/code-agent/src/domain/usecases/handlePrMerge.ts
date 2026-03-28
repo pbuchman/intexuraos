@@ -133,7 +133,11 @@ export async function handlePrMerge(deps: HandlePrMergeDeps, input: HandlePrMerg
           { linearIssueId, userId, repository, prNumber, targetState },
           'Transitioning Linear issue on PR merge'
         );
-        return mark(userId, linearIssueId);
+        // Remove ready-to-merge label so the merge button disappears in the UI
+        return Promise.all([
+          mark(userId, linearIssueId),
+          linearIssueService.removeLabel(userId, linearIssueId, 'ready-to-merge'),
+        ]);
       })
     );
   }

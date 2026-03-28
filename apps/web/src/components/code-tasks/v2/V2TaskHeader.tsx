@@ -7,6 +7,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { formatDateTime, formatRelative } from '@/utils/dateFormat';
+import { getTaskMergeUrl } from '@/utils/issueGroups.js';
 import type { CodeTask, WorkerStatusTag } from '@/types';
 import {
   DEFAULT_STATE_STYLE,
@@ -42,6 +43,7 @@ export function V2TaskHeader({ task, workerStatusTag }: V2TaskHeaderProps): Reac
       : task.executionMemoryContext.status === 'none'
         ? 'Memory: none'
         : 'Memory: error';
+  const prUrl = getTaskMergeUrl(task);
 
   return (
     <div className="mb-6">
@@ -140,14 +142,14 @@ export function V2TaskHeader({ task, workerStatusTag }: V2TaskHeaderProps): Reac
             {task.linearIssue.identifier}
           </a>
         ) : null}
-        {task.result?.prUrl !== undefined ? (
+        {prUrl !== undefined ? (
           <a
-            href={task.result.prUrl}
+            href={prUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 dark:hover:bg-blue-900/80"
           >
-            PR #{/\/pull\/(\d+)/.exec(task.result.prUrl)?.[1] ?? ''}
+            PR #{task.prNumber ?? /\/pull\/(\d+)/.exec(prUrl)?.[1] ?? ''}
           </a>
         ) : null}
       </div>

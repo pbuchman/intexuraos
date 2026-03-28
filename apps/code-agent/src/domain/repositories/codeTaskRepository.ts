@@ -35,7 +35,7 @@ export interface CreateTaskInput {
 
   // Follow-up tracking (INT-465)
   parentTaskId?: string;
-  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement' | 'ci_failure';
+  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement' | 'ci_failure' | 'merge_conflict';
   agentType?: AgentType;
   /** Initial task status. Defaults to 'queued' if not specified. */
   initialStatus?: 'queued' | 'dispatched';
@@ -171,7 +171,8 @@ export interface CodeTaskRepository {
 
   /**
    * Find the task that created a specific PR.
-   * Used for PR comment auto-response to link back to original task (INT-465).
+   * Excludes merge-conflict follow-up tasks so PR routing links back to the
+   * canonical PR task instead of a later conflict-resolution episode (INT-465).
    */
   findByPR(
     repository: string,
@@ -200,8 +201,9 @@ export interface CodeTaskRepository {
 
   /**
    * Find the newest execution-eligible task for a PR.
-   * Excludes review and remediation tasks — only returns planning, execution,
-   * or pull_request tasks. Used to route generic PR comments to existing tasks.
+   * Excludes review, remediation, and merge-conflict follow-up tasks — only
+   * returns planning, execution, or canonical pull_request tasks. Used to route
+   * generic PR comments to existing tasks.
    * Treats tasks with missing agentType as execution-eligible (backward compatibility).
    */
   findLatestExecutionTaskByPR(
@@ -243,6 +245,7 @@ export interface CodeTaskRepository {
    * Find a preserved pull_request container for a PR.
    * Returns the most recent task with agentType 'pull_request' and status 'implemented'
    * for the given repository and prNumber, ordered by completedAt desc.
+   * Excludes merge-conflict follow-up tasks.
    * Used to reuse preserved containers for non-@worker PR comments.
    */
   findPreservedPullRequestTask(
