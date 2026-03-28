@@ -33,7 +33,7 @@ export interface StatusMirrorService {
    * Non-fatal: failures are logged but don't stop task execution.
    */
   mirrorStatus(params: {
-    actionId: string | undefined;
+    actionId: string | undefined; // @allow-undefined-type -- required param that may be undefined (distinct from optional)
     taskStatus: TaskStatus;
     resourceUrl?: string;
     errorMessage?: string;
@@ -42,7 +42,7 @@ export interface StatusMirrorService {
 }
 
 /**
- * UUID v4 format validation.
+ * UUID format validation.
  * Real actions-agent IDs are standard UUIDs (crypto.randomUUID()).
  * Synthetic patterns (webhook-assign-*, pr-comment/*, merge-conflict/*, fanout_*) don't match.
  */
