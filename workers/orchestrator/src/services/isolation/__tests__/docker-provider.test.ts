@@ -159,6 +159,7 @@ vi.mock('node:fs', async (importOriginal) => {
       rm: vi.fn().mockResolvedValue(undefined),
       readdir: vi.fn().mockResolvedValue(['system-prompt.txt', 'user-prompt.txt', 'github-token']),
       writeFile: vi.fn().mockResolvedValue(undefined),
+      stat: vi.fn().mockResolvedValue({ mtimeMs: Date.now() }),
       statfs: vi.fn().mockResolvedValue({ bavail: 2_000_000, bsize: 4096 }),
     },
   };
@@ -3705,6 +3706,144 @@ describe('DockerProvider', () => {
 
       expect(mocks.mockContainer.stop).not.toHaveBeenCalled();
       expect(mocks.mockContainer.remove).not.toHaveBeenCalled();
+    });
+
+    it('preserves runtime state directories when removing stale containers', async () => {
+      const fourHoursAgo = Math.floor(Date.now() / 1000) - 4 * 60 * 60;
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'stale-container-id',
+          Names: ['/code-worker-stale-state-task'],
+          State: 'exited',
+          Created: fourHoursAgo,
+        },
+      ]);
+
+      // Mock readdir to return no runtime state dirs (so orphan cleanup is a no-op)
+      const fsModule = await import('node:fs');
+      (fsModule.promises.readdir as Mock).mockResolvedValueOnce([]);
+
+      vi.clearAllMocks();
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'stale-container-id',
+          Names: ['/code-worker-stale-state-task'],
+          State: 'exited',
+          Created: fourHoursAgo,
+        },
+      ]);
+
+      await provider.runCleanupCycle();
+
+      // Container is removed but cleanupTaskSession should NOT be called —
+      // runtime state directories are preserved for potential resume.
+      expect(mocks.mockContainer.remove).toHaveBeenCalledWith({ force: true });
+      const rmCalls = (fsModule.promises.rm as Mock).mock.calls;
+      const runtimeStateDeletions = rmCalls.filter(
+        (call: unknown[]) =>
+          typeof call[0] === 'string' &&
+          (call[0].includes('codex-state-stale-state-task') ||
+            call[0].includes('claude-session-stale-state-task'))
+      );
+      expect(runtimeStateDeletions).toHaveLength(0);
+    });
+
+    it('removes orphaned runtime state directories older than 24 hours', async () => {
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([]);
+
+      const fsModule = await import('node:fs');
+      (fsModule.promises.readdir as Mock).mockResolvedValueOnce([
+        'codex-state-orphan-task-1',
+        'claude-session-orphan-task-2',
+        'some-other-dir',
+      ]);
+
+      const oldMtime = Date.now() - 25 * 60 * 60 * 1000; // 25 hours ago
+      (fsModule.promises.stat as Mock).mockResolvedValue({ mtimeMs: oldMtime });
+
+      vi.clearAllMocks();
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([]);
+      (fsModule.promises.readdir as Mock).mockResolvedValueOnce([
+        'codex-state-orphan-task-1',
+        'claude-session-orphan-task-2',
+        'some-other-dir',
+      ]);
+      (fsModule.promises.stat as Mock).mockResolvedValue({ mtimeMs: oldMtime });
+
+      await provider.runCleanupCycle();
+
+      const rmCalls = (fsModule.promises.rm as Mock).mock.calls;
+      const runtimeRemovals = rmCalls.filter(
+        (call: unknown[]) =>
+          typeof call[0] === 'string' &&
+          (call[0].includes('codex-state-orphan-task-1') ||
+            call[0].includes('claude-session-orphan-task-2'))
+      );
+      expect(runtimeRemovals).toHaveLength(2);
+
+      // Non-matching dirs should not be removed
+      const otherRemovals = rmCalls.filter(
+        (call: unknown[]) => typeof call[0] === 'string' && call[0].includes('some-other-dir')
+      );
+      expect(otherRemovals).toHaveLength(0);
+    });
+
+    it('keeps runtime state directories younger than 24 hours', async () => {
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([]);
+
+      const fsModule = await import('node:fs');
+      const recentMtime = Date.now() - 2 * 60 * 60 * 1000; // 2 hours ago
+
+      vi.clearAllMocks();
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([]);
+      (fsModule.promises.readdir as Mock).mockResolvedValueOnce(['codex-state-recent-task']);
+      (fsModule.promises.stat as Mock).mockResolvedValue({ mtimeMs: recentMtime });
+
+      await provider.runCleanupCycle();
+
+      const rmCalls = (fsModule.promises.rm as Mock).mock.calls;
+      const runtimeRemovals = rmCalls.filter(
+        (call: unknown[]) =>
+          typeof call[0] === 'string' && call[0].includes('codex-state-recent-task')
+      );
+      expect(runtimeRemovals).toHaveLength(0);
+    });
+
+    it('keeps runtime state directories for active and preserved workers', async () => {
+      await provider.createWorker(createTestConfig({ taskId: 'active-worker' }));
+      await provider.createWorker(createTestConfig({ taskId: 'preserved-worker' }));
+      await provider.preserveWorker('preserved-worker');
+
+      const fsModule = await import('node:fs');
+      const oldMtime = Date.now() - 25 * 60 * 60 * 1000;
+
+      vi.clearAllMocks();
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([]);
+      (fsModule.promises.readdir as Mock).mockResolvedValueOnce([
+        'codex-state-active-worker',
+        'codex-state-preserved-worker',
+        'codex-state-abandoned-worker',
+      ]);
+      (fsModule.promises.stat as Mock).mockResolvedValue({ mtimeMs: oldMtime });
+
+      await provider.runCleanupCycle();
+
+      const rmCalls = (fsModule.promises.rm as Mock).mock.calls;
+      // Active and preserved workers should NOT be removed
+      const activeRemovals = rmCalls.filter(
+        (call: unknown[]) =>
+          typeof call[0] === 'string' &&
+          (call[0].includes('codex-state-active-worker') ||
+            call[0].includes('codex-state-preserved-worker'))
+      );
+      expect(activeRemovals).toHaveLength(0);
+
+      // Abandoned worker should be removed (old + not in any map)
+      const abandonedRemovals = rmCalls.filter(
+        (call: unknown[]) =>
+          typeof call[0] === 'string' && call[0].includes('codex-state-abandoned-worker')
+      );
+      expect(abandonedRemovals).toHaveLength(1);
     });
   });
 
