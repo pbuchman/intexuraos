@@ -126,6 +126,7 @@ const codeTaskSchema = {
       nullable: true,
     },
     agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request', 'review'] },
+    prNumber: { type: 'number', nullable: true },
     implementationTaskId: { type: 'string' },
     parentTaskId: { type: 'string' },
     followUpReason: { type: 'string' },
@@ -224,6 +225,7 @@ function taskToApiResponse(task: {
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;
+  prNumber?: number;
   agentType?: AgentType;
   implementationTaskId?: string;
   parentTaskId?: string;
@@ -273,6 +275,7 @@ function taskToApiResponse(task: {
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;
+  prNumber?: number;
   agentType?: AgentType;
   implementationTaskId?: string;
   parentTaskId?: string;
@@ -320,6 +323,7 @@ function taskToApiResponse(task: {
     ...(task.actionId !== undefined && { actionId: task.actionId }),
     ...(task.approvalEventId !== undefined && { approvalEventId: task.approvalEventId }),
     ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+    ...(task.prNumber !== undefined && { prNumber: task.prNumber }),
     ...(task.agentType !== undefined && { agentType: task.agentType }),
     ...(task.implementationTaskId !== undefined && { implementationTaskId: task.implementationTaskId }),
     ...(task.parentTaskId !== undefined && { parentTaskId: task.parentTaskId }),
@@ -1671,6 +1675,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                     ...linearIssueForDisplaySchema,
                     nullable: true,
                   },
+                  prNumber: { type: 'number', nullable: true },
                   agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request', 'review'] },
                   implementationTaskId: { type: 'string' },
                   parentTaskId: { type: 'string' },
