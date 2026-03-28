@@ -222,8 +222,7 @@ describe('firestoreExecutionMemoryRepository', () => {
       limit: 2,
     });
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) throw new Error(`Expected ok result, got: ${result.error.message}`);
 
     expect(whereRepository).toHaveBeenCalledWith('repository', '==', 'pbuchman/intexuraos');
     expect(whereStatus).toHaveBeenCalledWith('status', '==', 'active');

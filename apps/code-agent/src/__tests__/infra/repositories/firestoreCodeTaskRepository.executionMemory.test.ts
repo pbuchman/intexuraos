@@ -77,8 +77,7 @@ describe('firestoreCodeTaskRepository execution memory queries', () => {
 
     const result = await repo.listPendingExecutionMemoryPostRun(10);
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) throw new Error(`Expected ok result, got: ${result.error.message}`);
 
     expect(whereAgentType).toHaveBeenCalledWith('agentType', '==', 'execution');
     expect(wherePending).toHaveBeenCalledWith('executionMemoryPostRun.status', '==', 'pending');

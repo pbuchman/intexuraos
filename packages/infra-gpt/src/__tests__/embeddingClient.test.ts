@@ -21,11 +21,9 @@ describe('EmbeddingClient', () => {
 
     const result = await client.embed('test query');
 
-    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Expected ok result, got: ${result.error.message}`);
     expect(embedFn).toHaveBeenCalledWith('test query', 'text-embedding-3-small');
-    if (result.ok) {
-      expect(result.value).toEqual(mockEmbedding);
-    }
+    expect(result.value).toEqual(mockEmbedding);
   });
 
   it('trims input before calling OpenAI', async () => {
@@ -74,7 +72,7 @@ describe('EmbeddingClient', () => {
     await vi.advanceTimersByTimeAsync(200);
     const result = await resultPromise;
 
-    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Expected ok result, got: ${result.error.message}`);
     expect(embedFn).toHaveBeenCalledTimes(3);
     vi.useRealTimers();
   });
