@@ -1959,6 +1959,52 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value?.repository).toBe('test/repo');
     });
 
+    it('ignores merge-conflict follow-up tasks when resolving the canonical PR task', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const original = await repo.create(createTaskInput({
+        id: 'task-pr-origin',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'pull_request',
+        prompt: 'Original PR task',
+        sanitizedPrompt: 'original pr task',
+      }));
+      expect(original.ok).toBe(true);
+
+      await repo.create(createTaskInput({
+        id: 'task-conflict-new-style',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'pull_request',
+        parentTaskId: 'task-pr-origin',
+        followUpReason: 'merge_conflict' as never,
+        prompt: 'Resolve merge conflicts',
+        sanitizedPrompt: 'resolve merge conflicts',
+      }));
+
+      await repo.create(createTaskInput({
+        id: 'task-conflict-legacy',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'pull_request',
+        systemPromptHash: MERGE_CONFLICT_SYSTEM_PROMPT_HASH,
+        prompt: 'Resolve merge conflicts again',
+        sanitizedPrompt: 'resolve merge conflicts again',
+      }));
+
+      const result = await repo.findByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe('task-pr-origin');
+    });
+
     it('returns null when no task exists for PR', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -2407,6 +2453,51 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.value).not.toBeNull();
       expect(result.value?.id).toBe('task-execution-1');
+    });
+
+    it('ignores merge-conflict follow-up tasks, including legacy prompt-hash records', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.create(createTaskInput({
+        id: 'task-pr-origin',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'pull_request',
+        prompt: 'Original PR task',
+        sanitizedPrompt: 'original pr task',
+      }));
+
+      await repo.create(createTaskInput({
+        id: 'task-conflict-new-style',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'pull_request',
+        parentTaskId: 'task-pr-origin',
+        followUpReason: 'merge_conflict' as never,
+        prompt: 'Resolve merge conflicts',
+        sanitizedPrompt: 'resolve merge conflicts',
+      }));
+
+      await repo.create(createTaskInput({
+        id: 'task-conflict-legacy',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'pull_request',
+        systemPromptHash: MERGE_CONFLICT_SYSTEM_PROMPT_HASH,
+        prompt: 'Resolve merge conflicts again',
+        sanitizedPrompt: 'resolve merge conflicts again',
+      }));
+
+      const result = await repo.findLatestExecutionTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe('task-pr-origin');
     });
 
     it('returns null when all tasks are review or remediation tasks (INT-1087)', async () => {
@@ -3205,6 +3296,69 @@ describe('firestoreCodeTaskRepository', () => {
       if (!result.ok) return;
 
       expect(result.value).toBeNull();
+    });
+
+    it('ignores merge-conflict follow-up tasks, including legacy prompt-hash records', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const original = await repo.create(createTaskInput({
+        id: 'task-pr-origin',
+        repository: 'test/repo',
+        prNumber: 42,
+        agentType: 'pull_request',
+        prompt: 'Original PR task',
+        sanitizedPrompt: 'original pr task',
+      }));
+      expect(original.ok).toBe(true);
+      if (!original.ok) return;
+      await repo.update(original.value.id, {
+        status: 'implemented',
+        completedAt: new Date('2026-03-28T10:00:00Z'),
+      });
+
+      const conflictNewStyle = await repo.create(createTaskInput({
+        id: 'task-conflict-new-style',
+        repository: 'test/repo',
+        prNumber: 42,
+        agentType: 'pull_request',
+        parentTaskId: 'task-pr-origin',
+        followUpReason: 'merge_conflict' as never,
+        prompt: 'Resolve merge conflicts',
+        sanitizedPrompt: 'resolve merge conflicts',
+      }));
+      expect(conflictNewStyle.ok).toBe(true);
+      if (!conflictNewStyle.ok) return;
+      await repo.update(conflictNewStyle.value.id, {
+        status: 'implemented',
+        completedAt: new Date('2026-03-28T11:00:00Z'),
+      });
+
+      const conflictLegacy = await repo.create(createTaskInput({
+        id: 'task-conflict-legacy',
+        repository: 'test/repo',
+        prNumber: 42,
+        agentType: 'pull_request',
+        systemPromptHash: MERGE_CONFLICT_SYSTEM_PROMPT_HASH,
+        prompt: 'Resolve merge conflicts again',
+        sanitizedPrompt: 'resolve merge conflicts again',
+      }));
+      expect(conflictLegacy.ok).toBe(true);
+      if (!conflictLegacy.ok) return;
+      await repo.update(conflictLegacy.value.id, {
+        status: 'implemented',
+        completedAt: new Date('2026-03-28T12:00:00Z'),
+      });
+
+      const result = await repo.findPreservedPullRequestTask('test/repo', 42);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe('task-pr-origin');
     });
   });
 
