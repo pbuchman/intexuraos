@@ -49,6 +49,7 @@ describe('handlePrMerge', () => {
   let mockCodeTaskRepo: {
     findByPR: ReturnType<typeof vi.fn>;
     findLatestExecutionTaskByPR: ReturnType<typeof vi.fn>;
+    findOriginTaskByPR: ReturnType<typeof vi.fn>;
     findPreservedPullRequestTask: ReturnType<typeof vi.fn>;
   };
   let mockLinearIssueService: {
@@ -70,6 +71,7 @@ describe('handlePrMerge', () => {
     mockCodeTaskRepo = {
       findByPR: vi.fn().mockResolvedValue(ok(null)),
       findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
       findPreservedPullRequestTask: vi.fn().mockResolvedValue(ok(null)),
     };
     mockLinearIssueService = {

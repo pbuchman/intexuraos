@@ -2478,6 +2478,189 @@ describe('firestoreCodeTaskRepository', () => {
     });
   });
 
+  describe('findOriginTaskByPR', () => {
+    it('returns planning task, skipping pull_request and review tasks', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a planning origin task (oldest)
+      await repo.create(createTaskInput({
+        id: 'task-planning-origin',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'planning',
+        prompt: 'Planning task',
+        sanitizedPrompt: 'planning task',
+      }));
+
+      // Create a newer pull_request task (should be skipped)
+      await repo.create(createTaskInput({
+        id: 'task-pr-newer',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'pull_request',
+        prompt: 'PR task',
+        sanitizedPrompt: 'pr task',
+      }));
+
+      // Create a review task (should be skipped)
+      await repo.create(createTaskInput({
+        id: 'task-review-newest',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'review',
+        prompt: 'Review task',
+        sanitizedPrompt: 'review task',
+      }));
+
+      const result = await repo.findOriginTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe('task-planning-origin');
+    });
+
+    it('returns execution task as origin', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.create(createTaskInput({
+        id: 'task-execution-origin',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'execution',
+        prompt: 'Execution task',
+        sanitizedPrompt: 'execution task',
+      }));
+
+      const result = await repo.findOriginTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe('task-execution-origin');
+    });
+
+    it('returns null when only pull_request and review tasks exist', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.create(createTaskInput({
+        id: 'task-pr-1',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'pull_request',
+        prompt: 'PR task',
+        sanitizedPrompt: 'pr task',
+      }));
+
+      await repo.create(createTaskInput({
+        id: 'task-review-1',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'review',
+        prompt: 'Review task',
+        sanitizedPrompt: 'review task',
+      }));
+
+      const result = await repo.findOriginTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toBeNull();
+    });
+
+    it('skips remediation tasks', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.create(createTaskInput({
+        id: 'task-execution-origin',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'execution',
+        prompt: 'Execution task',
+        sanitizedPrompt: 'execution task',
+      }));
+
+      await repo.create(createTaskInput({
+        id: 'task-remediation-1',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'remediation',
+        prompt: 'Remediation task',
+        sanitizedPrompt: 'remediation task',
+      }));
+
+      const result = await repo.findOriginTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe('task-execution-origin');
+    });
+
+    it('returns newest planning/execution task when multiple exist', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.create(createTaskInput({
+        id: 'task-planning-older',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'planning',
+        prompt: 'Planning task',
+        sanitizedPrompt: 'planning task',
+      }));
+
+      await repo.create(createTaskInput({
+        id: 'task-execution-newer',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'execution',
+        prompt: 'Execution task',
+        sanitizedPrompt: 'execution task',
+      }));
+
+      const result = await repo.findOriginTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe('task-execution-newer');
+    });
+
+    it('returns null when no tasks exist for the PR', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.findOriginTaskByPR('test/repo', 999);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toBeNull();
+    });
+  });
+
   describe('findRecentTasksByLinearIssue', () => {
     it('returns newest tasks first for the same Linear issue', async () => {
       const repo = createFirestoreCodeTaskRepository({
@@ -2761,6 +2944,38 @@ describe('firestoreCodeTaskRepository', () => {
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ repository: 'test/repo', prNumber: 789, docsScanned: 50 }),
         'findLatestExecutionTaskByPR exhausted 50-doc window without finding a non-review task',
+      );
+    });
+  });
+
+  describe('findOriginTaskByPR 50-doc exhaustion warning', () => {
+    it('logs warning when 50 docs are scanned without finding a planning/execution task', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create 50 review tasks for the same PR to exhaust the 50-doc window
+      for (let i = 0; i < 50; i++) {
+        await repo.create(createTaskInput({
+          id: `task-origin-exhaust-${i}`,
+          userId: `user-${i}`,
+          repository: 'test/repo',
+          prNumber: 790,
+          agentType: 'review',
+          prompt: `Review task ${i}`,
+          sanitizedPrompt: `review task ${i}`,
+        }));
+      }
+
+      const result = await repo.findOriginTaskByPR('test/repo', 790);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toBeNull();
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ repository: 'test/repo', prNumber: 790, docsScanned: 50 }),
+        'findOriginTaskByPR exhausted 50-doc window without finding a planning/execution task',
       );
     });
   });
