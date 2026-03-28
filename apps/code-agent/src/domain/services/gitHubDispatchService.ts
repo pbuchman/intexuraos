@@ -444,16 +444,18 @@ async function handleNewTask(
     ? deps.messageBuilder.build(event)
     : event.body ?? '';
 
+  // Look up any preserved container for this PR once — used in both branches below.
+  const preservedResult = await deps.codeTaskRepo.findPreservedPullRequestTask(
+    event.repository,
+    event.pullRequestNumber,
+  );
+  const preserved = preservedResult.ok ? preservedResult.value : null;
+
   // When @worker directive is present, destroy any preserved container first (best-effort).
   // The user's intent is a fresh agent with a specific model — failing to destroy the old
   // one should not block creating the new task.
   if (workerType !== undefined) {
-    const preservedResult = await deps.codeTaskRepo.findPreservedPullRequestTask(
-      event.repository,
-      event.pullRequestNumber,
-    );
-    if (preservedResult.ok && preservedResult.value !== null) {
-      const preserved = preservedResult.value;
+    if (preserved !== null) {
       logger.info(
         { taskId: preserved.id, prNumber: event.pullRequestNumber },
         'Destroying preserved container for @worker directive',
@@ -481,12 +483,7 @@ async function handleNewTask(
 
   // Check for preserved pull_request container to reuse (non-@worker comments only)
   if (workerType === undefined) {
-    const preservedResult = await deps.codeTaskRepo.findPreservedPullRequestTask(
-      event.repository,
-      event.pullRequestNumber,
-    );
-    if (preservedResult.ok && preservedResult.value !== null) {
-      const preserved = preservedResult.value;
+    if (preserved !== null) {
       try {
         const sendResult = await sendTaskMessage(
           {

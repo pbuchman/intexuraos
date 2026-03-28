@@ -1921,19 +1921,21 @@ export class TaskDispatcher {
 
     if (shouldPreserve && task.agentType === 'pull_request' && task.prNumber !== undefined) {
       const preserved = (await this.isolation.provider.listPreservedWorkers?.()) ?? [];
-      const savedState = await this.statePersistence.load();
-      for (const p of preserved) {
-        const preservedTask = savedState.tasks[p.taskId];
-        if (
-          preservedTask?.agentType === 'pull_request' &&
-          preservedTask.prNumber === task.prNumber &&
-          preservedTask.taskId !== task.taskId
-        ) {
-          this.logger.info(
-            { oldTaskId: p.taskId, newTaskId: task.taskId, prNumber: task.prNumber },
-            'Destroying previous preserved pull_request container for same PR'
-          );
-          await this.isolation.provider.destroyWorker(p.taskId);
+      if (preserved.length > 0) {
+        const savedState = await this.statePersistence.load();
+        for (const p of preserved) {
+          const preservedTask = savedState.tasks[p.taskId];
+          if (
+            preservedTask?.agentType === 'pull_request' &&
+            preservedTask.prNumber === task.prNumber &&
+            preservedTask.taskId !== task.taskId
+          ) {
+            this.logger.info(
+              { oldTaskId: p.taskId, newTaskId: task.taskId, prNumber: task.prNumber },
+              'Destroying previous preserved pull_request container for same PR'
+            );
+            await this.isolation.provider.destroyWorker(p.taskId);
+          }
         }
       }
     }
