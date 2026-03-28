@@ -26,6 +26,8 @@ export interface CreateTaskRequest {
   agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
   /** Existing PR tracking comment to reuse instead of creating a new one. */
   trackingCommentId?: string;
+  /** PR number this task is operating on. Used to enforce one-per-PR container preservation. */
+  prNumber?: number;
   /** Existing PR number to continue instead of creating a fresh PR. */
   continuationPrNumber?: number;
   /** Existing PR branch to continue instead of creating a fresh PR. */

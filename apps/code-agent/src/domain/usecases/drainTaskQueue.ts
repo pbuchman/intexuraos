@@ -337,6 +337,7 @@ export async function drainTaskQueue(
       ...(task.trackingCommentId !== undefined && { trackingCommentId: task.trackingCommentId }),
       ...(task.retriedFrom !== undefined && { retriedFrom: task.retriedFrom }),
       ...(task.reviewTypes !== undefined && { reviewTypes: task.reviewTypes }),
+      ...(task.prNumber !== undefined && { prNumber: task.prNumber }),
     });
 
     if (!dispatchResult.ok) {

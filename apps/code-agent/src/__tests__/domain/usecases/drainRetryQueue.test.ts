@@ -271,6 +271,38 @@ describe('drainRetryQueue', () => {
       expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({ status: 'dispatched' }));
     });
 
+    it('forwards prNumber in dispatch request when task has prNumber', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(
+        ok({ ...sampleTask, prNumber: 99, agentType: 'review' })
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(ok({ dispatched: true, workerLocation: 'home-mac' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('dispatched');
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ prNumber: 99 })
+      );
+    });
+
+    it('does not include prNumber in dispatch request when task has no prNumber', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockTaskDispatcher.dispatch.mockResolvedValue(ok({ dispatched: true, workerLocation: 'home-mac' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('dispatched');
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.not.objectContaining({ prNumber: expect.anything() })
+      );
+    });
+
     it('includes reviewTypes in dispatch when task has them', async () => {
       mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
       mockCodeTaskRepo.findById.mockResolvedValue(
