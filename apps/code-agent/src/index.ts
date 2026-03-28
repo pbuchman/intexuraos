@@ -18,8 +18,6 @@ const REQUIRED_ENV = [
   'INTEXURAOS_ORCHESTRATOR_SECRET', // For HMAC signature validation from orchestrator
   'INTEXURAOS_GITHUB_WEBHOOK_SECRET', // For GitHub webhook signature verification
   'INTEXURAOS_SERVICE_URL', // Webhook callback URL — orchestrator calls this to report task status
-  'INTEXURAOS_EXECUTION_MEMORY_ENABLED', // Feature flag for execution memory retrieval/distillation
-  'INTEXURAOS_OPENAI_APP_API_KEY', // OpenAI embeddings for execution memory retrieval/distillation
 ];
 
 /**
@@ -44,6 +42,8 @@ const PRODUCTION_ONLY_ENV = [
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_USER_SERVICE_URL',
   'INTEXURAOS_GEMINI_APP_API_KEY',
+  'INTEXURAOS_EXECUTION_MEMORY_ENABLED', // Feature flag for execution memory retrieval/distillation
+  'INTEXURAOS_OPENAI_APP_API_KEY', // OpenAI embeddings for execution memory retrieval/distillation
 ];
 
 // In E2E mode, only validate core env vars; others have sensible defaults
