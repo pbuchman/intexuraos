@@ -590,6 +590,7 @@ export class TaskDispatcher {
     const task = loadResult.tasks[taskId];
 
     if (task === undefined) {
+      // TODO(INT-1130): call code-agent /internal/tasks/:id/dispatch-metadata when task not in state
       return { ok: false, error: { type: 'not_found', message: 'Task not found' } };
     }
 
