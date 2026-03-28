@@ -266,6 +266,7 @@ export interface NotificationFiltersData {
  */
 export interface UserSettings {
   userId: string;
+  timezone?: string;
   notifications: {
     filters: NotificationFilter[];
   };

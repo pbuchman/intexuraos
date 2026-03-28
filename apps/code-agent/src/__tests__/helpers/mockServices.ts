@@ -64,6 +64,9 @@ export const mockUserServiceClient: UserServiceClient = {
   async resolveGitHubUsername() {
     return ok(null);
   },
+  async getUserTimezone() {
+    return undefined;
+  },
 };
 
 /**
@@ -169,13 +172,12 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     gitHubPRClient: createGitHubPRHttpClient({ timeoutMs: 5000 }),
     userServiceClient: mockUserServiceClient,
     firestore: fakeFirestore,
-    messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS),
+    messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS),
     allowedBots: ALLOWED_BOTS,
     orchestratorSecret: 'test-secret',
     serviceUrl: 'http://localhost:8080',
     dispatchRetryRepo: createFirestoreDispatchRetryRepository({ logger }),
     automationLog,
-    createRemediationTask: async () => ok({ status: 'queued' as const, taskId: 'mock-remediation-task', workerType: 'auto' as const }),
   });
 
   const eventDecisionRepo = createFirestoreEventDecisionRepository({ logger });

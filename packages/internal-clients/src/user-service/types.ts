@@ -67,4 +67,5 @@ export interface UserServiceClient {
   resolveGitHubUsername(
     gitHubUsername: string
   ): Promise<Result<{ userId: string } | null, UserServiceError>>;
+  getUserTimezone(userId: string): Promise<string | undefined>;
 }

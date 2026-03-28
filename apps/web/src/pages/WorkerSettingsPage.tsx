@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { Button, Layout } from '@/components';
-import { useWorkerSettings } from '@/hooks';
+import { useWorkerSettings, useTimezone } from '@/hooks';
 import type {
   WorkerConfigInput,
   WorkerConfigUpdateInput,
@@ -10,6 +10,7 @@ import type {
 import { WorkerRow } from '@/components/workers/WorkerRow.js';
 import { AddWorkerForm } from '@/components/workers/AddWorkerForm.js';
 import { DefaultWorkerTypeCard } from '@/components/workers/DefaultWorkerTypeCard.js';
+import { TimezoneCard } from '@/components/workers/TimezoneCard.js';
 
 const MAX_WORKERS = 2;
 
@@ -25,6 +26,13 @@ export function WorkerSettingsPage(): React.JSX.Element {
     reorderWorkers,
     updateDefaultWorkerType,
   } = useWorkerSettings();
+
+  const {
+    timezone,
+    saving: timezoneSaving,
+    error: timezoneError,
+    updateTimezone,
+  } = useTimezone();
 
   const [showAddForm, setShowAddForm] = useState(false);
 
@@ -114,6 +122,15 @@ export function WorkerSettingsPage(): React.JSX.Element {
           successMessage="Default pull request model saved"
           currentType={settings?.defaultPullRequestWorkerType ?? 'auto'}
           onUpdate={(wt): Promise<void> => updateDefaultWorkerType('pull-request', wt)}
+        />
+      </div>
+
+      <div className="mb-6">
+        <TimezoneCard
+          currentTimezone={timezone}
+          saving={timezoneSaving}
+          error={timezoneError}
+          onUpdate={updateTimezone}
         />
       </div>
 

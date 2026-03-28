@@ -130,4 +130,13 @@ export interface WorkerSettingsRepository {
     field: DefaultWorkerTypeField,
     workerType: CodeTaskWorkerType
   ): Promise<Result<void, WorkerSettingsError>>;
+
+  /**
+   * Clear a default worker type field, restoring automatic fallback behavior.
+   * Removes the field from the settings document.
+   */
+  clearDefaultWorkerType(
+    userId: string,
+    field: DefaultWorkerTypeField
+  ): Promise<Result<void, WorkerSettingsError>>;
 }

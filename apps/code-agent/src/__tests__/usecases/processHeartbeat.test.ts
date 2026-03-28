@@ -54,6 +54,7 @@ describe('processHeartbeat', () => {
         findByIdForUser: vi.fn(),
         list: vi.fn(),
         hasActiveTaskForLinearIssue: vi.fn(),
+        hasDispatchedOrRunningForPR: vi.fn(),
         findZombieTasks: vi.fn(),
         update: updateMock,
       } as unknown as ProcessHeartbeatDeps['codeTaskRepository'],

@@ -278,6 +278,10 @@ export class FakeUserServiceClient implements UserServiceClient {
     return ok(null);
   }
 
+  async getUserTimezone(): Promise<string | undefined> {
+    return undefined;
+  }
+
   // Test helpers
   setApiKeys(userId: string, keys: DecryptedApiKeys): void {
     this.apiKeys.set(userId, keys);

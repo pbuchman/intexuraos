@@ -93,6 +93,9 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async findActiveReviewForPR(): ReturnType<CodeTaskRepository['findActiveReviewForPR']> {
       return ok(null);
     },
+    async hasDispatchedOrRunningForPR(): ReturnType<CodeTaskRepository['hasDispatchedOrRunningForPR']> {
+      return ok({ hasActive: false });
+    },
     async deleteTask(): ReturnType<CodeTaskRepository['deleteTask']> {
       return ok(undefined);
     },
@@ -118,6 +121,9 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
       return ok(null);
     },
     async findRecentRemediationForPR(): ReturnType<CodeTaskRepository['findRecentRemediationForPR']> {
+      return ok(null);
+    },
+    async findPreservedPullRequestTask(): ReturnType<CodeTaskRepository['findPreservedPullRequestTask']> {
       return ok(null);
     },
   };
@@ -235,6 +241,9 @@ function createMockUserServiceClient(): UserServiceClient {
     },
     async resolveGitHubUsername(): ReturnType<UserServiceClient['resolveGitHubUsername']> {
       return ok(null);
+    },
+    async getUserTimezone(): Promise<string | undefined> {
+      return undefined;
     },
   };
 }
@@ -1061,5 +1070,27 @@ describe('createTaskForPR', () => {
 
       expect(capturedWorkerType).toBe('auto');
     });
+  });
+
+  it('passes workerType override to created task when provided, taking priority over user default', async () => {
+    // User has a defaultPullRequestWorkerType of 'sonnet' in their settings.
+    // An explicit workerType in the request ('opus') must always win.
+    deps.workerSettingsRepo = createFakeWorkerSettingsRepo({
+      getSettings: vi.fn().mockResolvedValue(ok({ defaultPullRequestWorkerType: 'sonnet' })),
+    });
+
+    const createSpy = vi.fn().mockResolvedValue(ok({} as never));
+    deps.codeTaskRepo = {
+      ...createMockCodeTaskRepo(),
+      create: createSpy,
+    };
+
+    const result = await createTaskForPR(deps, {
+      ...request,
+      workerType: 'opus',
+    });
+    expect(result.ok).toBe(true);
+    const createCall = (createSpy as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+    expect(createCall?.workerType).toBe('opus');
   });
 });

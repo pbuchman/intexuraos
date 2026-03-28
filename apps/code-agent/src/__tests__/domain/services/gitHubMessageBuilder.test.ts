@@ -1,9 +1,8 @@
-import { PullRequestReviewTemplate, IssueCommentTemplate, EditedBotReviewTemplate, CodeWorkerNitpickNukerTemplate, createWebhookMessageBuilder } from '../../../domain/services/gitHubMessageBuilder.js';
+import { PullRequestReviewTemplate, IssueCommentTemplate, EditedBotReviewTemplate, createWebhookMessageBuilder } from '../../../domain/services/gitHubMessageBuilder.js';
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import { describe, it, expect } from 'vitest';
 
 const ALLOWED_BOTS = new Set(['claude[bot]', 'chatgpt-codex-connector[bot]']);
-const CODE_WORKER_BOTS = new Set(['intexuraos-code-worker[bot]']);
 
 const mockPRReviewEvent: GitHubPREvent = {
   id: 'event-123',
@@ -288,86 +287,23 @@ describe('GitHubMessageBuilder', () => {
     });
   });
 
-  describe('CodeWorkerNitpickNukerTemplate', () => {
-    const mockCodeWorkerReviewEvent: GitHubPREvent = {
-      id: 'event-126',
-      githubEventId: 126,
-      deliveryId: null,
-      repository: 'intexuraos/code-agent',
-      repositoryId: 54321,
-      pullRequestNumber: 42,
-      pullRequestId: 12345,
-      eventType: 'pull_request_review',
-      action: 'submitted',
-      senderLogin: 'intexuraos-code-worker[bot]',
-      senderId: 777,
-      senderType: 'Bot',
-      prAuthorLogin: null,
-      title: 'Test PR',
-      body: '## Code Quality Review\n\n### Suggestions\n\n1. **Hardcoded timeout** — Extract to constant.',
-      state: 'open',
-      baseBranch: null,
-      mergedAt: null,
-      createdAt: new Date('2026-03-03T10:00:00Z'),
-      processedAt: new Date('2026-03-03T10:00:00Z'),
-      payload: {
-        review: {
-          id: 999,
-          state: 'commented',
-        },
-      },
-    };
-
-    it('renders header with PR number', () => {
-      const template = new CodeWorkerNitpickNukerTemplate();
-      const result = template.render(mockCodeWorkerReviewEvent);
-
-      expect(result).toContain('[Code Worker Review] A code-worker review was submitted on PR #42.');
-    });
-
-    it('includes /nitpick-nuker command with PR number', () => {
-      const template = new CodeWorkerNitpickNukerTemplate();
-      const result = template.render(mockCodeWorkerReviewEvent);
-
-      expect(result).toContain('/nitpick-nuker 42');
-    });
-
-    it('does not include review body or triage table', () => {
-      const template = new CodeWorkerNitpickNukerTemplate();
-      const result = template.render(mockCodeWorkerReviewEvent);
-
-      expect(result).not.toContain('Full review body:');
-      expect(result).not.toContain('Columns: # | Finding');
-      expect(result).not.toContain('### Suggestions');
-    });
-
-    it('describes the skill behavior', () => {
-      const template = new CodeWorkerNitpickNukerTemplate();
-      const result = template.render(mockCodeWorkerReviewEvent);
-
-      expect(result).toContain('fetch all unprocessed review comments');
-      expect(result).toContain('triage each one');
-      expect(result).toContain('exit cleanly');
-    });
-  });
-
   describe('createWebhookMessageBuilder', () => {
     it('routes pull_request_review to PullRequestReviewTemplate', () => {
-      const builder = createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS);
+      const builder = createWebhookMessageBuilder(ALLOWED_BOTS);
       const result = builder.build(mockPRReviewEvent);
 
       expect(result).toContain('[PR Review] New review on PR #42');
     });
 
     it('routes issue_comment to IssueCommentTemplate', () => {
-      const builder = createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS);
+      const builder = createWebhookMessageBuilder(ALLOWED_BOTS);
       const result = builder.build(mockIssueCommentEvent);
 
       expect(result).toContain('[PR Comment] New comment on PR #42');
     });
 
     it('routes edited bot comment to EditedBotReviewTemplate', () => {
-      const builder = createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS);
+      const builder = createWebhookMessageBuilder(ALLOWED_BOTS);
       const result = builder.build(mockEditedBotEvent);
 
       expect(result).toContain('[PR Comment — Bot Review Edit]');
@@ -378,7 +314,7 @@ describe('GitHubMessageBuilder', () => {
         ...mockEditedBotEvent,
         senderLogin: 'random-user',
       };
-      const builder = createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS);
+      const builder = createWebhookMessageBuilder(ALLOWED_BOTS);
       const result = builder.build(nonBotEditedEvent);
 
       expect(result).toContain('[PR Comment] New comment on PR #42');
@@ -391,7 +327,7 @@ describe('GitHubMessageBuilder', () => {
         eventType: 'push',
         action: 'created',
       };
-      const builder = createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS);
+      const builder = createWebhookMessageBuilder(ALLOWED_BOTS);
       const result = builder.build(unknownEvent);
 
       expect(result).toContain('[PR Comment] New comment on PR #42');
@@ -404,33 +340,11 @@ describe('GitHubMessageBuilder', () => {
         senderLogin: 'claude[bot]',
         payload: { comment: { id: 555 } },
       };
-      const builder = createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS);
+      const builder = createWebhookMessageBuilder(ALLOWED_BOTS);
       const result = builder.build(editedBotReviewEvent);
 
       expect(result).toContain('[PR Comment — Bot Review Edit]');
     });
 
-    it('routes code-worker pull_request_review to CodeWorkerNitpickNukerTemplate', () => {
-      const codeWorkerReviewEvent: GitHubPREvent = {
-        ...mockPRReviewEvent,
-        senderLogin: 'intexuraos-code-worker[bot]',
-        body: '## Code Quality Review\n\n### Suggestions\n\n1. **Issue** — Fix it.',
-        payload: { review: { id: 888, state: 'commented' } },
-      };
-      const builder = createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS);
-      const result = builder.build(codeWorkerReviewEvent);
-
-      expect(result).toContain('[Code Worker Review]');
-      expect(result).toContain('/nitpick-nuker 42');
-      expect(result).not.toContain('[PR Review] New review');
-    });
-
-    it('does not route non-code-worker pull_request_review to nitpick-nuker template', () => {
-      const builder = createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS);
-      const result = builder.build(mockPRReviewEvent);
-
-      expect(result).toContain('[PR Review] New review on PR #42');
-      expect(result).not.toContain('Code Worker Review');
-    });
   });
 });

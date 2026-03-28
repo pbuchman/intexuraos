@@ -1116,4 +1116,86 @@ describe('createUserServiceClient', () => {
       }
     });
   });
+
+  describe('getUserTimezone', () => {
+    it('returns timezone string when user has timezone set', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, {
+          success: true,
+          data: {
+            timezone: 'Europe/Berlin',
+          },
+        });
+
+      const client = createUserServiceClient(config);
+      const result = await client.getUserTimezone('user123');
+
+      expect(result).toBe('Europe/Berlin');
+    });
+
+    it('returns undefined when user has no timezone set', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, {
+          success: true,
+          data: {},
+        });
+
+      const client = createUserServiceClient(config);
+      const result = await client.getUserTimezone('user123');
+
+      expect(result).toBeUndefined();
+    });
+
+    it('returns undefined and logs warning when HTTP call fails', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(500);
+
+      const client = createUserServiceClient(config);
+      const result = await client.getUserTimezone('user123');
+
+      expect(result).toBeUndefined();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        { userId: 'user123', status: 500 },
+        'Failed to fetch user timezone'
+      );
+    });
+
+    it('returns undefined and logs warning on network error', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .replyWithError('ECONNREFUSED');
+
+      const client = createUserServiceClient(config);
+      const result = await client.getUserTimezone('user123');
+
+      expect(result).toBeUndefined();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        { userId: 'user123', error: expect.stringContaining('ECONNREFUSED') },
+        'Failed to fetch user timezone'
+      );
+    });
+
+    it('URL encodes userId with pipe (Auth0 format)', async () => {
+      const userId = 'auth0|user123';
+
+      nock('http://localhost:3000')
+        .get(`/internal/users/${encodeURIComponent(userId)}/settings`)
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, {
+          success: true,
+          data: { timezone: 'America/New_York' },
+        });
+
+      const client = createUserServiceClient(config);
+      const result = await client.getUserTimezone(userId);
+
+      expect(result).toBe('America/New_York');
+    });
+  });
 });
