@@ -5069,7 +5069,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       return updateResult.value;
     }
 
-    it('backfills requiresReReview from remediation result when the task has no prior value', async () => {
+    it('writes requiresReReview from remediation result', async () => {
       const task = await createRemediationTaskRecord('trace_remediation_backfill');
       const payload = {
         taskId: task.id,
@@ -5101,8 +5101,8 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(stored.value.result?.requires_re_review).toBe('1');
     });
 
-    it('preserves existing requiresReReview when remediation result disagrees', async () => {
-      const task = await createRemediationTaskRecord('trace_remediation_preserve', false);
+    it('overwrites existing requiresReReview with result value', async () => {
+      const task = await createRemediationTaskRecord('trace_remediation_overwrite', false);
       const payload = {
         taskId: task.id,
         status: 'completed' as const,
@@ -5129,7 +5129,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       const stored = await codeTaskRepo.findById(task.id);
       expect(stored.ok).toBe(true);
       if (!stored.ok) throw new Error('Failed to get remediation task');
-      expect(stored.value.requiresReReview).toBe(false);
+      expect(stored.value.requiresReReview).toBe(true);
       expect(stored.value.result?.requires_re_review).toBe('1');
     });
   });

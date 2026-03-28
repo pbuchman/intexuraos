@@ -1111,9 +1111,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           error: null,
           ...(prNumber !== undefined && { prNumber }),
           ...(result?.branch !== undefined && { prBranch: result.branch }),
-          ...(task.agentType === 'remediation' &&
-            remediationRequiresReReview !== undefined &&
-            task.requiresReReview === undefined && {
+          ...(remediationRequiresReReview !== undefined && {
               requiresReReview: remediationRequiresReReview,
             }),
           callbackReceived: true,
@@ -1122,21 +1120,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (!updateResult.ok) {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as completed');
           return reply.fail('INTERNAL_ERROR', updateResult.error.message);
-        }
-        if (
-          task.agentType === 'remediation' &&
-          remediationRequiresReReview !== undefined &&
-          task.requiresReReview !== undefined &&
-          task.requiresReReview !== remediationRequiresReReview
-        ) {
-          request.log.warn(
-            {
-              taskId,
-              persistedRequiresReReview: task.requiresReReview,
-              resultRequiresReReview: remediationRequiresReReview,
-            },
-            'Remediation result requires_re_review disagrees with previously persisted requiresReReview; keeping persisted value',
-          );
         }
         await cleanupLockIfPR();
 

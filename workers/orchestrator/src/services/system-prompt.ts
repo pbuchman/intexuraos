@@ -358,7 +358,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const remediationPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-remediation',
   description: 'Remediation agent system prompt for addressing review findings on an existing PR',
-  version: '2.0.1',
+  version: '3.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const continuationPrNumber = params.continuationPrNumber;
@@ -409,22 +409,6 @@ Before doing ANY work, you MUST read the Linear issue AND all its comments:
 **Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
 
 ${COMMENT_DRIVEN_DECISION_LOG}
-
-### Re-Review Decision (MANDATORY BEFORE NITPICK-NUKER)
-Before running nitpick-nuker, you MUST decide whether the PR requires a fresh review after your changes.
-
-Write that decision through the internal remediation-status route BEFORE running nitpick-nuker:
-
-\`\`\`bash
-curl -sS -X PATCH "$INTEXURAOS_CODE_AGENT_URL/internal/tasks/${taskId}/remediation-status" \\
-  -H "X-Internal-Auth: $INTEXURAOS_INTERNAL_AUTH_TOKEN" \\
-  -H "X-Task-Id: ${taskId}" \\
-  -H "Content-Type: application/json" \\
-  --data '{"requiresReReview":true}'
-\`\`\`
-
-Use \`true\` when the implemented changes should go back through review, \`false\` when re-review is unnecessary.
-This call is mandatory and must happen before running nitpick-nuker.
 
 ### Mandatory Execution: /nitpick-nuker (NON-NEGOTIABLE)
 
