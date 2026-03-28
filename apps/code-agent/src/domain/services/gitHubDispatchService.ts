@@ -444,6 +444,41 @@ async function handleNewTask(
     ? deps.messageBuilder.build(event)
     : event.body ?? '';
 
+  // When @worker directive is present, destroy any preserved container first (best-effort).
+  // The user's intent is a fresh agent with a specific model — failing to destroy the old
+  // one should not block creating the new task.
+  if (workerType !== undefined) {
+    const preservedResult = await deps.codeTaskRepo.findPreservedPullRequestTask(
+      event.repository,
+      event.pullRequestNumber,
+    );
+    if (preservedResult.ok && preservedResult.value !== null) {
+      const preserved = preservedResult.value;
+      logger.info(
+        { taskId: preserved.id, prNumber: event.pullRequestNumber },
+        'Destroying preserved container for @worker directive',
+      );
+      try {
+        const settingsResult = await deps.workerSettingsRepo.getSettings(preserved.userId);
+        let workerCreds: { url: string; cfAccessClientId: string; cfAccessClientSecret: string } | undefined;
+        if (settingsResult.ok && settingsResult.value !== null) {
+          const settings = settingsResult.value;
+          const workerConfig = settings.workers.find((w) => w.name === preserved.workerLocation);
+          if (workerConfig?.enabled === true) {
+            workerCreds = {
+              url: workerConfig.url,
+              cfAccessClientId: workerConfig.cfAccessClientId,
+              cfAccessClientSecret: workerConfig.cfAccessClientSecret,
+            };
+          }
+        }
+        await deps.taskDispatcher.cancelOnWorker(preserved.id, preserved.workerLocation, workerCreds);
+      } catch (error) {
+        logger.warn({ taskId: preserved.id, error }, 'Failed to destroy preserved container (best-effort)');
+      }
+    }
+  }
+
   // Check for preserved pull_request container to reuse (non-@worker comments only)
   if (workerType === undefined) {
     const preservedResult = await deps.codeTaskRepo.findPreservedPullRequestTask(
