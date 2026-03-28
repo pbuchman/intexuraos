@@ -4873,10 +4873,9 @@ describe('POST /internal/webhooks/task-complete', () => {
       });
     });
 
-    it('skips label when latest non-review task is a pull_request task (not a real origin)', async () => {
+    it('walks past pull_request task to find planning origin and sets ready-to-implement', async () => {
       // Create planning origin task first, then a newer pull_request task on the same PR.
-      // findLatestExecutionTaskByPR returns the newest non-review task, which is
-      // the pull_request task — this must NOT be treated as an origin task.
+      // findOriginTaskByPR should skip the pull_request task and find the planning origin.
       const planningTask = await createOriginTask({ traceId: 'trace_label_pr_task_planning', agentType: 'planning' });
       // Mark planning task as completed so the Layer 3 dedup (active task for same linear issue) doesn't block
       await codeTaskRepo.update(planningTask.id, { status: 'planned' });
@@ -4905,17 +4904,17 @@ describe('POST /internal/webhooks/task-complete', () => {
       const response = await sendLabelPayload(payload);
 
       expect(response.statusCode).toBe(200);
-      // Label should NOT be set — pull_request is not a valid origin type
+      // Label SHOULD be set — findOriginTaskByPR walks past pull_request to the planning task
       const { linearAgentClient: lac } = getServices();
       const metadataSpy = vi.mocked(lac.updateIssueMetadata);
-      const labelCalls = metadataSpy.mock.calls.filter(
-        (call) => call[0].addLabels !== undefined &&
-          (call[0].addLabels.includes('ready-to-merge') || call[0].addLabels.includes('ready-to-implement'))
-      );
-      expect(labelCalls).toHaveLength(0);
+      expect(metadataSpy).toHaveBeenCalledWith({
+        userId: 'user-123',
+        issueId: 'linear-issue-uuid',
+        addLabels: ['ready-to-implement'],
+      });
     });
 
-    it('skips label when findLatestExecutionTaskByPR returns null', async () => {
+    it('skips label when findOriginTaskByPR returns null', async () => {
       // No origin task created — only the review task exists
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_no_origin' });
       const payload = makeLabelPayload(reviewTask.id);
@@ -4966,11 +4965,11 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(labelCalls).toHaveLength(0);
     });
 
-    it('logs warning and succeeds when findLatestExecutionTaskByPR returns error', async () => {
+    it('logs warning and succeeds when findOriginTaskByPR returns error', async () => {
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_origin_error' });
       const payload = makeLabelPayload(reviewTask.id);
 
-      vi.spyOn(codeTaskRepo, 'findLatestExecutionTaskByPR').mockResolvedValueOnce(
+      vi.spyOn(codeTaskRepo, 'findOriginTaskByPR').mockResolvedValueOnce(
         err({ code: 'FIRESTORE_ERROR' as const, message: 'Simulated query error' })
       );
 

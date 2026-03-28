@@ -114,6 +114,9 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async findLatestExecutionTaskByPR(): ReturnType<CodeTaskRepository['findLatestExecutionTaskByPR']> {
       return ok(null);
     },
+    async findOriginTaskByPR(): ReturnType<CodeTaskRepository['findOriginTaskByPR']> {
+      return ok(null);
+    },
     async findRecentRemediationForPR(): ReturnType<CodeTaskRepository['findRecentRemediationForPR']> {
       return ok(null);
     },

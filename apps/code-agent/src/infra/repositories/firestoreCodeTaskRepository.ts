@@ -961,6 +961,47 @@ export const createFirestoreCodeTaskRepository = (deps: {
       }
     },
 
+    findOriginTaskByPR: async (
+      repository: string,
+      prNumber: number
+    ): Promise<Result<CodeTask | null, RepositoryError>> => {
+      try {
+        // Query the newest 50 tasks for this PR and filter in-memory.
+        // Uses limit(50) instead of a Firestore inequality filter on agentType
+        // to avoid a composite index.
+        const snapshot = await collection
+          .where('repository', '==', repository)
+          .where('prNumber', '==', prNumber)
+          .orderBy('createdAt', 'desc')
+          .limit(50)
+          .get();
+
+        // Find the first planning or execution task (the true origin)
+        for (const doc of snapshot.docs) {
+          const data = doc.data();
+          const agentType = data['agentType'] as string | undefined;
+          if (agentType === 'planning' || agentType === 'execution') {
+            return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
+          }
+        }
+
+        if (snapshot.docs.length === 50) {
+          logger.warn(
+            { repository, prNumber, docsScanned: 50 },
+            'findOriginTaskByPR exhausted 50-doc window without finding a planning/execution task',
+          );
+        }
+
+        return ok(null);
+      } catch (error) {
+        logger.error({ error, repository, prNumber }, 'Failed to find origin task by PR');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
     findRecentTasksByLinearIssue: async (
       linearIssueId: string,
       limit: number
