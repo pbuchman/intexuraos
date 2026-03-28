@@ -4873,6 +4873,48 @@ describe('POST /internal/webhooks/task-complete', () => {
       });
     });
 
+    it('skips label when latest non-review task is a pull_request task (not a real origin)', async () => {
+      // Create planning origin task first, then a newer pull_request task on the same PR.
+      // findLatestExecutionTaskByPR returns the newest non-review task, which is
+      // the pull_request task — this must NOT be treated as an origin task.
+      const planningTask = await createOriginTask({ traceId: 'trace_label_pr_task_planning', agentType: 'planning' });
+      // Mark planning task as completed so the Layer 3 dedup (active task for same linear issue) doesn't block
+      await codeTaskRepo.update(planningTask.id, { status: 'planned' });
+
+      // Create a newer pull_request task on the same PR
+      const prTaskResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'PR comment follow-up',
+        sanitizedPrompt: 'PR comment follow-up',
+        systemPromptHash: 'pr-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_label_pr_task_newer',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'pull_request',
+        linearIssueId: 'INT-500',
+      });
+      if (!prTaskResult.ok) throw new Error('Failed to create pull_request task');
+
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_pr_task_review' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      // Label should NOT be set — pull_request is not a valid origin type
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      const labelCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].addLabels !== undefined &&
+          (call[0].addLabels.includes('ready-to-merge') || call[0].addLabels.includes('ready-to-implement'))
+      );
+      expect(labelCalls).toHaveLength(0);
+    });
+
     it('skips label when findLatestExecutionTaskByPR returns null', async () => {
       // No origin task created — only the review task exists
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_no_origin' });

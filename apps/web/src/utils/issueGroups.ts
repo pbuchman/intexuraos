@@ -111,6 +111,49 @@ export function hasMergeReadyLabel(labels: { name: string }[] | undefined): bool
   return labels.some((l) => normalizeLabel(l.name) === 'ready-to-merge');
 }
 
+/**
+ * Determines if a single task is merge-ready for the detail view.
+ *
+ * Covers two cases:
+ * 1. An `implemented` task with its own `result.prUrl` and `ready-to-merge` label
+ * 2. A `reviewed` task with a `prNumber` and `ready-to-merge` label — the reviewed
+ *    task won't have `result.prUrl` but the merge URL can be constructed from
+ *    `repository` + `prNumber`.
+ */
+export function isTaskMergeable(task: {
+  status: string;
+  prNumber?: number;
+  result?: { prUrl?: string };
+  linearIssue?: { labels: { name: string }[] };
+}): boolean {
+  if (!hasMergeReadyLabel(task.linearIssue?.labels)) {
+    return false;
+  }
+  return (
+    (task.status === 'implemented' && task.result?.prUrl !== undefined) ||
+    (task.status === 'reviewed' && task.prNumber !== undefined)
+  );
+}
+
+/**
+ * Extracts the merge URL for a single task (detail view).
+ *
+ * Prefers `result.prUrl`; falls back to constructing from `repository` + `prNumber`.
+ */
+export function getTaskMergeUrl(task: {
+  repository: string;
+  prNumber?: number;
+  result?: { prUrl?: string };
+}): string | undefined {
+  if (task.result?.prUrl !== undefined) {
+    return task.result.prUrl;
+  }
+  if (task.prNumber !== undefined) {
+    return `https://github.com/${task.repository}/pull/${String(task.prNumber)}`;
+  }
+  return undefined;
+}
+
 function deriveStepState(status: CodeTaskStatus): StepState {
   if (status === 'planned' || status === 'implemented' || status === 'reviewed') {
     return 'completed';
