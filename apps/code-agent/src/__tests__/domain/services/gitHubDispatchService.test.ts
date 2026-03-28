@@ -1158,6 +1158,104 @@ describe('GitHubDispatchService', () => {
       );
     });
 
+    it('passes worker credentials when destroying preserved container for enabled @worker', async () => {
+      const preserved = { id: 'task-old', workerLocation: 'vm-1', userId: 'user-456' };
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-new-creds' }));
+
+      const mockCancelOnWorker = vi.fn().mockResolvedValue(undefined);
+      const workerConfig = {
+        name: 'vm-1',
+        url: 'https://vm-1.example.com',
+        cfAccessClientId: 'client-id-abc',
+        cfAccessClientSecret: 'client-secret-xyz',
+        dispatchSigningSecret: 'signing-secret',
+        enabled: true,
+      };
+      const mockGetSettings = vi.fn().mockResolvedValue(ok({
+        userId: 'user-456',
+        workers: [workerConfig],
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      }));
+      deps = createMockDeps({
+        codeTaskRepo: {
+          ...deps.codeTaskRepo,
+          findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+          findPreservedPullRequestTask: vi.fn().mockResolvedValue(ok(preserved)),
+        } as never,
+        taskDispatcher: {
+          cancelOnWorker: mockCancelOnWorker,
+          dispatch: vi.fn(),
+          sendMessageToWorker: vi.fn(),
+        } as never,
+        workerSettingsRepo: {
+          getSettings: mockGetSettings,
+          saveSettings: vi.fn(),
+        } as never,
+      });
+
+      const workerContext: DispatchContext = {
+        event: { ...mockEvent, body: '@worker opus fix it' },
+        decision: mockDecision,
+        logger: mockLogger,
+      };
+
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch(workerContext);
+
+      expect(result.success).toBe(true);
+      expect(result.taskId).toBe('task-new-creds');
+      expect(mockCancelOnWorker).toHaveBeenCalledWith('task-old', 'vm-1', {
+        url: 'https://vm-1.example.com',
+        cfAccessClientId: 'client-id-abc',
+        cfAccessClientSecret: 'client-secret-xyz',
+      });
+    });
+
+    it('passes undefined credentials when settings have no matching worker for preserved container', async () => {
+      const preserved = { id: 'task-old', workerLocation: 'vm-1', userId: 'user-456' };
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-new-no-match' }));
+
+      const mockCancelOnWorker = vi.fn().mockResolvedValue(undefined);
+      // Settings exist but no worker named 'vm-1'
+      const mockGetSettings = vi.fn().mockResolvedValue(ok({
+        userId: 'user-456',
+        workers: [{ name: 'vm-2', url: 'https://vm-2.example.com', cfAccessClientId: 'id', cfAccessClientSecret: 'secret', dispatchSigningSecret: 'sig', enabled: true }],
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      }));
+      deps = createMockDeps({
+        codeTaskRepo: {
+          ...deps.codeTaskRepo,
+          findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+          findPreservedPullRequestTask: vi.fn().mockResolvedValue(ok(preserved)),
+        } as never,
+        taskDispatcher: {
+          cancelOnWorker: mockCancelOnWorker,
+          dispatch: vi.fn(),
+          sendMessageToWorker: vi.fn(),
+        } as never,
+        workerSettingsRepo: {
+          getSettings: mockGetSettings,
+          saveSettings: vi.fn(),
+        } as never,
+      });
+
+      const workerContext: DispatchContext = {
+        event: { ...mockEvent, body: '@worker opus fix it' },
+        decision: mockDecision,
+        logger: mockLogger,
+      };
+
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch(workerContext);
+
+      expect(result.success).toBe(true);
+      expect(result.taskId).toBe('task-new-no-match');
+      // No matching worker — cancelOnWorker called with undefined credentials
+      expect(mockCancelOnWorker).toHaveBeenCalledWith('task-old', 'vm-1', undefined);
+    });
+
     it('falls through to createTaskForPR when no preserved container exists', async () => {
       vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(null));
       vi.mocked(deps.codeTaskRepo.findPreservedPullRequestTask).mockResolvedValue(ok(null));
