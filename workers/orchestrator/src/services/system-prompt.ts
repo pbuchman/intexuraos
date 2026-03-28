@@ -1,6 +1,8 @@
-import { hasCodeTaskLabel } from '@intexuraos/common-core';
+import { CODE_TASK_WORKER_TYPES, hasCodeTaskLabel } from '@intexuraos/common-core';
 import type { PromptBuilder } from './prompt-builder.js';
 import type { WorkerType } from './isolation/types.js';
+
+const WORKER_TYPE_FALLBACK = `<${CODE_TASK_WORKER_TYPES.join('|')}>`;
 
 const WORKER_INSTRUCTIONS = `### Git CLI (MANDATORY — NON-NEGOTIABLE)
 Always use \`gh\` CLI instead of raw \`git\` commands. Use \`gh\` for status, diff, log, branching, PRs, and any operation \`gh\` supports. Fall back to \`git\` only when \`gh\` has no equivalent (e.g., \`git add\`, \`git commit\`).
@@ -178,7 +180,7 @@ Example: \`[INT-665] [plan] Update orchestrator PR title format\`
 ### PR Description Format (MANDATORY — never skip, never restructure)
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
-- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
+- Worker Type: \`${workerType ?? WORKER_TYPE_FALLBACK}\`
 - Model: \`${modelName ?? 'default'}\`
 
 ⚠️ The Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE. You MUST include them exactly as shown above. Never omit, never rephrase, never move to a different section. This is not optional.
@@ -309,7 +311,7 @@ Example: \`[INT-665] Update orchestrator PR title format\`
 ### PR Description Format (MANDATORY — never skip, never restructure)
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
-- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
+- Worker Type: \`${workerType ?? WORKER_TYPE_FALLBACK}\`
 - Model: \`${modelName ?? 'default'}\`
 
 ⚠️ The Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE. You MUST include them exactly as shown above. Never omit, never rephrase, never move to a different section. This is not optional.
@@ -449,7 +451,7 @@ This call is mandatory and must happen before the final push.
 ### PR Description Context
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
-- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
+- Worker Type: \`${workerType ?? WORKER_TYPE_FALLBACK}\`
 - Model: \`${modelName ?? 'default'}\`
 
 ### Completion Criteria (MANDATORY LAST MESSAGE)
@@ -533,7 +535,7 @@ All three are MANDATORY. PR reviews and PR comments alone are NOT sufficient —
 ### PR Description Update (MANDATORY — never skip, never restructure)
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
-- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
+- Worker Type: \`${workerType ?? WORKER_TYPE_FALLBACK}\`
 - Model: \`${modelName ?? 'default'}\`
 
 ⚠️ The Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE. You MUST include them exactly as shown above. Never omit, never rephrase, never move to a different section. This is not optional.
@@ -1018,7 +1020,7 @@ gh api -X PATCH /repos/{owner}/{repo}/issues/comments/{comment_id} -f body="<upd
 ### PR Description Update (MANDATORY — never skip, never restructure)
 ${linearIssueId !== undefined ? `- Linear: [${linearIssueId}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId})` : ''}
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
-- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
+- Worker Type: \`${workerType ?? WORKER_TYPE_FALLBACK}\`
 - Model: \`${modelName ?? 'default'}\`
 
 ⚠️ The Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE. You MUST include them exactly as shown above. Never omit, never rephrase, never move to a different section. This is not optional.

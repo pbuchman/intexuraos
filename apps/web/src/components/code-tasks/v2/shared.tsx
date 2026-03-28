@@ -16,6 +16,7 @@ export const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
   qwen: 'Qwen',
   kimi: 'Kimi',
   codex: 'Codex',
+  'codex-xhigh': 'Codex XHigh',
 };
 
 // --- Status badge config ---

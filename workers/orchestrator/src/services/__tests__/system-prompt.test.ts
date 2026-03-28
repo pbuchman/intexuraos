@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CODE_TASK_WORKER_TYPES } from '@intexuraos/common-core';
 import {
   buildSystemPrompt,
   planningPrompt,
@@ -8,6 +9,8 @@ import {
   prReviewOverlayPrompt,
   reviewPrompt,
 } from '../system-prompt.js';
+
+const EXPECTED_WORKER_TYPE_FALLBACK = `\`<${CODE_TASK_WORKER_TYPES.join('|')}>\``;
 
 describe('system-prompt', () => {
   const SEMVER_REGEX = /^\d+\.\d+\.\d+$/;
@@ -240,7 +243,7 @@ describe('system-prompt', () => {
     });
 
     expect(result).toContain('[INT-XXX]');
-    expect(result).toContain('`<auto|opus|sonnet|minimax|glm|qwen|kimi>`');
+    expect(result).toContain(EXPECTED_WORKER_TYPE_FALLBACK);
   });
 
   it('execution prompt renders linearIssueTitle in PR Description when provided', () => {
@@ -280,7 +283,7 @@ describe('system-prompt', () => {
       linearIssueLabels: ['bug'],
     });
 
-    expect(result).toContain('`<auto|opus|sonnet|minimax|glm|qwen|kimi>`');
+    expect(result).toContain(EXPECTED_WORKER_TYPE_FALLBACK);
   });
 
   it('execution prompt uses workerType fallback when workerType is undefined', () => {
@@ -290,7 +293,7 @@ describe('system-prompt', () => {
       linearIssueLabels: ['code-task'],
     });
 
-    expect(result).toContain('`<auto|opus|sonnet|minimax|glm|qwen|kimi>`');
+    expect(result).toContain(EXPECTED_WORKER_TYPE_FALLBACK);
   });
 
   it('pull request prompt uses workerType fallback when workerType is undefined', () => {
@@ -300,7 +303,7 @@ describe('system-prompt', () => {
       linearIssueLabels: ['code-task', 'pr-comment'],
     });
 
-    expect(result).toContain('`<auto|opus|sonnet|minimax|glm|qwen|kimi>`');
+    expect(result).toContain(EXPECTED_WORKER_TYPE_FALLBACK);
   });
 
   it('review prompt renders linearIssueTitle in PR Description when provided', () => {
@@ -320,7 +323,7 @@ describe('system-prompt', () => {
       agentType: 'review',
     });
 
-    expect(result).toContain('`<auto|opus|sonnet|minimax|glm|qwen|kimi>`');
+    expect(result).toContain(EXPECTED_WORKER_TYPE_FALLBACK);
   });
 
   it('review prompt renders taskUrl in View in IntexuraOS link and code task line', () => {

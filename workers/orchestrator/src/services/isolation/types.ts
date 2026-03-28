@@ -29,7 +29,7 @@ export interface WorkerTypeConfig {
   apiBaseUrl: string;
   apiKeyEnvVar?: 'ANTHROPIC_API_KEY' | 'MINIMAX_API_KEY' | 'DASHSCOPE_API_KEY';
   model?: string;
-  effort?: 'low' | 'medium' | 'high' | 'max';
+  effort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh';
 }
 
 export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
@@ -78,6 +78,11 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
   codex: {
     runtime: 'codex',
     apiBaseUrl: 'https://api.openai.com',
+  },
+  'codex-xhigh': {
+    runtime: 'codex',
+    apiBaseUrl: 'https://api.openai.com',
+    effort: 'xhigh',
   },
 };
 

@@ -50,6 +50,10 @@ describe('extractDispatchWorkerType', () => {
     expect(extractDispatchWorkerType('@worker codex')).toBe('codex');
   });
 
+  it('extracts codex-xhigh from @worker codex-xhigh', () => {
+    expect(extractDispatchWorkerType('@worker codex-xhigh')).toBe('codex-xhigh');
+  });
+
   it('extracts auto from @model auto', () => {
     expect(extractDispatchWorkerType('@model auto')).toBe('auto');
   });

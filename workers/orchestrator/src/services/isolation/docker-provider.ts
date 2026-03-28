@@ -664,6 +664,9 @@ export class DockerProvider implements IsolationProvider {
       } else {
         env.push('CODEX_HOME=/home/claude/.codex');
         env.push('CODEX_SQLITE_HOME=/home/claude/.codex');
+        if (workerTypeConfig.effort !== undefined) {
+          env.push(`CODEX_REASONING_EFFORT=${workerTypeConfig.effort}`);
+        }
       }
 
       if (this.config.gitUserName !== undefined) {
