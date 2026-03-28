@@ -83,6 +83,7 @@
 - `workers/orchestrator/src/services/task-dispatcher.ts` — worker auth provider resolution (hardcodes `'codex'` runtime check)
 - `workers/orchestrator/src/services/isolation/__tests__/types.test.ts`
 - `workers/orchestrator/src/services/isolation/__tests__/docker-provider.test.ts` — effort level env var tests
+- `workers/orchestrator/src/services/isolation/__tests__/worker-image.test.ts` — reads `entrypoint.sh` directly; extend to verify `CODEX_REASONING_EFFORT` → `-c model_reasoning_effort` bridge
 - `workers/orchestrator/src/__tests__/types/types.test.ts`
 - `workers/orchestrator/src/services/__tests__/system-prompt.test.ts`
 - Any focused orchestrator tests that assert worker-type routing or managed attempt config
@@ -134,6 +135,7 @@
 - Modify: `workers/orchestrator/src/services/system-prompt.ts`
 - Modify: `workers/orchestrator/src/services/isolation/__tests__/types.test.ts`
 - Modify: `workers/orchestrator/src/services/isolation/__tests__/docker-provider.test.ts` — test effort env var for codex-xhigh
+- Modify: `workers/orchestrator/src/services/isolation/__tests__/worker-image.test.ts` — verify `entrypoint.sh` translates `CODEX_REASONING_EFFORT` to `-c model_reasoning_effort` in `codex exec` invocations
 - Modify: `workers/orchestrator/src/__tests__/types/types.test.ts`
 - Modify: `workers/orchestrator/src/services/__tests__/system-prompt.test.ts`
 - Modify: any focused orchestrator tests that validate worker-type routing if they enumerate known presets
@@ -146,7 +148,8 @@
 - [ ] Verify all `runtime === 'codex'` checks in `docker-provider.ts` and `task-dispatcher.ts` operate on the runtime field (not the worker type string) — they do, so `codex-xhigh` will inherit correct runtime behavior automatically.
 - [ ] Update orchestrator system-prompt worker-type fallback text and focused tests anywhere supported public worker names are hardcoded.
 - [ ] Keep `codex` unchanged and verify that no new route fields or response fields are introduced.
-- [ ] Run `pnpm --filter orchestrator test -- src/services/isolation/__tests__/types.test.ts src/__tests__/types/types.test.ts src/services/isolation/__tests__/docker-provider.test.ts`.
+- [ ] Extend `worker-image.test.ts` to assert that `entrypoint.sh` reads `CODEX_REASONING_EFFORT` and injects `-c model_reasoning_effort` into `codex exec` invocations. This directly verifies the shell bridge introduced by the `entrypoint.sh` change above.
+- [ ] Run `pnpm --filter orchestrator test -- src/services/isolation/__tests__/types.test.ts src/__tests__/types/types.test.ts src/services/isolation/__tests__/docker-provider.test.ts src/services/isolation/__tests__/worker-image.test.ts`.
 
 ## Task 3: Code-agent validation and review flows
 
@@ -191,6 +194,7 @@
 - [ ] Verify all four tasks are implemented on a single branch before final CI.
 - [ ] Run `pnpm run verify:workspace:tracked -- common-core`.
 - [ ] Run `pnpm run verify:workspace:tracked -- orchestrator`.
+- [ ] Verify that `worker-image.test.ts` passes and confirms the `entrypoint.sh` `CODEX_REASONING_EFFORT` bridge.
 - [ ] Run `pnpm run verify:workspace:tracked -- code-agent`.
 - [ ] Run `pnpm run verify:workspace:tracked -- web`.
 - [ ] Run `pnpm run ci:tracked`.
