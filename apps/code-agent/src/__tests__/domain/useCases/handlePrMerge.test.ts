@@ -6,6 +6,8 @@ import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRe
 import type { LinearIssueService } from '../../../domain/services/linearIssueService.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
+import type { TaskDispatcherService } from '../../../domain/services/taskDispatcher.js';
+import type { WorkerSettingsRepository } from '../../../domain/ports/workerSettingsRepository.js';
 import { createMockLogger } from '../../helpers/mockLogger.js';
 
 function createBaseTask(overrides: Partial<CodeTask> = {}): CodeTask {
@@ -48,6 +50,7 @@ describe('handlePrMerge', () => {
     findByPR: ReturnType<typeof vi.fn>;
     findLatestExecutionTaskByPR: ReturnType<typeof vi.fn>;
     findOriginTaskByPR: ReturnType<typeof vi.fn>;
+    findPreservedPullRequestTask: ReturnType<typeof vi.fn>;
   };
   let mockLinearIssueService: {
     markQa: ReturnType<typeof vi.fn>;
@@ -56,6 +59,12 @@ describe('handlePrMerge', () => {
   let mockUserServiceClient: {
     resolveGitHubUsername: ReturnType<typeof vi.fn>;
   };
+  let mockTaskDispatcher: {
+    cancelOnWorker: ReturnType<typeof vi.fn>;
+  };
+  let mockWorkerSettingsRepo: {
+    getSettings: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     mockLogger = createMockLogger();
@@ -63,6 +72,7 @@ describe('handlePrMerge', () => {
       findByPR: vi.fn().mockResolvedValue(ok(null)),
       findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
       findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findPreservedPullRequestTask: vi.fn().mockResolvedValue(ok(null)),
     };
     mockLinearIssueService = {
       markQa: vi.fn().mockResolvedValue(undefined),
@@ -71,6 +81,12 @@ describe('handlePrMerge', () => {
     mockUserServiceClient = {
       resolveGitHubUsername: vi.fn().mockResolvedValue(ok({ userId: 'resolved-user' })),
     };
+    mockTaskDispatcher = {
+      cancelOnWorker: vi.fn().mockResolvedValue(undefined),
+    };
+    mockWorkerSettingsRepo = {
+      getSettings: vi.fn().mockResolvedValue(ok(null)),
+    };
   });
 
   function buildDeps(): HandlePrMergeDeps {
@@ -78,6 +94,8 @@ describe('handlePrMerge', () => {
       codeTaskRepo: mockCodeTaskRepo as unknown as CodeTaskRepository,
       linearIssueService: mockLinearIssueService as unknown as LinearIssueService,
       userServiceClient: mockUserServiceClient as unknown as UserServiceClient,
+      taskDispatcher: mockTaskDispatcher as unknown as TaskDispatcherService,
+      workerSettingsRepo: mockWorkerSettingsRepo as unknown as WorkerSettingsRepository,
       logger: mockLogger,
     };
   }
@@ -272,6 +290,90 @@ describe('handlePrMerge', () => {
     expect(mockUserServiceClient.resolveGitHubUsername).not.toHaveBeenCalled();
     expect(mockLinearIssueService.markQa).toHaveBeenCalledTimes(1);
     expect(mockLinearIssueService.markQa).toHaveBeenCalledWith('task-user', 'INT-1400');
+  });
+
+  describe('preserved container cleanup on PR merge', () => {
+    it('destroys preserved pull_request container on PR merge', async () => {
+      mockCodeTaskRepo.findPreservedPullRequestTask.mockResolvedValue(
+        ok({ id: 'task_preserved', workerLocation: 'worker-home', userId: 'user-preserved' })
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [
+            {
+              name: 'worker-home',
+              url: 'https://worker.example.com',
+              cfAccessClientId: 'client-id',
+              cfAccessClientSecret: 'client-secret',
+              enabled: true,
+            },
+          ],
+        })
+      );
+
+      await handlePrMerge(buildDeps(), createDefaultInput());
+
+      expect(mockCodeTaskRepo.findPreservedPullRequestTask).toHaveBeenCalledWith('pbuchman/intexuraos', 42);
+      expect(mockWorkerSettingsRepo.getSettings).toHaveBeenCalledWith('user-preserved');
+      expect(mockTaskDispatcher.cancelOnWorker).toHaveBeenCalledWith(
+        'task_preserved',
+        'worker-home',
+        { url: 'https://worker.example.com', cfAccessClientId: 'client-id', cfAccessClientSecret: 'client-secret' },
+      );
+    });
+
+    it('does not fail if no preserved container exists', async () => {
+      mockCodeTaskRepo.findPreservedPullRequestTask.mockResolvedValue(ok(null));
+
+      await expect(handlePrMerge(buildDeps(), createDefaultInput())).resolves.toBeUndefined();
+      expect(mockTaskDispatcher.cancelOnWorker).not.toHaveBeenCalled();
+    });
+
+    it('does not fail if findPreservedPullRequestTask returns err', async () => {
+      mockCodeTaskRepo.findPreservedPullRequestTask.mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR', message: 'connection failed' })
+      );
+
+      await expect(handlePrMerge(buildDeps(), createDefaultInput())).resolves.toBeUndefined();
+      expect(mockTaskDispatcher.cancelOnWorker).not.toHaveBeenCalled();
+    });
+
+    it('does not fail if cancelOnWorker throws', async () => {
+      mockCodeTaskRepo.findPreservedPullRequestTask.mockResolvedValue(
+        ok({ id: 'task_preserved', workerLocation: 'worker-home', userId: 'user-preserved' })
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok(null));
+      mockTaskDispatcher.cancelOnWorker.mockRejectedValue(new Error('network error'));
+
+      await expect(handlePrMerge(buildDeps(), createDefaultInput())).resolves.toBeUndefined();
+    });
+
+    it('calls cancelOnWorker with undefined credentials when worker config not found', async () => {
+      mockCodeTaskRepo.findPreservedPullRequestTask.mockResolvedValue(
+        ok({ id: 'task_preserved', workerLocation: 'unknown-worker', userId: 'user-preserved' })
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [
+            {
+              name: 'other-worker',
+              url: 'https://other.example.com',
+              cfAccessClientId: 'other-id',
+              cfAccessClientSecret: 'other-secret',
+              enabled: true,
+            },
+          ],
+        })
+      );
+
+      await handlePrMerge(buildDeps(), createDefaultInput());
+
+      expect(mockTaskDispatcher.cancelOnWorker).toHaveBeenCalledWith(
+        'task_preserved',
+        'unknown-worker',
+        undefined,
+      );
+    });
   });
 
   describe('plan PR detection', () => {

@@ -81,6 +81,7 @@ export type AutomationEvent =
       taskId: string;
       workerType: string;
       attempt: number;
+      agentType?: AgentType;
     }
   | {
       type: 'task_completed';
@@ -89,6 +90,7 @@ export type AutomationEvent =
       duration: number; // milliseconds
       prUrl?: string;
       commits?: { sha: string; message: string }[];
+      agentType?: AgentType;
     }
   | {
       type: 'task_failed';

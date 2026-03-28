@@ -336,6 +336,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                       provider: { type: 'string' },
                     },
                   },
+                  timezone: { type: 'string' },
                 },
               },
               diagnostics: { $ref: 'Diagnostics#' },
@@ -382,13 +383,14 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           'Failed to fetch user settings'
         );
         // Return empty preferences on error instead of failing
-        return await reply.ok({ llmPreferences: undefined, transcriptionPreferences: undefined });
+        return await reply.ok({ llmPreferences: undefined, transcriptionPreferences: undefined, timezone: undefined });
       }
 
       const settings = result.value;
       return await reply.ok({
         llmPreferences: settings?.llmPreferences,
         transcriptionPreferences: settings?.transcriptionPreferences,
+        timezone: settings?.timezone,
       });
     }
   );

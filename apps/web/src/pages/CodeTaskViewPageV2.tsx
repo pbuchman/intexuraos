@@ -154,6 +154,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
         isActive={isActive}
         listenerHealthy={listenerHealthy}
         taskStatus={task.status}
+        {...(task.agentType !== undefined ? { agentType: task.agentType } : {})}
         onSendMessage={sendMessage}
         sending={sending}
         sendError={sendError}

@@ -267,6 +267,7 @@ async function handleNewTaskRetry(
     }),
     ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
     ...(task.reviewTypes !== undefined && { reviewTypes: task.reviewTypes }),
+    ...(task.prNumber !== undefined && { prNumber: task.prNumber }),
   });
 
   if (!dispatchResult.ok) {

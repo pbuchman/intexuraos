@@ -73,6 +73,7 @@ function createUserServiceClientMock(): UserServiceClient {
     reportLlmSuccess: vi.fn().mockResolvedValue(undefined),
     getOAuthToken: vi.fn().mockResolvedValue(ok({ accessToken: 'github-token', email: 'owner@example.com' })),
     resolveGitHubUsername: vi.fn().mockResolvedValue(ok({ userId: 'owner-user-id' })),
+      getUserTimezone: async (): Promise<string | undefined> => undefined,
   };
 }
 

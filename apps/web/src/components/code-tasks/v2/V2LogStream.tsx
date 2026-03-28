@@ -8,6 +8,7 @@ interface V2LogStreamProps {
   isActive: boolean;
   listenerHealthy: boolean;
   taskStatus: CodeTaskStatus;
+  agentType?: string;
   onSendMessage: (message: string) => Promise<void>;
   sending: boolean;
   sendError: { code: string; message: string } | null;

@@ -3203,42 +3203,6 @@ describe('TaskDispatcher', () => {
       expect(destroyWorker).toHaveBeenCalledWith(taskId);
     });
 
-    it('does not preserve pull_request agent containers when preserveWorkerContainers is enabled', async () => {
-      const { destroyWorker, preserveWorker, dispatcher } = createPreserveTestFixture();
-
-      const taskId = 'pr-no-preserve';
-      await dispatcher.submitTask({
-        taskId,
-        workerType: 'auto',
-        prompt: 'PR task should not preserve',
-        webhookUrl: 'https://example.com/webhook',
-        webhookSecret: 'secret',
-        linearIssueLabels: [],
-        hasChildren: false,
-        agentType: 'pull_request',
-      });
-      await flushAsync();
-
-      const task = await dispatcher.getTask(taskId);
-      if (task === null) {
-        throw new Error('Task not found');
-      }
-
-      const internalDispatcher = dispatcher as unknown as {
-        finalizeTask: (
-          taskArg: Record<string, unknown>,
-          finalStatus: 'failed',
-          payload: { result?: unknown; error?: unknown }
-        ) => Promise<void>;
-      };
-      await internalDispatcher.finalizeTask(task as unknown as Record<string, unknown>, 'failed', {
-        error: { code: 'TEST', message: 'test', remediation: { action: 'retry' as const } },
-      });
-
-      expect(preserveWorker).not.toHaveBeenCalled();
-      expect(destroyWorker).toHaveBeenCalledWith(taskId);
-    });
-
     it('does not preserve remediation agent containers when preserveWorkerContainers is enabled', async () => {
       const { destroyWorker, preserveWorker, dispatcher } = createPreserveTestFixture();
 
@@ -3275,6 +3239,260 @@ describe('TaskDispatcher', () => {
 
       expect(preserveWorker).not.toHaveBeenCalled();
       expect(destroyWorker).toHaveBeenCalledWith(taskId);
+    });
+
+    it('preserves pull_request agent containers on completion', async () => {
+      const { destroyWorker, preserveWorker, dispatcher } = createPreserveTestFixture();
+
+      const taskId = 'pr-preserve';
+      await dispatcher.submitTask({
+        taskId,
+        workerType: 'auto',
+        prompt: 'PR task should preserve',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'pull_request',
+      });
+      await flushAsync();
+
+      const task = await dispatcher.getTask(taskId);
+      if (task === null) {
+        throw new Error('Task not found');
+      }
+
+      const internalDispatcher = dispatcher as unknown as {
+        finalizeTask: (
+          taskArg: Record<string, unknown>,
+          finalStatus: 'completed',
+          payload: { result?: unknown; error?: unknown }
+        ) => Promise<void>;
+      };
+      await internalDispatcher.finalizeTask(
+        task as unknown as Record<string, unknown>,
+        'completed',
+        {}
+      );
+
+      expect(preserveWorker).toHaveBeenCalledWith(taskId);
+      expect(destroyWorker).not.toHaveBeenCalled();
+    });
+
+    it('destroys existing preserved pull_request container for same PR before preserving new one', async () => {
+      const state = createStatePersistence();
+      const destroyWorker = vi.fn(async () => undefined);
+      const preserveWorker = vi.fn(async () => undefined);
+      const oldTaskId = 'pr-old-task';
+      const newTaskId = 'pr-new-task';
+      const prNumber = 100;
+
+      // Pre-seed old task in state (already preserved)
+      const oldTask: Task = {
+        taskId: oldTaskId,
+        workerType: 'auto',
+        prompt: 'Old PR task',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        linearIssueLabels: [],
+        hasChildren: false,
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'completed',
+        worktreePath: '/tmp/old-worktree',
+        containerId: 'container-old',
+        startedAt: new Date().toISOString(),
+        agentType: 'pull_request',
+        prNumber,
+      };
+      const stateData = await state.load();
+      stateData.tasks[oldTaskId] = oldTask;
+      await state.save(stateData);
+
+      const listPreservedWorkers = vi.fn(async () => [
+        { containerId: 'container-old', taskId: oldTaskId, preservedAt: new Date().toISOString() },
+      ]);
+
+      const isolationProvider: IsolationProvider = {
+        ...mockIsolationProvider,
+        destroyWorker,
+        preserveWorker,
+        cleanupTaskSession: vi.fn(async () => undefined),
+        listPreservedWorkers,
+      };
+      const isolation: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: isolationProvider,
+      };
+
+      const dispatcher = new TaskDispatcher(
+        mockConfig,
+        state,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        isolation,
+        {
+          maxAttempts: 1,
+          preserveWorkerContainers: true,
+          verifier: {
+            verify: vi.fn().mockResolvedValue({
+              passed: true,
+              missingFields: [],
+              verifierFailure: false,
+              trace: dummyTrace,
+            }),
+            describe: (): { enabled: boolean } => ({ enabled: true }),
+            extractResumeSummary: vi.fn().mockResolvedValue(undefined),
+          },
+        }
+      );
+
+      await dispatcher.submitTask({
+        taskId: newTaskId,
+        workerType: 'auto',
+        prompt: 'New PR task for same PR',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'pull_request',
+        prNumber,
+      });
+      await flushAsync();
+
+      const newTask = await dispatcher.getTask(newTaskId);
+      if (newTask === null) {
+        throw new Error('New task not found');
+      }
+
+      const internalDispatcher = dispatcher as unknown as {
+        finalizeTask: (
+          taskArg: Record<string, unknown>,
+          finalStatus: 'completed',
+          payload: { result?: unknown; error?: unknown }
+        ) => Promise<void>;
+      };
+      await internalDispatcher.finalizeTask(
+        newTask as unknown as Record<string, unknown>,
+        'completed',
+        {}
+      );
+
+      // Old container should have been destroyed
+      expect(destroyWorker).toHaveBeenCalledWith(oldTaskId);
+      // New container should be preserved
+      expect(preserveWorker).toHaveBeenCalledWith(newTaskId);
+    });
+
+    it('does not destroy preserved pull_request container for different PR', async () => {
+      const state = createStatePersistence();
+      const destroyWorker = vi.fn(async () => undefined);
+      const preserveWorker = vi.fn(async () => undefined);
+      const oldTaskId = 'pr-different-old-task';
+      const newTaskId = 'pr-different-new-task';
+
+      // Pre-seed old task for PR #100
+      const oldTask: Task = {
+        taskId: oldTaskId,
+        workerType: 'auto',
+        prompt: 'Old PR task',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        linearIssueLabels: [],
+        hasChildren: false,
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'completed',
+        worktreePath: '/tmp/old-worktree',
+        containerId: 'container-old',
+        startedAt: new Date().toISOString(),
+        agentType: 'pull_request',
+        prNumber: 100,
+      };
+      const stateData = await state.load();
+      stateData.tasks[oldTaskId] = oldTask;
+      await state.save(stateData);
+
+      const listPreservedWorkers = vi.fn(async () => [
+        { containerId: 'container-old', taskId: oldTaskId, preservedAt: new Date().toISOString() },
+      ]);
+
+      const isolationProvider: IsolationProvider = {
+        ...mockIsolationProvider,
+        destroyWorker,
+        preserveWorker,
+        cleanupTaskSession: vi.fn(async () => undefined),
+        listPreservedWorkers,
+      };
+      const isolation: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: isolationProvider,
+      };
+
+      const dispatcher = new TaskDispatcher(
+        mockConfig,
+        state,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        isolation,
+        {
+          maxAttempts: 1,
+          preserveWorkerContainers: true,
+          verifier: {
+            verify: vi.fn().mockResolvedValue({
+              passed: true,
+              missingFields: [],
+              verifierFailure: false,
+              trace: dummyTrace,
+            }),
+            describe: (): { enabled: boolean } => ({ enabled: true }),
+            extractResumeSummary: vi.fn().mockResolvedValue(undefined),
+          },
+        }
+      );
+
+      // New task is for PR #200 (different PR)
+      await dispatcher.submitTask({
+        taskId: newTaskId,
+        workerType: 'auto',
+        prompt: 'New PR task for different PR',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'pull_request',
+        prNumber: 200,
+      });
+      await flushAsync();
+
+      const newTask = await dispatcher.getTask(newTaskId);
+      if (newTask === null) {
+        throw new Error('New task not found');
+      }
+
+      const internalDispatcher = dispatcher as unknown as {
+        finalizeTask: (
+          taskArg: Record<string, unknown>,
+          finalStatus: 'completed',
+          payload: { result?: unknown; error?: unknown }
+        ) => Promise<void>;
+      };
+      await internalDispatcher.finalizeTask(
+        newTask as unknown as Record<string, unknown>,
+        'completed',
+        {}
+      );
+
+      // Old container (PR #100) should NOT be destroyed — different PR
+      expect(destroyWorker).not.toHaveBeenCalledWith(oldTaskId);
+      // New container (PR #200) should be preserved
+      expect(preserveWorker).toHaveBeenCalledWith(newTaskId);
     });
 
     it('uses fallback attempt metadata when persisted task is missing fields', async () => {
@@ -6469,6 +6687,67 @@ describe('TaskDispatcher', () => {
       );
     });
 
+    it('routes codex log events through appendRawChunk to bypass formatted-log cap', async () => {
+      const task = createCodexTask();
+      await statePersistence.modify((state) => {
+        state.tasks[task.taskId] = task;
+      });
+
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+      vi.mocked(mockLogForwarder.appendRawChunk).mockClear();
+
+      await (
+        dispatcher as unknown as {
+          handleRuntimeEvents: (task: Task, events: unknown[]) => Promise<void>;
+        }
+      ).handleRuntimeEvents(task, [{ type: 'log', text: 'codex output line\n' }]);
+
+      expect(mockLogForwarder.appendRawChunk).toHaveBeenCalledWith(
+        'codex-runtime-task',
+        'codex output line\n'
+      );
+      expect(mockLogForwarder.appendChunk).not.toHaveBeenCalled();
+    });
+
+    it('routes non-codex log events through appendChunk', async () => {
+      const task: Task = {
+        taskId: 'claude-runtime-task',
+        workerType: 'auto',
+        prompt: 'Test Claude runtime handling',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret-123',
+        status: 'running',
+        worktreePath: '/tmp/worktrees/claude-runtime-task',
+        containerId: '',
+        startedAt: new Date().toISOString(),
+        attemptCount: 1,
+        maxAttempts: 3,
+        verificationHistory: [],
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await statePersistence.modify((state) => {
+        state.tasks[task.taskId] = task;
+      });
+
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+      vi.mocked(mockLogForwarder.appendRawChunk).mockClear();
+
+      await (
+        dispatcher as unknown as {
+          handleRuntimeEvents: (task: Task, events: unknown[]) => Promise<void>;
+        }
+      ).handleRuntimeEvents(task, [{ type: 'log', text: 'claude output line\n' }]);
+
+      expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
+        'claude-runtime-task',
+        'claude output line\n'
+      );
+      expect(mockLogForwarder.appendRawChunk).not.toHaveBeenCalled();
+    });
+
     it('rejects codex resume when runtimeSessionId is missing', async () => {
       const task = createCodexTask();
 
@@ -7215,6 +7494,90 @@ describe('TaskDispatcher', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.type).toBe('service_error');
+      }
+    });
+
+    it('rejects sendMessage for review agentType', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-review-agent',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const state = await statePersistence.load();
+      const task = state.tasks['msg-review-agent'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      task.agentType = 'review';
+      await statePersistence.save(state);
+
+      const result = await dispatcher.sendMessage('msg-review-agent', 'Follow-up');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('invalid_agent_type');
+      }
+    });
+
+    it('rejects sendMessage for remediation agentType', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-remediation-agent',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const state = await statePersistence.load();
+      const task = state.tasks['msg-remediation-agent'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      task.agentType = 'remediation';
+      await statePersistence.save(state);
+
+      const result = await dispatcher.sendMessage('msg-remediation-agent', 'Follow-up');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('invalid_agent_type');
+      }
+    });
+
+    it('allows sendMessage for pull_request agentType', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-pull-request-agent',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const state = await statePersistence.load();
+      const task = state.tasks['msg-pull-request-agent'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      task.agentType = 'pull_request';
+      await statePersistence.save(state);
+
+      const result = await dispatcher.sendMessage('msg-pull-request-agent', 'Follow-up');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'resumed' });
       }
     });
   });

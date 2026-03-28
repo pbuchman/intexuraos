@@ -75,7 +75,6 @@ function createDefaultRequest(overrides: Partial<CreateRemediationTaskRequest> =
     senderLogin: 'alice',
     workerType: 'opus',
     eventId: 'event-123',
-    reviewBody: 'Found 3 issues: missing error handling, unused import, typo in variable name.',
     ...overrides,
   };
 }
@@ -100,57 +99,27 @@ describe('createRemediationTask', () => {
     expect(createCall?.prNumber).toBe(42);
   });
 
-  it('includes review body in the remediation prompt', async () => {
+  it('prompt does not contain pre-loaded review findings sections', async () => {
     const deps = createFakeDeps();
-    const request = createDefaultRequest({
-      reviewBody: 'Missing null check on line 42',
-    });
+    // Even if caller somehow passes extra fields, they must not appear in the prompt.
+    // The type no longer accepts these fields; cast to verify runtime behaviour.
+    const request = createDefaultRequest() as CreateRemediationTaskRequest & {
+      reviewBody?: string;
+      inlineComments?: { path: string; line: number; body: string }[];
+      triggerComment?: { body: string; author: string };
+    };
+    request.reviewBody = 'Some review body that must NOT appear';
+    request.inlineComments = [{ path: 'src/foo.ts', line: 1, body: 'Inline comment that must NOT appear' }];
+    request.triggerComment = { body: 'Trigger comment that must NOT appear', author: 'alice' };
 
-    await createRemediationTask(deps, request);
-
-    const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0]?.[0];
-    expect(createCall?.prompt).toContain('Missing null check on line 42');
-  });
-
-  it('omits review findings section when reviewBody is not provided', async () => {
-    const deps = createFakeDeps();
-    // Create request without reviewBody by destructuring it out
-    const { reviewBody: _, ...requestWithoutReviewBody } = createDefaultRequest();
-    void _;
-
-    await createRemediationTask(deps, requestWithoutReviewBody);
+    await createRemediationTask(deps, request as CreateRemediationTaskRequest);
 
     const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0]?.[0];
     expect(createCall?.prompt).not.toContain('### Review Findings');
-  });
-
-  it('includes inline comments in the remediation prompt', async () => {
-    const deps = createFakeDeps();
-    const request = createDefaultRequest({
-      inlineComments: [
-        { path: 'src/index.ts', line: 10, body: 'Missing error handling' },
-        { path: 'src/utils.ts', line: 25, body: 'Unused variable' },
-      ],
-    });
-
-    await createRemediationTask(deps, request);
-
-    const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0]?.[0];
-    expect(createCall?.prompt).toContain('src/index.ts');
-    expect(createCall?.prompt).toContain('Missing error handling');
-    expect(createCall?.prompt).toContain('src/utils.ts');
-  });
-
-  it('includes trigger comment in prompt when present', async () => {
-    const deps = createFakeDeps();
-    const request = createDefaultRequest({
-      triggerComment: { body: '@worker opus fix the review findings', author: 'bob' },
-    });
-
-    await createRemediationTask(deps, request);
-
-    const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0]?.[0];
-    expect(createCall?.prompt).toContain('@worker opus fix the review findings');
+    expect(createCall?.prompt).not.toContain('### Inline Comments');
+    expect(createCall?.prompt).not.toContain('Some review body that must NOT appear');
+    expect(createCall?.prompt).not.toContain('Inline comment that must NOT appear');
+    expect(createCall?.prompt).not.toContain('Trigger comment that must NOT appear');
   });
 
   it('links to existing execution task Linear issue when found', async () => {
