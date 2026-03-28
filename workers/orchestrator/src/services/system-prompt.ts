@@ -428,7 +428,7 @@ This call is mandatory and must happen before running nitpick-nuker.
 
 After reading the Linear issue and making the re-review decision, run:
 
-/nitpick-nuker ${String(continuationPrNumber ?? 0)}
+/nitpick-nuker ${String(continuationPrNumber ?? '<PR_NUMBER>')}
 
 This is the PRIMARY and mandatory execution step. The skill:
 - Fetches all unprocessed review comments on the PR
