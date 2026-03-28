@@ -286,7 +286,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const {
         codeTaskRepo,
-        actionsAgentClient,
+        statusMirrorService,
         whatsappNotifier,
         rateLimitService,
         metricsClient,
@@ -1290,19 +1290,12 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           await linearIssueService.markInReview(task.userId, task.linearIssueId);
         }
 
-        // Notify actions-agent if task has actionId
-        if (task.actionId) {
-          const actionsResult = await actionsAgentClient.updateActionStatus(task.actionId, 'completed', result?.prUrl ? {
-            prUrl: result.prUrl,
-          } : undefined, traceId);
-
-          if (!actionsResult.ok) {
-            request.log.warn(
-              { taskId, actionId: task.actionId, error: actionsResult.error },
-              'Failed to notify actions-agent - action status may be stale'
-            );
-          }
-        }
+        await statusMirrorService.mirrorStatus({
+          actionId: task.actionId,
+          taskStatus: resolvedStatus,
+          ...(result?.prUrl !== undefined && { resourceUrl: result.prUrl }),
+          traceId,
+        });
 
         // Send WhatsApp notification (use updated task with result populated)
         const completedTask = { ...task, status: resolvedStatus, ...(result !== undefined && { result }) } as typeof task;
@@ -1406,19 +1399,12 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
         await cleanupLockIfPR();
 
-        // Notify actions-agent if task has actionId
-        if (task.actionId) {
-          const actionsResult = await actionsAgentClient.updateActionStatus(task.actionId, 'failed', {
-            error: taskError.message,
-          }, traceId);
-
-          if (!actionsResult.ok) {
-            request.log.warn(
-              { taskId, actionId: task.actionId, error: actionsResult.error },
-              'Failed to notify actions-agent - action status may be stale'
-            );
-          }
-        }
+        await statusMirrorService.mirrorStatus({
+          actionId: task.actionId,
+          taskStatus: 'failed',
+          errorMessage: taskError.message,
+          traceId,
+        });
 
         await whatsappNotifier.notifyTaskFailed(
           task.userId,
@@ -1461,21 +1447,12 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
         await cleanupLockIfPR();
 
-        // Notify actions-agent if task has actionId
-        // Design line 328: interrupted → failed
-        if (task.actionId) {
-          const actionsResult = await actionsAgentClient.updateActionStatus(task.actionId, 'failed', {
-            error: 'Worker was interrupted during task execution',
-          }, traceId);
-
-          if (!actionsResult.ok) {
-            request.log.warn(
-              { taskId, actionId: task.actionId, error: actionsResult.error },
-              'Failed to notify actions-agent - action status may be stale'
-            );
-            // Don't fail the webhook - task update succeeded
-          }
-        }
+        await statusMirrorService.mirrorStatus({
+          actionId: task.actionId,
+          taskStatus: 'interrupted',
+          errorMessage: 'Worker was interrupted during task execution',
+          traceId,
+        });
 
         // Send WhatsApp notification for interrupted task
         await whatsappNotifier.notifyTaskFailed(
@@ -1524,16 +1501,11 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
         await cleanupLockIfPR();
 
-        if (task.actionId) {
-          const actionsResult = await actionsAgentClient.updateActionStatus(task.actionId, 'cancelled', undefined, traceId);
-
-          if (!actionsResult.ok) {
-            request.log.warn(
-              { taskId, actionId: task.actionId, error: actionsResult.error },
-              'Failed to notify actions-agent - action status may be stale'
-            );
-          }
-        }
+        await statusMirrorService.mirrorStatus({
+          actionId: task.actionId,
+          taskStatus: 'cancelled',
+          traceId,
+        });
 
         await whatsappNotifier.notifyTaskFailed(
           task.userId,

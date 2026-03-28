@@ -88,7 +88,6 @@ async function createAndEnqueueChild(
     repository: parentTask.repository,
     baseBranch: parentTask.baseBranch,
     traceId: `trace-fanout-${String(Date.now())}-${child.identifier}`,
-    actionId: `fanout_${randomUUID()}`,
     approvalEventId: `fanout_approval_${randomUUID()}`,
     linearIssueId: child.identifier,
     agentType: 'execution',
