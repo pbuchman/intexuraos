@@ -4671,6 +4671,7 @@ describe('POST /internal/webhooks/task-complete', () => {
 
     async function createReviewTaskForLabel(overrides: {
       traceId: string;
+      linearIssueId?: string;
     }): Promise<import('../../domain/models/codeTask.js').CodeTask> {
       const result = await codeTaskRepo.create({
         userId: 'user-123',
@@ -4685,6 +4686,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         prNumber: 42,
         webhookSecret: 'test-webhook-secret',
         agentType: 'review',
+        ...(overrides.linearIssueId !== undefined && { linearIssueId: overrides.linearIssueId }),
       });
       if (!result.ok) throw new Error('Failed to create review task');
       return result.value;
@@ -4932,26 +4934,7 @@ describe('POST /internal/webhooks/task-complete', () => {
     });
 
     it('falls back to review task issue when no origin task exists (external PR)', async () => {
-      // Create review task WITH linearIssueId but no origin task
-      const reviewResult = await codeTaskRepo.create({
-        userId: 'user-123',
-        prompt: 'Review the PR',
-        sanitizedPrompt: 'Review the PR',
-        systemPromptHash: 'review-auto',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace_label_fallback_review',
-        prNumber: 42,
-        webhookSecret: 'test-webhook-secret',
-        agentType: 'review',
-        linearIssueId: 'INT-REVIEW-99',
-      });
-      if (!reviewResult.ok) throw new Error('Failed to create review task');
-      const reviewTask = reviewResult.value;
-
-      // Ensure no origin task found for this PR
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_fallback_review', linearIssueId: 'INT-REVIEW-99' });
       vi.spyOn(codeTaskRepo, 'findOriginTaskByPR').mockResolvedValueOnce(ok(null));
 
       const payload = makeLabelPayload(reviewTask.id);
@@ -4973,24 +4956,7 @@ describe('POST /internal/webhooks/task-complete', () => {
     });
 
     it('falls back to review task issue when origin lookup fails', async () => {
-      const reviewResult = await codeTaskRepo.create({
-        userId: 'user-123',
-        prompt: 'Review the PR',
-        sanitizedPrompt: 'Review the PR',
-        systemPromptHash: 'review-auto',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace_label_fallback_error',
-        prNumber: 42,
-        webhookSecret: 'test-webhook-secret',
-        agentType: 'review',
-        linearIssueId: 'INT-REVIEW-ERR',
-      });
-      if (!reviewResult.ok) throw new Error('Failed to create review task');
-      const reviewTask = reviewResult.value;
-
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_fallback_error', linearIssueId: 'INT-REVIEW-ERR' });
       vi.spyOn(codeTaskRepo, 'findOriginTaskByPR').mockResolvedValueOnce(
         err({ code: 'FIRESTORE_ERROR' as const, message: 'Simulated query error' })
       );
