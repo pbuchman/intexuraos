@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Logger } from '@intexuraos/common-core';
+import type { WorkerRuntime } from '../runtime/types.js';
 import { withTimeout } from '../../with-timeout.js';
 import type {
   DiscoveredContainer,
@@ -12,6 +13,7 @@ import type {
   WorkerHandle,
   ResourceUsage,
 } from './types.js';
+import { WORKER_TYPES } from './types.js';
 
 export interface DockerProviderConfig {
   imageName: string;
@@ -25,6 +27,7 @@ export interface DockerProviderConfig {
   managedAttemptsMode: boolean;
   workerReadyTimeoutMs?: number;
   sharedCredsPath?: string;
+  sharedCodexAuthPath?: string;
   gitUserName?: string;
   gitUserEmail?: string;
   forensicsMode: boolean;
@@ -33,9 +36,9 @@ export interface DockerProviderConfig {
 
 const DEFAULT_CONFIG: DockerProviderConfig = {
   imageName:
-    'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest',
+    'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest',
   imagePullPolicy: 'always',
-  networkName: 'claude-worker-net',
+  networkName: 'code-worker-net',
   maxConcurrent: 4,
   timeoutMs: 2 * 60 * 60 * 1000,
   secretsBasePath: '/tmp/claude-secrets',
@@ -43,14 +46,15 @@ const DEFAULT_CONFIG: DockerProviderConfig = {
   keepContainersAlive: false,
   managedAttemptsMode: true,
   forensicsMode: false,
-  forensicsBasePath: '/tmp/claude-worker-forensics',
+  forensicsBasePath: '/tmp/code-worker-forensics',
 };
 
 interface WorkerEntry {
   containerId: string;
   handle: WorkerHandle;
+  runtime: WorkerRuntime;
   taskSecretsPath: string;
-  taskSessionPath: string;
+  taskRuntimeHomePath: string;
   attemptRunning: boolean;
   attemptLogBuffer: string;
   taskForensicsPath?: string;
@@ -65,12 +69,14 @@ interface PreservedWorkerEntry {
 
 export const PNPM_STORE_DIR_NAME = 'pnpm-store';
 const CLAUDE_SESSION_DIR_PREFIX = 'claude-session';
+const CODEX_STATE_DIR_PREFIX = 'codex-state';
 const PERIODIC_CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 const HEALTH_CHECK_INTERVAL_MS = 30_000;
 const DOCKER_PING_TIMEOUT_MS = 5_000;
 const MIN_DISK_SPACE_BYTES = 5 * 1024 * 1024 * 1024;
 const MIN_DISK_SPACE_GB = MIN_DISK_SPACE_BYTES / (1024 * 1024 * 1024);
 const PRESERVED_MAX_AGE_MS = 3 * 60 * 60 * 1000;
+const RUNTIME_STATE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 // Container must run as the host user so bind-mounted files (worktrees, secrets,
 // pnpm store) are accessible without permission hacks.
@@ -90,7 +96,7 @@ function getHostUserInfo(): { uid: number; gid: number; userString: string } {
   return _hostUserInfo;
 }
 const DOCKER_PROVIDER_DIR = path.dirname(fileURLToPath(import.meta.url));
-const FORENSICS_SECCOMP_PROFILE_FILENAME = 'claude-worker-forensics-seccomp.json';
+const FORENSICS_SECCOMP_PROFILE_FILENAME = 'code-worker-forensics-seccomp.json';
 const EXEC_INSPECT_POLL_INTERVAL_MS = 5_000;
 
 export class DockerProvider implements IsolationProvider {
@@ -117,8 +123,41 @@ export class DockerProvider implements IsolationProvider {
   }
 
   private extractTaskIdFromContainerName(rawName: string): string | null {
-    const taskId = rawName.replace(/^\/claude-worker-/, '');
+    const taskId = rawName.replace(/^\/code-worker-/, '');
     return taskId === '' ? null : taskId;
+  }
+
+  private resolveWorkerRuntime(config: WorkerConfig): WorkerRuntime {
+    if (config.runtimeOverride !== undefined) {
+      return config.runtimeOverride;
+    }
+
+    return WORKER_TYPES[config.workerType].runtime;
+  }
+
+  private getTaskRuntimeHomePath(taskId: string, runtime: WorkerRuntime): string {
+    const dirPrefix = runtime === 'codex' ? CODEX_STATE_DIR_PREFIX : CLAUDE_SESSION_DIR_PREFIX;
+    return path.join(this.config.secretsBasePath, `${dirPrefix}-${taskId}`);
+  }
+
+  private getContainerRuntimeHome(
+    runtime: WorkerRuntime
+  ): '/home/claude/.claude' | '/home/claude/.codex' {
+    return runtime === 'codex' ? '/home/claude/.codex' : '/home/claude/.claude';
+  }
+
+  private assertResumeRuntimeStateAvailable(
+    runtime: WorkerRuntime,
+    continueSession: boolean,
+    taskRuntimeHomePath: string
+  ): void {
+    if (runtime !== 'codex' || !continueSession) {
+      return;
+    }
+
+    if (!fs.existsSync(taskRuntimeHomePath)) {
+      throw new Error(`Codex resume requires existing task-local state at ${taskRuntimeHomePath}`);
+    }
   }
 
   private async removeTaskSecretsDirectory(taskId: string): Promise<void> {
@@ -165,7 +204,9 @@ export class DockerProvider implements IsolationProvider {
 
     this.preservedWorkers.delete(taskId);
     await this.removeTaskSecretsDirectory(taskId);
-    await this.cleanupTaskSession(taskId);
+    // Runtime session state (codex-state-*, claude-session-*) is intentionally
+    // preserved here — the task may be resumed later. Session cleanup is the
+    // task-dispatcher's responsibility via explicit teardownAttempt(taskId, false).
     this.logger.info({ taskId, containerId, state }, 'Removed stale worker container');
   }
 
@@ -376,7 +417,7 @@ export class DockerProvider implements IsolationProvider {
     try {
       const containers = await this.docker.listContainers({
         all: true,
-        filters: { name: ['claude-worker-'] },
+        filters: { name: ['code-worker-'] },
       });
 
       return containers
@@ -398,6 +439,7 @@ export class DockerProvider implements IsolationProvider {
 
   async createWorker(config: WorkerConfig): Promise<WorkerHandle> {
     const { taskId, worktreePath, systemPrompt, prompt, secrets, workerType } = config;
+    const runtime = this.resolveWorkerRuntime(config);
 
     const existingWorker = this.workers.get(taskId);
     if (existingWorker !== undefined) {
@@ -418,13 +460,12 @@ export class DockerProvider implements IsolationProvider {
         this.preservedWorkers.delete(taskId);
 
         const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
-        const taskSessionPath = path.join(
-          this.config.secretsBasePath,
-          `${CLAUDE_SESSION_DIR_PREFIX}-${taskId}`
-        );
+        const taskRuntimeHomePath = this.getTaskRuntimeHomePath(taskId, runtime);
 
         // Recreate secrets dir (deleted during preservation) and write new prompt files
+        this.assertResumeRuntimeStateAvailable(runtime, true, taskRuntimeHomePath);
         await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
+        await fs.promises.mkdir(taskRuntimeHomePath, { recursive: true, mode: 0o700 });
         await this.writePromptFiles(taskSecretsPath, systemPrompt, prompt);
 
         if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
@@ -445,8 +486,9 @@ export class DockerProvider implements IsolationProvider {
         this.workers.set(taskId, {
           containerId: preserved.containerId,
           handle,
+          runtime,
           taskSecretsPath,
-          taskSessionPath,
+          taskRuntimeHomePath,
           attemptRunning: false,
           attemptLogBuffer: '',
           ...(taskForensicsPath !== null ? { taskForensicsPath } : {}),
@@ -466,19 +508,18 @@ export class DockerProvider implements IsolationProvider {
     // In-memory Maps are lost on restart, but Docker containers survive
     if (config.continueSession === true) {
       try {
-        const orphanContainer = this.docker.getContainer(`claude-worker-${taskId}`);
+        const orphanContainer = this.docker.getContainer(`code-worker-${taskId}`);
         const orphanInfo = await orphanContainer.inspect();
 
         if (orphanInfo.State.Running) {
           const containerId = orphanInfo.Id;
 
           const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
-          const taskSessionPath = path.join(
-            this.config.secretsBasePath,
-            `${CLAUDE_SESSION_DIR_PREFIX}-${taskId}`
-          );
+          const taskRuntimeHomePath = this.getTaskRuntimeHomePath(taskId, runtime);
 
+          this.assertResumeRuntimeStateAvailable(runtime, true, taskRuntimeHomePath);
           await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
+          await fs.promises.mkdir(taskRuntimeHomePath, { recursive: true, mode: 0o700 });
           await this.writePromptFiles(taskSecretsPath, systemPrompt, prompt);
 
           /* v8 ignore start -- test-infra: FakeFs cannot simulate gcpSaKeyPath existence conditionally per-resume path @preserve */
@@ -501,8 +542,9 @@ export class DockerProvider implements IsolationProvider {
           this.workers.set(taskId, {
             containerId,
             handle,
+            runtime,
             taskSecretsPath,
-            taskSessionPath,
+            taskRuntimeHomePath,
             attemptRunning: false,
             attemptLogBuffer: '',
             ...(taskForensicsPath !== null ? { taskForensicsPath } : {}),
@@ -551,12 +593,14 @@ export class DockerProvider implements IsolationProvider {
     }
 
     const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
-    const taskSessionPath = path.join(
-      this.config.secretsBasePath,
-      `${CLAUDE_SESSION_DIR_PREFIX}-${taskId}`
+    const taskRuntimeHomePath = this.getTaskRuntimeHomePath(taskId, runtime);
+    this.assertResumeRuntimeStateAvailable(
+      runtime,
+      config.continueSession === true,
+      taskRuntimeHomePath
     );
     await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
-    await fs.promises.mkdir(taskSessionPath, { recursive: true, mode: 0o700 });
+    await fs.promises.mkdir(taskRuntimeHomePath, { recursive: true, mode: 0o700 });
     await this.writePromptFiles(taskSecretsPath, systemPrompt, prompt);
 
     let container: Docker.Container | undefined;
@@ -565,40 +609,67 @@ export class DockerProvider implements IsolationProvider {
         await fs.promises.copyFile(config.gcpSaKeyPath, path.join(taskSecretsPath, 'gcp-sa.json'));
       }
 
-      const workerTypeConfig = (await import('./types.js')).WORKER_TYPES[workerType];
-      const apiKey = secrets[workerTypeConfig.apiKeyEnvVar];
-
-      if (apiKey === '') {
-        throw new Error(
-          `Worker type '${workerType}' requires ${workerTypeConfig.apiKeyEnvVar} but it is not configured`
-        );
-      }
+      const workerTypeConfig = WORKER_TYPES[workerType];
+      const apiKey =
+        workerTypeConfig.apiKeyEnvVar === undefined ? '' : secrets[workerTypeConfig.apiKeyEnvVar];
 
       // When shared credentials are configured for opus/auto workers, Claude CLI reads
       // credentials from the mounted .credentials.json file. No ANTHROPIC_API_KEY needed.
       const useSharedCreds =
+        runtime === 'claude' &&
         this.config.sharedCredsPath !== undefined &&
         workerTypeConfig.apiKeyEnvVar === 'ANTHROPIC_API_KEY';
+      const useSharedCodexAuth =
+        runtime === 'codex' && this.config.sharedCodexAuthPath !== undefined;
+      const requiredApiKeyEnvVar = workerTypeConfig.apiKeyEnvVar;
+
+      if (runtime === 'claude') {
+        if (requiredApiKeyEnvVar === undefined) {
+          throw new Error(`Worker type '${workerType}' is missing API key configuration`);
+        }
+
+        if (apiKey === '') {
+          throw new Error(
+            `Worker type '${workerType}' requires ${requiredApiKeyEnvVar} but it is not configured`
+          );
+        }
+      }
+
+      if (runtime === 'codex' && !useSharedCodexAuth) {
+        throw new Error('Codex runtime requires sharedCodexAuthPath but it is not configured');
+      }
 
       const env = [
         `TASK_ID=${taskId}`,
-        ...(useSharedCreds
-          ? []
-          : [`ANTHROPIC_API_KEY=${apiKey}`, `ANTHROPIC_BASE_URL=${workerTypeConfig.apiBaseUrl}`]),
         `LINEAR_API_KEY=${secrets.LINEAR_API_KEY}`,
         `SENTRY_AUTH_TOKEN=${secrets.SENTRY_AUTH_TOKEN}`,
         `GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json`,
-        'CLAUDE_PROJECT_DIR=/repo',
-        'CLAUDE_WORKER_MODE=1',
-        `CLAUDE_MANAGED_MODE=${this.config.managedAttemptsMode ? '1' : '0'}`,
-        `CLAUDE_CONTINUE=${config.continueSession === true ? '1' : '0'}`,
+        `WORKER_RUNTIME=${runtime}`,
+        'CODE_WORKER_MODE=1',
+        `WORKER_MANAGED_MODE=${this.config.managedAttemptsMode ? '1' : '0'}`,
+        `WORKER_CONTINUE=${config.continueSession === true ? '1' : '0'}`,
       ];
 
-      if (workerTypeConfig.model !== undefined) {
-        env.push(`ANTHROPIC_MODEL=${workerTypeConfig.model}`);
-      }
-      if (workerTypeConfig.effort !== undefined) {
-        env.push(`CLAUDE_CODE_EFFORT_LEVEL=${workerTypeConfig.effort}`);
+      if (runtime === 'claude') {
+        env.push('CLAUDE_PROJECT_DIR=/repo');
+        if (!useSharedCreds) {
+          env.push(
+            `ANTHROPIC_API_KEY=${apiKey}`,
+            `ANTHROPIC_BASE_URL=${workerTypeConfig.apiBaseUrl}`
+          );
+        }
+        if (workerTypeConfig.model !== undefined) {
+          env.push(`ANTHROPIC_MODEL=${workerTypeConfig.model}`);
+        }
+        if (workerTypeConfig.effort !== undefined) {
+          env.push(`CLAUDE_CODE_EFFORT_LEVEL=${workerTypeConfig.effort}`);
+        }
+      } else {
+        env.push('CODEX_HOME=/home/claude/.codex');
+        env.push('CODEX_SQLITE_HOME=/home/claude/.codex');
+        if (workerTypeConfig.effort !== undefined) {
+          env.push(`CODEX_REASONING_EFFORT=${workerTypeConfig.effort}`);
+        }
       }
 
       if (this.config.gitUserName !== undefined) {
@@ -608,15 +679,18 @@ export class DockerProvider implements IsolationProvider {
         env.push(`GIT_USER_EMAIL=${this.config.gitUserEmail}`);
       }
       if (this.config.forensicsMode) {
-        env.push('CLAUDE_FORENSICS=1');
-        env.push('CLAUDE_FORENSICS_DIR=/var/crash');
+        env.push('WORKER_FORENSICS=1');
+        env.push('WORKER_FORENSICS_DIR=/var/crash');
       }
 
-      const keySuffix = useSharedCreds
-        ? 'shared-creds (.credentials.json)'
-        : apiKey.length > 4
-          ? '...' + apiKey.slice(-4)
-          : '****';
+      const keySuffix =
+        runtime === 'codex'
+          ? 'shared-auth (auth.json)'
+          : useSharedCreds
+            ? 'shared-creds (.credentials.json)'
+            : apiKey.length > 4
+              ? '...' + apiKey.slice(-4)
+              : '****';
       const taskForensicsPath = this.ensureTaskForensicsPath(taskId);
       const requestedImage = this.config.imageName;
       const resolvedImage =
@@ -624,7 +698,7 @@ export class DockerProvider implements IsolationProvider {
       this.logger.info({ taskId }, 'Container creation started');
       this.logger.info(
         {},
-        `Creating worker container: taskId=${taskId} workerType=${workerType} image=${resolvedImage} apiKey=${keySuffix} baseUrl=${workerTypeConfig.apiBaseUrl} worktreePath=${worktreePath}`
+        `Creating worker container: taskId=${taskId} workerType=${workerType} runtime=${runtime} image=${resolvedImage} apiKey=${keySuffix} baseUrl=${workerTypeConfig.apiBaseUrl} worktreePath=${worktreePath}`
       );
 
       const pnpmStorePath = path.join(
@@ -648,7 +722,7 @@ export class DockerProvider implements IsolationProvider {
 
       container = await this.docker.createContainer({
         Image: resolvedImage,
-        name: `claude-worker-${taskId}`,
+        name: `code-worker-${taskId}`,
         Env: env,
         WorkingDir: '/repo',
         User: getHostUserInfo().userString,
@@ -658,11 +732,14 @@ export class DockerProvider implements IsolationProvider {
             `${worktreePath}:/repo:rw`,
             `${taskSecretsPath}:/secrets:ro`,
             `${pnpmStorePath}:/home/claude/pnpm-store:rw`,
-            `${taskSessionPath}:/home/claude/.claude:rw`,
+            `${taskRuntimeHomePath}:${this.getContainerRuntimeHome(runtime)}:rw`,
             ...(useSharedCreds && this.config.sharedCredsPath !== undefined
               ? [
                   `${this.config.sharedCredsPath}/.credentials.json:/home/claude/.claude/.credentials.json:rw`,
                 ]
+              : []),
+            ...(useSharedCodexAuth && this.config.sharedCodexAuthPath !== undefined
+              ? [`${this.config.sharedCodexAuthPath}/auth.json:/home/claude/.codex/auth.json:rw`]
               : []),
             ...(mainGitDir !== null ? [`${mainGitDir}:${mainGitDir}:rw`] : []),
             ...(taskForensicsPath !== null ? [`${taskForensicsPath}:/var/crash:rw`] : []),
@@ -717,8 +794,9 @@ export class DockerProvider implements IsolationProvider {
       this.workers.set(taskId, {
         containerId: container.id,
         handle,
+        runtime,
         taskSecretsPath,
-        taskSessionPath,
+        taskRuntimeHomePath,
         attemptRunning: false,
         attemptLogBuffer: '',
         ...(taskForensicsPath !== null ? { taskForensicsPath } : {}),
@@ -758,7 +836,7 @@ export class DockerProvider implements IsolationProvider {
           this.logger.warn({ taskId, error: e }, 'Cleanup: failed to remove task secrets');
         });
       await fs.promises
-        .rm(taskSessionPath, { recursive: true, force: true })
+        .rm(taskRuntimeHomePath, { recursive: true, force: true })
         .catch((e: unknown) => {
           this.logger.warn({ taskId, error: e }, 'Cleanup: failed to remove task session');
         });
@@ -948,17 +1026,20 @@ export class DockerProvider implements IsolationProvider {
   }
 
   async cleanupTaskSession(taskId: string): Promise<void> {
-    const taskSessionPath = path.join(
-      this.config.secretsBasePath,
-      `${CLAUDE_SESSION_DIR_PREFIX}-${taskId}`
-    );
-    try {
-      await fs.promises.rm(taskSessionPath, { recursive: true, force: true });
-    } catch (err: unknown) {
-      this.logger.error(
-        { taskId, error: err, path: taskSessionPath },
-        'Failed to remove task session directory'
-      );
+    const taskRuntimeHomePaths = [
+      this.getTaskRuntimeHomePath(taskId, 'claude'),
+      this.getTaskRuntimeHomePath(taskId, 'codex'),
+    ];
+
+    for (const taskRuntimeHomePath of taskRuntimeHomePaths) {
+      try {
+        await fs.promises.rm(taskRuntimeHomePath, { recursive: true, force: true });
+      } catch (err: unknown) {
+        this.logger.error(
+          { taskId, error: err, path: taskRuntimeHomePath },
+          'Failed to remove task runtime directory'
+        );
+      }
     }
   }
 
@@ -1011,7 +1092,7 @@ export class DockerProvider implements IsolationProvider {
     try {
       const containers = await this.docker.listContainers({
         all: true,
-        filters: { name: ['claude-worker-'] },
+        filters: { name: ['code-worker-'] },
       });
 
       const containerMap = new Map<
@@ -1051,7 +1132,7 @@ export class DockerProvider implements IsolationProvider {
 
         if (containerInfo === undefined) {
           await this.removeTaskSecretsDirectory(taskId);
-          await this.cleanupTaskSession(taskId);
+          // Runtime session state preserved for potential resume (see removeDetachedContainer).
           this.logger.info(
             { taskId, containerId: preserved.containerId },
             'Removed stale preserved worker metadata'
@@ -1076,6 +1157,47 @@ export class DockerProvider implements IsolationProvider {
       }
     } catch (error) {
       this.logger.warn({ error }, 'Failed to clean up stale worker containers');
+    }
+
+    await this.cleanupOrphanedRuntimeState();
+  }
+
+  private async cleanupOrphanedRuntimeState(): Promise<void> {
+    const prefixes = [CLAUDE_SESSION_DIR_PREFIX, CODEX_STATE_DIR_PREFIX];
+    const now = Date.now();
+
+    let entries: string[];
+    try {
+      entries = await fs.promises.readdir(this.config.secretsBasePath);
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      const matchedPrefix = prefixes.find((p) => entry.startsWith(`${p}-`));
+      if (matchedPrefix === undefined) {
+        continue;
+      }
+
+      const taskId = entry.slice(matchedPrefix.length + 1);
+      if (this.workers.has(taskId) || this.preservedWorkers.has(taskId)) {
+        continue;
+      }
+
+      const fullPath = path.join(this.config.secretsBasePath, entry);
+      try {
+        const stat = await fs.promises.stat(fullPath);
+        if (now - stat.mtimeMs <= RUNTIME_STATE_MAX_AGE_MS) {
+          continue;
+        }
+        await fs.promises.rm(fullPath, { recursive: true, force: true });
+        this.logger.info({ taskId, path: fullPath }, 'Removed orphaned runtime state directory');
+      } catch (err: unknown) {
+        this.logger.warn(
+          { taskId, path: fullPath, error: err },
+          'Failed to clean up orphaned runtime state directory'
+        );
+      }
     }
   }
 
@@ -1406,7 +1528,13 @@ export class DockerProvider implements IsolationProvider {
         Tty: false,
         WorkingDir: '/',
         User: getHostUserInfo().userString,
-        Env: [`CLAUDE_CONTINUE=${config.continueSession === true ? '1' : '0'}`],
+        Env: [
+          `WORKER_CONTINUE=${config.continueSession === true ? '1' : '0'}`,
+          `WORKER_RUNTIME=${worker.runtime}`,
+          ...(worker.runtime === 'codex' && config.runtimeSessionId !== undefined
+            ? [`CODEX_THREAD_ID=${config.runtimeSessionId}`]
+            : []),
+        ],
       });
 
       const execStream = await execInstance.start({ hijack: false, stdin: false });

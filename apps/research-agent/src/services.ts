@@ -96,28 +96,32 @@ export interface ServiceContainer {
     apiKey: string,
     userId: string,
     pricing: ModelPricing,
-    logger: Logger
+    logger: Logger,
+    researchId: string | undefined
   ) => LlmResearchProvider;
   createSynthesizer: (
     model: ResearchModel,
     apiKey: string,
     userId: string,
     pricing: ModelPricing,
-    logger: Logger
+    logger: Logger,
+    researchId: string | undefined
   ) => LlmSynthesisProvider;
   createTitleGenerator: (
     model: FastModel,
     apiKey: string,
     userId: string,
     pricing: ModelPricing,
-    logger: Logger
+    logger: Logger,
+    researchId: string | undefined
   ) => TitleGenerator;
   createContextInferrer: (
     model: FastModel,
     apiKey: string,
     userId: string,
     pricing: ModelPricing,
-    logger: Logger
+    logger: Logger,
+    researchId: string | undefined
   ) => ContextInferenceProvider;
   createInputValidator: (
     model: FastModel,

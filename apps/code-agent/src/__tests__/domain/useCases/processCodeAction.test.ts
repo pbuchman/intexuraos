@@ -975,6 +975,7 @@ describe('processCodeAction', () => {
         }),
         markInProgress: vi.fn(),
         markInReview: vi.fn(),
+        markTodo: vi.fn(),
         markQa: vi.fn(),
       } as unknown as LinearIssueService;
 
@@ -1015,6 +1016,7 @@ describe('processCodeAction', () => {
         }),
         markInProgress: vi.fn(),
         markInReview: vi.fn(),
+        markTodo: vi.fn(),
         markQa: vi.fn(),
       } as unknown as LinearIssueService;
 
@@ -2041,6 +2043,174 @@ describe('processCodeAction', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('internal_error');
       }
+    });
+  });
+
+  describe('defaultPlanningWorkerType fallback', () => {
+    beforeEach(() => {
+      vi.mocked(codeTaskRepo.create).mockImplementation((input) =>
+        Promise.resolve(
+          ok({
+            id: input.id,
+            userId: input.userId,
+            prompt: input.prompt,
+            sanitizedPrompt: input.sanitizedPrompt,
+            systemPromptHash: input.systemPromptHash,
+            workerType: input.workerType,
+            workerLocation: input.workerLocation,
+            repository: input.repository,
+            baseBranch: input.baseBranch,
+            status: 'queued' as const,
+            dedupKey: 'dedup-key',
+            callbackReceived: false,
+            traceId: input.traceId,
+            createdAt: Timestamp.now(),
+            updatedAt: Timestamp.now(),
+            agentType: input.agentType,
+          } as CodeTask)
+        )
+      );
+    });
+
+    it('uses defaultPlanningWorkerType when no label and workerType is auto', async () => {
+      vi.mocked(workerSettingsRepo.getSettings).mockResolvedValueOnce(
+        ok({
+          userId: 'user-789',
+          workers: [{ name: 'home-mac', url: 'https://cc.example.com', cfAccessClientId: 'id', cfAccessClientSecret: 'secret', dispatchSigningSecret: 'dsecret', enabled: true }],
+          defaultPlanningWorkerType: 'glm',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+      vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
+        linearIssueId: 'INT-100',
+        linearIssueTitle: 'Test',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+        {
+          actionId: 'action-1',
+          approvalEventId: 'approval-1',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      expect(codeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ workerType: 'glm' })
+      );
+    });
+
+    it('Linear label takes priority over defaultPlanningWorkerType', async () => {
+      vi.mocked(workerSettingsRepo.getSettings).mockResolvedValueOnce(
+        ok({
+          userId: 'user-789',
+          workers: [{ name: 'home-mac', url: 'https://cc.example.com', cfAccessClientId: 'id', cfAccessClientSecret: 'secret', dispatchSigningSecret: 'dsecret', enabled: true }],
+          defaultPlanningWorkerType: 'glm',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+      vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
+        linearIssueId: 'INT-101',
+        linearIssueTitle: 'Test',
+        linearIssueLabels: ['opus'],
+        hasChildren: false,
+        linearFallback: false,
+      });
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+        {
+          actionId: 'action-2',
+          approvalEventId: 'approval-2',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      // Label 'worker:opus' must win over defaultPlanningWorkerType 'glm'
+      expect(codeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ workerType: 'opus' })
+      );
+    });
+
+    it('explicit request workerType takes priority over defaultPlanningWorkerType', async () => {
+      vi.mocked(workerSettingsRepo.getSettings).mockResolvedValueOnce(
+        ok({
+          userId: 'user-789',
+          workers: [{ name: 'home-mac', url: 'https://cc.example.com', cfAccessClientId: 'id', cfAccessClientSecret: 'secret', dispatchSigningSecret: 'dsecret', enabled: true }],
+          defaultPlanningWorkerType: 'glm',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+      vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
+        linearIssueId: 'INT-102',
+        linearIssueTitle: 'Test',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+        {
+          actionId: 'action-3',
+          approvalEventId: 'approval-3',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'opus',
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      // Request 'opus' is not 'auto', so defaultPlanningWorkerType 'glm' must not apply
+      expect(codeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ workerType: 'opus' })
+      );
+    });
+
+    it('falls back to auto when no label, no explicit type, and no defaultPlanningWorkerType', async () => {
+      vi.mocked(workerSettingsRepo.getSettings).mockResolvedValueOnce(
+        ok({
+          userId: 'user-789',
+          workers: [{ name: 'home-mac', url: 'https://cc.example.com', cfAccessClientId: 'id', cfAccessClientSecret: 'secret', dispatchSigningSecret: 'dsecret', enabled: true }],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+      vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
+        linearIssueId: 'INT-103',
+        linearIssueTitle: 'Test',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+        {
+          actionId: 'action-4',
+          approvalEventId: 'approval-4',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      expect(codeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ workerType: 'auto' })
+      );
     });
   });
 });

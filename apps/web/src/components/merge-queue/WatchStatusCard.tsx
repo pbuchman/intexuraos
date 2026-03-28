@@ -7,6 +7,7 @@ interface WatchStatusCardProps {
   onToggle: () => void;
   isToggling: boolean;
   blocked: boolean;
+  excludedCount: number;
 }
 
 function ToggleSwitch({ enabled, disabled, onToggle }: { enabled: boolean; disabled: boolean; onToggle: () => void }): React.JSX.Element {
@@ -30,7 +31,7 @@ function ToggleSwitch({ enabled, disabled, onToggle }: { enabled: boolean; disab
   );
 }
 
-export function WatchStatusCard({ watch, onToggle, isToggling, blocked }: WatchStatusCardProps): React.JSX.Element {
+export function WatchStatusCard({ watch, onToggle, isToggling, blocked, excludedCount }: WatchStatusCardProps): React.JSX.Element {
   const isActive = watch !== null && watch.status === 'active';
   const isDrained = watch !== null && watch.status === 'drained';
   const isCancelled = watch !== null && watch.status === 'cancelled';
@@ -70,6 +71,7 @@ export function WatchStatusCard({ watch, onToggle, isToggling, blocked }: WatchS
         </p>
         <p className="mt-1 text-xs text-red-500 dark:text-red-400/80">
           Merged: {String(watch.mergedPrs.length)} &middot; Skipped: {String(watch.skippedPrs.length)}
+          {excludedCount > 0 ? ` \u00b7 Excluded: ${String(excludedCount)}` : ''}
         </p>
       </div>
     );
@@ -91,6 +93,7 @@ export function WatchStatusCard({ watch, onToggle, isToggling, blocked }: WatchS
         </div>
         <p className="mt-1 text-xs text-blue-600 dark:text-blue-400/80">
           Merged: {String(watch.mergedPrs.length)} &middot; Skipped: {String(watch.skippedPrs.length)}
+          {excludedCount > 0 ? ` \u00b7 Excluded: ${String(excludedCount)}` : ''}
           {watch.lastTickAt !== null ? ` \u00b7 Last tick: ${formatRelative(watch.lastTickAt)}` : ''}
         </p>
       </div>

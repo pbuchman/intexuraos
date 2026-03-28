@@ -513,8 +513,8 @@ module "secret_manager" {
     "INTEXURAOS_GEMINI_APP_API_KEY"    = "Gemini API key for orchestrator completion verifier"
     "INTEXURAOS_DASHSCOPE_APP_API_KEY" = "Dashscope API key for orchestrator glm and qwen worker containers"
     # External service API keys for worker containers
-    "INTEXURAOS_LINEAR_API_KEY"    = "Linear API key passed to Claude worker containers"
-    "INTEXURAOS_SENTRY_AUTH_TOKEN" = "Sentry auth token passed to Claude worker containers"
+    "INTEXURAOS_LINEAR_API_KEY"    = "Linear API key passed to code worker containers"
+    "INTEXURAOS_SENTRY_AUTH_TOKEN" = "Sentry auth token passed to code worker containers"
     # Code worker secrets (INT-156)
     "INTEXURAOS_ORCHESTRATOR_SECRET"   = "HMAC signing secret for orchestrator communication"
     "INTEXURAOS_WEBHOOK_VERIFY_SECRET" = "HMAC signing secret for orchestrator webhook callbacks to code-agent"
@@ -1470,6 +1470,7 @@ module "code_agent" {
     INTEXURAOS_QUEUE_TTL_MINUTES          = "30"
     INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS   = "3"
     INTEXURAOS_RETRY_QUEUE_TTL_MINUTES    = "10"
+    INTEXURAOS_ENABLE_METRICS             = "true"
   })
 
   depends_on = [

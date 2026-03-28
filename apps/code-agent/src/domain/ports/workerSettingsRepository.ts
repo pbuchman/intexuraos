@@ -13,6 +13,14 @@ import type {
   WorkerHealthStatus,
 } from '../models/workerSettings.js';
 
+/** Fields in UserWorkerSettings that hold a default worker type per agent category */
+export type DefaultWorkerTypeField =
+  | 'defaultReviewWorkerType'
+  | 'defaultRemediationWorkerType'
+  | 'defaultExecutionWorkerType'
+  | 'defaultPlanningWorkerType'
+  | 'defaultPullRequestWorkerType';
+
 export interface WorkerSettingsError {
   code: 'not_found' | 'already_exists' | 'max_workers_exceeded' | 'internal_error';
   message: string;
@@ -111,5 +119,24 @@ export interface WorkerSettingsRepository {
   updateDefaultReviewWorkerType(
     userId: string,
     workerType: CodeTaskWorkerType
+  ): Promise<Result<void, WorkerSettingsError>>;
+
+  /**
+   * Update any default worker type field for a user.
+   * Creates the settings document if it doesn't exist.
+   */
+  updateDefaultWorkerType(
+    userId: string,
+    field: DefaultWorkerTypeField,
+    workerType: CodeTaskWorkerType
+  ): Promise<Result<void, WorkerSettingsError>>;
+
+  /**
+   * Clear a default worker type field, restoring automatic fallback behavior.
+   * Removes the field from the settings document.
+   */
+  clearDefaultWorkerType(
+    userId: string,
+    field: DefaultWorkerTypeField
   ): Promise<Result<void, WorkerSettingsError>>;
 }

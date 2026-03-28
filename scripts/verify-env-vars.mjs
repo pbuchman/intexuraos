@@ -71,6 +71,8 @@ const COMMON_OPTIONAL_ENV = new Set([
   // Retry queue config (optional — have sensible defaults: maxAttempts=3, ttlMinutes=10)
   'INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS',
   'INTEXURAOS_RETRY_QUEUE_TTL_MINUTES',
+  // Cloud Monitoring metrics (optional — no-op when not set, requires monitoring.metricWriter IAM role)
+  'INTEXURAOS_ENABLE_METRICS',
 ]);
 
 /**

@@ -27,7 +27,7 @@ describe('renderHeader', () => {
 
 describe('renderEvent', () => {
   describe('webhook_received', () => {
-    it('renders event type, action, and sender', () => {
+    it('renders human-readable label for pull_request.opened', () => {
       useFakeTime();
       const event: AutomationEvent = {
         type: 'webhook_received',
@@ -38,10 +38,10 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- `pull_request.opened` by @octocat');
+      expect(result).toBe('**14:35 UTC** -- PR opened by @octocat');
     });
 
-    it('renders event type as link when eventUrl is present', () => {
+    it('renders human-readable label for issue_comment.created as link when eventUrl is present', () => {
       useFakeTime();
       const event: AutomationEvent = {
         type: 'webhook_received',
@@ -54,7 +54,7 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toBe(
-        '**14:35** -- [`issue_comment.created`](https://github.com/pbuchman/intexuraos/pull/42#issuecomment-123) by @octocat'
+        '**14:35 UTC** -- [Comment posted](https://github.com/pbuchman/intexuraos/pull/42#issuecomment-123) by @octocat'
       );
     });
 
@@ -71,7 +71,7 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toBe(
-        '**14:35** -- `issue_comment.created` by @octocat \u2014 @ignore Automated Code review'
+        '**14:35 UTC** -- Comment posted by @octocat \u2014 @ignore Automated Code review'
       );
     });
 
@@ -89,8 +89,22 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toBe(
-        '**14:35** -- [`pull_request_review.submitted`](https://github.com/pbuchman/intexuraos/pull/42#pullrequestreview-1) by @reviewer \u2014 APPROVED: Looks good'
+        '**14:35 UTC** -- [Review submitted](https://github.com/pbuchman/intexuraos/pull/42#pullrequestreview-1) by @reviewer \u2014 APPROVED: Looks good'
       );
+    });
+
+    it('falls back to backtick-wrapped raw name for unmapped event action', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'webhook_received',
+        eventType: 'pull_request',
+        action: 'labeled',
+        sender: 'octocat',
+        deliveryId: 'abc-123',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe('**14:35 UTC** -- `pull_request.labeled` by @octocat');
     });
   });
 
@@ -132,9 +146,9 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Skipped** | NO_ACTION_NEEDED');
+      expect(result).toContain('**14:35 UTC** -- **Skipped** | NO_ACTION_NEEDED');
       expect(result).toContain('<details>');
-      expect(result).toContain('Cost: $0.042');
+      expect(result).toContain('Triage cost: $0.042');
       expect(result).toContain('This is a documentation-only change.');
       expect(result).toContain('- `readFile(README.md)`');
       expect(result).toContain('- `getDiff()`');
@@ -149,7 +163,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- **Skipped** | NO_ACTION_NEEDED');
+      expect(result).toBe('**14:35 UTC** -- **Skipped** | NO_ACTION_NEEDED');
       expect(result).not.toContain('<details>');
     });
 
@@ -165,7 +179,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('Cost: $0.010');
+      expect(result).toContain('Triage cost: $0.010');
       expect(result).toContain('Trivial change.');
       // No tool calls section when array is empty
       expect(result).not.toContain('Tool calls');
@@ -173,7 +187,7 @@ describe('renderEvent', () => {
   });
 
   describe('triage_dispatch', () => {
-    it('renders review dispatch with review types', () => {
+    it('renders review dispatch with unicode arrow, no bold, lowercase d', () => {
       useFakeTime();
       const event: AutomationEvent = {
         type: 'triage_dispatch',
@@ -185,16 +199,18 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toContain(
-        '**14:35** -- Triage -> **Dispatching review** (`code_review, architecture`)'
+        '**14:35 UTC** -- Triage \u2192 dispatching review (`code_review, architecture`)'
       );
+      expect(result).not.toContain('->');
+      expect(result).not.toContain('**Dispatching review**');
       expect(result).toContain('<details>');
-      expect(result).toContain('Cost: $0.123');
+      expect(result).toContain('Triage cost: $0.123');
       expect(result).toContain('Complex PR needs thorough review.');
       expect(result).toContain('- `readFile(src/index.ts)`');
       expect(result).toContain('- `getDiff()`');
     });
 
-    it('renders task dispatch when no reviewTypes', () => {
+    it('renders task dispatch with unicode arrow, no bold, lowercase d', () => {
       useFakeTime();
       const event: AutomationEvent = {
         type: 'triage_dispatch',
@@ -205,8 +221,10 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- Triage -> **Dispatching task**');
-      expect(result).not.toContain('Dispatching review');
+      expect(result).toContain('**14:35 UTC** -- Triage \u2192 dispatching task');
+      expect(result).not.toContain('->');
+      expect(result).not.toContain('**Dispatching task**');
+      expect(result).not.toContain('dispatching review');
     });
   });
 
@@ -220,14 +238,14 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Triage failed** | dispatch');
+      expect(result).toContain('**14:35 UTC** -- **Triage failed** | dispatch');
       expect(result).toContain('<details>');
       expect(result).toContain('LLM timeout after 30s');
     });
   });
 
   describe('task_dispatched', () => {
-    it('renders task ID with link and worker type', () => {
+    it('hides UUID behind View task link and shows worker type', () => {
       useFakeTime();
       const event: AutomationEvent = {
         type: 'task_dispatched',
@@ -238,8 +256,95 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toBe(
-        '**14:35** -- Task dispatched: [`task_abc123`](https://intexuraos.cloud/#/code-tasks/task_abc123) | opus'
+        '**14:35 UTC** -- Implementation dispatched | opus | [View task](https://intexuraos.cloud/#/code-tasks/task_abc123)'
       );
+    });
+
+    it('renders review agent type label without raw UUID', () => {
+      useFakeTime();
+      const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'review' });
+      expect(result).toContain('Review dispatched |');
+      expect(result).not.toContain('Review dispatched:');
+      expect(result).toContain('[View task]');
+    });
+
+    it('renders remediation agent type label without raw UUID', () => {
+      useFakeTime();
+      const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'remediation' });
+      expect(result).toContain('Remediation dispatched |');
+      expect(result).not.toContain('Remediation dispatched:');
+      expect(result).toContain('[View task]');
+    });
+
+    it('renders plan agent type label without raw UUID', () => {
+      useFakeTime();
+      const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'planning' });
+      expect(result).toContain('Plan dispatched |');
+      expect(result).not.toContain('Plan dispatched:');
+      expect(result).toContain('[View task]');
+    });
+
+    it('renders PR agent type label without raw UUID', () => {
+      useFakeTime();
+      const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'pull_request' });
+      expect(result).toContain('PR dispatched |');
+      expect(result).not.toContain('PR dispatched:');
+      expect(result).toContain('[View task]');
+    });
+  });
+
+  describe('remediation_decision', () => {
+    it('renders remediation not required', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'remediation_decision',
+        required: false,
+        source: 'review_result',
+        signal: '0',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe('**14:35 UTC** -- Remediation not required');
+    });
+
+    it('returns null when required=true and taskId present (task_dispatched already logs this)', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'remediation_decision',
+        required: true,
+        source: 'review_result',
+        signal: '1',
+        taskId: 'task_rem_123',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBeNull();
+    });
+
+    it('renders fail-open remediation requirement when review signal is missing', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'remediation_decision',
+        required: true,
+        source: 'review_result',
+        signal: 'missing',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe('**14:35 UTC** -- Remediation required (dispatch failed, review signal missing)');
+    });
+
+    it('renders remediation required without task link when no remediation task id is available', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'remediation_decision',
+        required: true,
+        source: 'review_result',
+        signal: '1',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe('**14:35 UTC** -- Remediation required (dispatch failed)');
     });
   });
 
@@ -253,7 +358,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Dispatch failed**');
+      expect(result).toContain('**14:35 UTC** -- **Dispatch failed**');
       expect(result).toContain('<details>');
       expect(result).toContain('Rate limit exceeded');
       expect(result).toContain('RATE_LIMIT');
@@ -267,7 +372,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Dispatch failed**');
+      expect(result).toContain('**14:35 UTC** -- **Dispatch failed**');
       expect(result).toContain('Unknown error');
       expect(result).not.toContain('Code:');
     });
@@ -284,7 +389,61 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- Task started | attempt 2');
+      expect(result).toBe('**14:35 UTC** -- Task started | attempt 2');
+    });
+
+    it('omits attempt number on first attempt', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'task_started',
+        taskId: 'task_abc123',
+        workerType: 'opus',
+        attempt: 1,
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe('**14:35 UTC** -- Task started');
+    });
+
+    it('renders agentType label when agentType is present (review)', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'task_started',
+        taskId: 'task_abc123',
+        workerType: 'opus',
+        attempt: 1,
+        agentType: 'review',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe('**14:35 UTC** -- Review started');
+    });
+
+    it('renders agentType label with attempt when agentType is present and attempt > 1', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'task_started',
+        taskId: 'task_abc123',
+        workerType: 'opus',
+        attempt: 3,
+        agentType: 'remediation',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe('**14:35 UTC** -- Remediation started | attempt 3');
+    });
+
+    it('falls back to "Task" when agentType is absent', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'task_started',
+        taskId: 'task_abc123',
+        workerType: 'opus',
+        attempt: 1,
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe('**14:35 UTC** -- Task started');
     });
   });
 
@@ -300,7 +459,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Completed** | 8m 42s | [PR #99](https://github.com/pbuchman/intexuraos/pull/99)');
+      expect(result).toContain('**14:35 UTC** -- **Implementation completed** | 8m 42s | [PR #99](https://github.com/pbuchman/intexuraos/pull/99)');
     });
 
     it('renders commits with links when repository provided', () => {
@@ -351,7 +510,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Completed** | 1h 2m');
+      expect(result).toContain('**14:35 UTC** -- **Implementation completed** | 1h 2m');
       expect(result).not.toContain('PR #');
       expect(result).not.toContain('<details>');
     });
@@ -380,7 +539,67 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Completed** | 0s');
+      expect(result).toContain('**14:35 UTC** -- **Implementation completed** | 0s');
+    });
+
+    it('renders review completed label for reviewed status', () => {
+      useFakeTime();
+      const result = renderEvent({ type: 'task_completed', taskId: 'task_1', status: 'reviewed', duration: 60_000 });
+      expect(result).toContain('**Review completed**');
+    });
+
+    it('renders plan completed label for planned status', () => {
+      useFakeTime();
+      const result = renderEvent({ type: 'task_completed', taskId: 'task_1', status: 'planned', duration: 60_000 });
+      expect(result).toContain('**Plan completed**');
+    });
+
+    it('renders generic completed label for unknown status', () => {
+      useFakeTime();
+      const result = renderEvent({ type: 'task_completed', taskId: 'task_1', status: 'unknown', duration: 60_000 });
+      expect(result).toContain('**Completed**');
+    });
+
+    it('renders agentType label when agentType is present (remediation)', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'task_completed',
+        taskId: 'task_abc123',
+        status: 'implemented',
+        duration: 60_000,
+        agentType: 'remediation',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toContain('**Remediation completed**');
+      expect(result).not.toContain('**Implementation completed**');
+    });
+
+    it('renders agentType label when agentType is present (review)', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'task_completed',
+        taskId: 'task_abc123',
+        status: 'reviewed',
+        duration: 60_000,
+        agentType: 'review',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toContain('**Review completed**');
+    });
+
+    it('falls back to status-derived label when agentType is absent', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'task_completed',
+        taskId: 'task_abc123',
+        status: 'implemented',
+        duration: 60_000,
+      };
+
+      const result = renderEvent(event);
+      expect(result).toContain('**Implementation completed**');
     });
   });
 
@@ -396,7 +615,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Failed** | 45s | WORKER_CRASH');
+      expect(result).toContain('**14:35 UTC** -- **Failed** | 45s | WORKER_CRASH');
       expect(result).toContain('<details>');
       expect(result).toContain('Worker crashed');
     });
@@ -410,7 +629,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Failed**');
+      expect(result).toContain('**14:35 UTC** -- **Failed**');
       expect(result).not.toContain(' | 0s');
       expect(result).toContain('Something went wrong');
     });
@@ -426,7 +645,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- **Interrupted** | 2m 0s');
+      expect(result).toBe('**14:35 UTC** -- **Interrupted** | 2m 0s');
     });
 
     it('renders without duration when missing', () => {
@@ -437,7 +656,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- **Interrupted**');
+      expect(result).toBe('**14:35 UTC** -- **Interrupted**');
     });
   });
 
@@ -450,7 +669,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- ⚠️ Linear issue creation failed | Usage limit exceeded');
+      expect(result).toBe('**14:35 UTC** -- ⚠️ Linear issue creation failed | Usage limit exceeded');
     });
   });
 
@@ -463,7 +682,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- Review cancelled (replaced) | task_old456');
+      expect(result).toBe('**14:35 UTC** -- Review cancelled (replaced) | task_old456');
     });
   });
 
@@ -482,7 +701,7 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toBe(
-        '**14:35** -- ⚠️ CI check failed: ESLint | branch: task_abc123 | failure'
+        '**14:35 UTC** -- ⚠️ CI check failed: ESLint | branch: task_abc123 | failure'
       );
     });
   });
@@ -499,7 +718,7 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toBe(
-        '**14:35** -- Fix task dispatched for CI failure | parent: `task_parent456` → fix: `task_fix789`'
+        '**14:35 UTC** -- Fix task dispatched for CI failure | parent: `task_parent456` → fix: `task_fix789`'
       );
     });
   });
@@ -513,7 +732,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- CI failure skip: already_follow_up');
+      expect(result).toBe('**14:35 UTC** -- CI failure skip: already_follow_up');
     });
   });
 
@@ -581,9 +800,9 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Skipped** | LOW_PRIORITY');
+      expect(result).toContain('**14:35 UTC** -- **Skipped** | LOW_PRIORITY');
       expect(result).toContain('Rule: PriorityRule');
-      expect(result).toContain('Cost: $0.033');
+      expect(result).toContain('Triage cost: $0.033');
       expect(result).toContain('This is a minor formatting change.');
       expect(result).toContain('- `getDiff()`');
       expect(result).toContain('- `readFile(package.json)`');
@@ -600,7 +819,156 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('Cost: $1.000');
+      expect(result).toContain('Triage cost: $1.000');
+    });
+  });
+
+  describe('timestamp formatting with timezone', () => {
+    it('formats timestamp in UTC with "UTC" label when no timezone provided', () => {
+      const event: AutomationEvent = {
+        type: 'webhook_received',
+        eventType: 'pull_request',
+        action: 'opened',
+        sender: 'octocat',
+        deliveryId: 'abc-123',
+      };
+
+      const result = renderEvent(event, { timestamp: '2026-03-14T14:35:00Z' });
+      expect(result).toBe('**14:35 UTC** -- PR opened by @octocat');
+    });
+
+    it('formats timestamp in user timezone with timezone abbreviation', () => {
+      const event: AutomationEvent = {
+        type: 'webhook_received',
+        eventType: 'pull_request',
+        action: 'opened',
+        sender: 'octocat',
+        deliveryId: 'abc-123',
+      };
+
+      // 14:35 UTC = 15:35 CET (Europe/Berlin in winter / standard time)
+      // Use a January date to ensure standard time (CET), not summer time (CEST)
+      const result = renderEvent(event, {
+        timestamp: '2026-01-15T14:35:00Z',
+        timezone: 'Europe/Berlin',
+      });
+      expect(result).toBe('**15:35 CET** -- PR opened by @octocat');
+    });
+
+    it('formats America/* timezone with named abbreviation, not GMT offset', () => {
+      const event: AutomationEvent = {
+        type: 'webhook_received',
+        eventType: 'pull_request',
+        action: 'opened',
+        sender: 'octocat',
+        deliveryId: 'abc-123',
+      };
+
+      // 14:35 UTC = 09:35 EST (America/New_York in January / standard time)
+      const result = renderEvent(event, {
+        timestamp: '2026-01-15T14:35:00Z',
+        timezone: 'America/New_York',
+      });
+      expect(result).toBe('**09:35 EST** -- PR opened by @octocat');
+    });
+
+    it('formats America/Los_Angeles with named abbreviation', () => {
+      const event: AutomationEvent = {
+        type: 'webhook_received',
+        eventType: 'pull_request',
+        action: 'opened',
+        sender: 'octocat',
+        deliveryId: 'abc-123',
+      };
+
+      // 14:35 UTC = 06:35 PST (America/Los_Angeles in January / standard time)
+      const result = renderEvent(event, {
+        timestamp: '2026-01-15T14:35:00Z',
+        timezone: 'America/Los_Angeles',
+      });
+      expect(result).toBe('**06:35 PST** -- PR opened by @octocat');
+    });
+
+    it('uses GMT offset when both locales lack a named abbreviation', () => {
+      const event: AutomationEvent = {
+        type: 'webhook_received',
+        eventType: 'pull_request',
+        action: 'opened',
+        sender: 'octocat',
+        deliveryId: 'abc-123',
+      };
+
+      // Asia/Tokyo produces GMT+9 in both en-US and en-GB — the formatter
+      // keeps the en-US offset as the best available label
+      const result = renderEvent(event, {
+        timestamp: '2026-01-15T14:35:00Z',
+        timezone: 'Asia/Tokyo',
+      });
+      expect(result).toBe('**23:35 GMT+9** -- PR opened by @octocat');
+    });
+
+    it('defaults to current time when no timestamp provided', () => {
+      useFakeTime(); // Sets to 2026-03-14T14:35:00Z
+      const event: AutomationEvent = {
+        type: 'webhook_received',
+        eventType: 'pull_request',
+        action: 'opened',
+        sender: 'octocat',
+        deliveryId: 'abc-123',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toContain('**14:35 UTC** -- PR opened by @octocat');
+    });
+
+    it('applies timezone to all event types (task_completed)', () => {
+      const event: AutomationEvent = {
+        type: 'task_completed',
+        taskId: 'task_abc',
+        status: 'implemented',
+        duration: 60_000,
+      };
+
+      const result = renderEvent(event, { timestamp: '2026-01-15T14:35:00Z', timezone: 'Europe/Berlin' });
+      expect(result).toContain('**15:35 CET**');
+    });
+
+    it('handles undefined timezone gracefully (falls back to UTC)', () => {
+      const event: AutomationEvent = {
+        type: 'task_started',
+        taskId: 'task_abc',
+        workerType: 'opus',
+        attempt: 1,
+      };
+
+      const result = renderEvent(event, { timestamp: '2026-03-14T14:35:00Z', timezone: undefined });
+      expect(result).toBe('**14:35 UTC** -- Task started');
+    });
+
+    it('falls back to timezone string when formatToParts lacks timeZoneName', () => {
+      const original = Intl.DateTimeFormat.prototype.formatToParts;
+      vi.spyOn(Intl.DateTimeFormat.prototype, 'formatToParts').mockReturnValue([
+        { type: 'literal', value: '1/15/2026' },
+      ]);
+
+      const event: AutomationEvent = {
+        type: 'webhook_received',
+        eventType: 'pull_request',
+        action: 'opened',
+        sender: 'octocat',
+        deliveryId: 'abc-123',
+      };
+
+      const result = renderEvent(event, {
+        timestamp: '2026-01-15T14:35:00Z',
+        timezone: 'America/New_York',
+      });
+      // When formatToParts lacks timeZoneName, falls back to the IANA zone string
+      expect(result).toContain('America/New_York');
+
+      vi.mocked(Intl.DateTimeFormat.prototype.formatToParts).mockRestore();
+      // Verify the original is restored
+      expect(Intl.DateTimeFormat.prototype.formatToParts).toBe(original);
     });
   });
 });

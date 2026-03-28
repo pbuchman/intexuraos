@@ -23,7 +23,7 @@ interface OrchestratorTools {
   // Submit a new code task for execution
   submitTask(params: {
     taskId: string;
-    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi';
+    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi' | 'codex';
     prompt: string;
     repository?: string;
     baseBranch?: string;
@@ -79,7 +79,10 @@ interface OrchestratorTools {
     running: number;
     available: number;
     githubTokenExpiresAt: string | null;
-    anthropicOAuth: OAuthState;
+    workerAuths: {
+      claude: WorkerAuthState;
+      codex: WorkerAuthState;
+    };
     dockerHealthy: boolean;
     diskHealthy: boolean;
   }>;
@@ -126,7 +129,7 @@ interface OrchestratorResources {
 ```typescript
 interface Task {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi' | 'codex';
   prompt: string;
   repository: string;
   baseBranch: string;
@@ -253,7 +256,7 @@ Execution Agent note:
 
 - `implemented` is sent as `status='completed'`
 - `already_completed` is sent as `status='completed'` with `execution_outcome_label='already_completed'`
-- Orchestrator verification is Gemini semantic validation of Claude responses only (latest response first)
+- Orchestrator verification is Gemini semantic validation of worker responses (latest response first)
 - Orchestrator flattens execution verifier metadata into `execution_*` fields on `result`
 - Worker owns GitHub execution (code/tests/CI/PR/review loop); PR descriptions include mandatory `Worker Type` and `Model` lines
 - `code-agent` owns deterministic Linear enforcement for successful execution callbacks (executed issue only)
@@ -291,13 +294,19 @@ interface TurnMetrics {
 }
 ```
 
-### OAuthState (in HealthResponse)
+### WorkerAuthState (in HealthResponse)
 
 ```typescript
-type OAuthState =
-  | { status: 'active'; expiresAt: string; expiresInMinutes: number; subscriptionType: string }
-  | { status: 'expired'; message: string }
-  | { status: 'not_configured'; message: string };
+type WorkerAuthState = {
+  status: 'active' | 'expired' | 'not_configured' | 'invalid' | 'refresh_failed';
+  authMode: 'oauth' | 'chatgpt' | null;
+  refreshSupported: boolean;
+  message?: string;
+  expiresAt?: string;
+  expiresInMinutes?: number;
+  lastRefreshAt?: string;
+  subscriptionType?: string;
+};
 ```
 
 ---
@@ -382,13 +391,13 @@ Headers: X-Request-Timestamp, X-Request-Signature, X-Internal-Auth
 4. Validate API key for the target model provider (cached 5 minutes)
 5. Build system prompt (agent-specific: planning/execution/pull_request/review via labels + `agentType`)
 6. Pull worker image (15-minute timeout, separated from container creation)
-7. Spawn Docker container with Claude Code in interactive mode (2-minute creation timeout)
+7. Spawn a code-worker container for the selected runtime (2-minute creation timeout)
 8. Write system prompt to container stdin
 9. Stream logs to code-agent via LogForwarder
 10. Monitor container exit (30s polling)
 11. On exit: flush logs, check for PR via `gh pr list` + `gh pr checks`
 12. Detect fatal exit codes (137/139) — skip Gemini verification, trigger immediate retry
-13. Run completion verification (Gemini semantic validation of Claude responses with agent-specific Zod schemas)
+13. Run completion verification (Gemini semantic validation of worker responses with agent-specific Zod schemas)
 14. If verification **fails** and `attempt < maxAttempts`: resume session with follow-up prompt listing missing criteria
 15. If verification **passes**: run deep validation for execution tasks (full transcript analysis via code-agent Linear proxy, post PR comment), collect turn metrics, send webhook with result or error
 16. If max attempts reached without passing: send webhook with `TASK_COMPLETION_VERIFICATION_FAILED` error
@@ -436,13 +445,13 @@ On startup, the orchestrator:
 | `INTEXURAOS_MINIMAX_APP_API_KEY`          | Yes      | -                                  |
 | `INTEXURAOS_DASHSCOPE_APP_API_KEY`        | Yes      | -                                  |
 | `GOOGLE_APPLICATION_CREDENTIALS`          | Yes      | -                                  |
-| `INTEXURAOS_REPOSITORY_PATH`              | No       | `~/.claude-orchestrator/repo`      |
+| `INTEXURAOS_REPOSITORY_PATH`              | No       | `~/.code-orchestrator/repo`        |
 | `INTEXURAOS_WORKER_CAPACITY`              | No       | `2`                                |
 | `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`      | No       | `3`                                |
 | `INTEXURAOS_PRESERVE_WORKER_CONTAINERS`   | No       | `1`                                |
-| `INTEXURAOS_CLAUDE_WORKER_IMAGE`          | No       | (GCR Artifact Registry)            |
-| `INTEXURAOS_CLAUDE_WORKER_FORENSICS`      | No       | `0`                                |
-| `INTEXURAOS_CLAUDE_WORKER_FORENSICS_PATH` | No       | `~/.claude-orchestrator/forensics` |
+| `INTEXURAOS_CODE_WORKER_IMAGE`            | No       | (GCR Artifact Registry)            |
+| `INTEXURAOS_CODE_WORKER_FORENSICS`        | No       | `0`                                |
+| `INTEXURAOS_CODE_WORKER_FORENSICS_PATH`   | No       | `~/.code-orchestrator/forensics`   |
 | `INTEXURAOS_GIT_USER_NAME`                | No       | (host git config)                  |
 | `INTEXURAOS_GIT_USER_EMAIL`               | No       | (host git config)                  |
 | `INTEXURAOS_GITHUB_APP_PRIVATE_KEY`       | No       | (Secret Manager)                   |
@@ -458,6 +467,7 @@ On startup, the orchestrator:
 | ------------------------------------- | ---- | -------------------------------------------------------------- |
 | `at_capacity`                         | 503  | All worker slots occupied                                      |
 | `docker_unavailable`                  | 503  | Docker daemon is not responding                                |
+| `auth_unavailable`                    | 503  | Selected worker runtime auth is not ready                      |
 | `invalid_request`                     | 400  | Request body failed Zod validation                             |
 | `service_error`                       | 400  | Worktree or container creation failed                          |
 | `not_found`                           | 404  | Task ID does not exist                                         |

@@ -29,6 +29,9 @@ const DEDUP_WINDOW_MS = 5 * 60 * 1000; // 5 minutes (design line 1544)
 const DEDUP_CANDIDATE_LIMIT = 5; // Fetch up to 5 candidates for app-level active-status filtering
 const ACTIVE_TASK_STATUSES = ['queued', 'dispatched', 'running'] as const;
 
+/** Statuses representing tasks actively consuming worker capacity (excludes queued). */
+const DISPATCHED_OR_RUNNING_STATUSES = ['dispatched', 'running'] as const;
+
 function stripLegacyLinearFields(data: Record<string, unknown>): Record<string, unknown> {
   const {
     linearIssueTitle: _linearIssueTitle,
@@ -509,6 +512,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
           }
           /* v8 ignore stop @preserve */
         }
+        if (input.requiresReReview !== undefined) {
+          updateData['requiresReReview'] = input.requiresReReview;
+        }
 
         await docRef.update(updateData);
 
@@ -618,7 +624,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
         const snapshot = await collection
           // Note: 'queued' excluded — queued tasks don't heartbeat (no updatedAt changes),
           // so they'd be false positives. Queue TTL expiry in drainTaskQueue handles them.
-          .where('status', 'in', ['running', 'dispatched'])
+          .where('status', 'in', DISPATCHED_OR_RUNNING_STATUSES)
           .where('updatedAt', '<', Timestamp.fromDate(staleThreshold))
           .get();
 
@@ -801,6 +807,70 @@ export const createFirestoreCodeTaskRepository = (deps: {
         return ok({ logCount: totalLogCount, archivedAt });
       } catch (error) {
         logger.error({ error, taskId }, 'Failed to archive task logs');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    findRecentRemediationForPR: async (
+      repository: string,
+      prNumber: number
+    ): Promise<Result<CodeTask | null, RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('repository', '==', repository)
+          .where('prNumber', '==', prNumber)
+          .where('agentType', '==', 'remediation')
+          .orderBy('createdAt', 'desc')
+          .limit(1)
+          .get();
+
+        if (snapshot.empty) {
+          return ok(null);
+        }
+
+        const doc = snapshot.docs[0]!;
+        return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
+      } catch (error) {
+        logger.error({ error, repository, prNumber }, 'Failed to find recent remediation task for PR');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    findPreservedPullRequestTask: async (
+      repository: string,
+      prNumber: number,
+    ): Promise<Result<{ id: string; workerLocation: string; userId: string } | null, RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('repository', '==', repository)
+          .where('prNumber', '==', prNumber)
+          .where('agentType', '==', 'pull_request')
+          .where('status', '==', 'implemented')
+          .orderBy('completedAt', 'desc')
+          .limit(1)
+          .get();
+
+        if (snapshot.empty) {
+          return ok(null);
+        }
+
+        const doc = snapshot.docs[0]!;
+        const data = doc.data();
+        return ok({
+          id: doc.id,
+          /* v8 ignore start -- upstream: FakeFirestore always returns complete documents, cannot simulate missing Firestore fields @preserve */
+          workerLocation: String(data['workerLocation'] ?? ''),
+          userId: String(data['userId'] ?? ''),
+          /* v8 ignore stop @preserve */
+        });
+      } catch (error) {
+        logger.error({ error, repository, prNumber }, 'Failed to find preserved pull_request task');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,
@@ -1002,7 +1072,34 @@ export const createFirestoreCodeTaskRepository = (deps: {
       }
     },
 
-    findLatestNonReviewTaskByPR: async (
+    hasDispatchedOrRunningForPR: async (
+      repository: string,
+      prNumber: number
+    ): Promise<Result<{ hasActive: boolean; taskId?: string }, RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('repository', '==', repository)
+          .where('prNumber', '==', prNumber)
+          .where('status', 'in', DISPATCHED_OR_RUNNING_STATUSES)
+          .limit(1)
+          .get();
+
+        if (snapshot.empty) {
+          return ok({ hasActive: false });
+        }
+
+        const doc = snapshot.docs[0]!;
+        return ok({ hasActive: true, taskId: doc.id });
+      } catch (error) {
+        logger.error({ error, repository, prNumber }, 'Failed to check dispatched/running task for PR');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    findLatestExecutionTaskByPR: async (
       repository: string,
       prNumber: number
     ): Promise<Result<CodeTask | null, RepositoryError>> => {
@@ -1019,12 +1116,12 @@ export const createFirestoreCodeTaskRepository = (deps: {
           .limit(50)
           .get();
 
-        // Find the first non-review task (agentType !== 'review' or missing)
+        // Find the first execution-eligible task (excludes 'review' and 'remediation')
         for (const doc of snapshot.docs) {
           const data = doc.data();
           const agentType = data['agentType'] as string | undefined;
-          // Treat missing agentType as non-review (backward compatibility)
-          if (agentType !== 'review') {
+          // Treat missing agentType as execution-eligible (backward compatibility)
+          if (agentType !== 'review' && agentType !== 'remediation') {
             return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
           }
         }
@@ -1032,13 +1129,54 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (snapshot.docs.length === 50) {
           logger.warn(
             { repository, prNumber, docsScanned: 50 },
-            'findLatestNonReviewTaskByPR exhausted 50-doc window without finding a non-review task',
+            'findLatestExecutionTaskByPR exhausted 50-doc window without finding a non-review task',
           );
         }
 
         return ok(null);
       } catch (error) {
-        logger.error({ error, repository, prNumber }, 'Failed to find latest non-review task by PR');
+        logger.error({ error, repository, prNumber }, 'Failed to find latest execution task by PR');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    findOriginTaskByPR: async (
+      repository: string,
+      prNumber: number
+    ): Promise<Result<CodeTask | null, RepositoryError>> => {
+      try {
+        // Query the newest 50 tasks for this PR and filter in-memory.
+        // Uses limit(50) instead of a Firestore inequality filter on agentType
+        // to avoid a composite index.
+        const snapshot = await collection
+          .where('repository', '==', repository)
+          .where('prNumber', '==', prNumber)
+          .orderBy('createdAt', 'desc')
+          .limit(50)
+          .get();
+
+        // Find the first planning or execution task (the true origin)
+        for (const doc of snapshot.docs) {
+          const data = doc.data();
+          const agentType = data['agentType'] as string | undefined;
+          if (agentType === 'planning' || agentType === 'execution') {
+            return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
+          }
+        }
+
+        if (snapshot.docs.length === 50) {
+          logger.warn(
+            { repository, prNumber, docsScanned: 50 },
+            'findOriginTaskByPR exhausted 50-doc window without finding a planning/execution task',
+          );
+        }
+
+        return ok(null);
+      } catch (error) {
+        logger.error({ error, repository, prNumber }, 'Failed to find origin task by PR');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,

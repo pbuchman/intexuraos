@@ -25,7 +25,7 @@ export { LinkPreviewList } from './LinkPreviewList.js';
 export { MarkdownContent, type MarkdownContentProps } from './MarkdownContent.js';
 export { GitHubEventLogTableRow, type GitHubEventLogTableRowProps } from './GitHubEventLogTableRow.js';
 export { PREventsGroup, type PREventsGroupProps } from './PREventsGroup.js';
-export { ModelSelector, getSelectedModelsList, PROVIDER_MODELS } from './ModelSelector.js';
+export { ModelSelector, getSelectedModelsList, PROVIDER_MODELS, MAX_TOTAL_MODELS } from './ModelSelector.js';
 export { VegaChart } from './VegaChart.js';
 export { VersionInfoModal } from './VersionInfoModal.js';
 export { LinearIssueCombobox } from './LinearIssueCombobox.js';

@@ -23,7 +23,7 @@ import { drainRetryQueue } from '../domain/usecases/drainRetryQueue.js';
 import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
 import { hasCodeTaskLabel } from '../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../domain/utils/promptSanitization.js';
-import type { TaskStatus, WorkerType } from '../domain/models/codeTask.js';
+import type { AgentType, TaskStatus, WorkerType } from '../domain/models/codeTask.js';
 import { randomUUID } from 'node:crypto';
 import { generateWebhookSecret } from '../domain/utils/secrets.js';
 import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
@@ -276,7 +276,7 @@ function taskToApiResponse(task: {
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  agentType?: AgentType;
   implementationTaskId?: string;
   parentTaskId?: string;
   followUpReason?: string;
@@ -327,7 +327,7 @@ function taskToApiResponse(task: {
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  agentType?: AgentType;
   implementationTaskId?: string;
   parentTaskId?: string;
   followUpReason?: string;
@@ -3952,6 +3952,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         const { error } = result;
         if (error.code === 'task_not_found') {
           return reply.fail('NOT_FOUND' as ErrorCode, error.message);
+        }
+        if (error.code === 'invalid_agent_type') {
+          return reply.fail('FORBIDDEN' as ErrorCode, error.message);
         }
         if (error.code === 'invalid_status') {
           return reply.fail('INVALID_STATUS' as ErrorCode, error.message);

@@ -99,7 +99,7 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
   }
 
   async function processWatch(
-    watch: { id: string; userId: string; gitHubUsername: string; owner: string; repo: string; baseBranch: string }
+    watch: { id: string; userId: string; gitHubUsername: string; owner: string; repo: string; baseBranch: string; excludedPrNumbers: number[] }
   ): Promise<TickResult> {
     const { id: watchId, userId, gitHubUsername, owner, repo, baseBranch } = watch;
 
@@ -147,10 +147,25 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
       return { watchId, owner, repo, baseBranch, action: 'drained', remainingPrs: 0, skipped: [] };
     }
 
+    // Filter out excluded PRs (after drain check to avoid premature drain)
+    const excludedSet = new Set(watch.excludedPrNumbers);
+    const prsToProcess = eligiblePrs.filter((pr) => !excludedSet.has(pr.number));
+
+    // If all eligible PRs are excluded, return skipped_all (not drain — PRs exist, just excluded)
+    if (prsToProcess.length === 0) {
+      await recordSuccessfulTick(watchId, []);
+      return {
+        watchId, owner, repo, baseBranch,
+        action: 'skipped_all',
+        remainingPrs: allPrs.length,
+        skipped: [],
+      };
+    }
+
     // Step 3h: Iterate eligible PRs
     const skippedList: SkippedPr[] = [];
 
-    for (const pr of eligiblePrs) {
+    for (const pr of prsToProcess) {
       // Get PR details
       const detailsResult = await gitHubPRClient.getPullRequestDetails(token, owner, repo, pr.number);
       if (!detailsResult.ok) {

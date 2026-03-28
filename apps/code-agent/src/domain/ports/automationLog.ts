@@ -6,6 +6,8 @@
  * (e.g., as a single append-only GitHub PR comment).
  */
 
+import type { AgentType } from '../models/codeTask.js';
+
 export interface PRRef {
   repository: string; // e.g., "pbuchman/intexuraos"
   prNumber: number;
@@ -56,7 +58,7 @@ export type AutomationEvent =
       type: 'task_dispatched';
       taskId: string;
       workerType: string;
-      agentType: 'planning' | 'execution' | 'review' | 'pull_request';
+      agentType: AgentType;
       linearIssueId?: string;
     }
   | {
@@ -79,6 +81,7 @@ export type AutomationEvent =
       taskId: string;
       workerType: string;
       attempt: number;
+      agentType?: AgentType;
     }
   | {
       type: 'task_completed';
@@ -87,6 +90,7 @@ export type AutomationEvent =
       duration: number; // milliseconds
       prUrl?: string;
       commits?: { sha: string; message: string }[];
+      agentType?: AgentType;
     }
   | {
       type: 'task_failed';
@@ -106,6 +110,13 @@ export type AutomationEvent =
       type: 'review_replaced';
       replacedTaskId: string;
       replacedWorkerType?: string;
+    }
+  | {
+      type: 'remediation_decision';
+      required: boolean;
+      source: 'review_result';
+      signal: '0' | '1' | 'missing';
+      taskId?: string;
     }
 
   // Phase 7: CI Failure handling (INT-853)

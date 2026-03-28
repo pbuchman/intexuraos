@@ -63,6 +63,16 @@ describe('detectWorkerTypeFromMessage', () => {
     });
   });
 
+  describe('prefix collision prevention', () => {
+    it('returns codex-xhigh (not codex) for "use codex-xhigh"', () => {
+      expect(detectWorkerTypeFromMessage('use codex-xhigh')).toBe('codex-xhigh');
+    });
+
+    it('returns codex for "use codex" without hyphenated suffix', () => {
+      expect(detectWorkerTypeFromMessage('use codex')).toBe('codex');
+    });
+  });
+
   describe('exhaustiveness', () => {
     it('has a detection rule for every non-auto type in CODE_TASK_WORKER_TYPES', () => {
       const nonAutoTypes = CODE_TASK_WORKER_TYPES.filter((t) => t !== 'auto');

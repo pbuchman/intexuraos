@@ -1113,6 +1113,39 @@ describe('taskDispatcherImpl', () => {
       expect(body['continuationPrBranch']).toBe('task_existing_pr_branch');
     });
 
+    it('includes prNumber in body when provided', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'PR task',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        agentType: 'pull_request',
+        prNumber: 42,
+      });
+
+      const fetchCall = mockFetch.mock.calls[0];
+      if (!fetchCall) throw new Error('Fetch was not called');
+      const options = fetchCall[1];
+      if (!options) throw new Error('Fetch options not found');
+      const body = JSON.parse(options.body as string) as Record<string, unknown>;
+
+      expect(body['prNumber']).toBe(42);
+    });
+
     it('omits linearIssueId when undefined', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);

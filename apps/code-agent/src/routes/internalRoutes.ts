@@ -328,5 +328,286 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
+  // PATCH /internal/tasks/:id/remediation-status - set requiresReReview on remediation tasks
+  fastify.patch<{ Params: { id: string }; Body: { requiresReReview: boolean } }>(
+    '/internal/tasks/:id/remediation-status',
+    {
+      schema: {
+        operationId: 'updateRemediationStatus',
+        summary: 'Set requiresReReview on a remediation task',
+        description:
+          'Called by the remediation agent before pushing code. ' +
+          'Validates that the task exists, has agentType=remediation, and the caller task ID matches.',
+        tags: ['internal'],
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: {
+            id: { type: 'string', description: 'Code task ID' },
+          },
+        },
+        headers: {
+          type: 'object',
+          properties: {
+            'x-task-id': { type: 'string', description: 'Caller task ID — must match the :id path param' },
+          },
+        },
+        body: {
+          type: 'object',
+          required: ['requiresReReview'],
+          additionalProperties: false,
+          properties: {
+            requiresReReview: { type: 'boolean' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Status updated',
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              ok: { type: 'boolean', enum: [true] },
+            },
+            required: ['ok'],
+          },
+          400: {
+            description: 'Invalid request',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          403: {
+            description: 'Forbidden',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['FORBIDDEN'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          404: {
+            description: 'Task not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['NOT_FOUND'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to PATCH /internal/tasks/:id/remediation-status',
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      const { id } = request.params;
+      const { codeTaskRepo, logger } = getServices();
+
+      // Validate caller task ID matches
+      const callerTaskId = request.headers['x-task-id'];
+      if (typeof callerTaskId !== 'string' || callerTaskId !== id) {
+        return await reply.fail('FORBIDDEN', 'Caller task ID does not match');
+      }
+
+      // Look up the task
+      const findResult = await codeTaskRepo.findById(id);
+      if (!findResult.ok) {
+        if (findResult.error.code === 'NOT_FOUND') {
+          return await reply.fail('NOT_FOUND', `Task ${id} not found`);
+        }
+        return await reply.fail('INTERNAL_ERROR', `Failed to look up task ${id}`);
+      }
+
+      const task = findResult.value;
+
+      // Verify agentType is remediation
+      if (task.agentType !== 'remediation') {
+        return await reply.fail('FORBIDDEN', 'Task is not a remediation task');
+      }
+
+      // Update requiresReReview
+      const { requiresReReview } = request.body;
+      const updateResult = await codeTaskRepo.update(id, { requiresReReview });
+      if (!updateResult.ok) {
+        logger.error({ taskId: id, error: updateResult.error }, 'Failed to update remediation status');
+        return await reply.fail('INTERNAL_ERROR', 'Failed to update task');
+      }
+
+      logger.info({ taskId: id, requiresReReview }, 'Updated remediation status');
+
+      // @allow-raw-send: internal endpoint returns simple acknowledgement
+      return await reply.send({ ok: true });
+    }
+  );
+
+  // GET /internal/tasks/:taskId/dispatch-metadata - fallback for pruned tasks (INT-1130)
+  fastify.get<{ Params: { taskId: string } }>(
+    '/internal/tasks/:taskId/dispatch-metadata',
+    {
+      schema: {
+        operationId: 'getTaskDispatchMetadata',
+        summary: 'Get dispatch metadata for a task by ID',
+        description:
+          'Returns the dispatch metadata fields for a code task. ' +
+          'Used by the orchestrator as a fallback when a task has been pruned from state.',
+        tags: ['internal'],
+        params: {
+          type: 'object',
+          required: ['taskId'],
+          properties: {
+            taskId: { type: 'string', description: 'Code task ID' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Task dispatch metadata',
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              taskId: { type: 'string' },
+              prompt: { type: 'string' },
+              repository: { type: 'string' },
+              baseBranch: { type: 'string' },
+              agentType: { type: ['string', 'null'] },
+              workerType: { type: 'string' },
+              linearIssueId: { type: ['string', 'null'] },
+              webhookSecret: { type: ['string', 'null'] },
+              prNumber: { type: ['number', 'null'] },
+            },
+            required: ['taskId', 'prompt', 'repository', 'baseBranch', 'agentType', 'workerType', 'linearIssueId', 'webhookSecret', 'prNumber'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          404: {
+            description: 'Task not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['NOT_FOUND'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to GET /internal/tasks/:taskId/dispatch-metadata',
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      const { taskId } = request.params;
+      const { codeTaskRepo } = getServices();
+
+      const findResult = await codeTaskRepo.findById(taskId);
+      if (!findResult.ok) {
+        return await reply.fail('NOT_FOUND', `Task ${taskId} not found`);
+      }
+
+      const task = findResult.value;
+
+      // @allow-raw-send: internal endpoint returns structured dispatch metadata directly
+      return await reply.send({
+        taskId: task.id,
+        prompt: task.prompt,
+        repository: task.repository,
+        baseBranch: task.baseBranch,
+        agentType: task.agentType ?? null,
+        workerType: task.workerType,
+        linearIssueId: task.linearIssueId ?? null,
+        webhookSecret: task.webhookSecret ?? null,
+        prNumber: task.prNumber ?? null,
+      });
+    }
+  );
+
   done();
 };

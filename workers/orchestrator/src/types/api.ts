@@ -1,6 +1,7 @@
 import type { OrchestratorStatus } from './state.js';
 import type { ExecutionMemoryPromptContext } from './execution-memory.js';
-import type { OAuthState, WorkerType } from '../services/isolation/types.js';
+import type { WorkerType } from '../services/isolation/types.js';
+import type { WorkerAuthProvider, WorkerAuthState } from '../services/worker-auth/index.js';
 
 // POST /tasks request
 export interface CreateTaskRequest {
@@ -23,11 +24,13 @@ export interface CreateTaskRequest {
    */
   retriedFrom?: string;
   /** Agent type determined by code-agent routing analysis. */
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
   /** Prompt-ready execution memory context prepared by code-agent retrieval. */
   executionMemoryContext?: ExecutionMemoryPromptContext;
   /** Existing PR tracking comment to reuse instead of creating a new one. */
   trackingCommentId?: string;
+  /** PR number this task is operating on. Used to enforce one-per-PR container preservation. */
+  prNumber?: number;
   /** Existing PR number to continue instead of creating a fresh PR. */
   continuationPrNumber?: number;
   /** Existing PR branch to continue instead of creating a fresh PR. */
@@ -47,5 +50,7 @@ export interface HealthResponse {
   running: number;
   available: number;
   githubTokenExpiresAt: string | null;
-  anthropicOAuth: OAuthState;
+  dockerHealthy: boolean;
+  diskHealthy: boolean;
+  workerAuths: Record<WorkerAuthProvider, WorkerAuthState>;
 }

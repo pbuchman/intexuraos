@@ -300,6 +300,7 @@ async function handleNewTaskRetry(
     ...(dispatchExecutionMemoryContext !== undefined && {
       executionMemoryContext: dispatchExecutionMemoryContext,
     }),
+    ...(task.prNumber !== undefined && { prNumber: task.prNumber }),
   });
 
   if (!dispatchResult.ok) {

@@ -66,9 +66,9 @@ describe('CredentialRefresher', () => {
 
     refresher = new CredentialRefresher(
       {
-        sharedCredsPath: '/home/user/.claude-orchestrator/claude-creds',
-        imageName: 'europe-central2-docker.pkg.dev/project/repo/claude-worker:latest',
-        networkName: 'claude-worker-net',
+        sharedCredsPath: '/home/user/.code-orchestrator/claude-creds',
+        imageName: 'europe-central2-docker.pkg.dev/project/repo/code-worker:latest',
+        networkName: 'code-worker-net',
       },
       mockDocker as never,
       mockLogger
@@ -84,14 +84,14 @@ describe('CredentialRefresher', () => {
 
     expect(mockDocker.createContainer).toHaveBeenCalledWith(
       expect.objectContaining({
-        Image: 'europe-central2-docker.pkg.dev/project/repo/claude-worker:latest',
+        Image: 'europe-central2-docker.pkg.dev/project/repo/code-worker:latest',
         Entrypoint: ['claude'],
         Cmd: ['--print', '--model', 'haiku', 'reply ok'],
         HostConfig: expect.objectContaining({
           Binds: expect.arrayContaining([
-            '/home/user/.claude-orchestrator/claude-creds:/home/claude/.claude:rw',
+            '/home/user/.code-orchestrator/claude-creds:/home/claude/.claude:rw',
           ]),
-          NetworkMode: 'claude-worker-net',
+          NetworkMode: 'code-worker-net',
           AutoRemove: false,
         }),
       })

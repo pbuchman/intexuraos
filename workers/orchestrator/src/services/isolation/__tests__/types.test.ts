@@ -40,4 +40,30 @@ describe('WORKER_TYPES configuration', () => {
     expect(WORKER_TYPES.opus.apiBaseUrl).toBe('https://api.anthropic.com');
     expect(WORKER_TYPES.opus.apiKeyEnvVar).toBe('ANTHROPIC_API_KEY');
   });
+
+  it('routes public codex workers through the Codex runtime', () => {
+    expect(WORKER_TYPES.codex.runtime).toBe('codex');
+    expect(WORKER_TYPES.codex.apiBaseUrl).toBe('https://api.openai.com');
+    expect(WORKER_TYPES.codex.apiKeyEnvVar).toBeUndefined();
+  });
+
+  it('keeps existing worker types on the Claude runtime', () => {
+    for (const [workerType, config] of Object.entries(WORKER_TYPES)) {
+      if (workerType === 'codex' || workerType === 'codex-xhigh') {
+        continue;
+      }
+      expect(config.runtime).toBe('claude');
+    }
+  });
+
+  it('routes codex-xhigh through the Codex runtime with xhigh effort', () => {
+    expect(WORKER_TYPES['codex-xhigh'].runtime).toBe('codex');
+    expect(WORKER_TYPES['codex-xhigh'].apiBaseUrl).toBe('https://api.openai.com');
+    expect(WORKER_TYPES['codex-xhigh'].effort).toBe('xhigh');
+    expect(WORKER_TYPES['codex-xhigh'].apiKeyEnvVar).toBeUndefined();
+  });
+
+  it('does not set effort for base codex worker type', () => {
+    expect(WORKER_TYPES.codex.effort).toBeUndefined();
+  });
 });

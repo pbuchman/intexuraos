@@ -80,7 +80,7 @@ export class CodeWorkerOutputRule implements WebhookRule {
     }
 
     if (event.eventType === 'pull_request_review' && event.action === 'submitted') {
-      return { action: 'dispatch', reason: 'CODE_WORKER_REVIEW' };
+      return { action: 'skip', reason: 'CODE_WORKER_REVIEW_HANDLED_BY_TASK_COMPLETE' };
     }
 
     return { action: 'skip', reason: 'CODE_WORKER_NON_PR_EVENT' };

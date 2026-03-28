@@ -587,7 +587,7 @@ export function createLinearAgentHttpClient(
 
         if (!response.ok) {
           const errorText = await response.text();
-          logger.warn({ status: response.status, error: errorText }, 'linear-agent getIssueDescription failed');
+          logger.info({ status: response.status, error: errorText }, 'linear-agent getIssueDescription failed');
           return err({ code: 'UNAVAILABLE', message: errorText });
         }
 

@@ -359,7 +359,7 @@ export function MobileNotificationsListPage(): React.JSX.Element {
         </div>
       </div>
 
-      <div className="space-y-1">
+      <div className="space-y-3 md:space-y-1">
         {sortedNotifications.length === 0 ? (
           <Card title="">
             <div className="flex flex-col items-center justify-center py-12 text-center">

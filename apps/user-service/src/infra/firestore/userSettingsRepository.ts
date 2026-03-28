@@ -30,15 +30,18 @@ interface UserSettingsDoc {
     openai?: EncryptedValue;
     anthropic?: EncryptedValue;
     perplexity?: EncryptedValue;
+    openrouter?: EncryptedValue;
   };
   llmTestResults?: {
     google?: LlmTestResult;
     openai?: LlmTestResult;
     anthropic?: LlmTestResult;
     perplexity?: LlmTestResult;
+    openrouter?: LlmTestResult;
   };
   llmPreferences?: LlmPreferences;
   transcriptionPreferences?: TranscriptionPreferences;
+  timezone?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -75,6 +78,9 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
       if (data.transcriptionPreferences !== undefined) {
         settings.transcriptionPreferences = data.transcriptionPreferences;
       }
+      if (data.timezone !== undefined) {
+        settings.timezone = data.timezone;
+      }
       return ok(settings);
     } catch (error) {
       return err({
@@ -105,6 +111,9 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
       }
       if (settings.transcriptionPreferences !== undefined) {
         doc.transcriptionPreferences = settings.transcriptionPreferences;
+      }
+      if (settings.timezone !== undefined) {
+        doc.timezone = settings.timezone;
       }
 
       await docRef.set(doc);
@@ -333,6 +342,36 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
       return err({
         code: 'INTERNAL_ERROR',
         message: `Failed to update transcription preferences: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+      });
+    }
+  }
+
+  async updateTimezone(userId: string, timezone: string): Promise<Result<void, SettingsError>> {
+    try {
+      const db = getFirestore();
+      const docRef = db.collection(COLLECTION_NAME).doc(userId);
+      const doc = await docRef.get();
+
+      if (!doc.exists) {
+        const now = new Date().toISOString();
+        await docRef.set({
+          userId,
+          timezone,
+          createdAt: now,
+          updatedAt: now,
+        });
+      } else {
+        await docRef.update({
+          timezone,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      return ok(undefined);
+    } catch (error) {
+      return err({
+        code: 'INTERNAL_ERROR',
+        message: `Failed to update timezone: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }

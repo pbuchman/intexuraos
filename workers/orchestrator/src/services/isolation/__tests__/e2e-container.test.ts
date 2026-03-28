@@ -6,8 +6,8 @@
  *
  * Prerequisites:
  * - Docker daemon running
- * - Test worker image built: docker build -t claude-worker:test -f Dockerfile.test .
- * - Worker network created: docker network create claude-worker-net
+ * - Test worker image built: docker build -t code-worker:test -f Dockerfile.test .
+ * - Worker network created: docker network create code-worker-net
  *
  * To run locally:
  *   pnpm --filter orchestrator test:e2e
@@ -22,8 +22,8 @@ import { execSync } from 'node:child_process';
 import { DockerProvider } from '../docker-provider.js';
 import type { WorkerConfig } from '../types.js';
 
-const TEST_IMAGE = process.env['WORKER_IMAGE'] ?? 'claude-worker:test';
-const TEST_NETWORK = process.env['WORKER_NETWORK'] ?? 'claude-worker-net';
+const TEST_IMAGE = process.env['WORKER_IMAGE'] ?? 'code-worker:test';
+const TEST_NETWORK = process.env['WORKER_NETWORK'] ?? 'code-worker-net';
 const TEST_TIMEOUT = 60_000;
 
 function isDockerAvailable(): boolean {

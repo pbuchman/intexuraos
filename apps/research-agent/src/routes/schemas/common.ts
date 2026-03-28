@@ -5,13 +5,30 @@
 import { ALL_LLM_MODELS } from '@intexuraos/llm-contract';
 
 export const supportedModelSchema = {
+  anyOf: [
+    { type: 'string', enum: ALL_LLM_MODELS },
+    { type: 'string', pattern: '^or:[a-z0-9-]+/[a-z0-9._:-]+$' },
+  ],
+} as const;
+
+/**
+ * Intentionally relaxed to a plain string (no enum constraint).
+ * Historical research documents may contain model IDs that have since been removed
+ * from ALL_LLM_MODELS or the OpenRouter allowlist. Using the stricter
+ * supportedModelSchema here would cause Fastify to strip those values from read
+ * responses, breaking the UI's ability to display and guard against retired models.
+ */
+export const storedModelSchema = {
   type: 'string',
-  enum: ALL_LLM_MODELS,
 } as const;
 
 export const llmProviderSchema = {
   type: 'string',
-  enum: ['google', 'openai', 'anthropic', 'perplexity'],
+  enum: ['google', 'openai', 'anthropic', 'perplexity', 'openrouter'],
+} as const;
+
+export const storedLlmProviderSchema = {
+  type: 'string',
 } as const;
 
 export const researchStatusSchema = {
@@ -31,7 +48,7 @@ export const researchStatusSchema = {
 export const llmResultSchema = {
   type: 'object',
   properties: {
-    provider: llmProviderSchema,
+    provider: storedLlmProviderSchema,
     model: { type: 'string' },
     status: { type: 'string', enum: ['pending', 'processing', 'completed', 'failed'] },
     result: { type: 'string', nullable: true },
@@ -63,7 +80,7 @@ export const partialFailureSchema = {
   properties: {
     failedModels: {
       type: 'array',
-      items: supportedModelSchema,
+      items: storedModelSchema,
     },
     userDecision: { type: 'string', enum: ['proceed', 'retry', 'cancel'], nullable: true },
     detectedAt: { type: 'string' },
@@ -115,9 +132,9 @@ export const researchSchema = {
     originalPrompt: { type: 'string', nullable: true },
     selectedModels: {
       type: 'array',
-      items: supportedModelSchema,
+      items: storedModelSchema,
     },
-    synthesisModel: supportedModelSchema,
+    synthesisModel: storedModelSchema,
     status: researchStatusSchema,
     llmResults: {
       type: 'array',

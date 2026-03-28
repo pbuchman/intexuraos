@@ -5,10 +5,13 @@
  * suitable for appending to a single GitHub PR comment.
  */
 
+import type { AgentType } from '../models/codeTask.js';
 import type { AutomationEvent } from '../ports/automationLog.js';
 
 export interface RenderEventOptions {
   repository?: string;
+  timezone?: string | undefined;   // IANA timezone, e.g. "Europe/Berlin"
+  timestamp?: string | undefined;  // ISO 8601 datetime of the event
 }
 
 /**
@@ -28,7 +31,10 @@ export function renderEvent(
   event: AutomationEvent,
   options?: RenderEventOptions
 ): string | null {
-  const ts = formatTimestamp();
+  const ts = formatTimestamp(
+    options?.timestamp ?? new Date().toISOString(),
+    options?.timezone
+  );
 
   switch (event.type) {
     case 'webhook_received':
@@ -44,7 +50,7 @@ export function renderEvent(
       return renderTriageFailed(ts, event);
 
     case 'task_dispatched':
-      return `**${ts}** -- Task dispatched: [\`${event.taskId}\`](https://intexuraos.cloud/#/code-tasks/${event.taskId}) | ${event.workerType}`;
+      return `**${ts}** -- ${agentTypeLabel(event.agentType)} dispatched | ${event.workerType} | [View task](https://intexuraos.cloud/#/code-tasks/${event.taskId})`;
 
     case 'task_dispatch_failed':
       return renderTaskDispatchFailed(ts, event);
@@ -52,8 +58,14 @@ export function renderEvent(
     case 'linear_issue_failed':
       return `**${ts}** -- ⚠️ Linear issue creation failed | ${event.error}`;
 
-    case 'task_started':
-      return `**${ts}** -- Task started | attempt ${String(event.attempt)}`;
+    case 'task_started': {
+      const label = event.agentType !== undefined
+        ? agentTypeLabel(event.agentType)
+        : 'Task';
+      return event.attempt > 1
+        ? `**${ts}** -- ${label} started | attempt ${String(event.attempt)}`
+        : `**${ts}** -- ${label} started`;
+    }
 
     case 'task_completed':
       return renderTaskCompleted(ts, event, options);
@@ -66,6 +78,9 @@ export function renderEvent(
 
     case 'review_replaced':
       return `**${ts}** -- Review cancelled (replaced) | ${event.replacedTaskId}`;
+
+    case 'remediation_decision':
+      return renderRemediationDecision(ts, event);
 
     case 'ci_failure_detected':
       return `**${ts}** -- ⚠️ CI check failed: ${event.checkName} | branch: ${event.headBranch} | ${event.conclusion}`;
@@ -82,11 +97,25 @@ export function renderEvent(
 // Internal renderers
 // ---------------------------------------------------------------------------
 
+function webhookEventLabel(eventType: string, action: string): string {
+  const key = `${eventType}.${action}`;
+  switch (key) {
+    case 'pull_request.opened': return 'PR opened';
+    case 'pull_request.synchronize': return 'Commits pushed';
+    case 'pull_request.closed': return 'PR closed';
+    case 'pull_request.reopened': return 'PR reopened';
+    case 'pull_request_review.submitted': return 'Review submitted';
+    case 'pull_request_review_comment.created': return 'Inline comment';
+    case 'issue_comment.created': return 'Comment posted';
+    default: return `\`${key}\``;
+  }
+}
+
 function renderWebhookReceived(
   ts: string,
   event: Extract<AutomationEvent, { type: 'webhook_received' }>
 ): string {
-  const eventLabel = `\`${event.eventType}.${event.action}\``;
+  const eventLabel = webhookEventLabel(event.eventType, event.action);
   const linkedLabel = event.eventUrl !== undefined
     ? `[${eventLabel}](${event.eventUrl})`
     : eventLabel;
@@ -113,7 +142,7 @@ function renderSkipped(
     details.push(`Rule: ${event.ruleName}`);
   }
   if (event.cost !== undefined) {
-    details.push(`Cost: ${formatCost(event.cost)}`);
+    details.push(`Triage cost: ${formatCost(event.cost)}`);
   }
   if (event.reasoning !== undefined) {
     details.push('', event.reasoning);
@@ -136,11 +165,11 @@ function renderTriageDispatch(
   const hasReviewTypes =
     reviewTypes !== undefined && reviewTypes.length > 0;
   const headline = hasReviewTypes
-    ? `**${ts}** -- Triage -> **Dispatching review** (\`${reviewTypes.join(', ')}\`)`
-    : `**${ts}** -- Triage -> **Dispatching task**`;
+    ? `**${ts}** -- Triage → dispatching review (\`${reviewTypes.join(', ')}\`)`
+    : `**${ts}** -- Triage → dispatching task`;
 
   const details: string[] = [];
-  details.push(`Cost: ${formatCost(event.cost)}`);
+  details.push(`Triage cost: ${formatCost(event.cost)}`);
   details.push('', event.reasoning);
   if (event.toolCalls.length > 0) {
     details.push('', '**Tool calls:**', ...event.toolCalls.map((tc) => `- \`${tc}\``));
@@ -175,7 +204,10 @@ function renderTaskCompleted(
   event: Extract<AutomationEvent, { type: 'task_completed' }>,
   options?: RenderEventOptions
 ): string {
-  const parts: string[] = [`**${ts}** -- **Completed**`, formatDuration(event.duration)];
+  const completionLabel = event.agentType !== undefined
+    ? `${agentTypeLabel(event.agentType)} completed`
+    : completedLabel(event.status);
+  const parts: string[] = [`**${ts}** -- **${completionLabel}**`, formatDuration(event.duration)];
 
   if (event.prUrl !== undefined) {
     const prNumber = extractPrNumber(event.prUrl);
@@ -227,15 +259,78 @@ function renderTaskInterrupted(
   return `**${ts}** -- **Interrupted**`;
 }
 
+function renderRemediationDecision(
+  ts: string,
+  event: Extract<AutomationEvent, { type: 'remediation_decision' }>
+): string | null {
+  if (!event.required) {
+    return `**${ts}** -- Remediation not required`;
+  }
+
+  if (event.taskId !== undefined) {
+    // Suppressed: task_dispatched is always emitted before this event when taskId is set.
+    // If task_dispatched is absent from the log, this entry will also be missing.
+    return null;
+  }
+
+  if (event.signal === 'missing') {
+    return `**${ts}** -- Remediation required (dispatch failed, review signal missing)`;
+  }
+
+  return `**${ts}** -- Remediation required (dispatch failed)`;
+}
+
 // ---------------------------------------------------------------------------
 // Formatting helpers
 // ---------------------------------------------------------------------------
 
-function formatTimestamp(): string {
-  const now = new Date();
-  const hours = String(now.getUTCHours()).padStart(2, '0');
-  const minutes = String(now.getUTCMinutes()).padStart(2, '0');
-  return `${hours}:${minutes}`;
+// Two-pass timezone abbreviation: en-US produces named abbreviations (EST, PDT)
+// for Americas but GMT±N for Europe; en-GB does the reverse (CET, CEST for Europe
+// but GMT±N for Americas). We try en-US first and fall back to en-GB when the
+// result is a raw GMT offset, maximising human-readable labels across IANA zones.
+const timeFmtCache = new Map<string, Intl.DateTimeFormat>();
+
+function getTimeFormatter(tz: string): Intl.DateTimeFormat {
+  let fmt = timeFmtCache.get(tz);
+  if (fmt === undefined) {
+    fmt = new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: tz,
+    });
+    timeFmtCache.set(tz, fmt);
+  }
+  return fmt;
+}
+
+function formatTimestamp(iso: string, timezone?: string): string {
+  const date = new Date(iso);
+  const tz = timezone ?? 'UTC';
+  const timePart = getTimeFormatter(tz).format(date);
+  const tzName = resolveTimezoneAbbreviation(date, tz);
+  return `${timePart} ${tzName}`;
+}
+
+const tzNameFmtCache = new Map<string, Intl.DateTimeFormat>();
+
+function extractTzName(date: Date, tz: string, locale: string): string {
+  const key = `${tz}:${locale}`;
+  let fmt = tzNameFmtCache.get(key);
+  if (fmt === undefined) {
+    fmt = new Intl.DateTimeFormat(locale, { timeZone: tz, timeZoneName: 'short' });
+    tzNameFmtCache.set(key, fmt);
+  }
+  return fmt.formatToParts(date).find((p) => p.type === 'timeZoneName')?.value ?? tz;
+}
+
+function resolveTimezoneAbbreviation(date: Date, tz: string): string {
+  const usName = extractTzName(date, tz, 'en-US');
+  if (!usName.startsWith('GMT') || usName === 'GMT') return usName;
+  const gbName = extractTzName(date, tz, 'en-GB');
+  // Both locales produce GMT offsets for some zones (e.g. Asia/Tokyo → GMT+9).
+  // Keep the en-US offset in those cases; the GMT literal guard prevents
+  // misclassifying plain "GMT" (which is a valid named abbreviation).
+  return gbName.startsWith('GMT') ? usName : gbName;
 }
 
 function formatDuration(ms: number): string {
@@ -266,4 +361,23 @@ function extractPrNumber(prUrl: string): string {
 
 function wrapDetails(label: string, content: string): string {
   return `<details><summary>${label}</summary>\n\n${content}\n</details>`;
+}
+
+function agentTypeLabel(agentType: AgentType): string {
+  switch (agentType) {
+    case 'review': return 'Review';
+    case 'remediation': return 'Remediation';
+    case 'execution': return 'Implementation';
+    case 'planning': return 'Plan';
+    case 'pull_request': return 'PR';
+  }
+}
+
+function completedLabel(status: 'implemented' | 'reviewed' | 'planned' | 'unknown'): string {
+  switch (status) {
+    case 'reviewed': return 'Review completed';
+    case 'implemented': return 'Implementation completed';
+    case 'planned': return 'Plan completed';
+    default: return 'Completed';
+  }
 }

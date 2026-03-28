@@ -1114,6 +1114,9 @@ importers:
       '@intexuraos/infra-notion':
         specifier: workspace:*
         version: link:../../packages/infra-notion
+      '@intexuraos/infra-openrouter':
+        specifier: workspace:*
+        version: link:../../packages/infra-openrouter
       '@intexuraos/infra-otel':
         specifier: workspace:*
         version: link:../../packages/infra-otel
@@ -1281,6 +1284,9 @@ importers:
       '@intexuraos/infra-gpt':
         specifier: workspace:*
         version: link:../../packages/infra-gpt
+      '@intexuraos/infra-openrouter':
+        specifier: workspace:*
+        version: link:../../packages/infra-openrouter
       '@intexuraos/infra-otel':
         specifier: workspace:*
         version: link:../../packages/infra-otel
@@ -1728,6 +1734,31 @@ importers:
       '@notionhq/client':
         specifier: ^2.2.15
         version: 2.3.0(encoding@0.1.13)
+
+  packages/infra-openrouter:
+    dependencies:
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../common-core
+      '@intexuraos/llm-audit':
+        specifier: workspace:*
+        version: link:../llm-audit
+      '@intexuraos/llm-contract':
+        specifier: workspace:*
+        version: link:../llm-contract
+      '@intexuraos/llm-pricing':
+        specifier: workspace:*
+        version: link:../llm-pricing
+      '@intexuraos/llm-prompts':
+        specifier: workspace:*
+        version: link:../llm-prompts
+      openai:
+        specifier: ^5.3.0
+        version: 5.23.2(ws@8.19.0)(zod@3.25.76)
+    devDependencies:
+      nock:
+        specifier: ^14.0.0
+        version: 14.0.10
 
   packages/infra-otel:
     dependencies:
@@ -12889,6 +12920,21 @@ packages:
     resolution:
       {
         integrity: sha512-p99EFNsA/yX6UhVO93f5kJsDRLAg+CTA2RBqdHK4RtK8u5IJw32Hyb2dTGKbnnFmnuoBv5r7Z2CURI9sGZpSuA==,
+      }
+    hasBin: true
+    peerDependencies:
+      ws: ^8.18.0
+      zod: ^3.23.8
+    peerDependenciesMeta:
+      ws:
+        optional: true
+      zod:
+        optional: true
+
+  openai@5.23.2:
+    resolution:
+      {
+        integrity: sha512-MQBzmTulj+MM5O8SKEk/gL8a7s5mktS9zUtAkU257WjvobGc9nKcBuVwjyEEcb9SI8a8Y2G/mzn3vm9n1Jlleg==,
       }
     hasBin: true
     peerDependencies:
@@ -24302,6 +24348,11 @@ snapshots:
       zod: 3.25.76
     transitivePeerDependencies:
       - encoding
+
+  openai@5.23.2(ws@8.19.0)(zod@3.25.76):
+    optionalDependencies:
+      ws: 8.19.0
+      zod: 3.25.76
 
   openai@6.16.0(ws@8.19.0)(zod@3.25.76):
     optionalDependencies:

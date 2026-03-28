@@ -58,6 +58,11 @@ export interface LinearIssueService {
   markInReview(userId: string, linearIssueId: string): Promise<void>;
 
   /**
+   * Transition issue to Todo when a plan-only PR is merged.
+   */
+  markTodo(userId: string, linearIssueId: string): Promise<void>;
+
+  /**
    * Transition issue to QA when PR is merged.
    */
   markQa(userId: string, linearIssueId: string): Promise<void>;
@@ -195,6 +200,10 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
 
     async markInReview(userId: string, linearIssueId: string): Promise<void> {
       await transitionState(userId, linearIssueId, 'in_review', 'In Review');
+    },
+
+    async markTodo(userId: string, linearIssueId: string): Promise<void> {
+      await transitionState(userId, linearIssueId, 'todo', 'Todo');
     },
 
     async markQa(userId: string, linearIssueId: string): Promise<void> {

@@ -57,6 +57,7 @@ describe('detectZombieTasks', () => {
         findByIdForUser: vi.fn(),
         list: vi.fn(),
         hasActiveTaskForLinearIssue: vi.fn(),
+        hasDispatchedOrRunningForPR: vi.fn(),
         findZombieTasks: findZombieTasksMock,
         update: updateMock,
       } as unknown as DetectZombieTasksDeps['codeTaskRepository'],

@@ -5,12 +5,19 @@ import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-htt
 import { extractOrGenerateTraceId } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
 import { validateWebhookSignature, validateOrchestratorSignature } from '../infra/webhookValidation.js';
-import { formatLogChunk, createFormatterState, type FormatterState } from '../domain/services/logFormatter.js';
+import {
+  formatLogChunkForRuntime,
+  flushLogChunkFormatterForRuntime,
+  createFormatterState,
+  type FormatterState,
+  type LogRuntime,
+} from '../domain/services/logFormatter.js';
 import { loadConfig } from '../config.js';
 import type { TurnMetrics } from '../domain/models/turnMetrics.js';
 import { formatMetricsLogLines } from '../domain/formatters/metricsLogFormatter.js';
 import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
 import { parseLinearIdentifierFromUrl } from '../domain/utils/linearIdentifierParser.js';
+import { parseOwnerRepo } from '../domain/utils/parseOwnerRepo.js';
 
 /**
  * Best-effort: record a task_failed automation log event for PR-linked tasks.
@@ -54,10 +61,72 @@ function shouldQueueExecutionMemoryPostRun(params: {
   );
 }
 
+function recordRemediationDecision(params: {
+  repository: string;
+  prNumber: number;
+  userId: string;
+  required: boolean;
+  signal: '0' | '1' | 'missing';
+  taskId?: string;
+}): void {
+  getServices().automationLog.record(
+    { repository: params.repository, prNumber: params.prNumber },
+    {
+      type: 'remediation_decision',
+      required: params.required,
+      source: 'review_result',
+      signal: params.signal,
+      ...(params.taskId !== undefined && { taskId: params.taskId }),
+    },
+    params.userId,
+  ).catch((e: unknown) => {
+    getServices().logger.warn(
+      { error: e, repository: params.repository, prNumber: params.prNumber },
+      'Failed to record remediation decision automation log',
+    );
+  });
+}
+
+function resolveLogRuntime(workerType: string): LogRuntime {
+  return workerType.startsWith('codex') ? 'codex' : 'claude';
+}
+
+interface TaskFormatterEntry {
+  runtime: LogRuntime;
+  state: FormatterState;
+  lastSequence: number;
+}
+
 export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // Per-task formatter state: persists tool_use_id→name mappings across HTTP requests
   // so Read suppression works even when assistant + tool_result land in different log chunks
-  const taskFormatterStates = new Map<string, FormatterState>();
+  const taskFormatterStates = new Map<string, TaskFormatterEntry>();
+
+  async function flushPendingTaskLogLines(taskId: string): Promise<void> {
+    const formatterEntry = taskFormatterStates.get(taskId);
+    if (formatterEntry === undefined) return;
+
+    taskFormatterStates.delete(taskId);
+
+    const pendingLines = flushLogChunkFormatterForRuntime(
+      formatterEntry.runtime,
+      formatterEntry.lastSequence + 1,
+      Timestamp.now(),
+      formatterEntry.state,
+    );
+
+    if (pendingLines.length === 0) {
+      return;
+    }
+
+    const lineResult = await getServices().logLineRepo.storeBatch(taskId, pendingLines);
+    if (!lineResult.ok) {
+      getServices().logger.error(
+        { taskId, error: lineResult.error },
+        'Failed to flush pending log lines on task completion',
+      );
+    }
+  }
 
   // ============================================================
   // INTERNAL WEBHOOK ROUTES (X-Internal-Auth + HMAC Signature)
@@ -90,10 +159,13 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       execution_memory_ids_rejected?: string;
       execution_memory_usage_summary?: string;
       execution_linear_issue_url?: string;
+      review_id?: string;
       review_comments_posted?: string;
       review_types?: string;
       requirements_tracker_updated?: string;
       gh_actions_status?: string;
+      needs_remediation?: string;
+      requires_re_review?: string;
     };
     error?: {
       code: string;
@@ -142,10 +214,13 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 execution_memory_ids_used: { type: 'string' },
                 execution_memory_ids_rejected: { type: 'string' },
                 execution_memory_usage_summary: { type: 'string' },
+                review_id: { type: 'string' },
                 review_comments_posted: { type: 'string' },
                 review_types: { type: 'string' },
                 requirements_tracker_updated: { type: 'string' },
                 gh_actions_status: { type: 'string' },
+                needs_remediation: { type: 'string' },
+                requires_re_review: { type: 'string' },
               },
               required: [],
             },
@@ -226,7 +301,20 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         });
       }
 
-      const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService, metricsClient, linearIssueService, linearAgentClient, logger, firestore } = getServices();
+      const {
+        codeTaskRepo,
+        actionsAgentClient,
+        whatsappNotifier,
+        rateLimitService,
+        metricsClient,
+        linearIssueService,
+        linearAgentClient,
+        logger,
+        firestore,
+        gitHubPRSummaryRepo,
+        gitHubPRClient,
+        userServiceClient,
+      } = getServices();
       const { taskId, status, result, error } = request.body;
 
       // Extract traceId from headers for downstream calls
@@ -1014,13 +1102,16 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
         }
 
-        // Extract PR number from prUrl for findByPR correlation (INT-465)
+        // Extract PR number from prUrl for findByPR correlation (INT-465).
         let prNumber: number | undefined;
         if (result?.prUrl) {
           const match = /\/pull\/(\d+)/.exec(result.prUrl);
           if (match?.[1] !== undefined) {
             prNumber = Number(match[1]);
           }
+        }
+        if (prNumber === undefined && task.prNumber !== undefined) {
+          prNumber = task.prNumber;
         }
 
         const resolvedStatus =
@@ -1036,6 +1127,10 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               generatedMemoryIds: [],
             }
           : undefined;
+        const remediationRequiresReReview =
+          task.agentType === 'remediation' && result?.requires_re_review !== undefined
+            ? result.requires_re_review === '1'
+            : undefined;
         const updateResult = await codeTaskRepo.update(taskId, {
           status: resolvedStatus,
           completedAt,
@@ -1044,6 +1139,11 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           ...(prNumber !== undefined && { prNumber }),
           ...(result?.branch !== undefined && { prBranch: result.branch }),
           ...(executionMemoryPostRun !== undefined && { executionMemoryPostRun }),
+          ...(task.agentType === 'remediation' &&
+            remediationRequiresReReview !== undefined &&
+            task.requiresReReview === undefined && {
+              requiresReReview: remediationRequiresReReview,
+            }),
           callbackReceived: true,
         });
 
@@ -1051,11 +1151,170 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as completed');
           return reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
+        if (
+          task.agentType === 'remediation' &&
+          remediationRequiresReReview !== undefined &&
+          task.requiresReReview !== undefined &&
+          task.requiresReReview !== remediationRequiresReReview
+        ) {
+          request.log.warn(
+            {
+              taskId,
+              persistedRequiresReReview: task.requiresReReview,
+              resultRequiresReReview: remediationRequiresReReview,
+            },
+            'Remediation result requires_re_review disagrees with previously persisted requiresReReview; keeping persisted value',
+          );
+        }
         await cleanupLockIfPR();
+
+        // Best-effort: update PR summary when review completes
+        if (resolvedStatus === 'reviewed' && prNumber !== undefined) {
+          try {
+            const tokenResult = await userServiceClient.getOAuthToken(task.userId, 'github');
+            if (tokenResult.ok) {
+              const parsed = parseOwnerRepo(task.repository);
+              /* v8 ignore start -- ts-type: parseOwnerRepo cannot return null for valid task.repository (always owner/repo format) @preserve */
+              if (parsed !== null) {
+              /* v8 ignore stop @preserve */
+                const detailsResult = await gitHubPRClient.getPullRequestDetails(tokenResult.value.accessToken, parsed.owner, parsed.repo, prNumber);
+                if (detailsResult.ok) {
+                  await gitHubPRSummaryRepo.upsert({
+                    repository: task.repository,
+                    pullRequestNumber: prNumber,
+                    lastActivityAt: new Date(),
+                    lastReviewedCommitSha: detailsResult.value.headSha,
+                    lastReviewNeedsRemediation: result?.needs_remediation ?? null,
+                  });
+                  request.log.info({ taskId, prNumber, headSha: detailsResult.value.headSha }, 'Updated lastReviewedCommitSha on PR summary');
+                }
+              }
+            }
+          } catch (reviewShaError: unknown) {
+            request.log.warn({ error: reviewShaError, taskId, prNumber }, 'Failed to update lastReviewedCommitSha (best-effort)');
+          }
+        }
+
+        // Best-effort: create remediation task when review finds actionable issues
+        if (task.agentType === 'review' && prNumber !== undefined && result !== undefined) {
+          try {
+            const remediationSignal: '0' | '1' | 'missing' =
+              result.needs_remediation === '0' || result.needs_remediation === '1'
+                ? result.needs_remediation
+                : 'missing';
+            if (result.needs_remediation === '0') {
+              recordRemediationDecision({
+                repository: task.repository,
+                prNumber,
+                userId: task.userId,
+                required: false,
+                signal: remediationSignal,
+              });
+
+              // Best-effort: set review-outcome label on the origin Linear issue
+              try {
+                const originResult = await codeTaskRepo.findOriginTaskByPR(task.repository, prNumber);
+                if (originResult.ok && originResult.value !== null && originResult.value.linearIssueId !== undefined) {
+                  const originTask = originResult.value;
+                  const originLinearIssueId: string = originResult.value.linearIssueId;
+                  const label: string =
+                    originTask.agentType === 'planning' ? 'ready-to-implement' : 'ready-to-merge';
+                  const issueValidation = await linearAgentClient.validateIssue({
+                    userId: originTask.userId,
+                    identifier: originLinearIssueId,
+                  });
+                  if (issueValidation.ok) {
+                    const labelResult = await linearAgentClient.updateIssueMetadata({
+                      userId: originTask.userId,
+                      issueId: issueValidation.value.id,
+                      addLabels: [label],
+                    });
+                    if (labelResult.ok) {
+                      request.log.info({ taskId, prNumber, label, linearIssueId: originLinearIssueId }, 'Set review-outcome label on origin issue');
+                    } else {
+                      request.log.warn({ taskId, prNumber, label, error: labelResult.error }, 'Failed to set review-outcome label (best-effort)');
+                    }
+                  } else {
+                    request.log.warn({ taskId, prNumber, linearIssueId: originLinearIssueId, error: issueValidation.error }, 'Failed to validate origin issue for review-outcome label (best-effort)');
+                  }
+                } else if (!originResult.ok) {
+                  request.log.warn({ taskId, prNumber, error: originResult.error }, 'Failed to look up origin task for review-outcome label (best-effort)');
+                }
+              } catch (labelError: unknown) {
+                request.log.warn({ error: labelError, taskId, prNumber }, 'Failed to set review-outcome label (best-effort)');
+              }
+            } else {
+              const { createRemediationTaskFn, logger: remediationLogger } = getServices();
+              if (createRemediationTaskFn !== undefined) {
+                const remediationResult = await createRemediationTaskFn(
+                  remediationLogger,
+                  {
+                    repository: task.repository,
+                    prNumber,
+                    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard, repository always contains '/' @preserve */
+                    senderLogin: task.repository.split('/')[0] ?? task.userId,
+                    /* v8 ignore stop @preserve */
+                    workerType: 'auto',
+                    eventId: taskId,
+                    ...(task.baseBranch !== undefined && { baseBranch: task.baseBranch }),
+                    ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+                  },
+                );
+                if (remediationResult.ok) {
+                  request.log.info(
+                    { taskId, prNumber, remediationTaskId: remediationResult.value.taskId },
+                    'Created remediation task from review task-complete',
+                  );
+                  recordRemediationDecision({
+                    repository: task.repository,
+                    prNumber,
+                    userId: task.userId,
+                    required: true,
+                    signal: remediationSignal,
+                    taskId: remediationResult.value.taskId,
+                  });
+                } else {
+                  request.log.warn(
+                    { taskId, prNumber, error: remediationResult.error },
+                    'Failed to create remediation task from review task-complete (best-effort)',
+                  );
+                  recordRemediationDecision({
+                    repository: task.repository,
+                    prNumber,
+                    userId: task.userId,
+                    required: true,
+                    signal: remediationSignal,
+                  });
+                }
+              } else {
+                request.log.warn({ taskId, prNumber }, 'createRemediationTaskFn not configured, skipping remediation creation');
+                recordRemediationDecision({
+                  repository: task.repository,
+                  prNumber,
+                  userId: task.userId,
+                  required: true,
+                  signal: remediationSignal,
+                });
+              }
+            }
+          } catch (remediationError: unknown) {
+            request.log.warn({ error: remediationError, taskId, prNumber }, 'Unexpected error during remediation task creation (best-effort)');
+            recordRemediationDecision({
+              repository: task.repository,
+              prNumber,
+              userId: task.userId,
+              required: true,
+              signal:
+                result.needs_remediation === '0' || result.needs_remediation === '1'
+                  ? result.needs_remediation
+                  : 'missing',
+            });
+          }
+        }
 
         // Best-effort In Review transition for agent types without deterministic enforcement
         // (planning, execution, and pull_request agents handle this in their own enforcement paths)
-        if (task.agentType !== 'execution' && task.agentType !== 'pull_request' && task.agentType !== 'planning' && prNumber !== undefined && task.linearIssueId !== undefined) {
+        if (task.agentType !== 'execution' && task.agentType !== 'pull_request' && task.agentType !== 'planning' && task.agentType !== 'remediation' && prNumber !== undefined && task.linearIssueId !== undefined) {
           await linearIssueService.markInReview(task.userId, task.linearIssueId);
         }
 
@@ -1128,6 +1387,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           },
           'Task marked as completed'
         );
+        await flushPendingTaskLogLines(taskId);
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
@@ -1152,6 +1412,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               return reply.fail('INTERNAL_ERROR', failResult.error.message);
             }
             await cleanupLockIfPR();
+            await flushPendingTaskLogLines(taskId);
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
           }
@@ -1220,6 +1481,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
 
         request.log.info({ taskId, error: taskError }, 'Task marked as failed');
+        await flushPendingTaskLogLines(taskId);
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
@@ -1280,6 +1542,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
 
         request.log.info({ taskId }, 'Task marked as interrupted');
+        await flushPendingTaskLogLines(taskId);
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
@@ -1336,6 +1599,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
 
         request.log.info({ taskId }, 'Task marked as cancelled');
+        await flushPendingTaskLogLines(taskId);
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
@@ -1457,8 +1721,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // First log delivery for this task — task might still be dispatched.
       // Update to running and mirror to action.
+      let formatterEntry = taskFormatterStates.get(taskId);
       /* v8 ignore start -- test-infra: FakeFirestore cannot simulate stateful multi-request log delivery with dispatched task @preserve */
-      if (!taskFormatterStates.has(taskId)) {
+      if (formatterEntry === undefined) {
         const taskResult = await codeTaskRepo.findById(taskId);
         if (taskResult.ok && taskResult.value.status === 'dispatched') {
           await codeTaskRepo.update(taskId, { status: 'running' });
@@ -1468,6 +1733,15 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             taskStatus: 'running',
             traceId: extractOrGenerateTraceId(request.headers),
           });
+        }
+        if (taskResult.ok) {
+          const resolvedFormatterEntry: TaskFormatterEntry = {
+            runtime: resolveLogRuntime(taskResult.value.workerType),
+            state: createFormatterState(),
+            lastSequence: 0,
+          };
+          formatterEntry = resolvedFormatterEntry;
+          taskFormatterStates.set(taskId, resolvedFormatterEntry);
         }
       }
       /* v8 ignore stop @preserve */
@@ -1488,12 +1762,19 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return reply.fail('INTERNAL_ERROR', storeResult.error.message);
       }
 
-      const state = taskFormatterStates.get(taskId) ?? createFormatterState();
+      const formatter = formatterEntry ?? {
+        runtime: 'claude' as const,
+        state: createFormatterState(),
+        lastSequence: chunks[chunks.length - 1]?.sequence ?? 0,
+      };
       const allLines = chunks.flatMap((chunk) => {
         const chunkTimestamp = Timestamp.fromDate(new Date(chunk.timestamp));
-        return formatLogChunk(chunk.content, chunk.sequence, chunkTimestamp, state);
+        return formatLogChunkForRuntime(formatter.runtime, chunk.content, chunk.sequence, chunkTimestamp, formatter.state);
       });
-      taskFormatterStates.set(taskId, state);
+      formatter.lastSequence = chunks[chunks.length - 1]?.sequence ?? formatter.lastSequence;
+      if (formatterEntry !== undefined) {
+        taskFormatterStates.set(taskId, formatter);
+      }
 
       if (allLines.length > 0) {
         const lineResult = await logLineRepo.storeBatch(taskId, allLines);

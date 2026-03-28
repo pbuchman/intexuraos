@@ -7,6 +7,7 @@
  * - Decryption happens only when credentials are needed for dispatch
  */
 
+import { FieldValue } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@intexuraos/infra-firestore';
 import { ok, err, getErrorMessage, type Result } from '@intexuraos/common-core';
 import type { Logger, CodeTaskWorkerType } from '@intexuraos/common-core';
@@ -14,6 +15,7 @@ import type {
   WorkerSettingsRepository,
   WorkerSettingsError,
   TestResult,
+  DefaultWorkerTypeField,
 } from '../../domain/ports/workerSettingsRepository.js';
 import type {
   UserWorkerSettings,
@@ -44,6 +46,10 @@ interface WorkerSettingsDoc {
   createdAt: string;
   updatedAt: string;
   defaultReviewWorkerType?: string;
+  defaultRemediationWorkerType?: string;
+  defaultExecutionWorkerType?: string;
+  defaultPlanningWorkerType?: string;
+  defaultPullRequestWorkerType?: string;
   workerHealthStatuses?: Record<string, {
     state: unknown;
     checkedAt: string;
@@ -133,6 +139,10 @@ export function createWorkerSettingsRepository(
           ...(data.defaultReviewWorkerType !== undefined && {
             defaultReviewWorkerType: data.defaultReviewWorkerType as CodeTaskWorkerType,
           }),
+          ...(data.defaultRemediationWorkerType !== undefined && { defaultRemediationWorkerType: data.defaultRemediationWorkerType as CodeTaskWorkerType }),
+          ...(data.defaultExecutionWorkerType !== undefined && { defaultExecutionWorkerType: data.defaultExecutionWorkerType as CodeTaskWorkerType }),
+          ...(data.defaultPlanningWorkerType !== undefined && { defaultPlanningWorkerType: data.defaultPlanningWorkerType as CodeTaskWorkerType }),
+          ...(data.defaultPullRequestWorkerType !== undefined && { defaultPullRequestWorkerType: data.defaultPullRequestWorkerType as CodeTaskWorkerType }),
         };
 
         return ok(settings);
@@ -345,16 +355,11 @@ export function createWorkerSettingsRepository(
 
         const now = new Date().toISOString();
 
-        // If this is the only worker, delete the entire document
-        if (existingData.workers.length === 1) {
-          await docRef.delete();
-        } else {
-          const updatedWorkers = existingData.workers.filter((w) => w.name !== workerName);
-          await docRef.update({
-            workers: updatedWorkers,
-            updatedAt: now,
-          });
-        }
+        const updatedWorkers = existingData.workers.filter((w) => w.name !== workerName);
+        await docRef.update({
+          workers: updatedWorkers,
+          updatedAt: now,
+        });
 
         return ok(undefined);
       } catch (error) {
@@ -516,8 +521,9 @@ export function createWorkerSettingsRepository(
       }
     },
 
-    async updateDefaultReviewWorkerType(
+    async updateDefaultWorkerType(
       userId: string,
+      field: DefaultWorkerTypeField,
       workerType: CodeTaskWorkerType
     ): Promise<Result<void, WorkerSettingsError>> {
       try {
@@ -526,12 +532,12 @@ export function createWorkerSettingsRepository(
         const now = new Date().toISOString();
 
         if (doc.exists) {
-          await docRef.update({ defaultReviewWorkerType: workerType, updatedAt: now });
+          await docRef.update({ [field]: workerType, updatedAt: now });
         } else {
           await docRef.set({
             userId,
             workers: [],
-            defaultReviewWorkerType: workerType,
+            [field]: workerType,
             createdAt: now,
             updatedAt: now,
           });
@@ -540,12 +546,45 @@ export function createWorkerSettingsRepository(
         return ok(undefined);
       } catch (error) {
         const message = getErrorMessage(error);
-        logger.error({ error, userId }, 'Failed to update default review worker type');
+        logger.error({ error, userId, field }, 'Failed to update default worker type');
         return err({
           code: 'internal_error',
           message: `Firestore error: ${message}`,
         });
       }
+    },
+
+    async clearDefaultWorkerType(
+      userId: string,
+      field: DefaultWorkerTypeField
+    ): Promise<Result<void, WorkerSettingsError>> {
+      try {
+        const docRef = collection.doc(userId);
+        const doc = await docRef.get();
+
+        if (!doc.exists) {
+          return ok(undefined);
+        }
+
+        const now = new Date().toISOString();
+        await docRef.update({ [field]: FieldValue.delete(), updatedAt: now });
+
+        return ok(undefined);
+      } catch (error) {
+        const message = getErrorMessage(error);
+        logger.error({ error, userId, field }, 'Failed to clear default worker type');
+        return err({
+          code: 'internal_error',
+          message: `Firestore error: ${message}`,
+        });
+      }
+    },
+
+    async updateDefaultReviewWorkerType(
+      userId: string,
+      workerType: CodeTaskWorkerType
+    ): Promise<Result<void, WorkerSettingsError>> {
+      return await this.updateDefaultWorkerType(userId, 'defaultReviewWorkerType', workerType);
     },
   };
 }

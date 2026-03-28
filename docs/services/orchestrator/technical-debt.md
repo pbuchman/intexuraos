@@ -29,7 +29,7 @@ Distribute tasks across multiple macOS hosts or dev machines:
 
 ### Container Image Versioning
 
-Pin claude-worker images to specific versions instead of `:latest`:
+Pin code-worker images to specific versions instead of `:latest`:
 
 1. Tag images with build timestamps or git SHAs
 2. Store preferred image tag per worker type in configuration
@@ -138,7 +138,7 @@ When Gemini is unavailable (network error, rate limit, API outage), all in-fligh
 
 **Severity:** Medium
 
-`cancelTask()` calls `destroyWorker()` which sends SIGTERM and then force-removes the container. Claude Code does not receive a chance to save progress, push partial work, or clean up.
+`cancelTask()` calls `destroyWorker()` which sends SIGTERM and then force-removes the container. The active worker runtime does not receive a chance to save progress, push partial work, or clean up.
 
 **Recommended fix:** Implement a two-phase cancellation:
 
@@ -198,7 +198,7 @@ Worktrees accumulate until manually cleaned or the stale threshold is exceeded. 
 
 Container logs are streamed to code-agent via `LogForwarder` but are not persisted locally. If the code-agent is unreachable during a task, log data is lost after the chunk retry limit (3 attempts, 4s max backoff).
 
-**Recommended fix:** Write container logs to `~/.claude-orchestrator/logs/{taskId}.log` as a fallback before streaming.
+**Recommended fix:** Write container logs to `~/.code-orchestrator/logs/{taskId}.log` as a fallback before streaming.
 
 ---
 

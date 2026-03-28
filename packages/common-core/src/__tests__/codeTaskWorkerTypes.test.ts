@@ -8,6 +8,8 @@ const EXPECTED_CODE_TASK_WORKER_TYPES = [
   'glm',
   'qwen',
   'kimi',
+  'codex',
+  'codex-xhigh',
 ];
 
 describe('code task worker types', () => {

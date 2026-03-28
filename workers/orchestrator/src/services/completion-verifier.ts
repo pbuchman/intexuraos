@@ -6,7 +6,12 @@ import { z } from 'zod';
 import { stripDockerHeaders } from './log-formatter.js';
 import { OrchestratorFileAuditSink } from './orchestrator-audit-sink.js';
 
-export type CompletionAgentType = 'planning' | 'execution' | 'pull_request' | 'review';
+export type CompletionAgentType =
+  | 'planning'
+  | 'execution'
+  | 'pull_request'
+  | 'review'
+  | 'remediation';
 
 export interface CompletionVerifierInput {
   taskId: string;
@@ -27,7 +32,12 @@ export interface CompletionVerifierVerdict {
   passed: boolean;
   missingFields: string[];
   verifierFailure: boolean;
-  agentData?: PlanningAgentData | ExecutionAgentData | PullRequestAgentData | ReviewAgentData;
+  agentData?:
+    | PlanningAgentData
+    | ExecutionAgentData
+    | PullRequestAgentData
+    | ReviewAgentData
+    | RemediationAgentData;
   trace: CompletionVerifierTrace;
 }
 
@@ -66,10 +76,20 @@ export interface PullRequestAgentData {
 export interface ReviewAgentData {
   agentType: 'review';
   gh_pr_url: string;
+  review_id?: string | undefined;
   review_comments_posted: string;
   review_types: string;
   requirements_tracker_updated: string;
   gh_actions_status: string;
+  needs_remediation: string;
+  summary: string;
+}
+
+export interface RemediationAgentData {
+  agentType: 'remediation';
+  outcome: 'implemented' | 'already_completed';
+  gh_pr_url: string;
+  requires_re_review: string;
   summary: string;
 }
 
@@ -116,12 +136,28 @@ export const PULL_REQUEST_SCHEMA = z.object({
 
 export const REVIEW_SCHEMA = z.object({
   gh_pr_url: z.string(),
+  review_id: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().regex(/^\d+$/, 'review_id must be a numeric string').optional()
+  ),
   review_comments_posted: z
     .string()
     .regex(/^\d+$/, 'review_comments_posted must be a numeric string'),
   review_types: z.string().trim().min(1, 'review_types must not be empty'),
   requirements_tracker_updated: z.string().optional().default(''),
   gh_actions_status: z.string().optional().default(''),
+  needs_remediation: z
+    .string()
+    .regex(/^[01]$/)
+    .optional()
+    .default('1'),
+  summary: z.string(),
+});
+
+export const REMEDIATION_SCHEMA = z.object({
+  outcome: z.enum(['implemented', 'already_completed']),
+  gh_pr_url: z.string(),
+  requires_re_review: z.string().regex(/^[01]$/, 'requires_re_review must be "0" or "1"'),
   summary: z.string(),
 });
 
@@ -137,7 +173,8 @@ const VERIFIER_PRICING: Partial<Record<LLMModel, ModelPricing>> = {
   },
 };
 
-const FATAL_EXIT_CODE_PATTERN = /\[entrypoint\] Claude attempt finished with exit code: (137|139)/;
+const FATAL_EXIT_CODE_PATTERN =
+  /\[entrypoint\] (?:Claude|Codex) attempt finished with exit code: (137|139)/;
 
 export function detectFatalExitCode(rawLogs: string): number | undefined {
   const match = FATAL_EXIT_CODE_PATTERN.exec(rawLogs);
@@ -248,13 +285,40 @@ export function buildReviewPrompt(transcript: string): string {
     ...sharedPreamble(),
     'Fields:',
     '- gh_pr_url: the GitHub Pull Request URL (string, empty string if not found)',
+    '- review_id: numeric review identifier returned by the single POST /reviews API call (string, omit when not found)',
     '- review_comments_posted: number of review comments posted as a string (e.g., "3")',
     '- review_types: comma-separated list of review types performed (e.g., "code_quality,security")',
     '- requirements_tracker_updated: "yes" if tracker comment was created/updated, "no" if skipped, empty string if no requirements available',
+    '- gh_actions_status: GitHub Actions check result (e.g., "all passed", "2 failed", "pending", "not yet triggered")',
+    '- needs_remediation: "0" if the PR is clean or all findings are informational only, "1" if any finding requires code changes',
     '- summary: 3-5 sentence summary of the review findings — the LLM agent typically states this clearly as a summary block in its final output',
     '',
     'Example valid response:',
-    '{"gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","review_comments_posted":"3","review_types":"code_quality,security","requirements_tracker_updated":"yes","summary":"The review agent analyzed PR #901 for code quality and security issues. Found 3 issues: a missing null check, an unused import, and a potential XSS vulnerability. All findings were posted as inline review comments."}',
+    '{"gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","review_id":"321654987","review_comments_posted":"3","review_types":"code_quality,security","requirements_tracker_updated":"yes","gh_actions_status":"all passed","needs_remediation":"1","summary":"The review agent analyzed PR #901 for code quality and security issues. Found 3 issues: a missing null check, an unused import, and a potential XSS vulnerability. All findings were posted as inline review comments."}',
+    '',
+    'The review_id must be the numeric GitHub review ID created by the single POST /reviews call, not a comment ID. If the transcript does not contain it, omit review_id instead of inventing or blanking it.',
+    '',
+    'Transcript (last 50 lines):',
+    transcript,
+  ].join('\n');
+}
+
+export function buildRemediationPrompt(transcript: string): string {
+  return [
+    'You are a task-completion verifier for the Remediation Agent.',
+    'Analyze the transcript below and extract the following fields as JSON.',
+    'Return ONLY a JSON object, no markdown fences.',
+    '',
+    ...sharedPreamble(),
+    'Fields:',
+    '- outcome: "implemented" if the agent pushed remediation changes, "already_completed" if it determined the findings were already addressed',
+    '- gh_pr_url: the GitHub Pull Request URL (string, empty string if not found)',
+    '- requires_re_review: "1" if the agent decided the PR must be re-reviewed after the changes, "0" otherwise',
+    '- summary: 3-5 sentence summary of the remediation work — the LLM agent typically states this clearly as a summary block in its final output',
+    '',
+    'Example valid responses:',
+    '{"outcome":"implemented","gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","requires_re_review":"1","summary":"The remediation agent addressed the review findings on the existing PR branch, updated the affected tests, and pushed the fixes. It marked the PR for re-review because the code changed in the reviewed areas."}',
+    '{"outcome":"already_completed","gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","requires_re_review":"0","summary":"The remediation agent verified that the reported findings were already resolved on the PR branch. No new code changes or push were required."}',
     '',
     'Transcript (last 50 lines):',
     transcript,
@@ -263,20 +327,20 @@ export function buildReviewPrompt(transcript: string): string {
 
 export function buildResumeSummaryPrompt(transcript: string): string {
   return [
-    'You are summarizing the output of a resumed Claude coding session.',
+    'You are summarizing the output of a resumed code-worker session.',
     'Analyze the transcript below and extract a brief summary of what was accomplished.',
     'Return ONLY a JSON object with a single field, no markdown fences.',
     '',
     'Rules:',
-    '- Find the summary Claude stated directly in the last assistant messages.',
+    '- Find the summary the worker stated directly in the last assistant messages.',
     '- If no explicit summary exists, write 2-3 sentences describing the last completed action.',
     '- Keep it concise and factual.',
     '',
     'Field:',
-    '- summary: 2-3 sentence summary of what Claude accomplished in this resumed session',
+    '- summary: 2-3 sentence summary of what the worker accomplished in this resumed session',
     '',
     'Example valid response:',
-    '{"summary":"Claude fixed the authentication bug by updating the token refresh logic. CI passed after the fix."}',
+    '{"summary":"The worker fixed the authentication bug by updating the token refresh logic. CI passed after the fix."}',
     '',
     'Transcript (last 20 lines):',
     transcript,
@@ -296,6 +360,9 @@ function selectSchemaAndPrompt(
   if (agentType === 'review') {
     return { schema: REVIEW_SCHEMA, prompt: buildReviewPrompt(transcript) };
   }
+  if (agentType === 'remediation') {
+    return { schema: REMEDIATION_SCHEMA, prompt: buildRemediationPrompt(transcript) };
+  }
   return { schema: PULL_REQUEST_SCHEMA, prompt: buildPullRequestPrompt(transcript) };
 }
 
@@ -311,7 +378,12 @@ function getMissingFields(error: z.ZodError): string[] {
 function toAgentData(
   agentType: CompletionAgentType,
   parsed: unknown
-): PlanningAgentData | ExecutionAgentData | PullRequestAgentData | ReviewAgentData {
+):
+  | PlanningAgentData
+  | ExecutionAgentData
+  | PullRequestAgentData
+  | ReviewAgentData
+  | RemediationAgentData {
   if (agentType === 'planning') {
     const data = parsed as z.infer<typeof PLANNING_SCHEMA>;
     return { agentType: 'planning', ...data };
@@ -323,6 +395,10 @@ function toAgentData(
   if (agentType === 'review') {
     const data = parsed as z.infer<typeof REVIEW_SCHEMA>;
     return { agentType: 'review', ...data };
+  }
+  if (agentType === 'remediation') {
+    const data = parsed as z.infer<typeof REMEDIATION_SCHEMA>;
+    return { agentType: 'remediation', ...data };
   }
   const data = parsed as z.infer<typeof PULL_REQUEST_SCHEMA>;
   return { agentType: 'pull_request', ...data };

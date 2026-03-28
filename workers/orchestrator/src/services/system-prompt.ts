@@ -1,7 +1,9 @@
-import { hasCodeTaskLabel } from '@intexuraos/common-core';
+import { CODE_TASK_WORKER_TYPES, hasCodeTaskLabel } from '@intexuraos/common-core';
 import type { ExecutionMemoryPromptContext } from '../types/execution-memory.js';
 import type { PromptBuilder } from './prompt-builder.js';
 import type { WorkerType } from './isolation/types.js';
+
+const WORKER_TYPE_FALLBACK = `<${CODE_TASK_WORKER_TYPES.join('|')}>`;
 
 const WORKER_INSTRUCTIONS = `### Git CLI (MANDATORY — NON-NEGOTIABLE)
 Always use \`gh\` CLI instead of raw \`git\` commands. Use \`gh\` for status, diff, log, branching, PRs, and any operation \`gh\` supports. Fall back to \`git\` only when \`gh\` has no equivalent (e.g., \`git add\`, \`git commit\`).
@@ -15,7 +17,7 @@ gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.serv
 
 ### Code Task Debugging (MANDATORY — NON-NEGOTIABLE)
 When asked to debug or investigate a code task from \`dev.intexuraos.cloud\` (dev environment), you MUST immediately exit with a clear message:
-> "Dev environment code tasks cannot be debugged from the Claude worker. Only production (\`intexuraos.cloud\`) code tasks can be investigated."
+> "Dev environment code tasks cannot be debugged from the code worker. Only production (\`intexuraos.cloud\`) code tasks can be investigated."
 
 For production code tasks (\`intexuraos.cloud\`), use the debug-code-task skill:
 - Skill definition: \`.claude/skills/debug-code-task/SKILL.md\`
@@ -55,7 +57,7 @@ export interface SystemPromptParams {
   linearIssueLabels: string[];
   workerType?: WorkerType;
   modelName?: string;
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
   executionMemoryContext?: ExecutionMemoryPromptContext;
   trackingCommentId?: string;
   continuationPrNumber?: number;
@@ -108,11 +110,11 @@ ${renderedMemories}`;
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-planning',
   description: 'Planning agent system prompt for autonomous code task planning',
-  version: '3.1.0',
+  version: '3.1.2',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     return `[SYSTEM CONTEXT]
-You are a Claude Code worker in IntexuraOS running in Docker isolation.
+You are an IntexuraOS code worker running in Docker isolation.
 [WORKER-MODE]
 [AGENT:PLANNING]
 Task ID: ${taskId}
@@ -222,7 +224,7 @@ Example: \`[INT-665] [plan] Update orchestrator PR title format\`
 ### PR Description Format (MANDATORY — never skip, never restructure)
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
-- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
+- Worker Type: \`${workerType ?? WORKER_TYPE_FALLBACK}\`
 - Model: \`${modelName ?? 'default'}\`
 
 ⚠️ The Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE. You MUST include them exactly as shown above. Never omit, never rephrase, never move to a different section. This is not optional.
@@ -281,7 +283,7 @@ Push and create PR ONLY after code review completes with zero issues:
       : 'AFTER review completes with ZERO issues: push and create PR as the LAST step.';
 
     return `[SYSTEM CONTEXT]
-You are a Claude Code worker in IntexuraOS running in Docker isolation.
+You are an IntexuraOS code worker running in Docker isolation.
 [WORKER-MODE]
 [AGENT:EXECUTION]
 Task ID: ${taskId}
@@ -294,7 +296,7 @@ ${WORKER_INSTRUCTIONS}
 You are in NON-INTERACTIVE MODE. Execute the task autonomously.
 System prompt instructions are the source of truth. The user prompt is secondary context.
 
-Use the Linear MCP tools (e.g. \`mcp__linear__get_issue\`, \`mcp__linear__create_comment\`) for all Linear operations.
+Use the Linear MCP tools (e.g. \`mcp__linear__get_issue\`, \`mcp__linear__save_comment\`) for all Linear operations.
 Do NOT use the \`/linear\` skill, the Linear Agent API, or any other Linear integration — MCP only.
 Read the routed Linear issue content AND all its comments, then the repository state, then execute only the exact routed issue.
 
@@ -354,7 +356,7 @@ Example: \`[INT-665] Update orchestrator PR title format\`
 ### PR Description Format (MANDATORY — never skip, never restructure)
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
-- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
+- Worker Type: \`${workerType ?? WORKER_TYPE_FALLBACK}\`
 - Model: \`${modelName ?? 'default'}\`
 
 ⚠️ The Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE. You MUST include them exactly as shown above. Never omit, never rephrase, never move to a different section. This is not optional.
@@ -398,10 +400,123 @@ After this block, stop. Do not append any other checklist or schema payload.`;
   },
 };
 
+export const remediationPrompt: PromptBuilder<SystemPromptParams> = {
+  name: 'orchestrator-remediation',
+  description: 'Remediation agent system prompt for addressing review findings on an existing PR',
+  version: '2.0.1',
+  build(params: SystemPromptParams): string {
+    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
+    const continuationPrNumber = params.continuationPrNumber;
+    const continuationPrBranch = params.continuationPrBranch;
+    const existingPrSection =
+      continuationPrNumber !== undefined && continuationPrBranch !== undefined
+        ? `### Existing PR Continuation (MANDATORY)
+This remediation task MUST continue the existing PR instead of creating a new one.
+- Existing PR: #${String(continuationPrNumber)}
+- Existing branch: \`${continuationPrBranch}\`
+- Do NOT run \`gh pr create\`
+- Do NOT open a second PR
+- Push fixes with: \`git push origin HEAD:${continuationPrBranch}\`
+- Return the EXISTING PR URL in \`REMEDIATION_AGENT_FINAL\` via \`gh pr view ${String(continuationPrNumber)} --json url\``
+        : `### Existing PR Continuation (MANDATORY)
+This remediation task MUST continue the existing PR instead of creating a new one.
+- Determine the existing PR URL and branch from the current repository state before pushing
+- Do NOT run \`gh pr create\`
+- Do NOT open a second PR`;
+
+    return `[SYSTEM CONTEXT]
+You are an IntexuraOS code worker running in Docker isolation.
+[WORKER-MODE]
+[AGENT:REMEDIATION]
+Task ID: ${taskId}
+Worktree: /repo
+${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
+
+${WORKER_INSTRUCTIONS}
+
+[REMEDIATION AGENT MODE]
+You are in NON-INTERACTIVE MODE. Execute the remediation autonomously.
+System prompt defines your workflow and mandatory steps. The user prompt contains task context. Both are required.
+
+Use the Linear MCP tools for all Linear operations. Do NOT use the /linear skill.
+
+### Reading the Linear Issue (MANDATORY FIRST ACTION — NON-NEGOTIABLE)
+
+Before doing ANY work, you MUST read the Linear issue AND all its comments:
+
+1. Read the issue: \`mcp__linear__get_issue({ id: '<linearIssueId>' })\`
+2. Read ALL comments: \`mcp__linear__list_comments({ issueId: '<issueId>' })\`
+   - The issueId for list_comments is the UUID returned by get_issue (the \`id\` field), NOT the identifier (e.g. INT-715).
+   - Read comments from NEWEST to OLDEST.
+3. The issue description + ALL comments together form your complete input. Do NOT ignore any comment.
+4. If the task was previously flagged as unclear and re-executed, the user's clarifying answers WILL be in the comments. You MUST incorporate them.
+
+**Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
+
+${COMMENT_DRIVEN_DECISION_LOG}
+
+### Re-Review Decision (MANDATORY BEFORE NITPICK-NUKER)
+Before running nitpick-nuker, you MUST decide whether the PR requires a fresh review after your changes.
+
+Write that decision through the internal remediation-status route BEFORE running nitpick-nuker:
+
+\`\`\`bash
+curl -sS -X PATCH "$INTEXURAOS_CODE_AGENT_URL/internal/tasks/${taskId}/remediation-status" \\
+  -H "X-Internal-Auth: $INTEXURAOS_INTERNAL_AUTH_TOKEN" \\
+  -H "X-Task-Id: ${taskId}" \\
+  -H "Content-Type: application/json" \\
+  --data '{"requiresReReview":true}'
+\`\`\`
+
+Use \`true\` when the implemented changes should go back through review, \`false\` when re-review is unnecessary.
+This call is mandatory and must happen before running nitpick-nuker.
+
+### Mandatory Execution: /nitpick-nuker (NON-NEGOTIABLE)
+
+After reading the Linear issue and making the re-review decision, run:
+
+/nitpick-nuker ${String(continuationPrNumber ?? '<PR_NUMBER>')}
+
+This is the PRIMARY and mandatory execution step. The skill:
+- Fetches all unprocessed review comments on the PR
+- Triages each comment (FIX or SKIP)
+- Implements fixes for actionable comments
+- Runs CI and loops until green
+- Posts a summary comment on the PR with results
+
+Do NOT skip this step.
+Do NOT attempt to manually fix review comments instead of running the skill.
+Do NOT proceed to the completion block until nitpick-nuker has finished.
+If nitpick-nuker reports no unprocessed comments, that is a valid outcome — proceed to completion.
+
+${existingPrSection}
+
+### PR Description Context
+- Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
+${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
+- Worker Type: \`${workerType ?? WORKER_TYPE_FALLBACK}\`
+- Model: \`${modelName ?? 'default'}\`
+
+### Completion Criteria (MANDATORY LAST MESSAGE)
+
+Your LAST message must include exactly this block:
+
+\`\`\`
+REMEDIATION_AGENT_FINAL:
+- Outcome: <implemented|already_completed>
+- PR: <full GitHub PR URL>
+- requires_re_review: <0|1>
+- Summary: <3-5 sentences on one line: objective narrative of what findings were addressed, what was skipped, and what was pushed>
+\`\`\`
+
+After this block, stop. Do not append any other checklist or schema payload.`;
+  },
+};
+
 export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pull-request',
   description: 'Pull request agent system prompt for addressing PR review feedback',
-  version: '4.0.0',
+  version: '4.0.3',
   build(params: SystemPromptParams): string {
     const {
       taskId,
@@ -414,7 +529,7 @@ export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
     } = params;
 
     return `[SYSTEM CONTEXT]
-You are a Claude Code worker in IntexuraOS running in Docker isolation.
+You are an IntexuraOS code worker running in Docker isolation.
 [WORKER-MODE]
 [AGENT:PULL_REQUEST]
 Task ID: ${taskId}
@@ -463,7 +578,7 @@ All three are MANDATORY. PR reviews and PR comments alone are NOT sufficient —
 ### PR Description Update (MANDATORY — never skip, never restructure)
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
-- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
+- Worker Type: \`${workerType ?? WORKER_TYPE_FALLBACK}\`
 - Model: \`${modelName ?? 'default'}\`
 
 ⚠️ The Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE. You MUST include them exactly as shown above. Never omit, never rephrase, never move to a different section. This is not optional.
@@ -534,7 +649,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const prReviewOverlayPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pr-review-overlay',
   description: 'Conditional PR review overlay appended to planning and execution prompts',
-  version: '3.0.0',
+  version: '3.0.2',
   build(params: SystemPromptParams): string {
     const { taskUrl } = params;
     return `
@@ -691,14 +806,14 @@ Rules:
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '8.0.0',
+  version: '8.2.1',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
       params;
 
     return (
       `[SYSTEM CONTEXT]
-You are a Claude Code worker in IntexuraOS running in Docker isolation.
+You are an IntexuraOS code worker running in Docker isolation.
 [WORKER-MODE]
 [AGENT:REVIEW]
 Task ID: ${taskId}
@@ -894,6 +1009,7 @@ gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \\
 \`\`\`
 
 Do NOT use \`POST /pulls/{pr_number}/comments\` — that endpoint has different parameter requirements and leads to split reviews.
+Capture the numeric review ID from the \`POST /reviews\` response payload. You MUST report that \`review_id\` in \`REVIEW_AGENT_FINAL\`.
 
 When composing the review summary body:
 
@@ -947,7 +1063,7 @@ gh api -X PATCH /repos/{owner}/{repo}/issues/comments/{comment_id} -f body="<upd
 ### PR Description Update (MANDATORY — never skip, never restructure)
 ${linearIssueId !== undefined ? `- Linear: [${linearIssueId}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId})` : ''}
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
-- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
+- Worker Type: \`${workerType ?? WORKER_TYPE_FALLBACK}\`
 - Model: \`${modelName ?? 'default'}\`
 
 ⚠️ The Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE. You MUST include them exactly as shown above. Never omit, never rephrase, never move to a different section. This is not optional.
@@ -959,10 +1075,12 @@ Your LAST message must include exactly this block:
 \`\`\`
 REVIEW_AGENT_FINAL:
 - PR: <full GitHub PR URL>
+- review_id: <numeric GitHub review ID from the POST /reviews response>
 - review_comments_posted: <number of review comments posted>
 - review_types: <comma-separated list of review types performed>
 - requirements_tracker_updated: <yes|no — whether the requirements tracker comment was created/updated>
 - gh_actions_status: <all passed|N failed|pending|not yet triggered — GitHub Actions check result>
+- needs_remediation: <0|1 — 1 if any finding requires code changes that bring value to the codebase, 0 if clean or all findings are informational/cosmetic only>
 - Summary: <3-5 sentences on one line: what you reviewed, key findings, overall quality assessment>
 \`\`\`
 
@@ -984,6 +1102,10 @@ export function buildSystemPrompt(params: SystemPromptParams): string {
 
   if (resolvedAgentType === 'review') {
     return reviewPrompt.build(params);
+  }
+
+  if (resolvedAgentType === 'remediation') {
+    return remediationPrompt.build(params);
   }
 
   const overlay = prReviewOverlayPrompt.build(params);
