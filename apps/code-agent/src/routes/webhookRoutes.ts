@@ -18,7 +18,6 @@ import { formatMetricsLogLines } from '../domain/formatters/metricsLogFormatter.
 import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
 import { parseLinearIdentifierFromUrl } from '../domain/utils/linearIdentifierParser.js';
 import { parseOwnerRepo } from '../domain/utils/parseOwnerRepo.js';
-import { enrichReviewWithComments } from '../domain/usecases/enrichReviewWithComments.js';
 
 /**
  * Best-effort: record a task_failed automation log event for PR-linked tasks.
@@ -295,7 +294,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         linearAgentClient,
         logger,
         firestore,
-        gitHubPREventRepo,
         gitHubPRSummaryRepo,
         gitHubPRClient,
         userServiceClient,
@@ -1187,41 +1185,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             } else {
               const { createRemediationTaskFn, logger: remediationLogger } = getServices();
               if (createRemediationTaskFn !== undefined) {
-                let reviewBody = result.summary;
-                let inlineComments: { path: string; line: number; body: string }[] | undefined;
-                if (result.review_id !== undefined && /^\d+$/.test(result.review_id)) {
-                  const reviewId = Number(result.review_id);
-                  const enrichedReviewResult = await enrichReviewWithComments(
-                    { logger: remediationLogger, gitHubPREventRepo },
-                    {
-                      repository: task.repository,
-                      pullRequestNumber: prNumber,
-                      reviewId,
-                      reviewBody: null,
-                    },
-                  );
-                  if (enrichedReviewResult.ok) {
-                    reviewBody = enrichedReviewResult.value.reviewBody ?? reviewBody;
-                    if (enrichedReviewResult.value.comments.length > 0) {
-                      inlineComments = enrichedReviewResult.value.comments
-                        .filter(
-                          (
-                            comment,
-                          ): comment is typeof comment & { line: number } => comment.line !== null,
-                        )
-                        .map((comment) => ({
-                          path: comment.path,
-                          line: comment.line,
-                          body: comment.body,
-                        }));
-                    }
-                  } else {
-                    request.log.warn(
-                      { taskId, prNumber, reviewId, error: enrichedReviewResult.error },
-                      'Failed to enrich review context from stored GitHub events, falling back to verifier summary',
-                    );
-                    }
-                }
                 const remediationResult = await createRemediationTaskFn(
                   remediationLogger,
                   {
@@ -1230,11 +1193,8 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                     /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard, repository always contains '/' @preserve */
                     senderLogin: task.repository.split('/')[0] ?? task.userId,
                     /* v8 ignore stop @preserve */
-                    // Always pass 'auto' — remediation resolves its own default via defaultRemediationWorkerType
                     workerType: 'auto',
                     eventId: taskId,
-                    ...(reviewBody !== undefined && { reviewBody }),
-                    ...(inlineComments !== undefined && inlineComments.length > 0 && { inlineComments }),
                     ...(task.baseBranch !== undefined && { baseBranch: task.baseBranch }),
                     ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
                   },

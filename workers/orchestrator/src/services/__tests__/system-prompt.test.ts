@@ -201,14 +201,46 @@ describe('system-prompt', () => {
     });
 
     expect(result).toContain('[AGENT:REMEDIATION]');
-    expect(result).toContain('PATCH /internal/tasks/:id/remediation-status');
+    expect(result).toContain(
+      'PATCH "$INTEXURAOS_CODE_AGENT_URL/internal/tasks/task-123/remediation-status"'
+    );
     expect(result).toContain('requires_re_review');
-    expect(result).toContain('Do NOT create a new PR');
+    expect(result).toContain('Do NOT open a second PR');
     expect(result).toContain('REMEDIATION_AGENT_FINAL:');
-    expect(result).toContain('superpowers:receiving-code-review');
-    expect(result).toContain('mcp__linear__save_comment');
-    expect(result).not.toContain('mcp__linear__create_comment');
+    expect(result).toContain('Linear MCP tools');
     expect(result).not.toContain('superpowers:requesting-code-review');
+  });
+
+  it('does not include executing-plans or receiving-code-review in remediation prompt', () => {
+    const result = remediationPrompt.build({
+      ...baseParams,
+      agentType: 'remediation',
+      continuationPrNumber: 901,
+      continuationPrBranch: 'fix/remediation-901',
+    });
+    expect(result).not.toContain('superpowers:executing-plans');
+    expect(result).not.toContain('superpowers:receiving-code-review');
+  });
+
+  it('includes mandatory nitpick-nuker instruction in remediation prompt', () => {
+    const result = remediationPrompt.build({
+      ...baseParams,
+      agentType: 'remediation',
+      continuationPrNumber: 901,
+      continuationPrBranch: 'fix/remediation-901',
+    });
+    expect(result).toContain('/nitpick-nuker');
+    expect(result).toContain('mandatory execution step');
+  });
+
+  it('does not say system prompt is source of truth in remediation prompt', () => {
+    const result = remediationPrompt.build({
+      ...baseParams,
+      agentType: 'remediation',
+      continuationPrNumber: 901,
+      continuationPrBranch: 'fix/remediation-901',
+    });
+    expect(result).not.toContain('source of truth');
   });
 
   it('remediation prompt renders linearIssueTitle in PR Description when provided', () => {
@@ -1143,8 +1175,8 @@ describe('system-prompt', () => {
     expect(executionPrompt.version).toBe('5.1.2');
   });
 
-  it('remediation prompt version is 1.0.1', () => {
-    expect(remediationPrompt.version).toBe('1.0.1');
+  it('remediation prompt version is 2.0.0', () => {
+    expect(remediationPrompt.version).toBe('2.0.0');
   });
 
   it('review agent prompt includes Linear section when linearIssueId is provided', () => {

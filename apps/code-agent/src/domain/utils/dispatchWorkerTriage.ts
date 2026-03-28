@@ -1,7 +1,7 @@
 import { CODE_TASK_WORKER_TYPES } from '@intexuraos/common-core';
 import type { WorkerType } from '../models/codeTask.js';
 
-export const DISPATCH_WORKER_PATTERNS = ['@worker', '@model'] as const;
+export const DISPATCH_WORKER_PATTERNS = ['@worker'] as const;
 
 // Use shared worker types from common-core
 export const SUPPORTED_DISPATCH_WORKER_TYPES = CODE_TASK_WORKER_TYPES satisfies readonly WorkerType[];
@@ -25,8 +25,8 @@ const WORKER_PATTERN = new RegExp(
 );
 
 /**
- * Extracts worker type from comment like "Fix this @worker minimax" or "@model qwen".
- * Returns undefined if no @worker/@model directive found.
+ * Extracts worker type from comment like "Fix this @worker minimax".
+ * Returns undefined if no @worker directive found.
  */
 export function extractDispatchWorkerType(commentBody: string): WorkerType | undefined {
   const match = WORKER_PATTERN.exec(commentBody);

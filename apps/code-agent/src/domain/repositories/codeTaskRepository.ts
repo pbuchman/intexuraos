@@ -226,6 +226,17 @@ export interface CodeTaskRepository {
   ): Promise<Result<CodeTask | null, RepositoryError>>;
 
   /**
+   * Find a preserved pull_request container for a PR.
+   * Returns the most recent task with agentType 'pull_request' and status 'implemented'
+   * for the given repository and prNumber, ordered by completedAt desc.
+   * Used to reuse preserved containers for non-@worker PR comments.
+   */
+  findPreservedPullRequestTask(
+    repository: string,
+    prNumber: number,
+  ): Promise<Result<{ id: string; workerLocation: string; userId: string } | null, RepositoryError>>;
+
+  /**
    * Delete a task by ID, scoped to a user.
    * Returns NOT_FOUND if the task does not exist or belongs to a different user.
    */

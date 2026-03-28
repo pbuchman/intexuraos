@@ -587,6 +587,39 @@ describe('drainTaskQueue', () => {
     });
   });
 
+  it('forwards prNumber in dispatch request when task has prNumber', async () => {
+    const task = createMockTask({ prNumber: 42, agentType: 'review' });
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    setupWorkerSettings();
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      ok({ dispatched: true, workerLocation: 'home-mac' })
+    );
+    mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+    await drainTaskQueue(createDeps());
+
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ prNumber: 42 })
+    );
+  });
+
+  it('does not include prNumber in dispatch request when task has no prNumber', async () => {
+    const task = createMockTask({ agentType: 'planning' });
+    delete (task as unknown as Record<string, unknown>)['prNumber'];
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    setupWorkerSettings();
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      ok({ dispatched: true, workerLocation: 'home-mac' })
+    );
+    mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+    await drainTaskQueue(createDeps());
+
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+      expect.not.objectContaining({ prNumber: expect.anything() })
+    );
+  });
+
   it('logs a warning when archiving the original task after queued retry dispatch fails', async () => {
     const task = createMockTask({
       prNumber: 1139,
