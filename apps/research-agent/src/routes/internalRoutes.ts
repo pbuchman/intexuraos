@@ -22,7 +22,8 @@ import {
   type TextGenerationClient,
 } from '../domain/research/index.js';
 import { formatLlmError } from '../domain/research/formatLlmError.js';
-import { getProviderForModel, LlmModels } from '@intexuraos/llm-contract';
+import { getProviderForModel, isOpenRouterModel, getOpenRouterRawId, LlmModels, type LLMModel, type ModelPricing } from '@intexuraos/llm-contract';
+import { getAllowlistPricing, isAllowedModel } from '@intexuraos/infra-openrouter';
 import { getServices, type DecryptedApiKeys } from '../services.js';
 import { createSynthesisProviders } from './helpers/synthesisHelper.js';
 import { handleAllCompleted } from './helpers/completionHandlers.js';
@@ -430,6 +431,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           synthesisModel,
           apiKeys,
           research.userId,
+          event.researchId,
           services,
           request.log
         );
@@ -450,7 +452,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             apiKeys.google,
             research.userId,
             services.pricingContext.getPricing(LlmModels.Gemini25Flash),
-            request.log
+            request.log,
+            event.researchId
           );
         }
 
@@ -861,12 +864,37 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           '[3.3] Starting LLM research call'
         );
 
+        // Reject non-allowlisted OpenRouter models to enforce curated model policy
+        if (isOpenRouterModel(event.model) && !isAllowedModel(getOpenRouterRawId(event.model))) {
+          request.log.warn({ researchId: event.researchId, model: event.model }, '[3.3] OpenRouter model not in allowlist');
+          void researchRepo.updateLlmResult(event.researchId, event.model, {
+            status: 'failed',
+            error: `Model '${event.model}' is not in the curated allowlist`,
+            completedAt: new Date().toISOString(),
+          });
+          return await reply.fail('INVALID_REQUEST', 'Model not in curated allowlist');
+        }
+
+        let researchPricing: ModelPricing;
+        if (isOpenRouterModel(event.model)) {
+          const pricing = getAllowlistPricing(getOpenRouterRawId(event.model));
+          /* v8 ignore start -- upstream: isAllowedModel guard above guarantees getAllowlistPricing returns defined for same model @preserve */
+          if (pricing === undefined) {
+            throw new Error(`No pricing for allowlisted model: ${String(event.model)}`);
+          }
+          /* v8 ignore stop @preserve */
+          researchPricing = pricing;
+        } else {
+          researchPricing = services.pricingContext.getPricing(event.model as LLMModel);
+        }
+
         const llmProvider = services.createResearchProvider(
           event.model,
           apiKey,
           event.userId,
-          services.pricingContext.getPricing(event.model),
-          request.log
+          researchPricing,
+          request.log,
+          event.researchId
         );
         const startTime = Date.now();
         const llmResult = await llmProvider.research(event.prompt, research.researchContext);

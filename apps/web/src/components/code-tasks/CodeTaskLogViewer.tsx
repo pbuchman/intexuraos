@@ -41,6 +41,9 @@ const TAG_STYLES: Record<string, TagStyle> = {
   init:         { text: 'text-cyan-600 dark:text-cyan-300' },
   system:       { text: 'text-slate-500 dark:text-slate-500' },
   orchestrator: { text: 'text-slate-500 dark:text-slate-500' },
+  cmd:          { text: 'text-amber-700 dark:text-yellow-300' },
+  msg:          { text: 'text-blue-700 dark:text-blue-300' },
+  codex:        { text: 'text-cyan-600 dark:text-cyan-300' },
 };
 
 function extractTag(text: string): string | null {
@@ -79,6 +82,7 @@ export interface CodeTaskLogViewerProps {
   workerOnline?: boolean;
   workerName?: string;
   readOnly?: boolean;
+  agentType?: string;
   onSendMessage?: (message: string) => Promise<void>;
   sending?: boolean;
   sendError?: { code: string; message: string } | null;
@@ -93,6 +97,7 @@ export function CodeTaskLogViewer({
   workerOnline = true,
   workerName,
   readOnly = false,
+  agentType,
   onSendMessage,
   sending = false,
   sendError = null,
@@ -127,7 +132,7 @@ export function CodeTaskLogViewer({
       if (line === undefined) continue;
       const tag = extractTag(line.text);
 
-      if (tag === 'tool') {
+      if (tag === 'tool' || tag === 'cmd') {
         finalizeBlock(index);
         current = { headerIdx: index, bodyStart: index + 1, bodyEnd: index + 1 };
       } else if (tag !== null) {
@@ -232,7 +237,8 @@ export function CodeTaskLogViewer({
     });
   }, []);
 
-  const showMessageInput = !readOnly && taskStatus !== 'cancelled' && onSendMessage !== undefined;
+  const isNonMessagableAgent = agentType === 'review' || agentType === 'remediation';
+  const showMessageInput = !readOnly && taskStatus !== 'cancelled' && onSendMessage !== undefined && !isNonMessagableAgent;
 
   return (
     <div className="mt-6 mb-6">
@@ -378,6 +384,11 @@ export function CodeTaskLogViewer({
               workerOnline={workerOnline}
               workerName={workerName ?? ''}
             />
+          </div>
+        ) : null}
+        {isNonMessagableAgent && !readOnly ? (
+          <div className="rounded-b-lg border-t border-slate-200 bg-slate-50 px-3 py-2.5 text-center text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-400">
+            Messages not available for {agentType} tasks
           </div>
         ) : null}
       </div>

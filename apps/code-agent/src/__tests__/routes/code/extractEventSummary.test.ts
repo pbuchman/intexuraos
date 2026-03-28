@@ -55,24 +55,93 @@ describe('extractEventSummary', () => {
   });
 
   describe('pull_request_review', () => {
-    it('returns state and body combined', () => {
-      const payload = { review: { state: 'approved', body: 'Looks good' } };
-      expect(extractEventSummary('pull_request_review', payload)).toBe('APPROVED: Looks good');
+    describe('COMMENTED state', () => {
+      it('returns body only, stripping COMMENTED prefix', () => {
+        const payload = { review: { state: 'commented', body: 'Looks good to me' } };
+        expect(extractEventSummary('pull_request_review', payload)).toBe('Looks good to me');
+      });
+
+      it('returns null when body is null (nothing meaningful to show)', () => {
+        const payload = { review: { state: 'commented', body: null } };
+        expect(extractEventSummary('pull_request_review', payload)).toBeNull();
+      });
+
+      it('returns null when body is empty', () => {
+        const payload = { review: { state: 'commented', body: '' } };
+        expect(extractEventSummary('pull_request_review', payload)).toBeNull();
+      });
+
+      it('returns null when body is whitespace only', () => {
+        const payload = { review: { state: 'commented', body: '  ' } };
+        expect(extractEventSummary('pull_request_review', payload)).toBeNull();
+      });
+
+      it('truncates long body', () => {
+        const payload = { review: { state: 'commented', body: 'B'.repeat(150) } };
+        const result = extractEventSummary('pull_request_review', payload);
+        expect(result).not.toBeNull();
+        expect(result).toHaveLength(101); // 100 + ellipsis
+        expect(result?.startsWith('B')).toBe(true);
+      });
     });
 
-    it('returns state only when body is null', () => {
-      const payload = { review: { state: 'approved', body: null } };
-      expect(extractEventSummary('pull_request_review', payload)).toBe('APPROVED');
+    describe('APPROVED state', () => {
+      it('prepends ✓ indicator when body is present', () => {
+        const payload = { review: { state: 'approved', body: 'Looks good' } };
+        expect(extractEventSummary('pull_request_review', payload)).toBe('✓ Looks good');
+      });
+
+      it('returns ✓ indicator only when body is null', () => {
+        const payload = { review: { state: 'approved', body: null } };
+        expect(extractEventSummary('pull_request_review', payload)).toBe('✓');
+      });
+
+      it('returns ✓ indicator only when body is empty', () => {
+        const payload = { review: { state: 'approved', body: '' } };
+        expect(extractEventSummary('pull_request_review', payload)).toBe('✓');
+      });
+
+      it('truncates long body with ✓ prefix', () => {
+        const payload = { review: { state: 'approved', body: 'B'.repeat(150) } };
+        const result = extractEventSummary('pull_request_review', payload);
+        expect(result).not.toBeNull();
+        expect(result).toHaveLength(101); // 100 + ellipsis
+        expect(result?.startsWith('✓ B')).toBe(true);
+      });
     });
 
-    it('returns state only when body is empty', () => {
-      const payload = { review: { state: 'changes_requested', body: '' } };
-      expect(extractEventSummary('pull_request_review', payload)).toBe('CHANGES_REQUESTED');
+    describe('CHANGES_REQUESTED state', () => {
+      it('prepends ✗ indicator when body is present', () => {
+        const payload = { review: { state: 'changes_requested', body: 'Please fix X' } };
+        expect(extractEventSummary('pull_request_review', payload)).toBe('✗ Please fix X');
+      });
+
+      it('returns ✗ indicator only when body is null', () => {
+        const payload = { review: { state: 'changes_requested', body: null } };
+        expect(extractEventSummary('pull_request_review', payload)).toBe('✗');
+      });
+
+      it('returns ✗ indicator only when body is empty', () => {
+        const payload = { review: { state: 'changes_requested', body: '' } };
+        expect(extractEventSummary('pull_request_review', payload)).toBe('✗');
+      });
     });
 
-    it('returns state only when body is whitespace', () => {
-      const payload = { review: { state: 'commented', body: '  ' } };
-      expect(extractEventSummary('pull_request_review', payload)).toBe('COMMENTED');
+    describe('other states (DISMISSED, PENDING)', () => {
+      it('returns body only for DISMISSED with body', () => {
+        const payload = { review: { state: 'dismissed', body: 'Review dismissed' } };
+        expect(extractEventSummary('pull_request_review', payload)).toBe('Review dismissed');
+      });
+
+      it('returns null for DISMISSED with no body', () => {
+        const payload = { review: { state: 'dismissed', body: null } };
+        expect(extractEventSummary('pull_request_review', payload)).toBeNull();
+      });
+
+      it('returns null for PENDING with no body', () => {
+        const payload = { review: { state: 'pending', body: '' } };
+        expect(extractEventSummary('pull_request_review', payload)).toBeNull();
+      });
     });
 
     it('returns null when review is missing', () => {
@@ -82,14 +151,6 @@ describe('extractEventSummary', () => {
     it('returns null when state is missing', () => {
       const payload = { review: { body: 'Some feedback' } };
       expect(extractEventSummary('pull_request_review', payload)).toBeNull();
-    });
-
-    it('truncates long state + body combination', () => {
-      const payload = { review: { state: 'approved', body: 'B'.repeat(150) } };
-      const result = extractEventSummary('pull_request_review', payload);
-      expect(result).not.toBeNull();
-      expect(result).toHaveLength(101); // 100 + ellipsis
-      expect(result?.startsWith('APPROVED: ')).toBe(true);
     });
   });
 

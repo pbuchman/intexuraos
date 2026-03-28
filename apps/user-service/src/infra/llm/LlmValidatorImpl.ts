@@ -7,6 +7,7 @@ import { createGeminiClient } from '@intexuraos/infra-gemini';
 import { createGptClient } from '@intexuraos/infra-gpt';
 import { createClaudeClient } from '@intexuraos/infra-claude';
 import { createPerplexityClient } from '@intexuraos/infra-perplexity';
+import { createOpenRouterClient, OPENROUTER_VALIDATION_MODEL } from '@intexuraos/infra-openrouter';
 import { LlmModels, LlmProviders, type ModelPricing } from '@intexuraos/llm-contract';
 import type {
   LlmProvider,
@@ -22,6 +23,7 @@ const VALIDATION_MODELS = {
   [LlmProviders.OpenAI]: LlmModels.GPT4oMini,
   [LlmProviders.Anthropic]: LlmModels.ClaudeHaiku35,
   [LlmProviders.Perplexity]: LlmModels.Sonar,
+  [LlmProviders.OpenRouter]: OPENROUTER_VALIDATION_MODEL,
 } as const;
 
 /**
@@ -32,6 +34,7 @@ export interface ValidationPricing {
   openai: ModelPricing;
   anthropic: ModelPricing;
   perplexity: ModelPricing;
+  openrouter: ModelPricing;
 }
 
 /**
@@ -133,6 +136,27 @@ export class LlmValidatorImpl implements LlmValidator {
         }
         return ok(undefined);
       }
+      case LlmProviders.OpenRouter: {
+        // Use lightweight /api/v1/key endpoint for validation - no token cost
+        const client = createOpenRouterClient({
+          apiKey,
+          model: VALIDATION_MODELS[LlmProviders.OpenRouter],
+          userId,
+          pricing: this.pricing.openrouter,
+          logger: this.logger,
+        });
+        const result = await client.validateKey(apiKey);
+        if (!result.ok) {
+          return err({
+            code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
+            message:
+              result.error.code === 'INVALID_KEY'
+                ? 'Invalid OpenRouter API key'
+                : `OpenRouter API error: ${result.error.message}`,
+          });
+        }
+        return ok(undefined);
+      }
     }
   }
 
@@ -200,6 +224,23 @@ export class LlmValidatorImpl implements LlmValidator {
           model: VALIDATION_MODELS[LlmProviders.Perplexity],
           userId,
           pricing: this.pricing.perplexity,
+          logger: this.logger,
+        });
+        const result = await client.generate(prompt);
+        if (!result.ok) {
+          return err({
+            code: 'API_ERROR',
+            message: result.error.message,
+          });
+        }
+        return ok({ content: result.value.content });
+      }
+      case LlmProviders.OpenRouter: {
+        const client = createOpenRouterClient({
+          apiKey,
+          model: VALIDATION_MODELS[LlmProviders.OpenRouter],
+          userId,
+          pricing: this.pricing.openrouter,
           logger: this.logger,
         });
         const result = await client.generate(prompt);

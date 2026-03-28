@@ -104,12 +104,20 @@ describe('ContextInferenceAdapter', () => {
     it('passes apiKey, model, and userId to client', () => {
       mockCreateGeminiClient.mockClear();
       const testLogger = createMockLogger();
-      new ContextInferenceAdapter('test-key', LlmModels.Gemini20Flash, 'test-user', testPricing, testLogger);
+      new ContextInferenceAdapter(
+        'test-key',
+        LlmModels.Gemini20Flash,
+        'test-user',
+        testPricing,
+        testLogger,
+        'research-123'
+      );
 
       expect(mockCreateGeminiClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: LlmModels.Gemini20Flash,
         userId: 'test-user',
+        researchId: 'research-123',
         pricing: testPricing,
         logger: testLogger,
       });

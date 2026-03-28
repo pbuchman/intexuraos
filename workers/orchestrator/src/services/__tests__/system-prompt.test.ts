@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { CODE_TASK_WORKER_TYPES } from '@intexuraos/common-core';
 import {
   buildSystemPrompt,
   planningPrompt,
   executionPrompt,
+  remediationPrompt,
   pullRequestPrompt,
   prReviewOverlayPrompt,
   reviewPrompt,
 } from '../system-prompt.js';
+
+const EXPECTED_WORKER_TYPE_FALLBACK = `\`<${CODE_TASK_WORKER_TYPES.join('|')}>\``;
 
 describe('system-prompt', () => {
   const SEMVER_REGEX = /^\d+\.\d+\.\d+$/;
@@ -15,6 +19,7 @@ describe('system-prompt', () => {
     it.each([
       { name: 'planningPrompt', prompt: planningPrompt },
       { name: 'executionPrompt', prompt: executionPrompt },
+      { name: 'remediationPrompt', prompt: remediationPrompt },
       { name: 'pullRequestPrompt', prompt: pullRequestPrompt },
       { name: 'prReviewOverlayPrompt', prompt: prReviewOverlayPrompt },
       { name: 'reviewPrompt', prompt: reviewPrompt },
@@ -25,6 +30,7 @@ describe('system-prompt', () => {
     it.each([
       { name: 'planningPrompt', prompt: planningPrompt },
       { name: 'executionPrompt', prompt: executionPrompt },
+      { name: 'remediationPrompt', prompt: remediationPrompt },
       { name: 'pullRequestPrompt', prompt: pullRequestPrompt },
       { name: 'prReviewOverlayPrompt', prompt: prReviewOverlayPrompt },
       { name: 'reviewPrompt', prompt: reviewPrompt },
@@ -189,6 +195,89 @@ describe('system-prompt', () => {
     expect(result).toContain('[AGENT:REVIEW]');
   });
 
+  it('remediation prompt includes remediation-specific completion and pre-push contract', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'remediation',
+      continuationPrNumber: 901,
+      continuationPrBranch: 'fix/remediation-901',
+    });
+
+    expect(result).toContain('[AGENT:REMEDIATION]');
+    expect(result).toContain(
+      'PATCH "$INTEXURAOS_CODE_AGENT_URL/internal/tasks/task-123/remediation-status"'
+    );
+    expect(result).toContain('requires_re_review');
+    expect(result).toContain('Do NOT open a second PR');
+    expect(result).toContain('REMEDIATION_AGENT_FINAL:');
+    expect(result).toContain('Linear MCP tools');
+    expect(result).not.toContain('superpowers:requesting-code-review');
+  });
+
+  it('does not include executing-plans or receiving-code-review in remediation prompt', () => {
+    const result = remediationPrompt.build({
+      ...baseParams,
+      agentType: 'remediation',
+      continuationPrNumber: 901,
+      continuationPrBranch: 'fix/remediation-901',
+    });
+    expect(result).not.toContain('superpowers:executing-plans');
+    expect(result).not.toContain('superpowers:receiving-code-review');
+  });
+
+  it('includes mandatory nitpick-nuker instruction in remediation prompt', () => {
+    const result = remediationPrompt.build({
+      ...baseParams,
+      agentType: 'remediation',
+      continuationPrNumber: 901,
+      continuationPrBranch: 'fix/remediation-901',
+    });
+    expect(result).toContain('/nitpick-nuker');
+    expect(result).toContain('mandatory execution step');
+  });
+
+  it('does not say system prompt is source of truth in remediation prompt', () => {
+    const result = remediationPrompt.build({
+      ...baseParams,
+      agentType: 'remediation',
+      continuationPrNumber: 901,
+      continuationPrBranch: 'fix/remediation-901',
+    });
+    expect(result).not.toContain('source of truth');
+  });
+
+  it('remediation prompt renders linearIssueTitle in PR Description when provided', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'remediation',
+      linearIssueTitle: 'Fix review follow-up',
+      continuationPrNumber: 901,
+      continuationPrBranch: 'fix/remediation-901',
+    });
+
+    expect(result).toContain('[INT-123 Fix review follow-up]');
+  });
+
+  it('remediation prompt renders fallback PR description values when Linear issue and worker type are absent', () => {
+    const {
+      linearIssueId: _issueId,
+      workerType: _workerType,
+      ...paramsWithoutIssueAndWorker
+    } = baseParams;
+    void _issueId;
+    void _workerType;
+
+    const result = buildSystemPrompt({
+      ...paramsWithoutIssueAndWorker,
+      agentType: 'remediation',
+      continuationPrNumber: 901,
+      continuationPrBranch: 'fix/remediation-901',
+    });
+
+    expect(result).toContain('[INT-XXX]');
+    expect(result).toContain(EXPECTED_WORKER_TYPE_FALLBACK);
+  });
+
   it('execution prompt renders linearIssueTitle in PR Description when provided', () => {
     const result = executionPrompt.build({
       ...baseParams,
@@ -197,6 +286,16 @@ describe('system-prompt', () => {
     });
 
     expect(result).toContain('[INT-123 Fix login bug]');
+  });
+
+  it('execution prompt uses the real Linear MCP comment tool', () => {
+    const result = executionPrompt.build({
+      ...baseParams,
+      linearIssueLabels: ['code-task'],
+    });
+
+    expect(result).toContain('mcp__linear__save_comment');
+    expect(result).not.toContain('mcp__linear__create_comment');
   });
 
   it('pull request prompt renders linearIssueTitle in PR Description when provided', () => {
@@ -216,7 +315,7 @@ describe('system-prompt', () => {
       linearIssueLabels: ['bug'],
     });
 
-    expect(result).toContain('`<auto|opus|sonnet|minimax|glm|qwen|kimi>`');
+    expect(result).toContain(EXPECTED_WORKER_TYPE_FALLBACK);
   });
 
   it('execution prompt uses workerType fallback when workerType is undefined', () => {
@@ -226,7 +325,7 @@ describe('system-prompt', () => {
       linearIssueLabels: ['code-task'],
     });
 
-    expect(result).toContain('`<auto|opus|sonnet|minimax|glm|qwen|kimi>`');
+    expect(result).toContain(EXPECTED_WORKER_TYPE_FALLBACK);
   });
 
   it('pull request prompt uses workerType fallback when workerType is undefined', () => {
@@ -236,7 +335,7 @@ describe('system-prompt', () => {
       linearIssueLabels: ['code-task', 'pr-comment'],
     });
 
-    expect(result).toContain('`<auto|opus|sonnet|minimax|glm|qwen|kimi>`');
+    expect(result).toContain(EXPECTED_WORKER_TYPE_FALLBACK);
   });
 
   it('review prompt renders linearIssueTitle in PR Description when provided', () => {
@@ -256,7 +355,7 @@ describe('system-prompt', () => {
       agentType: 'review',
     });
 
-    expect(result).toContain('`<auto|opus|sonnet|minimax|glm|qwen|kimi>`');
+    expect(result).toContain(EXPECTED_WORKER_TYPE_FALLBACK);
   });
 
   it('review prompt renders taskUrl in View in IntexuraOS link and code task line', () => {
@@ -1071,12 +1170,16 @@ describe('system-prompt', () => {
     }
   });
 
-  it('planning prompt version is 3.1.0', () => {
-    expect(planningPrompt.version).toBe('3.1.0');
+  it('planning prompt version is 3.1.2', () => {
+    expect(planningPrompt.version).toBe('3.1.2');
   });
 
   it('execution prompt version is 6.0.0', () => {
     expect(executionPrompt.version).toBe('6.0.0');
+  });
+
+  it('remediation prompt version is 2.0.1', () => {
+    expect(remediationPrompt.version).toBe('2.0.1');
   });
 
   it('injects execution memory section only for execution tasks', () => {

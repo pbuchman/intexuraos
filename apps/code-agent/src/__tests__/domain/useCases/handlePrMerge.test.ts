@@ -6,6 +6,8 @@ import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRe
 import type { LinearIssueService } from '../../../domain/services/linearIssueService.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
+import type { TaskDispatcherService } from '../../../domain/services/taskDispatcher.js';
+import type { WorkerSettingsRepository } from '../../../domain/ports/workerSettingsRepository.js';
 import { createMockLogger } from '../../helpers/mockLogger.js';
 
 function createBaseTask(overrides: Partial<CodeTask> = {}): CodeTask {
@@ -46,26 +48,44 @@ describe('handlePrMerge', () => {
   let mockLogger: pino.Logger;
   let mockCodeTaskRepo: {
     findByPR: ReturnType<typeof vi.fn>;
-    findLatestNonReviewTaskByPR: ReturnType<typeof vi.fn>;
+    findLatestExecutionTaskByPR: ReturnType<typeof vi.fn>;
+    findOriginTaskByPR: ReturnType<typeof vi.fn>;
+    findPreservedPullRequestTask: ReturnType<typeof vi.fn>;
   };
   let mockLinearIssueService: {
     markQa: ReturnType<typeof vi.fn>;
+    markTodo: ReturnType<typeof vi.fn>;
   };
   let mockUserServiceClient: {
     resolveGitHubUsername: ReturnType<typeof vi.fn>;
+  };
+  let mockTaskDispatcher: {
+    cancelOnWorker: ReturnType<typeof vi.fn>;
+  };
+  let mockWorkerSettingsRepo: {
+    getSettings: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
     mockLogger = createMockLogger();
     mockCodeTaskRepo = {
       findByPR: vi.fn().mockResolvedValue(ok(null)),
-      findLatestNonReviewTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findPreservedPullRequestTask: vi.fn().mockResolvedValue(ok(null)),
     };
     mockLinearIssueService = {
       markQa: vi.fn().mockResolvedValue(undefined),
+      markTodo: vi.fn().mockResolvedValue(undefined),
     };
     mockUserServiceClient = {
       resolveGitHubUsername: vi.fn().mockResolvedValue(ok({ userId: 'resolved-user' })),
+    };
+    mockTaskDispatcher = {
+      cancelOnWorker: vi.fn().mockResolvedValue(undefined),
+    };
+    mockWorkerSettingsRepo = {
+      getSettings: vi.fn().mockResolvedValue(ok(null)),
     };
   });
 
@@ -74,6 +94,8 @@ describe('handlePrMerge', () => {
       codeTaskRepo: mockCodeTaskRepo as unknown as CodeTaskRepository,
       linearIssueService: mockLinearIssueService as unknown as LinearIssueService,
       userServiceClient: mockUserServiceClient as unknown as UserServiceClient,
+      taskDispatcher: mockTaskDispatcher as unknown as TaskDispatcherService,
+      workerSettingsRepo: mockWorkerSettingsRepo as unknown as WorkerSettingsRepository,
       logger: mockLogger,
     };
   }
@@ -92,7 +114,7 @@ describe('handlePrMerge', () => {
   it('should deduplicate when both repo methods return same task', async () => {
     const task = createBaseTask({ linearIssueId: 'INT-200', userId: 'user-1' });
     mockCodeTaskRepo.findByPR.mockResolvedValue(ok(task));
-    mockCodeTaskRepo.findLatestNonReviewTaskByPR.mockResolvedValue(ok(task));
+    mockCodeTaskRepo.findLatestExecutionTaskByPR.mockResolvedValue(ok(task));
 
     await handlePrMerge(buildDeps(), createDefaultInput());
 
@@ -104,7 +126,7 @@ describe('handlePrMerge', () => {
     mockCodeTaskRepo.findByPR.mockResolvedValue(
       ok(createBaseTask({ linearIssueId: 'INT-300', userId: 'user-a' }))
     );
-    mockCodeTaskRepo.findLatestNonReviewTaskByPR.mockResolvedValue(
+    mockCodeTaskRepo.findLatestExecutionTaskByPR.mockResolvedValue(
       ok(createBaseTask({ id: 'task_def', linearIssueId: 'INT-400', userId: 'user-b' }))
     );
 
@@ -203,8 +225,8 @@ describe('handlePrMerge', () => {
     expect(mockLinearIssueService.markQa).toHaveBeenCalledWith('resolved-user', 'INT-1100');
   });
 
-  it('should continue with other discovery when findLatestNonReviewTaskByPR returns err', async () => {
-    mockCodeTaskRepo.findLatestNonReviewTaskByPR.mockResolvedValue(
+  it('should continue with other discovery when findLatestExecutionTaskByPR returns err', async () => {
+    mockCodeTaskRepo.findLatestExecutionTaskByPR.mockResolvedValue(
       err({ code: 'FIRESTORE_ERROR', message: 'timeout' })
     );
 
@@ -215,7 +237,7 @@ describe('handlePrMerge', () => {
 
     expect(vi.mocked(mockLogger.warn)).toHaveBeenCalledWith(
       expect.objectContaining({ error: expect.objectContaining({ code: 'FIRESTORE_ERROR' }) }),
-      expect.stringContaining('findLatestNonReviewTaskByPR')
+      expect.stringContaining('findLatestExecutionTaskByPR')
     );
     expect(mockLinearIssueService.markQa).toHaveBeenCalledWith('resolved-user', 'INT-1500');
   });
@@ -268,5 +290,151 @@ describe('handlePrMerge', () => {
     expect(mockUserServiceClient.resolveGitHubUsername).not.toHaveBeenCalled();
     expect(mockLinearIssueService.markQa).toHaveBeenCalledTimes(1);
     expect(mockLinearIssueService.markQa).toHaveBeenCalledWith('task-user', 'INT-1400');
+  });
+
+  describe('preserved container cleanup on PR merge', () => {
+    it('destroys preserved pull_request container on PR merge', async () => {
+      mockCodeTaskRepo.findPreservedPullRequestTask.mockResolvedValue(
+        ok({ id: 'task_preserved', workerLocation: 'worker-home', userId: 'user-preserved' })
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [
+            {
+              name: 'worker-home',
+              url: 'https://worker.example.com',
+              cfAccessClientId: 'client-id',
+              cfAccessClientSecret: 'client-secret',
+              enabled: true,
+            },
+          ],
+        })
+      );
+
+      await handlePrMerge(buildDeps(), createDefaultInput());
+
+      expect(mockCodeTaskRepo.findPreservedPullRequestTask).toHaveBeenCalledWith('pbuchman/intexuraos', 42);
+      expect(mockWorkerSettingsRepo.getSettings).toHaveBeenCalledWith('user-preserved');
+      expect(mockTaskDispatcher.cancelOnWorker).toHaveBeenCalledWith(
+        'task_preserved',
+        'worker-home',
+        { url: 'https://worker.example.com', cfAccessClientId: 'client-id', cfAccessClientSecret: 'client-secret' },
+      );
+    });
+
+    it('does not fail if no preserved container exists', async () => {
+      mockCodeTaskRepo.findPreservedPullRequestTask.mockResolvedValue(ok(null));
+
+      await expect(handlePrMerge(buildDeps(), createDefaultInput())).resolves.toBeUndefined();
+      expect(mockTaskDispatcher.cancelOnWorker).not.toHaveBeenCalled();
+    });
+
+    it('does not fail if findPreservedPullRequestTask returns err', async () => {
+      mockCodeTaskRepo.findPreservedPullRequestTask.mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR', message: 'connection failed' })
+      );
+
+      await expect(handlePrMerge(buildDeps(), createDefaultInput())).resolves.toBeUndefined();
+      expect(mockTaskDispatcher.cancelOnWorker).not.toHaveBeenCalled();
+    });
+
+    it('does not fail if cancelOnWorker throws', async () => {
+      mockCodeTaskRepo.findPreservedPullRequestTask.mockResolvedValue(
+        ok({ id: 'task_preserved', workerLocation: 'worker-home', userId: 'user-preserved' })
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok(null));
+      mockTaskDispatcher.cancelOnWorker.mockRejectedValue(new Error('network error'));
+
+      await expect(handlePrMerge(buildDeps(), createDefaultInput())).resolves.toBeUndefined();
+    });
+
+    it('calls cancelOnWorker with undefined credentials when worker config not found', async () => {
+      mockCodeTaskRepo.findPreservedPullRequestTask.mockResolvedValue(
+        ok({ id: 'task_preserved', workerLocation: 'unknown-worker', userId: 'user-preserved' })
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [
+            {
+              name: 'other-worker',
+              url: 'https://other.example.com',
+              cfAccessClientId: 'other-id',
+              cfAccessClientSecret: 'other-secret',
+              enabled: true,
+            },
+          ],
+        })
+      );
+
+      await handlePrMerge(buildDeps(), createDefaultInput());
+
+      expect(mockTaskDispatcher.cancelOnWorker).toHaveBeenCalledWith(
+        'task_preserved',
+        'unknown-worker',
+        undefined,
+      );
+    });
+  });
+
+  describe('plan PR detection', () => {
+    it('should transition to Todo (not QA) when PR title contains [plan]', async () => {
+      mockCodeTaskRepo.findByPR.mockResolvedValue(
+        ok(createBaseTask({ linearIssueId: 'INT-100', userId: 'user-from-task' }))
+      );
+
+      await handlePrMerge(
+        buildDeps(),
+        createDefaultInput({ prTitle: '[INT-100] [plan] Add remediation agent' }),
+      );
+
+      expect(mockLinearIssueService.markTodo).toHaveBeenCalledWith('user-from-task', 'INT-100');
+      expect(mockLinearIssueService.markTodo).toHaveBeenCalledTimes(1);
+      expect(mockLinearIssueService.markQa).not.toHaveBeenCalled();
+    });
+
+    it('should transition to QA when PR title has no [plan] prefix', async () => {
+      mockCodeTaskRepo.findByPR.mockResolvedValue(
+        ok(createBaseTask({ linearIssueId: 'INT-200', userId: 'user-from-task' }))
+      );
+
+      await handlePrMerge(
+        buildDeps(),
+        createDefaultInput({ prTitle: '[INT-200] Fix auth bug' }),
+      );
+
+      expect(mockLinearIssueService.markQa).toHaveBeenCalledWith('user-from-task', 'INT-200');
+      expect(mockLinearIssueService.markQa).toHaveBeenCalledTimes(1);
+      expect(mockLinearIssueService.markTodo).not.toHaveBeenCalled();
+    });
+
+    it('should detect [PLAN] case-insensitively (uppercase)', async () => {
+      mockCodeTaskRepo.findByPR.mockResolvedValue(
+        ok(createBaseTask({ linearIssueId: 'INT-150', userId: 'user-from-task' }))
+      );
+
+      await handlePrMerge(
+        buildDeps(),
+        createDefaultInput({ prTitle: '[INT-150] [PLAN] Uppercase plan tag' }),
+      );
+
+      expect(mockLinearIssueService.markTodo).toHaveBeenCalledWith('user-from-task', 'INT-150');
+      expect(mockLinearIssueService.markTodo).toHaveBeenCalledTimes(1);
+      expect(mockLinearIssueService.markQa).not.toHaveBeenCalled();
+    });
+
+    it('should transition to Todo when plan PR has INT-XXX in body (not task)', async () => {
+      await handlePrMerge(
+        buildDeps(),
+        createDefaultInput({
+          prTitle: '[INT-300] [plan] New feature',
+          prBody: 'Fixes INT-300',
+          prAuthorLogin: 'author-login',
+        }),
+      );
+
+      expect(mockLinearIssueService.markTodo).toHaveBeenCalledWith('resolved-user', 'INT-300');
+      expect(mockLinearIssueService.markTodo).toHaveBeenCalledTimes(1);
+      expect(mockLinearIssueService.markQa).not.toHaveBeenCalled();
+    });
   });
 });

@@ -42,6 +42,8 @@ export interface FormatterState {
   partialLine?: string; // Buffered incomplete JSON from previous chunk
 }
 
+export type LogRuntime = 'claude' | 'codex';
+
 export function createFormatterState(): FormatterState {
   return {
     toolCallsById: new Map<string, string>(),
@@ -123,6 +125,83 @@ export function formatLogChunk(
     if (text === '') continue;
 
     result.push({ sequence: seq++, text, timestamp });
+  }
+
+  return result;
+}
+
+export function formatLogChunkForRuntime(
+  runtime: LogRuntime,
+  raw: string,
+  startSequence: number,
+  timestamp: Timestamp,
+  state?: FormatterState,
+): FormattedLogLine[] {
+  if (runtime === 'codex') {
+    return formatRawCodexLogChunk(raw, startSequence, timestamp, state);
+  }
+  return formatLogChunk(raw, startSequence, timestamp, state);
+}
+
+export function flushLogChunkFormatterForRuntime(
+  runtime: LogRuntime,
+  startSequence: number,
+  timestamp: Timestamp,
+  state: FormatterState,
+): FormattedLogLine[] {
+  if (runtime !== 'codex') {
+    return [];
+  }
+
+  if (state.partialLine === undefined) {
+    return [];
+  }
+
+  const line = state.partialLine;
+  delete state.partialLine;
+
+  if (line.trim() === '') {
+    return [];
+  }
+
+  return [{ sequence: startSequence * 1000, text: line, timestamp }];
+}
+
+function formatRawCodexLogChunk(
+  raw: string,
+  startSequence: number,
+  timestamp: Timestamp,
+  state?: FormatterState,
+): FormattedLogLine[] {
+  if (raw === '') return [];
+
+  const lines = raw.split('\n');
+  const result: FormattedLogLine[] = [];
+  let seq = startSequence * 1000;
+  const hasExternalState = state !== undefined;
+  const s = state ?? createFormatterState();
+
+  if (s.partialLine !== undefined && lines.length > 0) {
+    /* v8 ignore start -- ts-type: String.split always returns a dense array, so lines[0] is defined when length > 0 @preserve */
+    lines[0] = s.partialLine + (lines[0] ?? '');
+    /* v8 ignore stop @preserve */
+    delete s.partialLine;
+  }
+
+  const endsWithNewline = raw.endsWith('\n');
+  for (let i = 0; i < lines.length; i++) {
+    /* v8 ignore start -- ts-type: Array indexing within bounds on split output is always defined for dense arrays @preserve */
+    const line = lines[i] ?? '';
+    /* v8 ignore stop @preserve */
+    const isLastLine = i === lines.length - 1;
+
+    if (hasExternalState && isLastLine && !endsWithNewline) {
+      s.partialLine = line;
+      continue;
+    }
+
+    if (line.trim() === '') continue;
+    result.push({ sequence: seq++, text: line, timestamp });
   }
 
   return result;

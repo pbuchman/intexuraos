@@ -2,7 +2,12 @@ import { useState } from 'react';
 import { ChevronDown, FileText } from 'lucide-react';
 import { Card, MarkdownContent } from '@/components';
 import { formatRelative } from '@/utils/dateFormat';
-import type { InputContext, LlmResult, ResearchStatus, SupportedModel } from '@/services/researchAgentApi.types';
+import type {
+  InputContext,
+  LlmResult,
+  ResearchStatus,
+  StoredResearchModel,
+} from '@/services/researchAgentApi.types';
 import { getModelDisplayName } from './shared.js';
 
 type DotStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
@@ -85,8 +90,8 @@ export function CollapsibleInputContext({
 
 interface ProcessingStatusProps {
   llmResults: LlmResult[];
-  selectedModels: SupportedModel[];
-  synthesisModel: SupportedModel;
+  selectedModels: StoredResearchModel[];
+  synthesisModel: StoredResearchModel;
   researchStatus: ResearchStatus;
   hasInputContexts: boolean;
   title?: string;

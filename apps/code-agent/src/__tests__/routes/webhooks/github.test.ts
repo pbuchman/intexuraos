@@ -108,6 +108,7 @@ describe('POST /webhooks/github', () => {
       archiveTaskLogs: vi.fn().mockResolvedValue(ok(undefined)),
       findByPR: vi.fn().mockResolvedValue(ok(null)),
       findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
+      hasDispatchedOrRunningForPR: vi.fn().mockResolvedValue(ok({ hasActive: false })),
       deleteTask: vi.fn().mockResolvedValue(ok(undefined)),
       listQueuedByAge: vi.fn().mockResolvedValue(ok([])),
       listQueued: vi.fn().mockResolvedValue(ok([])),
@@ -115,7 +116,10 @@ describe('POST /webhooks/github', () => {
       countQueued: vi.fn().mockResolvedValue(ok(0)),
       findRecentTasksByLinearIssue: vi.fn().mockResolvedValue(ok([])),
       findPlannedTaskByLinearIssue: vi.fn().mockResolvedValue(ok(null)),
-      findLatestNonReviewTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findRecentRemediationForPR: vi.fn().mockResolvedValue(ok(null)),
+      findPreservedPullRequestTask: vi.fn().mockResolvedValue(ok(null)),
     };
 
     // Create mock PR summary repo
@@ -3327,7 +3331,7 @@ describe('POST /webhooks/github', () => {
 
     beforeEach(() => {
       mockMarkQa = vi.fn().mockResolvedValue(undefined);
-      Object.assign(mockServices, { linearIssueService: { markQa: mockMarkQa } });
+      Object.assign(mockServices, { linearIssueService: { markQa: mockMarkQa, markTodo: vi.fn().mockResolvedValue(undefined) } });
     });
 
     it('should call handlePrMerge when PR is closed with merge', async () => {

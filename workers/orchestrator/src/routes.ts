@@ -2,8 +2,8 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { createHmac } from 'node:crypto';
 import type { TaskDispatcher } from './services/task-dispatcher.js';
 import type { GitHubTokenService } from './github/token-service.js';
-import type { CredentialMonitor } from './services/isolation/credential-monitor.js';
 import type { IsolationProvider } from './services/isolation/types.js';
+import type { WorkerAuthRegistry } from './services/worker-auth/index.js';
 import type { OrchestratorStatus } from './types/state.js';
 import type { Logger } from '@intexuraos/common-core';
 import type { CreateTaskRequest } from './types/api.js';
@@ -56,7 +56,7 @@ export function registerRoutes(
   config: { orchestratorSecret: string },
   logger: Logger,
   getStatus?: () => OrchestratorStatus,
-  credentialMonitor?: CredentialMonitor,
+  workerAuthRegistry?: WorkerAuthRegistry,
   isolationProvider?: IsolationProvider
 ): void {
   const nonceCache: NonceCache = {};
@@ -165,6 +165,7 @@ export function registerRoutes(
       }),
       ...(parsed.planningPrBranch !== undefined && { planningPrBranch: parsed.planningPrBranch }),
       ...(parsed.planningPrUrl !== undefined && { planningPrUrl: parsed.planningPrUrl }),
+      ...(parsed.prNumber !== undefined && { prNumber: parsed.prNumber }),
     };
 
     logger.info(
@@ -176,7 +177,11 @@ export function registerRoutes(
 
     if (!result.ok) {
       const { error } = result;
-      if (error.type === 'at_capacity' || error.type === 'docker_unavailable') {
+      if (
+        error.type === 'at_capacity' ||
+        error.type === 'docker_unavailable' ||
+        error.type === 'auth_unavailable'
+      ) {
         const errorResponse = { error: error.message };
         logger.warn(
           { taskId: body.taskId, errorType: error.type, status: 503, response: errorResponse },
@@ -276,10 +281,20 @@ export function registerRoutes(
     const running = dispatcher.getRunningCount();
     const capacity = dispatcher.getCapacity();
     const tokenExpiry = tokenService.getExpiresAt();
-    /* v8 ignore start -- ts-type: nullish coalescing fallback for optional credentialMonitor parameter @preserve */
-    const oauthState = credentialMonitor?.getState() ?? {
-      status: 'not_configured' as const,
-      message: 'Credential monitor not initialized',
+    /* v8 ignore start -- ts-type: nullish coalescing fallback for optional workerAuthRegistry parameter @preserve */
+    const workerAuths = workerAuthRegistry?.getStates() ?? {
+      claude: {
+        status: 'not_configured' as const,
+        authMode: null,
+        refreshSupported: false,
+        message: 'Worker auth registry not initialized',
+      },
+      codex: {
+        status: 'not_configured' as const,
+        authMode: null,
+        refreshSupported: false,
+        message: 'Worker auth registry not initialized',
+      },
     };
     /* v8 ignore stop @preserve */
 
@@ -293,7 +308,7 @@ export function registerRoutes(
       running,
       available: capacity - running,
       githubTokenExpiresAt: tokenExpiry?.toISOString() ?? null,
-      anthropicOAuth: oauthState,
+      workerAuths,
       dockerHealthy: healthDetails.docker,
       diskHealthy: healthDetails.disk,
     });

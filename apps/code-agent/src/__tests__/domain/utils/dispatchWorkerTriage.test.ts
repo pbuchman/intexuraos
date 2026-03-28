@@ -6,8 +6,10 @@ describe('extractDispatchWorkerType', () => {
     expect(extractDispatchWorkerType('Fix this @worker minimax')).toBe('minimax');
   });
 
-  it('extracts worker type from @model directive', () => {
-    expect(extractDispatchWorkerType('@model qwen fix tests')).toBe('qwen');
+  it('should return undefined for @model directive (removed)', () => {
+    expect(extractDispatchWorkerType('@model qwen fix tests')).toBeUndefined();
+    expect(extractDispatchWorkerType('@model opus')).toBeUndefined();
+    expect(extractDispatchWorkerType('fix this @model sonnet')).toBeUndefined();
   });
 
   it('normalizes qwen alias to qwen', () => {
@@ -26,7 +28,8 @@ describe('extractDispatchWorkerType', () => {
     expect(extractDispatchWorkerType('@WORKER OPUS')).toBe('opus');
   });
 
-  it('uses first match when multiple directives', () => {
+  it('uses @worker when both @worker and @model present', () => {
+    // @model is ignored, so @worker opus is used
     expect(extractDispatchWorkerType('@worker opus @model sonnet')).toBe('opus');
   });
 
@@ -34,9 +37,6 @@ describe('extractDispatchWorkerType', () => {
     expect(extractDispatchWorkerType('@worker opus')).toBe('opus');
   });
 
-  it('extracts sonnet from @model sonnet', () => {
-    expect(extractDispatchWorkerType('@model sonnet')).toBe('sonnet');
-  });
 
   it('normalizes glm to glm', () => {
     expect(extractDispatchWorkerType('@worker glm')).toBe('glm');
@@ -46,8 +46,12 @@ describe('extractDispatchWorkerType', () => {
     expect(extractDispatchWorkerType('@worker kimi')).toBe('kimi');
   });
 
-  it('extracts auto from @model auto', () => {
-    expect(extractDispatchWorkerType('@model auto')).toBe('auto');
+  it('extracts codex from @worker codex', () => {
+    expect(extractDispatchWorkerType('@worker codex')).toBe('codex');
+  });
+
+  it('extracts codex-xhigh from @worker codex-xhigh', () => {
+    expect(extractDispatchWorkerType('@worker codex-xhigh')).toBe('codex-xhigh');
   });
 
   it('rejects qwen3.5-plus explicit form', () => {
@@ -58,7 +62,4 @@ describe('extractDispatchWorkerType', () => {
     expect(extractDispatchWorkerType('@worker')).toBeUndefined();
   });
 
-  it('returns undefined for @model without type', () => {
-    expect(extractDispatchWorkerType('@model')).toBeUndefined();
-  });
 });

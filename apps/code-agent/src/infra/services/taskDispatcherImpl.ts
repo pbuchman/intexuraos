@@ -5,7 +5,7 @@
  */
 
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import type { WorkerType } from '../../domain/models/codeTask.js';
+import type { AgentType, WorkerType } from '../../domain/models/codeTask.js';
 import type { WorkerCredentials } from '../../domain/models/workerSettings.js';
 import type {
   DispatchError,
@@ -59,9 +59,10 @@ interface WorkerTaskRequest {
   hasChildren: boolean;
   linearIssueId?: string;
   traceId?: string;
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  agentType?: AgentType;
   executionMemoryContext?: ExecutionMemoryPromptContext;
   trackingCommentId?: string;
+  prNumber?: number;
   continuationPrNumber?: number;
   continuationPrBranch?: string;
   planningPrBranch?: string;
@@ -137,6 +138,9 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     }
     if (request.trackingCommentId !== undefined) {
       taskRequest.trackingCommentId = request.trackingCommentId;
+    }
+    if (request.prNumber !== undefined) {
+      taskRequest.prNumber = request.prNumber;
     }
     if (request.continuationPrNumber !== undefined) {
       taskRequest.continuationPrNumber = request.continuationPrNumber;

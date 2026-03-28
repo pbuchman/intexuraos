@@ -41,7 +41,7 @@ Create `.envrc.local` with orchestrator-specific variables:
 ```bash
 cat >> .envrc.local << 'EOF'
 export INTEXURAOS_REPOSITORY_URL=https://github.com/pbuchman/intexuraos.git
-export INTEXURAOS_REPOSITORY_PATH=$HOME/.claude-orchestrator/repo
+export INTEXURAOS_REPOSITORY_PATH=$HOME/.code-orchestrator/repo
 export INTEXURAOS_PROJECT_ID=intexuraos-dev-pbuchman
 export INTEXURAOS_CODE_AGENT_URL=https://intexuraos-code-agent-cj44trunra-lm.a.run.app/
 export GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json
@@ -57,12 +57,12 @@ direnv allow
 ### Step 4: Create required directories
 
 ```bash
-mkdir -p ~/.claude-orchestrator/logs ~/claude-workers/worktrees
+mkdir -p ~/.code-orchestrator/logs ~/code-workers/worktrees
 ```
 
 ### Step 5: Set up Docker network
 
-The claude-worker containers need a Docker network:
+The code-worker containers need a Docker network:
 
 ```bash
 ./scripts/setup-worker-network.sh
@@ -71,7 +71,7 @@ The claude-worker containers need a Docker network:
 Verify:
 
 ```bash
-docker network inspect claude-worker-net
+docker network inspect code-worker-net
 ```
 
 ### Step 6: Start the orchestrator
@@ -109,7 +109,10 @@ Expected response:
   "running": 0,
   "available": 2,
   "githubTokenExpiresAt": "2026-03-22T15:30:00.000Z",
-  "anthropicOAuth": { "status": "active", "expiresInMinutes": 45, "subscriptionType": "max" },
+  "workerAuths": {
+    "claude": { "status": "active", "authMode": "oauth", "refreshSupported": true, "expiresInMinutes": 45, "subscriptionType": "max" },
+    "codex": { "status": "active", "authMode": "chatgpt", "refreshSupported": true, "expiresInMinutes": 40 }
+  },
   "dockerHealthy": true,
   "diskHealthy": true
 }
@@ -140,7 +143,7 @@ echo "X-Dispatch-Signature: ${SIGNATURE}"
 
 ### Step 2: Submit a task
 
-The `workerType` field controls which AI model handles the task. Valid types are `opus`, `auto`, `sonnet` (Anthropic), `minimax` (MiniMax), and `glm`, `qwen`, `kimi` (Alibaba Cloud DashScope).
+The `workerType` field controls which runtime/model preset handles the task. Valid types are `opus`, `auto`, `sonnet` (Anthropic), `minimax` (MiniMax), `glm`, `qwen`, `kimi` (Alibaba Cloud DashScope), and `codex`.
 
 ```bash
 BODY='{
@@ -281,7 +284,7 @@ curl http://localhost:8199/tasks/test-task-001 | jq
 Watch Docker container logs:
 
 ```bash
-docker logs -f claude-worker-test-task-001
+docker logs -f code-worker-test-task-001
 ```
 
 View orchestrator health:
@@ -334,8 +337,8 @@ pnpm --filter orchestrator typecheck
 Build the test image first:
 
 ```bash
-cd workers/claude-worker
-docker build -t claude-worker:test -f Dockerfile.test .
+cd workers/code-worker
+docker build -t code-worker:test -f Dockerfile.test .
 cd ../..
 ```
 
@@ -385,9 +388,9 @@ Create `~/Library/LaunchAgents/com.intexuraos.orchestrator.plist`:
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/Users/YOUR_USERNAME/.claude-orchestrator/logs/orchestrator.out.log</string>
+    <string>/Users/YOUR_USERNAME/.code-orchestrator/logs/orchestrator.out.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/YOUR_USERNAME/.claude-orchestrator/logs/orchestrator.err.log</string>
+    <string>/Users/YOUR_USERNAME/.code-orchestrator/logs/orchestrator.err.log</string>
 </dict>
 </plist>
 ```
@@ -431,9 +434,9 @@ curl -H "CF-Access-Client-Id: <client-id>" \
 | `Secret Manager fetch failed`                     | Wrong credentials path               | Verify `GOOGLE_APPLICATION_CREDENTIALS` file exists                                                                                               |
 | `502 from tunnel`                                 | Orchestrator not running             | Start with `pnpm --filter orchestrator dev`                                                                                                       |
 | `401 Invalid signature`                           | HMAC secret mismatch                 | Match `INTEXURAOS_ORCHESTRATOR_SECRET` with UI setting                                                                                            |
-| Docker `name already in use`                      | Orphaned container from previous run | Periodic stale cleanup handles this; manual: `docker rm -f $(docker ps -aq --filter name=claude-worker-)`                                         |
+| Docker `name already in use`                      | Orphaned container from previous run | Periodic stale cleanup handles this; manual: `docker rm -f $(docker ps -aq --filter name=code-worker-)`                                           |
 | `Network not found`                               | Missing Docker network               | `./scripts/setup-worker-network.sh`                                                                                                               |
-| `Image not found`                                 | Claude worker image not pulled/built | `docker pull europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest`; or set `INTEXURAOS_CLAUDE_WORKER_IMAGE` |
+| `Image not found`                                 | Code worker image not pulled/built   | `docker pull europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest`; or set `INTEXURAOS_CODE_WORKER_IMAGE`     |
 | Tests skipped (E2E)                               | Docker network or test image missing | See Part 3 prerequisites                                                                                                                          |
 | `Cannot find module '@intexuraos'`                | Packages not built                   | Run `pnpm build` at repository root                                                                                                               |
 | Turn metrics always zero                          | macOS host (no cgroup v2 exposure)   | Expected on macOS; metrics are non-fatal and show zeros when cgroup path is unavailable                                                           |

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CodeTask } from '@/types';
-import { groupByLinearIssue, sortIssueGroups } from '../issueGroups.js';
+import { groupByLinearIssue, sortIssueGroups, hasImplementationReadyLabel, hasMergeReadyLabel, isTaskMergeable, getTaskMergeUrl } from '../issueGroups.js';
 import type { IssueGroup, PipelineStepData, SortOption } from '../issueGroups.js';
 
 function createMockTask(overrides: Partial<CodeTask> & { id: string }): CodeTask {
@@ -760,6 +760,34 @@ describe('groupByLinearIssue', () => {
     expect(groups[0]?.pipeline.pr).toEqual({ url: 'https://github.com/org/repo/pull/999', number: '999' });
   });
 
+  it('falls through to older execution task when newest review task has no prUrl', () => {
+    // Real-world post-review flow: execution (implemented, has prUrl) → review (reviewed, no prUrl)
+    // pipeline.pr should still surface the execution task's prUrl
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+        updatedAt: '2026-03-07T16:00:00Z',
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+        status: 'reviewed',
+        updatedAt: '2026-03-07T17:00:00Z',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    // Review task (t2) has no prUrl, so iteration falls through to execution task (t1)
+    expect(groups[0]?.pipeline.pr).toEqual({ url: 'https://github.com/org/repo/pull/42', number: '42' });
+  });
+
   it('does not extract PR from archived tasks', () => {
     const tasks = [
       createMockTask({
@@ -1016,5 +1044,412 @@ describe('sortIssueGroups', () => {
         expect(() => sortIssueGroups(groups, option)).not.toThrow();
       }
     });
+  });
+});
+
+describe('hasImplementationReadyLabel', () => {
+  it('returns true when ready-to-implement label exists', () => {
+    expect(hasImplementationReadyLabel([{ id: 'l1', name: 'ready-to-implement' }])).toBe(true);
+  });
+
+  it('returns true when code-task label exists (backward compat)', () => {
+    expect(hasImplementationReadyLabel([{ id: 'l1', name: 'code-task' }])).toBe(true);
+  });
+
+  it('returns true when labels is undefined (graceful fallback)', () => {
+    expect(hasImplementationReadyLabel(undefined)).toBe(true);
+  });
+
+  it('returns true when labels is empty array (graceful fallback)', () => {
+    expect(hasImplementationReadyLabel([])).toBe(true);
+  });
+
+  it('returns false when labels has items but neither ready-to-implement nor code-task', () => {
+    expect(hasImplementationReadyLabel([{ id: 'l1', name: 'some-other-label' }])).toBe(false);
+  });
+
+  it('handles mixed labels with ready-to-implement present', () => {
+    expect(hasImplementationReadyLabel([
+      { id: 'l1', name: 'bug' },
+      { id: 'l2', name: 'ready-to-implement' },
+    ])).toBe(true);
+  });
+
+  it('normalizes label names (spaces, underscores, casing)', () => {
+    expect(hasImplementationReadyLabel([{ id: 'l1', name: 'Ready To Implement' }])).toBe(true);
+    expect(hasImplementationReadyLabel([{ id: 'l1', name: 'ready_to_implement' }])).toBe(true);
+    expect(hasImplementationReadyLabel([{ id: 'l1', name: 'Code-Task' }])).toBe(true);
+  });
+});
+
+describe('label-gated actionable state', () => {
+  const linearIssueSkeleton = {
+    identifier: 'INT-100',
+    title: 'Test',
+    state: { name: 'Todo', type: 'unstarted' as const },
+    priority: 3,
+    assignee: null,
+    url: 'https://linear.app/test',
+    commentCount: 0,
+    lastCommentAt: null,
+  };
+
+  it('shows actionable when ready-to-implement label exists', () => {
+    const task = createMockTask({
+      id: 't1',
+      linearIssueId: 'INT-100',
+      agentType: 'planning',
+      status: 'planned',
+      linearIssue: {
+        ...linearIssueSkeleton,
+        labels: [{ id: 'l1', name: 'ready-to-implement' }],
+      },
+    });
+    const groups = groupByLinearIssue([task]);
+    expect(findStep(groups[0]?.pipeline, 'execution')?.state).toBe('actionable');
+  });
+
+  it('shows actionable when code-task label exists (backward compat)', () => {
+    const task = createMockTask({
+      id: 't1',
+      linearIssueId: 'INT-100',
+      agentType: 'planning',
+      status: 'planned',
+      linearIssue: {
+        ...linearIssueSkeleton,
+        labels: [{ id: 'l1', name: 'code-task' }],
+      },
+    });
+    const groups = groupByLinearIssue([task]);
+    expect(findStep(groups[0]?.pipeline, 'execution')?.state).toBe('actionable');
+  });
+
+  it('shows actionable when linearIssue is undefined (graceful fallback)', () => {
+    const task = createMockTask({
+      id: 't1',
+      linearIssueId: 'INT-100',
+      agentType: 'planning',
+      status: 'planned',
+    });
+    const groups = groupByLinearIssue([task]);
+    expect(findStep(groups[0]?.pipeline, 'execution')?.state).toBe('actionable');
+  });
+
+  it('shows actionable when linearIssue has empty labels array (graceful fallback)', () => {
+    const task = createMockTask({
+      id: 't1',
+      linearIssueId: 'INT-100',
+      agentType: 'planning',
+      status: 'planned',
+      linearIssue: {
+        ...linearIssueSkeleton,
+        labels: [],
+      },
+    });
+    const groups = groupByLinearIssue([task]);
+    expect(findStep(groups[0]?.pipeline, 'execution')?.state).toBe('actionable');
+  });
+
+  it('does NOT show actionable when linearIssue has labels but neither ready-to-implement nor code-task', () => {
+    const task = createMockTask({
+      id: 't1',
+      linearIssueId: 'INT-100',
+      agentType: 'planning',
+      status: 'planned',
+      linearIssue: {
+        ...linearIssueSkeleton,
+        labels: [{ id: 'l1', name: 'some-other-label' }],
+      },
+    });
+    const groups = groupByLinearIssue([task]);
+    expect(findStep(groups[0]?.pipeline, 'execution')).toBeUndefined();
+  });
+
+  it('does NOT show actionable when linearIssue has only unclear label', () => {
+    const task = createMockTask({
+      id: 't1',
+      linearIssueId: 'INT-100',
+      agentType: 'planning',
+      status: 'planned',
+      linearIssue: {
+        ...linearIssueSkeleton,
+        labels: [{ id: 'l1', name: 'unclear' }],
+      },
+    });
+    const groups = groupByLinearIssue([task]);
+    expect(findStep(groups[0]?.pipeline, 'execution')).toBeUndefined();
+  });
+});
+
+describe('hasMergeReadyLabel', () => {
+  it('returns true when ready-to-merge label exists', () => {
+    expect(hasMergeReadyLabel([{ id: 'l1', name: 'ready-to-merge' }])).toBe(true);
+  });
+
+  it('returns false when labels is undefined (no fallback)', () => {
+    expect(hasMergeReadyLabel(undefined)).toBe(false);
+  });
+
+  it('returns false when labels is empty (no fallback)', () => {
+    expect(hasMergeReadyLabel([])).toBe(false);
+  });
+
+  it('returns false when labels has items but not ready-to-merge', () => {
+    expect(hasMergeReadyLabel([{ id: 'l1', name: 'some-other-label' }])).toBe(false);
+  });
+
+  it('normalizes label names (spaces, underscores, casing)', () => {
+    expect(hasMergeReadyLabel([{ id: 'l1', name: 'Ready To Merge' }])).toBe(true);
+    expect(hasMergeReadyLabel([{ id: 'l1', name: 'ready_to_merge' }])).toBe(true);
+    expect(hasMergeReadyLabel([{ id: 'l1', name: 'READY-TO-MERGE' }])).toBe(true);
+  });
+
+  it('handles mixed labels with ready-to-merge present', () => {
+    expect(hasMergeReadyLabel([
+      { id: 'l1', name: 'bug' },
+      { id: 'l2', name: 'ready-to-merge' },
+    ])).toBe(true);
+  });
+});
+
+describe('pipeline merge step', () => {
+  const linearIssueSkeleton = {
+    identifier: 'INT-100',
+    title: 'Test',
+    state: { name: 'Todo', type: 'unstarted' as const },
+    priority: 3,
+    assignee: null,
+    url: 'https://linear.app/test',
+    commentCount: 0,
+    lastCommentAt: null,
+  };
+
+  it('shows actionable merge step when execution completed + ready-to-merge label exists', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'planning',
+        status: 'planned',
+        implementationTaskId: 't2',
+        createdAt: '2026-03-07T10:00:00Z',
+        updatedAt: '2026-03-07T10:05:00Z',
+        linearIssue: {
+          ...linearIssueSkeleton,
+          labels: [{ id: 'l1', name: 'ready-to-merge' }],
+        },
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-03-07T11:00:00Z',
+        updatedAt: '2026-03-07T11:05:00Z',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+        linearIssue: {
+          ...linearIssueSkeleton,
+          labels: [{ id: 'l1', name: 'ready-to-merge' }],
+        },
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    const mergeStep = findStep(groups[0]?.pipeline, 'merge');
+    expect(mergeStep).toBeDefined();
+    expect(mergeStep?.state).toBe('actionable');
+    expect(mergeStep?.label).toBe('Merge');
+  });
+
+  it('does NOT show merge step when execution completed but no ready-to-merge label', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'planning',
+        status: 'planned',
+        implementationTaskId: 't2',
+        createdAt: '2026-03-07T10:00:00Z',
+        updatedAt: '2026-03-07T10:05:00Z',
+        linearIssue: {
+          ...linearIssueSkeleton,
+          labels: [{ id: 'l1', name: 'ready-to-implement' }],
+        },
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-03-07T11:00:00Z',
+        updatedAt: '2026-03-07T11:05:00Z',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+        linearIssue: {
+          ...linearIssueSkeleton,
+          labels: [{ id: 'l1', name: 'ready-to-implement' }],
+        },
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(findStep(groups[0]?.pipeline, 'merge')).toBeUndefined();
+  });
+
+  it('does NOT show merge step when execution not yet completed (still running)', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'running',
+        linearIssue: {
+          ...linearIssueSkeleton,
+          labels: [{ id: 'l1', name: 'ready-to-merge' }],
+        },
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(findStep(groups[0]?.pipeline, 'merge')).toBeUndefined();
+  });
+
+  it('aggregate status is needs-action when merge step is actionable', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'planning',
+        status: 'planned',
+        implementationTaskId: 't2',
+        createdAt: '2026-03-07T10:00:00Z',
+        updatedAt: '2026-03-07T10:05:00Z',
+        linearIssue: {
+          ...linearIssueSkeleton,
+          labels: [{ id: 'l1', name: 'ready-to-merge' }],
+        },
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-03-07T11:00:00Z',
+        updatedAt: '2026-03-07T11:05:00Z',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+        linearIssue: {
+          ...linearIssueSkeleton,
+          labels: [{ id: 'l1', name: 'ready-to-merge' }],
+        },
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.aggregateStatus).toBe('needs-action');
+  });
+});
+
+describe('isTaskMergeable (detail view)', () => {
+  it('returns true for implemented task with prUrl and ready-to-merge label', () => {
+    expect(isTaskMergeable({
+      status: 'implemented',
+      result: { prUrl: 'https://github.com/org/repo/pull/42' },
+      linearIssue: { labels: [{ name: 'ready-to-merge' }] },
+    })).toBe(true);
+  });
+
+  it('returns true for reviewed task with prNumber and ready-to-merge label', () => {
+    expect(isTaskMergeable({
+      status: 'reviewed',
+      prNumber: 42,
+      linearIssue: { labels: [{ name: 'ready-to-merge' }] },
+    })).toBe(true);
+  });
+
+  it('returns false for reviewed task without prNumber', () => {
+    expect(isTaskMergeable({
+      status: 'reviewed',
+      linearIssue: { labels: [{ name: 'ready-to-merge' }] },
+    })).toBe(false);
+  });
+
+  it('returns false for implemented task without prUrl', () => {
+    expect(isTaskMergeable({
+      status: 'implemented',
+      linearIssue: { labels: [{ name: 'ready-to-merge' }] },
+    })).toBe(false);
+  });
+
+  it('returns false when ready-to-merge label is absent', () => {
+    expect(isTaskMergeable({
+      status: 'implemented',
+      result: { prUrl: 'https://github.com/org/repo/pull/42' },
+      linearIssue: { labels: [{ name: 'bug' }] },
+    })).toBe(false);
+  });
+
+  it('returns false for running task even with label and prUrl', () => {
+    expect(isTaskMergeable({
+      status: 'running',
+      result: { prUrl: 'https://github.com/org/repo/pull/42' },
+      linearIssue: { labels: [{ name: 'ready-to-merge' }] },
+    })).toBe(false);
+  });
+});
+
+describe('getTaskMergeUrl (detail view)', () => {
+  it('returns result.prUrl when available', () => {
+    expect(getTaskMergeUrl({
+      repository: 'org/repo',
+      result: { prUrl: 'https://github.com/org/repo/pull/42' },
+      prNumber: 42,
+    })).toBe('https://github.com/org/repo/pull/42');
+  });
+
+  it('constructs URL from repository + prNumber when prUrl missing', () => {
+    expect(getTaskMergeUrl({
+      repository: 'org/repo',
+      prNumber: 42,
+    })).toBe('https://github.com/org/repo/pull/42');
+  });
+
+  it('returns undefined when both prUrl and prNumber are missing', () => {
+    expect(getTaskMergeUrl({
+      repository: 'org/repo',
+    })).toBeUndefined();
+  });
+});
+
+describe('PR URL extraction fix', () => {
+  it('PR URL found when latest task is review (no prUrl) but earlier execution task has prUrl', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+        updatedAt: '2026-03-07T16:00:00Z',
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+        status: 'reviewed',
+        updatedAt: '2026-03-07T17:00:00Z',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.pipeline.pr).toEqual({ url: 'https://github.com/org/repo/pull/42', number: '42' });
   });
 });

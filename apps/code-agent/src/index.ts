@@ -30,6 +30,7 @@ const REQUIRED_ENV = [
  * - INTEXURAOS_SERVICE_URL: Worker configuration
  * - INTEXURAOS_WEB_URL: Web app URL for generating task links (defaults to https://intexuraos.cloud)
  * - INTEXURAOS_AUTH_AUDIENCE, INTEXURAOS_AUTH_ISSUER, INTEXURAOS_AUTH_JWKS_URL: Auth0 JWT
+ * - INTEXURAOS_ENABLE_METRICS: Set to 'true' to enable Cloud Monitoring metrics (requires monitoring.metricWriter IAM role)
  */
 
 // Additional env vars required in production but optional in E2E mode

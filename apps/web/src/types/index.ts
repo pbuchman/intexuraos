@@ -266,6 +266,7 @@ export interface NotificationFiltersData {
  */
 export interface UserSettings {
   userId: string;
+  timezone?: string;
   notifications: {
     filters: NotificationFilter[];
   };
@@ -1225,7 +1226,8 @@ export interface CodeTask {
     commentCount: number;
     lastCommentAt: string | null;
   };
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  prNumber?: number;
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
   implementationTaskId?: string;
   parentTaskId?: string;
   followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement';
@@ -1429,7 +1431,7 @@ export type GitHubDecisionState = 'pending' | 'completed';
 export type GitHubDecisionOutcome = 'dispatch' | 'skip' | 'request_review';
 export type GitHubDecisionMaker = 'hard_rules' | 'github_agent' | 'webhook_route';
 export type GitHubDispatchAction = 'create_task' | 'send_message' | 'create_review_task';
-export type GitHubReviewType = 'code_quality' | 'security' | 'architecture';
+export type GitHubReviewType = 'code_quality' | 'test_quality' | 'plan_review' | 'security' | 'architecture';
 
 export interface GitHubEventLogRow {
   id: string;

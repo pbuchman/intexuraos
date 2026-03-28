@@ -90,7 +90,7 @@ const MAX_TOKENS = 8192;
  */
 export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
   const client = new Anthropic({ apiKey: config.apiKey });
-  const { model, userId, pricing, logger } = config;
+  const { model, userId, researchId, pricing, logger } = config;
   const usageLogger = createUsageLogger({ logger });
 
   function createRequestContext(
@@ -106,6 +106,8 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
       method,
       prompt,
       startedAt: startTime,
+      userId,
+      ...(researchId !== undefined && { researchId }),
     });
     return { requestId, startTime, auditContext };
   }

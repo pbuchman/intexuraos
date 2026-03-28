@@ -45,4 +45,5 @@ export interface MergeQueueWatch {
   createdAt: string;
   lastTickAt: string | null;
   drainedAt: string | null;
+  excludedPrNumbers: number[];
 }

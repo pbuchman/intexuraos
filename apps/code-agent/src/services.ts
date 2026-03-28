@@ -71,10 +71,10 @@ import { createUnifiedEvaluator, type UnifiedEvaluator } from './domain/services
 import { evaluateEvent, type GitHubAgentEvalResult, type GitHubAgentError } from './domain/usecases/githubAgent.js';
 import type { GitHubPREvent } from './domain/models/gitHubPREvent.js';
 import { createReviewTask } from './domain/usecases/createReviewTask.js';
+import { createRemediationTask, type CreateRemediationTaskRequest, type CreateRemediationTaskResult, type CreateRemediationTaskError } from './domain/usecases/createRemediationTask.js';
 import type { MergeConflictDetector } from './domain/services/mergeConflictDetector.js';
 import { createDetectMergeConflictsOnPush } from './domain/usecases/detectMergeConflictsOnPush.js';
 import { fetchGitHubToken } from './domain/utils/gitHubTokenResolver.js';
-import { parseOwnerRepo } from './domain/utils/parseOwnerRepo.js';
 import type { GitHubWebhookAuditEventRepository } from './domain/repositories/gitHubWebhookAuditEventRepository.js';
 import { createFirestoreGitHubWebhookAuditEventRepository } from './infra/firestore/gitHubWebhookAuditEventRepository.js';
 import type { GitHubEventLogEntryRepository } from './domain/repositories/gitHubEventLogEntryRepository.js';
@@ -86,6 +86,7 @@ import type { TaskEnqueueService } from './domain/services/taskEnqueueService.js
 import { createTaskEnqueueService } from './infra/services/taskEnqueueServiceImpl.js';
 import type { MergeQueueWatchRepository } from './domain/repositories/mergeQueueWatchRepository.js';
 import { createFirestoreMergeQueueWatchRepository } from './infra/firestore/mergeQueueWatchRepository.js';
+import { createUnauthorizedSenderCommentHandler } from './domain/services/unauthorizedSenderCommentHandler.js';
 
 const GEMINI_TOOL_CALLING_MODEL = LlmModels.Gemini25Flash;
 const GEMINI_TOOL_CALLING_PRICING = TOOL_CALLING_PRICING[LlmModels.Gemini25Flash];
@@ -137,6 +138,8 @@ export interface ServiceContainer {
   executionMemoryDistillerClient?: LlmGenerateClient;
   executionMemoryEvaluatorClient?: LlmGenerateClient;
   executionMemoryEmbeddingClient?: EmbeddingClient;
+  // Optional so existing setServices() call sites in tests don't need updating
+  createRemediationTaskFn?: (logger: Logger, request: CreateRemediationTaskRequest) => Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>>;
 }
 
 // Configuration required to initialize services
@@ -323,7 +326,8 @@ export function initServices(config: ServiceConfig): void {
         logger,
       });
 
-  const metricsClient = isE2eMode ? createNoOpMetricsClient() : createMetricsClient();
+  const enableMetrics = process.env['INTEXURAOS_ENABLE_METRICS'] === 'true';
+  const metricsClient = isE2eMode || !enableMetrics ? createNoOpMetricsClient() : createMetricsClient();
 
   const whatsappPublisher = isE2eMode
     ? createE2eWhatsAppPublisher()
@@ -360,6 +364,7 @@ export function initServices(config: ServiceConfig): void {
     gitHubPRClient,
     prAutomationCommentRepo,
     resolveOAuthToken: async (userId) => await fetchGitHubToken(userServiceClient, userId, logger),
+    userServiceClient,
     logger,
   });
 
@@ -483,7 +488,7 @@ export function initServices(config: ServiceConfig): void {
     gitHubPRClient,
     userServiceClient,
     firestore,
-    messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS),
+    messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS),
     allowedBots: ALLOWED_BOTS,
     orchestratorSecret: config.orchestratorSecret,
     serviceUrl: config.serviceUrl,
@@ -527,6 +532,7 @@ export function initServices(config: ServiceConfig): void {
         workerSettingsRepo,
         orchestratorSecret: config.orchestratorSecret,
         automationLog,
+        gitHubPRSummaryRepo,
       },
       request,
     ),
@@ -539,20 +545,8 @@ export function initServices(config: ServiceConfig): void {
       return resolvedUser.userId;
     },
     allowedBots: ALLOWED_BOTS,
-    onUnauthorizedSender: async (event: GitHubPREvent) => {
-      const parsed = parseOwnerRepo(event.repository);
-      if (parsed === null) return;
-      const ownerUserResult = await userServiceClient.resolveGitHubUsername(parsed.owner);
-      if (!ownerUserResult.ok) return;
-      const ownerUser = ownerUserResult.value;
-      if (ownerUser === null) return;
-      const token = await fetchGitHubToken(userServiceClient, ownerUser.userId, logger);
-      if (token === null) return;
-      await gitHubPRClient.postPRComment(
-        token, parsed.owner, parsed.repo, event.pullRequestNumber,
-        `⚠️ Only the repository owner and authorized bots can trigger worker commands. This event from \`${event.senderLogin}\` has been ignored.`,
-      );
-    },
+    codeTaskRepo,
+    onUnauthorizedSender: createUnauthorizedSenderCommentHandler({ gitHubPRClient, userServiceClient, logger }),
   });
 
   container = {
@@ -610,6 +604,18 @@ export function initServices(config: ServiceConfig): void {
     ...(executionMemoryDistillerClient !== undefined && { executionMemoryDistillerClient }),
     ...(executionMemoryEvaluatorClient !== undefined && { executionMemoryEvaluatorClient }),
     ...(executionMemoryEmbeddingClient !== undefined && { executionMemoryEmbeddingClient }),
+    createRemediationTaskFn: (taskLogger: Logger, request: CreateRemediationTaskRequest): Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>> => createRemediationTask(
+      {
+        logger: taskLogger,
+        codeTaskRepo,
+        userLookupService,
+        taskEnqueueService,
+        workerSettingsRepo,
+        orchestratorSecret: config.orchestratorSecret,
+        automationLog,
+      },
+      request,
+    ),
   };
 }
 

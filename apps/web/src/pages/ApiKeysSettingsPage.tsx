@@ -23,12 +23,14 @@ const PROVIDERS: ProviderConfig[] = [
   { id: 'openai', name: 'OpenAI (GPT)' },
   { id: 'anthropic', name: 'Anthropic (Claude)' },
   { id: 'perplexity', name: 'Perplexity (Sonar)' },
+  { id: 'openrouter', name: 'OpenRouter' },
 ];
 
 const PROVIDER_GROUP_LABELS: Record<string, string> = {
   google: 'Google',
   openai: 'OpenAI',
   anthropic: 'Anthropic',
+  openrouter: 'OpenRouter',
 };
 
 /**
@@ -64,6 +66,13 @@ function validateApiKeyFormat(provider: LlmProvider, key: string): string | null
         return 'Perplexity API key should start with "pplx-"';
       }
       break;
+    case 'openrouter':
+      // OpenRouter keys typically start with 'sk-or-' but can have various formats
+      // since it's a proxy aggregator. Just ensure it's not trivially short.
+      if (key.length < 20) {
+        return 'OpenRouter API key appears too short';
+      }
+      break;
   }
 
   return null;
@@ -74,6 +83,7 @@ interface TestResults {
   openai: LlmTestResult | null;
   anthropic: LlmTestResult | null;
   perplexity: LlmTestResult | null;
+  openrouter: LlmTestResult | null;
 }
 
 /**
@@ -137,6 +147,7 @@ export function ApiKeysSettingsPage(): React.JSX.Element {
   if (keys?.openai !== null && keys?.openai !== undefined) configuredProviders.add(LlmProviders.OpenAI);
   if (keys?.anthropic !== null && keys?.anthropic !== undefined) configuredProviders.add(LlmProviders.Anthropic);
   if (keys?.perplexity !== null && keys?.perplexity !== undefined) configuredProviders.add(LlmProviders.Perplexity);
+  if (keys?.openrouter !== null && keys?.openrouter !== undefined) configuredProviders.add(LlmProviders.OpenRouter);
 
   const modelGroups = groupModelsByProvider(configuredProviders, keys?.testResults);
 
@@ -251,9 +262,11 @@ function ApiKeyRow({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [autoTestError, setAutoTestError] = useState<string | null>(null);
+  const [latestTestResult, setLatestTestResult] = useState<LlmTestResult | null>(null);
 
   const isConfigured = currentValue !== null;
+  const displayedTestResult = latestTestResult ?? savedTestResult;
 
   const handleSave = async (): Promise<void> => {
     const formatError = validateApiKeyFormat(provider.id, inputValue);
@@ -262,16 +275,24 @@ function ApiKeyRow({
       return;
     }
     setValidationError(null);
+    setAutoTestError(null);
+    setLatestTestResult(null);
     setIsSaving(true);
 
     try {
       await onSave(inputValue);
       setInputValue('');
       setIsEditing(false);
-      setSaveSuccess(true);
-      setTimeout(() => {
-        setSaveSuccess(false);
-      }, 5000);
+
+      setIsTesting(true);
+      try {
+        const result = await onTest();
+        setLatestTestResult(result);
+      } catch {
+        setAutoTestError('API key saved, but automatic testing failed. Use Test to retry.');
+      } finally {
+        setIsTesting(false);
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to save API key';
       setValidationError(errorMessage);
@@ -292,16 +313,25 @@ function ApiKeyRow({
 
   const handleTest = async (): Promise<void> => {
     setIsTesting(true);
-    setSaveSuccess(false);
+    setAutoTestError(null);
     try {
-      await onTest();
+      const result = await onTest();
+      setLatestTestResult(result);
     } finally {
       setIsTesting(false);
     }
   };
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [menuPlacement, setMenuPlacement] = useState<'down' | 'up'>('down');
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const updateMenuPlacement = (trigger: HTMLElement): void => {
+    const rect = trigger.getBoundingClientRect();
+    const estimatedMenuHeight = 144;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    setMenuPlacement(spaceBelow < estimatedMenuHeight ? 'up' : 'down');
+  };
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent): void {
@@ -316,7 +346,7 @@ function ApiKeyRow({
   }, []);
 
   return (
-    <Card className="relative overflow-hidden">
+    <Card className="relative">
       {isTesting ? (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 dark:bg-slate-800/60">
           <div className="flex items-center gap-2">
@@ -344,8 +374,12 @@ function ApiKeyRow({
               <>
                 <button
                   type="button"
-                  onClick={(): void => {
-                    setIsMenuOpen(!isMenuOpen);
+                  onClick={(event): void => {
+                    const nextOpen = !isMenuOpen;
+                    if (nextOpen) {
+                      updateMenuPlacement(event.currentTarget);
+                    }
+                    setIsMenuOpen(nextOpen);
                   }}
                   className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
                   title="Actions"
@@ -353,7 +387,11 @@ function ApiKeyRow({
                   <MoreVertical className="h-5 w-5" />
                 </button>
                 {isMenuOpen && (
-                  <div className="absolute right-0 top-full z-10 mt-1 w-36 rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                  <div
+                    className={`absolute right-0 z-10 w-36 rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800 ${
+                      menuPlacement === 'up' ? 'bottom-full mb-1' : 'top-full mt-1'
+                    }`}
+                  >
                     <button
                       type="button"
                       onClick={(): void => {
@@ -407,33 +445,31 @@ function ApiKeyRow({
         ) : null}
       </div>
 
-      {saveSuccess ? (
-        <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/30">
-          <p className="text-sm font-medium text-green-800 dark:text-green-400">
-            ✓ API key validated and saved successfully
-          </p>
+      {autoTestError !== null ? (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/30">
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">{autoTestError}</p>
         </div>
-      ) : savedTestResult !== null ? (
+      ) : displayedTestResult !== null ? (
         <div
           className={`mt-3 rounded-lg border p-3 ${
-            savedTestResult.status === 'success'
+            displayedTestResult.status === 'success'
               ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/30'
               : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/30'
           }`}
         >
           <p
             className={`text-sm font-medium mb-1 ${
-              savedTestResult.status === 'success' ? 'text-green-800 dark:text-green-400' : 'text-red-800 dark:text-red-400'
+              displayedTestResult.status === 'success' ? 'text-green-800 dark:text-green-400' : 'text-red-800 dark:text-red-400'
             }`}
           >
-            {savedTestResult.status === 'success'
-              ? `LLM Response (${formatDateTime(savedTestResult.testedAt)}):`
-              : `API Key Error (${formatDateTime(savedTestResult.testedAt)}):`}
+            {displayedTestResult.status === 'success'
+              ? `LLM Response (${formatDateTime(displayedTestResult.testedAt)}):`
+              : `API Key Error (${formatDateTime(displayedTestResult.testedAt)}):`}
           </p>
           <p
-            className={`text-sm ${savedTestResult.status === 'success' ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}
+            className={`text-sm ${displayedTestResult.status === 'success' ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}
           >
-            {savedTestResult.message}
+            {displayedTestResult.message}
           </p>
         </div>
       ) : null}
@@ -442,7 +478,12 @@ function ApiKeyRow({
         <div className="mt-4 space-y-3">
           <Input
             label="API Key"
+            id={`${provider.id}-api-key`}
+            name={`${provider.id}-api-key`}
             type="password"
+            autoComplete="new-password"
+            autoCapitalize="none"
+            spellCheck={false}
             placeholder="Enter API key..."
             value={inputValue}
             onChange={(e): void => {

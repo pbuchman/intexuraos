@@ -21,7 +21,7 @@ On startup, the orchestrator discovers orphaned containers via Docker and cross-
 ## Startup Adoption Flow
 
 ```
-1. Docker: list all claude-worker-* containers (running + exited)
+1. Docker: list all code-worker-* containers (running + exited)
 2. State: load state.json tasks with status=running
 3. For each container:
    ├─ Running + has state → ADOPT (re-register, --continue attempt)
@@ -35,10 +35,10 @@ On startup, the orchestrator discovers orphaned containers via Docker and cross-
 
 ## Container Discovery & Matching
 
-TaskId is extracted from container name via existing pattern `claude-worker-{taskId}`.
+TaskId is extracted from container name via existing pattern `code-worker-{taskId}`.
 
 Two data sources are joined by taskId:
-- **Docker containers** — discovered via `docker ps -a --filter name=claude-worker-`
+- **Docker containers** — discovered via `docker ps -a --filter name=code-worker-`
 - **State.json tasks** — persisted task objects with `status: running`
 
 ### Adoption details
@@ -72,13 +72,13 @@ From `state.json`: `webhookUrl`, `webhookSecret`, `workerType`, `worktreePath`, 
 | File                   | Change                                                                                     |
 | ---------------------- | ------------------------------------------------------------------------------------------ |
 | `main.ts`              | Replace `runStartupRecovery()` with new adoption flow coordinating Docker + state          |
-| `docker-provider.ts`   | New `listWorkerContainers()` method to discover all `claude-worker-*` containers           |
+| `docker-provider.ts`   | New `listWorkerContainers()` method to discover all `code-worker-*` containers             |
 | `task-dispatcher.ts`   | New `adoptTask()` method that re-registers timers/monitors and triggers --continue attempt |
 | `detect-zombies` route | Fix `INTERNAL_ERROR` in the code-agent endpoint                                            |
 
 ## What doesn't change
 
-- Container naming convention (`claude-worker-{taskId}`)
+- Container naming convention (`code-worker-{taskId}`)
 - Webhook client / retry mechanism
 - Heartbeat system (automatically picks up adopted tasks)
 - `state.json` persistence format

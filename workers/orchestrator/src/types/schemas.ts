@@ -56,9 +56,10 @@ export const CreateTaskRequestSchema = z.object({
   webhookUrl: z.string().url(),
   webhookSecret: z.string().min(1),
   actionId: z.string().optional(),
-  agentType: z.enum(['planning', 'execution', 'pull_request', 'review']).optional(),
+  agentType: z.enum(['planning', 'execution', 'pull_request', 'review', 'remediation']).optional(),
   executionMemoryContext: ExecutionMemoryPromptContextSchema.optional(),
   trackingCommentId: z.string().min(1).optional(),
+  prNumber: z.number().int().positive().optional(),
   continuationPrNumber: z.number().int().positive().optional(),
   continuationPrBranch: z.string().min(1).optional(),
   planningPrBranch: z.string().optional(),
@@ -83,6 +84,6 @@ export interface SendMessageResult {
 }
 
 export interface SendMessageError {
-  type: 'not_found' | 'invalid_status' | 'service_error';
+  type: 'not_found' | 'invalid_status' | 'service_error' | 'invalid_agent_type';
   message: string;
 }

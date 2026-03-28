@@ -14,7 +14,7 @@ export type WorkerType = CodeTaskWorkerType;
  */
 export type WorkerLocation = string;
 
-export type AgentType = 'planning' | 'execution' | 'pull_request' | 'review';
+export type AgentType = 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
 
 /** System prompt hash for auto-triggered merge-conflict resolution tasks. */
 export const MERGE_CONFLICT_SYSTEM_PROMPT_HASH = 'pr-merge-conflict-auto';
@@ -82,9 +82,12 @@ export interface TaskResult {
   execution_memory_ids_rejected?: string;
   execution_memory_usage_summary?: string;
   execution_linear_issue_url?: string;
+  review_id?: string;
   review_comments_posted?: string;
   review_types?: string;
   requirements_tracker_updated?: string;
+  needs_remediation?: string;
+  requires_re_review?: string;
 }
 
 export interface ExecutionMemoryContextMemory {
@@ -234,4 +237,7 @@ export interface CodeTask {
   reviewTypes?: string[];        // Review types requested (e.g., ['code_quality', 'security'])
   executionMemoryContext?: ExecutionMemoryContext;
   executionMemoryPostRun?: ExecutionMemoryPostRun;
+
+  // Remediation task metadata
+  requiresReReview?: boolean;    // Set by remediation tasks before pushing code
 }

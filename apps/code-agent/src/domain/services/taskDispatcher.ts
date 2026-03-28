@@ -5,7 +5,7 @@
  */
 
 import type { Result, Logger } from '@intexuraos/common-core';
-import type { WorkerType } from '../models/codeTask.js';
+import type { AgentType, WorkerType } from '../models/codeTask.js';
 import type { ExecutionMemoryType } from '../models/executionMemory.js';
 import type { WorkerLocation } from '../models/worker.js';
 import type { WorkerHealthProbe } from '../ports/workerHealthProbe.js';
@@ -65,11 +65,13 @@ export interface DispatchRequest {
   /** For retried tasks: points to the original task ID that this task is retrying. */
   retriedFrom?: string;
   /** Agent type for orchestrator agent-based routing. */
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  agentType?: AgentType;
   /** Prompt-ready execution memory context prepared by code-agent retrieval. */
   executionMemoryContext?: ExecutionMemoryPromptContext;
   /** Existing PR tracking comment to reuse for pull_request tasks. */
   trackingCommentId?: string;
+  /** PR number this task is operating on. Used to enforce one-per-PR container preservation. */
+  prNumber?: number;
   /** Existing PR number to continue instead of creating a fresh PR. */
   continuationPrNumber?: number;
   /** Existing PR branch to continue instead of creating a fresh PR. */

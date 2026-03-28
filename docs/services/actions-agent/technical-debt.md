@@ -316,7 +316,7 @@ No deprecated APIs or dependencies in use.
 
 ### v3.0.0 Code Action Type (INT-156)
 
-**Issue:** No support for dispatching code tasks (Claude Code) from the action system.
+**Issue:** No support for dispatching code tasks from the action system.
 
 **Resolution:** Added `code` action type with full lifecycle: `handleCodeAction`, `executeCodeAction`, `CodeAgentClient` port and HTTP client, code task buttons.
 
