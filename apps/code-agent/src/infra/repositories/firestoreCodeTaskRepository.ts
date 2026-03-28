@@ -1042,23 +1042,31 @@ export const createFirestoreCodeTaskRepository = (deps: {
           .limit(50)
           .get();
 
-        // Find the first planning or execution task (the true origin)
+        // Find the origin task: planning/execution preferred, pull_request as fallback
+        let pullRequestFallback: FirebaseFirestore.QueryDocumentSnapshot | null = null;
         for (const doc of snapshot.docs) {
           const data = doc.data();
           const agentType = data['agentType'] as string | undefined;
           if (agentType === 'planning' || agentType === 'execution') {
             return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
           }
+          if (agentType === 'pull_request' && pullRequestFallback === null) {
+            pullRequestFallback = doc;
+          }
         }
 
         if (snapshot.docs.length === 50) {
           logger.warn(
             { repository, prNumber, docsScanned: 50 },
-            'findOriginTaskByPR exhausted 50-doc window without finding a planning/execution task',
+            'findOriginTaskByPR exhausted 50-doc window without finding an origin task',
           );
         }
 
-        return ok(null);
+        return ok(
+          pullRequestFallback !== null
+            ? toCodeTask(pullRequestFallback as { id: string; data(): Record<string, unknown> })
+            : null
+        );
       } catch (error) {
         logger.error({ error, repository, prNumber }, 'Failed to find origin task by PR');
         return err({
