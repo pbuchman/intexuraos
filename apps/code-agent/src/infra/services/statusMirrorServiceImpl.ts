@@ -88,7 +88,6 @@ export function createStatusMirrorService(deps: StatusMirrorServiceDeps): Status
       }
 
       const resourceStatus = statusMapping[taskStatus];
-      // Note: statusMapping covers all TaskStatus values, so this is exhaustive
       const result = await actionsAgentClient.updateActionStatus(
         actionId,
         resourceStatus,

@@ -1290,7 +1290,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           await linearIssueService.markInReview(task.userId, task.linearIssueId);
         }
 
-        // Mirror status to actions-agent (handles undefined/synthetic actionIds internally)
         await statusMirrorService.mirrorStatus({
           actionId: task.actionId,
           taskStatus: resolvedStatus,
@@ -1400,7 +1399,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
         await cleanupLockIfPR();
 
-        // Mirror status to actions-agent (handles undefined/synthetic actionIds internally)
         await statusMirrorService.mirrorStatus({
           actionId: task.actionId,
           taskStatus: 'failed',
@@ -1449,7 +1447,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
         await cleanupLockIfPR();
 
-        // Mirror status to actions-agent (handles undefined/synthetic actionIds internally)
         await statusMirrorService.mirrorStatus({
           actionId: task.actionId,
           taskStatus: 'interrupted',
@@ -1504,7 +1501,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
         await cleanupLockIfPR();
 
-        // Mirror status to actions-agent (handles undefined/synthetic actionIds internally)
         await statusMirrorService.mirrorStatus({
           actionId: task.actionId,
           taskStatus: 'cancelled',
