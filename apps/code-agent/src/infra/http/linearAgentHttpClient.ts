@@ -399,7 +399,7 @@ export function createLinearAgentHttpClient(
       assigneeId?: string | null;
       addLabels?: string[];
       removeLabels?: string[];
-    }): Promise<Result<void, LinearAgentError>> {
+    }): Promise<Result<{ droppedLabels: string[] }, LinearAgentError>> {
       const url = `${baseUrl}/internal/linear/issues/${encodeURIComponent(request.issueId)}/metadata`;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
@@ -424,9 +424,9 @@ export function createLinearAgentHttpClient(
           const errorText = await response.text();
           return err({ code: response.status === 404 ? 'NOT_FOUND' : 'UNAVAILABLE', message: errorText });
         }
-        const body = await response.json() as { success: boolean };
+        const body = await response.json() as { success: boolean; data?: { droppedLabels?: string[] } };
         if (!body.success) return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
-        return ok(undefined);
+        return ok({ droppedLabels: body.data?.droppedLabels ?? [] });
       } catch (error) {
         return err({ code: 'UNKNOWN', message: String(error) });
       } finally {
