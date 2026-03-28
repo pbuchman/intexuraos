@@ -1981,7 +1981,7 @@ describe('firestoreCodeTaskRepository', () => {
         prNumber: 456,
         agentType: 'pull_request',
         parentTaskId: 'task-pr-origin',
-        followUpReason: 'merge_conflict' as never,
+        followUpReason: 'merge_conflict',
         prompt: 'Resolve merge conflicts',
         sanitizedPrompt: 'resolve merge conflicts',
       }));
@@ -2476,7 +2476,7 @@ describe('firestoreCodeTaskRepository', () => {
         prNumber: 456,
         agentType: 'pull_request',
         parentTaskId: 'task-pr-origin',
-        followUpReason: 'merge_conflict' as never,
+        followUpReason: 'merge_conflict',
         prompt: 'Resolve merge conflicts',
         sanitizedPrompt: 'resolve merge conflicts',
       }));
@@ -3325,7 +3325,7 @@ describe('firestoreCodeTaskRepository', () => {
         prNumber: 42,
         agentType: 'pull_request',
         parentTaskId: 'task-pr-origin',
-        followUpReason: 'merge_conflict' as never,
+        followUpReason: 'merge_conflict',
         prompt: 'Resolve merge conflicts',
         sanitizedPrompt: 'resolve merge conflicts',
       }));
@@ -3359,6 +3359,36 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.value).not.toBeNull();
       expect(result.value?.id).toBe('task-pr-origin');
+    });
+
+    it('returns null when all implemented tasks are merge-conflict follow-ups', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const conflictTask = await repo.create(createTaskInput({
+        id: 'task-conflict-only',
+        repository: 'test/repo',
+        prNumber: 42,
+        agentType: 'pull_request',
+        followUpReason: 'merge_conflict',
+        prompt: 'Resolve merge conflicts',
+        sanitizedPrompt: 'resolve merge conflicts',
+      }));
+      expect(conflictTask.ok).toBe(true);
+      if (!conflictTask.ok) return;
+      await repo.update(conflictTask.value.id, {
+        status: 'implemented',
+        completedAt: new Date('2026-03-28T10:00:00Z'),
+      });
+
+      const result = await repo.findPreservedPullRequestTask('test/repo', 42);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toBeNull();
     });
   });
 

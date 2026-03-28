@@ -188,7 +188,7 @@ function buildTaskUrl(taskId: string): string {
 }
 
 function buildConflictCommentBody(params: {
-  phase: 'starting' | 'queued' | 'resumed' | 'no-worker' | 'failed' | 'resolved';
+  phase: 'starting' | 'queued' | 'no-worker' | 'failed' | 'resolved';
   repository: string;
   prNumber: number;
   baseBranch: string;
@@ -216,9 +216,6 @@ function buildConflictCommentBody(params: {
       break;
     case 'queued':
       lines.push('', 'Automated conflict resolution is queued and will start when worker capacity is available.');
-      break;
-    case 'resumed':
-      lines.push('', 'An existing PR task has been instructed to resolve the conflict.');
       break;
     case 'no-worker':
       lines.push('', 'Automatic resolution could not start because the PR owner has no enabled worker mapping.');
@@ -576,6 +573,7 @@ async function createMergeConflictTask(
   });
   const taskId = `task_${crypto.randomUUID()}`;
   const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, taskId);
+  const conflictParentTaskId = resolveConflictParentTaskId(params.existingTask);
 
   const createResult = await deps.codeTaskRepo.create(buildCreateTaskInput({
     taskId,
@@ -588,9 +586,7 @@ async function createMergeConflictTask(
     userId: params.ownerUserId,
     webhookSecret,
     ...(linkedLinearIssueId !== undefined && { linearIssueId: linkedLinearIssueId }),
-    ...(resolveConflictParentTaskId(params.existingTask) !== undefined
-      ? { parentTaskId: resolveConflictParentTaskId(params.existingTask) }
-      : {}),
+    ...(conflictParentTaskId !== undefined && { parentTaskId: conflictParentTaskId }),
   }));
 
   if (!createResult.ok) {
