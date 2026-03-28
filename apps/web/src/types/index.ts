@@ -1192,6 +1192,7 @@ export interface CodeTask {
     commentCount: number;
     lastCommentAt: string | null;
   };
+  prNumber?: number;
   agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
   implementationTaskId?: string;
   parentTaskId?: string;

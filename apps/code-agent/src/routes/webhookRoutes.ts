@@ -1191,24 +1191,36 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 if (originResult.ok && originResult.value !== null && originResult.value.linearIssueId !== undefined) {
                   const originTask = originResult.value;
                   const originLinearIssueId: string = originResult.value.linearIssueId;
-                  const label = originTask.agentType === 'planning' ? 'ready-to-implement' : 'ready-to-merge';
-                  const issueValidation = await linearAgentClient.validateIssue({
-                    userId: originTask.userId,
-                    identifier: originLinearIssueId,
-                  });
-                  if (issueValidation.ok) {
-                    const labelResult = await linearAgentClient.updateIssueMetadata({
-                      userId: originTask.userId,
-                      issueId: issueValidation.value.id,
-                      addLabels: [label],
-                    });
-                    if (labelResult.ok) {
-                      request.log.info({ taskId, prNumber, label, linearIssueId: originLinearIssueId }, 'Set review-outcome label on origin issue');
-                    } else {
-                      request.log.warn({ taskId, prNumber, label, error: labelResult.error }, 'Failed to set review-outcome label (best-effort)');
-                    }
+                  // Only label for real origin task types — pull_request tasks can also
+                  // be returned by findLatestExecutionTaskByPR but aren't valid origins.
+                  const label: string | undefined =
+                    originTask.agentType === 'planning' ? 'ready-to-implement' :
+                    originTask.agentType === 'execution' ? 'ready-to-merge' :
+                    undefined;
+                  if (label === undefined) {
+                    request.log.info(
+                      { taskId, prNumber, originAgentType: originTask.agentType },
+                      'Skipping review-outcome label — origin task is not a planning/execution task',
+                    );
                   } else {
-                    request.log.warn({ taskId, prNumber, linearIssueId: originLinearIssueId, error: issueValidation.error }, 'Failed to validate origin issue for review-outcome label (best-effort)');
+                    const issueValidation = await linearAgentClient.validateIssue({
+                      userId: originTask.userId,
+                      identifier: originLinearIssueId,
+                    });
+                    if (issueValidation.ok) {
+                      const labelResult = await linearAgentClient.updateIssueMetadata({
+                        userId: originTask.userId,
+                        issueId: issueValidation.value.id,
+                        addLabels: [label],
+                      });
+                      if (labelResult.ok) {
+                        request.log.info({ taskId, prNumber, label, linearIssueId: originLinearIssueId }, 'Set review-outcome label on origin issue');
+                      } else {
+                        request.log.warn({ taskId, prNumber, label, error: labelResult.error }, 'Failed to set review-outcome label (best-effort)');
+                      }
+                    } else {
+                      request.log.warn({ taskId, prNumber, linearIssueId: originLinearIssueId, error: issueValidation.error }, 'Failed to validate origin issue for review-outcome label (best-effort)');
+                    }
                   }
                 } else if (!originResult.ok) {
                   request.log.warn({ taskId, prNumber, error: originResult.error }, 'Failed to look up origin task for review-outcome label (best-effort)');

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CodeTask } from '@/types';
-import { groupByLinearIssue, sortIssueGroups, hasImplementationReadyLabel, hasMergeReadyLabel } from '../issueGroups.js';
+import { groupByLinearIssue, sortIssueGroups, hasImplementationReadyLabel, hasMergeReadyLabel, isTaskMergeable, getTaskMergeUrl } from '../issueGroups.js';
 import type { IssueGroup, PipelineStepData, SortOption } from '../issueGroups.js';
 
 function createMockTask(overrides: Partial<CodeTask> & { id: string }): CodeTask {
@@ -1325,6 +1325,77 @@ describe('pipeline merge step', () => {
 
     expect(groups).toHaveLength(1);
     expect(groups[0]?.aggregateStatus).toBe('needs-action');
+  });
+});
+
+describe('isTaskMergeable (detail view)', () => {
+  it('returns true for implemented task with prUrl and ready-to-merge label', () => {
+    expect(isTaskMergeable({
+      status: 'implemented',
+      result: { prUrl: 'https://github.com/org/repo/pull/42' },
+      linearIssue: { labels: [{ name: 'ready-to-merge' }] },
+    })).toBe(true);
+  });
+
+  it('returns true for reviewed task with prNumber and ready-to-merge label', () => {
+    expect(isTaskMergeable({
+      status: 'reviewed',
+      prNumber: 42,
+      linearIssue: { labels: [{ name: 'ready-to-merge' }] },
+    })).toBe(true);
+  });
+
+  it('returns false for reviewed task without prNumber', () => {
+    expect(isTaskMergeable({
+      status: 'reviewed',
+      linearIssue: { labels: [{ name: 'ready-to-merge' }] },
+    })).toBe(false);
+  });
+
+  it('returns false for implemented task without prUrl', () => {
+    expect(isTaskMergeable({
+      status: 'implemented',
+      linearIssue: { labels: [{ name: 'ready-to-merge' }] },
+    })).toBe(false);
+  });
+
+  it('returns false when ready-to-merge label is absent', () => {
+    expect(isTaskMergeable({
+      status: 'implemented',
+      result: { prUrl: 'https://github.com/org/repo/pull/42' },
+      linearIssue: { labels: [{ name: 'bug' }] },
+    })).toBe(false);
+  });
+
+  it('returns false for running task even with label and prUrl', () => {
+    expect(isTaskMergeable({
+      status: 'running',
+      result: { prUrl: 'https://github.com/org/repo/pull/42' },
+      linearIssue: { labels: [{ name: 'ready-to-merge' }] },
+    })).toBe(false);
+  });
+});
+
+describe('getTaskMergeUrl (detail view)', () => {
+  it('returns result.prUrl when available', () => {
+    expect(getTaskMergeUrl({
+      repository: 'org/repo',
+      result: { prUrl: 'https://github.com/org/repo/pull/42' },
+      prNumber: 42,
+    })).toBe('https://github.com/org/repo/pull/42');
+  });
+
+  it('constructs URL from repository + prNumber when prUrl missing', () => {
+    expect(getTaskMergeUrl({
+      repository: 'org/repo',
+      prNumber: 42,
+    })).toBe('https://github.com/org/repo/pull/42');
+  });
+
+  it('returns undefined when both prUrl and prNumber are missing', () => {
+    expect(getTaskMergeUrl({
+      repository: 'org/repo',
+    })).toBeUndefined();
   });
 });
 
