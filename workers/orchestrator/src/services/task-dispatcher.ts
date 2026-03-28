@@ -593,6 +593,16 @@ export class TaskDispatcher {
       return { ok: false, error: { type: 'not_found', message: 'Task not found' } };
     }
 
+    if (task.agentType === 'review' || task.agentType === 'remediation') {
+      return {
+        ok: false,
+        error: {
+          type: 'invalid_agent_type' as const,
+          message: 'Cannot send messages to review/remediation tasks',
+        },
+      };
+    }
+
     if (task.status === 'running') {
       const queue = this.pendingMessages.get(taskId) ?? [];
       queue.push(message);
