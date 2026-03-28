@@ -175,7 +175,6 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     serviceUrl: 'http://localhost:8080',
     dispatchRetryRepo: createFirestoreDispatchRetryRepository({ logger }),
     automationLog,
-    createRemediationTask: async () => ok({ status: 'queued' as const, taskId: 'mock-remediation-task', workerType: 'auto' as const }),
   });
 
   const eventDecisionRepo = createFirestoreEventDecisionRepository({ logger });

@@ -1059,4 +1059,26 @@ describe('createTaskForPR', () => {
       expect(capturedWorkerType).toBe('auto');
     });
   });
+
+  it('passes workerType override to created task when provided, taking priority over user default', async () => {
+    // User has a defaultPullRequestWorkerType of 'sonnet' in their settings.
+    // An explicit workerType in the request ('opus') must always win.
+    deps.workerSettingsRepo = createFakeWorkerSettingsRepo({
+      getSettings: vi.fn().mockResolvedValue(ok({ defaultPullRequestWorkerType: 'sonnet' })),
+    });
+
+    const createSpy = vi.fn().mockResolvedValue(ok({} as never));
+    deps.codeTaskRepo = {
+      ...createMockCodeTaskRepo(),
+      create: createSpy,
+    };
+
+    const result = await createTaskForPR(deps, {
+      ...request,
+      workerType: 'opus',
+    });
+    expect(result.ok).toBe(true);
+    const createCall = (createSpy as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+    expect(createCall?.workerType).toBe('opus');
+  });
 });
