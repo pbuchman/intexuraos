@@ -5128,7 +5128,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         baseBranch: 'development',
         traceId: 'trace_123',
         webhookSecret: 'test-webhook-secret',
-        actionId: 'action-123',
+        actionId: '550e8400-e29b-41d4-a716-446655440000',
       });
 
       expect(createResult.ok).toBe(true);
@@ -5167,7 +5167,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           baseUrl: 'http://actions-agent',
           internalAuthToken: 'test-token',
         }),
-        `/internal/actions/action-123/status`,
+        `/internal/actions/550e8400-e29b-41d4-a716-446655440000/status`,
         expect.objectContaining({
           method: 'PATCH',
           body: JSON.stringify({
@@ -5245,7 +5245,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         baseBranch: 'development',
         traceId: 'trace_123',
         webhookSecret: 'test-webhook-secret',
-        actionId: 'action-pr-less',
+        actionId: '660e8400-e29b-41d4-a716-446655440001',
       });
 
       expect(createResult.ok).toBe(true);
@@ -5283,7 +5283,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           baseUrl: 'http://actions-agent',
           internalAuthToken: 'test-token',
         }),
-        `/internal/actions/action-pr-less/status`,
+        `/internal/actions/660e8400-e29b-41d4-a716-446655440001/status`,
         expect.objectContaining({
           method: 'PATCH',
           body: JSON.stringify({
@@ -5305,7 +5305,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         baseBranch: 'development',
         traceId: 'trace_123',
         webhookSecret: 'test-webhook-secret',
-        actionId: 'action-789',
+        actionId: '770e8400-e29b-41d4-a716-446655440002',
       });
 
       expect(createResult.ok).toBe(true);
@@ -5342,7 +5342,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           baseUrl: 'http://actions-agent',
           internalAuthToken: 'test-token',
         }),
-        `/internal/actions/action-789/status`,
+        `/internal/actions/770e8400-e29b-41d4-a716-446655440002/status`,
         expect.objectContaining({
           method: 'PATCH',
           body: JSON.stringify({
@@ -5367,7 +5367,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         baseBranch: 'development',
         traceId: 'trace_123',
         webhookSecret: 'test-webhook-secret',
-        actionId: 'action-update-fail',
+        actionId: '880e8400-e29b-41d4-a716-446655440003',
       });
 
       expect(createResult.ok).toBe(true);
@@ -5426,7 +5426,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         baseBranch: 'development',
         traceId: 'trace_123',
         webhookSecret: 'test-webhook-secret',
-        actionId: 'action-456',
+        actionId: '990e8400-e29b-41d4-a716-446655440004',
       });
 
       expect(createResult.ok).toBe(true);
@@ -5453,13 +5453,13 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Verify actions-agent was called with 'failed' status
+      // Verify actions-agent was called with 'interrupted' status (INT-1119: statusMirrorService maps correctly)
       expect(mockFetchWithAuth).toHaveBeenCalledWith(
         expect.any(Object),
-        '/internal/actions/action-456/status',
+        '/internal/actions/990e8400-e29b-41d4-a716-446655440004/status',
         expect.objectContaining({
           body: JSON.stringify({
-            resource_status: 'failed',
+            resource_status: 'interrupted',
             resource_result: {
               error: 'Worker was interrupted during task execution',
             },
@@ -5480,7 +5480,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         baseBranch: 'development',
         traceId: 'trace_123',
         webhookSecret: 'test-webhook-secret',
-        actionId: 'action-789',
+        actionId: 'aa0e8400-e29b-41d4-a716-446655440005',
       });
 
       expect(createResult.ok).toBe(true);
