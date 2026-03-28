@@ -258,18 +258,26 @@ run_codex_attempt() {
 
     echo "[entrypoint] Starting Codex in exec mode..."
 
+    local effort_args=()
+    if [ -n "${CODEX_REASONING_EFFORT:-}" ]; then
+        effort_args=(-c "model_reasoning_effort=${CODEX_REASONING_EFFORT}")
+        echo "[entrypoint] Codex reasoning effort: ${CODEX_REASONING_EFFORT}"
+    fi
+
     set +e
     if [ -n "$attempt_forensics_dir" ]; then
         if [ "$continue_flag" = "1" ]; then
             codex exec resume --json \
                 --skip-git-repo-check \
                 --dangerously-bypass-approvals-and-sandbox \
+                "${effort_args[@]}" \
                 "${CODEX_THREAD_ID}" \
                 - < "$prompt_file" 2>&1 | tee -a "${attempt_forensics_dir}/codex-stream.log"
         else
             codex exec --json \
                 --skip-git-repo-check \
                 --dangerously-bypass-approvals-and-sandbox \
+                "${effort_args[@]}" \
                 - < "$prompt_file" 2>&1 | tee -a "${attempt_forensics_dir}/codex-stream.log"
         fi
     else
@@ -277,12 +285,14 @@ run_codex_attempt() {
             codex exec resume --json \
                 --skip-git-repo-check \
                 --dangerously-bypass-approvals-and-sandbox \
+                "${effort_args[@]}" \
                 "${CODEX_THREAD_ID}" \
                 - < "$prompt_file"
         else
             codex exec --json \
                 --skip-git-repo-check \
                 --dangerously-bypass-approvals-and-sandbox \
+                "${effort_args[@]}" \
                 - < "$prompt_file"
         fi
     fi

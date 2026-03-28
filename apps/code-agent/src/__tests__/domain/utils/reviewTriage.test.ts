@@ -51,6 +51,11 @@ describe('extractReviewWorkerType', () => {
     expect(workerType).toBe('codex');
   });
 
+  it('extracts codex-xhigh worker type', () => {
+    const workerType = extractReviewWorkerType('@review codex-xhigh');
+    expect(workerType).toBe('codex-xhigh');
+  });
+
   it('is case-insensitive', () => {
     const workerType = extractReviewWorkerType('@review with MINIMAX');
     expect(workerType).toBe('minimax');
@@ -120,5 +125,9 @@ describe('normalizeReviewWorkerType', () => {
 
   it('normalizes codex', () => {
     expect(normalizeReviewWorkerType('codex')).toBe('codex');
+  });
+
+  it('normalizes codex-xhigh', () => {
+    expect(normalizeReviewWorkerType('codex-xhigh')).toBe('codex-xhigh');
   });
 });

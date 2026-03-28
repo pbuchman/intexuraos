@@ -9,6 +9,7 @@ export const WORKER_TYPE_METADATA: Record<CodeTaskWorkerType, { name: string; de
   qwen: { name: 'Qwen', description: 'Advanced Qwen model with thinking enabled' },
   kimi: { name: 'Kimi', description: 'Moonshot\'s latest recommended model with image understanding' },
   codex: { name: 'Codex', description: 'OpenAI Codex runtime for code-task execution with persisted thread resume' },
+  'codex-xhigh': { name: 'Codex XHigh', description: 'High-effort Codex preset for deeper reviews, investigations, and complex implementation tasks' },
 };
 
 export const WORKER_TYPE_LABELS: Record<CodeTaskWorkerType, string> = Object.fromEntries(
