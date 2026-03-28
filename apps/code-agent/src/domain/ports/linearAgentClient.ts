@@ -149,7 +149,7 @@ export interface LinearAgentClient {
     assigneeId?: string | null;
     addLabels?: string[];
     removeLabels?: string[];
-  }): Promise<Result<void, LinearAgentError>>;
+  }): Promise<Result<{ droppedLabels: string[] }, LinearAgentError>>;
 
   /**
    * Fetch Linear issue data for display in task detail view.

@@ -293,13 +293,17 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
 
       const availableLabels = labelsResult.value; // @allow-result-access -- guarded by if (!labelsResult.ok) above
       /* v8 ignore start -- schema: Fastify schema validates addLabels/removeLabels as optional arrays; ?? [] fallback unreachable when schema-validated request provides them @preserve */
-      const desiredLabelIds = resolveDesiredLabelIds(
+      const { labelIds: desiredLabelIds, droppedLabels } = resolveDesiredLabelIds(
         syncedIssue.labels,
         request.body.addLabels ?? [],
         request.body.removeLabels ?? [],
         availableLabels
       );
       /* v8 ignore stop @preserve */
+
+      if (droppedLabels.length > 0) {
+        request.log.warn({ issueId, droppedLabels }, 'Requested labels not found in team — dropped');
+      }
 
       const updateResult = await services.linearApiClient.updateIssue(apiKeyResult.value, issueId, { // @allow-result-access -- guarded by if (!apiKeyResult.ok) and null check above
         ...(request.body.assigneeId !== undefined && { assigneeId: request.body.assigneeId }),
@@ -311,6 +315,7 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
         id: updateResult.value.id, // @allow-result-access -- guarded by if (!updateResult.ok) above
         labels: updateResult.value.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
         assignee: updateResult.value.assignee ?? null,
+        droppedLabels,
       });
     }
   );
