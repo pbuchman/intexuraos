@@ -126,7 +126,8 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
     task.linearIssueId !== undefined &&
     hasImplementationReadyLabel(task.linearIssue?.labels);
   const isMergeable = isTaskMergeable(task);
-  const mergeUrl = isMergeable ? getTaskMergeUrl(task) : undefined;
+  const prUrl = getTaskMergeUrl(task);
+  const mergeUrl = isMergeable ? prUrl : undefined;
   const isArchivable = ARCHIVABLE_STATUSES.has(task.status);
 
   return (
@@ -174,7 +175,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
         onToggleDropdown={(): void => { setShowImplementDropdown(!showImplementDropdown); }}
         onSelectWorkerType={(type): void => { setSelectedWorkerType(type); setShowImplementDropdown(false); }}
         onImplement={(): void => { void handleImplement(); }}
-        {...(task.result?.prUrl !== undefined ? { prUrl: task.result.prUrl } : {})}
+        {...(prUrl !== undefined ? { prUrl } : {})}
         {...(task.linearIssue?.url !== undefined ? { linearIssueUrl: task.linearIssue.url } : {})}
         isMergeable={isMergeable}
         {...(mergeUrl !== undefined ? { mergeUrl } : {})}
@@ -204,7 +205,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
         archiving={archiving}
         archiveError={archiveError}
         onArchive={(): void => { void handleArchive(); }}
-        {...(task.result?.prUrl !== undefined ? { prUrl: task.result.prUrl } : {})}
+        {...(prUrl !== undefined ? { prUrl } : {})}
         {...(task.linearIssue?.url !== undefined ? { linearIssueUrl: task.linearIssue.url } : {})}
         linksInNextSteps={isImplementable || task.implementationTaskId !== undefined || isMergeable}
       />
