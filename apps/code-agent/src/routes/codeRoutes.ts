@@ -3829,6 +3829,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         if (error.code === 'task_not_found') {
           return reply.fail('NOT_FOUND' as ErrorCode, error.message);
         }
+        if (error.code === 'invalid_agent_type') {
+          return reply.fail('FORBIDDEN' as ErrorCode, error.message);
+        }
         if (error.code === 'invalid_status') {
           return reply.fail('INVALID_STATUS' as ErrorCode, error.message);
         }

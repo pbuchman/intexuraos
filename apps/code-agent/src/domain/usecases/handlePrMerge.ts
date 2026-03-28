@@ -18,6 +18,7 @@ import type { TaskDispatcherService } from '../services/taskDispatcher.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { extractIntIssueId } from '../utils/linearIdentifierParser.js';
+import { resolveWorkerCredentials } from '../services/gitHubDispatchService.js';
 
 function isPlanPr(prTitle: string | null): boolean {
   return prTitle !== null && /\[plan\]/i.test(prTitle);
@@ -143,19 +144,9 @@ export async function handlePrMerge(deps: HandlePrMergeDeps, input: HandlePrMerg
     if (preservedResult.ok && preservedResult.value !== null) {
       const preserved = preservedResult.value;
       logger.info({ taskId: preserved.id, prNumber }, 'Destroying preserved container for merged PR');
-      let workerCreds: { url: string; cfAccessClientId: string; cfAccessClientSecret: string } | undefined;
-      const settingsResult = await workerSettingsRepo.getSettings(preserved.userId);
-      if (settingsResult.ok && settingsResult.value !== null) {
-        const settings = settingsResult.value;
-        const workerConfig = settings.workers.find((w) => w.name === preserved.workerLocation);
-        if (workerConfig?.enabled === true) {
-          workerCreds = {
-            url: workerConfig.url,
-            cfAccessClientId: workerConfig.cfAccessClientId,
-            cfAccessClientSecret: workerConfig.cfAccessClientSecret,
-          };
-        }
-      }
+      const workerCreds = await resolveWorkerCredentials(
+        workerSettingsRepo, preserved.userId, preserved.workerLocation,
+      );
       await taskDispatcher.cancelOnWorker(preserved.id, preserved.workerLocation, workerCreds);
     }
   } catch (error) {

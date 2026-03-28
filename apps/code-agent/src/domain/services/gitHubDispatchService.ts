@@ -89,6 +89,27 @@ export interface WebhookDispatchServiceDeps {
   automationLog: AutomationLog;
 }
 
+/**
+ * Resolve worker credentials for a preserved task by looking up the user's
+ * worker settings and matching on workerLocation. Shared by handleNewTask
+ * (@worker destruction) and handlePrMerge (merge cleanup).
+ */
+export async function resolveWorkerCredentials(
+  workerSettingsRepo: WorkerSettingsRepository,
+  userId: string,
+  workerLocation: string,
+): Promise<{ url: string; cfAccessClientId: string; cfAccessClientSecret: string } | undefined> {
+  const settingsResult = await workerSettingsRepo.getSettings(userId);
+  if (!settingsResult.ok || settingsResult.value === null) return undefined;
+  const workerConfig = settingsResult.value.workers.find((w) => w.name === workerLocation);
+  if (workerConfig?.enabled !== true) return undefined;
+  return {
+    url: workerConfig.url,
+    cfAccessClientId: workerConfig.cfAccessClientId,
+    cfAccessClientSecret: workerConfig.cfAccessClientSecret,
+  };
+}
+
 export function resolveLoginForTaskCreation(senderLogin: string, repository: string, allowedBots: Set<string>): string {
   if (!allowedBots.has(senderLogin)) return senderLogin;
   const slashIndex = repository.indexOf('/');
@@ -409,6 +430,58 @@ export function isStaleTaskError(result: WebhookDispatchResult): boolean {
   return false;
 }
 
+/** Best-effort destroy a preserved container when @worker directive requires a fresh agent. */
+async function destroyPreservedContainer(
+  deps: Pick<WebhookDispatchServiceDeps, 'workerSettingsRepo' | 'taskDispatcher'>,
+  preserved: { id: string; userId: string; workerLocation: string },
+  logger: Logger,
+): Promise<void> {
+  try {
+    const workerCreds = await resolveWorkerCredentials(
+      deps.workerSettingsRepo, preserved.userId, preserved.workerLocation,
+    );
+    await deps.taskDispatcher.cancelOnWorker(preserved.id, preserved.workerLocation, workerCreds);
+  } catch (error) {
+    logger.warn({ taskId: preserved.id, error }, 'Failed to destroy preserved container (best-effort)');
+  }
+}
+
+/** Attempt to reuse a preserved pull_request container by sending it a message. */
+async function reusePreservedContainer(
+  deps: Pick<WebhookDispatchServiceDeps, 'codeTaskRepo' | 'logLineRepo' | 'taskDispatcher' | 'workerSettingsRepo' | 'statusMirrorService' | 'whatsappNotifier'>,
+  preserved: { id: string; userId: string },
+  comment: string,
+  logger: Logger,
+): Promise<WebhookDispatchResult | null> {
+  try {
+    const sendResult = await sendTaskMessage(
+      {
+        logger,
+        codeTaskRepo: deps.codeTaskRepo,
+        logLineRepo: deps.logLineRepo,
+        taskDispatcher: deps.taskDispatcher,
+        workerSettingsRepo: deps.workerSettingsRepo,
+        statusMirrorService: deps.statusMirrorService,
+        whatsappNotifier: deps.whatsappNotifier,
+      },
+      { taskId: preserved.id, userId: preserved.userId, message: comment },
+    );
+    if (sendResult.ok) {
+      return { success: true, dispatched: true };
+    }
+    logger.warn(
+      { taskId: preserved.id, error: sendResult.error },
+      'Failed to send message to preserved container, falling through to new task',
+    );
+  } catch (error) {
+    logger.warn(
+      { taskId: preserved.id, error },
+      'Error sending to preserved container, falling through',
+    );
+  }
+  return null;
+}
+
 async function handleNewTask(
   deps: WebhookDispatchServiceDeps,
   event: GitHubPREvent,
@@ -454,70 +527,23 @@ async function handleNewTask(
   // When @worker directive is present, destroy any preserved container first (best-effort).
   // The user's intent is a fresh agent with a specific model — failing to destroy the old
   // one should not block creating the new task.
-  if (workerType !== undefined) {
-    if (preserved !== null) {
-      logger.info(
-        { taskId: preserved.id, prNumber: event.pullRequestNumber },
-        'Destroying preserved container for @worker directive',
-      );
-      try {
-        const settingsResult = await deps.workerSettingsRepo.getSettings(preserved.userId);
-        let workerCreds: { url: string; cfAccessClientId: string; cfAccessClientSecret: string } | undefined;
-        if (settingsResult.ok && settingsResult.value !== null) {
-          const settings = settingsResult.value;
-          const workerConfig = settings.workers.find((w) => w.name === preserved.workerLocation);
-          if (workerConfig?.enabled === true) {
-            workerCreds = {
-              url: workerConfig.url,
-              cfAccessClientId: workerConfig.cfAccessClientId,
-              cfAccessClientSecret: workerConfig.cfAccessClientSecret,
-            };
-          }
-        }
-        await deps.taskDispatcher.cancelOnWorker(preserved.id, preserved.workerLocation, workerCreds);
-      } catch (error) {
-        logger.warn({ taskId: preserved.id, error }, 'Failed to destroy preserved container (best-effort)');
-      }
-    }
+  if (workerType !== undefined && preserved !== null) {
+    logger.info(
+      { taskId: preserved.id, prNumber: event.pullRequestNumber },
+      'Destroying preserved container for @worker directive',
+    );
+    await destroyPreservedContainer(deps, preserved, logger);
   }
 
   // Check for preserved pull_request container to reuse (non-@worker comments only)
-  if (workerType === undefined) {
-    if (preserved !== null) {
-      try {
-        const sendResult = await sendTaskMessage(
-          {
-            logger,
-            codeTaskRepo: deps.codeTaskRepo,
-            logLineRepo: deps.logLineRepo,
-            taskDispatcher: deps.taskDispatcher,
-            workerSettingsRepo: deps.workerSettingsRepo,
-            statusMirrorService: deps.statusMirrorService,
-            whatsappNotifier: deps.whatsappNotifier,
-          },
-          {
-            taskId: preserved.id,
-            userId: preserved.userId,
-            message: comment,
-          },
-        );
-        if (sendResult.ok) {
-          logger.info(
-            { taskId: preserved.id, prNumber: event.pullRequestNumber },
-            'Reused preserved container for PR comment',
-          );
-          return { success: true, dispatched: true };
-        }
-        logger.warn(
-          { taskId: preserved.id, error: sendResult.error },
-          'Failed to send message to preserved container, falling through to new task',
-        );
-      } catch (error) {
-        logger.warn(
-          { taskId: preserved.id, error },
-          'Error sending to preserved container, falling through',
-        );
-      }
+  if (workerType === undefined && preserved !== null) {
+    const reuseResult = await reusePreservedContainer(deps, preserved, comment, logger);
+    if (reuseResult !== null) {
+      logger.info(
+        { taskId: preserved.id, prNumber: event.pullRequestNumber },
+        'Reused preserved container for PR comment',
+      );
+      return reuseResult;
     }
   }
 
