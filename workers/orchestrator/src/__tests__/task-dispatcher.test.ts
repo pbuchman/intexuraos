@@ -5,6 +5,7 @@ import {
   type IsolationConfig,
   parsePrUrl,
   getTaskEventUrl,
+  hasFatalExitCodeField,
 } from '../services/task-dispatcher.js';
 import type { OrchestratorConfig } from '../types/config.js';
 import type { StatePersistence } from '../services/state-persistence.js';
@@ -3594,6 +3595,114 @@ describe('TaskDispatcher', () => {
       );
       vi.useRealTimers();
     });
+
+    it.each([
+      { exitCode: 137, signal: 'SIGKILL' },
+      { exitCode: 139, signal: 'SIGSEGV' },
+    ])(
+      'immediately fails without retry on fatal exit code $exitCode ($signal)',
+      async ({ exitCode }) => {
+        vi.useFakeTimers();
+        const fatalState = createStatePersistence();
+        const createWorker = vi.fn().mockResolvedValue({
+          taskId: `fatal-${String(exitCode)}-task`,
+          containerId: `container-fatal-${String(exitCode)}`,
+          status: 'running',
+          startedAt: new Date(),
+        });
+        const destroyWorker = vi.fn(async () => undefined);
+        const cleanupTaskSession = vi.fn(async () => undefined);
+        const localIsolationProvider: IsolationProvider = {
+          ...mockIsolationProvider,
+          createWorker,
+          destroyWorker,
+          cleanupTaskSession,
+        };
+        const localIsolation: IsolationConfig = {
+          ...mockIsolationConfig,
+          provider: localIsolationProvider,
+        };
+
+        const verify = vi.fn().mockResolvedValue({
+          passed: false,
+          missingFields: [`fatal_exit_code_${String(exitCode)}`],
+          verifierFailure: false,
+          trace: dummyTrace,
+        });
+
+        const fatalDispatcher = new TaskDispatcher(
+          mockConfig,
+          fatalState,
+          mockWorktreeManager,
+          mockLogForwarder,
+          mockWebhookClient,
+          mockGitHubTokenService,
+          mockLogger,
+          localIsolation,
+          {
+            maxAttempts: 3,
+            verifier: {
+              verify,
+              describe: (): { enabled: boolean } => ({ enabled: false }),
+              extractResumeSummary: vi.fn().mockResolvedValue(undefined),
+            },
+          }
+        );
+
+        const internal = fatalDispatcher as unknown as {
+          checkForResult: (task: unknown) => Promise<{
+            branch: string;
+            commits: number;
+            prUrl: string;
+          }>;
+        };
+        vi.spyOn(internal, 'checkForResult').mockResolvedValue({
+          branch: 'fatal-branch',
+          commits: 1,
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/500',
+        });
+
+        const request: CreateTaskRequest = {
+          taskId: `fatal-${String(exitCode)}-task`,
+          workerType: 'auto',
+          prompt: 'Task that crashes with signal',
+          webhookUrl: 'https://example.com/webhook',
+          webhookSecret: 'secret',
+          linearIssueLabels: [],
+          hasChildren: false,
+        };
+
+        await fatalDispatcher.submitTask(request);
+        await vi.advanceTimersByTimeAsync(0);
+        vi.mocked(localIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+        await vi.advanceTimersByTimeAsync(30 * 1000);
+
+        const task = await fatalDispatcher.getTask(`fatal-${String(exitCode)}-task`);
+        expect(task?.status).toBe('failed');
+        expect(task?.attemptCount).toBe(1);
+
+        // Container destroyed + session cleaned (teardownAttempt with keepSession=false)
+        expect(destroyWorker).toHaveBeenCalledWith(`fatal-${String(exitCode)}-task`);
+        expect(cleanupTaskSession).toHaveBeenCalledWith(`fatal-${String(exitCode)}-task`);
+
+        // No retry — createWorker called exactly once (initial attempt only)
+        expect(createWorker).toHaveBeenCalledTimes(1);
+
+        // Webhook sent with correct error code
+        expect(mockWebhookClient.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            payload: expect.objectContaining({
+              status: 'failed',
+              error: expect.objectContaining({
+                code: 'TASK_FATAL_EXIT_CODE',
+                message: expect.stringContaining(`fatal_exit_code_${String(exitCode)}`),
+              }),
+            }),
+          })
+        );
+        vi.useRealTimers();
+      }
+    );
 
     it('skips duplicate completion handling when completion is already in progress', async () => {
       vi.useFakeTimers();
@@ -8399,6 +8508,28 @@ describe('parsePrUrl', () => {
     expect(parsePrUrl('https://example.com/not-a-pr')).toBeUndefined();
     expect(parsePrUrl('')).toBeUndefined();
     expect(parsePrUrl('random string')).toBeUndefined();
+  });
+});
+
+describe('hasFatalExitCodeField', () => {
+  it('returns the field for fatal_exit_code_137', () => {
+    expect(hasFatalExitCodeField(['fatal_exit_code_137'])).toBe('fatal_exit_code_137');
+  });
+
+  it('returns the field for fatal_exit_code_139', () => {
+    expect(hasFatalExitCodeField(['fatal_exit_code_139'])).toBe('fatal_exit_code_139');
+  });
+
+  it('returns undefined for normal missing fields', () => {
+    expect(hasFatalExitCodeField(['gh_pr_url', 'agent_final_block'])).toBeUndefined();
+  });
+
+  it('returns undefined for empty array', () => {
+    expect(hasFatalExitCodeField([])).toBeUndefined();
+  });
+
+  it('returns the fatal field when mixed with normal fields', () => {
+    expect(hasFatalExitCodeField(['gh_pr_url', 'fatal_exit_code_139'])).toBe('fatal_exit_code_139');
   });
 });
 
