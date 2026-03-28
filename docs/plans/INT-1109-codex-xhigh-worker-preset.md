@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a public `codex-xhigh` worker preset that users can select end to end, with the Codex runtime configured for maximum reasoning effort.
+**Goal:** Add a public `codex-xhigh` worker preset that users can select end to end, with the Codex runtime configured for `xhigh` reasoning effort.
 
 **Architecture:** Keep the existing Codex runtime and public worker-type flow intact. Introduce `codex-xhigh` as a new shared worker-type literal, map it to the existing Codex runtime with a higher effort preset inside the orchestrator, and expose the same key consistently in code-agent validation and web selectors without adding new endpoints or payload fields.
 
@@ -14,8 +14,9 @@
 
 - Public worker key: `codex-xhigh`
 - Runtime owner: `workers/orchestrator`
-- Runtime mapping: `runtime='codex'`, `apiBaseUrl='https://api.openai.com'`, `effort='max'`
-- Effort wiring: The orchestrator currently only passes `CLAUDE_CODE_EFFORT_LEVEL` for `runtime === 'claude'` containers (docker-provider.ts:650-663). The Codex `else` branch (line 664) does NOT pass effort. Task 2 must add effort-to-env-var wiring for the Codex runtime path, or document that `effort` is metadata-only if Codex ignores it.
+- Runtime mapping: `runtime='codex'`, `apiBaseUrl='https://api.openai.com'`, `effort='xhigh'`
+- Effort mechanism: Codex CLI uses `model_reasoning_effort` in `~/.codex/config.toml` (valid values: `minimal`/`low`/`medium`/`high`/`xhigh`). Can also be passed via CLI override: `codex -c model_reasoning_effort=xhigh`. There is NO environment variable equivalent — this is fundamentally different from Claude's `CLAUDE_CODE_EFFORT_LEVEL` env var.
+- Effort wiring strategy: The orchestrator must pass a new env var (e.g., `CODEX_REASONING_EFFORT=xhigh`) to the container, and `entrypoint.sh` must read it and inject `-c model_reasoning_effort=$CODEX_REASONING_EFFORT` into the `codex exec` command. The orchestrator's effort type union (`types.ts:32`) must be extended from `'low' | 'medium' | 'high' | 'max'` to also include `'xhigh'`.
 - UI label: `Codex XHigh`
 - UI description: `High-effort Codex preset for deeper reviews, investigations, and complex implementation tasks`
 - Review-default policy: expose `codex-xhigh` as a selectable default review worker type, but do not migrate or auto-switch existing defaults in this change
@@ -73,8 +74,9 @@
 
 ### Orchestrator
 
-- `workers/orchestrator/src/services/isolation/types.ts` — `WORKER_TYPES` config and effort type union
-- `workers/orchestrator/src/services/isolation/docker-provider.ts` — effort env var wiring for Codex runtime path
+- `workers/orchestrator/src/services/isolation/types.ts` — `WORKER_TYPES` config and effort type union (extend to include `'xhigh'`)
+- `workers/orchestrator/src/services/isolation/docker-provider.ts` — pass `CODEX_REASONING_EFFORT` env var for Codex containers
+- `workers/code-worker/entrypoint.sh` — inject `-c model_reasoning_effort` into `codex exec` invocations
 - `workers/orchestrator/src/types/api.ts`
 - `workers/orchestrator/src/types/schemas.ts`
 - `workers/orchestrator/src/services/system-prompt.ts`
@@ -124,8 +126,9 @@
 ## Task 2: Orchestrator runtime preset
 
 **Files:**
-- Modify: `workers/orchestrator/src/services/isolation/types.ts` — add `codex-xhigh` to `WORKER_TYPES`, effort type stays `'max'` (already in union)
-- Modify: `workers/orchestrator/src/services/isolation/docker-provider.ts` — wire effort env var for Codex runtime (currently only wired for Claude at line 650-663)
+- Modify: `workers/orchestrator/src/services/isolation/types.ts` — add `codex-xhigh` to `WORKER_TYPES` with `effort: 'xhigh'`, extend effort type union to include `'xhigh'`
+- Modify: `workers/orchestrator/src/services/isolation/docker-provider.ts` — pass `CODEX_REASONING_EFFORT` env var for Codex runtime containers when effort is set
+- Modify: `workers/code-worker/entrypoint.sh` — read `CODEX_REASONING_EFFORT` and inject `-c model_reasoning_effort=$value` into `codex exec` invocations
 - Modify: `workers/orchestrator/src/types/api.ts`
 - Modify: `workers/orchestrator/src/types/schemas.ts`
 - Modify: `workers/orchestrator/src/services/system-prompt.ts`
@@ -136,8 +139,10 @@
 - Modify: any focused orchestrator tests that validate worker-type routing if they enumerate known presets
 
 - [ ] Add `codex-xhigh` to orchestrator worker-type validation anywhere public worker-type enums are mirrored.
-- [ ] Extend `WORKER_TYPES` so `codex-xhigh` uses `runtime='codex'`, `apiBaseUrl='https://api.openai.com'`, and `effort='max'`.
-- [ ] Wire effort env var passing for the Codex runtime path in `docker-provider.ts`. Currently effort is only passed as `CLAUDE_CODE_EFFORT_LEVEL` inside the `if (runtime === 'claude')` block (line 650). Determine the correct env var for Codex effort (e.g., `CODEX_EFFORT_LEVEL` or equivalent) and add it to the Codex branch, or document that Codex ignores effort and the field is metadata-only.
+- [ ] Extend the `effort` type union in `types.ts:32` from `'low' | 'medium' | 'high' | 'max'` to `'low' | 'medium' | 'high' | 'max' | 'xhigh'`.
+- [ ] Extend `WORKER_TYPES` so `codex-xhigh` uses `runtime='codex'`, `apiBaseUrl='https://api.openai.com'`, and `effort='xhigh'`.
+- [ ] In `docker-provider.ts`, add `CODEX_REASONING_EFFORT` env var passing for Codex runtime containers. Currently `CLAUDE_CODE_EFFORT_LEVEL` is only set for `runtime === 'claude'` (line 650-663). In the Codex `else` branch (line 664), add: if `workerTypeConfig.effort !== undefined`, push `CODEX_REASONING_EFFORT=${workerTypeConfig.effort}` into the container env.
+- [ ] In `workers/code-worker/entrypoint.sh`, update `run_codex_attempt()` to read `CODEX_REASONING_EFFORT` and inject `-c model_reasoning_effort=$CODEX_REASONING_EFFORT` into all `codex exec` invocations (4 call sites: lines 264, 270, 277, 283).
 - [ ] Verify all `runtime === 'codex'` checks in `docker-provider.ts` and `task-dispatcher.ts` operate on the runtime field (not the worker type string) — they do, so `codex-xhigh` will inherit correct runtime behavior automatically.
 - [ ] Update orchestrator system-prompt worker-type fallback text and focused tests anywhere supported public worker names are hardcoded.
 - [ ] Keep `codex` unchanged and verify that no new route fields or response fields are introduced.
@@ -195,5 +200,5 @@
 
 - Code that special-cases `codex` by exact string may accidentally exclude `codex-xhigh`. **Mitigated:** all runtime-level checks in docker-provider.ts and task-dispatcher.ts use the `runtime` field from `WORKER_TYPES`, not the worker type string. Since `codex-xhigh` maps to `runtime='codex'`, these checks work automatically.
 - Review worker parsing may need to recognize the longer token explicitly instead of falling back to `codex`.
-- The effort type union (`'low' | 'medium' | 'high' | 'max'`) already includes `'max'` — no type extension needed. However, the Codex container env var setup (docker-provider.ts:664-667) does NOT currently pass effort. This must be addressed in Task 2.
+- Codex CLI reasoning effort uses `model_reasoning_effort` in config.toml, NOT an environment variable. The orchestrator must bridge this gap: pass `CODEX_REASONING_EFFORT` env var to the container, then `entrypoint.sh` must translate it to `-c model_reasoning_effort=xhigh` on the `codex exec` command line. The effort type union must be extended to include `'xhigh'`.
 - `dispatchWorkerTriage.ts` has a `WORKER_TYPE_ALIASES` map with `codex: 'codex'` — verify whether `codex-xhigh` needs an alias entry or if it should only be selectable by exact name.
