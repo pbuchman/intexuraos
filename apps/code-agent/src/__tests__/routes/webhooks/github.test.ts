@@ -117,6 +117,7 @@ describe('POST /webhooks/github', () => {
       findPlannedTaskByLinearIssue: vi.fn().mockResolvedValue(ok(null)),
       findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
       findRecentRemediationForPR: vi.fn().mockResolvedValue(ok(null)),
+      findPreservedPullRequestTask: vi.fn().mockResolvedValue(ok(null)),
     };
 
     // Create mock PR summary repo

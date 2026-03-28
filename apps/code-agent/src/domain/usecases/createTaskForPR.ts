@@ -47,7 +47,7 @@ export interface CreateTaskForPRRequest {
   /** GitHub webhook event ID for deduplication */
   eventId: string;
   baseBranch?: string;
-  /** Worker type extracted from @worker/@model directive (optional) */
+  /** Worker type extracted from @worker directive (optional) */
   workerType?: WorkerType;
   /** Existing PR tracking comment to reuse for pull_request tasks. */
   trackingCommentId?: string;

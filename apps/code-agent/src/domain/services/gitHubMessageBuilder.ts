@@ -119,32 +119,15 @@ Instructions:
   }
 }
 
-export class CodeWorkerNitpickNukerTemplate implements MessageTemplate {
-  render(event: GitHubPREvent): string {
-    const prNumber = String(event.pullRequestNumber);
-    return `[Code Worker Review] A code-worker review was submitted on PR #${prNumber}.
-
-Run /nitpick-nuker ${prNumber}
-
-This skill will fetch all unprocessed review comments, triage each one (FIX/SKIP),
-implement fixes, verify CI, and post a summary. If there are no unprocessed comments,
-it will exit cleanly.`;
-  }
-}
-
-export function createWebhookMessageBuilder(allowedBots: Set<string>, codeWorkerBots: Set<string>): WebhookMessageBuilder {
+export function createWebhookMessageBuilder(allowedBots: Set<string>): WebhookMessageBuilder {
   const reviewTemplate = new PullRequestReviewTemplate();
   const commentTemplate = new IssueCommentTemplate();
   const editedBotTemplate = new EditedBotReviewTemplate();
-  const codeWorkerNitpickNukerTemplate = new CodeWorkerNitpickNukerTemplate();
 
   return {
     build(event: GitHubPREvent): string {
       if (event.action === 'edited' && allowedBots.has(event.senderLogin)) {
         return editedBotTemplate.render(event);
-      }
-      if (event.eventType === 'pull_request_review' && codeWorkerBots.has(event.senderLogin)) {
-        return codeWorkerNitpickNukerTemplate.render(event);
       }
       if (event.eventType === 'pull_request_review') {
         return reviewTemplate.render(event);

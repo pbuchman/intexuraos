@@ -26,9 +26,6 @@ export interface CreateRemediationTaskRequest {
   senderLogin: string;
   workerType: WorkerType;
   eventId: string;
-  triggerComment?: { body: string; author: string };
-  reviewBody?: string;
-  inlineComments?: { path: string; line: number; body: string }[];
   linearIssueId?: string;
   baseBranch?: string;
 }
@@ -56,59 +53,25 @@ export interface CreateRemediationTaskDeps {
 }
 
 function buildRemediationPrompt(request: CreateRemediationTaskRequest): string {
-  const { repository, prNumber, workerType, reviewBody, inlineComments, triggerComment } = request;
+  const { repository, prNumber, workerType } = request;
   const lines = [
     `[Remediation Task] Fix review findings for PR #${String(prNumber)} in ${repository}`,
     '',
     `Worker type: ${workerType}`,
     '',
     'This task was created automatically to address review feedback.',
-    'You are working in a fresh container — do not assume any prior context.',
     '',
-  ];
-
-  if (triggerComment !== undefined) {
-    lines.push(
-      '### Trigger Comment',
-      '',
-      `**Author:** ${triggerComment.author}`,
-      triggerComment.body,
-      '',
-    );
-  }
-
-  if (reviewBody !== undefined) {
-    lines.push(
-      '### Review Findings',
-      '',
-      reviewBody,
-      '',
-    );
-  }
-
-  if (inlineComments !== undefined && inlineComments.length > 0) {
-    lines.push('### Inline Comments', '');
-    for (const comment of inlineComments) {
-      lines.push(`- **${comment.path}:${String(comment.line)}**: ${comment.body}`);
-    }
-    lines.push('');
-  }
-
-  lines.push(
     '### Instructions',
     '',
-    '1. Fetch the PR and review the findings above',
-    `2. For each finding: implement the fix OR document why it is out of scope`,
-    '3. Run CI: `pnpm run ci:tracked` and verify all checks pass',
-    `4. Push changes to the PR branch`,
-    '5. Output a summary of what was fixed and what was skipped',
+    '1. Run /nitpick-nuker to fetch and address all review findings for this PR',
+    '2. Push changes to the PR branch',
     '',
     '### Constraints',
     '',
     '- Do NOT modify code unrelated to the review findings',
     '- Do NOT expand scope beyond addressing the findings',
     '- Do NOT create new PRs — push to the existing PR branch',
-  );
+  ];
 
   return lines.join('\n');
 }

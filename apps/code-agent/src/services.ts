@@ -436,24 +436,12 @@ export function initServices(config: ServiceConfig): void {
     gitHubPRClient,
     userServiceClient,
     firestore,
-    messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS),
+    messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS),
     allowedBots: ALLOWED_BOTS,
     orchestratorSecret: config.orchestratorSecret,
     serviceUrl: config.serviceUrl,
     dispatchRetryRepo,
     automationLog,
-    createRemediationTask: (taskLogger, request) => createRemediationTask(
-      {
-        logger: taskLogger,
-        codeTaskRepo,
-        userLookupService,
-        taskEnqueueService,
-        workerSettingsRepo,
-        orchestratorSecret: config.orchestratorSecret,
-        automationLog,
-      },
-      request,
-    ),
   });
 
   const dispatchService: WebhookDispatchService & CIFailureDispatchService = dispatchServiceResult;

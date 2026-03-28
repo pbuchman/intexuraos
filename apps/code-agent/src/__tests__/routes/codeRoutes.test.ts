@@ -4002,6 +4002,82 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.error.code).toBe('NOT_FOUND');
     });
 
+    it('returns 403 when sending message to review task', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create({
+        userId: 'test-user-id',
+        prompt: 'Review PR',
+        sanitizedPrompt: 'review pr',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-review-msg',
+        agentType: 'review',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const response = await server.inject({
+        method: 'POST',
+        url: `/code/tasks/${created.value.id}/messages`,
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          message: 'Please check again',
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('returns 403 when sending message to remediation task', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create({
+        userId: 'test-user-id',
+        prompt: 'Fix review findings',
+        sanitizedPrompt: 'fix review findings',
+        systemPromptHash: 'remediation-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-remediation-msg',
+        agentType: 'remediation',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const response = await server.inject({
+        method: 'POST',
+        url: `/code/tasks/${created.value.id}/messages`,
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          message: 'Please try again',
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
   });
 
   describe('POST /code/tasks/:taskId/implement', () => {

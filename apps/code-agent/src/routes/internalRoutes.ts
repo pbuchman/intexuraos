@@ -369,5 +369,111 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
+  // GET /internal/tasks/:taskId/dispatch-metadata - fallback for pruned tasks (INT-1130)
+  fastify.get<{ Params: { taskId: string } }>(
+    '/internal/tasks/:taskId/dispatch-metadata',
+    {
+      schema: {
+        operationId: 'getTaskDispatchMetadata',
+        summary: 'Get dispatch metadata for a task by ID',
+        description:
+          'Returns the dispatch metadata fields for a code task. ' +
+          'Used by the orchestrator as a fallback when a task has been pruned from state.',
+        tags: ['internal'],
+        params: {
+          type: 'object',
+          required: ['taskId'],
+          properties: {
+            taskId: { type: 'string', description: 'Code task ID' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Task dispatch metadata',
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              taskId: { type: 'string' },
+              prompt: { type: 'string' },
+              repository: { type: 'string' },
+              baseBranch: { type: 'string' },
+              agentType: { type: ['string', 'null'] },
+              workerType: { type: 'string' },
+              linearIssueId: { type: ['string', 'null'] },
+              webhookSecret: { type: ['string', 'null'] },
+              prNumber: { type: ['number', 'null'] },
+            },
+            required: ['taskId', 'prompt', 'repository', 'baseBranch', 'agentType', 'workerType', 'linearIssueId', 'webhookSecret', 'prNumber'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          404: {
+            description: 'Task not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['NOT_FOUND'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to GET /internal/tasks/:taskId/dispatch-metadata',
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      const { taskId } = request.params;
+      const { codeTaskRepo } = getServices();
+
+      const findResult = await codeTaskRepo.findById(taskId);
+      if (!findResult.ok) {
+        return await reply.fail('NOT_FOUND', `Task ${taskId} not found`);
+      }
+
+      const task = findResult.value;
+
+      // @allow-raw-send: internal endpoint returns structured dispatch metadata directly
+      return await reply.send({
+        taskId: task.id,
+        prompt: task.prompt,
+        repository: task.repository,
+        baseBranch: task.baseBranch,
+        agentType: task.agentType ?? null,
+        workerType: task.workerType,
+        linearIssueId: task.linearIssueId ?? null,
+        webhookSecret: task.webhookSecret ?? null,
+        prNumber: task.prNumber ?? null,
+      });
+    }
+  );
+
   done();
 };
