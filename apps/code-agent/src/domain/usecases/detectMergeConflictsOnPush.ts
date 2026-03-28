@@ -20,7 +20,6 @@ import { resolveLoginForTaskCreation } from '../services/gitHubDispatchService.j
 import { fetchGitHubToken } from '../utils/gitHubTokenResolver.js';
 import { parseOwnerRepo } from '../utils/parseOwnerRepo.js';
 import { generateWebhookSecret } from '../utils/secrets.js';
-import { sendTaskMessage } from './sendTaskMessage.js';
 
 const BRANCH_REF_PREFIX = 'refs/heads/';
 const SYSTEM_PROMPT_HASH = MERGE_CONFLICT_SYSTEM_PROMPT_HASH;
@@ -273,7 +272,8 @@ function buildCreateTaskInput(params: {
   eventId: string;
   userId: string;
   webhookSecret: string;
-  linearIssueId?: string;
+  linearIssueId?: string | undefined;
+  parentTaskId?: string | undefined;
 }): CreateTaskInput {
   return {
     id: params.taskId,
@@ -291,8 +291,14 @@ function buildCreateTaskInput(params: {
     prNumber: params.prNumber,
     webhookSecret: params.webhookSecret,
     agentType: 'pull_request',
+    followUpReason: 'merge_conflict',
     ...(params.linearIssueId !== undefined && { linearIssueId: params.linearIssueId }),
+    ...(params.parentTaskId !== undefined && { parentTaskId: params.parentTaskId }),
   };
+}
+
+function isMergeConflictTask(task: Pick<CodeTask, 'followUpReason' | 'systemPromptHash'>): boolean {
+  return task.followUpReason === 'merge_conflict' || task.systemPromptHash === SYSTEM_PROMPT_HASH;
 }
 
 function isReusableConflictTask(task: CodeTask, repository: string, prNumber: number): boolean {
@@ -300,8 +306,17 @@ function isReusableConflictTask(task: CodeTask, repository: string, prNumber: nu
     task.repository === repository &&
     task.prNumber === prNumber &&
     task.agentType === 'pull_request' &&
-    task.status !== 'archived'
+    task.status !== 'archived' &&
+    isMergeConflictTask(task)
   );
+}
+
+function resolveConflictParentTaskId(existingTask: CodeTask | null): string | undefined {
+  if (existingTask === null || isMergeConflictTask(existingTask)) {
+    return undefined;
+  }
+
+  return existingTask.id;
 }
 
 async function loadPullRequestDetails(
@@ -402,10 +417,7 @@ async function resolveExistingConflictTask(
   const latestTask = byPRResult.value;
   return ok({
     latestTask,
-    reusableTask:
-      latestTask !== null && isReusableConflictTask(latestTask, repository, prNumber)
-        ? latestTask
-        : null,
+    reusableTask: null,
     staleSummaryTaskId,
   });
 }
@@ -576,6 +588,9 @@ async function createMergeConflictTask(
     userId: params.ownerUserId,
     webhookSecret,
     ...(linkedLinearIssueId !== undefined && { linearIssueId: linkedLinearIssueId }),
+    ...(resolveConflictParentTaskId(params.existingTask) !== undefined
+      ? { parentTaskId: resolveConflictParentTaskId(params.existingTask) }
+      : {}),
   }));
 
   if (!createResult.ok) {
@@ -611,73 +626,26 @@ function shouldResolveTaskState(
   );
 }
 
+function shouldRetainExistingConflictTask(status: MergeConflictStatus): boolean {
+  return status === 'conflicting' || status === 'unknown';
+}
+
 function buildInitialWorkflowResult(
   existingSummary: GitHubPRSummary,
   taskResolution: ExistingConflictTaskResolution
 ): ConflictWorkflowResult {
+  const reusableTask = shouldRetainExistingConflictTask(existingSummary.mergeConflictStatus)
+    ? taskResolution.reusableTask
+    : null;
+
   return {
     commentId: existingSummary.managedConflictCommentId,
     taskId:
-      taskResolution.reusableTask?.id ??
+      reusableTask?.id ??
       (taskResolution.staleSummaryTaskId ? null : existingSummary.managedConflictTaskId),
     ownerUserId:
-      taskResolution.reusableTask?.userId ??
+      reusableTask?.userId ??
       existingSummary.managedConflictTaskOwnerUserId,
-  };
-}
-
-async function reuseConflictTask(
-  params: ConflictWorkflowParams,
-  reusableTask: CodeTask,
-  commentId: number
-): Promise<ConflictWorkflowResult> {
-  const sendResult = await sendTaskMessage(
-    {
-      logger: params.logger,
-      codeTaskRepo: params.deps.codeTaskRepo,
-      logLineRepo: params.deps.logLineRepo,
-      taskDispatcher: params.deps.taskDispatcher,
-      workerSettingsRepo: params.deps.workerSettingsRepo,
-      statusMirrorService: params.deps.statusMirrorService,
-      whatsappNotifier: params.deps.whatsappNotifier,
-    },
-    {
-      taskId: reusableTask.id,
-      userId: reusableTask.userId,
-      message: buildConflictInstruction({
-        repository: params.repository,
-        prNumber: params.existingSummary.pullRequestNumber,
-        baseBranch: params.details.baseBranch,
-        commentId,
-      }),
-    }
-  );
-
-  const phase = sendResult.ok
-    ? sendResult.value.action === 'queued' ? 'queued' : 'resumed'
-    : 'failed';
-
-  await updateManagedComment(
-    params.deps.gitHubPRClient,
-    params.accessContext.token,
-    params.parsedRepository.owner,
-    params.parsedRepository.repo,
-    params.existingSummary.pullRequestNumber,
-    commentId,
-    buildConflictCommentBody({
-      phase,
-      repository: params.repository,
-      prNumber: params.existingSummary.pullRequestNumber,
-      baseBranch: params.details.baseBranch,
-      ...(sendResult.ok ? { taskId: reusableTask.id } : {}),
-    }),
-    params.logger
-  );
-
-  return {
-    commentId,
-    taskId: sendResult.ok ? reusableTask.id : null,
-    ownerUserId: reusableTask.userId,
   };
 }
 
@@ -787,6 +755,9 @@ async function executeConflictWorkflow(
     params.existingSummary,
     params.taskResolution
   );
+  const reusableTask = shouldRetainExistingConflictTask(params.existingSummary.mergeConflictStatus)
+    ? params.taskResolution.reusableTask
+    : null;
 
   if (!shouldEnsureConflictWorkflow(
     params.existingSummary,
@@ -807,6 +778,7 @@ async function executeConflictWorkflow(
       repository: params.repository,
       prNumber: params.existingSummary.pullRequestNumber,
       baseBranch: params.details.baseBranch,
+      ...(reusableTask !== null ? { taskId: reusableTask.id } : {}),
     }),
     params.logger
   );
@@ -815,9 +787,12 @@ async function executeConflictWorkflow(
     return initialWorkflowResult;
   }
 
-  const reusableTask = params.taskResolution.reusableTask;
   if (reusableTask !== null) {
-    return await reuseConflictTask(params, reusableTask, commentId);
+    return {
+      commentId,
+      taskId: reusableTask.id,
+      ownerUserId: reusableTask.userId,
+    };
   }
 
   return await createConflictTaskWorkflow({ ...params, commentId });

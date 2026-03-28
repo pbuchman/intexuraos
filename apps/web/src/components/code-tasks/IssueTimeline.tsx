@@ -115,12 +115,14 @@ function FollowUpChip({ reason }: FollowUpChipProps): React.JSX.Element | null {
     retry: 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400',
     pr_comment: 'border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400',
     user_feedback: 'border-slate-500/30 bg-slate-500/10 text-slate-600 dark:text-slate-400',
+    merge_conflict: 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400',
   };
 
   const labels: Record<string, string> = {
     retry: 'Retry',
     pr_comment: 'PR Comment',
     user_feedback: 'User Feedback',
+    merge_conflict: 'Merge Conflict',
   };
 
   const style = chipStyles[reason] ?? 'border-slate-500/30 bg-slate-500/10 text-slate-600 dark:text-slate-400';
