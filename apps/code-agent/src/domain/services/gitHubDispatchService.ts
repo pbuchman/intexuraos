@@ -23,7 +23,6 @@ import { loadConfig } from '../../config.js';
 
 import { extractDispatchWorkerType } from '../utils/dispatchWorkerTriage.js';
 import type { AutomationLog } from '../ports/automationLog.js';
-import type { CreateRemediationTaskRequest, CreateRemediationTaskError, CreateRemediationTaskResult } from '../usecases/createRemediationTask.js';
 
 export interface DispatchContext {
   event: GitHubPREvent;
@@ -88,7 +87,27 @@ export interface WebhookDispatchServiceDeps {
   serviceUrl: string;
   dispatchRetryRepo?: DispatchRetryRepository;
   automationLog: AutomationLog;
-  createRemediationTask: (logger: Logger, request: CreateRemediationTaskRequest) => Promise<import('@intexuraos/common-core').Result<CreateRemediationTaskResult, CreateRemediationTaskError>>;
+}
+
+/**
+ * Resolve worker credentials for a preserved task by looking up the user's
+ * worker settings and matching on workerLocation. Shared by handleNewTask
+ * (@worker destruction) and handlePrMerge (merge cleanup).
+ */
+export async function resolveWorkerCredentials(
+  workerSettingsRepo: WorkerSettingsRepository,
+  userId: string,
+  workerLocation: string,
+): Promise<{ url: string; cfAccessClientId: string; cfAccessClientSecret: string } | undefined> {
+  const settingsResult = await workerSettingsRepo.getSettings(userId);
+  if (!settingsResult.ok || settingsResult.value === null) return undefined;
+  const workerConfig = settingsResult.value.workers.find((w) => w.name === workerLocation);
+  if (workerConfig?.enabled !== true) return undefined;
+  return {
+    url: workerConfig.url,
+    cfAccessClientId: workerConfig.cfAccessClientId,
+    cfAccessClientSecret: workerConfig.cfAccessClientSecret,
+  };
 }
 
 export function resolveLoginForTaskCreation(senderLogin: string, repository: string, allowedBots: Set<string>): string {
@@ -113,38 +132,11 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
           'Starting GitHub dispatch workflow'
         );
 
-        // Only user @worker/@model directives reach dispatch(); review events are gated out by CodeWorkerOutputRule
+        // Extract @worker directive if present; will be passed to pull_request task creation.
+        // Note: if an existing task is already executing for this PR, the @worker directive
+        // is intentionally ignored — the comment is sent as a message to the running task
+        // rather than creating a competing task.
         const workerDirective = extractDispatchWorkerType(event.body ?? '');
-        const isRemediationDispatch = workerDirective !== undefined;
-
-        if (isRemediationDispatch) {
-          const senderLogin = resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots);
-          const remediationResult = await deps.createRemediationTask(logger, {
-            repository: event.repository,
-            prNumber: event.pullRequestNumber,
-            senderLogin,
-            workerType: workerDirective,
-            eventId: event.id,
-            ...(event.body !== null && {
-              triggerComment: { body: event.body, author: event.senderLogin },
-            }),
-            ...(event.baseBranch !== null && { baseBranch: event.baseBranch }),
-          });
-
-          if (!remediationResult.ok) {
-            logger.error(
-              { prNumber: event.pullRequestNumber, error: remediationResult.error },
-              'Failed to create remediation task'
-            );
-            return { success: false, dispatched: false, error: remediationResult.error.message };
-          }
-
-          logger.info(
-            { prNumber: event.pullRequestNumber, taskId: remediationResult.value.taskId, workerType: remediationResult.value.workerType },
-            'Created remediation task from dispatch'
-          );
-          return { success: true, dispatched: true, taskId: remediationResult.value.taskId };
-        }
 
         // Use non-review lookup to avoid routing generic comments into review tasks
         const taskResult = await deps.codeTaskRepo.findLatestExecutionTaskByPR(event.repository, event.pullRequestNumber);
@@ -160,7 +152,7 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
         const task = taskResult.value;
 
         if (task === null) {
-          return await handleNewTask(deps, event, logger);
+          return await handleNewTask(deps, event, logger, workerDirective);
         }
 
         const existingResult = await handleExistingTask(deps, event, task, logger);
@@ -171,7 +163,7 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
             { staleTaskId: task.id, prNumber: event.pullRequestNumber },
             'Existing task is stale on worker, falling back to new task creation'
           );
-          return await handleNewTask(deps, event, logger);
+          return await handleNewTask(deps, event, logger, workerDirective);
         }
 
         return existingResult;
@@ -438,10 +430,63 @@ export function isStaleTaskError(result: WebhookDispatchResult): boolean {
   return false;
 }
 
+/** Best-effort destroy a preserved container when @worker directive requires a fresh agent. */
+async function destroyPreservedContainer(
+  deps: Pick<WebhookDispatchServiceDeps, 'workerSettingsRepo' | 'taskDispatcher'>,
+  preserved: { id: string; userId: string; workerLocation: string },
+  logger: Logger,
+): Promise<void> {
+  try {
+    const workerCreds = await resolveWorkerCredentials(
+      deps.workerSettingsRepo, preserved.userId, preserved.workerLocation,
+    );
+    await deps.taskDispatcher.cancelOnWorker(preserved.id, preserved.workerLocation, workerCreds);
+  } catch (error) {
+    logger.warn({ taskId: preserved.id, error }, 'Failed to destroy preserved container (best-effort)');
+  }
+}
+
+/** Attempt to reuse a preserved pull_request container by sending it a message. */
+async function reusePreservedContainer(
+  deps: Pick<WebhookDispatchServiceDeps, 'codeTaskRepo' | 'logLineRepo' | 'taskDispatcher' | 'workerSettingsRepo' | 'statusMirrorService' | 'whatsappNotifier'>,
+  preserved: { id: string; userId: string },
+  comment: string,
+  logger: Logger,
+): Promise<WebhookDispatchResult | null> {
+  try {
+    const sendResult = await sendTaskMessage(
+      {
+        logger,
+        codeTaskRepo: deps.codeTaskRepo,
+        logLineRepo: deps.logLineRepo,
+        taskDispatcher: deps.taskDispatcher,
+        workerSettingsRepo: deps.workerSettingsRepo,
+        statusMirrorService: deps.statusMirrorService,
+        whatsappNotifier: deps.whatsappNotifier,
+      },
+      { taskId: preserved.id, userId: preserved.userId, message: comment },
+    );
+    if (sendResult.ok) {
+      return { success: true, dispatched: true };
+    }
+    logger.warn(
+      { taskId: preserved.id, error: sendResult.error },
+      'Failed to send message to preserved container, falling through to new task',
+    );
+  } catch (error) {
+    logger.warn(
+      { taskId: preserved.id, error },
+      'Error sending to preserved container, falling through',
+    );
+  }
+  return null;
+}
+
 async function handleNewTask(
   deps: WebhookDispatchServiceDeps,
   event: GitHubPREvent,
   logger: Logger,
+  workerType?: import('../models/codeTask.js').WorkerType,
 ): Promise<WebhookDispatchResult> {
   if (deps.userLookupService === undefined) {
     logger.warn({ repo: event.repository, prNumber: event.pullRequestNumber }, 'UserLookupService not configured, cannot create task');
@@ -468,13 +513,40 @@ async function handleNewTask(
   }
 
   // Use messageBuilder for pull_request_review events to apply template routing
-  // (e.g. code-worker reviews → nitpick-nuker template)
   const comment = event.eventType === 'pull_request_review'
     ? deps.messageBuilder.build(event)
     : event.body ?? '';
 
-  // Note: @worker/@model directives are intercepted by remediation dispatch
-  // before reaching handleNewTask, so workerType extraction is not needed here.
+  // Look up any preserved container for this PR once — used in both branches below.
+  const preservedResult = await deps.codeTaskRepo.findPreservedPullRequestTask(
+    event.repository,
+    event.pullRequestNumber,
+  );
+  const preserved = preservedResult.ok ? preservedResult.value : null;
+
+  // When @worker directive is present, destroy any preserved container first (best-effort).
+  // The user's intent is a fresh agent with a specific model — failing to destroy the old
+  // one should not block creating the new task.
+  if (workerType !== undefined && preserved !== null) {
+    logger.info(
+      { taskId: preserved.id, prNumber: event.pullRequestNumber },
+      'Destroying preserved container for @worker directive',
+    );
+    await destroyPreservedContainer(deps, preserved, logger);
+  }
+
+  // Check for preserved pull_request container to reuse (non-@worker comments only)
+  if (workerType === undefined && preserved !== null) {
+    const reuseResult = await reusePreservedContainer(deps, preserved, comment, logger);
+    if (reuseResult !== null) {
+      logger.info(
+        { taskId: preserved.id, prNumber: event.pullRequestNumber },
+        'Reused preserved container for PR comment',
+      );
+      return reuseResult;
+    }
+  }
+
   const createResult = await createTaskForPR(
     {
       logger,
@@ -498,6 +570,7 @@ async function handleNewTask(
       eventId: event.id,
       ...(event.title !== null && { prTitle: event.title }),
       ...(resolvedBaseBranch !== null && { baseBranch: resolvedBaseBranch }),
+      ...(workerType !== undefined && { workerType }),
     },
   );
 

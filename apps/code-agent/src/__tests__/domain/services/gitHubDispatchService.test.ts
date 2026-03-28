@@ -92,6 +92,7 @@ function createMockDeps(overrides: Partial<WebhookDispatchServiceDeps> = {}): We
     codeTaskRepo: {
       findByPR: vi.fn().mockResolvedValue(ok(null)),
       findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findPreservedPullRequestTask: vi.fn().mockResolvedValue(ok(null)),
       create: vi.fn(),
       findById: vi.fn(),
       findByIdForUser: vi.fn(),
@@ -126,7 +127,6 @@ function createMockDeps(overrides: Partial<WebhookDispatchServiceDeps> = {}): We
     orchestratorSecret: 'test-secret',
     serviceUrl: 'http://localhost:8080',
     automationLog: { record: vi.fn().mockResolvedValue(undefined) },
-    createRemediationTask: vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'task-rem-default', workerType: 'auto' })),
     ...overrides,
   };
 }
@@ -138,6 +138,7 @@ function createMockDepsForCIFailure(): WebhookDispatchServiceDeps {
     codeTaskRepo: {
       findByPR: vi.fn().mockResolvedValue(ok(null)),
       findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findPreservedPullRequestTask: vi.fn().mockResolvedValue(ok(null)),
       create: vi.fn(),
       findById: vi.fn(),
       findByIdForUser: vi.fn(),
@@ -526,36 +527,34 @@ describe('GitHubDispatchService', () => {
       expect(requestArg).not.toHaveProperty('baseBranch');
     });
 
-    it('should route @worker directive to remediation task', async () => {
-      const mockCreateRemediation = vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'task-rem-worker', workerType: 'minimax' }));
-      deps = createMockDeps({ createRemediationTask: mockCreateRemediation });
+    it('should route @worker directive to createTaskForPR with workerType', async () => {
       const workerCommentEvent = { ...mockEvent, body: 'Fix this @worker minimax' };
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-worker-minimax' }));
 
       const service = createWebhookDispatchService(deps);
       const result = await service.dispatch({ ...context, event: workerCommentEvent });
 
       expect(result.success).toBe(true);
-      expect(result.taskId).toBe('task-rem-worker');
-      expect(mockCreateRemediation).toHaveBeenCalledWith(
-        mockLogger,
+      expect(result.taskId).toBe('task-worker-minimax');
+      expect(mockedCreateTaskForPR).toHaveBeenCalledWith(
+        expect.any(Object),
         expect.objectContaining({ workerType: 'minimax', prNumber: 42 }),
       );
     });
 
-    it('should route @model directive to remediation task', async () => {
-      const mockCreateRemediation = vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'task-rem-model', workerType: 'qwen' }));
-      deps = createMockDeps({ createRemediationTask: mockCreateRemediation });
+    it('should ignore @model directive (not recognized)', async () => {
+      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(null));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-no-branch' }));
       const modelCommentEvent = { ...mockEvent, body: '@model qwen fix the tests' };
 
       const service = createWebhookDispatchService(deps);
       const result = await service.dispatch({ ...context, event: modelCommentEvent });
 
       expect(result.success).toBe(true);
-      expect(result.taskId).toBe('task-rem-model');
-      expect(mockCreateRemediation).toHaveBeenCalledWith(
-        mockLogger,
-        expect.objectContaining({ workerType: 'qwen', prNumber: 42 }),
-      );
+      // @model is not recognized, so it should not be treated as a remediation directive
+      // Instead it falls through to normal task creation without workerType
+      const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
+      expect(requestArg).not.toHaveProperty('workerType');
     });
 
     it('should not pass workerType when no @worker/@model directive found', async () => {
@@ -617,32 +616,29 @@ describe('GitHubDispatchService', () => {
       expect(requestArg?.comment).toBe('Test description');
     });
 
-    it('should route pull_request_review with @worker directive to remediation task', async () => {
-      const mockCreateRemediation = vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'task-rem-review-worker', workerType: 'minimax' }));
-      deps = createMockDeps({ createRemediationTask: mockCreateRemediation });
+    it('should route pull_request_review with @worker directive to createTaskForPR with workerType', async () => {
       const reviewEvent: GitHubPREvent = {
         ...mockEvent,
         eventType: 'pull_request_review',
         action: 'submitted',
         body: 'Fix this @worker minimax',
       };
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-review-worker-minimax' }));
 
       const service = createWebhookDispatchService(deps);
       const result = await service.dispatch({ ...context, event: reviewEvent });
 
       expect(result.success).toBe(true);
-      expect(result.taskId).toBe('task-rem-review-worker');
-      expect(mockCreateRemediation).toHaveBeenCalledWith(
-        mockLogger,
+      expect(result.taskId).toBe('task-review-worker-minimax');
+      expect(mockedCreateTaskForPR).toHaveBeenCalledWith(
+        expect.any(Object),
         expect.objectContaining({ workerType: 'minimax' }),
       );
     });
   });
 
   describe('dispatch — remediation routing (INT-1087)', () => {
-    it('should NOT create remediation task for CODE_WORKER_REVIEW', async () => {
-      const mockCreateRemediation = vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'task-rem-1', workerType: 'auto' }));
-      deps = createMockDeps({ createRemediationTask: mockCreateRemediation });
+    it('should NOT route CODE_WORKER_REVIEW to @worker directive path', async () => {
       vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(null));
       mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-new' }));
 
@@ -656,12 +652,13 @@ describe('GitHubDispatchService', () => {
       const result = await service.dispatch(codeWorkerContext);
 
       expect(result.success).toBe(true);
-      expect(mockCreateRemediation).not.toHaveBeenCalled();
+      // No @worker directive in the body, so workerType should not be passed
+      const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
+      expect(requestArg).not.toHaveProperty('workerType');
     });
 
-    it('should create remediation task for @worker directive comments', async () => {
-      const mockCreateRemediation = vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'task-rem-2', workerType: 'opus' }));
-      deps = createMockDeps({ createRemediationTask: mockCreateRemediation });
+    it('should route @worker directive comments to createTaskForPR with workerType', async () => {
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-worker-2' }));
 
       const workerContext: DispatchContext = {
         event: { ...mockEvent, body: 'Fix the review findings @worker opus' },
@@ -673,19 +670,16 @@ describe('GitHubDispatchService', () => {
       const result = await service.dispatch(workerContext);
 
       expect(result.success).toBe(true);
-      expect(result.taskId).toBe('task-rem-2');
-      expect(mockCreateRemediation).toHaveBeenCalledWith(
-        mockLogger,
-        expect.objectContaining({
-          workerType: 'opus',
-          triggerComment: expect.objectContaining({ body: 'Fix the review findings @worker opus' }),
-        })
+      expect(result.taskId).toBe('task-worker-2');
+      expect(mockedCreateTaskForPR).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ workerType: 'opus' }),
       );
     });
 
-    it('should create remediation task for @model directive comments', async () => {
-      const mockCreateRemediation = vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'task-rem-3', workerType: 'sonnet' }));
-      deps = createMockDeps({ createRemediationTask: mockCreateRemediation });
+    it('should ignore @model directive in comments (not recognized)', async () => {
+      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(null));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-new' }));
 
       const modelContext: DispatchContext = {
         event: { ...mockEvent, body: '@model sonnet fix the tests' },
@@ -697,12 +691,13 @@ describe('GitHubDispatchService', () => {
       const result = await service.dispatch(modelContext);
 
       expect(result.success).toBe(true);
-      expect(result.taskId).toBe('task-rem-3');
+      // @model is not recognized, so workerType should not be passed
+      const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
+      expect(requestArg).not.toHaveProperty('workerType');
     });
 
-    it('should pass baseBranch to remediation task when @worker event has baseBranch', async () => {
-      const mockCreateRemediation = vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'task-rem-branch', workerType: 'auto' }));
-      deps = createMockDeps({ createRemediationTask: mockCreateRemediation });
+    it('should pass workerType to createTaskForPR when @worker event has baseBranch', async () => {
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-worker-branch' }));
 
       const workerContext: DispatchContext = {
         event: {
@@ -718,17 +713,16 @@ describe('GitHubDispatchService', () => {
       const result = await service.dispatch(workerContext);
 
       expect(result.success).toBe(true);
-      expect(mockCreateRemediation).toHaveBeenCalledWith(
-        mockLogger,
+      expect(mockedCreateTaskForPR).toHaveBeenCalledWith(
+        expect.any(Object),
         expect.objectContaining({
+          workerType: 'opus',
           baseBranch: 'development',
-        })
+        }),
       );
     });
 
     it('should fall through to normal dispatch when no @worker/@model and not code-worker review', async () => {
-      const mockCreateRemediation = vi.fn();
-      deps = createMockDeps({ createRemediationTask: mockCreateRemediation });
       vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(null));
       mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-normal' }));
 
@@ -742,12 +736,12 @@ describe('GitHubDispatchService', () => {
       const result = await service.dispatch(normalContext);
 
       expect(result.success).toBe(true);
-      expect(mockCreateRemediation).not.toHaveBeenCalled();
+      const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
+      expect(requestArg).not.toHaveProperty('workerType');
     });
 
-    it('should return failure when remediation task creation fails', async () => {
-      const mockCreateRemediation = vi.fn().mockResolvedValue(err({ code: 'task_creation_failed', message: 'Firestore error' }));
-      deps = createMockDeps({ createRemediationTask: mockCreateRemediation });
+    it('should return failure when createTaskForPR fails for @worker directive', async () => {
+      mockedCreateTaskForPR.mockResolvedValue(err({ code: 'task_creation_failed' as const, message: 'Firestore error' }));
 
       const workerContext: DispatchContext = {
         event: { ...mockEvent, body: '@worker opus fix it' },
@@ -762,9 +756,8 @@ describe('GitHubDispatchService', () => {
       expect(result.error).toContain('Firestore error');
     });
 
-    it('should always route @worker directives to remediation task', async () => {
-      const mockCreateRemediation = vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'task-rem-always', workerType: 'opus' }));
-      deps = createMockDeps({ createRemediationTask: mockCreateRemediation });
+    it('@worker opus comment creates pull_request task with workerType opus', async () => {
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-worker-opus' }));
 
       const workerContext: DispatchContext = {
         event: { ...mockEvent, body: '@worker opus fix it' },
@@ -776,14 +769,43 @@ describe('GitHubDispatchService', () => {
       const result = await service.dispatch(workerContext);
 
       expect(result.success).toBe(true);
-      expect(result.taskId).toBe('task-rem-always');
-      expect(mockCreateRemediation).toHaveBeenCalledWith(
-        mockLogger,
+      expect(result.taskId).toBe('task-worker-opus');
+      expect(mockedCreateTaskForPR).toHaveBeenCalledWith(
+        expect.any(Object),
         expect.objectContaining({
           workerType: 'opus',
           prNumber: 42,
         }),
       );
+    });
+
+    it('sends message to existing executing task even when @worker directive is present', async () => {
+      // The dispatch flow checks for an existing executing task BEFORE processing @worker.
+      // If one exists, the @worker directive is intentionally ignored — the comment is
+      // forwarded as a message to the running task rather than creating a competing one.
+      const existingTask = { id: 'task-running', userId: 'user-456' };
+      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(existingTask as never));
+      mockedSendTaskMessage.mockResolvedValue(ok({ action: 'queued' }));
+
+      const workerContext: DispatchContext = {
+        event: { ...mockEvent, body: '@worker opus fix it' },
+        decision: { action: 'dispatch', reason: 'ALL_RULES_PASSED' },
+        logger: mockLogger,
+      };
+
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch(workerContext);
+
+      expect(result).toEqual<WebhookDispatchResult>({
+        success: true,
+        dispatched: true,
+        taskId: 'task-running',
+      });
+      expect(mockedSendTaskMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ logger: mockLogger }),
+        { taskId: 'task-running', userId: 'user-456', message: 'built-message' },
+      );
+      expect(mockedCreateTaskForPR).not.toHaveBeenCalled();
     });
   });
 
@@ -970,6 +992,304 @@ describe('GitHubDispatchService', () => {
         expect.any(Object),
         expect.objectContaining({ taskId: 'task-nonreview' })
       );
+    });
+  });
+
+  describe('dispatch — preserved container reuse', () => {
+    it('sends message to preserved container for non-@worker comment', async () => {
+      const preserved = { id: 'task-preserved', workerLocation: 'vm-1', userId: 'user-456' };
+      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(null));
+      vi.mocked(deps.codeTaskRepo.findPreservedPullRequestTask).mockResolvedValue(ok(preserved));
+      mockedSendTaskMessage.mockResolvedValue(ok({ action: 'resumed' }));
+
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch(context);
+
+      expect(result).toEqual<WebhookDispatchResult>({
+        success: true,
+        dispatched: true,
+      });
+      expect(mockedSendTaskMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ logger: mockLogger }),
+        { taskId: 'task-preserved', userId: 'user-456', message: 'Test description' },
+      );
+      expect(mockedCreateTaskForPR).not.toHaveBeenCalled();
+    });
+
+    it('falls through to createTaskForPR when sendTaskMessage fails', async () => {
+      const preserved = { id: 'task-preserved', workerLocation: 'vm-1', userId: 'user-456' };
+      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(null));
+      vi.mocked(deps.codeTaskRepo.findPreservedPullRequestTask).mockResolvedValue(ok(preserved));
+      mockedSendTaskMessage.mockResolvedValue(err({ code: 'worker_error' as const, message: 'Container gone' }));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'new-task-fallback' }));
+
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch(context);
+
+      expect(result).toEqual<WebhookDispatchResult>({
+        success: true,
+        dispatched: true,
+        taskId: 'new-task-fallback',
+      });
+      expect(mockedSendTaskMessage).toHaveBeenCalled();
+      expect(mockedCreateTaskForPR).toHaveBeenCalled();
+    });
+
+    it('falls through to createTaskForPR when sendTaskMessage throws', async () => {
+      const preserved = { id: 'task-preserved', workerLocation: 'vm-1', userId: 'user-456' };
+      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(null));
+      vi.mocked(deps.codeTaskRepo.findPreservedPullRequestTask).mockResolvedValue(ok(preserved));
+      mockedSendTaskMessage.mockRejectedValue(new Error('Network failure'));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'new-task-thrown' }));
+
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch(context);
+
+      expect(result).toEqual<WebhookDispatchResult>({
+        success: true,
+        dispatched: true,
+        taskId: 'new-task-thrown',
+      });
+      expect(mockedCreateTaskForPR).toHaveBeenCalled();
+    });
+
+    it('skips preserved container reuse (but may destroy) when @worker directive is present', async () => {
+      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(null));
+      vi.mocked(deps.codeTaskRepo.findPreservedPullRequestTask).mockResolvedValue(ok(null));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'new-worker-task' }));
+
+      const workerContext: DispatchContext = {
+        event: { ...mockEvent, body: '@worker opus fix it' },
+        decision: mockDecision,
+        logger: mockLogger,
+      };
+
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch(workerContext);
+
+      expect(result.success).toBe(true);
+      expect(result.taskId).toBe('new-worker-task');
+      // Should NOT reuse the preserved container when @worker is present — always creates new task
+      expect(mockedSendTaskMessage).not.toHaveBeenCalled();
+      expect(mockedCreateTaskForPR).toHaveBeenCalled();
+    });
+
+    it('destroys preserved container when @worker comment arrives', async () => {
+      const preserved = { id: 'task-old', workerLocation: 'vm-1', userId: 'user-456' };
+      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(null));
+      vi.mocked(deps.codeTaskRepo.findPreservedPullRequestTask).mockResolvedValue(ok(preserved));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-new-opus' }));
+
+      const mockCancelOnWorker = vi.fn().mockResolvedValue(undefined);
+      const mockGetSettings = vi.fn().mockResolvedValue(ok(null));
+      deps = createMockDeps({
+        codeTaskRepo: {
+          ...deps.codeTaskRepo,
+          findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+          findPreservedPullRequestTask: vi.fn().mockResolvedValue(ok(preserved)),
+        } as never,
+        taskDispatcher: {
+          cancelOnWorker: mockCancelOnWorker,
+          dispatch: vi.fn(),
+          sendMessageToWorker: vi.fn(),
+        } as never,
+        workerSettingsRepo: {
+          getSettings: mockGetSettings,
+          saveSettings: vi.fn(),
+        } as never,
+      });
+
+      const workerContext: DispatchContext = {
+        event: { ...mockEvent, body: '@worker opus fix it' },
+        decision: mockDecision,
+        logger: mockLogger,
+      };
+
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch(workerContext);
+
+      expect(result.success).toBe(true);
+      expect(result.taskId).toBe('task-new-opus');
+      expect(mockCancelOnWorker).toHaveBeenCalledWith('task-old', 'vm-1', undefined);
+      expect(mockedCreateTaskForPR).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ workerType: 'opus', prNumber: 42 }),
+      );
+    });
+
+    it('still creates new task when destroying preserved container fails', async () => {
+      const preserved = { id: 'task-old', workerLocation: 'vm-1', userId: 'user-456' };
+      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(null));
+      vi.mocked(deps.codeTaskRepo.findPreservedPullRequestTask).mockResolvedValue(ok(preserved));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-new-opus' }));
+
+      const mockCancelOnWorkerError = vi.fn().mockRejectedValue(new Error('Worker unavailable'));
+      const mockGetSettings = vi.fn().mockResolvedValue(ok(null));
+      deps = createMockDeps({
+        codeTaskRepo: {
+          ...deps.codeTaskRepo,
+          findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+          findPreservedPullRequestTask: vi.fn().mockResolvedValue(ok(preserved)),
+        } as never,
+        taskDispatcher: {
+          cancelOnWorker: mockCancelOnWorkerError,
+          dispatch: vi.fn(),
+          sendMessageToWorker: vi.fn(),
+        } as never,
+        workerSettingsRepo: {
+          getSettings: mockGetSettings,
+          saveSettings: vi.fn(),
+        } as never,
+      });
+
+      const workerContext: DispatchContext = {
+        event: { ...mockEvent, body: '@worker opus fix it' },
+        decision: mockDecision,
+        logger: mockLogger,
+      };
+
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch(workerContext);
+
+      expect(result.success).toBe(true);
+      expect(result.taskId).toBe('task-new-opus');
+      expect(mockCancelOnWorkerError).toHaveBeenCalledWith('task-old', 'vm-1', undefined);
+      expect(mockedCreateTaskForPR).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ workerType: 'opus', prNumber: 42 }),
+      );
+    });
+
+    it('passes worker credentials when destroying preserved container for enabled @worker', async () => {
+      const preserved = { id: 'task-old', workerLocation: 'vm-1', userId: 'user-456' };
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-new-creds' }));
+
+      const mockCancelOnWorker = vi.fn().mockResolvedValue(undefined);
+      const workerConfig = {
+        name: 'vm-1',
+        url: 'https://vm-1.example.com',
+        cfAccessClientId: 'client-id-abc',
+        cfAccessClientSecret: 'client-secret-xyz',
+        dispatchSigningSecret: 'signing-secret',
+        enabled: true,
+      };
+      const mockGetSettings = vi.fn().mockResolvedValue(ok({
+        userId: 'user-456',
+        workers: [workerConfig],
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      }));
+      deps = createMockDeps({
+        codeTaskRepo: {
+          ...deps.codeTaskRepo,
+          findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+          findPreservedPullRequestTask: vi.fn().mockResolvedValue(ok(preserved)),
+        } as never,
+        taskDispatcher: {
+          cancelOnWorker: mockCancelOnWorker,
+          dispatch: vi.fn(),
+          sendMessageToWorker: vi.fn(),
+        } as never,
+        workerSettingsRepo: {
+          getSettings: mockGetSettings,
+          saveSettings: vi.fn(),
+        } as never,
+      });
+
+      const workerContext: DispatchContext = {
+        event: { ...mockEvent, body: '@worker opus fix it' },
+        decision: mockDecision,
+        logger: mockLogger,
+      };
+
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch(workerContext);
+
+      expect(result.success).toBe(true);
+      expect(result.taskId).toBe('task-new-creds');
+      expect(mockCancelOnWorker).toHaveBeenCalledWith('task-old', 'vm-1', {
+        url: 'https://vm-1.example.com',
+        cfAccessClientId: 'client-id-abc',
+        cfAccessClientSecret: 'client-secret-xyz',
+      });
+    });
+
+    it('passes undefined credentials when settings have no matching worker for preserved container', async () => {
+      const preserved = { id: 'task-old', workerLocation: 'vm-1', userId: 'user-456' };
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-new-no-match' }));
+
+      const mockCancelOnWorker = vi.fn().mockResolvedValue(undefined);
+      // Settings exist but no worker named 'vm-1'
+      const mockGetSettings = vi.fn().mockResolvedValue(ok({
+        userId: 'user-456',
+        workers: [{ name: 'vm-2', url: 'https://vm-2.example.com', cfAccessClientId: 'id', cfAccessClientSecret: 'secret', dispatchSigningSecret: 'sig', enabled: true }],
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      }));
+      deps = createMockDeps({
+        codeTaskRepo: {
+          ...deps.codeTaskRepo,
+          findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+          findPreservedPullRequestTask: vi.fn().mockResolvedValue(ok(preserved)),
+        } as never,
+        taskDispatcher: {
+          cancelOnWorker: mockCancelOnWorker,
+          dispatch: vi.fn(),
+          sendMessageToWorker: vi.fn(),
+        } as never,
+        workerSettingsRepo: {
+          getSettings: mockGetSettings,
+          saveSettings: vi.fn(),
+        } as never,
+      });
+
+      const workerContext: DispatchContext = {
+        event: { ...mockEvent, body: '@worker opus fix it' },
+        decision: mockDecision,
+        logger: mockLogger,
+      };
+
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch(workerContext);
+
+      expect(result.success).toBe(true);
+      expect(result.taskId).toBe('task-new-no-match');
+      // No matching worker — cancelOnWorker called with undefined credentials
+      expect(mockCancelOnWorker).toHaveBeenCalledWith('task-old', 'vm-1', undefined);
+    });
+
+    it('falls through to createTaskForPR when no preserved container exists', async () => {
+      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(null));
+      vi.mocked(deps.codeTaskRepo.findPreservedPullRequestTask).mockResolvedValue(ok(null));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'new-task-no-preserved' }));
+
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch(context);
+
+      expect(result).toEqual<WebhookDispatchResult>({
+        success: true,
+        dispatched: true,
+        taskId: 'new-task-no-preserved',
+      });
+      expect(mockedCreateTaskForPR).toHaveBeenCalled();
+    });
+
+    it('falls through to createTaskForPR when findPreservedPullRequestTask returns error', async () => {
+      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(null));
+      vi.mocked(deps.codeTaskRepo.findPreservedPullRequestTask).mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR' as const, message: 'DB error' })
+      );
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'new-task-db-err' }));
+
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch(context);
+
+      expect(result).toEqual<WebhookDispatchResult>({
+        success: true,
+        dispatched: true,
+        taskId: 'new-task-db-err',
+      });
+      expect(mockedCreateTaskForPR).toHaveBeenCalled();
     });
   });
 

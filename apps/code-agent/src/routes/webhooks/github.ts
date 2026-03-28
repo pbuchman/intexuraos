@@ -634,9 +634,9 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
 
       // Transition Linear issues to QA when PR is merged
       if (parsedEvent.eventType === 'pull_request' && parsedEvent.action === 'closed' && parsedEvent.mergedAt !== null) {
-        const { codeTaskRepo, linearIssueService, userServiceClient } = getServices();
+        const { codeTaskRepo, linearIssueService, userServiceClient, taskDispatcher, workerSettingsRepo } = getServices();
         void handlePrMerge(
-          { codeTaskRepo, linearIssueService, userServiceClient, logger },
+          { codeTaskRepo, linearIssueService, userServiceClient, taskDispatcher, workerSettingsRepo, logger },
           {
             repository: parsedEvent.repository,
             prNumber: parsedEvent.pullRequestNumber,
