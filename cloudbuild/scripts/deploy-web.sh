@@ -18,7 +18,7 @@ log "  Source: apps/web/dist/"
 # Sync all files with automatic content-type detection.
 # NOTE: No -d flag — old content-hashed assets (e.g. index-abc123.js) are kept
 # so service workers referencing them don't 404 during the SW update window.
-# Accumulation is negligible (few KB per deploy) and bounded by GCS versioning.
+# Accumulation is negligible in practice (~few KB per deploy).
 gsutil -m rsync -r apps/web/dist/ "gs://${BUCKET}/"
 
 # Set cache-control headers:
