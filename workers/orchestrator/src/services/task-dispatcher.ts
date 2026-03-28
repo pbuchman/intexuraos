@@ -49,6 +49,12 @@ export function getTaskEventUrl(webhookUrl: string): string {
   return webhookUrl.replace('/internal/webhooks/task-complete', '/internal/webhooks/task-event');
 }
 
+const FATAL_EXIT_CODE_PREFIX = 'fatal_exit_code_';
+
+export function hasFatalExitCodeField(missingFields: string[]): string | undefined {
+  return missingFields.find((f) => f.startsWith(FATAL_EXIT_CODE_PREFIX));
+}
+
 const TASK_TIMEOUT_WARNING_MS = 175 * 60 * 1000; // 2h 55m
 const TASK_TIMEOUT_KILL_MS = 180 * 60 * 1000; // 3h
 const COMPLETION_CHECK_INTERVAL_MS = 30 * 1000; // 30s
@@ -1121,6 +1127,28 @@ export class TaskDispatcher {
           void this.flushAndCloseLogForwarder(task.taskId);
         });
       }
+      return;
+    }
+
+    // Fatal exit code (SIGKILL=137, SIGSEGV=139): do not retry — session state is corrupted
+    const fatalField = hasFatalExitCodeField(verification.missingFields);
+    if (fatalField !== undefined) {
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `Fatal exit code detected (${fatalField}); skipping retry — session state is not recoverable`
+      );
+      await this.flushTaskLogs(task.taskId);
+      await this.collectTurnMetrics(task, attempt);
+      await this.teardownAttempt(task.taskId, false);
+      const error: TaskError = {
+        code: 'TASK_FATAL_EXIT_CODE',
+        message: `Worker process killed by signal: ${fatalField}`,
+        remediation: { action: 'retry' },
+      };
+      await this.finalizeTask(task, 'failed', {
+        ...(result !== undefined && { result }),
+        error,
+      });
       return;
     }
 
