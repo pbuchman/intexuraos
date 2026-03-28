@@ -76,6 +76,7 @@ const DOCKER_PING_TIMEOUT_MS = 5_000;
 const MIN_DISK_SPACE_BYTES = 5 * 1024 * 1024 * 1024;
 const MIN_DISK_SPACE_GB = MIN_DISK_SPACE_BYTES / (1024 * 1024 * 1024);
 const PRESERVED_MAX_AGE_MS = 3 * 60 * 60 * 1000;
+const RUNTIME_STATE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 // Container must run as the host user so bind-mounted files (worktrees, secrets,
 // pnpm store) are accessible without permission hacks.
@@ -203,7 +204,9 @@ export class DockerProvider implements IsolationProvider {
 
     this.preservedWorkers.delete(taskId);
     await this.removeTaskSecretsDirectory(taskId);
-    await this.cleanupTaskSession(taskId);
+    // Runtime session state (codex-state-*, claude-session-*) is intentionally
+    // preserved here — the task may be resumed later. Session cleanup is the
+    // task-dispatcher's responsibility via explicit teardownAttempt(taskId, false).
     this.logger.info({ taskId, containerId, state }, 'Removed stale worker container');
   }
 
@@ -1126,7 +1129,7 @@ export class DockerProvider implements IsolationProvider {
 
         if (containerInfo === undefined) {
           await this.removeTaskSecretsDirectory(taskId);
-          await this.cleanupTaskSession(taskId);
+          // Runtime session state preserved for potential resume (see removeDetachedContainer).
           this.logger.info(
             { taskId, containerId: preserved.containerId },
             'Removed stale preserved worker metadata'
@@ -1151,6 +1154,47 @@ export class DockerProvider implements IsolationProvider {
       }
     } catch (error) {
       this.logger.warn({ error }, 'Failed to clean up stale worker containers');
+    }
+
+    await this.cleanupOrphanedRuntimeState();
+  }
+
+  private async cleanupOrphanedRuntimeState(): Promise<void> {
+    const prefixes = [CLAUDE_SESSION_DIR_PREFIX, CODEX_STATE_DIR_PREFIX];
+    const now = Date.now();
+
+    let entries: string[];
+    try {
+      entries = await fs.promises.readdir(this.config.secretsBasePath);
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      const matchedPrefix = prefixes.find((p) => entry.startsWith(`${p}-`));
+      if (matchedPrefix === undefined) {
+        continue;
+      }
+
+      const taskId = entry.slice(matchedPrefix.length + 1);
+      if (this.workers.has(taskId) || this.preservedWorkers.has(taskId)) {
+        continue;
+      }
+
+      const fullPath = path.join(this.config.secretsBasePath, entry);
+      try {
+        const stat = await fs.promises.stat(fullPath);
+        if (now - stat.mtimeMs <= RUNTIME_STATE_MAX_AGE_MS) {
+          continue;
+        }
+        await fs.promises.rm(fullPath, { recursive: true, force: true });
+        this.logger.info({ taskId, path: fullPath }, 'Removed orphaned runtime state directory');
+      } catch (err: unknown) {
+        this.logger.warn(
+          { taskId, path: fullPath, error: err },
+          'Failed to clean up orphaned runtime state directory'
+        );
+      }
     }
   }
 
