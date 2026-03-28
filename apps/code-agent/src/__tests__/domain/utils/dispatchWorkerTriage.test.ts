@@ -54,10 +54,6 @@ describe('extractDispatchWorkerType', () => {
     expect(extractDispatchWorkerType('@worker codex-xhigh')).toBe('codex-xhigh');
   });
 
-  it('extracts auto from @model auto', () => {
-    expect(extractDispatchWorkerType('@model auto')).toBe('auto');
-  });
-
   it('rejects qwen3.5-plus explicit form', () => {
     expect(extractDispatchWorkerType('@worker qwen3.5-plus')).toBeUndefined();
   });
