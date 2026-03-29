@@ -1598,6 +1598,43 @@ describe('submitToExecutionAgent', () => {
       }
     });
 
+    it('returns invalid_status when resolved planning task belongs to different user', async () => {
+      const reviewTask = createMockTask({
+        id: 'task_review',
+        agentType: 'review',
+        status: 'reviewed',
+        linearIssueId: 'INT-100',
+      });
+      const otherUsersPlanningTask = createMockTask({
+        id: 'task_planning',
+        agentType: 'planning',
+        status: 'planned',
+        linearIssueId: 'INT-100',
+        userId: 'other-user-id',
+      });
+
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(reviewTask));
+      mockCodeTaskRepo.findPlannedTaskByLinearIssue.mockResolvedValue(ok(otherUsersPlanningTask));
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId: 'task_review',
+        userId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('invalid_status');
+      }
+      // Verify security event is logged with both user IDs
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestedByUserId: userId,
+          taskOwnedByUserId: 'other-user-id',
+        }),
+        'Security: resolved planning task belongs to different user'
+      );
+    });
+
     it('returns invalid_status when resolver errors', async () => {
       const reviewTask = createMockTask({
         id: 'task_review',
