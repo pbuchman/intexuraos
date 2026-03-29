@@ -140,26 +140,15 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
     // Step 3f: Sort by PR number ASC (oldest first)
     eligiblePrs.sort((a, b) => a.number - b.number);
 
-    // Step 3g: If zero eligible PRs, drain
-    if (eligiblePrs.length === 0) {
-      const now = new Date();
-      await recordSuccessfulTick(watchId, [], { status: 'drained', drainedAt: now });
-      return { watchId, owner, repo, baseBranch, action: 'drained', remainingPrs: 0, skipped: [] };
-    }
-
-    // Filter out excluded PRs (after drain check to avoid premature drain)
+    // Filter out excluded PRs before drain check
     const excludedSet = new Set(watch.excludedPrNumbers);
     const prsToProcess = eligiblePrs.filter((pr) => !excludedSet.has(pr.number));
 
-    // If all eligible PRs are excluded, return skipped_all (not drain — PRs exist, just excluded)
+    // Step 3g: Drain when zero selected (non-excluded) PRs remain
     if (prsToProcess.length === 0) {
-      await recordSuccessfulTick(watchId, []);
-      return {
-        watchId, owner, repo, baseBranch,
-        action: 'skipped_all',
-        remainingPrs: allPrs.length,
-        skipped: [],
-      };
+      const now = new Date();
+      await recordSuccessfulTick(watchId, [], { status: 'drained', drainedAt: now });
+      return { watchId, owner, repo, baseBranch, action: 'drained', remainingPrs: 0, skipped: [] };
     }
 
     // Step 3h: Iterate eligible PRs
