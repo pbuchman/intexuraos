@@ -1184,6 +1184,7 @@ export interface CodeTask {
   linearIssueId?: string;
   linearIssue?: {
     identifier: string;
+    parentIdentifier?: string | null;
     title: string;
     state: { name: string; type: string };
     priority: number;
