@@ -134,6 +134,13 @@ export interface Research {
   notionExportInfo?: NotionExportInfo;
 }
 
+/** Model-level status for progress indication (no result text). */
+export interface LlmResultStatusInfo {
+  provider: LlmProvider;
+  model: string;
+  status: LlmResultStatus;
+}
+
 /**
  * Lightweight projection of Research for list views.
  * Contains only the fields needed to render a research card in the list page.
@@ -149,10 +156,45 @@ export interface ResearchSummary {
   startedAt: string;
   completedAt?: string;
   favourite?: boolean;
-  /** Model-level statuses for progress indication (no result text) */
-  llmResultStatuses: { provider: LlmProvider; model: string; status: LlmResultStatus }[];
+  llmResultStatuses: LlmResultStatusInfo[];
   totalCostUsd?: number;
   partialFailure?: PartialFailure;
+}
+
+/**
+ * Maps a full Research document to a lightweight ResearchSummary.
+ * Strips large text fields (synthesizedResult, llmResults[].result, inputContexts).
+ * Note: Firestore .select() still fetches full llmResults (sub-field projection not supported);
+ * the result text is stripped here before leaving the server.
+ */
+export function toResearchSummary(data: Research): ResearchSummary {
+  const summary: ResearchSummary = {
+    id: data.id,
+    userId: data.userId,
+    title: data.title,
+    status: data.status,
+    selectedModels: data.selectedModels,
+    synthesisModel: data.synthesisModel,
+    startedAt: data.startedAt,
+    llmResultStatuses: data.llmResults.map((r) => ({
+      provider: r.provider,
+      model: r.model,
+      status: r.status,
+    })),
+  };
+  if (data.favourite !== undefined) {
+    summary.favourite = data.favourite;
+  }
+  if (data.completedAt !== undefined) {
+    summary.completedAt = data.completedAt;
+  }
+  if (data.totalCostUsd !== undefined) {
+    summary.totalCostUsd = data.totalCostUsd;
+  }
+  if (data.partialFailure !== undefined) {
+    summary.partialFailure = data.partialFailure;
+  }
+  return summary;
 }
 
 export function createLlmResults(selectedModels: ResearchModel[]): LlmResult[] {

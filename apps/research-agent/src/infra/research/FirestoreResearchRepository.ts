@@ -5,12 +5,13 @@
 
 import { FieldValue, getFirestore } from '@intexuraos/infra-firestore';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import type {
-  LlmResult,
-  RepositoryError,
-  Research,
-  ResearchRepository,
-  ResearchSummary,
+import {
+  toResearchSummary,
+  type LlmResult,
+  type RepositoryError,
+  type Research,
+  type ResearchRepository,
+  type ResearchSummary,
 } from '../../domain/research/index.js';
 
 export class FirestoreResearchRepository implements ResearchRepository {
@@ -187,38 +188,9 @@ export class FirestoreResearchRepository implements ResearchRepository {
       }
 
       const snapshot = await query.get();
-      const docs = snapshot.docs.map((doc) => {
-        const data = doc.data() as Research;
-        const summary: ResearchSummary = {
-          id: data.id,
-          userId: data.userId,
-          title: data.title,
-          status: data.status,
-          selectedModels: data.selectedModels,
-          synthesisModel: data.synthesisModel,
-          startedAt: data.startedAt,
-          llmResultStatuses: data.llmResults.map((r) => ({
-            provider: r.provider,
-            model: r.model,
-            status: r.status,
-          })),
-        };
-        /* v8 ignore start -- ts-type: conditional assignments for exactOptionalPropertyTypes compliance @preserve */
-        if (data.favourite !== undefined) {
-          summary.favourite = data.favourite;
-        }
-        if (data.completedAt !== undefined) {
-          summary.completedAt = data.completedAt;
-        }
-        if (data.totalCostUsd !== undefined) {
-          summary.totalCostUsd = data.totalCostUsd;
-        }
-        if (data.partialFailure !== undefined) {
-          summary.partialFailure = data.partialFailure;
-        }
-        /* v8 ignore stop @preserve */
-        return summary;
-      });
+      const docs = snapshot.docs.map((doc) =>
+        toResearchSummary(doc.data() as Research)
+      );
 
       const items = docs.slice(0, limit);
       const lastItem = items[items.length - 1];
