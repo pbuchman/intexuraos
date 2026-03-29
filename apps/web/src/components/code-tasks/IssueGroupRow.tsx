@@ -63,13 +63,6 @@ function StepDot({ state }: StepDotProps): React.JSX.Element {
       </span>
     );
   }
-  if (state === 'actionable') {
-    return (
-      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-green-500/20 text-green-500">
-        <Play className="h-3 w-3" />
-      </span>
-    );
-  }
   // waiting
   return (
     <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-500/20 text-slate-400">
@@ -88,7 +81,6 @@ const compactNames: Record<string, string> = {
 function stepLabel(name: string, state: StepState, compact?: boolean): string {
   if (compact === true) {
     const short = compactNames[name] ?? name.slice(0, 4);
-    if (state === 'actionable') return 'Code';
     return short;
   }
   if (state === 'completed') return name;
@@ -96,7 +88,6 @@ function stepLabel(name: string, state: StepState, compact?: boolean): string {
   if (state === 'dispatched') return `${name} (dispatched)`;
   if (state === 'queued') return `${name} (queued)`;
   if (state === 'failed') return `${name} Failed`;
-  if (state === 'actionable') return 'Code';
   return name;
 }
 
@@ -140,14 +131,15 @@ function PipelineStep({ name, state, compact }: PipelineStepProps): React.JSX.El
 
 function PipelineVisualization({ group, compact }: { group: IssueGroup; compact?: boolean }): React.JSX.Element {
   const { pipeline } = group;
-  if (pipeline.steps.length === 0) {
+  const visibleSteps = pipeline.steps.filter((s) => s.state !== 'actionable');
+  if (visibleSteps.length === 0) {
     return <span className="text-xs text-slate-500">--</span>;
   }
 
   const elements: React.JSX.Element[] = [];
 
-  for (let i = 0; i < pipeline.steps.length; i++) {
-    const step = pipeline.steps[i];
+  for (let i = 0; i < visibleSteps.length; i++) {
+    const step = visibleSteps[i];
     if (step === undefined) continue;
 
     if (i > 0) {
@@ -184,6 +176,34 @@ function summaryOrPrompt(task: { result?: { summary?: string }; sanitizedPrompt:
   if (summary !== undefined) return summary;
   const words = task.sanitizedPrompt.split(/\s+/);
   return words.length > 100 ? words.slice(0, 100).join(' ') + '...' : task.sanitizedPrompt;
+}
+
+function IssueIdentifierLink({
+  linearIssue,
+  linkClassName,
+}: {
+  linearIssue: NonNullable<IssueGroup['linearIssue']>;
+  linkClassName: string;
+}): React.JSX.Element {
+  return (
+    <span className="inline-flex flex-wrap items-center">
+      {linearIssue.parentIdentifier !== null && linearIssue.parentIdentifier !== undefined ? (
+        <span className="font-mono text-sm text-slate-400">
+          {linearIssue.parentIdentifier}
+          <span className="mx-1 text-slate-500">→</span>
+        </span>
+      ) : null}
+      <a
+        href={linearIssue.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e): void => { e.stopPropagation(); }}
+        className={linkClassName}
+      >
+        {linearIssue.identifier}
+      </a>
+    </span>
+  );
 }
 
 // --- Main component ---
@@ -293,15 +313,10 @@ const IssueGroupRow = memo(function IssueGroupRow({
             <div className="min-w-0">
               {group.linearIssue !== undefined ? (
                 <>
-                  <a
-                    href={group.linearIssue.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e): void => { e.stopPropagation(); }}
-                    className="font-mono text-sm text-blue-500 hover:text-blue-400 hover:underline"
-                  >
-                    {group.linearIssue.identifier}
-                  </a>
+                  <IssueIdentifierLink
+                    linearIssue={group.linearIssue}
+                    linkClassName="font-mono text-sm text-blue-500 hover:text-blue-400 hover:underline"
+                  />
                   <p className="truncate text-xs text-slate-500 dark:text-slate-400">
                     {group.linearIssue.title}
                   </p>
@@ -377,15 +392,10 @@ const IssueGroupRow = memo(function IssueGroupRow({
             <div className="min-w-0 flex-1">
               {group.linearIssue !== undefined ? (
                 <span className="text-sm">
-                  <a
-                    href={group.linearIssue.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e): void => { e.stopPropagation(); }}
-                    className="font-mono text-blue-500 hover:text-blue-400 hover:underline"
-                  >
-                    {group.linearIssue.identifier}
-                  </a>
+                  <IssueIdentifierLink
+                    linearIssue={group.linearIssue}
+                    linkClassName="font-mono text-blue-500 hover:text-blue-400 hover:underline"
+                  />
                   <span className="text-slate-400"> · </span>
                   <span className="text-xs text-slate-500 dark:text-slate-400">{createdRelative}</span>
                 </span>
@@ -476,6 +486,10 @@ const IssueGroupRow = memo(function IssueGroupRow({
 }, (prev, next) =>
   prev.timeTick === next.timeTick &&
   prev.group.linearIssueId === next.group.linearIssueId &&
+  prev.group.linearIssue?.identifier === next.group.linearIssue?.identifier &&
+  prev.group.linearIssue?.parentIdentifier === next.group.linearIssue?.parentIdentifier &&
+  prev.group.linearIssue?.title === next.group.linearIssue?.title &&
+  prev.group.linearIssue?.url === next.group.linearIssue?.url &&
   prev.group.aggregateStatus === next.group.aggregateStatus &&
   prev.group.latestTask.updatedAt === next.group.latestTask.updatedAt &&
   prev.group.tasks.length === next.group.tasks.length &&

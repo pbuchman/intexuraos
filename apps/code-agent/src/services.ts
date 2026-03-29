@@ -229,6 +229,7 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
       logger.info({ identifier: request.identifier }, '[E2E] Mock Linear issue fetch for display');
       return Promise.resolve(ok({
         identifier: request.identifier,
+        parentIdentifier: null,
         title: `Mock ${request.identifier}`,
         state: { name: 'In Progress', type: 'started' },
         priority: 2,
@@ -244,6 +245,7 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
       return Promise.resolve(ok(
         request.identifiers.map((identifier) => ({
           identifier,
+          parentIdentifier: null,
           title: `Mock ${identifier}`,
           state: { name: 'In Progress', type: 'started' as const },
           priority: 2,

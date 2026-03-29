@@ -55,3 +55,16 @@ Common thought patterns that precede rule violations. When you catch yourself th
 | "upstream: a prior check makes this unreachable"      | Unreachable code should be deleted, not exempted.   |
 | "The explanation is just for documentation"           | Explanation is for VALIDATION. CI checks it.        |
 | "This path requires a specific payload"               | Then create that payload in the test.               |
+
+## Investigation Traps
+
+| Your Thought                                        | Reality                                                  |
+| --------------------------------------------------- | -------------------------------------------------------- |
+| "The CLI segfaults, this is an upstream tool bug"   | Investigate the environment. Tool + environment = yours. |
+| "I found the root cause" (at the first layer)       | Go deeper. Surface cause hides the real root cause.      |
+| "The architecture is mismatched, that's the answer" | Why is it mismatched? What built it wrong? Fix that.     |
+| "I've diagnosed the problem"                        | Diagnosis without fix is incomplete. Implement the fix.  |
+| "Should I rebuild the image?"                       | During incident triage, act. Don't ask permission.       |
+| "This crashes because X" (no evidence cited)        | Show the evidence. Stack trace, log line, or config.     |
+| Speculating about internal mechanisms               | Citation needed. Reproduce it or don't claim it.         |
+| "I'll present findings and let the user decide"     | Implement the fix yourself. Present results, not options.|

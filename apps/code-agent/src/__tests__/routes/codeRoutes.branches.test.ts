@@ -2283,6 +2283,7 @@ describe('codeRoutes branch coverage', () => {
         ...services.linearAgentClient,
         fetchIssuesForDisplay: vi.fn().mockResolvedValue(ok([{
           identifier: 'INT-123',
+          parentIdentifier: null,
           title: 'Test issue',
           state: { name: 'In Progress', type: 'started' },
           priority: 2,
@@ -2390,6 +2391,7 @@ describe('codeRoutes branch coverage', () => {
         ...services.linearAgentClient,
         fetchIssueForDisplay: vi.fn().mockResolvedValue(ok({
           identifier: 'INT-456',
+          parentIdentifier: null,
           title: 'Test issue detail',
           state: { name: 'In Progress', type: 'started' },
           priority: 2,
