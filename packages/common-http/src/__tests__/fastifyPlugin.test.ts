@@ -228,6 +228,37 @@ describe('Intexura Fastify Plugin', () => {
     });
   });
 
+  describe('custom not-found handler', () => {
+    it('returns standard error envelope for unknown routes', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/nonexistent-route',
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+      expect(body.error.message).toBe('Route not found');
+      expect(body.diagnostics).toBeDefined();
+      expect(body.diagnostics.requestId).toBeDefined();
+    });
+
+    it('includes x-request-id header in not-found response', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/nonexistent-route',
+        headers: {
+          'x-request-id': 'not-found-req-id',
+        },
+      });
+
+      expect(response.headers['x-request-id']).toBe('not-found-req-id');
+      const body = JSON.parse(response.body);
+      expect(body.diagnostics.requestId).toBe('not-found-req-id');
+    });
+  });
+
   describe('JSON body parser', () => {
     it('accepts empty body with Content-Type application/json', async () => {
       app.post('/test', async (request, reply) => {

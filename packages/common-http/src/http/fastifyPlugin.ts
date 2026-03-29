@@ -120,6 +120,15 @@ const intexuraPlugin: FastifyPluginCallback = (
     }
   );
 
+  fastify.setNotFoundHandler((request: FastifyRequest, reply: FastifyReply): void => {
+    const diagnostics: Diagnostics = {
+      requestId: request.requestId,
+      durationMs: Date.now() - request.startTime,
+    };
+    const response: ApiError = fail('NOT_FOUND', 'Route not found', diagnostics);
+    void reply.status(404).send(response);
+  });
+
   done();
 };
 
