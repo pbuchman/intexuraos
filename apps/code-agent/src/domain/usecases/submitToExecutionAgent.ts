@@ -19,6 +19,10 @@ import { hasCodeTaskLabel, hasComplexTaskLabel, hasUnclearLabel, getWorkerTypeFr
 import { randomUUID } from 'node:crypto';
 import { generateWebhookSecret } from '../utils/secrets.js';
 import { fanOutChildTasks } from './fanOutChildTasks.js';
+import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
+import { mergePlanPr } from '../utils/mergePlanPr.js';
+import { fetchGitHubToken } from '../utils/gitHubTokenResolver.js';
 
 export const EXECUTION_AGENT_PROMPT =
   'Implement the requirements defined in the linked Linear issue and its comments (newest first). Follow the test plan, write code, run CI, and create a PR.';
@@ -59,6 +63,7 @@ export type SubmitToExecutionAgentErrorCode =
   | 'label_not_ready'
   | 'worker_not_configured'
   | 'queue_full'
+  | 'plan_pr_merge_failed'
   | 'internal_error';
 
 /**
@@ -79,6 +84,8 @@ export interface SubmitToExecutionAgentDeps {
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
   orchestratorSecret: string;
+  gitHubPRClient: GitHubPRClient;
+  userServiceClient: UserServiceClient;
 }
 
 /**
@@ -103,7 +110,7 @@ export async function submitToExecutionAgent(
   deps: SubmitToExecutionAgentDeps,
   request: SubmitToExecutionAgentRequest
 ): Promise<Result<SubmitToExecutionAgentResult, SubmitToExecutionAgentError>> {
-  const { logger, codeTaskRepo, linearAgentClient, taskEnqueueService, workerSettingsRepo } = deps;
+  const { logger, codeTaskRepo, linearAgentClient, taskEnqueueService, workerSettingsRepo, gitHubPRClient, userServiceClient } = deps;
   const { originalTaskId, userId, workerType } = request;
 
   // Step 1: Fetch original task
@@ -233,6 +240,31 @@ export async function submitToExecutionAgent(
     });
   }
 
+  // Step 8b: Merge plan PR if planning task produced one
+  const planningPrUrl = originalTask.result?.planning_pr_url;
+  if (planningPrUrl !== undefined) {
+    const gitHubToken = await fetchGitHubToken(userServiceClient, userId, logger);
+    if (gitHubToken === null) {
+      logger.warn({ userId }, 'Cannot merge plan PR: GitHub OAuth token unavailable');
+      return err({
+        code: 'plan_pr_merge_failed',
+        message: 'GitHub OAuth token is required to merge the plan PR. Please reconnect your GitHub account.',
+      });
+    }
+
+    const mergeResult = await mergePlanPr(
+      { logger, gitHubPRClient },
+      { planningPrUrl, repository: originalTask.repository, token: gitHubToken },
+    );
+
+    if (!mergeResult.ok) {
+      logger.warn({ planningPrUrl, error: mergeResult.error }, 'Plan PR merge failed — cannot proceed with implementation');
+      return err(mergeResult.error);
+    }
+
+    logger.info({ planningPrUrl }, 'Plan PR merged into development — proceeding with execution task creation');
+  }
+
   // Step 9: SET implementationTaskId on planning task BEFORE dispatch (optimistic lock)
   const executionTaskId = `task_${randomUUID()}`;
 
@@ -275,8 +307,6 @@ export async function submitToExecutionAgent(
     followUpReason: 'execution_implement' as const,
     agentType: 'execution' as const,
     linearIssueId,
-    ...(originalTask.result?.branch !== undefined && { planningPrBranch: originalTask.result.branch }),
-    ...(originalTask.result?.planning_pr_url !== undefined && { planningPrUrl: originalTask.result.planning_pr_url }),
   };
 
   const createResult = await codeTaskRepo.create(createInput);

@@ -2938,6 +2938,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           metricsClient: services.metricsClient,
           workerSettingsRepo: services.workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
+          gitHubPRClient: services.gitHubPRClient,
+          userServiceClient: services.userServiceClient,
         },
         { originalTaskId: taskId, userId }
       );
@@ -2966,6 +2968,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             });
           case 'active_task_exists':
             return await reply.fail('CONFLICT', error.message, undefined, { serverCode: error.code });
+          case 'plan_pr_merge_failed':
+            return await reply.fail('PLAN_PR_MERGE_FAILED', error.message);
           case 'internal_error':
           default:
             return await reply.fail('INTERNAL_ERROR', error.message);
@@ -3672,7 +3676,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         message: 'Received request to POST /code/tasks/:taskId/implement',
       });
 
-      const { codeTaskRepo, linearAgentClient, taskEnqueueService, metricsClient, workerSettingsRepo, rateLimitService } =
+      const { codeTaskRepo, linearAgentClient, taskEnqueueService, metricsClient, workerSettingsRepo, rateLimitService, gitHubPRClient, userServiceClient } =
         getServices();
       const userId = request.user?.userId;
 
@@ -3714,6 +3718,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           metricsClient,
           workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
+          gitHubPRClient,
+          userServiceClient,
         },
         executionAgentRequest
       );
@@ -3741,6 +3747,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             });
           case 'active_task_exists':
             return reply.fail('CONFLICT', error.message, undefined, { serverCode: error.code });
+          case 'plan_pr_merge_failed':
+            return reply.fail('PLAN_PR_MERGE_FAILED', error.message);
           case 'internal_error':
           default:
             return reply.fail('INTERNAL_ERROR', error.message);

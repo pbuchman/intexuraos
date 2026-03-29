@@ -1313,6 +1313,24 @@ describe('codeRoutes branch coverage', () => {
       expect(body.error.code).toBe('CONFLICT');
     });
 
+    it('returns 422 for plan_pr_merge_failed', async () => {
+      mockedSubmitToExecutionAgent.mockResolvedValue(err({
+        code: 'plan_pr_merge_failed',
+        message: 'Plan PR has merge conflicts',
+      }));
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/submit-phase2',
+        headers: { 'x-internal-auth': 'test-internal-token' },
+        payload: { taskId: 'task-123', userId: 'test-user-id' },
+      });
+
+      expect(response.statusCode).toBe(422);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('PLAN_PR_MERGE_FAILED');
+    });
+
     it('returns 500 for internal_error', async () => {
       mockedSubmitToExecutionAgent.mockResolvedValue(err({
         code: 'internal_error',
@@ -1640,6 +1658,24 @@ describe('codeRoutes branch coverage', () => {
       expect(response.statusCode).toBe(409);
       const body = JSON.parse(response.body);
       expect(body.error.code).toBe('CONFLICT');
+    });
+
+    it('returns 422 for plan_pr_merge_failed', async () => {
+      mockedSubmitToExecutionAgent.mockResolvedValue(err({
+        code: 'plan_pr_merge_failed',
+        message: 'Plan PR has merge conflicts',
+      }));
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/tasks/task-123/implement',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(422);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('PLAN_PR_MERGE_FAILED');
     });
 
     it('returns 500 for internal_error', async () => {

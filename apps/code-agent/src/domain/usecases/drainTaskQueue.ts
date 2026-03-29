@@ -344,8 +344,6 @@ export async function drainTaskQueue(
       }),
       ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
       // INT-949: Dispatch metadata fields from task document
-      ...(task.planningPrBranch !== undefined && { planningPrBranch: task.planningPrBranch }),
-      ...(task.planningPrUrl !== undefined && { planningPrUrl: task.planningPrUrl }),
       ...(task.trackingCommentId !== undefined && { trackingCommentId: task.trackingCommentId }),
       ...(task.retriedFrom !== undefined && { retriedFrom: task.retriedFrom }),
       ...(task.reviewTypes !== undefined && { reviewTypes: task.reviewTypes }),
