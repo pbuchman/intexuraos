@@ -1539,6 +1539,13 @@ describe('isTaskMergeable (detail view)', () => {
       result: { needs_remediation: '0' },
     })).toBe(false);
   });
+
+  it('returns false for implemented task with needs_remediation=0 and prUrl but no label (fallback scoped to reviewed)', () => {
+    expect(isTaskMergeable({
+      status: 'implemented',
+      result: { prUrl: 'https://github.com/org/repo/pull/42', needs_remediation: '0' },
+    })).toBe(false);
+  });
 });
 
 describe('getTaskMergeUrl (detail view)', () => {
