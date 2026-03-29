@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { indexes, metadata, rules, up } from '../071_create_execution_memories.mjs';
+import { indexes, metadata, rules, up } from '../072_create_execution_memories.mjs';
 
-describe('071-create-execution-memories migration', () => {
+describe('072-create-execution-memories migration', () => {
   it('exports the expected metadata', () => {
     expect(metadata).toMatchObject({
-      id: '071',
+      id: '072',
       name: 'create-execution-memories',
       description: 'Create execution memory collections and vector index',
       createdAt: '2026-03-25',

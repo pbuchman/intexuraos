@@ -1,5 +1,5 @@
 export const metadata = {
-  id: '071',
+  id: '072',
   name: 'create-execution-memories',
   description: 'Create execution memory collections and vector index',
   createdAt: '2026-03-25',
