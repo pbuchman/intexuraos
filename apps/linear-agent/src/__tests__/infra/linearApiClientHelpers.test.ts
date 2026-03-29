@@ -8,6 +8,7 @@ import {
   mapLinearError,
   createDedupKey,
   filterIssuesByCompletionDate,
+  DEFAULT_COMPLETED_SINCE_DAYS,
   mapTeam,
   clearClientCache,
   getClientCacheSize,
@@ -383,6 +384,46 @@ describe('linearApiClient helper functions', () => {
       const filtered = filterIssuesByCompletionDate(issues, 7);
       // Due to timing, this could be 0 or 1 - let's just verify the logic runs
       expect(filtered.length).toBeLessThanOrEqual(1);
+    });
+
+    it('DEFAULT_COMPLETED_SINCE_DAYS is set to 60 days', () => {
+      expect(DEFAULT_COMPLETED_SINCE_DAYS).toBe(60);
+    });
+
+    it('retains issues completed within the default 60-day window', () => {
+      const fortyFiveDaysAgo = new Date();
+      fortyFiveDaysAgo.setDate(fortyFiveDaysAgo.getDate() - 45);
+
+      const issues = [
+        createTestIssue({
+          state: { id: 's1', name: 'Done', type: 'completed' },
+          completedAt: fortyFiveDaysAgo.toISOString(),
+        }),
+      ];
+
+      const filtered = filterIssuesByCompletionDate(
+        issues,
+        DEFAULT_COMPLETED_SINCE_DAYS
+      );
+      expect(filtered).toHaveLength(1);
+    });
+
+    it('prunes issues completed beyond the default 60-day window', () => {
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+      const issues = [
+        createTestIssue({
+          state: { id: 's1', name: 'Done', type: 'completed' },
+          completedAt: ninetyDaysAgo.toISOString(),
+        }),
+      ];
+
+      const filtered = filterIssuesByCompletionDate(
+        issues,
+        DEFAULT_COMPLETED_SINCE_DAYS
+      );
+      expect(filtered).toHaveLength(0);
     });
   });
 

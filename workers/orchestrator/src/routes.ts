@@ -163,8 +163,6 @@ export function registerRoutes(
       ...(parsed.continuationPrBranch !== undefined && {
         continuationPrBranch: parsed.continuationPrBranch,
       }),
-      ...(parsed.planningPrBranch !== undefined && { planningPrBranch: parsed.planningPrBranch }),
-      ...(parsed.planningPrUrl !== undefined && { planningPrUrl: parsed.planningPrUrl }),
       ...(parsed.prNumber !== undefined && { prNumber: parsed.prNumber }),
     };
 

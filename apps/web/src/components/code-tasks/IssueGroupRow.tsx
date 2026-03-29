@@ -63,13 +63,6 @@ function StepDot({ state }: StepDotProps): React.JSX.Element {
       </span>
     );
   }
-  if (state === 'actionable') {
-    return (
-      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-green-500/20 text-green-500">
-        <Play className="h-3 w-3" />
-      </span>
-    );
-  }
   // waiting
   return (
     <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-500/20 text-slate-400">
@@ -88,7 +81,6 @@ const compactNames: Record<string, string> = {
 function stepLabel(name: string, state: StepState, compact?: boolean): string {
   if (compact === true) {
     const short = compactNames[name] ?? name.slice(0, 4);
-    if (state === 'actionable') return 'Code';
     return short;
   }
   if (state === 'completed') return name;
@@ -96,14 +88,22 @@ function stepLabel(name: string, state: StepState, compact?: boolean): string {
   if (state === 'dispatched') return `${name} (dispatched)`;
   if (state === 'queued') return `${name} (queued)`;
   if (state === 'failed') return `${name} Failed`;
-  if (state === 'actionable') return 'Implement';
   return name;
 }
 
-function PulsingDot(): React.JSX.Element {
+const OUTPUT_CHIP = 'min-w-[4.5rem] h-[26px] justify-center';
+
+function WaveLoader({ compact }: { compact?: boolean | undefined }): React.JSX.Element {
+  const px = compact === true ? 'px-2' : 'px-2.5';
   return (
-    <span role="status" aria-label="Loading" className="inline-flex items-center justify-center rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1">
-      <span className="h-2 w-2 rounded-full bg-blue-400 animate-pulse" />
+    <span
+      role="status"
+      aria-label="Loading"
+      className={`${OUTPUT_CHIP} relative inline-flex items-center overflow-hidden rounded-full border border-blue-500/30 bg-blue-500/10 ${px} py-1`}
+    >
+      <span className="relative h-1 w-full overflow-hidden rounded-full bg-blue-500/15">
+        <span className="wave-dot absolute top-0 h-full w-[30%] rounded-full" />
+      </span>
     </span>
   );
 }
@@ -131,14 +131,15 @@ function PipelineStep({ name, state, compact }: PipelineStepProps): React.JSX.El
 
 function PipelineVisualization({ group, compact }: { group: IssueGroup; compact?: boolean }): React.JSX.Element {
   const { pipeline } = group;
-  if (pipeline.steps.length === 0) {
+  const visibleSteps = pipeline.steps.filter((s) => s.state !== 'actionable');
+  if (visibleSteps.length === 0) {
     return <span className="text-xs text-slate-500">--</span>;
   }
 
   const elements: React.JSX.Element[] = [];
 
-  for (let i = 0; i < pipeline.steps.length; i++) {
-    const step = pipeline.steps[i];
+  for (let i = 0; i < visibleSteps.length; i++) {
+    const step = visibleSteps[i];
     if (step === undefined) continue;
 
     if (i > 0) {
@@ -177,6 +178,34 @@ function summaryOrPrompt(task: { result?: { summary?: string }; sanitizedPrompt:
   return words.length > 100 ? words.slice(0, 100).join(' ') + '...' : task.sanitizedPrompt;
 }
 
+function IssueIdentifierLink({
+  linearIssue,
+  linkClassName,
+}: {
+  linearIssue: NonNullable<IssueGroup['linearIssue']>;
+  linkClassName: string;
+}): React.JSX.Element {
+  return (
+    <span className="inline-flex flex-wrap items-center">
+      {linearIssue.parentIdentifier !== null && linearIssue.parentIdentifier !== undefined ? (
+        <span className="font-mono text-sm text-slate-400">
+          {linearIssue.parentIdentifier}
+          <span className="mx-1 text-slate-500">→</span>
+        </span>
+      ) : null}
+      <a
+        href={linearIssue.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e): void => { e.stopPropagation(); }}
+        className={linkClassName}
+      >
+        {linearIssue.identifier}
+      </a>
+    </span>
+  );
+}
+
 // --- Main component ---
 
 const IssueGroupRow = memo(function IssueGroupRow({
@@ -196,7 +225,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
 
   function renderActionButton(compact: boolean): React.JSX.Element | null {
     const px = compact ? 'px-2' : 'px-2.5';
-    if (isActioning) return <PulsingDot />;
+    if (isActioning) return <WaveLoader compact={compact} />;
     if (hasMergeAction && pipeline.pr !== null) {
       return (
         <a
@@ -204,7 +233,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e): void => { e.stopPropagation(); }}
-          className={`inline-flex items-center gap-1 rounded-md bg-purple-600 ${px} py-1 text-xs font-medium text-white transition-colors hover:bg-purple-500`}
+          className={`${OUTPUT_CHIP} inline-flex items-center gap-1 rounded-full bg-purple-600 ${px} py-1 text-xs font-medium text-white transition-colors hover:bg-purple-500`}
         >
           <GitMerge className="h-3 w-3" />
           Merge
@@ -218,10 +247,10 @@ const IssueGroupRow = memo(function IssueGroupRow({
             e.stopPropagation();
             onAction(latestTask.id, 'implement');
           }}
-          className={`inline-flex items-center gap-1 rounded-md bg-green-600 ${px} py-1 text-xs font-medium text-white transition-colors hover:bg-green-500`}
+          className={`${OUTPUT_CHIP} inline-flex items-center gap-1 rounded-full bg-green-600 ${px} py-1 text-xs font-medium text-white transition-colors hover:bg-green-500`}
         >
           <Play className="h-3 w-3" />
-          {compact ? 'Code' : 'Implement'}
+          Code
         </button>
       );
     }
@@ -232,7 +261,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e): void => { e.stopPropagation(); }}
-          className={`inline-flex items-center gap-1 rounded-full border border-blue-500/30 bg-blue-500/10 ${px} py-1 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-500/20 dark:text-blue-400`}
+          className={`${OUTPUT_CHIP} inline-flex items-center gap-1 rounded-full border border-blue-500/30 bg-blue-500/10 ${px} py-1 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-500/20 dark:text-blue-400`}
         >
           <ExternalLink className="h-3 w-3" />
           #{pipeline.pr.number}
@@ -246,14 +275,14 @@ const IssueGroupRow = memo(function IssueGroupRow({
             e.stopPropagation();
             onAction(latestTask.id, 'retry');
           }}
-          className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:border-slate-400 hover:text-slate-700 dark:border-slate-600 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-300"
+          className={`${OUTPUT_CHIP} inline-flex items-center gap-1 rounded-full border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:border-slate-400 hover:text-slate-700 dark:border-slate-600 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-300`}
         >
           <RotateCcw className="h-3 w-3" />
           Retry
         </button>
       );
     }
-    if (aggregateStatus === 'active') return <PulsingDot />;
+    if (aggregateStatus === 'active') return <WaveLoader compact={compact} />;
     return null;
   }
   const createdRelative = formatRelative(latestTask.createdAt);
@@ -284,15 +313,10 @@ const IssueGroupRow = memo(function IssueGroupRow({
             <div className="min-w-0">
               {group.linearIssue !== undefined ? (
                 <>
-                  <a
-                    href={group.linearIssue.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e): void => { e.stopPropagation(); }}
-                    className="font-mono text-sm text-blue-500 hover:text-blue-400 hover:underline"
-                  >
-                    {group.linearIssue.identifier}
-                  </a>
+                  <IssueIdentifierLink
+                    linearIssue={group.linearIssue}
+                    linkClassName="font-mono text-sm text-blue-500 hover:text-blue-400 hover:underline"
+                  />
                   <p className="truncate text-xs text-slate-500 dark:text-slate-400">
                     {group.linearIssue.title}
                   </p>
@@ -368,15 +392,10 @@ const IssueGroupRow = memo(function IssueGroupRow({
             <div className="min-w-0 flex-1">
               {group.linearIssue !== undefined ? (
                 <span className="text-sm">
-                  <a
-                    href={group.linearIssue.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e): void => { e.stopPropagation(); }}
-                    className="font-mono text-blue-500 hover:text-blue-400 hover:underline"
-                  >
-                    {group.linearIssue.identifier}
-                  </a>
+                  <IssueIdentifierLink
+                    linearIssue={group.linearIssue}
+                    linkClassName="font-mono text-blue-500 hover:text-blue-400 hover:underline"
+                  />
                   <span className="text-slate-400"> · </span>
                   <span className="text-xs text-slate-500 dark:text-slate-400">{createdRelative}</span>
                 </span>
@@ -467,6 +486,10 @@ const IssueGroupRow = memo(function IssueGroupRow({
 }, (prev, next) =>
   prev.timeTick === next.timeTick &&
   prev.group.linearIssueId === next.group.linearIssueId &&
+  prev.group.linearIssue?.identifier === next.group.linearIssue?.identifier &&
+  prev.group.linearIssue?.parentIdentifier === next.group.linearIssue?.parentIdentifier &&
+  prev.group.linearIssue?.title === next.group.linearIssue?.title &&
+  prev.group.linearIssue?.url === next.group.linearIssue?.url &&
   prev.group.aggregateStatus === next.group.aggregateStatus &&
   prev.group.latestTask.updatedAt === next.group.latestTask.updatedAt &&
   prev.group.tasks.length === next.group.tasks.length &&

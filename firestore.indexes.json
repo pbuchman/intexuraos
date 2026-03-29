@@ -433,6 +433,24 @@
       ]
     },
     {
+      "collectionGroup": "researches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "favourite",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "startedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "actions",
       "queryScope": "COLLECTION",
       "fields": [

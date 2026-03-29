@@ -465,6 +465,7 @@ export function createLinearAgentHttpClient(
           data?: {
             id: string;
             identifier: string;
+            parentIdentifier: string | null;
             title: string;
             description: string | null;
             state: { name: string; type: string };
@@ -486,6 +487,7 @@ export function createLinearAgentHttpClient(
 
         return ok({
           identifier: body.data.identifier,
+          parentIdentifier: body.data.parentIdentifier,
           title: body.data.title,
           state: body.data.state,
           priority: body.data.priority,

@@ -61,10 +61,6 @@ export interface Task {
   continuationPrNumber?: number;
   /** Existing PR branch inherited from retry/follow-up continuation flow. */
   continuationPrBranch?: string;
-  /** Branch name of planning PR to merge into execution worktree. */
-  planningPrBranch?: string;
-  /** PR URL to close after successful execution. */
-  planningPrUrl?: string;
   /** Review types requested for review agent tasks. */
   reviewTypes?: string[];
   /**

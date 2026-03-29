@@ -22,6 +22,7 @@ function createMockDeps(): UnshareResearchDeps & {
     update: vi.fn().mockResolvedValue(ok({})),
     updateLlmResult: vi.fn(),
     findByUserId: vi.fn(),
+    findSummariesByUserId: vi.fn(),
     clearShareInfo: vi.fn().mockResolvedValue(ok({})),
     delete: vi.fn(),
   };

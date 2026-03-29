@@ -82,6 +82,7 @@ export interface IssueTreeResponse {
 
 export interface LinearIssueForDisplay {
   identifier: string;
+  parentIdentifier: string | null;
   title: string;
   state: { name: string; type: string };
   priority: number;

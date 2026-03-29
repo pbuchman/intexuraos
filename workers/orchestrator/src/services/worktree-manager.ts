@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { type Result, ok, err, type Logger } from '@intexuraos/common-core';
+import { type Logger } from '@intexuraos/common-core';
 
 const execAsync = promisify(exec);
 const SAFE_GIT_BRANCH_PATTERN = /^[A-Za-z0-9._/-]+$/;
@@ -205,26 +205,6 @@ export class WorktreeManager {
   async worktreeExists(taskId: string): Promise<boolean> {
     const worktreePath = join(this.config.worktreeBasePath, taskId);
     return existsSync(worktreePath);
-  }
-
-  async mergePlanningBranch(
-    worktreePath: string,
-    planningBranch: string
-  ): Promise<Result<void, string>> {
-    try {
-      assertSafeBranchName(planningBranch, 'planning');
-      await execAsync(`git fetch origin "${planningBranch}"`, { cwd: worktreePath });
-      await execAsync(`git merge "origin/${planningBranch}" --no-edit`, { cwd: worktreePath });
-      this.logger.info({ worktreePath, planningBranch }, 'Planning branch merged into worktree');
-      return ok(undefined);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.warn(
-        { worktreePath, planningBranch, error: message },
-        'Failed to merge planning branch'
-      );
-      return err(message);
-    }
   }
 
   private async copyMcpConfig(worktreePath: string): Promise<void> {

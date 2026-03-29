@@ -214,7 +214,7 @@ function ColumnHeader(): React.JSX.Element {
       <div>Issue</div>
       <div>Pipeline</div>
       <div>Time</div>
-      <div>Output</div>
+      <div>Actions</div>
     </div>
   );
 }

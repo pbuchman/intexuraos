@@ -12,6 +12,7 @@ import {
 import type {
   CreateResearchRequest,
   Research,
+  ResearchSummary,
   SaveDraftRequest,
 } from '@/services/researchAgentApi.types';
 import {
@@ -20,6 +21,24 @@ import {
   isFirebaseAuthenticated,
   initializeFirebase,
 } from '@/services/firebase';
+
+/** Project a full Research document into a lightweight ResearchSummary for list state. */
+function researchToSummary(r: Research): ResearchSummary {
+  return {
+    id: r.id,
+    userId: r.userId,
+    title: r.title,
+    status: r.status,
+    selectedModels: r.selectedModels,
+    synthesisModel: r.synthesisModel,
+    startedAt: r.startedAt,
+    llmResultStatuses: r.llmResults.map(({ provider, model, status }) => ({ provider, model, status })),
+    ...(r.completedAt !== undefined && { completedAt: r.completedAt }),
+    ...(r.favourite !== undefined && { favourite: r.favourite }),
+    ...(r.totalCostUsd !== undefined && { totalCostUsd: r.totalCostUsd }),
+    ...(r.partialFailure !== undefined && { partialFailure: r.partialFailure }),
+  };
+}
 
 /**
  * Hook for fetching a single research by ID with real-time Firestore updates.
@@ -195,7 +214,7 @@ export function useResearch(id: string): {
  * without expensive Firestore listeners.
  */
 export function useResearches(): {
-  researches: Research[];
+  researches: ResearchSummary[];
   loading: boolean;
   loadingMore: boolean;
   refreshing: boolean;
@@ -206,9 +225,10 @@ export function useResearches(): {
   deleteResearch: (id: string) => Promise<void>;
   createResearch: (request: CreateResearchRequest) => Promise<Research>;
   saveDraft: (request: SaveDraftRequest) => Promise<{ id: string }>;
+  updateResearchLocally: (id: string, updates: Partial<ResearchSummary>) => void;
 } {
   const { getAccessToken } = useAuth();
-  const [researches, setResearches] = useState<Research[]>([]);
+  const [researches, setResearches] = useState<ResearchSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -308,7 +328,7 @@ export function useResearches(): {
     async (request: CreateResearchRequest): Promise<Research> => {
       const token = await getAccessToken();
       const newResearch = await createResearchApi(token, request);
-      setResearches((prev) => [newResearch, ...prev]);
+      setResearches((prev) => [researchToSummary(newResearch), ...prev]);
       return newResearch;
     },
     [getAccessToken]
@@ -324,6 +344,15 @@ export function useResearches(): {
     [getAccessToken, refresh]
   );
 
+  const updateResearchLocally = useCallback(
+    (id: string, updates: Partial<ResearchSummary>): void => {
+      setResearches((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, ...updates } : r))
+      );
+    },
+    []
+  );
+
   return {
     researches,
     loading,
@@ -336,5 +365,6 @@ export function useResearches(): {
     deleteResearch,
     createResearch,
     saveDraft,
+    updateResearchLocally,
   };
 }

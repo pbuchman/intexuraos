@@ -49,7 +49,6 @@ export function HellscriptConversationPage(): React.JSX.Element {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-7xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
             {isNewConversation
@@ -140,7 +139,6 @@ export function HellscriptConversationPage(): React.JSX.Element {
             </div>
           </div>
         )}
-      </div>
     </Layout>
   );
 }

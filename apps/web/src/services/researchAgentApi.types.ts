@@ -201,6 +201,44 @@ export interface ListResearchesResponse {
 }
 
 /**
+ * Lightweight status info for each LLM model in a research.
+ * Used in list view to show per-model progress without transferring result text.
+ */
+export interface LlmResultStatusInfo {
+  provider: string;
+  model: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+}
+
+/**
+ * Summary projection of a Research for list views.
+ * Contains only the fields needed to render a research card.
+ * Full document fetched separately when opening research detail.
+ */
+export interface ResearchSummary {
+  id: string;
+  userId: string;
+  title: string;
+  status: ResearchStatus;
+  selectedModels: StoredResearchModel[];
+  synthesisModel: StoredResearchModel;
+  startedAt: string;
+  completedAt?: string;
+  favourite?: boolean;
+  llmResultStatuses: LlmResultStatusInfo[];
+  totalCostUsd?: number;
+  partialFailure?: PartialFailure;
+}
+
+/**
+ * Response from listing researches (summary projection).
+ */
+export interface ListResearchSummariesResponse {
+  items: ResearchSummary[];
+  nextCursor?: string;
+}
+
+/**
  * Response from confirming partial failure action.
  */
 export interface ConfirmPartialFailureResponse {
