@@ -8,6 +8,8 @@ export interface CloudflareMarkdownClientConfig {
 }
 
 const DEFAULT_TIMEOUT_MS = 60000;
+const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com';
+const REJECTED_RESOURCE_TYPES = ['image', 'media', 'font', 'stylesheet'] as const;
 
 export interface PageContentError {
   code: 'FETCH_FAILED' | 'TIMEOUT' | 'INVALID_URL' | 'NO_CONTENT' | 'API_ERROR' | 'RATE_LIMITED';
@@ -37,7 +39,7 @@ export function createCloudflareMarkdownClient(
   logger: Logger
 ): PageContentFetcher {
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const endpointUrl = `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/browser-rendering/markdown`;
+  const endpointUrl = `${CLOUDFLARE_API_BASE}/client/v4/accounts/${config.accountId}/browser-rendering/markdown`;
 
   return {
     async fetchPageContent(url: string): Promise<Result<string, PageContentError>> {
@@ -55,7 +57,6 @@ export function createCloudflareMarkdownClient(
 
       const controller = new AbortController();
       const timeoutId = setTimeout((): void => {
-        logger.warn({ url, timeoutMs }, 'Request timed out');
         controller.abort();
       }, timeoutMs);
 
@@ -68,7 +69,7 @@ export function createCloudflareMarkdownClient(
           },
           body: JSON.stringify({
             url,
-            rejectResourceTypes: ['image', 'media', 'font', 'stylesheet'],
+            rejectResourceTypes: REJECTED_RESOURCE_TYPES,
           }),
           signal: controller.signal,
         });
@@ -117,7 +118,6 @@ export function createCloudflareMarkdownClient(
           });
         }
 
-        // Result may be a string directly or an object with a markdown field
         const raw =
           typeof data.result === 'string'
             ? data.result
