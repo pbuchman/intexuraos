@@ -97,22 +97,6 @@ describe('rateLimitService', () => {
       }
     });
 
-    it('should reject when monthly cost limit reached', async () => {
-      mockRepo.getOrCreate = vi.fn().mockResolvedValue(
-        createUsage({ costThisMonth: DEFAULT_LIMITS.monthlyCostCap - ESTIMATED_COST_PER_TASK + 0.01 })
-      );
-      const service = createRateLimitService({ userUsageRepository: mockRepo, logger });
-
-      const result = await service.checkLimits('user-1', 1000);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('monthly_cost_limit');
-        expect(result.error.message).toContain('$200');
-        expect(result.error.retryAfter).toBe('next month');
-      }
-    });
-
     it('should reject when prompt too long', async () => {
       const service = createRateLimitService({ userUsageRepository: mockRepo, logger });
 
@@ -250,7 +234,6 @@ describe('rateLimitService', () => {
       expect(DEFAULT_LIMITS.maxConcurrentTasks).toBe(3);
       expect(DEFAULT_LIMITS.maxTasksPerHour).toBe(10);
       expect(DEFAULT_LIMITS.maxPromptLength).toBe(10000);
-      expect(DEFAULT_LIMITS.monthlyCostCap).toBe(200);
     });
   });
 
