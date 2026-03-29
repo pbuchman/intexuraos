@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { err } from '@intexuraos/common-core';
 import { buildServer } from '../../server.js';
 import { setServices, resetServices } from '../../services.js';
 import type { FastifyInstance } from 'fastify';
@@ -632,6 +633,7 @@ describe('internalIssuesRoutes', () => {
             title: string;
             commentCount: number;
             lastCommentAt: string | null;
+            parentIdentifier: string | null;
           }[];
         };
       };
@@ -641,6 +643,8 @@ describe('internalIssuesRoutes', () => {
       expect(body.data.issues[0]?.title).toBe('First Batch Issue');
       expect(body.data.issues[0]?.commentCount).toBe(1);
       expect(body.data.issues[0]?.lastCommentAt).toBe('2024-01-03T10:00:00.000Z');
+      expect(body.data.issues[0]?.parentIdentifier).toBeNull();
+      expect(body.data.issues[1]?.parentIdentifier).toBeNull();
     });
 
     it('returns 401 when X-User-Id is missing', async () => {
@@ -813,6 +817,182 @@ describe('internalIssuesRoutes', () => {
       };
       expect(body.success).toBe(true);
       expect(body.data.issues).toHaveLength(0);
+    });
+
+    it('includes the parent identifier for subtasks', async () => {
+      fakeIssueRepo.seedIssue({
+        id: 'issue-parent',
+        identifier: 'ENG-100',
+        title: 'Parent Issue',
+        description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/test/ENG-100',
+        userId: testUserId,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        syncedAt: '2024-01-01T00:00:00.000Z',
+        teamId: 'team-1',
+        parentId: null,
+      });
+      fakeIssueRepo.seedIssue({
+        id: 'issue-child',
+        identifier: 'ENG-101',
+        title: 'Child Issue',
+        description: null,
+        state: 'In Progress',
+        stateType: 'started',
+        priority: 1,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/test/ENG-101',
+        userId: testUserId,
+        createdAt: '2024-01-02T00:00:00.000Z',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+        syncedAt: '2024-01-02T00:00:00.000Z',
+        teamId: 'team-1',
+        parentId: 'issue-parent',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/issues/display-batch',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+        payload: {
+          identifiers: ['ENG-101'],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          issues: {
+            identifier: string;
+            parentIdentifier: string | null;
+          }[];
+        };
+      };
+
+      expect(body.success).toBe(true);
+      expect(body.data.issues).toHaveLength(1);
+      expect(body.data.issues[0]?.identifier).toBe('ENG-101');
+      expect(body.data.issues[0]?.parentIdentifier).toBe('ENG-100');
+    });
+
+    it('returns 500 when parent identifier lookup fails', async () => {
+      fakeIssueRepo.seedIssue({
+        id: 'issue-parent',
+        identifier: 'ENG-100',
+        title: 'Parent Issue',
+        description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/test/ENG-100',
+        userId: testUserId,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        syncedAt: '2024-01-01T00:00:00.000Z',
+        teamId: 'team-1',
+        parentId: null,
+      });
+      fakeIssueRepo.seedIssue({
+        id: 'issue-child',
+        identifier: 'ENG-101',
+        title: 'Child Issue',
+        description: null,
+        state: 'In Progress',
+        stateType: 'started',
+        priority: 1,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/test/ENG-101',
+        userId: testUserId,
+        createdAt: '2024-01-02T00:00:00.000Z',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+        syncedAt: '2024-01-02T00:00:00.000Z',
+        teamId: 'team-1',
+        parentId: 'issue-parent',
+      });
+      vi.spyOn(fakeIssueRepo, 'findById').mockResolvedValue(
+        err({ code: 'INTERNAL_ERROR', message: 'Parent lookup unavailable' })
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/issues/display-batch',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+        payload: {
+          identifiers: ['ENG-101'],
+        },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.message).toBe('Parent lookup unavailable');
+    });
+
+    it('returns null parentIdentifier when the parent issue is not found locally', async () => {
+      fakeIssueRepo.seedIssue({
+        id: 'issue-child',
+        identifier: 'ENG-101',
+        title: 'Child Issue',
+        description: null,
+        state: 'In Progress',
+        stateType: 'started',
+        priority: 1,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/test/ENG-101',
+        userId: testUserId,
+        createdAt: '2024-01-02T00:00:00.000Z',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+        syncedAt: '2024-01-02T00:00:00.000Z',
+        teamId: 'team-1',
+        parentId: 'missing-parent',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/issues/display-batch',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+        payload: {
+          identifiers: ['ENG-101'],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          issues: {
+            identifier: string;
+            parentIdentifier: string | null;
+          }[];
+        };
+      };
+
+      expect(body.success).toBe(true);
+      expect(body.data.issues).toHaveLength(1);
+      expect(body.data.issues[0]?.identifier).toBe('ENG-101');
+      expect(body.data.issues[0]?.parentIdentifier).toBeNull();
     });
   });
 

@@ -554,8 +554,9 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
                         url: { type: 'string' },
                         commentCount: { type: 'number' },
                         lastCommentAt: { type: ['string', 'null'] },
+                        parentIdentifier: { type: ['string', 'null'] },
                       },
-                      required: ['identifier', 'title', 'state', 'priority', 'assignee', 'labels', 'url', 'commentCount', 'lastCommentAt'],
+                      required: ['identifier', 'title', 'state', 'priority', 'assignee', 'labels', 'url', 'commentCount', 'lastCommentAt', 'parentIdentifier'],
                     },
                   },
                 },
@@ -624,6 +625,29 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
         return await handleLinearError(summariesResult.error, reply);
       }
 
+      // 2.5 Batch-resolve parent identifiers for subtasks
+      const uniqueParentIds = [...new Set(
+        foundIssues
+          .map((issue) => issue.parentId)
+          .filter((parentId): parentId is string => parentId !== null)
+      )];
+      const parentIdentifierMap = new Map<string, string>();
+      if (uniqueParentIds.length > 0) {
+        const parentResults = await Promise.all(
+          uniqueParentIds.map((parentId) => services.issueRepository.findById(parentId))
+        );
+
+        for (const parentResult of parentResults) {
+          if (!parentResult.ok) {
+            reply.status(500);
+            return await handleLinearError(parentResult.error, reply);
+          }
+          if (parentResult.value !== null) {
+            parentIdentifierMap.set(parentResult.value.id, parentResult.value.identifier);
+          }
+        }
+      }
+
       // 3. Assemble response (preserve input identifier order)
       const summaryMap = new Map(summariesResult.value.map((s) => [s.issueId, s])); // @allow-result-access -- guarded by if (!summariesResult.ok) above
       const identifierOrder = new Map(
@@ -639,7 +663,10 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
         /* v8 ignore start -- ts-type: noUncheckedIndexedAccess forces undefined check; Map.get() always returns a value because getCommentSummaries guarantees an entry for every issueId @preserve */
         const summary = summaryMap.get(issue.id) ?? { commentCount: 0, lastCommentAt: null };
         /* v8 ignore stop @preserve */
-        return buildIssueDisplayResponse(issue, summary);
+        const parentIdentifier = issue.parentId !== null
+          ? (parentIdentifierMap.get(issue.parentId) ?? null)
+          : null;
+        return buildIssueDisplayResponse(issue, summary, parentIdentifier);
       });
 
       return await reply.ok({ issues });
