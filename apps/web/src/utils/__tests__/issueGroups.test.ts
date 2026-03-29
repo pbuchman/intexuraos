@@ -1379,6 +1379,36 @@ describe('pipeline merge step', () => {
     expect(findStep(groups[0]?.pipeline, 'merge')).toBeUndefined();
   });
 
+  it('does NOT show merge step for review task with needs_remediation=0 but no prNumber', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-03-07T10:00:00Z',
+        updatedAt: '2026-03-07T10:05:00Z',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+        status: 'reviewed',
+        createdAt: '2026-03-07T11:00:00Z',
+        updatedAt: '2026-03-07T11:05:00Z',
+        result: { needs_remediation: '0' },
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    // The execution-path merge step requires ready-to-merge label (not present),
+    // and the review-path fallback requires prNumber (not present) — no merge step.
+    expect(findStep(groups[0]?.pipeline, 'merge')).toBeUndefined();
+  });
+
   it('does NOT duplicate merge step when both label and needs_remediation=0 present', () => {
     const tasks = [
       createMockTask({
