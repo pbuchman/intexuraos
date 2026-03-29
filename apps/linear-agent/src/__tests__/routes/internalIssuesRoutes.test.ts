@@ -851,6 +851,77 @@ describe('internalIssuesRoutes', () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('NOT_FOUND');
     });
+
+    it('should remove label when called with Linear identifier instead of UUID', async () => {
+      fakeIssueRepo.seedIssue({
+        id: 'uuid-123',
+        identifier: 'INT-1147',
+        title: 'Test Issue',
+        description: null,
+        state: 'In Review',
+        stateType: 'started',
+        priority: 2,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [{ id: 'label-rtm', name: 'ready-to-merge', color: '#00ff00' }],
+        url: 'https://linear.app/test/INT-1147',
+        userId: testUserId,
+        createdAt: '2024-01-15T10:00:00.000Z',
+        updatedAt: '2024-01-16T12:30:00.000Z',
+        syncedAt: '2024-01-16T12:30:00.000Z',
+        teamId: 'team-1',
+        parentId: null,
+      });
+
+      fakeLinearClient.setLabels([
+        { id: 'label-rtm', name: 'ready-to-merge', color: '#00ff00' },
+        { id: 'label-bug', name: 'bug', color: '#ff0000' },
+      ]);
+
+      fakeLinearClient.seedIssue({
+        id: 'INT-1147',
+        identifier: 'INT-1147',
+        title: 'Test Issue',
+        description: null,
+        priority: 2,
+        state: { id: 'state-1', name: 'In Review', type: 'started' },
+        url: 'https://linear.app/test/INT-1147',
+        createdAt: '2024-01-15T10:00:00.000Z',
+        updatedAt: '2024-01-16T12:30:00.000Z',
+        completedAt: null,
+        childCount: 0,
+        children: [],
+        labels: [{ id: 'label-rtm', name: 'ready-to-merge', color: '#00ff00' }],
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/linear/issues/INT-1147/metadata',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+        payload: { removeLabels: ['ready-to-merge'] },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { labels: { name: string }[] } };
+      expect(body.success).toBe(true);
+      expect(body.data.labels).toEqual([]);
+    });
+
+    it('should return 502 when findByIdentifier fails after findById returns null', async () => {
+      fakeIssueRepo.setFindByIdentifierFailure(true, { code: 'INTERNAL_ERROR', message: 'DB error' });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/linear/issues/INT-9999/metadata',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+        payload: { removeLabels: ['ready-to-merge'] },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
   });
 
   describe('POST /internal/issues - error paths', () => {
