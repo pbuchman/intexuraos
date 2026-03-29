@@ -173,6 +173,20 @@ describe('system-prompt', () => {
     expect(result).toContain('[AGENT:EXECUTION]');
   });
 
+  it('execution prompt documents the retained Codex parity evidence', () => {
+    const result = executionPrompt.build({
+      ...baseParams,
+      linearIssueLabels: ['code-task'],
+      workerType: 'codex',
+    });
+
+    expect(result).toContain('### Codex Session Automation Parity');
+    expect(result).toContain('does NOT reproduce Claude hooks one-for-one');
+    expect(result).toContain('[entrypoint] Bootstrap evidence:');
+    expect(result).toContain('[entrypoint] Codex runtime evidence:');
+    expect(result).toContain('completion verifier + deep validator');
+  });
+
   it('pull request prompt omits Linear Issue line when linearIssueId is undefined', () => {
     const { linearIssueId: _, ...paramsWithoutLinear } = baseParams;
     const result = pullRequestPrompt.build({
@@ -1171,8 +1185,8 @@ describe('system-prompt', () => {
     expect(planningPrompt.version).toBe('3.2.0');
   });
 
-  it('execution prompt version is 5.2.0', () => {
-    expect(executionPrompt.version).toBe('5.2.0');
+  it('execution prompt version is 6.0.0', () => {
+    expect(executionPrompt.version).toBe('6.0.0');
   });
 
   it('remediation prompt version is 3.1.0', () => {
