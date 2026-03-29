@@ -1,4 +1,4 @@
-import { exec, execFile } from 'node:child_process';
+import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Mutex } from 'async-mutex';
 import {
@@ -43,7 +43,6 @@ import {
 } from './deep-validator-helpers.js';
 
 const execAsync = promisify(exec);
-const execFileAsync = promisify(execFile);
 
 export function getTaskEventUrl(webhookUrl: string): string {
   return webhookUrl.replace('/internal/webhooks/task-complete', '/internal/webhooks/task-event');
@@ -323,24 +322,6 @@ export class TaskDispatcher {
 
       this.logForwarder.registerTask(taskId, request.webhookSecret);
 
-      if (request.agentType === 'execution' && request.planningPrBranch !== undefined) {
-        const mergeResult = await this.worktreeManager.mergePlanningBranch(
-          worktreePath,
-          request.planningPrBranch
-        );
-        if (!mergeResult.ok) {
-          this.logger.warn(
-            { taskId, branch: request.planningPrBranch, error: mergeResult.error },
-            'Failed to merge planning branch — proceeding without plan files'
-          );
-        }
-      } else if (request.agentType === 'execution') {
-        this.logger.info(
-          { taskId },
-          'No planning branch to merge — dispatched without planningPrBranch'
-        );
-      }
-
       // Create task object
       const task: Task = {
         taskId,
@@ -374,10 +355,6 @@ export class TaskDispatcher {
         ...(request.continuationPrBranch !== undefined && {
           continuationPrBranch: request.continuationPrBranch,
         }),
-        ...(request.planningPrBranch !== undefined && {
-          planningPrBranch: request.planningPrBranch,
-        }),
-        ...(request.planningPrUrl !== undefined && { planningPrUrl: request.planningPrUrl }),
         /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
         ...(request.reviewTypes !== undefined && { reviewTypes: request.reviewTypes }),
         /* v8 ignore stop @preserve */
@@ -1407,48 +1384,6 @@ export class TaskDispatcher {
       return;
     }
     await this.finalizeTask(task, 'completed', { result: finalResult }, keepLogForwarderOpen);
-
-    if (agentType === 'execution' && task.planningPrUrl !== undefined) {
-      await this.closePlanningPr(task.planningPrUrl, task.taskId);
-    }
-  }
-
-  private async closePlanningPr(prUrl: string, taskId: string): Promise<void> {
-    try {
-      const parsed = parsePrUrl(prUrl);
-      if (parsed === undefined) {
-        this.logger.warn({ prUrl, taskId }, 'Could not parse planning PR URL');
-        return;
-      }
-
-      const comment = `Closed automatically — implementation completed in execution task ${taskId}`;
-      await execFileAsync(
-        'gh',
-        [
-          'pr',
-          'close',
-          String(parsed.number),
-          '--repo',
-          `${parsed.owner}/${parsed.repo}`,
-          '--comment',
-          comment,
-        ],
-        { cwd: this.config.worktreeBasePath }
-      );
-
-      this.logger.info(
-        { prUrl, taskId, prNumber: parsed.number },
-        'Planning PR closed after successful execution'
-      );
-    } catch (error: unknown) {
-      /* v8 ignore start -- upstream: prior check guarantees error is caught, cannot simulate gh CLI process failure @preserve */
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      /* v8 ignore stop @preserve */
-      this.logger.warn(
-        { prUrl, taskId, error: message },
-        'Failed to close planning PR (best-effort)'
-      );
-    }
   }
 
   private buildResumePreamble(task?: Task): string {
