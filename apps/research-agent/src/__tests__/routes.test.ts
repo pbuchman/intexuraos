@@ -31,7 +31,7 @@ import {
   FakeResearchExportSettings,
   FakeUserServiceClient,
 } from './fakes.js';
-import type { Research, RepositoryError } from '../domain/research/index.js';
+import type { Research, ResearchSummary, RepositoryError } from '../domain/research/index.js';
 import type {
   LlmError,
   LlmResearchResult,
@@ -972,7 +972,7 @@ describe('Research Routes - Authenticated', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { items: Research[] };
+        data: { items: ResearchSummary[] };
       };
       expect(body.success).toBe(true);
       expect(body.data.items).toHaveLength(0);
@@ -993,7 +993,7 @@ describe('Research Routes - Authenticated', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { items: Research[] };
+        data: { items: ResearchSummary[] };
       };
       expect(body.success).toBe(true);
       expect(body.data.items).toHaveLength(2);
@@ -6304,7 +6304,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: { items: Research[] } };
+      const body = JSON.parse(response.body) as { success: boolean; data: { items: ResearchSummary[] } };
       expect(body.success).toBe(true);
       expect(body.data.items).toHaveLength(5);
     });
@@ -6327,7 +6327,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: { items: Research[] } };
+      const body = JSON.parse(response.body) as { success: boolean; data: { items: ResearchSummary[] } };
       expect(body.success).toBe(true);
     });
   });
