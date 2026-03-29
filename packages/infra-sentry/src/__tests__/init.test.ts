@@ -78,14 +78,14 @@ describe('initSentry', () => {
   });
 
   it('sets runtime tag when INTEXURAOS_RUNTIME is set', () => {
-    process.env['INTEXURAOS_RUNTIME'] = 'cloud-run';
+    process.env['INTEXURAOS_RUNTIME'] = 'prod';
 
     initSentry({
       dsn: 'https://test@sentry.io/123',
       serviceName: 'test-service',
     });
 
-    expect(Sentry.setTag).toHaveBeenCalledWith('runtime', 'cloud-run');
+    expect(Sentry.setTag).toHaveBeenCalledWith('runtime', 'prod');
   });
 
   it('does not set runtime tag when INTEXURAOS_RUNTIME is not set', () => {

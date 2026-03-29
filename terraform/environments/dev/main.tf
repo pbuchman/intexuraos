@@ -277,7 +277,7 @@ locals {
   # Uses computed URLs to avoid circular dependencies
   common_service_env_vars = {
     INTEXURAOS_ENVIRONMENT                      = var.environment
-    INTEXURAOS_RUNTIME                          = "cloud-run"
+    INTEXURAOS_RUNTIME                          = "prod"
     INTEXURAOS_GCP_PROJECT_ID                   = var.project_id
     INTEXURAOS_USER_SERVICE_URL                 = "https://${local.services.user_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_NOTION_SERVICE_URL               = "https://${local.services.notion_service.name}-${local.cloud_run_url_suffix}"
