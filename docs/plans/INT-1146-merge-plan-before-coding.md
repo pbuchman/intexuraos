@@ -12,6 +12,12 @@
 
 ## File Structure
 
+### Shared Prerequisite
+
+| Action   | File                                                                           | Responsibility                                                               |
+| -------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| Modify   | `packages/common-core/src/errors.ts`                                           | Add `PLAN_PR_MERGE_FAILED` to `ErrorCode` union and `ERROR_HTTP_STATUS` map  |
+
 ### Code-Agent (Subtask 1)
 
 | Action   | File                                                                           | Responsibility                                                               |
@@ -76,6 +82,56 @@ This deployment order is for production safety only — development and testing 
 | Retry of execution task                                 | Execution tasks don't have `planningPrUrl` set (removed from creation). Plan is already on development. No merge needed.                                                                            |
 | Planning task result has no `planning_pr_url`           | Planning completed without a PR (e.g., simple plan). Skip merge step, proceed normally.                                                                                                             |
 | Multiple execution tasks for same plan                  | First one merges the PR. Subsequent ones see it as already merged (405) — treated as success.                                                                                                       |
+
+---
+
+## Prerequisite: Register `PLAN_PR_MERGE_FAILED` Error Code
+
+### Task 0.1: Add `PLAN_PR_MERGE_FAILED` to `common-core`
+
+**Files:**
+- Modify: `packages/common-core/src/errors.ts`
+
+The `ErrorCode` type in `common-core` is a closed, exhaustive union. `reply.fail()` in Fastify routes is typed to only accept values from this union. Task 1.2 Step 11 uses `reply.fail('PLAN_PR_MERGE_FAILED', ...)`, which will be a compile error unless this code is registered first.
+
+- [ ] **Step 1: Add `PLAN_PR_MERGE_FAILED` to the `ErrorCode` type union**
+
+In `packages/common-core/src/errors.ts`, add `'PLAN_PR_MERGE_FAILED'` to the `ErrorCode` union type:
+
+```typescript
+export type ErrorCode =
+  | 'INVALID_REQUEST'
+  // ... existing codes ...
+  | 'QUEUE_FULL'
+  | 'PLAN_PR_MERGE_FAILED';  // NEW — plan PR merge precondition failure
+```
+
+- [ ] **Step 2: Add `PLAN_PR_MERGE_FAILED` to the `ERROR_HTTP_STATUS` map**
+
+Map it to HTTP 422 (Unprocessable Entity) since it represents a domain precondition failure on user input:
+
+```typescript
+export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
+  // ... existing mappings ...
+  QUEUE_FULL: 503,
+  PLAN_PR_MERGE_FAILED: 422,  // NEW — domain precondition: plan PR cannot be merged
+};
+```
+
+- [ ] **Step 3: Build `common-core` to update `dist/`**
+
+```bash
+cd /repo && pnpm --filter @intexuraos/common-core run build
+```
+
+This must complete before any code-agent or orchestrator code references the new error code.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add packages/common-core/src/errors.ts
+git commit -m "feat(common-core): add PLAN_PR_MERGE_FAILED error code"
+```
 
 ---
 
@@ -643,7 +699,7 @@ In `apps/code-agent/src/domain/usecases/drainTaskQueue.ts`, remove lines 347-348
 
 - [ ] **Step 4: Remove from `drainRetryQueue.ts`**
 
-Check `apps/code-agent/src/domain/usecases/drainRetryQueue.ts` for the same fields and remove them.
+In `apps/code-agent/src/domain/usecases/drainRetryQueue.ts`, remove the `planningPrBranch` and `planningPrUrl` fields from the dispatch payload — the same pattern as `drainTaskQueue.ts` above. These fields are confirmed present in the retry dispatch and must be removed.
 
 - [ ] **Step 5: Update tests**
 
