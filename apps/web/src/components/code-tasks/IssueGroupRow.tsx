@@ -96,14 +96,22 @@ function stepLabel(name: string, state: StepState, compact?: boolean): string {
   if (state === 'dispatched') return `${name} (dispatched)`;
   if (state === 'queued') return `${name} (queued)`;
   if (state === 'failed') return `${name} Failed`;
-  if (state === 'actionable') return 'Implement';
+  if (state === 'actionable') return 'Code';
   return name;
 }
 
-function PulsingDot(): React.JSX.Element {
+const OUTPUT_CHIP = 'min-w-[4.5rem] h-[26px] justify-center';
+
+function WaveLoader(): React.JSX.Element {
   return (
-    <span role="status" aria-label="Loading" className="inline-flex items-center justify-center rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1">
-      <span className="h-2 w-2 rounded-full bg-blue-400 animate-pulse" />
+    <span
+      role="status"
+      aria-label="Loading"
+      className={`${OUTPUT_CHIP} relative inline-flex items-center overflow-hidden rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1`}
+    >
+      <span className="relative h-1 w-full overflow-hidden rounded-full bg-blue-500/15">
+        <span className="wave-dot absolute top-0 h-full w-[30%] rounded-full" />
+      </span>
     </span>
   );
 }
@@ -196,7 +204,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
 
   function renderActionButton(compact: boolean): React.JSX.Element | null {
     const px = compact ? 'px-2' : 'px-2.5';
-    if (isActioning) return <PulsingDot />;
+    if (isActioning) return <WaveLoader />;
     if (hasMergeAction && pipeline.pr !== null) {
       return (
         <a
@@ -204,7 +212,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e): void => { e.stopPropagation(); }}
-          className={`inline-flex items-center gap-1 rounded-md bg-purple-600 ${px} py-1 text-xs font-medium text-white transition-colors hover:bg-purple-500`}
+          className={`${OUTPUT_CHIP} inline-flex items-center gap-1 rounded-full bg-purple-600 ${px} py-1 text-xs font-medium text-white transition-colors hover:bg-purple-500`}
         >
           <GitMerge className="h-3 w-3" />
           Merge
@@ -218,10 +226,10 @@ const IssueGroupRow = memo(function IssueGroupRow({
             e.stopPropagation();
             onAction(latestTask.id, 'implement');
           }}
-          className={`inline-flex items-center gap-1 rounded-md bg-green-600 ${px} py-1 text-xs font-medium text-white transition-colors hover:bg-green-500`}
+          className={`${OUTPUT_CHIP} inline-flex items-center gap-1 rounded-full bg-green-600 ${px} py-1 text-xs font-medium text-white transition-colors hover:bg-green-500`}
         >
           <Play className="h-3 w-3" />
-          {compact ? 'Code' : 'Implement'}
+          Code
         </button>
       );
     }
@@ -232,7 +240,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e): void => { e.stopPropagation(); }}
-          className={`inline-flex items-center gap-1 rounded-full border border-blue-500/30 bg-blue-500/10 ${px} py-1 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-500/20 dark:text-blue-400`}
+          className={`${OUTPUT_CHIP} inline-flex items-center gap-1 rounded-full border border-blue-500/30 bg-blue-500/10 ${px} py-1 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-500/20 dark:text-blue-400`}
         >
           <ExternalLink className="h-3 w-3" />
           #{pipeline.pr.number}
@@ -246,14 +254,14 @@ const IssueGroupRow = memo(function IssueGroupRow({
             e.stopPropagation();
             onAction(latestTask.id, 'retry');
           }}
-          className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:border-slate-400 hover:text-slate-700 dark:border-slate-600 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-300"
+          className={`${OUTPUT_CHIP} inline-flex items-center gap-1 rounded-full border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:border-slate-400 hover:text-slate-700 dark:border-slate-600 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-300`}
         >
           <RotateCcw className="h-3 w-3" />
           Retry
         </button>
       );
     }
-    if (aggregateStatus === 'active') return <PulsingDot />;
+    if (aggregateStatus === 'active') return <WaveLoader />;
     return null;
   }
   const createdRelative = formatRelative(latestTask.createdAt);
