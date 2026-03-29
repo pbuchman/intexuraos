@@ -3,7 +3,7 @@ import { apiRequest } from './apiClient.js';
 import type {
   ConfirmPartialFailureResponse,
   CreateResearchRequest,
-  ListResearchesResponse,
+  ListResearchSummariesResponse,
   PartialFailureDecision,
   Research,
   SaveDraftRequest,
@@ -42,13 +42,13 @@ export async function saveDraft(
 }
 
 /**
- * List researches for the current user.
+ * List researches for the current user (summary projection).
  */
 export async function listResearches(
   accessToken: string,
   cursor?: string,
   limit = 50
-): Promise<ListResearchesResponse> {
+): Promise<ListResearchSummariesResponse> {
   const params = new URLSearchParams();
   if (cursor !== undefined && cursor !== '') {
     params.set('cursor', cursor);
@@ -58,7 +58,7 @@ export async function listResearches(
   const query = params.toString();
   const path = query !== '' ? `/research?${query}` : '/research';
 
-  return await apiRequest<ListResearchesResponse>(config.ResearchAgentUrl, path, accessToken);
+  return await apiRequest<ListResearchSummariesResponse>(config.ResearchAgentUrl, path, accessToken);
 }
 
 /**
@@ -246,12 +246,15 @@ export type {
   ImproveInputRequest,
   ImproveInputResponse,
   ListResearchesResponse,
+  ListResearchSummariesResponse,
   LlmProvider,
   LlmResult,
+  LlmResultStatusInfo,
   PartialFailure,
   PartialFailureDecision,
   Research,
   ResearchStatus,
+  ResearchSummary,
   SaveDraftRequest,
   SupportedModel,
   OpenRouterModelInfo,
