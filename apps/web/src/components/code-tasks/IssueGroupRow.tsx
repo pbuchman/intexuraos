@@ -63,13 +63,6 @@ function StepDot({ state }: StepDotProps): React.JSX.Element {
       </span>
     );
   }
-  if (state === 'actionable') {
-    return (
-      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-green-500/20 text-green-500">
-        <Play className="h-3 w-3" />
-      </span>
-    );
-  }
   // waiting
   return (
     <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-500/20 text-slate-400">
@@ -88,7 +81,6 @@ const compactNames: Record<string, string> = {
 function stepLabel(name: string, state: StepState, compact?: boolean): string {
   if (compact === true) {
     const short = compactNames[name] ?? name.slice(0, 4);
-    if (state === 'actionable') return 'Code';
     return short;
   }
   if (state === 'completed') return name;
@@ -96,7 +88,6 @@ function stepLabel(name: string, state: StepState, compact?: boolean): string {
   if (state === 'dispatched') return `${name} (dispatched)`;
   if (state === 'queued') return `${name} (queued)`;
   if (state === 'failed') return `${name} Failed`;
-  if (state === 'actionable') return 'Implement';
   return name;
 }
 
@@ -131,14 +122,15 @@ function PipelineStep({ name, state, compact }: PipelineStepProps): React.JSX.El
 
 function PipelineVisualization({ group, compact }: { group: IssueGroup; compact?: boolean }): React.JSX.Element {
   const { pipeline } = group;
-  if (pipeline.steps.length === 0) {
+  const visibleSteps = pipeline.steps.filter((s) => s.state !== 'actionable');
+  if (visibleSteps.length === 0) {
     return <span className="text-xs text-slate-500">--</span>;
   }
 
   const elements: React.JSX.Element[] = [];
 
-  for (let i = 0; i < pipeline.steps.length; i++) {
-    const step = pipeline.steps[i];
+  for (let i = 0; i < visibleSteps.length; i++) {
+    const step = visibleSteps[i];
     if (step === undefined) continue;
 
     if (i > 0) {
