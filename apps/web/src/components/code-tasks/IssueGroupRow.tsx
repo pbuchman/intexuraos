@@ -102,12 +102,13 @@ function stepLabel(name: string, state: StepState, compact?: boolean): string {
 
 const OUTPUT_CHIP = 'min-w-[4.5rem] h-[26px] justify-center';
 
-function WaveLoader(): React.JSX.Element {
+function WaveLoader({ compact }: { compact?: boolean | undefined }): React.JSX.Element {
+  const px = compact === true ? 'px-2' : 'px-2.5';
   return (
     <span
       role="status"
       aria-label="Loading"
-      className={`${OUTPUT_CHIP} relative inline-flex items-center overflow-hidden rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1`}
+      className={`${OUTPUT_CHIP} relative inline-flex items-center overflow-hidden rounded-full border border-blue-500/30 bg-blue-500/10 ${px} py-1`}
     >
       <span className="relative h-1 w-full overflow-hidden rounded-full bg-blue-500/15">
         <span className="wave-dot absolute top-0 h-full w-[30%] rounded-full" />
@@ -204,7 +205,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
 
   function renderActionButton(compact: boolean): React.JSX.Element | null {
     const px = compact ? 'px-2' : 'px-2.5';
-    if (isActioning) return <WaveLoader />;
+    if (isActioning) return <WaveLoader compact={compact} />;
     if (hasMergeAction && pipeline.pr !== null) {
       return (
         <a
@@ -261,7 +262,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
         </button>
       );
     }
-    if (aggregateStatus === 'active') return <WaveLoader />;
+    if (aggregateStatus === 'active') return <WaveLoader compact={compact} />;
     return null;
   }
   const createdRelative = formatRelative(latestTask.createdAt);
