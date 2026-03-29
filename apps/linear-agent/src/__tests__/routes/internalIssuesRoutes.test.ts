@@ -879,7 +879,7 @@ describe('internalIssuesRoutes', () => {
       ]);
 
       fakeLinearClient.seedIssue({
-        id: 'INT-1147',
+        id: 'uuid-123',
         identifier: 'INT-1147',
         title: 'Test Issue',
         description: null,
@@ -904,7 +904,7 @@ describe('internalIssuesRoutes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as { success: boolean; data: { labels: { name: string }[] } };
       expect(body.success).toBe(true);
-      expect(body.data.labels).toEqual([]);
+      expect(body.data.labels).toStrictEqual([]);
     });
 
     it('should return 502 when findByIdentifier fails after findById returns null', async () => {
@@ -921,6 +921,21 @@ describe('internalIssuesRoutes', () => {
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
+
+    it('should return 404 when both findById and findByIdentifier return null', async () => {
+      // No issue seeded — both lookups will return null
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/linear/issues/INT-9999/metadata',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+        payload: { removeLabels: ['ready-to-merge'] },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
     });
   });
 

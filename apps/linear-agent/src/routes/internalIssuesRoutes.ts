@@ -311,7 +311,7 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
         request.log.warn({ issueId, droppedLabels }, 'Requested labels not found in team — dropped');
       }
 
-      const updateResult = await services.linearApiClient.updateIssue(apiKeyResult.value, issueId, { // @allow-result-access -- guarded by if (!apiKeyResult.ok) and null check above
+      const updateResult = await services.linearApiClient.updateIssue(apiKeyResult.value, syncedIssue.id, { // @allow-result-access -- guarded by if (!apiKeyResult.ok) and null check above
         ...(request.body.assigneeId !== undefined && { assigneeId: request.body.assigneeId }),
         labelIds: desiredLabelIds,
       });
