@@ -73,6 +73,9 @@ function normalizeLabel(label: string): string {
   return label.trim().toLowerCase().replaceAll('_', '-').replaceAll(' ', '-');
 }
 
+/** Value of `needs_remediation` when the review passed without requiring fixes. */
+const REMEDIATION_NOT_NEEDED = '0';
+
 /** Labels that gate the Implement button (backward compat includes `code-task`). */
 const IMPLEMENTATION_READY_LABELS: ReadonlySet<string> = new Set([
   'ready-to-implement',
@@ -114,19 +117,25 @@ export function hasMergeReadyLabel(labels: { name: string }[] | undefined): bool
 /**
  * Determines if a single task is merge-ready for the detail view.
  *
- * Covers two cases:
+ * Covers three cases:
  * 1. An `implemented` task with its own `result.prUrl` and `ready-to-merge` label
  * 2. A `reviewed` task with a `prNumber` and `ready-to-merge` label — the reviewed
  *    task won't have `result.prUrl` but the merge URL can be constructed from
  *    `repository` + `prNumber`.
+ * 3. A `reviewed` task with a `prNumber` and `result.needs_remediation === '0'` —
+ *    fallback for review tasks / external PRs where the `ready-to-merge` label was
+ *    set on the origin task's Linear issue, not the review task's.
  */
 export function isTaskMergeable(task: {
   status: string;
   prNumber?: number;
-  result?: { prUrl?: string };
+  result?: { prUrl?: string; needs_remediation?: string };
   linearIssue?: { labels: { name: string }[] };
 }): boolean {
-  if (!hasMergeReadyLabel(task.linearIssue?.labels)) {
+  const hasLabel = hasMergeReadyLabel(task.linearIssue?.labels);
+  const passedReview = task.status === 'reviewed' && task.result?.needs_remediation === REMEDIATION_NOT_NEEDED;
+
+  if (!hasLabel && !passedReview) {
     return false;
   }
   return (
@@ -223,6 +232,23 @@ function derivePipeline(tasks: CodeTask[]): PipelineState {
     executionEntry?.step.state === 'completed' &&
     executionEntry.task.result?.prUrl !== undefined &&
     hasMergeReadyLabel(executionEntry.task.linearIssue?.labels)
+  ) {
+    steps.push({
+      agentType: 'merge',
+      state: 'actionable',
+      label: 'Merge',
+    });
+  }
+
+  // Merge-ready fallback for review tasks: if the review step completed with
+  // needs_remediation === '0', the PR is mergeable even without the ready-to-merge
+  // label (which may have been set on the origin task's Linear issue instead).
+  const reviewEntry = stepMap.get('review');
+  if (
+    reviewEntry?.step.state === 'completed' &&
+    reviewEntry.task.prNumber !== undefined &&
+    reviewEntry.task.result?.needs_remediation === REMEDIATION_NOT_NEEDED &&
+    !steps.some((s) => s.agentType === 'merge')
   ) {
     steps.push({
       agentType: 'merge',
