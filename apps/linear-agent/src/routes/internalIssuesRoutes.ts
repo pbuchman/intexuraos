@@ -268,13 +268,19 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
 
       const { issueId } = request.params;
       const services = getServices();
-      const issueResult = await services.issueRepository.findById(issueId);
+      let issueResult = await services.issueRepository.findById(issueId);
       if (!issueResult.ok) return await handleLinearError(issueResult.error, reply);
+
+      if (issueResult.value === null) {
+        issueResult = await services.issueRepository.findByIdentifier(issueId, userId);
+        if (!issueResult.ok) return await handleLinearError(issueResult.error, reply);
+      }
+
       if (issueResult.value === null) {
         reply.status(404);
         return await reply.fail('NOT_FOUND', `Issue ${issueId} not found`);
       }
-      const syncedIssue = issueResult.value; // @allow-result-access -- guarded by if (!issueResult.ok) and null check above
+      const syncedIssue = issueResult.value; // @allow-result-access -- guarded by findById/findByIdentifier !ok checks and null check above
 
       // Ownership check: return 404 (not 403) to prevent information leakage
       if (syncedIssue.userId !== userId) {
@@ -305,7 +311,7 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
         request.log.warn({ issueId, droppedLabels }, 'Requested labels not found in team — dropped');
       }
 
-      const updateResult = await services.linearApiClient.updateIssue(apiKeyResult.value, issueId, { // @allow-result-access -- guarded by if (!apiKeyResult.ok) and null check above
+      const updateResult = await services.linearApiClient.updateIssue(apiKeyResult.value, syncedIssue.id, { // @allow-result-access -- guarded by if (!apiKeyResult.ok) and null check above
         ...(request.body.assigneeId !== undefined && { assigneeId: request.body.assigneeId }),
         labelIds: desiredLabelIds,
       });
