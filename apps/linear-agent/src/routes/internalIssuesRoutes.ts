@@ -700,6 +700,7 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
                 properties: {
                   id: { type: 'string' },
                   identifier: { type: 'string' },
+                  parentIdentifier: { type: ['string', 'null'] },
                   title: { type: 'string' },
                   description: { type: ['string', 'null'] },
                   state: {
@@ -810,11 +811,28 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
         return await handleLinearError(commentsResult.error, reply);
       }
 
-      const displayIssue = buildIssueDisplayResponse(issue, toCommentSummary(commentsResult.value)); // @allow-result-access -- guarded by if (!commentsResult.ok) above
+      let parentIdentifier: string | null = null;
+      if (issue.parentId !== null) {
+        const parentIssueResult = await services.issueRepository.findById(issue.parentId);
+        if (!parentIssueResult.ok) {
+          logger.error({ error: parentIssueResult.error, parentId: issue.parentId, identifier }, 'Failed to fetch parent issue');
+          reply.status(500);
+          return await handleLinearError(parentIssueResult.error, reply);
+        }
+
+        parentIdentifier = parentIssueResult.value?.identifier ?? null;
+      }
+
+      const displayIssue = buildIssueDisplayResponse(
+        issue,
+        toCommentSummary(commentsResult.value),
+        parentIdentifier
+      ); // @allow-result-access -- guarded by if (!commentsResult.ok) above
 
       return await reply.ok({
         id: issue.id,
         identifier: issue.identifier,
+        parentIdentifier: displayIssue.parentIdentifier,
         title: issue.title,
         description: issue.description,
         state: displayIssue.state,
