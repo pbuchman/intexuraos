@@ -143,10 +143,30 @@ export async function submitToExecutionAgent(
     }
 
     const resolveResult = await codeTaskRepo.findPlannedTaskByLinearIssue(requestedTask.linearIssueId);
-    if (!resolveResult.ok || resolveResult.value?.userId !== userId) {
+    if (!resolveResult.ok) {
+      logger.error(
+        { taskId: requestedTask.id, linearIssueId: requestedTask.linearIssueId },
+        'Failed to resolve planning task via linearIssueId'
+      );
+      return err({
+        code: 'invalid_status',
+        message: 'Task must be a completed planning task to start implementation',
+      });
+    }
+    if (resolveResult.value === null) {
       logger.warn(
-        { taskId: requestedTask.id, status: requestedTask.status, agentType: requestedTask.agentType, linearIssueId: requestedTask.linearIssueId },
-        'Attempted to start Execution Agent on non-planning task'
+        { taskId: requestedTask.id, linearIssueId: requestedTask.linearIssueId },
+        'No planning task found for linearIssueId'
+      );
+      return err({
+        code: 'invalid_status',
+        message: 'Task must be a completed planning task to start implementation',
+      });
+    }
+    if (resolveResult.value.userId !== userId) {
+      logger.warn(
+        { taskId: requestedTask.id, linearIssueId: requestedTask.linearIssueId, requestedByUserId: userId, taskOwnedByUserId: resolveResult.value.userId },
+        'Security: resolved planning task belongs to different user'
       );
       return err({
         code: 'invalid_status',
