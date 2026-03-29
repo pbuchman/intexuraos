@@ -37,20 +37,28 @@
 | File                                          | Responsibility                                              |
 | --------------------------------------------- | ----------------------------------------------------------- |
 | `src/types/issueGroups.ts`                    | API response types matching backend output                  |
-| `src/services/codeAgentApiV3.ts`              | `listIssueGroups()` API client function                     |
+| `src/services/issueGroupsApi.ts`              | `listIssueGroups()` API client function                     |
 | `src/hooks/useIssueGroups.ts`                 | Hook for group-level data with pagination, refresh, polling |
 | `src/pages/CodeTasksPageV3.tsx`               | New page component consuming pre-grouped data               |
 | `src/__tests__/hooks/useIssueGroups.test.ts`  | Hook tests                                                  |
 | `src/__tests__/pages/CodeTasksPageV3.test.ts` | Page rendering tests                                        |
 
+### New shared module
+
+| File                                                            | Responsibility                                                   |
+| --------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `src/domain/serialization/codeTaskSerializer.ts`                | `taskToApiResponse` — extracted from `codeRoutes.ts` (Finding 4) |
+
 ### Existing files modified (minimal)
 
-| File                                        | Change                                                        |
-| ------------------------------------------- | ------------------------------------------------------------- |
-| `apps/code-agent/src/routes/codeRoutes.ts`  | Add `export` to `taskToApiResponse` function (line 209)       |
-| `apps/code-agent/src/routes/code/index.ts`  | Add barrel export for `issueGroupRoutes`                      |
-| `apps/code-agent/src/routes/index.ts`       | Add `app.register(issueGroupRoutes, deps)` + import           |
-| `apps/web/src/App.tsx`                      | Add `<Route path="/code-tasks-v3">` + lazy import             |
+| File                                                                  | Change                                                                                   |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `apps/code-agent/src/routes/codeRoutes.ts`                            | Replace local `taskToApiResponse` with import from serialization module                  |
+| `apps/code-agent/src/repositories/codeTaskRepository.ts`              | Add `listAllNonArchived(userId)` to interface (Finding 1+2)                              |
+| `apps/code-agent/src/repositories/firestoreCodeTaskRepository.ts`     | Implement `listAllNonArchived` — unbounded Firestore query (Finding 1+2)                 |
+| `apps/code-agent/src/routes/code/index.ts`                            | Add barrel export for `issueGroupRoutes`                                                 |
+| `apps/code-agent/src/routes/index.ts`                                 | Add `app.register(issueGroupRoutes, deps)` + import                                      |
+| `apps/web/src/App.tsx`                                                | Add `<Route path="/code-tasks-v3">` + lazy import                                        |
 
 ---
 
@@ -684,7 +692,7 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import { logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../../services.js';
 import type { CodeRoutesOptions } from './github-pre-events.js';
-import { taskToApiResponse } from '../codeRoutes.js';
+import { taskToApiResponse } from '../../domain/serialization/codeTaskSerializer.js';
 import {
   groupByLinearIssue,
   sortIssueGroups,
@@ -757,12 +765,8 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
       const limit = request.query.limit ?? 20;
       /* v8 ignore stop @preserve */
 
-      // Step 1: Fetch all non-archived tasks
-      const listResult = await codeTaskRepo.list({
-        userId,
-        status: [...NON_ARCHIVED_STATUSES],
-        limit: 10000, // Effectively unlimited — fetch all
-      });
+      // Step 1: Fetch all non-archived tasks (unbounded — no limit)
+      const listResult = await codeTaskRepo.listAllNonArchived(userId);
 
       if (!listResult.ok) {
         request.log.error({ error: listResult.error }, 'Failed to list tasks for issue grouping');
@@ -770,7 +774,7 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
       }
 
       // Step 2: Serialize to API shape
-      const apiTasks = listResult.value.tasks.map(taskToApiResponse);
+      const apiTasks = listResult.value.map(taskToApiResponse);
 
       // Step 3: Hydrate Linear labels
       const linearIssueIds = Array.from(
@@ -843,18 +847,9 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
 export default issueGroupRoutes;
 ```
 
-**Important:** The route reuses the existing `codeTaskRepo.list()` method with a very high limit instead of adding a new repository method. This avoids modifying the repository interface. If `list()` returns `nextCursor`, the response may be truncated — but at 10,000 limit this is safe for the current data size (1,507 tasks total). If this becomes insufficient, a dedicated `listAllNonArchived` method can be added later.
+**Important:** The route uses `codeTaskRepo.listAllNonArchived(userId)` as mandated by the spec. This method performs an unbounded Firestore query (no `.limit()` call), ensuring all non-archived tasks are returned regardless of dataset size. The method must be added to the `CodeTaskRepository` interface and implemented in `firestoreCodeTaskRepository.ts` — see Task 7a below.
 
-Also note: `taskToApiResponse` must be exported from `codeRoutes.ts`. Currently it's a module-level function (not exported). **This requires adding `export` to the existing function declaration** — a one-word change to an existing file:
-
-In `apps/code-agent/src/routes/codeRoutes.ts` line 209, change:
-```typescript
-function taskToApiResponse(task: {
-```
-to:
-```typescript
-export function taskToApiResponse(task: {
-```
+**Note:** `taskToApiResponse` is imported from `../../domain/serialization/codeTaskSerializer.js` (see Task 7b). Do NOT export from `codeRoutes.ts` — route handlers should be leaves in the dependency graph.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -864,9 +859,101 @@ Expected: All PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/code-agent/src/routes/code/issueGroupRoutes.ts apps/code-agent/src/__tests__/routes/code/issueGroups.test.ts apps/code-agent/src/routes/codeRoutes.ts
+git add apps/code-agent/src/routes/code/issueGroupRoutes.ts apps/code-agent/src/__tests__/routes/code/issueGroups.test.ts
 git commit -m "feat(code-agent): add GET /code/issue-groups route handler (INT-1173)"
 ```
+
+---
+
+## Task 7a: Backend Repository Method — `listAllNonArchived`
+
+**Files:**
+- Modify: `apps/code-agent/src/repositories/codeTaskRepository.ts` (add interface method)
+- Modify: `apps/code-agent/src/repositories/firestoreCodeTaskRepository.ts` (add implementation)
+- Modify: `apps/code-agent/src/__tests__/repositories/firestoreCodeTaskRepository.test.ts` (add test)
+
+- [ ] **Step 1: Write failing test for `listAllNonArchived`**
+
+Add a test to `firestoreCodeTaskRepository.test.ts` that verifies:
+- Returns all non-archived tasks for a user (no limit applied)
+- Excludes archived tasks
+- Returns tasks ordered by `createdAt` desc
+
+- [ ] **Step 2: Add `listAllNonArchived` to `CodeTaskRepository` interface**
+
+```typescript
+listAllNonArchived(userId: string): Promise<Result<CodeTask[], RepositoryError>>
+```
+
+- [ ] **Step 3: Implement in `firestoreCodeTaskRepository.ts`**
+
+```typescript
+async listAllNonArchived(userId: string): Promise<Result<CodeTask[], RepositoryError>> {
+  const query = this.collection
+    .where('userId', '==', userId)
+    .where('status', 'in', NON_ARCHIVED_STATUSES)
+    .orderBy('createdAt', 'desc');
+
+  const snapshot = await query.get();
+  return Result.ok(snapshot.docs.map((doc) => this.fromFirestore(doc)));
+}
+```
+
+No `.limit()` call — returns all matching documents. This is the spec-mandated approach that avoids silent truncation when a user's non-archived task count exceeds any arbitrary limit.
+
+- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 5: Update fake repository in test infrastructure**
+
+Add `listAllNonArchived` to the fake/in-memory repository used in route tests.
+
+- [ ] **Step 6: Commit**
+
+---
+
+## Task 7b: Extract `taskToApiResponse` to Serialization Module
+
+**Files:**
+- Create: `apps/code-agent/src/domain/serialization/codeTaskSerializer.ts`
+- Modify: `apps/code-agent/src/routes/codeRoutes.ts` (import from new module instead of local function)
+
+- [ ] **Step 1: Create `codeTaskSerializer.ts`**
+
+Extract `taskToApiResponse` from `codeRoutes.ts` into `apps/code-agent/src/domain/serialization/codeTaskSerializer.ts`. This isolates the serialization concern and keeps route files as leaves in the dependency graph.
+
+**Important:** Add `needs_remediation` to both the input and return type of `taskToApiResponse`:
+
+```typescript
+result?: {
+  prUrl?: string;
+  branch?: string;
+  commits?: number;
+  summary?: string;
+  ciFailed?: boolean;
+  partialWork?: boolean;
+  rebaseResult?: 'success' | 'conflict' | 'skipped';
+  review_comments_posted?: string;
+  review_types?: string;
+  requirements_tracker_updated?: string;
+  needs_remediation?: string;  // ← Added: required for isTaskMergeable passedReview path
+};
+```
+
+- [ ] **Step 2: Update `codeRoutes.ts`**
+
+Replace the local `taskToApiResponse` function with an import:
+```typescript
+import { taskToApiResponse } from '../domain/serialization/codeTaskSerializer.js';
+```
+
+- [ ] **Step 3: Update `issueGroupRoutes.ts`**
+
+Import from the shared serialization module:
+```typescript
+import { taskToApiResponse } from '../../domain/serialization/codeTaskSerializer.js';
+```
+
+- [ ] **Step 4: Run all code-agent tests to verify no regressions**
+- [ ] **Step 5: Commit**
 
 ---
 
@@ -922,7 +1009,7 @@ git commit -m "feat(code-agent): register issue-groups route (INT-1173)"
 
 **Files:**
 - Create: `apps/web/src/types/issueGroups.ts`
-- Create: `apps/web/src/services/codeAgentApiV3.ts`
+- Create: `apps/web/src/services/issueGroupsApi.ts`
 
 - [ ] **Step 1: Create frontend types**
 
@@ -969,7 +1056,7 @@ export interface ListIssueGroupsResponse {
 - [ ] **Step 2: Create API client**
 
 ```typescript
-// apps/web/src/services/codeAgentApiV3.ts
+// apps/web/src/services/issueGroupsApi.ts
 
 import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
@@ -1006,7 +1093,7 @@ export async function listIssueGroups(
 - [ ] **Step 3: Commit**
 
 ```bash
-git add apps/web/src/types/issueGroups.ts apps/web/src/services/codeAgentApiV3.ts
+git add apps/web/src/types/issueGroups.ts apps/web/src/services/issueGroupsApi.ts
 git commit -m "feat(web): add issue groups types and API client (INT-1173)"
 ```
 
@@ -1030,7 +1117,7 @@ Test cases to cover:
 7. Polling fires every 30s when `counts.active > 0`
 8. Tab visibility change triggers refresh
 
-Mock `listIssueGroups` from `@/services/codeAgentApiV3` and `useAuth` from `@/context`. Use `renderHook` from `@testing-library/react`.
+Mock `listIssueGroups` from `@/services/issueGroupsApi` and `useAuth` from `@/context`. Use `renderHook` from `@testing-library/react`.
 
 - [ ] **Step 2: Run tests to verify they fail**
 

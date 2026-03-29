@@ -107,6 +107,7 @@ All new files in `apps/code-agent/src/domain/issueGrouping/`:
 | `sortIssueGroups.ts`    | Sort functions + `parseLinearIssueNumber`                                                                   | `apps/web/src/utils/issueGroups.ts` lines 391-456 |
 | `labelHelpers.ts`       | `hasImplementationReadyLabel`, `hasMergeReadyLabel`, `normalizeLabel`, `isTaskMergeable`, `getTaskMergeUrl` | `apps/web/src/utils/issueGroups.ts` lines 70-155  |
 | `constants.ts`          | `ACTIVE_STATUSES`, `AGENT_TYPE_LABELS`, `NON_ARCHIVED_STATUSES`                                             | Various                                           |
+| `cursor.ts`             | `encodeCursor`, `decodeCursor` — base64url-encoded index cursor                                             | New                                               |
 | `index.ts`              | Barrel export                                                                                               | —                                                 |
 
 These operate on **serialized API-shaped tasks** (ISO string dates), not Firestore domain objects. This makes the port a near-copy of the frontend code.
@@ -190,7 +191,7 @@ function useIssueGroups(options: {
 
 Compares groups by `linearIssueId ?? latestTask.id`. Preserves reference if `aggregateStatus` and `latestTask.updatedAt` are unchanged. Same pattern as existing `mergeTasks()`.
 
-### Frontend — New API Client: `services/codeAgentApiV3.ts`
+### Frontend — New API Client: `services/issueGroupsApi.ts`
 
 ```typescript
 export async function listIssueGroups(
@@ -375,7 +376,7 @@ No existing behavior is changed.
 | File                                          | Purpose                              |
 | --------------------------------------------- | ------------------------------------ |
 | `src/types/issueGroups.ts`                    | API response types                   |
-| `src/services/codeAgentApiV3.ts`              | API client for new endpoint          |
+| `src/services/issueGroupsApi.ts`              | API client for new endpoint          |
 | `src/hooks/useIssueGroups.ts`                 | Hook for group-level data management |
 | `src/pages/CodeTasksPageV3.tsx`               | New page component                   |
 | `src/__tests__/hooks/useIssueGroups.test.ts`  | Hook tests                           |
