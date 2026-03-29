@@ -244,7 +244,7 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
     return {
       watchId, owner, repo, baseBranch,
       action,
-      remainingPrs: allPrs.length,
+      remainingPrs: action === 'drained' ? 0 : prsToProcess.length,
       skipped: skippedList,
     };
   }

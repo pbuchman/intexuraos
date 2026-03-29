@@ -733,6 +733,7 @@ describe('mergeQueueTick', () => {
     expect(tickResult).toBeDefined();
     if (tickResult === undefined) return;
     expect(tickResult.action).toBe('drained');
+    expect(tickResult.remainingPrs).toBe(0);
 
     expect(mockWatchRepo.update).toHaveBeenCalledWith('watch_abc', expect.objectContaining({
       status: 'drained',
