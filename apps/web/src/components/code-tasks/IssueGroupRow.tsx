@@ -365,7 +365,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
                 e.stopPropagation();
                 setShowArchiveConfirm(true);
               }}
-              className="rounded p-1 text-slate-400 transition-colors hover:bg-amber-500/10 hover:text-amber-500"
+              className="rounded p-1 text-slate-400 transition-colors hover:bg-amber-500/10 hover:text-amber-500 dark:hover:bg-amber-500/20 dark:hover:text-amber-400"
               title="Archive"
             >
               <Archive className="h-3.5 w-3.5" />
@@ -437,7 +437,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
                   e.stopPropagation();
                   setShowArchiveConfirm(true);
                 }}
-                className="rounded p-1 text-slate-400 transition-colors hover:bg-amber-500/10 hover:text-amber-500"
+                className="rounded p-1 text-slate-400 transition-colors hover:bg-amber-500/10 hover:text-amber-500 dark:hover:bg-amber-500/20 dark:hover:text-amber-400"
                 title="Archive"
               >
                 <Archive className="h-3.5 w-3.5" />
