@@ -3,7 +3,7 @@ import { exec, type ChildProcess } from 'node:child_process';
 import {
   TaskDispatcher,
   type IsolationConfig,
-  parsePrUrl,
+
   getTaskEventUrl,
   hasFatalExitCodeField,
 } from '../services/task-dispatcher.js';
@@ -8231,23 +8231,6 @@ describe('TaskDispatcher', () => {
   });
 });
 
-describe('parsePrUrl', () => {
-  it('should parse a standard GitHub PR URL', () => {
-    const result = parsePrUrl('https://github.com/pbuchman/intexuraos/pull/123');
-    expect(result).toEqual({ owner: 'pbuchman', repo: 'intexuraos', number: 123 });
-  });
-
-  it('should parse a GitHub API-style PR URL', () => {
-    const result = parsePrUrl('/repos/pbuchman/intexuraos/pull/456');
-    expect(result).toEqual({ owner: 'pbuchman', repo: 'intexuraos', number: 456 });
-  });
-
-  it('should return undefined for invalid URLs', () => {
-    expect(parsePrUrl('https://example.com/not-a-pr')).toBeUndefined();
-    expect(parsePrUrl('')).toBeUndefined();
-    expect(parsePrUrl('random string')).toBeUndefined();
-  });
-});
 
 describe('hasFatalExitCodeField', () => {
   it('returns the field for fatal_exit_code_137', () => {

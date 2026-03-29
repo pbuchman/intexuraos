@@ -2376,17 +2376,3 @@ export class TaskDispatcher {
     this.attemptCompletionSignals.delete(taskId);
   }
 }
-
-export function parsePrUrl(
-  prUrl: string
-): { owner: string; repo: string; number: number } | undefined {
-  const match =
-    /github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/.exec(prUrl) ??
-    /\/repos\/([^/]+)\/([^/]+)\/pull\/(\d+)$/.exec(prUrl);
-  if (match === null) return undefined;
-  return {
-    owner: match[1] ?? '',
-    repo: match[2] ?? '',
-    number: Number(match[3] ?? '0'),
-  };
-}
