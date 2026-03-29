@@ -488,6 +488,52 @@ describe('createSentryStream - sendLogToSentry internal function', () => {
     expect(captureException).toHaveBeenCalled();
   });
 
+  it('skips Sentry captureException when _skipSentry is true on error log', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureException } = getMockedSentry();
+
+    const mockMultistream = { streams: [] } as unknown as ReturnType<
+      typeof import('pino').multistream
+    >;
+
+    const result = createSentryStream(mockMultistream);
+    const ms = result as unknown as {
+      streams: { level: number; stream: { write: (data: string) => void } }[];
+    };
+
+    const errorLog = JSON.stringify({
+      level: 50,
+      msg: 'Error that should be skipped',
+      _skipSentry: true,
+    });
+    ms.streams[0]?.stream.write(errorLog);
+
+    expect(captureException).not.toHaveBeenCalled();
+  });
+
+  it('skips Sentry captureMessage when _skipSentry is true on warn log', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureMessage } = getMockedSentry();
+
+    const mockMultistream = { streams: [] } as unknown as ReturnType<
+      typeof import('pino').multistream
+    >;
+
+    const result = createSentryStream(mockMultistream);
+    const ms = result as unknown as {
+      streams: { level: number; stream: { write: (data: string) => void } }[];
+    };
+
+    const warnLog = JSON.stringify({
+      level: 40,
+      msg: 'Warning that should be skipped',
+      _skipSentry: true,
+    });
+    ms.streams[0]?.stream.write(warnLog);
+
+    expect(captureMessage).not.toHaveBeenCalled();
+  });
+
   it('handles error level with non-string msg (number)', () => {
     process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
     const { captureException } = getMockedSentry();
