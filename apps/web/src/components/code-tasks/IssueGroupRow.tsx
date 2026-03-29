@@ -1,5 +1,5 @@
 import { memo, useState } from 'react';
-import { ChevronDown, ChevronRight, Play, RotateCcw, ExternalLink, Check, X, Loader2, Clock, ScrollText, Trash2, GitMerge } from 'lucide-react';
+import { ChevronDown, ChevronRight, Play, RotateCcw, ExternalLink, Check, X, Loader2, Clock, ScrollText, Trash2, GitMerge, Archive } from 'lucide-react';
 import type { IssueGroup, StepState } from '@/utils/issueGroups';
 import { formatRelative } from '@/utils/dateFormat';
 import { IssueTimeline } from '@/components/code-tasks/IssueTimeline';
@@ -7,7 +7,7 @@ import { IssueTimeline } from '@/components/code-tasks/IssueTimeline';
 interface IssueGroupRowProps {
   group: IssueGroup;
   timeTick: number;
-  onAction: (taskId: string, action: 'delete' | 'retry' | 'implement') => void;
+  onAction: (taskId: string, action: 'delete' | 'retry' | 'implement' | 'archive') => void;
   onOpenLogs: (taskId: string) => void;
   actioningTaskId?: string | null;
 }
@@ -216,6 +216,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
 }: IssueGroupRowProps): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
 
   const { latestTask, pipeline, aggregateStatus } = group;
   const actionableStep = pipeline.steps.find((s) => s.state === 'actionable');
@@ -359,6 +360,16 @@ const IssueGroupRow = memo(function IssueGroupRow({
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
+            <button
+              onClick={(e): void => {
+                e.stopPropagation();
+                setShowArchiveConfirm(true);
+              }}
+              className="rounded p-1 text-slate-400 transition-colors hover:bg-amber-500/10 hover:text-amber-500"
+              title="Archive"
+            >
+              <Archive className="h-3.5 w-3.5" />
+            </button>
           </div>
 
           {/* Transcript column */}
@@ -421,6 +432,16 @@ const IssueGroupRow = memo(function IssueGroupRow({
               >
                 <ScrollText className="h-3.5 w-3.5" />
               </button>
+              <button
+                onClick={(e): void => {
+                  e.stopPropagation();
+                  setShowArchiveConfirm(true);
+                }}
+                className="rounded p-1 text-slate-400 transition-colors hover:bg-amber-500/10 hover:text-amber-500"
+                title="Archive"
+              >
+                <Archive className="h-3.5 w-3.5" />
+              </button>
               <div className="w-16 flex items-center justify-center">
                 {renderActionButton(true)}
               </div>
@@ -468,6 +489,43 @@ const IssueGroupRow = memo(function IssueGroupRow({
                 className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-500"
               >
                 Delete
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Archive confirmation overlay */}
+        {showArchiveConfirm ? (
+          <div
+            className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/80 backdrop-blur-sm dark:bg-slate-900/80"
+            onClick={(e): void => { e.stopPropagation(); }}
+          >
+            <div className="flex items-center gap-3 rounded-lg bg-white px-4 py-3 shadow-lg dark:bg-slate-800">
+              <p className="text-sm text-slate-700 dark:text-slate-200">
+                {group.tasks.length > 1
+                  ? `Archive all ${String(group.tasks.length)} tasks for ${group.linearIssue?.identifier ?? 'this group'}?`
+                  : 'Archive task?'}
+              </p>
+              <button
+                onClick={(e): void => {
+                  e.stopPropagation();
+                  setShowArchiveConfirm(false);
+                }}
+                className="rounded-md px-3 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={(e): void => {
+                  e.stopPropagation();
+                  for (const task of group.tasks) {
+                    onAction(task.id, 'archive');
+                  }
+                  setShowArchiveConfirm(false);
+                }}
+                className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-500"
+              >
+                Archive
               </button>
             </div>
           </div>

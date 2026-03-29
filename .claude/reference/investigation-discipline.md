@@ -57,12 +57,12 @@ When a tool, service, or container crashes:
 
 **Actual causal chain:**
 
-| Layer | Finding | Evidence |
-|-------|---------|----------|
-| 1 | SIGSEGV signal 11 | Firestore task doc: `fatal_exit_code_139` |
-| 2 | Container running amd64 on arm64 host | `docker exec uname -m` → x86_64, host `uname -m` → arm64 |
-| 3 | Registry manifest amd64-only | `docker manifest inspect` → single-platform `v2+json`, not OCI index |
-| 4 | CI service name mismatch | `MULTI_ARCH_SERVICES="claude-worker"` but deploy passes `"code-worker"` → `grep -qw` → no match → single-arch path |
+| Layer | Finding                               | Evidence                                                                                                           |
+| ----- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| 1     | SIGSEGV signal 11                     | Firestore task doc: `fatal_exit_code_139`                                                                          |
+| 2     | Container running amd64 on arm64 host | `docker exec uname -m` → x86_64, host `uname -m` → arm64                                                           |
+| 3     | Registry manifest amd64-only          | `docker manifest inspect` → single-platform `v2+json`, not OCI index                                               |
+| 4     | CI service name mismatch              | `MULTI_ARCH_SERVICES="claude-worker"` but deploy passes `"code-worker"` → `grep -qw` → no match → single-arch path |
 
 **Fix:** Corrected service name in CI script, rebuilt and pushed multi-arch image, verified arm64 container runs natively without crash.
 
@@ -74,12 +74,12 @@ When a tool, service, or container crashes:
 
 These are behavioral guidelines, not hook-enforced. When you catch yourself using these patterns, stop and investigate deeper.
 
-| Pattern | What to Do Instead |
-|---------|-------------------|
-| "This is an upstream/tool bug" | Investigate the environment first |
-| "The tool is broken" | Check your inputs, config, and environment |
-| "I found the root cause" (at layer 1) | Ask "why?" at least 2 more times |
-| "The problem is X" (with no fix) | "The problem is X, fixing it by Y" |
-| "Should I rebuild/restart?" | During incidents: act, don't ask |
-| Speculating about internal mechanisms | Reproduce it or cite evidence |
-| Presenting findings without action | Implement the fix, present results |
+| Pattern                               | What to Do Instead                         |
+| ------------------------------------- | ------------------------------------------ |
+| "This is an upstream/tool bug"        | Investigate the environment first          |
+| "The tool is broken"                  | Check your inputs, config, and environment |
+| "I found the root cause" (at layer 1) | Ask "why?" at least 2 more times           |
+| "The problem is X" (with no fix)      | "The problem is X, fixing it by Y"         |
+| "Should I rebuild/restart?"           | During incidents: act, don't ask           |
+| Speculating about internal mechanisms | Reproduce it or cite evidence              |
+| Presenting findings without action    | Implement the fix, present results         |
