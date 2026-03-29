@@ -57,6 +57,7 @@ describe('buildIssueDisplayResponse', () => {
       url: 'https://linear.app/test/INT-100',
       commentCount: 5,
       lastCommentAt: '2025-01-15T00:00:00Z',
+      parentIdentifier: null,
     });
   });
 
@@ -75,5 +76,10 @@ describe('buildIssueDisplayResponse', () => {
     const issueNoLabels = { ...baseIssue, labels: [] };
     const result = buildIssueDisplayResponse(issueNoLabels, commentSummary);
     expect(result.labels).toEqual([]);
+  });
+
+  it('includes parent identifier when provided', () => {
+    const result = buildIssueDisplayResponse(baseIssue, commentSummary, 'INT-42');
+    expect(result.parentIdentifier).toBe('INT-42');
   });
 });
