@@ -57,14 +57,12 @@ describe('cloudflareMarkdownClient', () => {
   });
 
   it('sends correct Authorization header and request body', async () => {
+    let capturedBody: unknown;
     nock(BASE_URL)
       .post(
         `/client/v4/accounts/${ACCOUNT_ID}/browser-rendering/markdown`,
         (body: Record<string, unknown>) => {
-          expect(body).toEqual({
-            url: 'https://example.com/page',
-            rejectResourceTypes: ['image', 'media', 'font', 'stylesheet'],
-          });
+          capturedBody = body;
           return true;
         }
       )
@@ -76,6 +74,10 @@ describe('cloudflareMarkdownClient', () => {
     const result = await client.fetchPageContent('https://example.com/page');
 
     expect(result.ok).toBe(true);
+    expect(capturedBody).toStrictEqual({
+      url: 'https://example.com/page',
+      rejectResourceTypes: ['image', 'media', 'font', 'stylesheet'],
+    });
   });
 
   it.each([
@@ -229,21 +231,22 @@ describe('cloudflareMarkdownClient', () => {
   });
 
   it('returns FETCH_FAILED when a non-Error is thrown', async () => {
-    // Mock fetch to throw a non-Error value
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (): never => {
       throw 'string-error';
     };
 
-    const client = createClient();
-    const result = await client.fetchPageContent('https://example.com');
+    try {
+      const client = createClient();
+      const result = await client.fetchPageContent('https://example.com');
 
-    globalThis.fetch = originalFetch;
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe('FETCH_FAILED');
-      expect(result.error.message).toBe('Unknown error');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('FETCH_FAILED');
+        expect(result.error.message).toBe('Unknown error');
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
     }
   });
 

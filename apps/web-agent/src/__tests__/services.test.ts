@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { getServices, initServices, resetServices, setServices } from '../services.js';
 import {
   FakeLinkPreviewFetcher,
@@ -11,14 +11,8 @@ import { FakePricingContext } from '@intexuraos/llm-pricing';
 describe('services', () => {
   const mockPricingContext = new FakePricingContext();
 
-  beforeEach(() => {
-    vi.stubEnv('INTEXURAOS_CLOUDFLARE_ACCOUNT_ID', 'test-account-id');
-    vi.stubEnv('INTEXURAOS_CLOUDFLARE_API_TOKEN', 'test-api-token');
-  });
-
   afterEach(() => {
     resetServices();
-    vi.unstubAllEnvs();
   });
 
   describe('initServices', () => {
