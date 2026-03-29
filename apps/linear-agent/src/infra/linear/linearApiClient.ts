@@ -28,6 +28,7 @@ import {
   mapLinearError,
   filterIssuesByCompletionDate,
   mapIssuesWithBatchedStates,
+  DEFAULT_COMPLETED_SINCE_DAYS,
   mapSingleIssue,
   mapSingleIssueWithTeam,
 } from './linearMappers.js';
@@ -49,6 +50,7 @@ export {
   mapLinearError,
   createDedupKey,
   filterIssuesByCompletionDate,
+  DEFAULT_COMPLETED_SINCE_DAYS,
   clearClientCache,
   getClientCacheSize,
   getDedupCacheSize,
@@ -123,7 +125,8 @@ export function createLinearApiClient(): LinearApiClient {
       teamId: string,
       options?: { completedSinceDays?: number }
     ): Promise<Result<LinearIssue[], LinearError>> {
-      const completedSinceDays = options?.completedSinceDays ?? 60;
+      const completedSinceDays =
+        options?.completedSinceDays ?? DEFAULT_COMPLETED_SINCE_DAYS;
       const dedupKey = createDedupKey(
         'listIssues',
         apiKey.slice(0, 8),
