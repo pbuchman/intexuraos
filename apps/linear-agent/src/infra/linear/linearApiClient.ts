@@ -123,7 +123,7 @@ export function createLinearApiClient(): LinearApiClient {
       teamId: string,
       options?: { completedSinceDays?: number }
     ): Promise<Result<LinearIssue[], LinearError>> {
-      const completedSinceDays = options?.completedSinceDays ?? 7;
+      const completedSinceDays = options?.completedSinceDays ?? 60;
       const dedupKey = createDedupKey(
         'listIssues',
         apiKey.slice(0, 8),
