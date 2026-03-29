@@ -684,8 +684,10 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
     return ok(null);
   }
 
+  private shouldFailFindByIdentifier = false;
+
   async findByIdentifier(identifier: string, userId?: string): Promise<Result<SyncedLinearIssue | null, LinearError>> {
-    if (this.shouldFail) return err(this.failError);
+    if (this.shouldFail || this.shouldFailFindByIdentifier) return err(this.failError);
     for (const issue of this.issues.values()) {
       if (issue.identifier === identifier) {
         if (userId !== undefined && issue.userId !== userId) continue;
@@ -693,6 +695,11 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
       }
     }
     return ok(null);
+  }
+
+  setFindByIdentifierFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailFindByIdentifier = fail;
+    if (error) this.failError = error;
   }
 
   private shouldFailFindByIdentifiers = false;
@@ -777,6 +784,7 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
     this.shouldFailSave = false;
     this.shouldFailListByUserId = false;
     this.shouldFailDeleteById = false;
+    this.shouldFailFindByIdentifier = false;
     this.shouldFailFindByIdentifiers = false;
     this.saveFailUserIds.clear();
     this.findUserIdsByIssueIdOverride = null;
