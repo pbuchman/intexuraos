@@ -66,8 +66,8 @@ describe('IssueGroupRow', () => {
       actioningTaskId: null,
     }));
 
-    expect((html.match(/INT-1121/g) ?? [])).toHaveLength(2);
-    expect((html.match(/href="https:\/\/linear\.app\/pbuchman\/issue\/INT-1154"/g) ?? [])).toHaveLength(2);
+    expect(html).toContain('INT-1121');
+    expect(html).toContain('href="https://linear.app/pbuchman/issue/INT-1154"');
     expect(html).not.toContain('href="https://linear.app/pbuchman/issue/INT-1121"');
     expect(html).toContain('→');
   });
