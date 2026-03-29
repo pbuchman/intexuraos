@@ -1144,6 +1144,7 @@ export interface CodeTaskResult {
   review_comments_posted?: string;
   review_types?: string;
   requirements_tracker_updated?: string;
+  needs_remediation?: string;
 }
 
 /**
