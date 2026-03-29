@@ -9,7 +9,6 @@ export function HellscriptBuffersPage(): React.JSX.Element {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-3xl">
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
@@ -55,7 +54,6 @@ export function HellscriptBuffersPage(): React.JSX.Element {
             ))}
           </div>
         )}
-      </div>
     </Layout>
   );
 }

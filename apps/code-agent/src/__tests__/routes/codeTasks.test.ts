@@ -536,6 +536,7 @@ describe('GET /code/tasks endpoints', () => {
         ).mockResolvedValueOnce(ok([
           {
             identifier: 'INT-301',
+            parentIdentifier: 'INT-300',
             title: 'List Linear Issue',
             state: { name: 'In Progress', type: 'started' },
             priority: 1,
@@ -561,7 +562,7 @@ describe('GET /code/tasks endpoints', () => {
           data: {
             tasks: {
               id: string;
-              linearIssue?: { title: string; labels: { name: string }[] };
+              linearIssue?: { title: string; labels: { name: string }[]; parentIdentifier: string | null };
             }[];
           };
         };
@@ -569,6 +570,7 @@ describe('GET /code/tasks endpoints', () => {
         expect(body.success).toBe(true);
         const hydratedTask = body.data.tasks.find((item) => item.id === task.value.id);
         expect(hydratedTask?.linearIssue?.title).toBe('List Linear Issue');
+        expect(hydratedTask?.linearIssue?.parentIdentifier).toBe('INT-300');
         expect(hydratedTask?.linearIssue?.labels.map((label) => label.name)).toEqual(['backend']);
         expect(fetchBatchSpy).toHaveBeenCalledWith({
           userId: 'test-user-id',
@@ -885,6 +887,7 @@ describe('GET /code/tasks endpoints', () => {
 
         const mockLinearIssue = {
           identifier: 'INT-100',
+          parentIdentifier: 'INT-42',
           title: 'Test Linear Issue',
           state: { name: 'In Progress', type: 'started' },
           priority: 2,
@@ -939,6 +942,7 @@ describe('GET /code/tasks endpoints', () => {
         vi.spyOn(linearAgentClient, 'fetchIssueForDisplay').mockResolvedValueOnce(
           ok({
             identifier: 'INT-200',
+            parentIdentifier: null,
             title: 'Feature with labels',
             state: { name: 'In Progress', type: 'started' },
             priority: 2,

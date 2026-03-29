@@ -61,4 +61,6 @@ All rules verified by `pnpm run ci:tracked`. If CI passes, rules are satisfied. 
 
 **Full Investigation:** NEVER present partial investigation results with hedging language ("maybe", "possibly", "there are multiple possible causes", "could be"). Always perform complete investigation with all mandatory evidence before presenting findings. Present definitive root cause backed by concrete evidence (logs, code, config). If evidence is genuinely insufficient, say exactly what evidence is missing and fetch it — do not guess. Non-negotiable.
 
+**Investigation Discipline:** When a tool, binary, or service crashes: (1) investigate the environment (arch, resources, config), not the tool. (2) Trace the causal chain to fixable code — surface symptoms are not root causes; keep asking "why?". (3) Diagnosis without fix is incomplete — implement and verify the fix. (4) During dev-env incident triage, act immediately (rebuild images, restart services) without asking permission. (5) Confident speculation is a violation — "crashes because X" without evidence is as wrong as "maybe X". Reference: `.claude/reference/investigation-discipline.md`
+
 **Plan Documentation:** Plans with HTTP endpoints MUST include "Endpoint Changes" section: Modified, Created, Removed, Unchanged.

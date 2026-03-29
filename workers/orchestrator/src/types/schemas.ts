@@ -62,8 +62,6 @@ export const CreateTaskRequestSchema = z.object({
   prNumber: z.number().int().positive().optional(),
   continuationPrNumber: z.number().int().positive().optional(),
   continuationPrBranch: z.string().min(1).optional(),
-  planningPrBranch: z.string().optional(),
-  planningPrUrl: z.string().url().optional(),
   reviewTypes: z
     .array(z.enum(['code_quality', 'security', 'architecture', 'plan_review', 'test_quality']))
     .optional(),

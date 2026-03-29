@@ -1784,30 +1784,6 @@ describe('drainTaskQueue', () => {
   });
 
   describe('dispatch metadata field reconstruction (INT-949)', () => {
-    it('passes planningPrBranch and planningPrUrl through to dispatch request', async () => {
-      const task = createMockTask({
-        agentType: 'execution',
-        planningPrBranch: 'task_planning_branch',
-        planningPrUrl: 'https://github.com/pbuchman/intexuraos/pull/99',
-      });
-      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
-      setupWorkerSettings();
-
-      mockTaskDispatcher.dispatch.mockResolvedValue(
-        ok({ dispatched: true, workerLocation: 'home-mac' })
-      );
-      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
-
-      await drainTaskQueue(createDeps());
-
-      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          planningPrBranch: 'task_planning_branch',
-          planningPrUrl: 'https://github.com/pbuchman/intexuraos/pull/99',
-        })
-      );
-    });
-
     it('passes trackingCommentId through to dispatch request', async () => {
       const task = createMockTask({
         agentType: 'pull_request',
@@ -1864,8 +1840,6 @@ describe('drainTaskQueue', () => {
       await drainTaskQueue(createDeps());
 
       const dispatchCall = mockTaskDispatcher.dispatch.mock.calls[0]?.[0] as Record<string, unknown>;
-      expect(dispatchCall['planningPrBranch']).toBeUndefined();
-      expect(dispatchCall['planningPrUrl']).toBeUndefined();
       expect(dispatchCall['trackingCommentId']).toBeUndefined();
       expect(dispatchCall['retriedFrom']).toBeUndefined();
     });

@@ -44,6 +44,7 @@ function createMockDeps(): EnhanceResearchDeps & {
     update: vi.fn(),
     updateLlmResult: vi.fn(),
     findByUserId: vi.fn(),
+    findSummariesByUserId: vi.fn(),
     clearShareInfo: vi.fn(),
     delete: vi.fn(),
   };

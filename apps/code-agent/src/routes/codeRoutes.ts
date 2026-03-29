@@ -55,6 +55,7 @@ const linearIssueForDisplaySchema = {
   type: 'object',
   properties: {
     identifier: { type: 'string' },
+    parentIdentifier: { type: 'string', nullable: true },
     title: { type: 'string' },
     state: {
       type: 'object',
@@ -88,7 +89,7 @@ const linearIssueForDisplaySchema = {
     commentCount: { type: 'number' },
     lastCommentAt: { type: 'string', nullable: true },
   },
-  required: ['identifier', 'title', 'state', 'priority', 'assignee', 'labels', 'url', 'commentCount', 'lastCommentAt'],
+  required: ['identifier', 'parentIdentifier', 'title', 'state', 'priority', 'assignee', 'labels', 'url', 'commentCount', 'lastCommentAt'],
 } as const;
 
 const workerTypeSchema = {
@@ -1254,7 +1255,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                 properties: {
                   code: {
                     type: 'string',
-                    enum: ['concurrent_limit', 'hourly_limit', 'monthly_cost_limit', 'prompt_too_long'],
+                    enum: ['concurrent_limit', 'hourly_limit', 'prompt_too_long'],
                   },
                   message: { type: 'string' },
                   retryAfter: { type: 'string' },
@@ -1319,7 +1320,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       request.log.info({ userId, promptLength: body.prompt.length }, 'Submitting code task from UI');
 
-      // Check rate limits (concurrent, hourly, daily/monthly cost, prompt length)
+      // Check rate limits (concurrent, hourly, prompt length)
       const limitCheck = await rateLimitService.checkLimits(userId, body.prompt.length);
       if (!limitCheck.ok) {
         const { error } = limitCheck;
@@ -1712,6 +1713,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       let hydratedIssuesByIdentifier = new Map<string, {
         identifier: string;
+        parentIdentifier: string | null;
         title: string;
         state: { name: string; type: string };
         priority: number;
@@ -1939,6 +1941,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       let linearIssue: undefined | {
         identifier: string;
+        parentIdentifier: string | null;
         title: string;
         state: { name: string; type: string };
         priority: number;
@@ -3062,6 +3065,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           metricsClient: services.metricsClient,
           workerSettingsRepo: services.workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
+          gitHubPRClient: services.gitHubPRClient,
+          userServiceClient: services.userServiceClient,
         },
         { originalTaskId: taskId, userId }
       );
@@ -3090,6 +3095,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             });
           case 'active_task_exists':
             return await reply.fail('CONFLICT', error.message, undefined, { serverCode: error.code });
+          case 'plan_pr_merge_failed':
+            return await reply.fail('PLAN_PR_MERGE_FAILED', error.message);
           case 'internal_error':
           default:
             return await reply.fail('INTERNAL_ERROR', error.message);
@@ -3796,7 +3803,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         message: 'Received request to POST /code/tasks/:taskId/implement',
       });
 
-      const { codeTaskRepo, linearAgentClient, taskEnqueueService, metricsClient, workerSettingsRepo, rateLimitService } =
+      const { codeTaskRepo, linearAgentClient, taskEnqueueService, metricsClient, workerSettingsRepo, rateLimitService, gitHubPRClient, userServiceClient } =
         getServices();
       const userId = request.user?.userId;
 
@@ -3838,6 +3845,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           metricsClient,
           workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
+          gitHubPRClient,
+          userServiceClient,
         },
         executionAgentRequest
       );
@@ -3865,6 +3874,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             });
           case 'active_task_exists':
             return reply.fail('CONFLICT', error.message, undefined, { serverCode: error.code });
+          case 'plan_pr_merge_failed':
+            return reply.fail('PLAN_PR_MERGE_FAILED', error.message);
           case 'internal_error':
           default:
             return reply.fail('INTERNAL_ERROR', error.message);

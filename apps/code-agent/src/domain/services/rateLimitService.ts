@@ -10,7 +10,7 @@ import type { UserUsageRepository } from '../ports/userUsageRepository.js';
 import { DEFAULT_LIMITS, ESTIMATED_COST_PER_TASK } from '../models/userUsage.js';
 
 export interface RateLimitError {
-  code: 'concurrent_limit' | 'hourly_limit' | 'monthly_cost_limit' | 'prompt_too_long' | 'service_unavailable';
+  code: 'concurrent_limit' | 'hourly_limit' | 'prompt_too_long' | 'service_unavailable';
   message: string;
   retryAfter?: string;
 }
@@ -77,15 +77,6 @@ export function createRateLimitService(deps: RateLimitServiceDeps): RateLimitSer
           code: 'hourly_limit',
           message: `Maximum ${String(limits.maxTasksPerHour)} tasks per hour allowed`,
           retryAfter: 'in about 1 hour',
-        });
-      }
-
-      // Check monthly cost
-      if (usage.costThisMonth + ESTIMATED_COST_PER_TASK >= limits.monthlyCostCap) {
-        return err({
-          code: 'monthly_cost_limit',
-          message: `Monthly cost limit of $${String(limits.monthlyCostCap)} reached ($${usage.costThisMonth.toFixed(2)} spent this month)`,
-          retryAfter: 'next month',
         });
       }
 

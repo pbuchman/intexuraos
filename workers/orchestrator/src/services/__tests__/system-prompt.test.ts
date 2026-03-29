@@ -1167,16 +1167,16 @@ describe('system-prompt', () => {
     }
   });
 
-  it('planning prompt version is 3.1.2', () => {
-    expect(planningPrompt.version).toBe('3.1.2');
+  it('planning prompt version is 3.2.0', () => {
+    expect(planningPrompt.version).toBe('3.2.0');
   });
 
   it('execution prompt version is 6.0.0', () => {
     expect(executionPrompt.version).toBe('6.0.0');
   });
 
-  it('remediation prompt version is 3.0.0', () => {
-    expect(remediationPrompt.version).toBe('3.0.0');
+  it('remediation prompt version is 3.1.0', () => {
+    expect(remediationPrompt.version).toBe('3.1.0');
   });
 
   it('injects execution memory section only for execution tasks', () => {

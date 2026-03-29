@@ -54,6 +54,13 @@ describe('submitToExecutionAgent', () => {
   let mockWorkerSettingsRepo: {
     getSettings: ReturnType<typeof vi.fn>;
   };
+  let mockGitHubPRClient: {
+    getPullRequestStatus: ReturnType<typeof vi.fn>;
+    mergePullRequest: ReturnType<typeof vi.fn>;
+  };
+  let mockUserServiceClient: {
+    getOAuthToken: ReturnType<typeof vi.fn>;
+  };
 
   const userId = 'user_123';
   const originalTaskId = 'task_original';
@@ -110,6 +117,8 @@ describe('submitToExecutionAgent', () => {
       metricsClient: mockMetricsClient as unknown as SubmitToExecutionAgentDeps['metricsClient'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as SubmitToExecutionAgentDeps['workerSettingsRepo'],
       orchestratorSecret: 'test-orchestrator-secret',
+      gitHubPRClient: mockGitHubPRClient as unknown as SubmitToExecutionAgentDeps['gitHubPRClient'],
+      userServiceClient: mockUserServiceClient as unknown as SubmitToExecutionAgentDeps['userServiceClient'],
     };
   }
 
@@ -224,6 +233,15 @@ describe('submitToExecutionAgent', () => {
 
     mockWorkerSettingsRepo = {
       getSettings: vi.fn(),
+    };
+
+    mockGitHubPRClient = {
+      getPullRequestStatus: vi.fn().mockResolvedValue(ok({ state: 'open', mergedAt: null, headRef: 'plan/test' })),
+      mergePullRequest: vi.fn().mockResolvedValue(ok({ sha: 'abc123', merged: true })),
+    };
+
+    mockUserServiceClient = {
+      getOAuthToken: vi.fn().mockResolvedValue(ok({ accessToken: 'ghp_test_token' })),
     };
   });
 
@@ -816,7 +834,23 @@ describe('submitToExecutionAgent', () => {
       );
     });
 
-    it('stores planning PR info on execution task when original task has result with branch and planning_pr_url', async () => {
+    it('merges plan PR before creating execution task when planning_pr_url exists', async () => {
+      setupHappyPathMocks({
+        result: {
+          branch: 'plan/my-feature',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/42',
+        },
+      });
+
+      const result = await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+      expect(mockGitHubPRClient.mergePullRequest).toHaveBeenCalledWith(
+        'ghp_test_token', 'pbuchman', 'intexuraos', 42, 'merge', expect.any(String),
+      );
+    });
+
+    it('does not include planningPrBranch or planningPrUrl on execution task', async () => {
       setupHappyPathMocks({
         result: {
           branch: 'plan/my-feature',
@@ -826,23 +860,19 @@ describe('submitToExecutionAgent', () => {
 
       await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
 
-      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          planningPrBranch: 'plan/my-feature',
-          planningPrUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
-        })
-      );
-    });
-
-    it('omits planning PR fields from execution task when original task has no result', async () => {
-      setupHappyPathMocks();
-
-      await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
-
       const createCall = mockCodeTaskRepo.create.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
       expect(createCall).toBeDefined();
       expect(createCall?.['planningPrBranch']).toBeUndefined();
       expect(createCall?.['planningPrUrl']).toBeUndefined();
+    });
+
+    it('skips plan PR merge when planning task has no planning_pr_url', async () => {
+      setupHappyPathMocks();
+
+      const result = await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+      expect(mockGitHubPRClient.mergePullRequest).not.toHaveBeenCalled();
     });
 
     it('calls enqueue after successful task creation', async () => {
@@ -894,6 +924,100 @@ describe('submitToExecutionAgent', () => {
           workerLocation: 'queued',
         })
       );
+    });
+  });
+
+  describe('plan PR merge', () => {
+    it('returns plan_pr_merge_failed when plan PR merge fails', async () => {
+      setupHappyPathMocks({
+        result: {
+          branch: 'plan/my-feature',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/42',
+        },
+      });
+      mockGitHubPRClient.getPullRequestStatus.mockResolvedValue(ok({ state: 'open', mergedAt: null, headRef: 'plan/test' }));
+      mockGitHubPRClient.mergePullRequest.mockResolvedValue(err({
+        code: 'API_ERROR' as const,
+        message: '405 Method Not Allowed - merge conflict',
+      }));
+
+      const result = await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('plan_pr_merge_failed');
+      }
+      // Verify no execution task was created
+      expect(mockCodeTaskRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('returns plan_pr_merge_failed when GitHub token is unavailable', async () => {
+      setupHappyPathMocks({
+        result: {
+          branch: 'plan/my-feature',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/42',
+        },
+      });
+      mockUserServiceClient.getOAuthToken.mockResolvedValue(err({
+        code: 'NOT_FOUND',
+        message: 'Token not found',
+      }));
+
+      const result = await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('plan_pr_merge_failed');
+        expect(result.error.message).toContain('GitHub OAuth token');
+      }
+      expect(mockCodeTaskRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('succeeds when plan PR is already merged', async () => {
+      setupHappyPathMocks({
+        result: {
+          branch: 'plan/my-feature',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/42',
+        },
+      });
+      mockGitHubPRClient.getPullRequestStatus.mockResolvedValue(ok({
+        state: 'closed', mergedAt: new Date(), headRef: 'plan/test',
+      }));
+
+      const result = await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+      expect(mockGitHubPRClient.mergePullRequest).not.toHaveBeenCalled();
+    });
+
+    it('merges plan PR before fan-out for complex tasks', async () => {
+      setupHappyPathMocks({
+        result: {
+          branch: 'plan/my-feature',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/42',
+        },
+      });
+      // Override to complex-task label
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'uuid-parent-123',
+          identifier: linearIssueId,
+          title: 'Complex Feature',
+          url: `https://linear.app/pbuchman/issue/${linearIssueId}`,
+          labels: ['complex-task'],
+          childCount: 3,
+          parentId: null,
+        })
+      );
+      mockFanOutChildTasks.mockResolvedValue(
+        ok({ childTaskIds: ['child_1', 'child_2'], parentTaskId: 'task_parent_exec' })
+      );
+
+      const result = await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+      // Verify merge happened before any task creation
+      expect(mockGitHubPRClient.mergePullRequest).toHaveBeenCalled();
     });
   });
 
