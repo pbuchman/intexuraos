@@ -54,6 +54,7 @@ const linearIssueForDisplaySchema = {
   type: 'object',
   properties: {
     identifier: { type: 'string' },
+    parentIdentifier: { type: 'string', nullable: true },
     title: { type: 'string' },
     state: {
       type: 'object',
@@ -87,7 +88,7 @@ const linearIssueForDisplaySchema = {
     commentCount: { type: 'number' },
     lastCommentAt: { type: 'string', nullable: true },
   },
-  required: ['identifier', 'title', 'state', 'priority', 'assignee', 'labels', 'url', 'commentCount', 'lastCommentAt'],
+  required: ['identifier', 'parentIdentifier', 'title', 'state', 'priority', 'assignee', 'labels', 'url', 'commentCount', 'lastCommentAt'],
 } as const;
 
 const workerTypeSchema = {
@@ -1590,6 +1591,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       let hydratedIssuesByIdentifier = new Map<string, {
         identifier: string;
+        parentIdentifier: string | null;
         title: string;
         state: { name: string; type: string };
         priority: number;
@@ -1815,6 +1817,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       let linearIssue: undefined | {
         identifier: string;
+        parentIdentifier: string | null;
         title: string;
         state: { name: string; type: string };
         priority: number;
