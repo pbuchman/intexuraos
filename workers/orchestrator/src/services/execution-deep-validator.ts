@@ -17,7 +17,7 @@ import { OrchestratorFileAuditSink } from './orchestrator-audit-sink.js';
 
 const execFileAsync = promisify(execFile);
 
-export const DEEP_VALIDATION_PROMPT_VERSION = '5.2.0';
+export const DEEP_VALIDATION_PROMPT_VERSION = '5.3.0';
 
 const MAX_TRANSCRIPT_CHARS = 200_000;
 const GITHUB_COMMENT_MAX_CHARS = 65_536;
@@ -50,6 +50,7 @@ export interface DeepValidationPromptInput {
   agentClaims: ExecutionAgentClaims;
   linearIssueBody: string;
   planContent: string | undefined; // @allow-undefined-type -- callers always provide the key, value may be undefined
+  workerType: string;
 }
 
 export function buildDeepValidationPrompt(input: DeepValidationPromptInput): string {
@@ -107,8 +108,12 @@ export function buildDeepValidationPrompt(input: DeepValidationPromptInput): str
     '- Was each mandatory skill loaded? In what order?',
     '- For requesting-code-review: was the core instruction actually followed through?',
     '- Were there any skills loaded whose instructions were not followed?',
-    '- For Codex transcripts, were the startup evidence lines present: `[entrypoint] Bootstrap evidence:` and `[entrypoint] Codex runtime evidence:`?',
-    '- Treat missing startup evidence lines as a warning because retained Codex parity proof is absent.',
+    ...(input.workerType.startsWith('codex')
+      ? [
+          '- For Codex transcripts, were the startup evidence lines present: `[entrypoint] Bootstrap evidence:` and `[entrypoint] Codex runtime evidence:`?',
+          '- Treat missing startup evidence lines as a warning because retained Codex parity proof is absent.',
+        ]
+      : []),
     '',
     '=== Section 3: Plan vs Reality ===',
     `Linear issue requirements:\n${input.linearIssueBody}`,
@@ -154,6 +159,7 @@ export interface DeepValidationInput {
   agentClaims: ExecutionAgentClaims;
   linearIssueBody: string;
   planContent: string | undefined; // @allow-undefined-type -- callers always provide the key, value may be undefined
+  workerType: string;
 }
 
 export interface ExecutionDeepValidator {
@@ -181,6 +187,7 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
       agentClaims: input.agentClaims,
       linearIssueBody: input.linearIssueBody,
       planContent: input.planContent,
+      workerType: input.workerType,
     });
 
     this.logger.info(
