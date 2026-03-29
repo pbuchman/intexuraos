@@ -4,6 +4,7 @@ export {
   type LlmProvider,
   type LlmResult,
   type LlmResultStatus,
+  type LlmResultStatusInfo,
   type NotionExportInfo,
   type PartialFailure,
   type PartialFailureDecision,
@@ -16,4 +17,5 @@ export {
   createEnhancedResearch,
   createLlmResults,
   createResearch,
+  toResearchSummary,
 } from './Research.js';

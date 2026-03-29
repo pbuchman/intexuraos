@@ -13,22 +13,23 @@ import {
   type ResearchContext,
   type SynthesisContext,
 } from '@intexuraos/llm-prompts';
-import type {
-  LabelGenerateResult,
-  LlmError,
-  LlmProvider,
-  LlmResearchProvider,
-  LlmResearchResult,
-  LlmResult,
-  LlmSynthesisProvider,
-  LlmSynthesisResult,
-  NotificationError,
-  RepositoryError,
-  Research,
-  ResearchRepository,
-  ResearchSummary,
-  TitleGenerateResult,
-  TitleGenerator,
+import {
+  toResearchSummary,
+  type LabelGenerateResult,
+  type LlmError,
+  type LlmProvider,
+  type LlmResearchProvider,
+  type LlmResearchResult,
+  type LlmResult,
+  type LlmSynthesisProvider,
+  type LlmSynthesisResult,
+  type NotificationError,
+  type RepositoryError,
+  type Research,
+  type ResearchRepository,
+  type ResearchSummary,
+  type TitleGenerateResult,
+  type TitleGenerator,
 } from '../domain/research/index.js';
 import type {
   ContextInferenceProvider,
@@ -127,35 +128,7 @@ export class FakeResearchRepository implements ResearchRepository {
       return b.startedAt.localeCompare(a.startedAt);
     });
 
-    const items: ResearchSummary[] = allItems.slice(0, limit).map((r) => {
-      const summary: ResearchSummary = {
-        id: r.id,
-        userId: r.userId,
-        title: r.title,
-        status: r.status,
-        selectedModels: r.selectedModels,
-        synthesisModel: r.synthesisModel,
-        startedAt: r.startedAt,
-        llmResultStatuses: r.llmResults.map((lr) => ({
-          provider: lr.provider,
-          model: lr.model,
-          status: lr.status,
-        })),
-      };
-      if (r.completedAt !== undefined) {
-        summary.completedAt = r.completedAt;
-      }
-      if (r.favourite !== undefined) {
-        summary.favourite = r.favourite;
-      }
-      if (r.totalCostUsd !== undefined) {
-        summary.totalCostUsd = r.totalCostUsd;
-      }
-      if (r.partialFailure !== undefined) {
-        summary.partialFailure = r.partialFailure;
-      }
-      return summary;
-    });
+    const items: ResearchSummary[] = allItems.slice(0, limit).map((r) => toResearchSummary(r));
 
     return ok({ items });
   }
