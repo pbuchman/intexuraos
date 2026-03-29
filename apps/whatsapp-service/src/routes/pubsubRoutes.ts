@@ -232,7 +232,8 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         if (!result.ok) {
           const isPermanentError = result.error.httpStatus !== undefined
             && result.error.httpStatus >= 400
-            && result.error.httpStatus < 500;
+            && result.error.httpStatus < 500
+            && result.error.httpStatus !== 429;
 
           if (isPermanentError) {
             request.log.error(

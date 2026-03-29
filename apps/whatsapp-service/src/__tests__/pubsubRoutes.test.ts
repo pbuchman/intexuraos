@@ -573,6 +573,32 @@ describe('Pub/Sub Routes', () => {
       expect(responseBody.success).toBe(true);
     });
 
+    it('returns 502 when WhatsApp API returns 429 rate-limit error (transient)', async () => {
+      await userMappingRepository.saveMapping('user-rate-limit', ['+48111222333']);
+      messageSender.setFail(true, {
+        code: 'PERSISTENCE_ERROR',
+        message: 'WhatsApp API error: 429 - rate limit exceeded',
+        httpStatus: 429,
+      });
+
+      const body = createPubSubBody({
+        type: 'whatsapp.message.send',
+        userId: 'user-rate-limit',
+        message: 'Test message',
+        correlationId: 'corr-rate-limit',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(502);
+    });
+
     it('returns 502 when WhatsApp API returns transient 5xx error', async () => {
       await userMappingRepository.saveMapping('user-transient', ['+48111222333']);
       messageSender.setFail(true, {
