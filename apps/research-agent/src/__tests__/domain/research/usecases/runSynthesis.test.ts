@@ -46,6 +46,7 @@ function createMockDeps(): RunSynthesisDeps & {
     update: vi.fn().mockResolvedValue(ok(undefined)),
     updateLlmResult: vi.fn().mockResolvedValue(ok(undefined)),
     findByUserId: vi.fn(),
+    findSummariesByUserId: vi.fn(),
     clearShareInfo: vi.fn().mockResolvedValue(ok(undefined)),
     delete: vi.fn(),
   };

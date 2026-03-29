@@ -4,7 +4,7 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import type { LlmResult, Research } from '../models/index.js';
+import type { LlmResult, Research, ResearchSummary } from '../models/index.js';
 
 export interface RepositoryError {
   code: 'NOT_FOUND' | 'FIRESTORE_ERROR' | 'CONFLICT';
@@ -20,6 +20,11 @@ export interface ResearchRepository {
     userId: string,
     options?: { limit?: number; cursor?: string }
   ): Promise<Result<{ items: Research[]; nextCursor?: string }, RepositoryError>>;
+
+  findSummariesByUserId(
+    userId: string,
+    options?: { limit?: number; cursor?: string }
+  ): Promise<Result<{ items: ResearchSummary[]; nextCursor?: string }, RepositoryError>>;
 
   update(id: string, updates: Partial<Research>): Promise<Result<Research, RepositoryError>>;
 
