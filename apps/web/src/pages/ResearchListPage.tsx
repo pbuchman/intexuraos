@@ -347,17 +347,13 @@ export function ResearchListPage(): React.JSX.Element {
   const handleToggleFavourite = (researchId: string, favourite: boolean): void => {
     setUpdatingFavourite(researchId);
     setFavouriteError(null);
-
-    // Optimistic update - immediately update UI
     updateResearchLocally(researchId, { favourite });
 
     void (async (): Promise<void> => {
       try {
         const token = await getAccessToken();
         await toggleResearchFavourite(token, researchId, favourite);
-        // No need to refresh - optimistic update already applied
       } catch (err) {
-        // Revert optimistic update on failure
         updateResearchLocally(researchId, { favourite: !favourite });
         setFavouriteError(err instanceof Error ? err.message : 'Failed to update favourite');
       } finally {
