@@ -748,7 +748,6 @@ describe('pruneIssues', () => {
       },
       linearClient: {
         deleteIssue: vi.fn().mockResolvedValue(ok(undefined)),
-        listIssues: vi.fn(),
       },
       classifier: {
         classifyCandidates: vi.fn(),
@@ -891,7 +890,7 @@ import type {
 export interface PruneIssuesDeps {
   connectionRepo: Pick<LinearConnectionRepository, 'getAllConnectedUserIds' | 'getFullConnection'>;
   issueRepo: Pick<LinearIssueRepository, 'listByUserId' | 'deleteById'>;
-  linearClient: Pick<LinearApiClient, 'deleteIssue' | 'listIssues'>;
+  linearClient: Pick<LinearApiClient, 'deleteIssue'>;
   classifier: IssuePruningClassifier;
   logger: Logger;
   config: PruneConfig;
@@ -991,6 +990,10 @@ export async function pruneIssues(
   logger.info({ candidateCount: candidates.length }, 'Classification complete, starting deletions');
 
   // Step 5: Get API key for deletion (use first connected user's key)
+  // NOTE: In a single-org Linear setup, any member's API key can delete any issue
+  // in the workspace. This is safe because IntexuraOS operates as a single-organization
+  // system. If multi-org support is added in the future, this must be revisited to
+  // use per-user keys matched to issue ownership.
   const connectionResult = await connectionRepo.getFullConnection(userIds[0]!);
   if (!connectionResult.ok) {
     return connectionResult;
@@ -1091,6 +1094,16 @@ git commit -m "feat(linear-agent): implement pruneIssues use case with Gemini cl
 - Modify: `apps/linear-agent/src/services.ts`
 - Modify: `apps/linear-agent/src/domain/index.ts` (already done in Task 4)
 
+- [ ] **Step 0: Add `@intexuraos/infra-gemini` dependency to linear-agent**
+
+The `infra-gemini` package is not currently in `apps/linear-agent/package.json`. Add it explicitly before importing:
+
+```bash
+pnpm --filter=linear-agent add @intexuraos/infra-gemini
+```
+
+Verify: `cat apps/linear-agent/package.json | grep infra-gemini` should show the dependency.
+
 - [ ] **Step 1: Add IssuePruningClassifier to ServiceContainer**
 
 In `apps/linear-agent/src/services.ts`:
@@ -1146,7 +1159,7 @@ const issuePruningClassifier = geminiApiKey !== undefined && geminiApiKey !== ''
 - [ ] **Step 2: Verify build**
 
 Run: `cd /repo && pnpm build --filter=linear-agent`
-Expected: Build succeeds. May need to run `pnpm install && pnpm build` if `infra-gemini` or `llm-pricing` imports fail.
+Expected: Build succeeds. Step 0 above must be completed first to ensure `@intexuraos/infra-gemini` is available.
 
 - [ ] **Step 3: Commit**
 
