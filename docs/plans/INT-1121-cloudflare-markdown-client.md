@@ -183,10 +183,10 @@ const CLOUDFLARE_MARKDOWN_URL = 'https://api.cloudflare.com/client/v4/accounts/{
 
 ```typescript
 // apps/web-agent/src/__tests__/infra/pagesummary/cloudflareMarkdownClient.test.ts
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import nock from 'nock';
 import { createCloudflareMarkdownClient } from '../../../infra/pagesummary/cloudflareMarkdownClient.js';
-import { createTestLogger } from '../../testHelpers.js'; // or pino({ level: 'silent' })
+import pino from 'pino';
 
 const ACCOUNT_ID = 'test-account-id';
 const API_TOKEN = 'test-api-token';
@@ -199,11 +199,19 @@ function createClient(overrides?: { timeoutMs?: number }) {
       apiToken: API_TOKEN,
       timeoutMs: overrides?.timeoutMs ?? 60000,
     },
-    createTestLogger()
+    pino({ level: 'silent' })
   );
 }
 
 describe('cloudflareMarkdownClient', () => {
+  beforeAll(() => {
+    nock.disableNetConnect();
+  });
+
+  afterAll(() => {
+    nock.enableNetConnect();
+  });
+
   beforeEach(() => {
     nock.cleanAll();
   });
@@ -298,6 +306,16 @@ export function createCloudflareMarkdownClient(
   return {
     async fetchPageContent(url: string): Promise<Result<string, PageContentError>> {
       logger.info({ url }, 'Starting page content fetch via Cloudflare');
+
+      try {
+        new URL(url);
+      } catch {
+        logger.warn({ url }, 'Invalid URL provided');
+        return err({
+          code: 'INVALID_URL',
+          message: `Invalid URL: ${url}`,
+        });
+      }
 
       const controller = new AbortController();
       const timeoutId = setTimeout((): void => {
@@ -607,6 +625,17 @@ it('trims whitespace from markdown result', async () => {
   expect(result.ok).toBe(true);
   if (result.ok) {
     expect(result.value).toBe('# Trimmed Content');
+  }
+});
+
+it('returns INVALID_URL for malformed URLs', async () => {
+  const client = createClient();
+  const result = await client.fetchPageContent('not-a-valid-url');
+
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error.code).toBe('INVALID_URL');
+    expect(result.error.message).toContain('not-a-valid-url');
   }
 });
 
@@ -979,6 +1008,14 @@ git commit -m "config: swap Crawl4AI env vars for Cloudflare in ecosystem config
 **Subtask:** infrastructure & documentation
 **Files:**
 - Create: `docs/guides/cloudflare-browser-rendering-setup.md`
+
+### Step 5.0: Create the guides directory
+
+- [ ] **Ensure the `docs/guides/` directory exists**
+
+```bash
+mkdir -p docs/guides/
+```
 
 ### Step 5.1: Write the setup guide
 
