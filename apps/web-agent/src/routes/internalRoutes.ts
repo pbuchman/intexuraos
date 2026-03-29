@@ -134,7 +134,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         operationId: 'summarizePageInternal',
         summary: 'Summarize a web page (internal)',
         description:
-          'Internal endpoint for extracting and summarizing web page content using Crawl4AI and user\'s LLM.',
+          'Internal endpoint for extracting and summarizing web page content using Cloudflare Browser Rendering and user\'s LLM.',
         tags: ['internal'],
         body: summarizePageBodySchema,
         response: {
@@ -173,7 +173,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const { pageContentFetcher, llmSummarizer, userServiceClient } = getServices();
 
-      // Step 1: Fetch page content via Crawl4AI
       const contentResult = await pageContentFetcher.fetchPageContent(url);
       if (!contentResult.ok) {
         const durationMs = Date.now() - startTime;
@@ -188,7 +187,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.ok({ result, metadata: { durationMs } });
       }
 
-      // Step 2: Get user's LLM client
       const llmClientResult = await userServiceClient.getLlmClient(userId);
       if (!llmClientResult.ok) {
         const durationMs = Date.now() - startTime;
@@ -207,7 +205,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.ok({ result, metadata: { durationMs } });
       }
 
-      // Step 3: Summarize with user's LLM
       const summaryResult = await llmSummarizer.summarize(
         contentResult.value,
         {

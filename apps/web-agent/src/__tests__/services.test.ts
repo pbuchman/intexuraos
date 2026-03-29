@@ -12,7 +12,8 @@ describe('services', () => {
   const mockPricingContext = new FakePricingContext();
 
   beforeEach(() => {
-    vi.stubEnv('INTEXURAOS_CRAWL4AI_APP_API_KEY', 'test-key');
+    vi.stubEnv('INTEXURAOS_CLOUDFLARE_ACCOUNT_ID', 'test-account-id');
+    vi.stubEnv('INTEXURAOS_CLOUDFLARE_API_TOKEN', 'test-api-token');
   });
 
   afterEach(() => {
@@ -23,7 +24,8 @@ describe('services', () => {
   describe('initServices', () => {
     it('initializes services with real implementations', () => {
       initServices({
-        crawl4aiApiKey: 'test-key',
+        cloudflareAccountId: 'test-account-id',
+        cloudflareApiToken: 'test-api-token',
         userServiceUrl: 'http://localhost:8110',
         internalAuthToken: 'test-token',
         pricingContext: mockPricingContext,
@@ -53,7 +55,8 @@ describe('services', () => {
 
     it('returns services after initialization', () => {
       initServices({
-        crawl4aiApiKey: 'test-key',
+        cloudflareAccountId: 'test-account-id',
+        cloudflareApiToken: 'test-api-token',
         userServiceUrl: 'http://localhost:8110',
         internalAuthToken: 'test-token',
         pricingContext: mockPricingContext,
@@ -89,7 +92,8 @@ describe('services', () => {
   describe('resetServices', () => {
     it('clears services making getServices throw', () => {
       initServices({
-        crawl4aiApiKey: 'test-key',
+        cloudflareAccountId: 'test-account-id',
+        cloudflareApiToken: 'test-api-token',
         userServiceUrl: 'http://localhost:8110',
         internalAuthToken: 'test-token',
         pricingContext: mockPricingContext,
