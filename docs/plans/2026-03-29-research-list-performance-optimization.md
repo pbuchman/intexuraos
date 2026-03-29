@@ -65,11 +65,13 @@ Additionally, when paginating with a cursor, EXTRA `.get()` calls fetch the curs
 
 The `researchSchema` used for list responses includes every field. The route handler at `apps/research-agent/src/routes/researchRoutes.ts:705` sends `result.value` as-is with no field stripping. Even if Firestore projection is added, the JSON serialization overhead of unnecessary fields remains.
 
-### Problem 5: Visibility Change Full Refresh
+### Problem 5: Visibility Change Full Refresh (OUT OF SCOPE)
 
 **File:** `apps/web/src/hooks/useResearch.ts:267-279`
 
-Every tab switch triggers `refresh(false)` which re-fetches the full list. With summary endpoint this becomes cheaper, but could also be debounced or use stale-while-revalidate pattern.
+Every tab switch triggers `refresh(false)` which re-fetches the full list. With the summary endpoint this becomes significantly cheaper (~15-30KB vs ~500KB-2MB), which reduces the impact from MODERATE to LOW.
+
+> **Out of scope:** A debounce or stale-while-revalidate optimization is deferred to a follow-up Linear issue. The summary projection already mitigates the worst of this problem (payload reduction makes the refresh near-instant). A follow-up issue should be created during implementation to track this.
 
 ## Existing Indexes (Confirmed in `firestore.indexes.json`)
 
@@ -222,7 +224,7 @@ async findSummariesByUserId(
         synthesisModel: data.synthesisModel,
         startedAt: data.startedAt,
         favourite: data.favourite,
-        llmResultStatuses: data.llmResults.map((r) => ({
+        llmResultStatuses: (data.llmResults ?? []).map((r) => ({
           provider: r.provider,
           model: r.model,
           status: r.status,
@@ -281,7 +283,7 @@ git commit -m "feat(research-agent): add findSummariesByUserId with select proje
 
 - [ ] **Write failing test for summary list use case**
 
-Test that `listResearches` with `{ summary: true }` calls `findSummariesByUserId` and returns `ResearchSummary[]`.
+Test that `listResearches` calls `findSummariesByUserId` and returns `ResearchSummary[]`. The use case always returns summaries — there is no `summary` flag or dual-path logic.
 
 - [ ] **Run test to verify it fails**
 
@@ -296,16 +298,12 @@ export interface ListResearchesParams {
   userId: string;
   limit?: number;
   cursor?: string;
-  summary?: boolean;
 }
 
-export type ListResearchesResult = {
-  items: Research[];
-  nextCursor?: string;
-} | {
+export interface ListResearchesResult {
   items: ResearchSummary[];
   nextCursor?: string;
-};
+}
 
 export async function listResearches(
   params: ListResearchesParams,
@@ -319,13 +317,11 @@ export async function listResearches(
     options.cursor = params.cursor;
   }
 
-  if (params.summary === true) {
-    return await deps.researchRepo.findSummariesByUserId(params.userId, options);
-  }
-
-  return await deps.researchRepo.findByUserId(params.userId, options);
+  return await deps.researchRepo.findSummariesByUserId(params.userId, options);
 }
 ```
+
+> **Design decision:** The list endpoint permanently returns `ResearchSummary[]` — there is no union type or `summary` flag. Callers that need full `Research` documents (e.g., the detail page) use `GET /research/:id` directly. This avoids a discriminant-less union that would require unsafe casts under strict TypeScript mode.
 
 - [ ] **Run test to verify it passes**
 
@@ -398,16 +394,9 @@ export const listResearchesResponseSchema = {
 } as const;
 ```
 
-- [ ] **Update route handler to pass `summary: true`**
+- [ ] **Update route handler (no flag needed)**
 
-In `apps/research-agent/src/routes/researchRoutes.ts`, modify the `GET /research` handler (line 699):
-
-```typescript
-const result = await listResearches(
-  { ...params, summary: true },
-  { researchRepo }
-);
-```
+In `apps/research-agent/src/routes/researchRoutes.ts`, the `GET /research` handler (line 699) calls `listResearches(params, { researchRepo })` — no changes needed since the use case always returns summaries now. Verify the existing call compiles with the updated `ListResearchesParams` type (the `summary` field was removed).
 
 - [ ] **Update route tests**
 
@@ -749,6 +738,8 @@ The two tasks (backend and frontend) can be executed in parallel by independent 
 ```
 
 **Cursor format change:** The cursor is now a plain document ID (e.g., `"def456"`) instead of the previous `"fav:def456"` / `"non:def456"` format. The frontend already treats the cursor as an opaque string, so this is backwards-compatible from the frontend's perspective.
+
+> **Deployment transition note:** During the deployment window, active browser sessions may hold old-format cursors (`"fav:abc123"` / `"non:abc123"`). If sent to the new endpoint, `collection.doc("fav:abc123").get()` returns a non-existent document, causing pagination to silently reset to the beginning of the list. This is graceful degradation (no crash, no error) — the user simply sees the first page again. This is acceptable for a deployment window and resolves itself when the user refreshes.
 
 **Fields removed from list response:** `prompt`, `originalPrompt`, `synthesizedResult`, `synthesisError`, `llmResults` (replaced by `llmResultStatuses`), `inputContexts`, `researchContext`, `shareInfo`, `notionExportInfo`, `sourceActionId`, `sourceResearchId`, `skipSynthesis`, `userName`, `userEmail`, `totalDurationMs`, `totalInputTokens`, `totalOutputTokens`, `auxiliaryCostUsd`, `sourceLlmCostUsd`, `attributionStatus`.
 
