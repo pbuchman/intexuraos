@@ -22,6 +22,24 @@ import {
   initializeFirebase,
 } from '@/services/firebase';
 
+/** Project a full Research document into a lightweight ResearchSummary for list state. */
+function researchToSummary(r: Research): ResearchSummary {
+  return {
+    id: r.id,
+    userId: r.userId,
+    title: r.title,
+    status: r.status,
+    selectedModels: r.selectedModels,
+    synthesisModel: r.synthesisModel,
+    startedAt: r.startedAt,
+    llmResultStatuses: r.llmResults.map(({ provider, model, status }) => ({ provider, model, status })),
+    ...(r.completedAt !== undefined && { completedAt: r.completedAt }),
+    ...(r.favourite !== undefined && { favourite: r.favourite }),
+    ...(r.totalCostUsd !== undefined && { totalCostUsd: r.totalCostUsd }),
+    ...(r.partialFailure !== undefined && { partialFailure: r.partialFailure }),
+  };
+}
+
 /**
  * Hook for fetching a single research by ID with real-time Firestore updates.
  *
@@ -310,33 +328,7 @@ export function useResearches(): {
     async (request: CreateResearchRequest): Promise<Research> => {
       const token = await getAccessToken();
       const newResearch = await createResearchApi(token, request);
-      const summary: ResearchSummary = {
-        id: newResearch.id,
-        userId: newResearch.userId,
-        title: newResearch.title,
-        status: newResearch.status,
-        selectedModels: newResearch.selectedModels,
-        synthesisModel: newResearch.synthesisModel,
-        startedAt: newResearch.startedAt,
-        llmResultStatuses: newResearch.llmResults.map((r) => ({
-          provider: r.provider,
-          model: r.model,
-          status: r.status,
-        })),
-      };
-      if (newResearch.completedAt !== undefined) {
-        summary.completedAt = newResearch.completedAt;
-      }
-      if (newResearch.favourite !== undefined) {
-        summary.favourite = newResearch.favourite;
-      }
-      if (newResearch.totalCostUsd !== undefined) {
-        summary.totalCostUsd = newResearch.totalCostUsd;
-      }
-      if (newResearch.partialFailure !== undefined) {
-        summary.partialFailure = newResearch.partialFailure;
-      }
-      setResearches((prev) => [summary, ...prev]);
+      setResearches((prev) => [researchToSummary(newResearch), ...prev]);
       return newResearch;
     },
     [getAccessToken]
