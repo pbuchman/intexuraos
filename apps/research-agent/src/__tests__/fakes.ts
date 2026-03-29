@@ -26,6 +26,7 @@ import type {
   RepositoryError,
   Research,
   ResearchRepository,
+  ResearchSummary,
   TitleGenerateResult,
   TitleGenerator,
 } from '../domain/research/index.js';
@@ -99,6 +100,62 @@ export class FakeResearchRepository implements ResearchRepository {
     const items = Array.from(this.researches.values())
       .filter((r) => r.userId === userId)
       .slice(0, limit);
+
+    return ok({ items });
+  }
+
+  async findSummariesByUserId(
+    userId: string,
+    options?: { limit?: number; cursor?: string }
+  ): Promise<Result<{ items: ResearchSummary[]; nextCursor?: string }, RepositoryError>> {
+    if (this.failNextFind) {
+      this.failNextFind = false;
+      return err({ code: 'FIRESTORE_ERROR', message: 'Test find failure' });
+    }
+
+    const limit = options?.limit ?? 50;
+    const allItems = Array.from(this.researches.values())
+      .filter((r) => r.userId === userId);
+
+    // Sort: favourites first (desc), then by startedAt desc
+    allItems.sort((a, b) => {
+      const aFav = a.favourite === true ? 1 : 0;
+      const bFav = b.favourite === true ? 1 : 0;
+      if (aFav !== bFav) {
+        return bFav - aFav;
+      }
+      return b.startedAt.localeCompare(a.startedAt);
+    });
+
+    const items: ResearchSummary[] = allItems.slice(0, limit).map((r) => {
+      const summary: ResearchSummary = {
+        id: r.id,
+        userId: r.userId,
+        title: r.title,
+        status: r.status,
+        selectedModels: r.selectedModels,
+        synthesisModel: r.synthesisModel,
+        startedAt: r.startedAt,
+        llmResultStatuses: r.llmResults.map((lr) => ({
+          provider: lr.provider,
+          model: lr.model,
+          status: lr.status,
+        })),
+      };
+      if (r.completedAt !== undefined) {
+        summary.completedAt = r.completedAt;
+      }
+      if (r.favourite !== undefined) {
+        summary.favourite = r.favourite;
+      }
+      if (r.totalCostUsd !== undefined) {
+        summary.totalCostUsd = r.totalCostUsd;
+      }
+      if (r.partialFailure !== undefined) {
+        summary.partialFailure = r.partialFailure;
+      }
+      return summary;
+    });
 
     return ok({ items });
   }

@@ -134,6 +134,27 @@ export interface Research {
   notionExportInfo?: NotionExportInfo;
 }
 
+/**
+ * Lightweight projection of Research for list views.
+ * Contains only the fields needed to render a research card in the list page.
+ * Avoids transferring large text fields (synthesizedResult, llmResults[].result, inputContexts[].content).
+ */
+export interface ResearchSummary {
+  id: string;
+  userId: string;
+  title: string;
+  status: ResearchStatus;
+  selectedModels: ResearchModel[];
+  synthesisModel: ResearchModel;
+  startedAt: string;
+  completedAt?: string;
+  favourite?: boolean;
+  /** Model-level statuses for progress indication (no result text) */
+  llmResultStatuses: { provider: LlmProvider; model: string; status: LlmResultStatus }[];
+  totalCostUsd?: number;
+  partialFailure?: PartialFailure;
+}
+
 export function createLlmResults(selectedModels: ResearchModel[]): LlmResult[] {
   return selectedModels.map((model) => ({
     provider: getProviderForModel(model),

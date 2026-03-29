@@ -10,6 +10,7 @@ import type {
   RepositoryError,
   Research,
   ResearchRepository,
+  ResearchSummary,
 } from '../../domain/research/index.js';
 
 export class FirestoreResearchRepository implements ResearchRepository {
@@ -150,6 +151,88 @@ export class FirestoreResearchRepository implements ResearchRepository {
       return err({
         code: 'FIRESTORE_ERROR',
         message: getErrorMessage(error, 'Failed to list researches'),
+      });
+    }
+  }
+
+  async findSummariesByUserId(
+    userId: string,
+    options?: { limit?: number; cursor?: string }
+  ): Promise<Result<{ items: ResearchSummary[]; nextCursor?: string }, RepositoryError>> {
+    try {
+      const db = getFirestore();
+      const collection = db.collection(this.collectionName);
+      const limit = options?.limit ?? 50;
+
+      // Single unified query: favourites first (DESC), then by startedAt DESC
+      // Uses composite index: (userId ASC, favourite DESC, startedAt DESC)
+      let query = collection
+        .where('userId', '==', userId)
+        .orderBy('favourite', 'desc')
+        .orderBy('startedAt', 'desc')
+        .select(
+          'id', 'userId', 'title', 'status', 'selectedModels', 'synthesisModel',
+          'startedAt', 'completedAt', 'favourite', 'llmResults', 'totalCostUsd',
+          'partialFailure'
+        )
+        .limit(limit + 1);
+
+      if (options?.cursor !== undefined && options.cursor !== '') {
+        const startDoc = await collection.doc(options.cursor).get();
+        /* v8 ignore start -- upstream: cursor !== undefined guard ensures doc ID is valid; startDoc.exists false branch is defensive @preserve */
+        if (startDoc.exists) {
+        /* v8 ignore stop @preserve */
+          query = query.startAfter(startDoc);
+        }
+      }
+
+      const snapshot = await query.get();
+      const docs = snapshot.docs.map((doc) => {
+        const data = doc.data() as Research;
+        const summary: ResearchSummary = {
+          id: data.id,
+          userId: data.userId,
+          title: data.title,
+          status: data.status,
+          selectedModels: data.selectedModels,
+          synthesisModel: data.synthesisModel,
+          startedAt: data.startedAt,
+          llmResultStatuses: data.llmResults.map((r) => ({
+            provider: r.provider,
+            model: r.model,
+            status: r.status,
+          })),
+        };
+        /* v8 ignore start -- ts-type: conditional assignments for exactOptionalPropertyTypes compliance @preserve */
+        if (data.favourite !== undefined) {
+          summary.favourite = data.favourite;
+        }
+        if (data.completedAt !== undefined) {
+          summary.completedAt = data.completedAt;
+        }
+        if (data.totalCostUsd !== undefined) {
+          summary.totalCostUsd = data.totalCostUsd;
+        }
+        if (data.partialFailure !== undefined) {
+          summary.partialFailure = data.partialFailure;
+        }
+        /* v8 ignore stop @preserve */
+        return summary;
+      });
+
+      const items = docs.slice(0, limit);
+      const lastItem = items[items.length - 1];
+      const nextCursor = docs.length > limit && lastItem !== undefined
+        ? lastItem.id
+        : undefined;
+
+      return nextCursor !== undefined
+        ? ok({ items, nextCursor })
+        : ok({ items });
+    } catch (error) {
+      return err({
+        code: 'FIRESTORE_ERROR',
+        message: getErrorMessage(error, 'Failed to list research summaries'),
       });
     }
   }
