@@ -28,10 +28,10 @@ export const EXECUTION_AGENT_PROMPT =
   'Implement the requirements defined in the linked Linear issue and its comments (newest first). Follow the test plan, write code, run CI, and create a PR.';
 
 /**
- * Request to start Execution Agent implementation from a completed planning design task.
+ * Request to start Execution Agent implementation.
  */
 export interface SubmitToExecutionAgentRequest {
-  /** The ID of the completed planning design task */
+  /** The ID of any task in the issue group. If not a planning task, the planning task is resolved automatically via linearIssueId. */
   originalTaskId: string;
   /** User ID submitting the request */
   userId: string;
@@ -92,8 +92,8 @@ export interface SubmitToExecutionAgentDeps {
  * Submit to Execution Agent use case.
  *
  * Workflow:
- * 1. Fetch original task and validate it belongs to user
- * 2. Validate status is 'planned' and agentType is 'planning'
+ * 1. Fetch requested task and validate it belongs to user
+ * 2. Resolve to planning task (pass-through if already planning, otherwise look up via linearIssueId)
  * 3. Validate task has a linked Linear issue
  * 4. Guard against duplicate implementation
  * 5. Check for active tasks on same Linear issue
@@ -124,29 +124,28 @@ export async function submitToExecutionAgent(
     });
   }
 
-  let planningTask = originalTaskResult.value;
+  const requestedTask = originalTaskResult.value;
 
-  // Step 2: Resolve to planning task if needed
-  // When /implement is called on a non-planning task (review, remediation, etc.),
-  // resolve to the planning task in the same issue group via linearIssueId.
-  if (planningTask.status !== 'planned' || planningTask.agentType !== 'planning') {
-    let resolved = false;
-
-    if (planningTask.linearIssueId !== undefined) {
-      const resolveResult = await codeTaskRepo.findPlannedTaskByLinearIssue(planningTask.linearIssueId);
-      if (resolveResult.ok && resolveResult.value !== null) {
-        logger.info(
-          { requestedTaskId: planningTask.id, resolvedTaskId: resolveResult.value.id, linearIssueId: planningTask.linearIssueId },
-          'Resolved non-planning task to planning task for implementation'
-        );
-        planningTask = resolveResult.value;
-        resolved = true;
-      }
+  // Step 2: Resolve to planning task if needed.
+  // Users often click /implement from whichever task they're viewing (review, remediation),
+  // not necessarily the planning task. Resolve via linearIssueId so any group member works.
+  let planningTask = requestedTask;
+  if (requestedTask.status !== 'planned' || requestedTask.agentType !== 'planning') {
+    if (requestedTask.linearIssueId === undefined) {
+      logger.warn(
+        { taskId: requestedTask.id, status: requestedTask.status, agentType: requestedTask.agentType },
+        'Attempted to start Execution Agent on non-planning task without linearIssueId'
+      );
+      return err({
+        code: 'invalid_status',
+        message: 'Task must be a completed planning task to start implementation',
+      });
     }
 
-    if (!resolved) {
+    const resolveResult = await codeTaskRepo.findPlannedTaskByLinearIssue(requestedTask.linearIssueId);
+    if (!resolveResult.ok || resolveResult.value?.userId !== userId) {
       logger.warn(
-        { taskId: planningTask.id, status: planningTask.status, agentType: planningTask.agentType },
+        { taskId: requestedTask.id, status: requestedTask.status, agentType: requestedTask.agentType, linearIssueId: requestedTask.linearIssueId },
         'Attempted to start Execution Agent on non-planning task'
       );
       return err({
@@ -154,6 +153,12 @@ export async function submitToExecutionAgent(
         message: 'Task must be a completed planning task to start implementation',
       });
     }
+
+    logger.info(
+      { requestedTaskId: requestedTask.id, resolvedTaskId: resolveResult.value.id, linearIssueId: requestedTask.linearIssueId },
+      'Resolved non-planning task to planning task for implementation'
+    );
+    planningTask = resolveResult.value;
   }
 
   // Step 3: Validate task has a linked Linear issue
