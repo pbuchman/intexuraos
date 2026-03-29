@@ -17,7 +17,7 @@ The current code tasks list (`GET /code/tasks`) returns flat, task-level paginat
 - **No modifications to existing code.** The current endpoint, hook, page, and utilities remain untouched. All new code lives in new files.
 - **New duplicate view.** A parallel page at `/code-tasks-v3` (hidden, no sidebar nav entry) with a new backend endpoint.
 - **Existing components may be imported**, not copied. `IssueGroupRow`, `CodeTaskLogsModal`, `Layout`, etc. are reused.
-- **Archived tasks excluded.** The backend query excludes archived tasks entirely. Archived task display is a separate future concern.
+- **Archived tasks excluded (v1).** The backend query excludes archived tasks entirely. The current `CodeTasksPage` supports an "Archived" filter tab, so v3 has a parity gap here. Before v3 replaces the default view, an `archived` value must be added to `groupStatus` (or a separate `includeArchived` flag). This is explicitly scoped as a follow-up — see "Future Work" section.
 
 ## Design
 
@@ -27,12 +27,12 @@ The current code tasks list (`GET /code/tasks`) returns flat, task-level paginat
 
 **Query Parameters:**
 
-| Param         | Type            | Default          | Description                                                      |
-| ------------- | --------------- | ---------------- | ---------------------------------------------------------------- |
-| `groupStatus` | comma-separated | all non-archived | Filter: `active`, `needs-action`, `done`, `failed`               |
-| `sortBy`      | string          | `linear-id`      | One of: `linear-id`, `pr-number`, `created-time`, `started-time` |
-| `limit`       | number          | 20               | Groups per page (max 100)                                        |
-| `cursor`      | string          | (none)           | Base64-encoded `{ index: number }` for group-level pagination    |
+| Param         | Type            | Default          | Description                                                        |
+| ------------- | --------------- | ---------------- | ------------------------------------------------------------------ |
+| `groupStatus` | comma-separated | all non-archived | Filter: `active`, `needs-action`, `done`, `failed`                 |
+| `sortBy`      | string          | `linear-id`      | One of: `linear-id`, `pr-number`, `created-time`, `started-time`   |
+| `limit`       | number          | 20               | Groups per page (max 100)                                          |
+| `cursor`      | string          | (none)           | Opaque cursor token for group-level pagination (see Cursor Design) |
 
 **Response:**
 
@@ -123,7 +123,15 @@ listAllNonArchived(userId: string): Promise<Result<CodeTask[], RepositoryError>>
 - No limit, no cursor — returns all matching documents
 - `NON_ARCHIVED_STATUSES`: `['queued', 'dispatched', 'running', 'planned', 'implemented', 'reviewed', 'failed', 'interrupted', 'cancelled']` (9 values, within Firestore's 30-value `in` limit)
 
-### Backend — Cursor Encoding
+### Backend — Cursor Design
+
+**Why index-based cursors are acceptable here:**
+
+The backend re-fetches and re-groups all non-archived tasks on every request (steps 1-8). Each request produces a fresh, deterministic group array. The cursor is used to slice into *that specific request's* result set. Unlike traditional database cursors where rows can be inserted between pages, here the full dataset is recomputed per-request, so index-based pagination is internally consistent.
+
+However, between a "page 1" and "Load More page 2" request, the underlying tasks may change (new tasks dispatched, statuses updated). This means groups can shift positions — a group at index 20 in request 1 may be at index 19 in request 2. This is an accepted trade-off: worst case, the user sees a duplicate group or skips one. The `mergeGroups()` function on the frontend deduplicates by `linearIssueId`, so duplicates are harmless. Skipped groups appear on refresh.
+
+**Cursor encoding:**
 
 ```typescript
 function encodeCursor(index: number): string {
@@ -136,6 +144,8 @@ function decodeCursor(cursor: string): { index: number } {
 ```
 
 Base64url-encoded JSON. The cursor represents the position in the sorted+filtered group list. On refresh (no cursor), pagination starts from index 0.
+
+**Future consideration:** If cursor drift proves problematic in practice, the cursor can be upgraded to keyset-based (encoding the last group's sort key + `linearIssueId` tiebreaker) without changing the opaque contract — the frontend treats cursors as opaque strings.
 
 ### Frontend — New Hook: `useIssueGroups.ts`
 
@@ -167,7 +177,11 @@ function useIssueGroups(options: {
 
 - **Initial load:** `listIssueGroups(token, { groupStatus, sortBy, limit: 20 })`
 - **Load more:** `listIssueGroups(token, { groupStatus, sortBy, limit: 20, cursor })` — appends groups
-- **Refresh:** `listIssueGroups(token, { groupStatus, sortBy, limit: Math.max(groups.length, 20) })` — no cursor, expanded limit to cover all loaded groups. Uses `mergeGroups()` for reference preservation.
+- **Refresh:** Multi-request refill when loaded groups exceed `limit`. The hook tracks `loadedGroupCount` (number of groups currently displayed). On refresh:
+  1. If `loadedGroupCount <= 100`: single request with `limit: Math.max(loadedGroupCount, 20)`, no cursor.
+  2. If `loadedGroupCount > 100`: sequential requests of `limit: 100` each, using cursors, until `loadedGroupCount` groups are fetched or no more pages remain.
+
+  Each batch is merged via `mergeGroups()` for reference preservation. This ensures refresh always honors the documented max limit of 100.
 - **Filter/sort change:** Resets to page 1, triggers fresh fetch with new params
 - **Polling:** 30s interval when `counts.active > 0`, tab visibility refresh
 - **Rapid polling:** 3s for 30s after user actions (same pattern as current)
@@ -369,6 +383,7 @@ No existing behavior is changed.
 
 ## Future Work (Not In Scope)
 
+- **Archived group status support** — add `archived` as a valid `groupStatus` value so v3 achieves filter parity with the current view before it replaces `CodeTasksPage` as the default. Required before sidebar navigation swap.
 - **Auto-archive merged tasks after 7 days** — background job that archives tasks with merged PRs, reducing the active document count (tracked separately in Linear)
 - **Archived tasks UI** — separate view/section for browsing archived tasks
 - **Denormalized `code_task_groups` collection** — pre-computed group index for O(1) group queries (Option A from initial analysis), justified when task counts grow further
