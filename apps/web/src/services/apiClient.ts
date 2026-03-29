@@ -134,7 +134,7 @@ export async function apiRequest<T>(
     const raw = json as Record<string, unknown>;
     if (typeof raw['message'] === 'string' && typeof raw['statusCode'] === 'number') {
       throw new ApiError(
-        typeof raw['error'] === 'string' ? raw['error'] : 'UNKNOWN',
+        'UNKNOWN',
         raw['message'],
         raw['statusCode']
       );

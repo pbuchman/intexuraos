@@ -242,6 +242,7 @@ describe('Intexura Fastify Plugin', () => {
       expect(body.error.message).toBe('Route not found');
       expect(body.diagnostics).toBeDefined();
       expect(body.diagnostics.requestId).toBeDefined();
+      expect(typeof body.diagnostics.durationMs).toBe('number');
     });
 
     it('includes x-request-id header in not-found response', async () => {
