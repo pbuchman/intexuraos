@@ -885,7 +885,7 @@ describe('internalIssuesRoutes', () => {
       expect(body.data.issues[0]?.parentIdentifier).toBe('ENG-100');
     });
 
-    it('returns 500 when parent identifier lookup fails', async () => {
+    it('returns 502 when parent identifier lookup fails', async () => {
       fakeIssueRepo.seedIssue({
         id: 'issue-parent',
         identifier: 'ENG-100',
