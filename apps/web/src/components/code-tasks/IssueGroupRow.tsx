@@ -177,6 +177,34 @@ function summaryOrPrompt(task: { result?: { summary?: string }; sanitizedPrompt:
   return words.length > 100 ? words.slice(0, 100).join(' ') + '...' : task.sanitizedPrompt;
 }
 
+function IssueIdentifierLink({
+  linearIssue,
+  linkClassName,
+}: {
+  linearIssue: NonNullable<IssueGroup['linearIssue']>;
+  linkClassName: string;
+}): React.JSX.Element {
+  return (
+    <span className="inline-flex flex-wrap items-center">
+      {linearIssue.parentIdentifier !== null && linearIssue.parentIdentifier !== undefined ? (
+        <span className="font-mono text-sm text-slate-400">
+          {linearIssue.parentIdentifier}
+          <span className="mx-1 text-slate-500">→</span>
+        </span>
+      ) : null}
+      <a
+        href={linearIssue.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e): void => { e.stopPropagation(); }}
+        className={linkClassName}
+      >
+        {linearIssue.identifier}
+      </a>
+    </span>
+  );
+}
+
 // --- Main component ---
 
 const IssueGroupRow = memo(function IssueGroupRow({
@@ -284,15 +312,10 @@ const IssueGroupRow = memo(function IssueGroupRow({
             <div className="min-w-0">
               {group.linearIssue !== undefined ? (
                 <>
-                  <a
-                    href={group.linearIssue.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e): void => { e.stopPropagation(); }}
-                    className="font-mono text-sm text-blue-500 hover:text-blue-400 hover:underline"
-                  >
-                    {group.linearIssue.identifier}
-                  </a>
+                  <IssueIdentifierLink
+                    linearIssue={group.linearIssue}
+                    linkClassName="font-mono text-sm text-blue-500 hover:text-blue-400 hover:underline"
+                  />
                   <p className="truncate text-xs text-slate-500 dark:text-slate-400">
                     {group.linearIssue.title}
                   </p>
@@ -368,15 +391,10 @@ const IssueGroupRow = memo(function IssueGroupRow({
             <div className="min-w-0 flex-1">
               {group.linearIssue !== undefined ? (
                 <span className="text-sm">
-                  <a
-                    href={group.linearIssue.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e): void => { e.stopPropagation(); }}
-                    className="font-mono text-blue-500 hover:text-blue-400 hover:underline"
-                  >
-                    {group.linearIssue.identifier}
-                  </a>
+                  <IssueIdentifierLink
+                    linearIssue={group.linearIssue}
+                    linkClassName="font-mono text-blue-500 hover:text-blue-400 hover:underline"
+                  />
                   <span className="text-slate-400"> · </span>
                   <span className="text-xs text-slate-500 dark:text-slate-400">{createdRelative}</span>
                 </span>
@@ -467,6 +485,10 @@ const IssueGroupRow = memo(function IssueGroupRow({
 }, (prev, next) =>
   prev.timeTick === next.timeTick &&
   prev.group.linearIssueId === next.group.linearIssueId &&
+  prev.group.linearIssue?.identifier === next.group.linearIssue?.identifier &&
+  prev.group.linearIssue?.parentIdentifier === next.group.linearIssue?.parentIdentifier &&
+  prev.group.linearIssue?.title === next.group.linearIssue?.title &&
+  prev.group.linearIssue?.url === next.group.linearIssue?.url &&
   prev.group.aggregateStatus === next.group.aggregateStatus &&
   prev.group.latestTask.updatedAt === next.group.latestTask.updatedAt &&
   prev.group.tasks.length === next.group.tasks.length &&
