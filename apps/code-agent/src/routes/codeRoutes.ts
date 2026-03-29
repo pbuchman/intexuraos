@@ -1198,7 +1198,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       request.log.info({ userId, promptLength: body.prompt.length }, 'Submitting code task from UI');
 
-      // Check rate limits (concurrent, hourly, daily/monthly cost, prompt length)
+      // Check rate limits (concurrent, hourly, prompt length)
       const limitCheck = await rateLimitService.checkLimits(userId, body.prompt.length);
       if (!limitCheck.ok) {
         const { error } = limitCheck;
