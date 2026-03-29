@@ -6,7 +6,7 @@ import { IssueGroupRow } from '@/components/code-tasks/IssueGroupRow';
 import { useAuth } from '@/context';
 import { useCodeTasks, useTimeTick } from '@/hooks';
 import { ApiError } from '@/services/apiClient';
-import { startImplementation, retryCodeTask } from '@/services/codeAgentApi';
+import { startImplementation, retryCodeTask, archiveCodeTask } from '@/services/codeAgentApi';
 import { ACTIVE_STATUSES, groupByLinearIssue, sortIssueGroups } from '@/utils/issueGroups';
 import type { IssueGroup, GroupStatus, SortOption } from '@/utils/issueGroups';
 import type { CodeTaskStatus } from '@/types';
@@ -211,11 +211,12 @@ function SortSelector({ activeSort, onChangeSort }: SortSelectorProps): React.JS
 
 function ColumnHeader(): React.JSX.Element {
   return (
-    <div className="mb-1 hidden grid-cols-[1fr_1fr_140px_120px] px-4 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500 lg:grid">
+    <div className="mb-1 hidden grid-cols-[1fr_1fr_140px_120px_36px] px-4 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500 lg:grid">
       <div>Issue</div>
       <div>Pipeline</div>
       <div>Time</div>
-      <div>Actions</div>
+      <div>Output</div>
+      <div>Logs</div>
     </div>
   );
 }
@@ -231,7 +232,7 @@ export function CodeTasksPage(): React.JSX.Element {
   const [actioningTaskId, setActioningTaskId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<ApiError | null>(null);
   const actionInFlightRef = useRef(false);
-  const lastActionRef = useRef<{ taskId: string; action: 'retry' | 'implement' } | null>(null);
+  const lastActionRef = useRef<{ taskId: string; action: 'retry' | 'implement' | 'archive' } | null>(null);
 
   // When the Archived filter is active, include 'archived' in the API status filter
   // so the backend returns archived tasks. Otherwise use default (non-archived) statuses.
@@ -320,7 +321,7 @@ export function CodeTasksPage(): React.JSX.Element {
   }, []);
 
   const handleAction = useCallback(
-    async (taskId: string, action: 'delete' | 'retry' | 'implement') => {
+    async (taskId: string, action: 'delete' | 'retry' | 'implement' | 'archive') => {
       if (action === 'delete') {
         void deleteTask(taskId);
         return;
@@ -333,6 +334,8 @@ export function CodeTasksPage(): React.JSX.Element {
         const token = await getAccessToken();
         if (action === 'implement') {
           await startImplementation(token, taskId);
+        } else if (action === 'archive') {
+          await archiveCodeTask(token, taskId);
         } else {
           await retryCodeTask(token, { taskId });
         }
@@ -353,7 +356,7 @@ export function CodeTasksPage(): React.JSX.Element {
   );
 
   const fireAction = useCallback(
-    (taskId: string, action: 'delete' | 'retry' | 'implement'): void => {
+    (taskId: string, action: 'delete' | 'retry' | 'implement' | 'archive'): void => {
       void handleAction(taskId, action);
     },
     [handleAction],
