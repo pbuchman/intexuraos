@@ -130,6 +130,15 @@ export async function apiRequest<T>(
     json === null ||
     !('success' in json)
   ) {
+    // Some endpoints return Fastify's default error format without the `success` envelope
+    const raw = json as Record<string, unknown>;
+    if (typeof raw['message'] === 'string' && typeof raw['statusCode'] === 'number') {
+      throw new ApiError(
+        'UNKNOWN',
+        raw['message'],
+        raw['statusCode']
+      );
+    }
     throw new ApiError('UNKNOWN', 'Invalid response format', response.status);
   }
 
