@@ -12,6 +12,7 @@ import {
 import type {
   CreateResearchRequest,
   Research,
+  ResearchSummary,
   SaveDraftRequest,
 } from '@/services/researchAgentApi.types';
 import {
@@ -195,7 +196,7 @@ export function useResearch(id: string): {
  * without expensive Firestore listeners.
  */
 export function useResearches(): {
-  researches: Research[];
+  researches: ResearchSummary[];
   loading: boolean;
   loadingMore: boolean;
   refreshing: boolean;
@@ -206,9 +207,10 @@ export function useResearches(): {
   deleteResearch: (id: string) => Promise<void>;
   createResearch: (request: CreateResearchRequest) => Promise<Research>;
   saveDraft: (request: SaveDraftRequest) => Promise<{ id: string }>;
+  updateResearchLocally: (id: string, updates: Partial<ResearchSummary>) => void;
 } {
   const { getAccessToken } = useAuth();
-  const [researches, setResearches] = useState<Research[]>([]);
+  const [researches, setResearches] = useState<ResearchSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -308,7 +310,33 @@ export function useResearches(): {
     async (request: CreateResearchRequest): Promise<Research> => {
       const token = await getAccessToken();
       const newResearch = await createResearchApi(token, request);
-      setResearches((prev) => [newResearch, ...prev]);
+      const summary: ResearchSummary = {
+        id: newResearch.id,
+        userId: newResearch.userId,
+        title: newResearch.title,
+        status: newResearch.status,
+        selectedModels: newResearch.selectedModels,
+        synthesisModel: newResearch.synthesisModel,
+        startedAt: newResearch.startedAt,
+        llmResultStatuses: newResearch.llmResults.map((r) => ({
+          provider: r.provider,
+          model: r.model,
+          status: r.status,
+        })),
+      };
+      if (newResearch.completedAt !== undefined) {
+        summary.completedAt = newResearch.completedAt;
+      }
+      if (newResearch.favourite !== undefined) {
+        summary.favourite = newResearch.favourite;
+      }
+      if (newResearch.totalCostUsd !== undefined) {
+        summary.totalCostUsd = newResearch.totalCostUsd;
+      }
+      if (newResearch.partialFailure !== undefined) {
+        summary.partialFailure = newResearch.partialFailure;
+      }
+      setResearches((prev) => [summary, ...prev]);
       return newResearch;
     },
     [getAccessToken]
@@ -324,6 +352,15 @@ export function useResearches(): {
     [getAccessToken, refresh]
   );
 
+  const updateResearchLocally = useCallback(
+    (id: string, updates: Partial<ResearchSummary>): void => {
+      setResearches((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, ...updates } : r))
+      );
+    },
+    []
+  );
+
   return {
     researches,
     loading,
@@ -336,5 +373,6 @@ export function useResearches(): {
     deleteResearch,
     createResearch,
     saveDraft,
+    updateResearchLocally,
   };
 }
