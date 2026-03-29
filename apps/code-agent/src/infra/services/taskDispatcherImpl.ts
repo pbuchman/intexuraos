@@ -63,8 +63,6 @@ interface WorkerTaskRequest {
   prNumber?: number;
   continuationPrNumber?: number;
   continuationPrBranch?: string;
-  planningPrBranch?: string;
-  planningPrUrl?: string;
   reviewTypes?: string[];
 }
 
@@ -142,12 +140,6 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     }
     if (request.continuationPrBranch !== undefined) {
       taskRequest.continuationPrBranch = request.continuationPrBranch;
-    }
-    if (request.planningPrBranch !== undefined) {
-      taskRequest.planningPrBranch = request.planningPrBranch;
-    }
-    if (request.planningPrUrl !== undefined) {
-      taskRequest.planningPrUrl = request.planningPrUrl;
     }
     if (request.reviewTypes !== undefined) {
       taskRequest.reviewTypes = request.reviewTypes;
