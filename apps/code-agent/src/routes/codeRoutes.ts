@@ -1133,7 +1133,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                 properties: {
                   code: {
                     type: 'string',
-                    enum: ['concurrent_limit', 'hourly_limit', 'monthly_cost_limit', 'prompt_too_long'],
+                    enum: ['concurrent_limit', 'hourly_limit', 'prompt_too_long'],
                   },
                   message: { type: 'string' },
                   retryAfter: { type: 'string' },
