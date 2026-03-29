@@ -66,7 +66,7 @@ export interface SystemPromptParams {
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-planning',
   description: 'Planning agent system prompt for autonomous code task planning',
-  version: '3.1.2',
+  version: '3.2.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     return `[SYSTEM CONTEXT]
@@ -199,7 +199,7 @@ PLANNING_AGENT_FINAL:
 - Plan PR: <full GitHub PR URL or empty — NEVER for simple tasks, ALWAYS when subtasks are defined>
 - Parallel breakdown proof: <required when Complex task=1; must show service boundaries and contracts between subissues — empty otherwise>
 - Clarification message: <REQUIRED for unclear outcomes; MUST be empty for successfully planned outcomes>
-- Summary: <3-5 sentences on one line: objective narrative of what you analyzed, decided, and produced>
+- Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was the task, what was decided (simple/complex), what artifacts were produced (plan doc, subtasks, PR), why unclear (if applicable). The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.
@@ -211,7 +211,7 @@ Note: For complex planned outcomes, you MUST include explicit proof of the paral
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '5.1.3',
+  version: '5.2.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const hasContinuationPr =
@@ -348,7 +348,7 @@ EXECUTION_AGENT_FINAL:
 - trivial_task: <0|1>
 - subagents: <explicit role + scope list, or none if trivial_task=1>
 - Skill sequence proof: <evidence that superpowers:executing-plans happened before superpowers:requesting-code-review>
-- Summary: <3-5 sentences on one line: objective narrative of what you implemented, tested, and delivered>
+- Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was implemented, key decisions or approach, what was tested, outcome (PR, CI status). The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.`;
@@ -358,7 +358,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const remediationPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-remediation',
   description: 'Remediation agent system prompt for addressing review findings on an existing PR',
-  version: '3.0.0',
+  version: '3.1.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const continuationPrNumber = params.continuationPrNumber;
@@ -445,7 +445,7 @@ REMEDIATION_AGENT_FINAL:
 - Outcome: <implemented|already_completed>
 - PR: <full GitHub PR URL>
 - requires_re_review: <0|1>
-- Summary: <3-5 sentences on one line: objective narrative of what findings were addressed, what was skipped, and what was pushed>
+- Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what review findings were addressed, what was skipped and why, what was pushed. The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.`;
@@ -455,7 +455,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pull-request',
   description: 'Pull request agent system prompt for addressing PR review feedback',
-  version: '4.0.3',
+  version: '4.1.0',
   build(params: SystemPromptParams): string {
     const {
       taskId,
@@ -578,7 +578,7 @@ PULL_REQUEST_AGENT_FINAL:
 - Tracking comment ID: <numeric ID from initial POST response>
 - Tracking comment: updated
 - Total PR comments posted: 1
-- Summary: <3-5 sentences on one line: objective narrative of what you investigated, implemented, and delivered>
+- Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what PR feedback was addressed, what changes were made, what is the outcome. The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.`;
@@ -588,7 +588,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const prReviewOverlayPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pr-review-overlay',
   description: 'Conditional PR review overlay appended to planning and execution prompts',
-  version: '3.0.2',
+  version: '3.1.0',
   build(params: SystemPromptParams): string {
     const { taskUrl } = params;
     return `
@@ -672,7 +672,7 @@ PULL_REQUEST_AGENT_FINAL:
 - Tracking comment ID: <numeric ID from initial POST response>
 - Tracking comment: updated
 - Total PR comments posted: 1
-- Summary: <3-5 sentences on one line: objective narrative of what you investigated, implemented, and delivered>
+- Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what PR feedback was addressed, what changes were made, what is the outcome. The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.`;
@@ -745,7 +745,7 @@ Rules:
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '8.2.1',
+  version: '8.3.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
       params;
@@ -1020,7 +1020,7 @@ REVIEW_AGENT_FINAL:
 - requirements_tracker_updated: <yes|no — whether the requirements tracker comment was created/updated>
 - gh_actions_status: <all passed|N failed|pending|not yet triggered — GitHub Actions check result>
 - needs_remediation: <0|1 — 1 if any finding requires code changes that bring value to the codebase, 0 if clean or all findings are informational/cosmetic only>
-- Summary: <3-5 sentences on one line: what you reviewed, key findings, overall quality assessment>
+- Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was reviewed, key findings, overall quality assessment, remediation needed. The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.`
