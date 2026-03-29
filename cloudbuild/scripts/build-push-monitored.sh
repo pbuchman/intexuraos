@@ -36,9 +36,9 @@ push_with_retry() {
 }
 
 # Multi-arch services need buildx to produce a manifest for both amd64 and arm64.
-# claude-worker contains native binaries (Claude CLI, terraform, gdb) that crash
+# code-worker contains native binaries (Claude CLI, terraform, gdb) that crash
 # under Rosetta emulation on Apple Silicon — it must run natively on both archs.
-MULTI_ARCH_SERVICES="claude-worker"
+MULTI_ARCH_SERVICES="code-worker"
 
 if echo "$MULTI_ARCH_SERVICES" | grep -qw "$SERVICE_NAME"; then
   echo "🔨 [BUILD] Multi-arch build for $SERVICE_NAME (amd64 + arm64)..."
