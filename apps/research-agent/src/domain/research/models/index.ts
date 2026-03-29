@@ -10,6 +10,7 @@ export {
   type Research,
   type ResearchModel,
   type ResearchStatus,
+  type ResearchSummary,
   type ShareInfo,
   createDraftResearch,
   createEnhancedResearch,
