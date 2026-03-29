@@ -133,7 +133,7 @@ export function isTaskMergeable(task: {
   linearIssue?: { labels: { name: string }[] };
 }): boolean {
   const hasLabel = hasMergeReadyLabel(task.linearIssue?.labels);
-  const passedReview = task.result?.needs_remediation === REMEDIATION_NOT_NEEDED;
+  const passedReview = task.status === 'reviewed' && task.result?.needs_remediation === REMEDIATION_NOT_NEEDED;
 
   if (!hasLabel && !passedReview) {
     return false;
