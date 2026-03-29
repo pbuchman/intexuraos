@@ -291,7 +291,6 @@ const LIMITS = {
   maxConcurrentTasks: 3,
   maxTasksPerHour: 10,
   maxPromptLength: 10000,
-  monthlyCostCap: 200, // dollars
   estimatedCostPerTask: 1.17,
 };
 ```
@@ -579,7 +578,6 @@ Layer 3: linearIssueId active check (one active task per issue)
 type RateLimitErrorCode =
   | 'concurrent_limit'    // 429 - max 3 concurrent
   | 'hourly_limit'        // 429 - max 10/hour
-  | 'monthly_cost_limit'  // 429 - $200/month cap
   | 'prompt_too_long'     // 429 - >10000 chars
   | 'service_unavailable'; // 503 - usage DB unreachable
 ```
