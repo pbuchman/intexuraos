@@ -1,5 +1,5 @@
 export const metadata = {
-  id: '072',
+  id: '073',
   name: 'execution-memory-pipeline-indexes',
   description: 'Add composite indexes for execution memory backlog processing',
   createdAt: '2026-03-25',

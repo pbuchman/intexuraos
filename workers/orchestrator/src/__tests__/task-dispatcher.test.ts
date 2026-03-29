@@ -3,7 +3,6 @@ import { exec, type ChildProcess } from 'node:child_process';
 import {
   TaskDispatcher,
   type IsolationConfig,
-
   getTaskEventUrl,
   hasFatalExitCodeField,
 } from '../services/task-dispatcher.js';
@@ -8283,7 +8282,6 @@ describe('TaskDispatcher', () => {
     });
   });
 });
-
 
 describe('hasFatalExitCodeField', () => {
   it('returns the field for fatal_exit_code_137', () => {

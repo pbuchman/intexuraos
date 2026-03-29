@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { collections, indexes, metadata, up } from '../072_execution-memory-pipeline-indexes.mjs';
+import { collections, indexes, metadata, up } from '../073_execution-memory-pipeline-indexes.mjs';
 
-describe('072-execution-memory-pipeline-indexes migration', () => {
+describe('073-execution-memory-pipeline-indexes migration', () => {
   it('exports the expected metadata', () => {
     expect(metadata).toMatchObject({
-      id: '072',
+      id: '073',
       name: 'execution-memory-pipeline-indexes',
       description: 'Add composite indexes for execution memory backlog processing',
       createdAt: '2026-03-25',
