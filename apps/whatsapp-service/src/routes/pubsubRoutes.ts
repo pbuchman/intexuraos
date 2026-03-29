@@ -230,6 +230,24 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         }
 
         if (!result.ok) {
+          const isPermanentError = result.error.httpStatus !== undefined
+            && result.error.httpStatus >= 400
+            && result.error.httpStatus < 500;
+
+          if (isPermanentError) {
+            request.log.error(
+              {
+                messageId: body.message.messageId,
+                userId: eventData.userId,
+                correlationId: eventData.correlationId,
+                error: result.error.message,
+                permanent: true,
+              },
+              'Failed to send WhatsApp message (permanent, will not retry)'
+            );
+            return await reply.ok({});
+          }
+
           request.log.error(
             {
               messageId: body.message.messageId,

@@ -545,6 +545,85 @@ describe('Pub/Sub Routes', () => {
       expect(responseBody.error.message).toBe('WhatsApp API error for CTA URL');
     });
 
+    it('returns 200 (ack) when WhatsApp API returns permanent 4xx error', async () => {
+      await userMappingRepository.saveMapping('user-perm-err', ['+48111222333']);
+      messageSender.setFail(true, {
+        code: 'PERSISTENCE_ERROR',
+        message: 'WhatsApp API error: 400 - body too long',
+        httpStatus: 400,
+      });
+
+      const body = createPubSubBody({
+        type: 'whatsapp.message.send',
+        userId: 'user-perm-err',
+        message: 'Test message',
+        correlationId: 'corr-perm-err',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const responseBody = JSON.parse(response.body) as { success: boolean };
+      expect(responseBody.success).toBe(true);
+    });
+
+    it('returns 502 when WhatsApp API returns transient 5xx error', async () => {
+      await userMappingRepository.saveMapping('user-transient', ['+48111222333']);
+      messageSender.setFail(true, {
+        code: 'PERSISTENCE_ERROR',
+        message: 'WhatsApp API error: 500 - internal server error',
+        httpStatus: 500,
+      });
+
+      const body = createPubSubBody({
+        type: 'whatsapp.message.send',
+        userId: 'user-transient',
+        message: 'Test message',
+        correlationId: 'corr-transient',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(502);
+    });
+
+    it('returns 502 when error has no httpStatus (timeout/network)', async () => {
+      await userMappingRepository.saveMapping('user-timeout', ['+48111222333']);
+      messageSender.setFail(true, {
+        code: 'PERSISTENCE_ERROR',
+        message: 'WhatsApp request timed out after 30000ms',
+      });
+
+      const body = createPubSubBody({
+        type: 'whatsapp.message.send',
+        userId: 'user-timeout',
+        message: 'Test message',
+        correlationId: 'corr-timeout',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(502);
+    });
+
     it('logs warning when outbound message save fails (non-fatal)', async () => {
       await userMappingRepository.saveMapping('user-save-fail', ['+48123456789']);
       outboundMessageRepository.setFail(true, {
