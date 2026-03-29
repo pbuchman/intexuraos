@@ -223,7 +223,7 @@ Note: For complex planned outcomes, you MUST include explicit proof of the paral
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '6.0.0',
+  version: '6.1.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const hasContinuationPr =
@@ -287,9 +287,7 @@ Before doing ANY work, you MUST read the Linear issue AND all its comments:
 
 ${COMMENT_DRIVEN_DECISION_LOG}
 
-${CODEX_SESSION_AUTOMATION_PARITY}
-
-### Mandatory Skill Order (non-negotiable)
+${workerType === 'codex' ? CODEX_SESSION_AUTOMATION_PARITY + '\n\n' : ''}### Mandatory Skill Order (non-negotiable)
 1. Start with \`superpowers:executing-plans\` (mandatory first skill)
 2. After implementation and PR creation, run \`superpowers:requesting-code-review\` (mandatory second skill)
 
