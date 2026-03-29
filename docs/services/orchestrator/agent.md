@@ -35,8 +35,6 @@ interface OrchestratorTools {
     trackingCommentId?: string;
     continuationPrNumber?: number;
     continuationPrBranch?: string;
-    planningPrBranch?: string;
-    planningPrUrl?: string;
     reviewTypes?: ('code_quality' | 'security' | 'architecture' | 'plan_review')[];
     slug?: string;
     webhookUrl: string;
@@ -146,8 +144,6 @@ interface Task {
   trackingCommentId?: string;
   continuationPrNumber?: number;
   continuationPrBranch?: string;
-  planningPrBranch?: string;
-  planningPrUrl?: string;
   reviewTypes?: ('code_quality' | 'security' | 'architecture' | 'plan_review')[];
   status: 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
   worktreePath: string;
@@ -387,22 +383,21 @@ Headers: X-Request-Timestamp, X-Request-Signature, X-Internal-Auth
 
 1. Create git worktree from `origin/{baseBranch}` (base branch fetched from origin first)
 2. If `continuationPrBranch` is set, checkout existing PR branch for retried tasks
-3. If `planningPrBranch` is set, merge planning branch into worktree
-4. Validate API key for the target model provider (cached 5 minutes)
-5. Build system prompt (agent-specific: planning/execution/pull_request/review via labels + `agentType`)
-6. Pull worker image (15-minute timeout, separated from container creation)
-7. Spawn a code-worker container for the selected runtime (2-minute creation timeout)
-8. Write system prompt to container stdin
-9. Stream logs to code-agent via LogForwarder
-10. Monitor container exit (30s polling)
-11. On exit: flush logs, check for PR via `gh pr list` + `gh pr checks`
-12. Detect fatal exit codes (137/139) — skip Gemini verification, trigger immediate retry
-13. Run completion verification (Gemini semantic validation of worker responses with agent-specific Zod schemas)
-14. If verification **fails** and `attempt < maxAttempts`: resume session with follow-up prompt listing missing criteria
-15. If verification **passes**: run deep validation for execution tasks (full transcript analysis via code-agent Linear proxy, post PR comment), collect turn metrics, send webhook with result or error
-16. If max attempts reached without passing: send webhook with `TASK_COMPLETION_VERIFICATION_FAILED` error
-17. Clean up token refresher, log forwarder, and task timers
-18. If any queued messages arrived during execution: deliver them immediately as a new session
+3. Validate API key for the target model provider (cached 5 minutes)
+4. Build system prompt (agent-specific: planning/execution/pull_request/review via labels + `agentType`)
+5. Pull worker image (15-minute timeout, separated from container creation)
+6. Spawn a code-worker container for the selected runtime (2-minute creation timeout)
+7. Write system prompt to container stdin
+8. Stream logs to code-agent via LogForwarder
+9. Monitor container exit (30s polling)
+10. On exit: flush logs, check for PR via `gh pr list` + `gh pr checks`
+11. Detect fatal exit codes (137/139) — skip Gemini verification, trigger immediate retry
+12. Run completion verification (Gemini semantic validation of worker responses with agent-specific Zod schemas)
+13. If verification **fails** and `attempt < maxAttempts`: resume session with follow-up prompt listing missing criteria
+14. If verification **passes**: run deep validation for execution tasks (full transcript analysis via code-agent Linear proxy, post PR comment), collect turn metrics, send webhook with result or error
+15. If max attempts reached without passing: send webhook with `TASK_COMPLETION_VERIFICATION_FAILED` error
+16. Clean up token refresher, log forwarder, and task timers
+17. If any queued messages arrived during execution: deliver them immediately as a new session
 
 ### Startup Recovery
 
