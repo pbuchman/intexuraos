@@ -140,7 +140,7 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
     // Step 3f: Sort by PR number ASC (oldest first)
     eligiblePrs.sort((a, b) => a.number - b.number);
 
-    // Filter out excluded PRs before drain check
+    // Filter out excluded PRs — they're not managed by this queue run, so they don't prevent drain
     const excludedSet = new Set(watch.excludedPrNumbers);
     const prsToProcess = eligiblePrs.filter((pr) => !excludedSet.has(pr.number));
 
@@ -226,7 +226,7 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
         watchId, owner, repo, baseBranch,
         action: 'merged',
         mergedPrNumber: pr.number,
-        remainingPrs: allPrs.length - 1,
+        remainingPrs: prsToProcess.length - 1,
         skipped: skippedList,
       };
     }
