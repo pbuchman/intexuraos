@@ -17,7 +17,7 @@ import { OrchestratorFileAuditSink } from './orchestrator-audit-sink.js';
 
 const execFileAsync = promisify(execFile);
 
-export const DEEP_VALIDATION_PROMPT_VERSION = '5.1.0';
+export const DEEP_VALIDATION_PROMPT_VERSION = '5.2.0';
 
 const MAX_TRANSCRIPT_CHARS = 200_000;
 const GITHUB_COMMENT_MAX_CHARS = 65_536;
@@ -92,21 +92,23 @@ export function buildDeepValidationPrompt(input: DeepValidationPromptInput): str
     'For each claim, confirm or contradict it with transcript evidence.',
     'Specifically check:',
     '- Was pnpm run ci:tracked called? What was the exit code in the tool_result?',
-    '- Was the Skill tool called with superpowers:requesting-code-review? After loading, was an Agent or Task tool dispatched as a subagent?',
-    '- Was the Skill tool called with superpowers:executing-plans?',
+    '- Was superpowers:requesting-code-review explicitly invoked? After that point, is there transcript evidence of a review worker/subagent/reviewer loop?',
+    '- Was superpowers:executing-plans explicitly invoked?',
     '- Was a PR created via gh pr create? What URL was returned?',
-    '- How many git commit tool calls succeeded?',
+    '- How many successful local commits are evidenced in the transcript?',
     '',
     '=== Section 2: Contract Verification ===',
     'The execution system prompt mandates this skill sequence:',
-    '1. superpowers:executing-plans must be invoked first (via Skill tool)',
-    '2. superpowers:requesting-code-review must be invoked second (via Skill tool)',
-    '3. After requesting-code-review is loaded, the agent MUST dispatch a code-reviewer subagent (via Agent tool with subagent_type containing "code-reviewer")',
+    '1. superpowers:executing-plans must be invoked first',
+    '2. superpowers:requesting-code-review must be invoked second',
+    '3. After requesting-code-review is loaded, the agent MUST show transcript evidence of a review worker/subagent/reviewer dispatch or equivalent explicit review loop',
     '',
     'Check:',
     '- Was each mandatory skill loaded? In what order?',
     '- For requesting-code-review: was the core instruction actually followed through?',
     '- Were there any skills loaded whose instructions were not followed?',
+    '- For Codex transcripts, were the startup evidence lines present: `[entrypoint] Bootstrap evidence:` and `[entrypoint] Codex runtime evidence:`?',
+    '- Treat missing startup evidence lines as a warning because retained Codex parity proof is absent.',
     '',
     '=== Section 3: Plan vs Reality ===',
     `Linear issue requirements:\n${input.linearIssueBody}`,

@@ -236,6 +236,27 @@ describe('buildDeepValidationPrompt', () => {
     expect(prompt).toContain('Update tests first');
   });
 
+  it('asks the validator to check Codex bootstrap evidence lines', () => {
+    const prompt = buildDeepValidationPrompt({
+      formattedTranscript:
+        '[MSG-001] [entrypoint] Bootstrap evidence: codex_skills=restored github_token=loaded\n' +
+        '[MSG-002] [entrypoint] Codex runtime evidence: mode=fresh thread_id=absent',
+      agentClaims: {
+        outcome: 'implemented',
+        superpowers_executing_plans: 'used',
+        superpowers_requesting_code_review: 'used',
+        gh_pr_url: '',
+        summary: 'Done.',
+      },
+      linearIssueBody: 'Some task',
+      planContent: undefined,
+    });
+
+    expect(prompt).toContain('[entrypoint] Bootstrap evidence:');
+    expect(prompt).toContain('[entrypoint] Codex runtime evidence:');
+    expect(prompt).toContain('startup evidence lines');
+  });
+
   it('indicates when no referenced plan document was found', () => {
     const prompt = buildDeepValidationPrompt({
       formattedTranscript: 'transcript here',
