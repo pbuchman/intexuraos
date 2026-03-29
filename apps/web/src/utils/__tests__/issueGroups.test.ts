@@ -1319,6 +1319,134 @@ describe('pipeline merge step', () => {
     expect(findStep(groups[0]?.pipeline, 'merge')).toBeUndefined();
   });
 
+  it('shows actionable merge step for review task with needs_remediation=0', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-03-07T10:00:00Z',
+        updatedAt: '2026-03-07T10:05:00Z',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+        status: 'reviewed',
+        prNumber: 42,
+        createdAt: '2026-03-07T11:00:00Z',
+        updatedAt: '2026-03-07T11:05:00Z',
+        result: { needs_remediation: '0' },
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    const mergeStep = findStep(groups[0]?.pipeline, 'merge');
+    expect(mergeStep).toBeDefined();
+    expect(mergeStep?.state).toBe('actionable');
+  });
+
+  it('does NOT show merge step for review task with needs_remediation=1', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-03-07T10:00:00Z',
+        updatedAt: '2026-03-07T10:05:00Z',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+        status: 'reviewed',
+        prNumber: 42,
+        createdAt: '2026-03-07T11:00:00Z',
+        updatedAt: '2026-03-07T11:05:00Z',
+        result: { needs_remediation: '1' },
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(findStep(groups[0]?.pipeline, 'merge')).toBeUndefined();
+  });
+
+  it('does NOT show merge step for review task with needs_remediation=0 but no prNumber', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-03-07T10:00:00Z',
+        updatedAt: '2026-03-07T10:05:00Z',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+        status: 'reviewed',
+        createdAt: '2026-03-07T11:00:00Z',
+        updatedAt: '2026-03-07T11:05:00Z',
+        result: { needs_remediation: '0' },
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    // The execution-path merge step requires ready-to-merge label (not present),
+    // and the review-path fallback requires prNumber (not present) — no merge step.
+    expect(findStep(groups[0]?.pipeline, 'merge')).toBeUndefined();
+  });
+
+  it('does NOT duplicate merge step when both label and needs_remediation=0 present', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-03-07T10:00:00Z',
+        updatedAt: '2026-03-07T10:05:00Z',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+        linearIssue: {
+          ...linearIssueSkeleton,
+          labels: [{ id: 'l1', name: 'ready-to-merge' }],
+        },
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+        status: 'reviewed',
+        prNumber: 42,
+        createdAt: '2026-03-07T11:00:00Z',
+        updatedAt: '2026-03-07T11:05:00Z',
+        result: { needs_remediation: '0' },
+        linearIssue: {
+          ...linearIssueSkeleton,
+          labels: [{ id: 'l1', name: 'ready-to-merge' }],
+        },
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    const mergeSteps = groups[0]?.pipeline.steps.filter((s) => s.agentType === 'merge');
+    expect(mergeSteps).toHaveLength(1);
+  });
+
   it('aggregate status is needs-action when merge step is actionable', () => {
     const tasks = [
       createMockTask({
@@ -1400,6 +1528,52 @@ describe('isTaskMergeable (detail view)', () => {
       status: 'running',
       result: { prUrl: 'https://github.com/org/repo/pull/42' },
       linearIssue: { labels: [{ name: 'ready-to-merge' }] },
+    })).toBe(false);
+  });
+
+  it('returns true for reviewed task with needs_remediation=0 and prNumber, no label', () => {
+    expect(isTaskMergeable({
+      status: 'reviewed',
+      prNumber: 42,
+      result: { needs_remediation: '0' },
+    })).toBe(true);
+  });
+
+  it('returns false for reviewed task with needs_remediation=1 and prNumber, no label', () => {
+    expect(isTaskMergeable({
+      status: 'reviewed',
+      prNumber: 42,
+      result: { needs_remediation: '1' },
+    })).toBe(false);
+  });
+
+  it('returns false for reviewed task with needs_remediation=0 but no prNumber', () => {
+    expect(isTaskMergeable({
+      status: 'reviewed',
+      result: { needs_remediation: '0' },
+    })).toBe(false);
+  });
+
+  it('returns true for reviewed task with needs_remediation=0 AND ready-to-merge label', () => {
+    expect(isTaskMergeable({
+      status: 'reviewed',
+      prNumber: 42,
+      result: { needs_remediation: '0' },
+      linearIssue: { labels: [{ name: 'ready-to-merge' }] },
+    })).toBe(true);
+  });
+
+  it('returns false for implemented task with needs_remediation=0 but no prUrl', () => {
+    expect(isTaskMergeable({
+      status: 'implemented',
+      result: { needs_remediation: '0' },
+    })).toBe(false);
+  });
+
+  it('returns false for implemented task with needs_remediation=0 and prUrl but no label (fallback scoped to reviewed)', () => {
+    expect(isTaskMergeable({
+      status: 'implemented',
+      result: { prUrl: 'https://github.com/org/repo/pull/42', needs_remediation: '0' },
     })).toBe(false);
   });
 });

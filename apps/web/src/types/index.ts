@@ -1144,6 +1144,8 @@ export interface CodeTaskResult {
   review_comments_posted?: string;
   review_types?: string;
   requirements_tracker_updated?: string;
+  /** '0' = no remediation needed, '1' = remediation required. */
+  needs_remediation?: string;
 }
 
 /**
