@@ -103,7 +103,6 @@ export function HellscriptStylePage(): React.JSX.Element {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-3xl">
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
             Voice of the Damned
@@ -135,7 +134,6 @@ export function HellscriptStylePage(): React.JSX.Element {
             ))}
           </div>
         )}
-      </div>
     </Layout>
   );
 }
