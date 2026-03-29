@@ -390,6 +390,7 @@ describe('internalIssuesRoutes', () => {
         data: {
           id: string;
           identifier: string;
+          parentIdentifier: string | null;
           title: string;
           description: string | null;
           state: { name: string; type: string };
@@ -406,6 +407,7 @@ describe('internalIssuesRoutes', () => {
       expect(body.success).toBe(true);
       expect(body.data.id).toBe(testIssueId);
       expect(body.data.identifier).toBe(testIssueIdentifier);
+      expect(body.data.parentIdentifier).toBeNull();
       expect(body.data.title).toBe('Test Issue Title');
       expect(body.data.description).toBe('Test issue description');
       expect(body.data.state).toEqual({ name: 'In Progress', type: 'started' });
@@ -434,6 +436,94 @@ describe('internalIssuesRoutes', () => {
       const body = JSON.parse(response.body) as { success: boolean; data: { assignee: unknown } };
       expect(body.success).toBe(true);
       expect(body.data.assignee).toBeNull();
+    });
+
+    it('should include parentIdentifier when the issue is a subtask', async () => {
+      const parentIssue: SyncedLinearIssue = {
+        ...testIssue,
+        id: 'linear-parent-123',
+        identifier: 'ENG-100',
+        title: 'Parent Issue',
+        parentId: null,
+      };
+      const subtaskIssue: SyncedLinearIssue = {
+        ...testIssue,
+        id: 'linear-subtask-123',
+        identifier: 'ENG-101',
+        title: 'Subtask Issue',
+        parentId: parentIssue.id,
+      };
+      fakeIssueRepo.seedIssue(parentIssue);
+      fakeIssueRepo.seedIssue(subtaskIssue);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/ENG-101',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { parentIdentifier: string | null };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.parentIdentifier).toBe('ENG-100');
+    });
+
+    it('should return null parentIdentifier when the parent issue is not found locally', async () => {
+      fakeIssueRepo.seedIssue({
+        ...testIssue,
+        id: 'linear-subtask-missing-parent',
+        identifier: 'ENG-102',
+        parentId: 'missing-parent-id',
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/ENG-102',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { parentIdentifier: string | null };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.parentIdentifier).toBeNull();
+    });
+
+    it('should return 502 when parent issue lookup fails', async () => {
+      fakeIssueRepo.seedIssue({
+        ...testIssue,
+        id: 'linear-subtask-parent-error',
+        identifier: 'ENG-103',
+        parentId: 'parent-lookup-error',
+      });
+
+      const findByIdSpy = vi.spyOn(fakeIssueRepo, 'findById').mockResolvedValueOnce(
+        err({ code: 'INTERNAL_ERROR', message: 'Parent lookup failed' })
+      );
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/ENG-103',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+      });
+
+      expect(response.statusCode).toBe(502);
+
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+
+      findByIdSpy.mockRestore();
     });
 
     it('should return 401 when X-Internal-Auth is missing', async () => {
