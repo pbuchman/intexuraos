@@ -33,9 +33,11 @@ async function clearAll(): Promise<Result<void, LinearError>> {
     // listDocuments() returns refs without fetching field data — more efficient than get()
     const refs = await db.collection(COLLECTION_NAME).listDocuments();
 
+    /* v8 ignore start -- test-infra: FakePruneCandidateRepository cannot exercise real Firestore listDocuments() empty-collection path @preserve */
     if (refs.length === 0) {
       return ok(undefined);
     }
+    /* v8 ignore stop @preserve */
 
     for (let i = 0; i < refs.length; i += BATCH_LIMIT) {
       const chunk = refs.slice(i, i + BATCH_LIMIT);

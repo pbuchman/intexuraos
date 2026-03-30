@@ -59,6 +59,24 @@ describe('GET /linear/prune-candidates', () => {
     expect(body.data.candidates[1].score).toBe(70);
   });
 
+  it('returns 500 when listAll fails', async () => {
+    ctx.pruneCandidateRepository.setListAllFailure(true, {
+      code: 'INTERNAL_ERROR',
+      message: 'Firestore unavailable',
+    });
+
+    const token = await createToken({ sub: 'auth0|test-user-id' });
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/linear/prune-candidates',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = response.json();
+    expect(body.success).toBe(false);
+  });
+
   it('returns 401 without auth token', async () => {
     const response = await ctx.app.inject({
       method: 'GET',

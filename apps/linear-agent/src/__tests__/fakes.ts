@@ -1056,6 +1056,8 @@ export class FakeCodeAgentClient implements CodeAgentClient {
 
 export class FakePruneCandidateRepository implements PruneCandidateRepository {
   private candidates: StoredPruneCandidate[] = [];
+  private shouldFailListAll = false;
+  private failError: LinearError = { code: 'INTERNAL_ERROR', message: 'Database error' };
 
   async clearAll(): Promise<Result<void, LinearError>> {
     this.candidates = [];
@@ -1068,12 +1070,19 @@ export class FakePruneCandidateRepository implements PruneCandidateRepository {
   }
 
   async listAll(): Promise<Result<StoredPruneCandidate[], LinearError>> {
+    if (this.shouldFailListAll) return err(this.failError);
     const sorted = [...this.candidates].sort((a, b) => b.score - a.score);
     return ok(sorted);
   }
 
+  setListAllFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailListAll = fail;
+    if (error) this.failError = error;
+  }
+
   reset(): void {
     this.candidates = [];
+    this.shouldFailListAll = false;
   }
 
   seedCandidates(candidates: StoredPruneCandidate[]): void {

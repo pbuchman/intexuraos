@@ -212,6 +212,26 @@ describe('confirmPruneDeletion', () => {
     expect(deps.issueRepo.deleteById).toHaveBeenCalledWith('shared-id', 'user-2');
   });
 
+  it('continues when findUserIdsByIssueId fails', async () => {
+    (deps.pruneCandidateRepo.listAll as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok([createTestCandidate({ id: 'id-1', identifier: 'INT-1' })])
+    );
+    (deps.issueRepo.findUserIdsByIssueId as ReturnType<typeof vi.fn>).mockResolvedValue(
+      err({ code: 'INTERNAL_ERROR', message: 'Firestore read failed' })
+    );
+
+    const result = await confirmPruneDeletion(deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.deleted).toBe(1);
+    expect(deps.issueRepo.deleteById).not.toHaveBeenCalled();
+    expect(deps.logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ identifier: 'INT-1' }),
+      'Failed to find users for local cleanup (non-fatal)'
+    );
+  });
+
   it('continues when local Firestore delete fails', async () => {
     (deps.pruneCandidateRepo.listAll as ReturnType<typeof vi.fn>).mockResolvedValue(
       ok([createTestCandidate({ id: 'id-1', identifier: 'INT-1' })])
