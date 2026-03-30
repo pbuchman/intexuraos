@@ -20,6 +20,7 @@ import type {
   LinearComment,
   CommentSummary,
   PruneCandidate,
+  StoredPruneCandidate,
 } from './models.js';
 import type { LinearError } from './errors.js';
 
@@ -255,4 +256,14 @@ export interface IssuePruningClassifier {
     targetCount: number,
     logger: Logger
   ): Promise<Result<PruneCandidate[], LinearError>>;
+}
+
+/** Repository for storing and retrieving prune candidates for user review */
+export interface PruneCandidateRepository {
+  /** Clear all stored prune candidates */
+  clearAll(): Promise<Result<void, LinearError>>;
+  /** Store multiple prune candidates (replaces any existing) */
+  storeAll(candidates: StoredPruneCandidate[]): Promise<Result<void, LinearError>>;
+  /** List all stored prune candidates (ordered by score descending) */
+  listAll(): Promise<Result<StoredPruneCandidate[], LinearError>>;
 }

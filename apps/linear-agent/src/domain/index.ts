@@ -16,6 +16,7 @@ export type {
   CodeAgentError,
   TriggerCodeTaskResponse,
   IssuePruningClassifier,
+  PruneCandidateRepository,
 } from './ports.js';
 export {
   processLinearAction,
