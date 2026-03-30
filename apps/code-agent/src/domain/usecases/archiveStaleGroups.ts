@@ -5,6 +5,7 @@ import type { Logger } from 'pino';
 import { ACTIVE_STATUSES } from '../issueGrouping/constants.js';
 
 const DEFAULT_STALE_DAYS = 7;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export interface ArchiveStaleGroupsDeps {
   codeTaskRepository: CodeTaskRepository;
@@ -38,7 +39,7 @@ export function createArchiveStaleGroupsUseCase(
   return async (input?: ArchiveStaleGroupsInput): Promise<Result<ArchiveStaleGroupsResult>> => {
     const startTime = Date.now();
     const staleDays = input?.staleDays ?? DEFAULT_STALE_DAYS;
-    const cutoffDate = new Date(Date.now() - staleDays * 24 * 60 * 60 * 1000);
+    const cutoffDate = new Date(Date.now() - staleDays * MS_PER_DAY);
 
     logger.info({ staleDays, cutoffDate }, 'Starting stale issue group archival');
 
@@ -51,7 +52,6 @@ export function createArchiveStaleGroupsUseCase(
     const allTasks = listResult.value;
     const totalTasksFetched = allTasks.length;
 
-    // Group tasks by linearIssueId (if present) or task.id (standalone)
     const groups = new Map<string, typeof allTasks>();
     for (const task of allTasks) {
       const groupKey = task.linearIssueId ?? task.id;
@@ -109,7 +109,7 @@ export function createArchiveStaleGroupsUseCase(
       }
 
       // Group is stale — archive all tasks
-      const daysSinceUpdate = Math.floor((Date.now() - maxUpdatedAtMs) / (24 * 60 * 60 * 1000));
+      const daysSinceUpdate = Math.floor((Date.now() - maxUpdatedAtMs) / MS_PER_DAY);
       logger.info(
         { groupKey, linearIssueId, taskCount, daysSinceUpdate },
         'Archiving stale issue group'
