@@ -14,6 +14,7 @@ import {
   FakeLinearIssueRepository,
   FakeLinearCommentRepository,
   FakeCodeAgentClient,
+  FakePruneCandidateRepository,
 } from './fakes.js';
 import { resetServices, setServices } from '../services.js';
 
@@ -173,6 +174,7 @@ export interface TestContext {
   issueRepository: FakeLinearIssueRepository;
   commentRepository: FakeLinearCommentRepository;
   userServiceClient: FakeUserServiceClient;
+  pruneCandidateRepository: FakePruneCandidateRepository;
   withTestLogger?: boolean;
 }
 
@@ -187,6 +189,7 @@ export function setupTestContext(withTestLogger = false): TestContext {
     issueRepository: null as unknown as FakeLinearIssueRepository,
     commentRepository: null as unknown as FakeLinearCommentRepository,
     userServiceClient: null as unknown as FakeUserServiceClient,
+    pruneCandidateRepository: null as unknown as FakePruneCandidateRepository,
     withTestLogger,
   };
 
@@ -209,6 +212,7 @@ export function setupTestContext(withTestLogger = false): TestContext {
     context.issueRepository = new FakeLinearIssueRepository();
     context.commentRepository = new FakeLinearCommentRepository();
     context.userServiceClient = new FakeUserServiceClient();
+    context.pruneCandidateRepository = new FakePruneCandidateRepository();
     setServices({
       connectionRepository: context.connectionRepository,
       linearApiClient: context.linearApiClient,
@@ -222,6 +226,7 @@ export function setupTestContext(withTestLogger = false): TestContext {
       issuePruningClassifier: {
         classifyCandidates: async () => ({ ok: true, value: [] }),
       },
+      pruneCandidateRepository: context.pruneCandidateRepository,
     });
     clearJwksCache();
     context.app = await buildServer(withTestLogger ? getTestLoggerStream() : undefined);
@@ -241,6 +246,7 @@ export function setupTestContext(withTestLogger = false): TestContext {
     context.issueRepository.reset();
     context.commentRepository.reset();
     context.userServiceClient.reset();
+    context.pruneCandidateRepository.reset();
     delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
   });
 

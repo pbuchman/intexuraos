@@ -1936,6 +1936,11 @@ describe('linearRoutes logging coverage', () => {
     issuePruningClassifier: {
       classifyCandidates: async (): Promise<Result<[], never>> => ({ ok: true as const, value: [] }),
     },
+    pruneCandidateRepository: {
+      clearAll: async () => ({ ok: true as const, value: undefined }),
+      storeAll: async () => ({ ok: true as const, value: undefined }),
+      listAll: async () => ({ ok: true as const, value: [] }),
+    },
   };
 
   beforeAll(async () => {

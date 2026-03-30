@@ -12,8 +12,10 @@ import type {
   LinearCommentRepository,
   CodeAgentClient,
   IssuePruningClassifier,
+  PruneCandidateRepository,
 } from './domain/index.js';
 import { createLinearConnectionRepository } from './infra/firestore/linearConnectionRepository.js';
+import { createPruneCandidateRepository } from './infra/firestore/pruneCandidateRepository.js';
 import { createLinearApiClient } from './infra/linear/linearApiClient.js';
 import { createLinearActionExtractionService } from './infra/llm/linearActionExtractionService.js';
 import { createFailedIssueRepository } from './infra/firestore/failedIssueRepository.js';
@@ -43,6 +45,7 @@ export interface ServiceContainer {
   userServiceClient: UserServiceClient;
   codeAgentClient: CodeAgentClient;
   issuePruningClassifier: IssuePruningClassifier;
+  pruneCandidateRepository: PruneCandidateRepository;
 }
 
 export interface ServiceConfig {
@@ -103,6 +106,7 @@ export function initServices(config: ServiceConfig): void {
     userServiceClient,
     codeAgentClient,
     issuePruningClassifier,
+    pruneCandidateRepository: createPruneCandidateRepository(),
   };
 }
 

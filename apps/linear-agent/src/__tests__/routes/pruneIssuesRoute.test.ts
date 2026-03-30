@@ -60,6 +60,11 @@ function createFakeServices(): ServiceContainer {
     issuePruningClassifier: {
       classifyCandidates: vi.fn().mockResolvedValue(ok([])),
     },
+    pruneCandidateRepository: {
+      clearAll: vi.fn().mockResolvedValue(ok(undefined)),
+      storeAll: vi.fn().mockResolvedValue(ok(undefined)),
+      listAll: vi.fn().mockResolvedValue(ok([])),
+    },
   } as unknown as ServiceContainer;
 }
 
