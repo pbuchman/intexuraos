@@ -8,6 +8,7 @@ interface IssueGroupRowProps {
   group: IssueGroup;
   timeTick: number;
   onAction: (taskId: string, action: 'delete' | 'retry' | 'implement' | 'archive') => void;
+  onArchiveGroup: (taskIds: string[]) => void;
   onOpenLogs: (taskId: string) => void;
   actioningTaskId?: string | null;
 }
@@ -211,6 +212,7 @@ function IssueIdentifierLink({
 const IssueGroupRow = memo(function IssueGroupRow({
   group,
   onAction,
+  onArchiveGroup,
   onOpenLogs,
   actioningTaskId,
 }: IssueGroupRowProps): React.JSX.Element {
@@ -518,9 +520,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
               <button
                 onClick={(e): void => {
                   e.stopPropagation();
-                  for (const task of group.tasks) {
-                    onAction(task.id, 'archive');
-                  }
+                  onArchiveGroup(group.tasks.map((t) => t.id));
                   setShowArchiveConfirm(false);
                 }}
                 className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-500"
@@ -561,6 +561,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
   prev.group.mostRecentDispatchedAt === next.group.mostRecentDispatchedAt &&
   prev.actioningTaskId === next.actioningTaskId &&
   prev.onAction === next.onAction &&
+  prev.onArchiveGroup === next.onArchiveGroup &&
   prev.onOpenLogs === next.onOpenLogs,
 );
 
