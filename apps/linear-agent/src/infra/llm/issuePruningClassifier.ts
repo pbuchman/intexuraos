@@ -8,6 +8,7 @@
 import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
+import { z } from 'zod';
 import type { IssuePruningClassifier, SyncedLinearIssue, PruneCandidate, LinearError } from '../../domain/index.js';
 
 interface GeminiGenerateResult {
@@ -25,14 +26,19 @@ interface ClassifierDeps {
   logger: Logger;
 }
 
-interface GeminiCandidateResponse {
-  identifier: string;
-  score: number;
-  reason: string;
-  category: PruneCandidate['category'];
-}
+/** Zod schema enforcing the expected Gemini response format for pruning candidates */
+const GeminiCandidateSchema = z.object({
+  identifier: z.string().regex(/^[A-Z]+-\d+$/, 'Must be a valid issue identifier like INT-123'),
+  score: z.number().int().min(0).max(100),
+  reason: z.string().min(1),
+  category: z.enum(['cancelled', 'duplicate', 'sub-issue', 'simple-fix', 'review-only', 'other']),
+});
 
-const PRUNING_PROMPT_VERSION = '1.0.0';
+const GeminiCandidateArraySchema = z.array(GeminiCandidateSchema);
+
+type GeminiCandidateResponse = z.infer<typeof GeminiCandidateSchema>;
+
+const PRUNING_PROMPT_VERSION = '1.1.0';
 
 function buildClassificationPrompt(
   issues: SyncedLinearIssue[],
@@ -117,7 +123,7 @@ export function createIssuePruningClassifier(deps: ClassifierDeps): IssuePruning
         'Gemini classification completed'
       );
 
-      // Parse JSON response
+      // Parse and validate JSON response with Zod
       let parsed: GeminiCandidateResponse[];
       try {
         const content = result.value.content.trim();
@@ -125,7 +131,22 @@ export function createIssuePruningClassifier(deps: ClassifierDeps): IssuePruning
         const jsonContent = content.startsWith('[')
           ? content
           : content.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
-        parsed = JSON.parse(jsonContent) as GeminiCandidateResponse[];
+        const rawParsed: unknown = JSON.parse(jsonContent);
+        const zodResult = GeminiCandidateArraySchema.safeParse(rawParsed);
+        if (!zodResult.success) {
+          const issues = zodResult.error.issues.map(
+            (issue) => `${issue.path.join('.')}: ${issue.message}`
+          );
+          logger.error(
+            { validationErrors: issues, responsePreview: result.value.content.slice(0, 200) },
+            'Gemini response failed schema validation'
+          );
+          return err({
+            code: 'INTERNAL_ERROR',
+            message: `Gemini response failed schema validation: ${issues.join('; ')}`,
+          });
+        }
+        parsed = zodResult.data;
       } catch {
         logger.error(
           { responsePreview: result.value.content.slice(0, 200) },
@@ -143,7 +164,7 @@ export function createIssuePruningClassifier(deps: ClassifierDeps): IssuePruning
       const candidates: PruneCandidate[] = parsed
         .filter((c) => issueMap.has(c.identifier))
         .map((c) => {
-          /* v8 ignore start -- upstream: filter ensures issue exists in map; impossible to reach undefined after has() check @preserve */
+          /* v8 ignore start -- ts-type: TypeScript does not narrow Map.get() after Map.has(); undefined branch is structurally unreachable @preserve */
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           const issue = issueMap.get(c.identifier)!;
           /* v8 ignore stop @preserve */

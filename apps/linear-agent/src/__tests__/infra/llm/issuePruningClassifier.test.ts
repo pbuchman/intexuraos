@@ -3,16 +3,7 @@ import { createIssuePruningClassifier } from '../../../infra/llm/issuePruningCla
 import type { IssuePruningClassifier, SyncedLinearIssue } from '../../../domain/index.js';
 import type { Logger } from 'pino';
 import type { Result } from '@intexuraos/common-core';
-
-function createFakeLogger(): Logger {
-  return {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    child: vi.fn().mockReturnThis(),
-  } as unknown as Logger;
-}
+import { createFakeLogger } from '../../testUtils.js';
 
 function createTestIssue(overrides: Partial<SyncedLinearIssue>): SyncedLinearIssue {
   return {
@@ -235,5 +226,93 @@ describe('IssuePruningClassifier', () => {
     if (!result.ok) return;
     expect(result.value).toHaveLength(1);
     expect(result.value[0]?.identifier).toBe('INT-100');
+  });
+
+  it('returns validation error when Gemini returns invalid score type', async () => {
+    const issues = [
+      createTestIssue({ id: '1', identifier: 'INT-100', stateType: 'cancelled', state: 'Canceled' }),
+    ];
+
+    fakeGenerate.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content: JSON.stringify([
+          { identifier: 'INT-100', score: 'high', reason: 'Bad score type', category: 'cancelled' },
+        ]),
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      },
+    });
+
+    const result = await classifier.classifyCandidates(issues, 5, logger);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('INTERNAL_ERROR');
+    expect(result.error.message).toContain('schema validation');
+  });
+
+  it('returns validation error when Gemini returns invalid category', async () => {
+    const issues = [
+      createTestIssue({ id: '1', identifier: 'INT-100', stateType: 'cancelled', state: 'Canceled' }),
+    ];
+
+    fakeGenerate.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content: JSON.stringify([
+          { identifier: 'INT-100', score: 90, reason: 'Bad category', category: 'nonexistent-category' },
+        ]),
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      },
+    });
+
+    const result = await classifier.classifyCandidates(issues, 5, logger);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('INTERNAL_ERROR');
+    expect(result.error.message).toContain('schema validation');
+  });
+
+  it('returns validation error when Gemini returns missing required fields', async () => {
+    const issues = [
+      createTestIssue({ id: '1', identifier: 'INT-100', stateType: 'cancelled', state: 'Canceled' }),
+    ];
+
+    fakeGenerate.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content: JSON.stringify([
+          { identifier: 'INT-100', score: 90 },
+        ]),
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      },
+    });
+
+    const result = await classifier.classifyCandidates(issues, 5, logger);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('INTERNAL_ERROR');
+    expect(result.error.message).toContain('schema validation');
+  });
+
+  it('returns validation error when Gemini returns score out of range', async () => {
+    const issues = [
+      createTestIssue({ id: '1', identifier: 'INT-100', stateType: 'cancelled', state: 'Canceled' }),
+    ];
+
+    fakeGenerate.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content: JSON.stringify([
+          { identifier: 'INT-100', score: 150, reason: 'Out of range', category: 'cancelled' },
+        ]),
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      },
+    });
+
+    const result = await classifier.classifyCandidates(issues, 5, logger);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('INTERNAL_ERROR');
+    expect(result.error.message).toContain('schema validation');
   });
 });
