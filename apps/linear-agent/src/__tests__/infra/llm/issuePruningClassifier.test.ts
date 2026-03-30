@@ -183,6 +183,37 @@ describe('IssuePruningClassifier', () => {
     expect(fakeGenerate).not.toHaveBeenCalled();
   });
 
+  it('handles issues with null description', async () => {
+    const issues = [
+      createTestIssue({ id: 'uuid-1', identifier: 'INT-100', description: null, stateType: 'cancelled', state: 'Canceled' }),
+    ];
+
+    fakeGenerate.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content: JSON.stringify([
+          { identifier: 'INT-100', score: 85, reason: 'Cancelled with no description', category: 'cancelled' },
+        ]),
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      },
+    });
+
+    const result = await classifier.classifyCandidates(issues, 5, logger);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(1);
+    expect(result.value[0]?.identifier).toBe('INT-100');
+
+    // Verify the prompt contains proper fallback values for null description
+    const firstCall = fakeGenerate.mock.calls[0];
+    if (firstCall === undefined) {
+      throw new Error('Expected generate to be called');
+    }
+    const promptArg = firstCall[0] as string;
+    expect(promptArg).toContain('"descriptionLength": 0');
+    expect(promptArg).toContain('"descriptionPreview": ""');
+  });
+
   it('filters out candidates with identifiers not in the issue map', async () => {
     const issues = [
       createTestIssue({ id: 'uuid-1', identifier: 'INT-100', title: 'Real issue', stateType: 'cancelled', state: 'Canceled' }),

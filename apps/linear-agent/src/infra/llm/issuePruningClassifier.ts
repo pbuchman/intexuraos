@@ -49,10 +49,8 @@ function buildClassificationPrompt(
       parentId: issue.parentId ?? null,
       labels: issue.labels.map((l) => l.name),
       priority: issue.priority,
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires explicit undefined fallback for optional property access @preserve */
       descriptionLength: issue.description?.length ?? 0,
       descriptionPreview: issue.description?.slice(0, 300) ?? '',
-      /* v8 ignore stop @preserve */
       createdAt: issue.createdAt,
     };
   });

@@ -2,6 +2,8 @@
  * Configuration loader for linear-agent service.
  */
 
+import type { PruneConfig } from './domain/index.js';
+
 export interface Config {
   port: number;
   gcpProjectId: string;
@@ -9,24 +11,10 @@ export interface Config {
   internalAuthToken: string;
 }
 
-/** Configuration for the issue pruning system - source constants */
-export const PRUNE_CONFIG = {
-  /** Threshold above which pruning activates */
-  ACTIVATION_THRESHOLD: 200,
-  /** Target number of issues to delete per run */
-  TARGET_DELETION_COUNT: 30,
-} as const;
-
-/** Configuration for the issue pruning system at runtime */
-export interface PruneConfigRuntime {
-  activationThreshold: number;
-  targetDeletionCount: number;
-}
-
-/** Runtime configuration for the issue pruning system - converts UPPER_CASE constants to camelCase */
-export const PRUNE_CONFIG_RUNTIME: PruneConfigRuntime = {
-  activationThreshold: PRUNE_CONFIG.ACTIVATION_THRESHOLD,
-  targetDeletionCount: PRUNE_CONFIG.TARGET_DELETION_COUNT,
+/** Configuration for the issue pruning system */
+export const PRUNE_CONFIG: PruneConfig = {
+  activationThreshold: 200,
+  targetDeletionCount: 30,
 } as const;
 
 export function loadConfig(): Config {
