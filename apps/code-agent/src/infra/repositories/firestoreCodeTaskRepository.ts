@@ -1234,6 +1234,27 @@ export const createFirestoreCodeTaskRepository = (deps: {
         });
       }
     },
+
+    listAllNonArchivedGlobal: async (): Promise<Result<CodeTask[], RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('status', 'in', NON_ARCHIVED_STATUSES)
+          .orderBy('updatedAt', 'asc')
+          .get();
+
+        const tasks = snapshot.docs.map((doc: QueryDocumentSnapshot) =>
+          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
+        );
+
+        return ok(tasks);
+      } catch (error) {
+        logger.error({ error }, 'Failed to list all non-archived tasks globally');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
   };
 };
 
