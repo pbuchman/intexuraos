@@ -32,6 +32,17 @@ describe('code-worker image Codex skill bootstrap', () => {
     expect(entrypoint).toContain('Codex skill discovery restored');
   });
 
+  it('emits explicit bootstrap and runtime evidence lines for Codex runs', () => {
+    const entrypoint = readFileSync(entrypointPath, 'utf8');
+
+    expect(entrypoint).toContain('[entrypoint] Bootstrap evidence:');
+    expect(entrypoint).toContain('codex_skills=');
+    expect(entrypoint).toContain('github_token=');
+    expect(entrypoint).toContain('[entrypoint] Codex runtime evidence:');
+    expect(entrypoint).toContain('mode=');
+    expect(entrypoint).toContain('thread_id=');
+  });
+
   it('translates CODEX_REASONING_EFFORT into -c model_reasoning_effort for codex exec', () => {
     const entrypoint = readFileSync(entrypointPath, 'utf8');
 
