@@ -3,7 +3,7 @@ import {
   confirmPruneDeletion,
   type ConfirmPruneDeletionDeps,
 } from '../../../domain/useCases/confirmPruneDeletionUseCase.js';
-import type { StoredPruneCandidate, SyncedLinearIssue } from '../../../domain/index.js';
+import type { StoredPruneCandidate } from '../../../domain/index.js';
 import type { Logger } from 'pino';
 import { ok, err } from '@intexuraos/common-core';
 
@@ -26,29 +26,6 @@ function createTestCandidate(overrides: Partial<StoredPruneCandidate> = {}): Sto
     reason: 'Cancelled and stale',
     category: 'cancelled',
     classifiedAt: '2026-03-29T00:00:00.000Z',
-    ...overrides,
-  };
-}
-
-function createTestIssue(overrides: Partial<SyncedLinearIssue> = {}): SyncedLinearIssue {
-  return {
-    id: 'issue-id-1',
-    identifier: 'INT-100',
-    title: 'Test issue',
-    description: 'Test description',
-    state: 'Done',
-    stateType: 'completed',
-    priority: 0,
-    assigneeId: null,
-    assigneeName: null,
-    labels: [],
-    url: 'https://linear.app/test',
-    userId: 'user-1',
-    parentId: null,
-    createdAt: '2026-03-01T00:00:00.000Z',
-    updatedAt: '2026-03-01T00:00:00.000Z',
-    syncedAt: '2026-03-29T00:00:00.000Z',
-    teamId: 'team-1',
     ...overrides,
   };
 }
@@ -76,7 +53,7 @@ describe('confirmPruneDeletion', () => {
         getFullConnection: vi.fn().mockResolvedValue(ok(FULL_CONNECTION)),
       },
       issueRepo: {
-        listByUserId: vi.fn().mockResolvedValue(ok([])),
+        findUserIdsByIssueId: vi.fn().mockResolvedValue(ok([])),
         deleteById: vi.fn().mockResolvedValue(ok(undefined)),
       },
       linearClient: {
@@ -113,12 +90,7 @@ describe('confirmPruneDeletion', () => {
       createTestCandidate({ id: 'id-2', identifier: 'INT-2' }),
     ];
     (deps.pruneCandidateRepo.listAll as ReturnType<typeof vi.fn>).mockResolvedValue(ok(candidates));
-    (deps.issueRepo.listByUserId as ReturnType<typeof vi.fn>).mockResolvedValue(
-      ok([
-        createTestIssue({ id: 'id-1', identifier: 'INT-1', userId: 'user-1' }),
-        createTestIssue({ id: 'id-2', identifier: 'INT-2', userId: 'user-1' }),
-      ])
-    );
+    (deps.issueRepo.findUserIdsByIssueId as ReturnType<typeof vi.fn>).mockResolvedValue(ok(['user-1']));
 
     const result = await confirmPruneDeletion(deps);
 
@@ -222,24 +194,19 @@ describe('confirmPruneDeletion', () => {
   });
 
   it('cleans up local Firestore copies for multiple users', async () => {
-    (deps.connectionRepo.getAllConnectedUserIds as ReturnType<typeof vi.fn>).mockResolvedValue(
-      ok(['user-1', 'user-2'])
-    );
-    (deps.connectionRepo.getFullConnection as ReturnType<typeof vi.fn>).mockResolvedValue(
-      ok({ ...FULL_CONNECTION, userId: 'user-1' })
-    );
     (deps.pruneCandidateRepo.listAll as ReturnType<typeof vi.fn>).mockResolvedValue(
       ok([createTestCandidate({ id: 'shared-id', identifier: 'INT-1' })])
     );
-    (deps.issueRepo.listByUserId as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce(ok([createTestIssue({ id: 'shared-id', userId: 'user-1' })]))
-      .mockResolvedValueOnce(ok([createTestIssue({ id: 'shared-id', userId: 'user-2' })]));
+    (deps.issueRepo.findUserIdsByIssueId as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok(['user-1', 'user-2'])
+    );
 
     const result = await confirmPruneDeletion(deps);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.deleted).toBe(1);
+    expect(deps.issueRepo.findUserIdsByIssueId).toHaveBeenCalledWith('shared-id');
     expect(deps.issueRepo.deleteById).toHaveBeenCalledTimes(2);
     expect(deps.issueRepo.deleteById).toHaveBeenCalledWith('shared-id', 'user-1');
     expect(deps.issueRepo.deleteById).toHaveBeenCalledWith('shared-id', 'user-2');
@@ -249,8 +216,8 @@ describe('confirmPruneDeletion', () => {
     (deps.pruneCandidateRepo.listAll as ReturnType<typeof vi.fn>).mockResolvedValue(
       ok([createTestCandidate({ id: 'id-1', identifier: 'INT-1' })])
     );
-    (deps.issueRepo.listByUserId as ReturnType<typeof vi.fn>).mockResolvedValue(
-      ok([createTestIssue({ id: 'id-1', userId: 'user-1' })])
+    (deps.issueRepo.findUserIdsByIssueId as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok(['user-1'])
     );
     (deps.issueRepo.deleteById as ReturnType<typeof vi.fn>).mockResolvedValue(
       err({ code: 'INTERNAL_ERROR', message: 'Firestore write failed' })

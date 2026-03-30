@@ -7,7 +7,7 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import type { Logger } from 'pino';
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
-import { listIssues, fullSync, retryFailedIssue, getIssueComments, getIssueDetail } from '../domain/index.js';
+import { listIssues, fullSync, retryFailedIssue, getIssueComments, getIssueDetail, confirmPruneDeletion } from '../domain/index.js';
 
 interface ConnectionBody {
   apiKey: string;
@@ -885,6 +885,182 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       return await reply.ok({ configured: false });
+    }
+  );
+
+  // GET /linear/prune-candidates — List all stored prune candidates for user review
+  fastify.get(
+    '/linear/prune-candidates',
+    {
+      schema: {
+        operationId: 'listPruneCandidates',
+        summary: 'List issues scheduled for deletion',
+        description: 'Returns all prune candidates classified by Gemini for user review',
+        tags: ['linear'],
+        response: {
+          200: {
+            description: 'Candidates listed',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                required: ['candidates'],
+                properties: {
+                  candidates: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      required: ['id', 'identifier', 'title', 'score', 'reason', 'category', 'classifiedAt'],
+                      properties: {
+                        id: { type: 'string' },
+                        identifier: { type: 'string' },
+                        title: { type: 'string' },
+                        score: { type: 'number' },
+                        reason: { type: 'string' },
+                        category: { type: 'string' },
+                        classifiedAt: { type: 'string' },
+                      },
+                    },
+                  },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          500: {
+            description: 'Internal Server Error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request);
+      const user = await requireAuth(request, reply);
+      if (user === null) return;
+
+      const { pruneCandidateRepository } = getServices();
+      const result = await pruneCandidateRepository.listAll();
+
+      if (!result.ok) {
+        return await handleLinearError(result.error, reply);
+      }
+
+      return await reply.ok({ candidates: result.value }); // @allow-result-access -- guarded by if (!result.ok) above
+    }
+  );
+
+  // DELETE /linear/prune-candidates — Confirm and execute deletion of all stored candidates
+  fastify.delete(
+    '/linear/prune-candidates',
+    {
+      schema: {
+        operationId: 'deletePruneCandidates',
+        summary: 'Delete all scheduled prune candidates from Linear',
+        description: 'Confirms and executes deletion of all stored prune candidates from Linear',
+        tags: ['linear'],
+        response: {
+          200: {
+            description: 'Deletion completed',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                required: ['deleted', 'failedDeletions', 'durationMs'],
+                properties: {
+                  deleted: { type: 'number', description: 'Number of issues deleted' },
+                  failedDeletions: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        identifier: { type: 'string' },
+                        error: { type: 'string' },
+                      },
+                    },
+                  },
+                  durationMs: { type: 'number', description: 'Duration in milliseconds' },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          403: {
+            description: 'Forbidden',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          500: {
+            description: 'Internal Server Error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request);
+      const user = await requireAuth(request, reply);
+      if (user === null) return;
+
+      const services = getServices();
+
+      request.log.info({ userId: user.userId }, 'linear/pruneCandidates: starting deletion');
+
+      const result = await confirmPruneDeletion({
+        connectionRepo: services.connectionRepository,
+        issueRepo: services.issueRepository,
+        linearClient: services.linearApiClient,
+        pruneCandidateRepo: services.pruneCandidateRepository,
+        logger: request.log as unknown as Logger,
+      });
+
+      if (!result.ok) {
+        return await handleLinearError(result.error, reply);
+      }
+
+      request.log.info(
+        {
+          deleted: result.value.deleted, // @allow-result-access -- guarded by if (!result.ok) above
+          failedDeletions: result.value.failedDeletions.length, // @allow-result-access -- guarded by if (!result.ok) above
+        },
+        'linear/pruneCandidates: deletion completed'
+      );
+
+      return await reply.ok(result.value); // @allow-result-access -- guarded by if (!result.ok) above
     }
   );
 
