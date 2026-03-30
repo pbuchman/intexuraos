@@ -40,7 +40,7 @@ interface ExecutionTaskRecord {
   complexityScore: 1 | 2 | 3 | 4 | 5;  // Based on lines changed
 
   // Model data (from Firestore code_tasks collection)
-  workerType: string | null;       // Model used: 'opus', 'sonnet', 'minimax', 'glm', 'qwen', 'kimi', 'codex', 'codex-xhigh', 'auto', or null if not found
+  workerType: string | null;       // Model used: 'opus', 'sonnet', 'minimax', 'glm', 'qwen', 'kimi', 'codex', 'codex-xhigh', 'auto' (terminal value — not resolved further), or null if Firestore lookup failed
 
   // Deep validation report data
   deepValidation: {
@@ -97,13 +97,14 @@ The coordinator (main agent) owns the entire collection:
 ```bash
 gh api "repos/pbuchman/intexuraos/issues/comments" \
   --paginate \
-  -q '.[] | select(.user.login == "pbuchman" and (.body | test("Deep Validation Report")) and .created_at >= "2026-03-11T17:00:00Z") | {pr_number: (.issue_url | split("/") | .[-1]), created_at, body}'
+  -q '.[] | select((.body | test("^### Deep Validation Report")) and .created_at >= "2026-03-11T17:00:00Z") | {pr_number: (.issue_url | split("/") | .[-1]), created_at, author: .user.login, body}'
 ```
 
 **Filter criteria:**
-- Author: `pbuchman` (actual reports, not bot follow-ups)
-- Body contains: "Deep Validation Report"
+- Body starts with: `### Deep Validation Report` (anchored match avoids false positives from bot follow-ups that merely reference the report)
 - Date: >= 2026-03-11T17:00:00Z (tabular format deployment)
+
+**Note on author:** DVRs are posted by the orchestrator's `ExecutionDeepValidator` service. The actual GitHub author depends on the authentication context at post time — it may be `pbuchman` or `intexuraos-code-worker[bot]`. The filter intentionally does **not** constrain by author; instead, the anchored body regex (`^### Deep Validation Report`) is the authoritative discriminator. The `author` field is captured in output for auditing.
 
 ### Phase 2: Fetch PR Details
 
@@ -114,15 +115,25 @@ gh pr view <number> --repo pbuchman/intexuraos --json number,title,headRefName,u
 
 ### Phase 3: Fetch Task Records from Firestore
 
-For each unique taskId (from branch name `task_<uuid>`) or PR number (for feature branches):
+For each unique taskId (from branch name `task_<uuid>`) or PR number (for feature branches), fetch the document via per-document `gcloud` read:
+
 ```bash
-# Query Firestore via gcloud CLI or Firebase Admin SDK
-gcloud firestore export --collection-ids=code_tasks --project=intexuraos-dev-pbuchman
+# Per-document lookup (NOT gcloud firestore export, which is a bulk GCS export)
+gcloud firestore documents get \
+  "projects/intexuraos-dev-pbuchman/databases/(default)/documents/code_tasks/{taskId}" \
+  --project=intexuraos-dev-pbuchman
 ```
 
-Or use the Firestore REST API to fetch specific documents:
-- If taskId present: `GET /projects/intexuraos-dev-pbuchman/databases/(default)/documents/code_tasks/{taskId}`
-- If feature branch: Query by `prNumber` field
+Alternatively, use the Firestore REST API:
+```bash
+# REST API per-document fetch
+curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  "https://firestore.googleapis.com/v1/projects/intexuraos-dev-pbuchman/databases/(default)/documents/code_tasks/{taskId}"
+```
+
+For feature branches (no taskId), query by `prNumber` field using a structured query.
+
+**Error handling for Firestore lookups:** If the document is not found (404), auth fails, or a network error occurs, set `workerType: null`, log the error with the taskId/prNumber, and continue processing. This ensures Firestore failures don't block the entire collection.
 
 **Extract `workerType` field** - this is the model used:
 - `opus` → Claude Opus 4
@@ -133,7 +144,7 @@ Or use the Firestore REST API to fetch specific documents:
 - `kimi` → Kimi
 - `codex` → Codex
 - `codex-xhigh` → Codex XHigh
-- `auto` → Auto-selected (check orchestrator logs for actual model)
+- `auto` → Auto-selected model; treat as a terminal value in the dataset (the orchestrator resolved it at dispatch time, but the resolved model is not stored back on the task record)
 
 ### Phase 4: Prepare Input for Agents
 
@@ -159,7 +170,7 @@ Combine each comment with its PR details AND Firestore task data:
 
 ### Phase 5: Batch & Dispatch
 
-- Split comments into batches of 10
+- Split comments into batches of 10 (sized to fit within agent context windows — each DVR comment averages ~2K tokens, so 10 reports + parsing instructions stays well under the 128K limit while maximizing throughput)
 - Spawn one agent per batch
 - Agent uses instructions in `agent-parse-deep-validation.md`
 - Each agent returns array of parsed records
@@ -174,9 +185,9 @@ Check each record:
 - [ ] `prNumber` is present and valid number
 - [ ] `linearIssueId` matches pattern `INT-XXX`
 - [ ] `complexityScore` is 1-5
-- [ ] `workerType` is present (from Firestore)
+- [ ] `workerType` is present (from Firestore) or explicitly `null` with a logged Firestore error
 - [ ] All `deepValidation` fields are present
-- [ ] No duplicate `prNumber` entries
+- [ ] No duplicate `prNumber` entries — if a PR has multiple DVRs (e.g., re-execution), keep only the **latest** by `created_at` and discard earlier entries
 
 ### Phase 8: Output
 
@@ -269,19 +280,21 @@ Look for in PR title:
 
 ## Validation Rules
 
-1. **Skip non-reports**: Comments by `intexuraos-code-worker[bot]` or `linear[bot]`
+1. **Skip non-reports**: Comments that don't match the `^### Deep Validation Report` body pattern (bot follow-ups, linear linkbacks, etc.)
 2. **Date filter**: Only reports after tabular format deployment
 3. **Completeness**: All required fields must be present
 4. **No duplicates**: One record per PR number
 
 ## Error Handling
 
-| Error                       | Action                          |
-| --------------------------- | ------------------------------- |
-| PR details fetch fails      | Skip comment, log error         |
-| Parse fails for section     | Use sensible defaults, continue |
-| No Linear issue ID in title | Set to "UNKNOWN"                |
-| taskId not in branch name   | Set to `null`                   |
+| Error                            | Action                                                  |
+| -------------------------------- | ------------------------------------------------------- |
+| PR details fetch fails           | Skip comment, log error                                 |
+| Firestore lookup fails (Phase 3) | Set `workerType: null`, log error with taskId, continue |
+| Parse fails for section          | Use sensible defaults, continue                         |
+| No Linear issue ID in title      | Set to "UNKNOWN"                                        |
+| taskId not in branch name        | Set to `null`                                           |
+| Duplicate `prNumber` detected    | Keep latest by `created_at`, discard earlier            |
 
 ## Files
 
