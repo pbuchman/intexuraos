@@ -24,6 +24,7 @@ import {
   CodeTaskViewPageV2,
   CodeTaskNewPage,
   CodeTasksPage,
+  CodeTasksPageV3,
   CronExecutionsPage,
   CronScheduleNewPage,
   CronSchedulesPage,
@@ -297,6 +298,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <CodeTasksPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/code-tasks-v3"
+        element={
+          <ProtectedRoute>
+            <CodeTasksPageV3 />
           </ProtectedRoute>
         }
       />

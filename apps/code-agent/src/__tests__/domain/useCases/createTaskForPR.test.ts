@@ -130,6 +130,9 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async findPreservedPullRequestTask(): ReturnType<CodeTaskRepository['findPreservedPullRequestTask']> {
       return ok(null);
     },
+    async listAllNonArchived(): ReturnType<CodeTaskRepository['listAllNonArchived']> {
+      return ok([]);
+    },
   };
 }
 
