@@ -52,16 +52,14 @@ describe('pruneIssues', () => {
     deps = {
       connectionRepo: {
         getAllConnectedUserIds: vi.fn().mockResolvedValue(ok(['user-1'])),
-        getFullConnection: vi.fn().mockResolvedValue(
-          ok({ userId: 'user-1', apiKey: 'key-1', teamId: 'team-1', teamName: 'Test', webhookSecret: null, connected: true, createdAt: '', updatedAt: '' })
-        ),
       },
       issueRepo: {
         listByUserId: vi.fn(),
-        deleteById: vi.fn().mockResolvedValue(ok(undefined)),
       },
-      linearClient: {
-        deleteIssue: vi.fn().mockResolvedValue(ok(undefined)),
+      pruneCandidateRepo: {
+        clearAll: vi.fn().mockResolvedValue(ok(undefined)),
+        storeAll: vi.fn().mockResolvedValue(ok(undefined)),
+        listAll: vi.fn().mockResolvedValue(ok([])),
       },
       classifier: {
         classifyCandidates: vi.fn(),
@@ -88,10 +86,14 @@ describe('pruneIssues', () => {
     expect(result.value.skipped).toBe(true);
     expect(result.value.skipReason).toContain('below threshold');
     expect(result.value.totalActive).toBe(50);
+    expect(result.value.stored).toBe(0);
+    expect(result.value.storedCandidates).toEqual([]);
     expect(deps.classifier.classifyCandidates).not.toHaveBeenCalled();
+    expect(deps.pruneCandidateRepo.clearAll).not.toHaveBeenCalled();
+    expect(deps.pruneCandidateRepo.storeAll).not.toHaveBeenCalled();
   });
 
-  it('deletes candidates and cleans up Firestore when above threshold', async () => {
+  it('stores candidates in Firestore when above threshold', async () => {
     const issues = Array.from({ length: 210 }, (_, i) =>
       createTestIssue({ id: `id-${String(i)}`, identifier: `INT-${String(i)}`, userId: 'user-1' })
     );
@@ -108,36 +110,43 @@ describe('pruneIssues', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.skipped).toBe(false);
-    expect(result.value.deleted).toBe(2);
+    expect(result.value.stored).toBe(2);
     expect(result.value.totalActive).toBe(210);
-    expect(result.value.remaining).toBe(208);
-    expect(deps.linearClient.deleteIssue).toHaveBeenCalledTimes(2);
-    expect(deps.linearClient.deleteIssue).toHaveBeenCalledWith('key-1', 'id-0');
-    expect(deps.issueRepo.deleteById).toHaveBeenCalledTimes(2);
+    expect(result.value.storedCandidates).toHaveLength(2);
+    expect(result.value.storedCandidates[0]?.identifier).toBe('INT-0');
+    expect(result.value.storedCandidates[1]?.identifier).toBe('INT-1');
+    expect(deps.pruneCandidateRepo.clearAll).toHaveBeenCalledTimes(1);
+    expect(deps.pruneCandidateRepo.storeAll).toHaveBeenCalledTimes(1);
+    const storeAllArg = (deps.pruneCandidateRepo.storeAll as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as unknown[];
+    expect(storeAllArg).toHaveLength(2);
+    expect((storeAllArg[0] as { identifier: string }).identifier).toBe('INT-0');
+    expect((storeAllArg[0] as { classifiedAt: string }).classifiedAt).toBeDefined();
   });
 
-  it('continues deleting remaining candidates when one fails', async () => {
+  it('clears old candidates before storing new ones', async () => {
     const issues = Array.from({ length: 210 }, (_, i) =>
-      createTestIssue({ id: `id-${String(i)}`, identifier: `INT-${String(i)}`, userId: 'user-1' })
+      createTestIssue({ id: `id-${String(i)}`, identifier: `INT-${String(i)}` })
     );
     (deps.issueRepo.listByUserId as ReturnType<typeof vi.fn>).mockResolvedValue(ok(issues));
 
     const candidates: PruneCandidate[] = [
       { id: 'id-0', identifier: 'INT-0', title: 'Task 0', score: 90, reason: 'Cancelled', category: 'cancelled' },
-      { id: 'id-1', identifier: 'INT-1', title: 'Task 1', score: 80, reason: 'Sub-issue', category: 'sub-issue' },
     ];
     (deps.classifier.classifyCandidates as ReturnType<typeof vi.fn>).mockResolvedValue(ok(candidates));
-    (deps.linearClient.deleteIssue as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce(err({ code: 'API_ERROR', message: 'Rate limited' }))
-      .mockResolvedValueOnce(ok(undefined));
 
-    const result = await pruneIssues(deps);
+    const callOrder: string[] = [];
+    (deps.pruneCandidateRepo.clearAll as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      callOrder.push('clearAll');
+      return ok(undefined);
+    });
+    (deps.pruneCandidateRepo.storeAll as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      callOrder.push('storeAll');
+      return ok(undefined);
+    });
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value.deleted).toBe(1);
-    expect(result.value.failedDeletions).toHaveLength(1);
-    expect(result.value.failedDeletions[0]?.identifier).toBe('INT-0');
+    await pruneIssues(deps);
+
+    expect(callOrder).toEqual(['clearAll', 'storeAll']);
   });
 
   it('returns error when getting connected users fails', async () => {
@@ -177,6 +186,8 @@ describe('pruneIssues', () => {
     if (!result.ok) return;
     expect(result.value.skipped).toBe(true);
     expect(result.value.skipReason).toBe('No connected users');
+    expect(result.value.stored).toBe(0);
+    expect(result.value.storedCandidates).toEqual([]);
   });
 
   it('continues when listByUserId fails for a user', async () => {
@@ -210,29 +221,14 @@ describe('pruneIssues', () => {
     expect(result.value.totalActive).toBe(1);
   });
 
-  it('handles connection null after successful getFullConnection', async () => {
+  it('returns error when clearAll fails', async () => {
     const issues = Array.from({ length: 210 }, (_, i) =>
       createTestIssue({ id: `id-${String(i)}`, identifier: `INT-${String(i)}` })
     );
     (deps.issueRepo.listByUserId as ReturnType<typeof vi.fn>).mockResolvedValue(ok(issues));
     (deps.classifier.classifyCandidates as ReturnType<typeof vi.fn>).mockResolvedValue(ok([]));
-    (deps.connectionRepo.getFullConnection as ReturnType<typeof vi.fn>).mockResolvedValue(ok(null));
-
-    const result = await pruneIssues(deps);
-
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.code).toBe('NOT_CONNECTED');
-  });
-
-  it('returns error when getFullConnection fails', async () => {
-    const issues = Array.from({ length: 210 }, (_, i) =>
-      createTestIssue({ id: `id-${String(i)}`, identifier: `INT-${String(i)}` })
-    );
-    (deps.issueRepo.listByUserId as ReturnType<typeof vi.fn>).mockResolvedValue(ok(issues));
-    (deps.classifier.classifyCandidates as ReturnType<typeof vi.fn>).mockResolvedValue(ok([]));
-    (deps.connectionRepo.getFullConnection as ReturnType<typeof vi.fn>).mockResolvedValue(
-      err({ code: 'INTERNAL_ERROR', message: 'Firestore unavailable' })
+    (deps.pruneCandidateRepo.clearAll as ReturnType<typeof vi.fn>).mockResolvedValue(
+      err({ code: 'INTERNAL_ERROR', message: 'Firestore write failed' })
     );
 
     const result = await pruneIssues(deps);
@@ -240,30 +236,29 @@ describe('pruneIssues', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('INTERNAL_ERROR');
+    expect(deps.pruneCandidateRepo.storeAll).not.toHaveBeenCalled();
   });
 
-  it('continues when local Firestore delete fails', async () => {
+  it('returns error when storeAll fails', async () => {
     const issues = Array.from({ length: 210 }, (_, i) =>
-      createTestIssue({ id: `id-${String(i)}`, identifier: `INT-${String(i)}`, userId: 'user-1' })
+      createTestIssue({ id: `id-${String(i)}`, identifier: `INT-${String(i)}` })
     );
     (deps.issueRepo.listByUserId as ReturnType<typeof vi.fn>).mockResolvedValue(ok(issues));
+
     const candidates: PruneCandidate[] = [
       { id: 'id-0', identifier: 'INT-0', title: 'Task 0', score: 90, reason: 'Cancelled', category: 'cancelled' },
     ];
     (deps.classifier.classifyCandidates as ReturnType<typeof vi.fn>).mockResolvedValue(ok(candidates));
-    (deps.issueRepo.deleteById as ReturnType<typeof vi.fn>).mockResolvedValue(
-      err({ code: 'INTERNAL_ERROR', message: 'Firestore down' })
+    (deps.pruneCandidateRepo.storeAll as ReturnType<typeof vi.fn>).mockResolvedValue(
+      err({ code: 'INTERNAL_ERROR', message: 'Firestore write failed' })
     );
 
     const result = await pruneIssues(deps);
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value.deleted).toBe(1);
-    expect(deps.logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ identifier: 'INT-0', userId: 'user-1' }),
-      'Failed to delete local Firestore copy (non-fatal)'
-    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('INTERNAL_ERROR');
+    expect(deps.pruneCandidateRepo.clearAll).toHaveBeenCalledTimes(1);
   });
 
   it('handles issue description null for optional chaining branches', async () => {

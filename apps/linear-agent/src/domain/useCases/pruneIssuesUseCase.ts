@@ -1,7 +1,7 @@
 /**
  * Prune redundant Linear issues to stay under subscription limits.
  *
- * Orchestrates: threshold check -> Gemini classification -> Linear API deletion -> Firestore cleanup.
+ * Orchestrates: threshold check -> Gemini classification -> store candidates in Firestore for user review.
  * All actions logged via structured logging (Cloud Logging).
  */
 
@@ -11,18 +11,19 @@ import type { Logger } from 'pino';
 import type {
   LinearConnectionRepository,
   LinearIssueRepository,
-  LinearApiClient,
   IssuePruningClassifier,
+  PruneCandidateRepository,
   LinearError,
   PruneConfig,
   PruneStats,
+  StoredPruneCandidate,
   SyncedLinearIssue,
 } from '../index.js';
 
 export interface PruneIssuesDeps {
-  connectionRepo: Pick<LinearConnectionRepository, 'getAllConnectedUserIds' | 'getFullConnection'>;
-  issueRepo: Pick<LinearIssueRepository, 'listByUserId' | 'deleteById'>;
-  linearClient: Pick<LinearApiClient, 'deleteIssue'>;
+  connectionRepo: Pick<LinearConnectionRepository, 'getAllConnectedUserIds'>;
+  issueRepo: Pick<LinearIssueRepository, 'listByUserId'>;
+  pruneCandidateRepo: PruneCandidateRepository;
   classifier: IssuePruningClassifier;
   logger: Logger;
   config: PruneConfig;
@@ -33,13 +34,13 @@ export interface PruneIssuesDeps {
  *
  * 1. Get all connected users and aggregate their synced issue count
  * 2. If total unique issues exceed activation threshold, classify candidates
- * 3. Delete top candidates via Linear API
- * 4. Clean up local Firestore copies
+ * 3. Clear old candidates from Firestore
+ * 4. Store new candidates in Firestore for user review
  */
 export async function pruneIssues(
   deps: PruneIssuesDeps
 ): Promise<Result<PruneStats, LinearError>> {
-  const { connectionRepo, issueRepo, classifier, logger, config } = deps;
+  const { connectionRepo, issueRepo, pruneCandidateRepo, classifier, logger, config } = deps;
   const startTime = Date.now();
 
   logger.info({ config }, 'Starting issue pruning workflow');
@@ -119,30 +120,41 @@ export async function pruneIssues(
   const candidates = classifyResult.value;
   logger.info({ candidateCount: candidates.length }, 'Classification complete, storing candidates for review');
 
-  // Step 5: Store candidates for user review
-  const storedCandidates: PruneStats['storedCandidates'] = [];
+  // Step 5: Clear old candidates from Firestore
+  const clearResult = await pruneCandidateRepo.clearAll();
+  if (!clearResult.ok) {
+    return clearResult;
+  }
 
-  for (const candidate of candidates) {
-    logger.info(
-      { identifier: candidate.identifier, score: candidate.score, reason: candidate.reason, category: candidate.category },
-      'Storing candidate for review'
-    );
+  // Step 6: Build and store new candidates
+  const classifiedAt = new Date().toISOString();
+  const storedCandidates: StoredPruneCandidate[] = candidates.map((candidate) => ({
+    id: candidate.id,
+    identifier: candidate.identifier,
+    title: candidate.title,
+    reason: candidate.reason,
+    score: candidate.score,
+    category: candidate.category,
+    classifiedAt,
+  }));
 
-    storedCandidates.push({
-      identifier: candidate.identifier,
-      title: candidate.title,
-      reason: candidate.reason,
-      score: candidate.score,
-      category: candidate.category,
-    });
+  const storeResult = await pruneCandidateRepo.storeAll(storedCandidates);
+  if (!storeResult.ok) {
+    return storeResult;
   }
 
   const stats: PruneStats = {
     skipped: false,
     totalActive,
     stored: storedCandidates.length,
-    remaining: totalActive - storedCandidates.length,
-    storedCandidates,
+    remaining: totalActive,
+    storedCandidates: storedCandidates.map((c) => ({
+      identifier: c.identifier,
+      title: c.title,
+      reason: c.reason,
+      score: c.score,
+      category: c.category,
+    })),
     durationMs: Date.now() - startTime,
   };
 

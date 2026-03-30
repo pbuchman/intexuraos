@@ -1081,6 +1081,6 @@ export class FakePruneCandidateRepository implements PruneCandidateRepository {
   }
 
   getCandidates(): StoredPruneCandidate[] {
-    return this.candidates;
+    return [...this.candidates];
   }
 }
