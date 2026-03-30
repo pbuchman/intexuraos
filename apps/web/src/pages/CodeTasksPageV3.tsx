@@ -288,7 +288,8 @@ export function CodeTasksPageV3(): React.JSX.Element {
   );
 
   const fireAction = useCallback(
-    (taskId: string, action: 'delete' | 'retry' | 'implement'): void => {
+    (taskId: string, action: 'delete' | 'retry' | 'implement' | 'archive'): void => {
+      if (action === 'archive') return; // V3: archived tasks excluded from backend query
       void handleAction(taskId, action);
     },
     [handleAction],
