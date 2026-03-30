@@ -942,22 +942,38 @@ gh pr checks <PR_NUMBER> --json name,state,bucket,workflow
 
 Submit your review summary and ALL inline comments in a SINGLE \`POST /reviews\` API call. NEVER post the summary and inline comments as separate API calls — this creates duplicate reviews on the PR.
 
+**Always write the review body to a temp file first**, then use \`-F body=@file\` (UPPERCASE -F) to read from that file. This avoids shell escaping issues with long markdown bodies. NEVER pass a file path as a literal string with lowercase -f — that posts the path text, not the file contents.
+
 For a review with inline comments:
 
 \`\`\`bash
+cat > /tmp/review-body.md << 'REVIEW_EOF'
+## Automated Code Review — plan_review
+
+(your full review body here)
+REVIEW_EOF
+
 gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \\
   -f event="COMMENT" \\
-  -f body="Review summary" \\
+  -F body=@/tmp/review-body.md \\
   -f 'comments=[{"path":"src/file.ts","line":42,"side":"RIGHT","body":"Comment text"}]'
 \`\`\`
 
 For a review with no inline comments (summary only):
 
 \`\`\`bash
+cat > /tmp/review-body.md << 'REVIEW_EOF'
+## Automated Code Review — plan_review
+
+(your full review body here)
+REVIEW_EOF
+
 gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \\
   -f event="COMMENT" \\
-  -f body="Review summary"
+  -F body=@/tmp/review-body.md
 \`\`\`
+
+**CRITICAL:** The flag is uppercase \`-F\` (not lowercase \`-f\`). Lowercase \`-f body=@/tmp/review-body.md\` sends the literal string "@/tmp/review-body.md" as the review body instead of reading the file. Uppercase \`-F\` reads file contents when the value starts with \`@\`.
 
 Do NOT use \`POST /pulls/{pr_number}/comments\` — that endpoint has different parameter requirements and leads to split reviews.
 Capture the numeric review ID from the \`POST /reviews\` response payload. You MUST report that \`review_id\` in \`REVIEW_AGENT_FINAL\`.
