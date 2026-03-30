@@ -9,16 +9,22 @@ export interface Config {
   internalAuthToken: string;
 }
 
-/** Configuration for the issue pruning system */
+/** Configuration for the issue pruning system - source constants */
 export const PRUNE_CONFIG = {
   /** Threshold above which pruning activates */
   ACTIVATION_THRESHOLD: 200,
   /** Target number of issues to delete per run */
   TARGET_DELETION_COUNT: 30,
-} as const satisfies { readonly ACTIVATION_THRESHOLD: number; readonly TARGET_DELETION_COUNT: number } & Record<string, number>;
+} as const;
 
-/** PruneConfig adapter - converts PRUNE_CONFIG to PruneConfig interface format */
-export const PRUNE_CONFIG_RUNTIME = {
+/** Configuration for the issue pruning system at runtime */
+export interface PruneConfigRuntime {
+  activationThreshold: number;
+  targetDeletionCount: number;
+}
+
+/** Runtime configuration for the issue pruning system - converts UPPER_CASE constants to camelCase */
+export const PRUNE_CONFIG_RUNTIME: PruneConfigRuntime = {
   activationThreshold: PRUNE_CONFIG.ACTIVATION_THRESHOLD,
   targetDeletionCount: PRUNE_CONFIG.TARGET_DELETION_COUNT,
 } as const;
