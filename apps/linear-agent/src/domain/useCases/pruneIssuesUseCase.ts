@@ -6,7 +6,7 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import { ok, err } from '@intexuraos/common-core';
+import { ok } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
 import type {
   LinearConnectionRepository,
@@ -39,7 +39,7 @@ export interface PruneIssuesDeps {
 export async function pruneIssues(
   deps: PruneIssuesDeps
 ): Promise<Result<PruneStats, LinearError>> {
-  const { connectionRepo, issueRepo, linearClient, classifier, logger, config } = deps;
+  const { connectionRepo, issueRepo, classifier, logger, config } = deps;
   const startTime = Date.now();
 
   logger.info({ config }, 'Starting issue pruning workflow');
@@ -57,10 +57,9 @@ export async function pruneIssues(
       skipped: true,
       skipReason: 'No connected users',
       totalActive: 0,
-      deleted: 0,
+      stored: 0,
       remaining: 0,
-      deletedCandidates: [],
-      failedDeletions: [],
+      storedCandidates: [],
       durationMs: Date.now() - startTime,
     });
   }
@@ -98,10 +97,9 @@ export async function pruneIssues(
       skipped: true,
       skipReason: `Issue count (${String(totalActive)}) is below threshold (${String(config.activationThreshold)})`,
       totalActive,
-      deleted: 0,
+      stored: 0,
       remaining: totalActive,
-      deletedCandidates: [],
-      failedDeletions: [],
+      storedCandidates: [],
       durationMs: Date.now() - startTime,
     });
   }
@@ -119,78 +117,32 @@ export async function pruneIssues(
   }
 
   const candidates = classifyResult.value;
-  logger.info({ candidateCount: candidates.length }, 'Classification complete, starting deletions');
+  logger.info({ candidateCount: candidates.length }, 'Classification complete, storing candidates for review');
 
-  // Step 5: Get API key for deletion (use first connected user's key)
-  // NOTE: In a single-org Linear setup, any member's API key can delete any issue
-  // in the workspace. This is safe because IntexuraOS operates as a single-organization
-  // system. If multi-org support is added in the future, this must be revisited to
-  // use per-user keys matched to issue ownership.
-  /* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires fallback despite prior .length check @preserve */
-  const firstUserId = userIds[0] ?? '';
-  /* v8 ignore stop @preserve */
-  const connectionResult = await connectionRepo.getFullConnection(firstUserId);
-  if (!connectionResult.ok) {
-    return connectionResult;
-  }
-  const connection = connectionResult.value;
-  if (connection === null) {
-    return err({ code: 'NOT_CONNECTED', message: 'No connected user found for API operations' });
-  }
-
-  // Step 6: Delete candidates
-  const deletedCandidates: PruneStats['deletedCandidates'] = [];
-  const failedDeletions: PruneStats['failedDeletions'] = [];
+  // Step 5: Store candidates for user review
+  const storedCandidates: PruneStats['storedCandidates'] = [];
 
   for (const candidate of candidates) {
     logger.info(
       { identifier: candidate.identifier, score: candidate.score, reason: candidate.reason, category: candidate.category },
-      'Deleting issue'
+      'Storing candidate for review'
     );
 
-    const deleteResult = await linearClient.deleteIssue(connection.apiKey, candidate.id);
-
-    if (!deleteResult.ok) {
-      logger.error(
-        { identifier: candidate.identifier, error: deleteResult.error },
-        'Failed to delete issue from Linear'
-      );
-      failedDeletions.push({ identifier: candidate.identifier, error: deleteResult.error.message });
-      continue;
-    }
-
-    // Clean up all local Firestore copies (multi-tenant: each user may have a copy)
-    /* v8 ignore start -- upstream: candidate.id always exists in allIssuesMap since candidates come from classifying the same issues; defensive check for data corruption @preserve */
-    const entry = allIssuesMap.get(candidate.id);
-    if (entry !== undefined) {
-    /* v8 ignore stop @preserve */
-      for (const userId of entry.userIds) {
-        const localDeleteResult = await issueRepo.deleteById(candidate.id, userId);
-        if (!localDeleteResult.ok) {
-          logger.warn(
-            { identifier: candidate.identifier, userId, error: localDeleteResult.error },
-            'Failed to delete local Firestore copy (non-fatal)'
-          );
-        }
-      }
-    }
-
-    deletedCandidates.push({
+    storedCandidates.push({
       identifier: candidate.identifier,
       title: candidate.title,
       reason: candidate.reason,
+      score: candidate.score,
+      category: candidate.category,
     });
-
-    logger.info({ identifier: candidate.identifier }, 'Issue deleted successfully');
   }
 
   const stats: PruneStats = {
     skipped: false,
     totalActive,
-    deleted: deletedCandidates.length,
-    remaining: totalActive - deletedCandidates.length,
-    deletedCandidates,
-    failedDeletions,
+    stored: storedCandidates.length,
+    remaining: totalActive - storedCandidates.length,
+    storedCandidates,
     durationMs: Date.now() - startTime,
   };
 

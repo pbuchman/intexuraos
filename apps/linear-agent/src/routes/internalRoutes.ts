@@ -697,7 +697,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       request.log.info(
         {
           skipped: result.value.skipped,
-          deleted: result.value.deleted,
+          stored: result.value.stored,
           remaining: result.value.remaining,
         },
         'internal/pruneIssues: pruning completed'

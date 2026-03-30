@@ -263,6 +263,12 @@ export interface PruneCandidate {
   category: 'cancelled' | 'duplicate' | 'sub-issue' | 'simple-fix' | 'review-only' | 'other';
 }
 
+/** A prune candidate stored in Firestore for user review */
+export interface StoredPruneCandidate extends PruneCandidate {
+  /** When the candidate was classified by Gemini */
+  classifiedAt: string;
+}
+
 /** Stats returned after a pruning run */
 export interface PruneStats {
   /** Whether pruning was skipped (below threshold) */
@@ -271,14 +277,22 @@ export interface PruneStats {
   skipReason?: string;
   /** Total active issues before pruning */
   totalActive: number;
-  /** Number of issues successfully deleted */
-  deleted: number;
-  /** Number of issues remaining after pruning */
+  /** Number of candidates stored for review */
+  stored: number;
+  /** Number of issues remaining after storing candidates */
   remaining: number;
-  /** Issues that were deleted with reasons */
-  deletedCandidates: { identifier: string; title: string; reason: string }[];
+  /** Candidates that were stored for user review */
+  storedCandidates: { identifier: string; title: string; reason: string; score: number; category: string }[];
+  /** Duration of the pruning run in milliseconds */
+  durationMs: number;
+}
+
+/** Stats returned after confirming deletion of prune candidates */
+export interface PruneDeleteStats {
+  /** Number of issues successfully deleted from Linear */
+  deleted: number;
   /** Issues that failed to delete */
   failedDeletions: { identifier: string; error: string }[];
-  /** Duration of the pruning run in milliseconds */
+  /** Duration of the deletion in milliseconds */
   durationMs: number;
 }
