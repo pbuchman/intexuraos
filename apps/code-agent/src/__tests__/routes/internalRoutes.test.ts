@@ -382,4 +382,23 @@ describe('POST /internal/archive-stale-groups', () => {
 
     expect(archiveSpy).toHaveBeenCalledWith({ staleDays: 14 });
   });
+
+  it('returns 500 when archiveStaleGroups use case returns error', async () => {
+    const services = getServices();
+    const archiveSpy = vi.fn().mockResolvedValue(err(new Error('Firestore connection lost')));
+
+    setServices({ ...services, archiveStaleGroups: archiveSpy });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/archive-stale-groups',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+    expect(body.error.message).toBe('Firestore connection lost');
+  });
 });
