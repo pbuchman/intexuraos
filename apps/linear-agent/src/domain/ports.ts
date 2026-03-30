@@ -151,6 +151,9 @@ export interface LinearApiClient {
     apiKey: string,
     teamId: string
   ): Promise<Result<WorkflowState[], LinearError>>;
+
+  /** Delete (trash) an issue in Linear. This is a soft-delete (recoverable via Linear UI). */
+  deleteIssue(apiKey: string, issueId: string): Promise<Result<void, LinearError>>;
 }
 
 /** Service for extracting issue data from natural language */
