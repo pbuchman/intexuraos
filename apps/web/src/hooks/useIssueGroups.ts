@@ -186,7 +186,7 @@ export function useIssueGroups(options: {
   // Initial load
   useEffect(() => {
     isMountedRef.current = true;
-    void refresh();
+    void refresh(false);
     return (): void => {
       isMountedRef.current = false;
     };
