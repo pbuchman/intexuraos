@@ -4,7 +4,8 @@ import type { SyncedLinearIssue, PruneCandidate, PruneConfig } from '../../../do
 import type { Logger } from 'pino';
 import { ok, err } from '@intexuraos/common-core';
 
-function createFakeLogger(): Logger {
+/** vi.fn()-based logger for tests that assert on logger calls */
+function createMockLogger(): Logger {
   return {
     info: vi.fn(),
     warn: vi.fn(),
@@ -47,7 +48,7 @@ describe('pruneIssues', () => {
   let logger: Logger;
 
   beforeEach(() => {
-    logger = createFakeLogger();
+    logger = createMockLogger();
     deps = {
       connectionRepo: {
         getAllConnectedUserIds: vi.fn().mockResolvedValue(ok(['user-1'])),
