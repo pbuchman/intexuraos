@@ -10,7 +10,7 @@
  * - No client-side groupByLinearIssue / sortIssueGroups
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpDown, Clock, Plus } from 'lucide-react';
 import { Button, CodeTaskLogsModal, Layout, TaskErrorModal } from '@/components';
@@ -19,8 +19,9 @@ import { useAuth } from '@/context';
 import { useIssueGroups, useRapidPoll } from '@/hooks/useIssueGroups';
 import { useTimeTick } from '@/hooks';
 import { ApiError } from '@/services/apiClient';
-import { startImplementation, retryCodeTask, archiveCodeTask } from '@/services/codeAgentApi';
+import { startImplementation, retryCodeTask, archiveCodeTask, deleteCodeTask } from '@/services/codeAgentApi';
 import type { GroupStatus, SortOption } from '@/types/issueGroups';
+import type { ActioningType } from '@/utils/issueGroups';
 
 // V3 does not include 'archived' — backend excludes archived tasks
 const ALL_GROUP_STATUSES: GroupStatus[] = ['active', 'needs-action', 'done', 'failed'];
@@ -228,6 +229,7 @@ export function CodeTasksPageV3(): React.JSX.Element {
   const [actionError, setActionError] = useState<ApiError | null>(null);
   const actionInFlightRef = useRef(false);
   const lastActionRef = useRef<{ taskId: string; action: 'retry' | 'implement' | 'archive' } | null>(null);
+  const [actioningType, setActioningType] = useState<ActioningType>(null);
 
   // Server-side grouping, filtering, sorting, pagination
   const {
@@ -236,6 +238,7 @@ export function CodeTasksPageV3(): React.JSX.Element {
     totalGroups,
     loading,
     loadingMore,
+    refreshing,
     error,
     hasMore,
     loadMore,
@@ -247,6 +250,13 @@ export function CodeTasksPageV3(): React.JSX.Element {
 
   // Rapid polling after user actions
   const { actioningTaskId, setActioningTaskId } = useRapidPoll(null, groups, refresh);
+
+  // Sync actioningType when rapid poll clears actioningTaskId
+  useEffect(() => {
+    if (actioningTaskId === null) {
+      setActioningType(null);
+    }
+  }, [actioningTaskId]);
 
   const timeTick = useTimeTick(30000, counts.active > 0);
 
@@ -278,6 +288,7 @@ export function CodeTasksPageV3(): React.JSX.Element {
       actionInFlightRef.current = true;
       lastActionRef.current = { taskId, action };
       setActioningTaskId(taskId);
+      setActioningType(action);
       try {
         const token = await getAccessToken();
         if (action === 'implement') {
@@ -291,6 +302,7 @@ export function CodeTasksPageV3(): React.JSX.Element {
         lastActionRef.current = null;
       } catch (err: unknown) {
         setActioningTaskId(null);
+        setActioningType(null);
         setActionError(
           err instanceof ApiError
             ? err
@@ -310,23 +322,25 @@ export function CodeTasksPageV3(): React.JSX.Element {
     [handleAction],
   );
 
-  const handleArchiveGroup = useCallback(
-    (taskIds: string[]): void => {
+  const handleGroupAction = useCallback(
+    (taskIds: string[], actionType: 'archive' | 'delete', apiFn: (token: string, taskId: string) => Promise<void>): void => {
       void (async (): Promise<void> => {
         if (actionInFlightRef.current) return;
         actionInFlightRef.current = true;
         const firstId = taskIds[0];
         if (firstId !== undefined) {
           setActioningTaskId(firstId);
+          setActioningType(actionType);
         }
         try {
           const token = await getAccessToken();
           for (const taskId of taskIds) {
-            await archiveCodeTask(token, taskId);
+            await apiFn(token, taskId);
           }
           await refresh(false);
         } catch (err: unknown) {
           setActioningTaskId(null);
+          setActioningType(null);
           setActionError(
             err instanceof ApiError
               ? err
@@ -338,6 +352,16 @@ export function CodeTasksPageV3(): React.JSX.Element {
       })();
     },
     [getAccessToken, refresh, setActioningTaskId],
+  );
+
+  const handleArchiveGroup = useCallback(
+    (taskIds: string[]): void => { handleGroupAction(taskIds, 'archive', archiveCodeTask); },
+    [handleGroupAction],
+  );
+
+  const handleDeleteGroup = useCallback(
+    (taskIds: string[]): void => { handleGroupAction(taskIds, 'delete', deleteCodeTask); },
+    [handleGroupAction],
   );
 
   const handleCloseErrorModal = useCallback((): void => {
@@ -411,7 +435,13 @@ export function CodeTasksPageV3(): React.JSX.Element {
         <div>
           <ColumnHeader />
 
-          <div className="space-y-1">
+          {refreshing ? (
+            <div className="mb-2 h-0.5 w-full overflow-hidden rounded-full bg-slate-700">
+              <div className="animate-progress-slide h-full w-2/5 rounded-full bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
+            </div>
+          ) : null}
+
+          <div className={`space-y-1 ${refreshing ? 'opacity-50 pointer-events-none' : ''}`}>
             {groups.map((group) => (
               <IssueGroupRow
                 key={group.linearIssueId ?? group.latestTask.id}
@@ -419,8 +449,10 @@ export function CodeTasksPageV3(): React.JSX.Element {
                 timeTick={timeTick}
                 onAction={fireAction}
                 onArchiveGroup={handleArchiveGroup}
+                onDeleteGroup={handleDeleteGroup}
                 onOpenLogs={setPreviewTaskId}
                 actioningTaskId={actioningTaskId}
+                actioningType={actioningType}
               />
             ))}
           </div>

@@ -2,6 +2,7 @@ import type { CodeTask, CodeTaskStatus } from '@/types';
 
 export type GroupStatus = 'active' | 'needs-action' | 'done' | 'failed' | 'archived';
 export type StepState = 'completed' | 'running' | 'dispatched' | 'queued' | 'failed' | 'waiting' | 'actionable';
+export type ActioningType = 'archive' | 'delete' | 'implement' | 'retry' | null;
 
 export interface PipelineStepData {
   agentType: string;
