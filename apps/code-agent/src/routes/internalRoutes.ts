@@ -300,5 +300,88 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
+  // POST /internal/archive-stale-groups - triggered by Cloud Scheduler hourly
+  fastify.post(
+    '/internal/archive-stale-groups',
+    {
+      schema: {
+        operationId: 'archiveStaleGroups',
+        summary: 'Archive issue groups with no activity for 7+ days',
+        description: 'Called by Cloud Scheduler hourly. Archives entire issue groups where all tasks have updatedAt older than the staleness threshold.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          nullable: true,
+          properties: {
+            staleDays: { type: 'number', description: 'Days of inactivity before archiving (default: 7)' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Archive completed',
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              totalTasksFetched: { type: 'number' },
+              totalGroupsEvaluated: { type: 'number' },
+              groupsArchived: { type: 'number' },
+              groupsRetained: { type: 'number' },
+              groupsSkippedActive: { type: 'number' },
+              tasksArchived: { type: 'number' },
+              tasksFailed: { type: 'number' },
+              durationMs: { type: 'number' },
+            },
+            required: ['totalTasksFetched', 'totalGroupsEvaluated', 'groupsArchived', 'groupsRetained', 'groupsSkippedActive', 'tasksArchived', 'tasksFailed', 'durationMs'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/archive-stale-groups',
+      });
+
+      const authResult = authenticateInternalScheduler(request);
+      if (!authResult.authenticated) {
+        request.log.warn('Internal auth failed for archive-stale-groups');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+      request.log.info({ strategy: authResult.strategy }, 'Authenticated for archive-stale-groups');
+
+      const { archiveStaleGroups, logger } = getServices();
+
+      const body = request.body as { staleDays?: number } | null;
+      const staleDays = body?.staleDays;
+      const input = staleDays !== undefined ? { staleDays } : undefined;
+
+      const result = await archiveStaleGroups(input);
+      if (!result.ok) {
+        logger.error({ error: result.error.message }, 'Archive stale groups failed');
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      logger.info(result.value, 'Stale issue group archival completed via route');
+
+      // @allow-raw-send: cron endpoint returns archive stats directly
+      return await reply.send(result.value);
+    }
+  );
+
   done();
 };
