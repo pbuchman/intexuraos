@@ -286,3 +286,100 @@ describe('GET /internal/linear/issue-context/:identifier', () => {
     expect(body.error.code).toBe('DOWNSTREAM_ERROR');
   });
 });
+
+describe('POST /internal/archive-stale-groups', () => {
+  let app: Awaited<ReturnType<typeof buildServer>>;
+
+  beforeEach(async () => {
+    nock('http://actions-agent').persist().patch(/\/internal\/actions\/.*\/status/).reply(200, { success: true });
+    nock('http://linear-agent:8086').persist().post(/\/.*/).reply(200, { success: true });
+
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.intexuraos.cloud';
+    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
+    process.env['INTEXURAOS_ORCHESTRATOR_SECRET'] = 'test-orchestrator-secret';
+
+    setupTestServices();
+    app = await buildServer();
+  });
+
+  afterEach(() => {
+    resetServices();
+    resetFirestore();
+    nock.cleanAll();
+  });
+
+  it('returns 401 when no auth header is provided', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/archive-stale-groups',
+    });
+
+    expect(response.statusCode).toBe(401);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('UNAUTHORIZED');
+  });
+
+  it('returns 200 with archive stats when x-internal-auth is valid', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/archive-stale-groups',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      totalTasksFetched: number;
+      totalGroupsEvaluated: number;
+      groupsArchived: number;
+      groupsRetained: number;
+      groupsSkippedActive: number;
+      tasksArchived: number;
+      tasksFailed: number;
+      durationMs: number;
+    };
+    expect(body.totalTasksFetched).toBe(0);
+    expect(body.groupsArchived).toBe(0);
+    expect(body.totalGroupsEvaluated).toBe(0);
+    expect(body.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('returns 200 when authenticated via OIDC Bearer token', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/archive-stale-groups',
+      headers: { authorization: 'Bearer fake-oidc-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { totalTasksFetched: number };
+    expect(body.totalTasksFetched).toBe(0);
+  });
+
+  it('passes staleDays from request body to use case', async () => {
+    const services = getServices();
+    const archiveSpy = vi.fn().mockResolvedValue(ok({
+      totalTasksFetched: 0,
+      totalGroupsEvaluated: 0,
+      groupsArchived: 0,
+      groupsRetained: 0,
+      groupsSkippedActive: 0,
+      tasksArchived: 0,
+      tasksFailed: 0,
+      durationMs: 1,
+    }));
+
+    setServices({ ...services, archiveStaleGroups: archiveSpy });
+
+    await app.inject({
+      method: 'POST',
+      url: '/internal/archive-stale-groups',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: { staleDays: 14 },
+    });
+
+    expect(archiveSpy).toHaveBeenCalledWith({ staleDays: 14 });
+  });
+});
