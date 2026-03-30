@@ -60,6 +60,9 @@ describe('internalRoutes', () => {
       userServiceClient: fakeUserServiceClient,
       commentRepository: null as unknown as import('../../domain/index.js').LinearCommentRepository,
       codeAgentClient: new FakeCodeAgentClient(),
+      issuePruningClassifier: {
+        classifyCandidates: async () => ({ ok: true, value: [] }),
+      },
     });
 
     app = await buildServer();

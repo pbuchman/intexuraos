@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createIssuePruningClassifier } from '../../../infra/llm/issuePruningClassifier.js';
-import type { IssuePruningClassifier, SyncedLinearIssue, PruneCandidate } from '../../../domain/index.js';
+import type { IssuePruningClassifier, SyncedLinearIssue } from '../../../domain/index.js';
 import type { Logger } from 'pino';
+import type { Result } from '@intexuraos/common-core';
 
 function createFakeLogger(): Logger {
   return {
@@ -45,7 +46,7 @@ describe('IssuePruningClassifier', () => {
     logger = createFakeLogger();
     fakeGenerate = vi.fn();
     classifier = createIssuePruningClassifier({
-      generate: fakeGenerate,
+      generate: fakeGenerate as unknown as (prompt: string) => Promise<Result<{ content: string; usage: { inputTokens: number; outputTokens: number; totalTokens: number } }, { code: string; message: string }>>,
       logger,
     });
   });
@@ -77,10 +78,10 @@ describe('IssuePruningClassifier', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value).toHaveLength(2);
-    expect(result.value[0]!.identifier).toBe('INT-100');
-    expect(result.value[0]!.score).toBe(95);
-    expect(result.value[0]!.category).toBe('cancelled');
-    expect(result.value[1]!.identifier).toBe('INT-300');
+    expect(result.value[0]?.identifier).toBe('INT-100');
+    expect(result.value[0]?.score).toBe(95);
+    expect(result.value[0]?.category).toBe('cancelled');
+    expect(result.value[1]?.identifier).toBe('INT-300');
   });
 
   it('filters out non-closed issues before sending to Gemini', async () => {
@@ -105,7 +106,11 @@ describe('IssuePruningClassifier', () => {
     if (!result.ok) return;
 
     // Only INT-300 should be in the prompt (completed/cancelled only)
-    const promptArg = fakeGenerate.mock.calls[0]![0] as string;
+    const firstCall = fakeGenerate.mock.calls[0];
+    if (firstCall === undefined) {
+      throw new Error('Expected generate to be called');
+    }
+    const promptArg = firstCall[0] as string;
     expect(promptArg).not.toContain('INT-100');
     expect(promptArg).not.toContain('INT-200');
     expect(promptArg).toContain('INT-300');
@@ -162,8 +167,8 @@ describe('IssuePruningClassifier', () => {
     const result = await classifier.classifyCandidates(issues, 5, logger);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value[0]!.id).toBe('uuid-1');
-    expect(result.value[0]!.title).toBe('My task');
+    expect(result.value[0]?.id).toBe('uuid-1');
+    expect(result.value[0]?.title).toBe('My task');
   });
 
   it('returns empty array when no closed issues exist', async () => {
@@ -176,5 +181,28 @@ describe('IssuePruningClassifier', () => {
     if (!result.ok) return;
     expect(result.value).toHaveLength(0);
     expect(fakeGenerate).not.toHaveBeenCalled();
+  });
+
+  it('filters out candidates with identifiers not in the issue map', async () => {
+    const issues = [
+      createTestIssue({ id: 'uuid-1', identifier: 'INT-100', title: 'Real issue', stateType: 'cancelled', state: 'Canceled' }),
+    ];
+
+    fakeGenerate.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content: JSON.stringify([
+          { identifier: 'INT-999', score: 90, reason: 'Hallucinated', category: 'cancelled' },
+          { identifier: 'INT-100', score: 80, reason: 'Real', category: 'cancelled' },
+        ]),
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      },
+    });
+
+    const result = await classifier.classifyCandidates(issues, 5, logger);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(1);
+    expect(result.value[0]?.identifier).toBe('INT-100');
   });
 });

@@ -55,6 +55,9 @@ describe('internalIssuesRoutes', () => {
       userServiceClient: new FakeUserServiceClient(),
       commentRepository: fakeCommentRepo,
       codeAgentClient: new FakeCodeAgentClient(),
+      issuePruningClassifier: {
+        classifyCandidates: async () => ({ ok: true, value: [] }),
+      },
     });
 
     app = await buildServer();

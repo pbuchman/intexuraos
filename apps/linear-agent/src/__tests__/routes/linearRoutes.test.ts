@@ -2,6 +2,7 @@ import { createToken, describe, expect, it, setupTestContext, clearTestLogs, get
 import { buildServer } from '../../server.js';
 import type { FastifyInstance } from 'fastify';
 import type { LinearConnection } from '../../domain/models.js';
+import type { Result } from '@intexuraos/common-core';
 import {
   FakeLinearConnectionRepository,
   FakeLinearApiClient,
@@ -1932,6 +1933,9 @@ describe('linearRoutes logging coverage', () => {
     userServiceClient: new FakeUserServiceClient(),
     commentRepository: new FakeLinearCommentRepository(),
     codeAgentClient: new FakeCodeAgentClient(),
+    issuePruningClassifier: {
+      classifyCandidates: async (): Promise<Result<[], never>> => ({ ok: true as const, value: [] }),
+    },
   };
 
   beforeAll(async () => {

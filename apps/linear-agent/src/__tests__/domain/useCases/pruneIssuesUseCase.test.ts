@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { pruneIssues, type PruneIssuesDeps } from '../../../domain/useCases/pruneIssuesUseCase.js';
 import type { SyncedLinearIssue, PruneCandidate, PruneConfig } from '../../../domain/index.js';
 import type { Logger } from 'pino';
-import { ok, err, type Result } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
 
 function createFakeLogger(): Logger {
   return {
@@ -136,7 +136,7 @@ describe('pruneIssues', () => {
     if (!result.ok) return;
     expect(result.value.deleted).toBe(1);
     expect(result.value.failedDeletions).toHaveLength(1);
-    expect(result.value.failedDeletions[0]!.identifier).toBe('INT-0');
+    expect(result.value.failedDeletions[0]?.identifier).toBe('INT-0');
   });
 
   it('returns error when getting connected users fails', async () => {
@@ -165,5 +165,115 @@ describe('pruneIssues', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.message).toContain('Gemini failed');
+  });
+
+  it('skips pruning when no connected users', async () => {
+    (deps.connectionRepo.getAllConnectedUserIds as ReturnType<typeof vi.fn>).mockResolvedValue(ok([]));
+
+    const result = await pruneIssues(deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.skipped).toBe(true);
+    expect(result.value.skipReason).toBe('No connected users');
+  });
+
+  it('continues when listByUserId fails for a user', async () => {
+    (deps.connectionRepo.getAllConnectedUserIds as ReturnType<typeof vi.fn>).mockResolvedValue(ok(['user-1', 'user-2']));
+    (deps.issueRepo.listByUserId as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(err({ code: 'INTERNAL_ERROR', message: 'Firestore down' }))
+      .mockResolvedValueOnce(ok([createTestIssue({ id: 'id-1', identifier: 'INT-1' })]));
+
+    const result = await pruneIssues(deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.skipped).toBe(true);
+    expect(deps.logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'user-1', error: expect.objectContaining({ code: 'INTERNAL_ERROR' }) }),
+      'Failed to list issues for user, continuing'
+    );
+  });
+
+  it('deduplicates issues across multiple users', async () => {
+    const sharedIssue = createTestIssue({ id: 'shared-id', identifier: 'INT-100', userId: 'user-1' });
+    (deps.connectionRepo.getAllConnectedUserIds as ReturnType<typeof vi.fn>).mockResolvedValue(ok(['user-1', 'user-2']));
+    (deps.issueRepo.listByUserId as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(ok([sharedIssue]))
+      .mockResolvedValueOnce(ok([createTestIssue({ id: 'shared-id', identifier: 'INT-100', userId: 'user-2' })]));
+
+    const result = await pruneIssues(deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.totalActive).toBe(1);
+  });
+
+  it('handles connection null after successful getFullConnection', async () => {
+    const issues = Array.from({ length: 210 }, (_, i) =>
+      createTestIssue({ id: `id-${String(i)}`, identifier: `INT-${String(i)}` })
+    );
+    (deps.issueRepo.listByUserId as ReturnType<typeof vi.fn>).mockResolvedValue(ok(issues));
+    (deps.classifier.classifyCandidates as ReturnType<typeof vi.fn>).mockResolvedValue(ok([]));
+    (deps.connectionRepo.getFullConnection as ReturnType<typeof vi.fn>).mockResolvedValue(ok(null));
+
+    const result = await pruneIssues(deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('NOT_CONNECTED');
+  });
+
+  it('returns error when getFullConnection fails', async () => {
+    const issues = Array.from({ length: 210 }, (_, i) =>
+      createTestIssue({ id: `id-${String(i)}`, identifier: `INT-${String(i)}` })
+    );
+    (deps.issueRepo.listByUserId as ReturnType<typeof vi.fn>).mockResolvedValue(ok(issues));
+    (deps.classifier.classifyCandidates as ReturnType<typeof vi.fn>).mockResolvedValue(ok([]));
+    (deps.connectionRepo.getFullConnection as ReturnType<typeof vi.fn>).mockResolvedValue(
+      err({ code: 'INTERNAL_ERROR', message: 'Firestore unavailable' })
+    );
+
+    const result = await pruneIssues(deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('continues when local Firestore delete fails', async () => {
+    const issues = Array.from({ length: 210 }, (_, i) =>
+      createTestIssue({ id: `id-${String(i)}`, identifier: `INT-${String(i)}`, userId: 'user-1' })
+    );
+    (deps.issueRepo.listByUserId as ReturnType<typeof vi.fn>).mockResolvedValue(ok(issues));
+    const candidates: PruneCandidate[] = [
+      { id: 'id-0', identifier: 'INT-0', title: 'Task 0', score: 90, reason: 'Cancelled', category: 'cancelled' },
+    ];
+    (deps.classifier.classifyCandidates as ReturnType<typeof vi.fn>).mockResolvedValue(ok(candidates));
+    (deps.issueRepo.deleteById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      err({ code: 'INTERNAL_ERROR', message: 'Firestore down' })
+    );
+
+    const result = await pruneIssues(deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.deleted).toBe(1);
+    expect(deps.logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ identifier: 'INT-0', userId: 'user-1' }),
+      'Failed to delete local Firestore copy (non-fatal)'
+    );
+  });
+
+  it('handles issue description null for optional chaining branches', async () => {
+    const issues = Array.from({ length: 210 }, (_, i) =>
+      createTestIssue({ id: `id-${String(i)}`, identifier: `INT-${String(i)}`, description: null })
+    );
+    (deps.issueRepo.listByUserId as ReturnType<typeof vi.fn>).mockResolvedValue(ok(issues));
+    (deps.classifier.classifyCandidates as ReturnType<typeof vi.fn>).mockResolvedValue(ok([]));
+
+    const result = await pruneIssues(deps);
+
+    expect(result.ok).toBe(true);
   });
 });
