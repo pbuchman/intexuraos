@@ -53,13 +53,14 @@ interface ExecutionTaskRecord {
 
     // Contract verification
     codeReviewerDispatched: boolean;  // Was code-reviewer subagent dispatched?
-    orderCorrect: boolean;            // Were skills invoked in correct order?
+    orderCorrect: boolean;            // true iff both executing-plans-first AND requesting-code-review-second rows are "Compliant"
 
     // Anomalies
     anomaliesCritical: number;     // Count of 🔴 critical anomalies
     anomaliesWarning: number;      // Count of 🟠 warning anomalies
     anomaliesMinor: number;        // Count of 🟡 minor anomalies
-    anomalyTypes: string[];        // Types of anomalies detected
+    anomalyTypes: string[];        // Anomaly descriptions (may be full sentences, not short tokens)
+    anomalySeverityUnavailable: boolean;  // true if Anomalies table lacked a Severity column
   };
 }
 ```
@@ -180,6 +181,18 @@ All required data is provided in the input.
 ## Report Format Reference
 
 ### Tabular Format (post 6f3e20b3f)
+
+**Note:** Column layouts vary across the date range. The parsing agent handles multiple formats.
+
+#### Overall — Two known formats:
+- Three-column: `| Key | Result | Severity |` (2026-03-14 onward)
+- Two-column: `| Key Info | Value |` (some 2026-03-13 reports)
+
+#### Anomalies — Multiple known formats:
+- `| Anomaly | Transcript Reference | Severity |` (has severity data)
+- `| Anomaly Type | Description |` (no severity — set counts to 0)
+- `| Message ID | Anomaly Type | Description |` (no severity — set counts to 0)
+- Bullet-list format (pre-tabular, should not appear after cutoff)
 
 ```markdown
 ### Deep Validation Report

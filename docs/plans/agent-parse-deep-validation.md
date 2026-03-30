@@ -50,7 +50,8 @@ Return ONLY valid JSON (no markdown, no commentary):
     "anomaliesCritical": 0,
     "anomaliesWarning": 2,
     "anomaliesMinor": 1,
-    "anomalyTypes": ["...", "..."]
+    "anomalyTypes": ["...", "..."],
+    "anomalySeverityUnavailable": false
   }
 }
 ```
@@ -70,9 +71,15 @@ Return ONLY valid JSON (no markdown, no commentary):
 Find `**Cost:** $X.XXXXXX` → extract number. Not found → `null`.
 
 #### Overall Section
-Find `#### Overall` then table:
+Find `#### Overall` then table. Two formats exist:
+
+**Three-column format** (`| Key | Result | Severity |`):
 - `overallOutcome`: "Outcome" row, "Result" column value
-- `overallSeverity`: Emoji in that row: 🟢→"pass", 🟠→"warning", 🔴→"critical"
+- `overallSeverity`: Emoji in Severity column: 🟢→"pass", 🟠→"warning", 🔴→"critical"
+
+**Two-column format** (`| Key Info | Value |`):
+- `overallOutcome`: "Outcome" row, "Value" column
+- `overallSeverity`: Look for emoji in the Value column. If no emoji found, default to `"pass"`
 
 #### Claim Verification Section
 Find `#### Claim Verification` then table:
@@ -84,18 +91,34 @@ Find `#### Claim Verification` then table:
 #### Contract Verification Section
 Find `#### Contract Verification` then table:
 - `codeReviewerDispatched`: Row about `code-reviewer subagent` has "Compliant" or "fulfilled" → true
-- `orderCorrect`: Both skills invoked AND correct order shown
+- `orderCorrect`: `true` if and only if BOTH of the following rows have Result = "Compliant" (or "fulfilled"):
+  1. Row matching `executing-plans invoked first` (or `superpowers:executing-plans`)
+  2. Row matching `requesting-code-review invoked second` (or `superpowers:requesting-code-review`)
+  If either row is missing or has any other Result value (e.g. "Not compliant"), set `orderCorrect` to `false`.
 
 #### Anomalies Section
-Find `#### Anomalies` then table:
+Find `#### Anomalies` then table. Multiple column layouts exist:
+
+**With Severity column** (e.g. `| Anomaly | Transcript Reference | Severity |`):
 - `anomaliesCritical`: Count 🔴 in Severity column
 - `anomaliesWarning`: Count 🟠 in Severity column
 - `anomaliesMinor`: Count 🟡 in Severity column
-- `anomalyTypes`: Array of unique values from first column
+
+**Without Severity column** (e.g. `| Anomaly Type | Description |` or `| Message ID | Anomaly Type | Description |`):
+- `anomaliesCritical`: 0
+- `anomaliesWarning`: 0
+- `anomaliesMinor`: 0
+- Note: Set a flag `"anomalySeverityUnavailable": true` in the output to indicate severity data could not be extracted
+
+**For all formats:**
+- `anomalyTypes`: Array of unique values from the column containing the anomaly description (first column if `Anomaly`, or the `Anomaly Type` column). These may be full natural-language sentences, not short tokens.
 
 ## Edge Cases
 - No Cost line → `costUsd: null`
-- No Anomalies section → counts = 0, `anomalyTypes: []`
+- No Anomalies section → counts = 0, `anomalyTypes: []`, `anomalySeverityUnavailable: false`
+- Anomalies section with no Severity column → counts = 0, `anomalySeverityUnavailable: true`, still extract `anomalyTypes`
+- Overall section with 2-column format → extract from Value column, default severity to `"pass"` if no emoji
+- Missing Contract Verification rows for skill order → `orderCorrect: false`
 - Missing section → use sensible defaults
 
 ## DO NOT
