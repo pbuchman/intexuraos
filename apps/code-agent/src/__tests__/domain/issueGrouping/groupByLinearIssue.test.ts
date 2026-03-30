@@ -9,6 +9,17 @@ import {
 
 function makeTask(overrides: Partial<SerializedTask> & { id: string }): SerializedTask {
   return {
+    userId: 'test-user',
+    prompt: 'test',
+    sanitizedPrompt: 'test',
+    systemPromptHash: 'hash',
+    workerType: 'auto',
+    workerLocation: 'test',
+    repository: 'owner/repo',
+    baseBranch: 'main',
+    traceId: 'trace-1',
+    dedupKey: 'dedup',
+    callbackReceived: false,
     status: 'implemented',
     createdAt: '2026-03-01T10:00:00.000Z',
     updatedAt: '2026-03-01T10:00:00.000Z',

@@ -20,20 +20,57 @@ export interface PipelineState {
   archivedCount: number;
 }
 
-/** SerializedTask is the shape produced by taskToApiResponse (ISO strings, not Timestamps). */
+/**
+ * SerializedTask is the shape produced by taskToSerializedTask in the route handler.
+ * Includes all fields needed by the grouping/pipeline logic and the frontend CodeTask type.
+ */
 export interface SerializedTask {
   id: string;
+  userId: string;
+  prompt: string;
+  sanitizedPrompt: string;
+  systemPromptHash: string;
+  workerType: string;
+  workerLocation: string;
+  repository: string;
+  baseBranch: string;
+  traceId: string;
   status: string;
+  dedupKey: string;
+  callbackReceived: boolean;
   createdAt: string;
   updatedAt: string;
   dispatchedAt?: string;
+  completedAt?: string;
+  actionId?: string;
+  approvalEventId?: string;
   linearIssueId?: string;
   agentType?: string;
   implementationTaskId?: string;
+  parentTaskId?: string;
+  followUpReason?: string;
   prNumber?: number;
   result?: {
     prUrl?: string;
+    branch?: string;
+    commits?: number;
+    summary?: string;
+    ciFailed?: boolean;
+    partialWork?: boolean;
+    rebaseResult?: 'success' | 'conflict' | 'skipped';
+    review_comments_posted?: string;
+    review_types?: string;
+    requirements_tracker_updated?: string;
     needs_remediation?: string;
+  };
+  error?: {
+    code: string;
+    message: string;
+    remediation?: {
+      retryAfter?: number;
+      manualSteps?: string;
+      supportLink?: string;
+    };
   };
   linearIssue?: {
     identifier: string;
@@ -47,7 +84,6 @@ export interface SerializedTask {
     commentCount: number;
     lastCommentAt: string | null;
   };
-  [key: string]: unknown;
 }
 
 export interface IssueGroup {
