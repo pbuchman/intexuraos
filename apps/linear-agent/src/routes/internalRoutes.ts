@@ -604,14 +604,14 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               success: { type: 'boolean', enum: [true] },
               data: {
                 type: 'object',
-                required: ['skipped', 'totalActive', 'deleted', 'remaining', 'deletedCandidates', 'failedDeletions', 'durationMs'],
+                required: ['skipped', 'totalActive', 'stored', 'remaining', 'storedCandidates', 'durationMs'],
                 properties: {
                   skipped: { type: 'boolean', description: 'Whether pruning was skipped' },
                   skipReason: { type: 'string', description: 'Reason for skipping' },
                   totalActive: { type: 'number', description: 'Total active issues before pruning' },
-                  deleted: { type: 'number', description: 'Number of issues deleted' },
-                  remaining: { type: 'number', description: 'Issues remaining after pruning' },
-                  deletedCandidates: {
+                  stored: { type: 'number', description: 'Number of candidates stored for user review' },
+                  remaining: { type: 'number', description: 'Issues remaining (unchanged, storing does not remove issues)' },
+                  storedCandidates: {
                     type: 'array',
                     items: {
                       type: 'object',
@@ -619,16 +619,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                         identifier: { type: 'string' },
                         title: { type: 'string' },
                         reason: { type: 'string' },
-                      },
-                    },
-                  },
-                  failedDeletions: {
-                    type: 'array',
-                    items: {
-                      type: 'object',
-                      properties: {
-                        identifier: { type: 'string' },
-                        error: { type: 'string' },
+                        score: { type: 'number' },
+                        category: { type: 'string' },
                       },
                     },
                   },
@@ -684,7 +676,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const result = await pruneIssues({
         connectionRepo: services.connectionRepository,
         issueRepo: services.issueRepository,
-        linearClient: services.linearApiClient,
+        pruneCandidateRepo: services.pruneCandidateRepository,
         classifier: services.issuePruningClassifier,
         logger: request.log as unknown as Logger,
         config: PRUNE_CONFIG,
