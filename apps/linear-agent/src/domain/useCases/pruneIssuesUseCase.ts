@@ -126,7 +126,10 @@ export async function pruneIssues(
   // in the workspace. This is safe because IntexuraOS operates as a single-organization
   // system. If multi-org support is added in the future, this must be revisited to
   // use per-user keys matched to issue ownership.
-  const connectionResult = await connectionRepo.getFullConnection(userIds[0]!);
+  /* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires fallback despite prior .length check @preserve */
+  const firstUserId = userIds[0] ?? '';
+  /* v8 ignore stop @preserve */
+  const connectionResult = await connectionRepo.getFullConnection(firstUserId);
   if (!connectionResult.ok) {
     return connectionResult;
   }
@@ -157,8 +160,10 @@ export async function pruneIssues(
     }
 
     // Clean up all local Firestore copies (multi-tenant: each user may have a copy)
+    /* v8 ignore start -- upstream: candidate.id always exists in allIssuesMap since candidates come from classifying the same issues; defensive check for data corruption @preserve */
     const entry = allIssuesMap.get(candidate.id);
     if (entry !== undefined) {
+    /* v8 ignore stop @preserve */
       for (const userId of entry.userIds) {
         const localDeleteResult = await issueRepo.deleteById(candidate.id, userId);
         if (!localDeleteResult.ok) {

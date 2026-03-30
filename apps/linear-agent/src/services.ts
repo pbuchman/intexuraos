@@ -87,7 +87,10 @@ export function initServices(config: ServiceConfig): void {
         logger,
       })
     : createIssuePruningClassifier({
-        generate: async () => ({ ok: false as const, error: { code: 'INVALID_KEY', message: 'No Gemini API key configured' } }),
+        generate: async (_prompt: string) => {
+          await Promise.resolve();
+          return { ok: false as const, error: { code: 'INVALID_KEY', message: 'No Gemini API key configured' } };
+        },
         logger,
       });
 

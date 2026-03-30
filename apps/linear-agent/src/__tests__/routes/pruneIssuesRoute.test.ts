@@ -52,7 +52,10 @@ function createFakeServices(): ServiceContainer {
       save: vi.fn(), findById: vi.fn(), listByIssueId: vi.fn(),
       countByIssueId: vi.fn(), getCommentSummaries: vi.fn(), deleteById: vi.fn(),
     },
-    userServiceClient: { getLlmClient: vi.fn(), getLlmClientDirect: vi.fn() } as any,
+    userServiceClient: {
+      getLlmClient: vi.fn(),
+      getLlmClientDirect: vi.fn(),
+    } as unknown as ServiceContainer['userServiceClient'],
     codeAgentClient: { triggerCodeTask: vi.fn() },
     issuePruningClassifier: {
       classifyCandidates: vi.fn().mockResolvedValue(ok([])),
@@ -106,5 +109,40 @@ describe('POST /internal/linear/prune-issues', () => {
     });
 
     expect(response.statusCode).toBe(200);
+  });
+
+  it('returns 500 when pruneIssues fails', async () => {
+    // Need to seed enough issues to trigger pruning (above 200 threshold)
+    const issues = Array.from({ length: 210 }, (_, i) => ({
+      id: `id-${String(i)}`,
+      identifier: `INT-${String(i)}`,
+      title: `Task ${String(i)}`,
+      description: null,
+      state: 'Done',
+      stateType: 'completed' as const,
+      priority: 0 as const,
+      assigneeId: null,
+      assigneeName: null,
+      labels: [],
+      url: 'https://linear.app/test',
+      userId: 'user-1',
+      parentId: null,
+      createdAt: '2026-03-01T00:00:00.000Z',
+      updatedAt: '2026-03-01T00:00:00.000Z',
+      syncedAt: '2026-03-29T00:00:00.000Z',
+      teamId: 'team-1',
+    }));
+    services.issueRepository.listByUserId = vi.fn().mockResolvedValue(ok(issues));
+    services.issuePruningClassifier.classifyCandidates = vi.fn().mockResolvedValue(
+      err({ code: 'INTERNAL_ERROR', message: 'Gemini unavailable' })
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/linear/prune-issues',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(500);
   });
 });

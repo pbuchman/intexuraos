@@ -425,6 +425,14 @@ export class FakeLinearApiClient implements LinearApiClient {
     return ok(this.workflowStates);
   }
 
+  async deleteIssue(
+    _apiKey: string,
+    _issueId: string
+  ): Promise<Result<void, LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    return ok(undefined);
+  }
+
   reset(): void {
     this.issues = [];
     this.issuesWithTeam = [];

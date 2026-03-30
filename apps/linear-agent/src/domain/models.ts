@@ -276,9 +276,9 @@ export interface PruneStats {
   /** Number of issues remaining after pruning */
   remaining: number;
   /** Issues that were deleted with reasons */
-  deletedCandidates: Array<{ identifier: string; title: string; reason: string }>;
+  deletedCandidates: { identifier: string; title: string; reason: string }[];
   /** Issues that failed to delete */
-  failedDeletions: Array<{ identifier: string; error: string }>;
+  failedDeletions: { identifier: string; error: string }[];
   /** Duration of the pruning run in milliseconds */
   durationMs: number;
 }

@@ -219,6 +219,9 @@ export function setupTestContext(withTestLogger = false): TestContext {
       commentRepository: context.commentRepository,
       userServiceClient: context.userServiceClient,
       codeAgentClient: new FakeCodeAgentClient(),
+      issuePruningClassifier: {
+        classifyCandidates: async () => ({ ok: true, value: [] }),
+      },
     });
     clearJwksCache();
     context.app = await buildServer(withTestLogger ? getTestLoggerStream() : undefined);

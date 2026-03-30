@@ -69,6 +69,9 @@ describe('Linear Webhook Routes', () => {
       commentRepository: commentRepo,
       userServiceClient,
       codeAgentClient,
+      issuePruningClassifier: {
+        classifyCandidates: async () => ({ ok: true, value: [] }),
+      },
     });
 
     app = await buildServer(undefined);
@@ -237,6 +240,9 @@ describe('Linear Webhook Routes', () => {
         commentRepository: commentRepo,
         userServiceClient,
         codeAgentClient,
+        issuePruningClassifier: {
+          classifyCandidates: async () => ({ ok: true, value: [] }),
+        },
       });
 
       const payload = createLinearWebhookPayload({
