@@ -85,9 +85,11 @@ function taskToSerializedTask(task: {
     };
   };
 }): SerializedTask {
-  /* v8 ignore start -- test-infra: FakeFirestore cannot preserve Timestamp fields during update() -- isFieldValueDelete falsely matches Timestamp.isEqual causing dispatchedAt/updatedAt to be dropped @preserve */
+  /* v8 ignore start -- ts-type: createdAt/updatedAt are always present strings in Firestore; nullish fallback is defensive for the Timestamp union cast and unreachable in tests @preserve */
   const createdAt = timestampToIso(task.createdAt as { toDate: () => Date } | string | undefined) ?? '';
   const updatedAt = timestampToIso(task.updatedAt as { toDate: () => Date } | string | undefined) ?? '';
+  /* v8 ignore stop @preserve */
+  /* v8 ignore start -- test-infra: FakeFirestore cannot preserve Timestamp fields during update() -- isFieldValueDelete falsely matches Timestamp.isEqual causing dispatchedAt/completedAt to be dropped @preserve */
   const dispatchedAt = timestampToIso(task.dispatchedAt as { toDate: () => Date } | string | undefined);
   const completedAt = timestampToIso(task.completedAt as { toDate: () => Date } | string | undefined);
   /* v8 ignore stop @preserve */
