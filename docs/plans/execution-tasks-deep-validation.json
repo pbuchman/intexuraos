@@ -29,7 +29,8 @@
         "anomaliesCritical": 0,
         "anomaliesWarning": 0,
         "anomaliesMinor": 0,
-        "anomalyTypes": []
+        "anomalyTypes": [],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -66,7 +67,8 @@
           "MSG-442",
           "MSG-445, MSG-467, MSG-536, MSG-541",
           "MSG-556, MSG-559"
-        ]
+        ],
+        "anomalySeverityUnavailable": true
       }
     },
     {
@@ -95,7 +97,8 @@
         "anomalyTypes": [
           "Initial struggle with Bash hook restrictions",
           "`git checkout` failure and recovery"
-        ]
+        ],
+        "anomalySeverityUnavailable": true
       }
     },
     {
@@ -125,7 +128,8 @@
           "Excessive, repetitive `Grep` calls without learning or progress",
           "Ignored explicit tool usage recommendation",
           "Identified test gap but chose not to address it"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -153,7 +157,8 @@
         "anomaliesMinor": 3,
         "anomalyTypes": [
           "Finding"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -182,7 +187,8 @@
         "anomalyTypes": [
           "Bash Hook Blocked",
           "Inefficient Grep Results"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -213,7 +219,8 @@
           "`Grep` tool failure due to unsupported parameter",
           "`Bash` tool `sleep` and `cat` for reading output from background task",
           "Fabrication of total test count in final summary"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -245,7 +252,8 @@
           "Implicit Code Review Findings",
           "Inefficient background task management",
           "Superficial initial CI output analysis"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -273,7 +281,8 @@
         "anomaliesMinor": 5,
         "anomalyTypes": [
           "Attempted to `Write` to a file without first `Read`ing it, leading to a tool error."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -302,7 +311,8 @@
         "anomalyTypes": [
           "Initial Bash command piping output to `tail` was blocked by `PreToolUse` hook.",
           "Bash command piping output to `tail` was blocked by `PreToolUse` hook again."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -332,7 +342,8 @@
           "Incorrect issue ID used for `linear__list_comments`",
           "Repeated command syntax errors and hook blocks for `pnpm test` and `verify:workspace:tracked`",
           "Ineffective `rg` commands for test and coverage output analysis"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -366,7 +377,8 @@
           "MSG-175, MSG-181",
           "MSG-235",
           "MSG-252, MSG-277"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -399,7 +411,8 @@
           "Incorrect Bash command syntax (piping output to `head`/`tail` directly)",
           "Subagent `Read` tool call failed due to incorrect file path",
           "`Grep` command with bad regex (missing closing parenthesis)"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -428,7 +441,8 @@
         "anomalyTypes": [
           "Finding",
           "Minor Tool Use Inefficiency"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -459,7 +473,8 @@
           "`pnpm run verify:workspace:tracked` blocked by hooks",
           "`Skill(simplify)` invoked out of sequence",
           "`gh pr create` with uncommitted changes"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -489,7 +504,8 @@
           "Drawing wrong conclusion during code review",
           "`gh pr create` with uncommitted changes",
           "Ignored `git status` warning"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -520,7 +536,8 @@
           "Incorrect `grep` option",
           "Wrong conclusion from failed tool calls",
           "Uncommitted changes warning ignored"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -553,7 +570,8 @@
           "Inefficient and repetitive file search during review phases",
           "`Grep` tool unable to find content in known readable file",
           "`gh pr create` reported uncommitted changes"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -585,7 +603,8 @@
           "MSG-141",
           "MSG-216",
           "MSG-340"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -617,7 +636,8 @@
           "Incomplete `grep` regex leading to error",
           "Incorrect `pnpm run verify:workspace:tracked` arguments",
           "Ignored `gh pr create` warning"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -643,7 +663,8 @@
         "anomaliesCritical": 0,
         "anomaliesWarning": 1,
         "anomaliesMinor": 2,
-        "anomalyTypes": []
+        "anomalyTypes": [],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -672,7 +693,8 @@
         "anomalyTypes": [
           "Finding",
           "Agent ignored PreToolUse:Bash hook error regarding use of `--` before workspace name."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -700,7 +722,8 @@
         "anomaliesMinor": 3,
         "anomalyTypes": [
           "Finding"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -729,7 +752,8 @@
         "anomalyTypes": [
           "MSG-NNN",
           "MSG-220, MSG-238, MSG-308, MSG-309"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -761,7 +785,8 @@
           "Direct hook script execution",
           "Incorrect `vitest` command argument usage",
           "Multiple iterations for `v8 ignore` syntax"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -792,7 +817,8 @@
           "Subagent delegation failure for `simplify` skill",
           "Identified critical issue but did not fix it",
           "Fabrication in final summary regarding code review"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -823,7 +849,8 @@
           "`MSG-157`",
           "`MSG-205` - `MSG-210`, `MSG-251` - `MSG-253`",
           "`MSG-355`"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -852,7 +879,8 @@
         "anomalyTypes": [
           "Incorrect `pnpm run verify:workspace:tracked` command syntax",
           "Incorrect `pnpm run ci:tracked` output capture method"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -888,7 +916,8 @@
           "**New test conflict**",
           "**`Read` tool exceeding token limit**",
           "**Code-reviewer subagent `gh diff` error**"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -916,7 +945,8 @@
         "anomaliesMinor": 4,
         "anomalyTypes": [
           "Finding"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -945,7 +975,8 @@
         "anomalyTypes": [
           "Output too large from `git diff`, agent declares it \"clear from preview\" without full consumption.",
           "Temporary lapse in tool usage leading to hook error."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -976,7 +1007,8 @@
           "**Repeated `PreToolUse:Bash hook error` for piping to `tail`**",
           "**`PreToolUse:Bash hook error` for `--` in workspace command**",
           "**Ignored \"1 uncommitted change\" warning before PR creation**"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1006,7 +1038,8 @@
           "Ignored Hook Warning",
           "Inconsistent Lint Resolution",
           "Subagent Test Verification Omission"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1035,7 +1068,8 @@
         "anomalyTypes": [
           "Pre-ToolUse Bash Hook Error",
           "`simplify` skill's `Agent` tool usage"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1065,7 +1099,8 @@
           "Failed Bash `rg` command due to unrecognized file type, then recovered.",
           "Agent dismissed a \"Critical\" finding from a subagent during `simplify` skill execution.",
           "`gh pr create` reported an uncommitted change."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1100,7 +1135,8 @@
           "`Hook PreToolUse:Bash denied this tool`.",
           "`pnpm run ci:tracked` failed due to lint error (`eqeqeq`).",
           "`gh pr create` issued with \"1 uncommitted change\"."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1131,7 +1167,8 @@
           "Piping `pnpm` output to `tail` was blocked.",
           "`simplify` skill instructions to launch three review agents were not followed.",
           "`gh pr create` emitted an uncommitted changes warning."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1162,7 +1199,8 @@
           "**Ignored Tool Warnings: Reading large files**",
           "**Wrong conclusion drawn from subagent output (Simplify skill)**",
           "**Repetitive and Inefficient Tool Use**"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1191,7 +1229,8 @@
         "anomalyTypes": [
           "Finding",
           "Unaddressed warning during PR creation"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1221,7 +1260,8 @@
           "Ignored Errors",
           "Ignored Errors",
           "Wrong Conclusion from Failed Tool Call"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1252,7 +1292,8 @@
           "Incorrect `pnpm` output piping",
           "`gh pr create` warning for uncommitted changes",
           "Deviation from `simplify` skill's instruction to launch review agents"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1282,7 +1323,8 @@
           "Ignored uncommitted changes warning",
           "Incorrect `pnpm run` syntax",
           "Piping output to `tail` blocked"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1312,7 +1354,8 @@
           "`simplify` skill subagent bypass",
           "`gh pr create` uncommitted changes warning",
           "\"File modified\" errors"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1341,7 +1384,8 @@
         "anomalyTypes": [
           "Finding",
           "The agent ignored a `Warning: 1 uncommitted change` message during PR creation."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1370,7 +1414,8 @@
         "anomalyTypes": [
           "Bash hook error for `pnpm run verify:workspace:tracked`",
           "Multiple Code Review Stages"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1404,7 +1449,8 @@
           "Error Handled Gracefully",
           "Error Handled Gracefully",
           "Error Handled Gracefully"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1437,7 +1483,8 @@
           "Bash hook blocked `pnpm` command due to `tail` usage.",
           "Bash hook blocked `pnpm` command due to incorrect workspace argument.",
           "Code review identified pre-existing pattern repetition."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1463,7 +1510,8 @@
         "anomaliesCritical": 0,
         "anomaliesWarning": 0,
         "anomaliesMinor": 0,
-        "anomalyTypes": []
+        "anomalyTypes": [],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1489,7 +1537,8 @@
         "anomaliesCritical": 0,
         "anomaliesWarning": 5,
         "anomaliesMinor": 1,
-        "anomalyTypes": []
+        "anomalyTypes": [],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1519,7 +1568,8 @@
           "Finding",
           "Agent used `Bash` with `find` for file search, which was explicitly blocked by a PreToolUse hook.",
           "Agent used `pnpm run ci:tracked 2>&1"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1552,7 +1602,8 @@
           "Repeated usage of `find` despite hook warning",
           "Piping `pnpm` output to `tail`",
           "Incorrect `pnpm verify:workspace:tracked` syntax"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1581,7 +1632,8 @@
         "anomalyTypes": [
           "`Edit` tool for sensitive file followed by brittle `sed`",
           "Ignored `simplify` skill instruction"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1611,7 +1663,8 @@
           "Finding",
           "**Fabrication of CI pass on first attempt**",
           "**Inefficient regex search**"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1643,7 +1696,8 @@
           "Used `tail` to filter output, violating a hook",
           "Used `--` before workspace name, violating a hook",
           "Claimed `subagents: none` in final report despite dispatching a `code-reviewer` subagent"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1669,7 +1723,8 @@
         "anomaliesCritical": 1,
         "anomaliesWarning": 1,
         "anomaliesMinor": 0,
-        "anomalyTypes": []
+        "anomalyTypes": [],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1701,7 +1756,8 @@
           "**Ignored Error / Failed Tool**",
           "**Ignored Error / Hook Misapplication**",
           "**Wrong Conclusion**"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1733,7 +1789,8 @@
           "Tool Use Error & Recovery",
           "Deliberate Non-Action (Pre-existing Pattern)",
           "Deliberate Non-Action (Trade-off Decision)"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1763,7 +1820,8 @@
           "Finding",
           "Failed to read large diff content, resorted to chunking.",
           "`simplify` skill instruction to launch three review agents partially ignored in second invocation."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1794,7 +1852,8 @@
           "Incorrect `pnpm verify` command syntax",
           "`pnpm verify` from incorrect directory",
           "Incomplete Initial Code Audit"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1828,7 +1887,8 @@
           "Laziness / Incomplete Verification",
           "Fabrication of Claims",
           "Fabrication of Claims"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1860,7 +1920,8 @@
           "Agent attempted to read `shared.js` instead of `shared.tsx`, indicating a typo.",
           "`rg` command used an unrecognized file type `tsx`.",
           "Agent used `find` instead of the recommended `Glob` tool for file searches."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1890,7 +1951,8 @@
           "Ignored `git status` warning",
           "`git commit` syntax error and recovery",
           "Contract violation: Missing mandatory skill invocations"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1924,7 +1986,8 @@
           "Incorrect tool command due to output redirection",
           "Failed `git push` due to uncommitted changes",
           "Incorrect tool command due to `--` parameter handling"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1953,7 +2016,8 @@
         "anomalyTypes": [
           "Finding",
           "Agent claims `outcome: \"already_completed\"` despite performing the implementation."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -1988,7 +2052,8 @@
           "Redundant `ci:tracked` execution",
           "`TaskOutput` for non-existent task",
           "Redundant `gh pr create` call"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2020,7 +2085,8 @@
           "Code Review Subagent failed to identify known issues",
           "`simplify` skill identified a \"CRITICAL FINDING\" but it was deferred",
           "Multiple `git push` retries and force push"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2028,7 +2094,7 @@
       "linearIssueId": "INT-996",
       "prNumber": 1342,
       "prUrl": "https://github.com/pbuchman/intexuraos/pull/1342",
-      "title": "[INT-996] Standardize TodosListPage — decompose + compact rows + filters",
+      "title": "[INT-996] Standardize TodosListPage \u2014 decompose + compact rows + filters",
       "branchName": "feature/int-996",
       "linesChanged": 2252,
       "filesChanged": 6,
@@ -2056,7 +2122,8 @@
           "Agent attempted to commit already-staged/committed files.",
           "Linter applied fixes outside explicit agent actions.",
           "Repeated `PreToolUse:Bash hook error` for using `grep -r` instead of the `Grep` tool."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2084,7 +2151,8 @@
         "anomaliesMinor": 1,
         "anomalyTypes": [
           "Finding"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2112,7 +2180,8 @@
         "anomaliesMinor": 3,
         "anomalyTypes": [
           "Finding"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2140,7 +2209,8 @@
         "anomaliesMinor": 3,
         "anomalyTypes": [
           "Finding"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2176,7 +2246,8 @@
           "Incorrect syntax for `pnpm run verify:workspace:tracked`.",
           "Placeholder return value in new endpoint.",
           "Fabrication of facts in final claim."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2213,7 +2284,8 @@
           "**Incomplete file creation/usage**",
           "**Misleading return value in new endpoint**",
           "**Claim Fabrication in Final Report**"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2243,7 +2315,8 @@
           "Finding",
           "Failed `mcp__linear__list_comments` tool call due to incorrect ID format",
           "PreToolUse:Bash hook error for `pnpm run verify:workspace:tracked`"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2273,7 +2346,8 @@
           "MSG-060, MSG-063, MSG-073, MSG-120, MSG-124",
           "MSG-093, MSG-099, MSG-101, MSG-107, MSG-177",
           "MSG-208"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2281,7 +2355,7 @@
       "linearIssueId": "INT-998",
       "prNumber": 1367,
       "prUrl": "https://github.com/pbuchman/intexuraos/pull/1367",
-      "title": "[INT-998] Standardize InboxPage — decompose + add sort",
+      "title": "[INT-998] Standardize InboxPage \u2014 decompose + add sort",
       "branchName": "task_550ca32f-12b6-4c08-96b7-52b5cf3ca376",
       "linesChanged": 740,
       "filesChanged": 3,
@@ -2301,7 +2375,8 @@
         "anomaliesMinor": 1,
         "anomalyTypes": [
           "Finding"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2335,7 +2410,8 @@
           "Duplicated `truncateContent` identified but not addressed",
           "Missing `pluralize` utility identified but not created",
           "`<Link>` replaced with `div`+`onClick`+`useNavigate` for main row"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2343,7 +2419,7 @@
       "linearIssueId": "INT-999",
       "prNumber": 1370,
       "prUrl": "https://github.com/pbuchman/intexuraos/pull/1370",
-      "title": "[INT-999] Standardize WhatsAppNotesPage (843 lines) — decompose + filters + compact rows",
+      "title": "[INT-999] Standardize WhatsAppNotesPage (843 lines) \u2014 decompose + filters + compact rows",
       "branchName": "task_06727555-4724-4277-a280-35aff88738ad",
       "linesChanged": 1505,
       "filesChanged": 5,
@@ -2365,7 +2441,8 @@
           "`rg` tool usage error",
           "Subagent findings ignored/deferred",
           "`superpowers:executing-plans` goal adherence"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2391,7 +2468,8 @@
         "anomaliesCritical": 0,
         "anomaliesWarning": 2,
         "anomaliesMinor": 2,
-        "anomalyTypes": []
+        "anomalyTypes": [],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2419,7 +2497,8 @@
         "anomaliesMinor": 1,
         "anomalyTypes": [
           "Laziness Pattern"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2452,7 +2531,8 @@
           "Ignored \"BLOCKED\" hook error for incorrect `verify:workspace:tracked` arguments.",
           "Ignored \"BLOCKED\" hook error for unnecessary `vitest --reporter=verbose`.",
           "`listIssues.ts` line count claimed as \"~50 lines\" but was actually 93 lines."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2484,7 +2564,8 @@
           "Ignored Error (Subagent)",
           "Laziness Pattern / Hook Block",
           "Misrepresentation in Final Summary"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2513,7 +2594,8 @@
         "anomalyTypes": [
           "Agent ignored PreToolUse:Bash hook warnings related to piping output (`",
           "Agent claimed \"subagents: none\" in final report despite dispatching a `code-reviewer` subagent."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2546,7 +2628,8 @@
           "Second `verify:workspace:tracked` failed due to Lint errors",
           "`pnpm run ci:tracked` during review phase blocked by `validate-ci-output-capture.sh` hook",
           "Critical bug identified and fixed by agent (Set serialization)"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2554,7 +2637,7 @@
       "linearIssueId": "INT-1004",
       "prNumber": 1377,
       "prUrl": "https://github.com/pbuchman/intexuraos/pull/1377",
-      "title": "[INT-1004] Standardize VisualizationsListPage — add header + filters + sort",
+      "title": "[INT-1004] Standardize VisualizationsListPage \u2014 add header + filters + sort",
       "branchName": "task_4793cdb7-f4ae-4a0a-857d-9c49d2e095a3",
       "linesChanged": 303,
       "filesChanged": 1,
@@ -2576,7 +2659,8 @@
           "Incorrect Bash command syntax for `verify:workspace:tracked`",
           "Incorrect Bash command syntax for output capture",
           "Inefficient background task output retrieval"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2606,7 +2690,8 @@
           "Initial misdiagnosis of work completeness leading to contradictory statements.",
           "Repeated incorrect `find` tool usage despite explicit warning.",
           "Verbose and repetitive self-reporting during exploration."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2635,7 +2720,8 @@
         "anomalyTypes": [
           "Incorrect tool usage (Bash `find` vs `Glob`)",
           "Incorrect CI output capture (piping to `grep`/`tail`)"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2665,7 +2751,8 @@
           "Finding",
           "Agent claimed `superpowers:requesting-code-review` was used, but it was not invoked.",
           "Agent claimed a PR URL was created, but no `gh pr create` tool was called."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2695,7 +2782,8 @@
           "`Bash` hook direct execution attempt",
           "Repeated `tool_use_error` from file modification",
           "`Bash` hook for output piping"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2729,7 +2817,8 @@
           "**`Edit` tool `replace_all: false` with duplicate matches**",
           "**Repeated incorrect `verify:workspace:tracked` arguments**",
           "**Pre-existing `bad-undefined-type` hook warning**"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2758,7 +2847,8 @@
         "anomalyTypes": [
           "Agent opted to skip subagents for `superpowers:executing-plans` despite skill advice.",
           "Agent did not explicitly acknowledge a cancelled parallel tool call."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2786,7 +2876,8 @@
         "anomaliesMinor": 2,
         "anomalyTypes": [
           "Initial `pnpm run ci:tracked` failed due to outdated test expectations after code changes."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2818,7 +2909,8 @@
           "Inefficient diff attempts post-commit",
           "Used banned tools (`find`, `grep -r`)",
           "Agent overrides subagent's \"CRITICAL\" finding"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2847,7 +2939,8 @@
         "anomalyTypes": [
           "**Incorrect `gh diff` command**",
           "**Redundant review efforts / \"Busy Work\" in `simplify` skill**"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2878,7 +2971,8 @@
           "Agent ignored explicit instruction to use built-in `Glob` tool.",
           "Agent performs redundant analysis work in parallel with dispatched subagents.",
           "`executing-plans` skill announcement delayed."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2909,7 +3003,8 @@
           "`detect-common-patterns.sh` hook execution blocked.",
           "Repeated use of `Bash` with `grep -r` or `find` despite warnings.",
           "Discrepancy between `simplify` subagent findings and main agent conclusion."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2938,7 +3033,8 @@
         "anomalyTypes": [
           "Finding",
           "CI output capture"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -2972,7 +3068,8 @@
           "Laziness pattern: Inefficient output capture",
           "Subagent drew wrong conclusion",
           "Subagent drew wrong conclusion"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3008,7 +3105,8 @@
           "Bash command denied due to unrecognized grep option",
           "Subagent identifies quality issue after initial CI pass",
           "Subagent identifies minor type-safety issue after second CI pass"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3038,7 +3136,8 @@
           "PreToolUse:Bash hook errors",
           "Inefficient Grep for `describe` block",
           "Hook blocked `find` command"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3068,7 +3167,8 @@
           "`PreToolUse` hook blocking due to piping output of CI commands to `tail`.",
           "`PreToolUse` hook blocking due to incorrect `--` syntax in `verify:workspace`.",
           "`detect-common-patterns` hook triggered by creating a new migration file."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3102,7 +3202,8 @@
           "Persistent hook warnings",
           "Detector search window too small",
           "Missing `git commit` calls"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3130,7 +3231,8 @@
         "anomaliesMinor": 4,
         "anomalyTypes": [
           "Finding"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3160,7 +3262,8 @@
           "Finding",
           "`Edit` and `Write` tool permission failures, followed by successful `Bash` workaround.",
           "Contract violation: `superpowers:requesting-code-review` was invoked as the third skill."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3194,7 +3297,8 @@
           "`firestoreCodeTaskRepository.ts` path error",
           "Code reviewer identified critical bug",
           "Fabricated claim about `superpowers:executing-plans`"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3228,7 +3332,8 @@
           "MSG-247, MSG-295",
           "MSG-253, MSG-318",
           "MSG-383"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3259,7 +3364,8 @@
           "Incorrect tool usage during `simplify`",
           "Redundant `git diff` and `git log` checks",
           "Initial missed file in implementation"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3292,7 +3398,8 @@
           "MSG-176, MSG-200",
           "MSG-255, MSG-281, MSG-283",
           "MSG-293"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3327,7 +3434,8 @@
           "CI failures after merge",
           "`gh pr create` error",
           "Duplicate final outcome statements"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3358,7 +3466,8 @@
           "Failed `git checkout development`",
           "Hook blocking `pnpm run verify:workspace:tracked` command",
           "Uncommitted change warning during PR creation"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3395,7 +3504,8 @@
           "**`[MSG-466]` Code quality: Parameter sprawl in `ModelSelectorProps`**",
           "**`[MSG-667]` Missing functionality: `EnhanceModal` doesn't support OpenRouter models**",
           "**`[MSG-669]` Cosmetic: Duplicate type imports in `ModelSelector.tsx`**"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3426,7 +3536,8 @@
           "**`node:crypto` dependency issue resolution**",
           "**Repeated `Bash` hook errors**",
           "**Ignored uncommitted change warning**"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3461,7 +3572,8 @@
           "PreToolUse:Bash hook blocked incorrect `verify:workspace:tracked` usage.",
           "Initial `ci:tracked` run failed due to type errors in test files.",
           "`gh pr create` reported \"Warning: 1 uncommitted change\"."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3492,7 +3604,8 @@
           "**Repeated Bash Hook Errors**",
           "**Non-existent Temporary File Access**",
           "**Incorrect `gh` Command Usage**"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3522,7 +3635,8 @@
           "`gh log` failure",
           "`git push` authentication issues",
           "Directory not found warning"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3551,7 +3665,8 @@
         "anomalyTypes": [
           "Finding",
           "Initial CI runs failed due to lint errors, which the agent successfully identified and fixed."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3582,7 +3697,8 @@
           "Redundant diff command",
           "Invalid `grep` option",
           "Inefficient search for logic"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3615,7 +3731,8 @@
           "Hook flagged pre-existing type definition (`",
           "Direct hook execution was blocked, required agent to read hook source to understand why.",
           "Warning of uncommitted change during `gh pr create`."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3647,7 +3764,8 @@
           "Repeated redundant `Read` and `Grep` tool calls during code review phase",
           "`Bash` commands denied without clear reason",
           "Agent expressed temporary confusion about \"the change being reviewed\""
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3678,7 +3796,8 @@
           "Laziness in command output handling",
           "Dead code in `task-dispatcher.ts`",
           "Stale documentation"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3706,7 +3825,8 @@
         "anomaliesMinor": 2,
         "anomalyTypes": [
           "Attempted to perform an identical edit, resulting in a \"No changes to make\" error."
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3735,7 +3855,8 @@
         "anomalyTypes": [
           "**Repeated `Bash hook error` for output piping.**",
           "**Subagent struggled with complex Git history in code review.**"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3770,7 +3891,8 @@
           "Full CI failure due to missing `metadata` in migration file",
           "Full CI failure due to test coverage issues",
           "Efficiency review identified cursor optimization opportunity, but agent deferred it"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3802,7 +3924,8 @@
           "Use of `find` command instead of `Glob` blocked by hook",
           "Use of `find` command instead of `Glob` blocked by hook",
           "`gh pr create` with uncommitted changes"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3841,7 +3964,8 @@
           "**Bash hook errors (`BLOCKED: Piping output to grep/tail loses context`)**",
           "**`simplify` skill using `general-purpose` agents for review roles**",
           "**`it.each` test description format specifier error**"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3873,7 +3997,8 @@
           "Hook error then corrected usage",
           "Redundant ignore pattern during code review",
           "`gh pr create` warning"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3904,7 +4029,8 @@
           "`PreToolUse:Bash hook error` - incorrect `pnpm` syntax",
           "`PreToolUse:Bash hook error` - piping output",
           "`Simplify` skill identifies issues but skips fixing them"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3937,7 +4063,8 @@
           "CI failed initially with lint error",
           "Pre-existing type mismatch identified but not fixed",
           "Agent did not launch review agents concurrently as instructed by skill"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3963,7 +4090,8 @@
         "anomaliesCritical": 0,
         "anomaliesWarning": 3,
         "anomaliesMinor": 1,
-        "anomalyTypes": []
+        "anomalyTypes": [],
+        "anomalySeverityUnavailable": false
       }
     },
     {
@@ -3995,7 +4123,8 @@
           "Misinterpretation of CI output regarding hook violations",
           "Incorrect claim of 100% test coverage",
           "Mismatch between reported total tests and actual count"
-        ]
+        ],
+        "anomalySeverityUnavailable": false
       }
     }
   ]

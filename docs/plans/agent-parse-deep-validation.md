@@ -111,7 +111,12 @@ Find `#### Anomalies` then table. Multiple column layouts exist:
 - Note: Set a flag `"anomalySeverityUnavailable": true` in the output to indicate severity data could not be extracted
 
 **For all formats:**
-- `anomalyTypes`: Array of unique values from the column containing the anomaly description (first column if `Anomaly`, or the `Anomaly Type` column). These may be full natural-language sentences, not short tokens.
+- `anomalyTypes`: Array of unique values from the column containing the anomaly description. Column selection rules:
+  - For `| Anomaly | ... |` format: use the first column (`Anomaly`).
+  - For `| Message ID | Anomaly Type | Description |` format: use the **second** column (`Anomaly Type`). Never use `Message ID` or `Transcript Reference` columns as the source.
+  - For `| Anomaly Type | Description | ... |` format: use the first column (`Anomaly Type`).
+  - **Always skip the table header row** — the first row containing column names is not a data row.
+  - These values may be full natural-language sentences, not short tokens.
 
 ## Edge Cases
 - No Cost line → `costUsd: null`
