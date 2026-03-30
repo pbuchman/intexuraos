@@ -195,6 +195,7 @@ const codeTaskSchema = {
         review_comments_posted: { type: 'string', nullable: true },
         review_types: { type: 'string', nullable: true },
         requirements_tracker_updated: { type: 'string', nullable: true },
+        needs_remediation: { type: 'string', nullable: true },
       },
     },
     error: {
@@ -294,6 +295,7 @@ function taskToApiResponse(task: {
     review_comments_posted?: string;
     review_types?: string;
     requirements_tracker_updated?: string;
+    needs_remediation?: string;
   };
   error?: {
     code: string;
@@ -346,6 +348,7 @@ function taskToApiResponse(task: {
     review_comments_posted?: string;
     review_types?: string;
     requirements_tracker_updated?: string;
+    needs_remediation?: string;
   };
   error?: {
     code: string;
@@ -1158,7 +1161,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     Body: {
       prompt: string;
       workerType?: WorkerType;
-      workerLocation?: string;
       linearIssueId?: string;
     };
   }>(
@@ -1175,7 +1177,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           properties: {
             prompt: { type: 'string', minLength: 1, maxLength: 100000 },
             workerType: workerTypeSchema,
-            workerLocation: { type: 'string', minLength: 1, maxLength: 32 },
             linearIssueId: { type: 'string' },
           },
           required: ['prompt'],
@@ -1212,22 +1213,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               },
             },
             required: ['success', 'error'],
-          },
-          400: {
-            description: 'Invalid worker specified',
-            type: 'object',
-            required: ['success', 'error'],
-            properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: {
-                type: 'object',
-                required: ['code', 'message'],
-                properties: {
-                  code: { type: 'string', enum: ['INVALID_WORKER', 'WORKER_UNHEALTHY'] },
-                  message: { type: 'string' },
-                },
-              },
-            },
           },
           409: {
             description: 'Duplicate task (similar prompt within 5 minutes)',
@@ -1310,7 +1295,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const body = request.body as {
         prompt: string;
         workerType?: WorkerType;
-        workerLocation?: string;
         linearIssueId?: string;
       };
 
@@ -1424,16 +1408,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       if (enabledWorkers.length === 0) {
         request.log.warn({ userId }, 'User has no workers configured');
         return await reply.fail('WORKER_NOT_CONFIGURED', 'Please configure your workers in Settings before submitting code tasks');
-      }
-
-      // Validate workerLocation if provided
-      if (body.workerLocation !== undefined) {
-        const requestedWorker = enabledWorkers.find((w) => w.name === body.workerLocation);
-
-        if (requestedWorker === undefined) {
-          request.log.warn({ userId, workerLocation: body.workerLocation }, 'Requested worker not found');
-          return await reply.fail('INVALID_WORKER', `Worker '${body.workerLocation}' is not configured or enabled`);
-        }
       }
 
       // Enqueue task for dispatch (INT-949)
@@ -1822,6 +1796,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                       review_comments_posted: { type: 'string', nullable: true },
                       review_types: { type: 'string', nullable: true },
                       requirements_tracker_updated: { type: 'string', nullable: true },
+                      needs_remediation: { type: 'string', nullable: true },
                     },
                   },
                   error: {

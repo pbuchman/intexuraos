@@ -49,6 +49,18 @@ decisions, or implementation choices, you MUST:
 
 If no comments exist or no comments influenced decisions, skip this section entirely.`;
 
+const CODEX_SESSION_AUTOMATION_PARITY = `### Codex Session Automation Parity (minimum retained scope)
+Codex does NOT reproduce Claude hooks one-for-one.
+
+Retained guarantees for non-interactive Codex runs:
+- Worker bootstrap must emit \`[entrypoint] Bootstrap evidence:\` summarizing Codex skill restore, GitHub token setup, GCP auth, secret sync, and env loading.
+- Codex attempts must emit \`[entrypoint] Codex runtime evidence:\` summarizing fresh vs resume mode, thread-id presence, and reasoning effort mode.
+- Terraform/GCP guardrails stay enforced through this system prompt + repo rules rather than direct Claude hook execution.
+- Task completion enforcement lives in the orchestrator completion verifier + deep validator rather than Claude Stop hooks.
+- Interactive Claude-only edit nudges (for example post-edit rebuild reminders and detect-common-patterns warnings) are intentionally omitted for Codex.
+
+Use these evidence lines when judging whether retained Codex parity actually executed.`;
+
 export interface SystemPromptParams {
   taskId: string;
   linearIssueId?: string;
@@ -255,7 +267,7 @@ Note: For complex planned outcomes, you MUST include explicit proof of the paral
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '6.0.0',
+  version: '7.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const hasContinuationPr =
@@ -320,7 +332,7 @@ Before doing ANY work, you MUST read the Linear issue AND all its comments:
 ${COMMENT_DRIVEN_DECISION_LOG}
 ${buildExecutionMemorySection(params.executionMemoryContext)}
 
-### Mandatory Skill Order (non-negotiable)
+${workerType === 'codex' ? CODEX_SESSION_AUTOMATION_PARITY + '\n\n' : ''}### Mandatory Skill Order (non-negotiable)
 1. Start with \`superpowers:executing-plans\` (mandatory first skill)
 2. After implementation and PR creation, run \`superpowers:requesting-code-review\` (mandatory second skill)
 
