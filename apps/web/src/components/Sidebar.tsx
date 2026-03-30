@@ -31,6 +31,7 @@ import {
   PenTool,
   Plus,
   Server,
+  Scissors,
   Settings,
   Sparkles,
   StickyNote,
@@ -628,6 +629,22 @@ export function Sidebar(): React.JSX.Element {
           >
             <LayoutList className="h-5 w-5 shrink-0" />
             {!isCollapsed ? <span>Linear Issues</span> : null}
+          </NavLink>
+
+          {/* Issue Cleanup */}
+          <NavLink
+            to="/linear/prune-candidates"
+            end
+            className={({ isActive }): string =>
+              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
+              }`
+            }
+          >
+            <Scissors className="h-5 w-5 shrink-0" />
+            {!isCollapsed ? <span>Issue Cleanup</span> : null}
           </NavLink>
 
           {/* Calendar */}
