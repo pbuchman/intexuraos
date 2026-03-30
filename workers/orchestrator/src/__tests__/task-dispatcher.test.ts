@@ -3,7 +3,6 @@ import { exec, type ChildProcess } from 'node:child_process';
 import {
   TaskDispatcher,
   type IsolationConfig,
-
   getTaskEventUrl,
   hasFatalExitCodeField,
 } from '../services/task-dispatcher.js';
@@ -4203,6 +4202,7 @@ describe('TaskDispatcher', () => {
       repository: 'pbuchman/intexuraos',
       worktreePath: '/tmp/worktrees/deep-val-test',
       linearIssueLabels: [],
+      workerType: 'auto',
     } as unknown as Task;
 
     const mockFinalResult = {
@@ -4247,6 +4247,7 @@ describe('TaskDispatcher', () => {
       expect(input?.prNumber).toBe(123);
       expect(input?.repository).toBe('pbuchman/intexuraos');
       expect(input?.agentClaims.superpowers_executing_plans).toBe('used');
+      expect(input?.workerType).toBe('auto');
       expect(mockReadSessionTranscript).toHaveBeenCalled();
       expect(mockReadPlanFile).not.toHaveBeenCalled();
     });
@@ -4357,6 +4358,7 @@ describe('TaskDispatcher', () => {
         },
         linearIssueBody: 'Fix bug',
         planContent: undefined,
+        workerType: 'auto',
       } as import('../services/execution-deep-validator.js').DeepValidationInput;
 
       vi.mocked(mockLogForwarder.appendChunk).mockClear();
@@ -4413,6 +4415,7 @@ describe('TaskDispatcher', () => {
         },
         linearIssueBody: 'Fix bug',
         planContent: undefined,
+        workerType: 'auto',
       } as import('../services/execution-deep-validator.js').DeepValidationInput;
 
       vi.mocked(mockLogForwarder.appendChunk).mockClear();
@@ -4646,6 +4649,7 @@ describe('TaskDispatcher', () => {
         },
         linearIssueBody: 'Fix bug',
         planContent: undefined,
+        workerType: 'auto',
       } as import('../services/execution-deep-validator.js').DeepValidationInput;
 
       vi.mocked(mockLogForwarder.appendChunk).mockClear();
@@ -8230,7 +8234,6 @@ describe('TaskDispatcher', () => {
     });
   });
 });
-
 
 describe('hasFatalExitCodeField', () => {
   it('returns the field for fatal_exit_code_137', () => {

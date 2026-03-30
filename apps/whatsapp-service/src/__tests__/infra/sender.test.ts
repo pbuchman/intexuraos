@@ -78,6 +78,39 @@ describe('WhatsAppCloudApiSender', () => {
       expect(body['to']).toBe('447123456789');
     });
 
+    it('truncates body text longer than 4096 characters', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<{ messages: { id: string }[] }> =>
+          Promise.resolve({ messages: [{ id: 'wamid.123' }] }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      const longMessage = 'a'.repeat(5000);
+      await sender.sendTextMessage('+1234567890', longMessage);
+
+      const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(callArgs[1].body as string) as { text: { body: string } };
+      expect(body.text.body.length).toBe(4096);
+    });
+
+    it('does not truncate body text at exactly 4096 characters', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<{ messages: { id: string }[] }> =>
+          Promise.resolve({ messages: [{ id: 'wamid.123' }] }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      const exactMessage = 'b'.repeat(4096);
+      await sender.sendTextMessage('+1234567890', exactMessage);
+
+      const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(callArgs[1].body as string) as { text: { body: string } };
+      expect(body.text.body.length).toBe(4096);
+      expect(body.text.body).toBe(exactMessage);
+    });
+
     it('returns error on API failure', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: false,
@@ -93,6 +126,7 @@ describe('WhatsAppCloudApiSender', () => {
         expect(result.error.code).toBe('PERSISTENCE_ERROR');
         expect(result.error.message).toContain('400');
         expect(result.error.message).toContain('Bad Request');
+        expect(result.error.httpStatus).toBe(400);
       }
     });
 
@@ -257,6 +291,43 @@ describe('WhatsAppCloudApiSender', () => {
       expect(body['to']).toBe('447123456789');
     });
 
+    it('truncates body text longer than 1024 characters for interactive message', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<{ messages: { id: string }[] }> =>
+          Promise.resolve({ messages: [{ id: 'wamid.123' }] }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      const longMessage = 'c'.repeat(2000);
+      await sender.sendInteractiveMessage('+1234567890', longMessage, [
+        { type: 'reply' as const, reply: { id: 'btn-1', title: 'OK' } },
+      ]);
+
+      const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(callArgs[1].body as string) as { interactive: { body: { text: string } } };
+      expect(body.interactive.body.text.length).toBe(1024);
+    });
+
+    it('does not truncate body text at exactly 1024 characters for interactive message', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<{ messages: { id: string }[] }> =>
+          Promise.resolve({ messages: [{ id: 'wamid.123' }] }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      const exactMessage = 'd'.repeat(1024);
+      await sender.sendInteractiveMessage('+1234567890', exactMessage, [
+        { type: 'reply' as const, reply: { id: 'btn-1', title: 'OK' } },
+      ]);
+
+      const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(callArgs[1].body as string) as { interactive: { body: { text: string } } };
+      expect(body.interactive.body.text.length).toBe(1024);
+      expect(body.interactive.body.text).toBe(exactMessage);
+    });
+
     it('returns error on API failure for interactive message', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: false,
@@ -273,6 +344,7 @@ describe('WhatsAppCloudApiSender', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('PERSISTENCE_ERROR');
         expect(result.error.message).toContain('400');
+        expect(result.error.httpStatus).toBe(400);
       }
     });
 
@@ -403,6 +475,39 @@ describe('WhatsAppCloudApiSender', () => {
       expect(body['to']).toBe('447123456789');
     });
 
+    it('truncates body text longer than 1024 characters for CTA URL message', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<{ messages: { id: string }[] }> =>
+          Promise.resolve({ messages: [{ id: 'wamid.123' }] }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      const longMessage = 'e'.repeat(2000);
+      await sender.sendCtaUrlMessage('+1234567890', longMessage, ctaUrl);
+
+      const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(callArgs[1].body as string) as { interactive: { body: { text: string } } };
+      expect(body.interactive.body.text.length).toBe(1024);
+    });
+
+    it('does not truncate body text at exactly 1024 characters for CTA URL message', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<{ messages: { id: string }[] }> =>
+          Promise.resolve({ messages: [{ id: 'wamid.123' }] }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      const exactMessage = 'f'.repeat(1024);
+      await sender.sendCtaUrlMessage('+1234567890', exactMessage, ctaUrl);
+
+      const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(callArgs[1].body as string) as { interactive: { body: { text: string } } };
+      expect(body.interactive.body.text.length).toBe(1024);
+      expect(body.interactive.body.text).toBe(exactMessage);
+    });
+
     it('returns error on API failure for CTA URL message', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: false,
@@ -417,6 +522,7 @@ describe('WhatsAppCloudApiSender', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('PERSISTENCE_ERROR');
         expect(result.error.message).toContain('400');
+        expect(result.error.httpStatus).toBe(400);
       }
     });
 

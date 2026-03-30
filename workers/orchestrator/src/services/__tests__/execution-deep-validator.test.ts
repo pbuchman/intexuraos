@@ -56,6 +56,7 @@ const defaultInput = {
   },
   linearIssueBody: 'Fix the PWA header',
   planContent: undefined,
+  workerType: 'auto',
 };
 
 const markdownResponse = [
@@ -200,6 +201,7 @@ describe('buildDeepValidationPrompt', () => {
       },
       linearIssueBody: 'task',
       planContent: undefined,
+      workerType: 'auto',
     });
 
     expect(prompt).toContain(`[deep-validation-prompt v${DEEP_VALIDATION_PROMPT_VERSION}]`);
@@ -226,6 +228,7 @@ describe('buildDeepValidationPrompt', () => {
       },
       linearIssueBody: 'Fix the PWA header logo shift',
       planContent: '## Plan\n1. Update tests first',
+      workerType: 'auto',
     });
 
     expect(prompt).toContain('Section 1: Claim Verification');
@@ -234,6 +237,67 @@ describe('buildDeepValidationPrompt', () => {
     expect(prompt).toContain('"superpowers_executing_plans": "not used"');
     expect(prompt).toContain('Fix the PWA header logo shift');
     expect(prompt).toContain('Update tests first');
+  });
+
+  it('asks the validator to check Codex bootstrap evidence lines for codex workers', () => {
+    const prompt = buildDeepValidationPrompt({
+      formattedTranscript: 'No evidence lines in this transcript',
+      agentClaims: {
+        outcome: 'implemented',
+        superpowers_executing_plans: 'used',
+        superpowers_requesting_code_review: 'used',
+        gh_pr_url: '',
+        summary: 'Done.',
+      },
+      linearIssueBody: 'Some task',
+      planContent: undefined,
+      workerType: 'codex',
+    });
+
+    expect(prompt).toContain('startup evidence lines');
+    expect(prompt).toContain('`[entrypoint] Bootstrap evidence:`');
+    expect(prompt).toContain('`[entrypoint] Codex runtime evidence:`');
+  });
+
+  it('includes Codex bootstrap evidence lines for codex-xhigh workers', () => {
+    const prompt = buildDeepValidationPrompt({
+      formattedTranscript: 'transcript',
+      agentClaims: {
+        outcome: 'implemented',
+        superpowers_executing_plans: 'used',
+        superpowers_requesting_code_review: 'used',
+        gh_pr_url: '',
+        summary: 'Done.',
+      },
+      linearIssueBody: 'Some task',
+      planContent: undefined,
+      workerType: 'codex-xhigh',
+    });
+
+    expect(prompt).toContain('`[entrypoint] Bootstrap evidence:`');
+    expect(prompt).toContain('`[entrypoint] Codex runtime evidence:`');
+  });
+
+  it('omits Codex bootstrap evidence lines for non-codex workers', () => {
+    for (const workerType of ['auto', 'opus', 'sonnet', 'minimax', 'glm', 'qwen', 'kimi']) {
+      const prompt = buildDeepValidationPrompt({
+        formattedTranscript: 'transcript',
+        agentClaims: {
+          outcome: 'implemented',
+          superpowers_executing_plans: 'used',
+          superpowers_requesting_code_review: 'used',
+          gh_pr_url: '',
+          summary: 'Done.',
+        },
+        linearIssueBody: 'Some task',
+        planContent: undefined,
+        workerType,
+      });
+
+      expect(prompt).not.toContain('`[entrypoint] Bootstrap evidence:`');
+      expect(prompt).not.toContain('`[entrypoint] Codex runtime evidence:`');
+      expect(prompt).not.toContain('startup evidence lines');
+    }
   });
 
   it('indicates when no referenced plan document was found', () => {
@@ -248,6 +312,7 @@ describe('buildDeepValidationPrompt', () => {
       },
       linearIssueBody: 'Some task',
       planContent: undefined,
+      workerType: 'auto',
     });
 
     expect(prompt).toContain('No plan document referenced in Linear issue');
@@ -265,6 +330,7 @@ describe('buildDeepValidationPrompt', () => {
       },
       linearIssueBody: 'task',
       planContent: undefined,
+      workerType: 'auto',
     });
 
     expect(prompt).toContain('=== Severity Scale ===');
@@ -288,6 +354,7 @@ describe('buildDeepValidationPrompt', () => {
       },
       linearIssueBody: 'task',
       planContent: undefined,
+      workerType: 'auto',
     });
 
     expect(prompt).toContain('[TRANSCRIPT TRUNCATED at 200000 chars');

@@ -1319,7 +1319,42 @@ describe('pipeline merge step', () => {
     expect(findStep(groups[0]?.pipeline, 'merge')).toBeUndefined();
   });
 
-  it('shows actionable merge step for review task with needs_remediation=0', () => {
+  it('shows actionable merge step for review task with needs_remediation=0 and ready-to-merge label', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-03-07T10:00:00Z',
+        updatedAt: '2026-03-07T10:05:00Z',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+        status: 'reviewed',
+        prNumber: 42,
+        createdAt: '2026-03-07T11:00:00Z',
+        updatedAt: '2026-03-07T11:05:00Z',
+        result: { needs_remediation: '0' },
+        linearIssue: {
+          ...linearIssueSkeleton,
+          labels: [{ id: 'l1', name: 'ready-to-merge' }],
+        },
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    const mergeStep = findStep(groups[0]?.pipeline, 'merge');
+    expect(mergeStep).toBeDefined();
+    expect(mergeStep?.state).toBe('actionable');
+  });
+
+  it('does NOT show merge step for review task with needs_remediation=0 but no ready-to-merge label (PR already merged)', () => {
     const tasks = [
       createMockTask({
         id: 't1',
@@ -1345,9 +1380,7 @@ describe('pipeline merge step', () => {
     const groups = groupByLinearIssue(tasks);
 
     expect(groups).toHaveLength(1);
-    const mergeStep = findStep(groups[0]?.pipeline, 'merge');
-    expect(mergeStep).toBeDefined();
-    expect(mergeStep?.state).toBe('actionable');
+    expect(findStep(groups[0]?.pipeline, 'merge')).toBeUndefined();
   });
 
   it('does NOT show merge step for review task with needs_remediation=1', () => {

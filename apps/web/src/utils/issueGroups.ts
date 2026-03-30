@@ -241,13 +241,15 @@ function derivePipeline(tasks: CodeTask[]): PipelineState {
   }
 
   // Merge-ready fallback for review tasks: if the review step completed with
-  // needs_remediation === '0', the PR is mergeable even without the ready-to-merge
-  // label (which may have been set on the origin task's Linear issue instead).
+  // needs_remediation === '0' AND the ready-to-merge label is still present.
+  // The label check is essential: handlePrMerge removes ready-to-merge when
+  // a PR is merged, preventing a stale merge button on already-merged PRs.
   const reviewEntry = stepMap.get('review');
   if (
     reviewEntry?.step.state === 'completed' &&
     reviewEntry.task.prNumber !== undefined &&
     reviewEntry.task.result?.needs_remediation === REMEDIATION_NOT_NEEDED &&
+    hasMergeReadyLabel(reviewEntry.task.linearIssue?.labels) &&
     !steps.some((s) => s.agentType === 'merge')
   ) {
     steps.push({

@@ -35,6 +35,12 @@ import type { LogDescriptor } from 'pino';
 const SENTRY_DSN_ENV = 'INTEXURAOS_SENTRY_DSN';
 
 /**
+ * Log context key to skip Sentry capture while preserving stdout/Cloud Logging output.
+ * Usage: `logger.error({ _skipSentry: true, ... }, 'message')`
+ */
+export const SKIP_SENTRY_KEY = '_skipSentry' as const;
+
+/**
  * Levels that should be sent to Sentry (warn, error, fatal).
  */
 const SENTRY_LEVELS = new Set([40, 50, 60]);
@@ -93,6 +99,10 @@ export function createSentryStream(
 function sendLogToSentry(logEntry: LogDescriptor): void {
   const levelValue = logEntry['level'] as unknown;
   if (levelValue === undefined || !SENTRY_LEVELS.has(levelValue as number)) {
+    return;
+  }
+
+  if (logEntry[SKIP_SENTRY_KEY] === true) {
     return;
   }
 
