@@ -135,12 +135,14 @@ docker run -it --rm \
 [entrypoint] Running as user: claude (uid=1001)
 [entrypoint] Claude config defaults restored
 [entrypoint] Plugin cache restored (2 marketplaces)
+[entrypoint] Codex skill discovery restored
 [entrypoint] Git repo verified: /repo
 [entrypoint] GCP auth successful
 [entrypoint] Syncing secrets from GCP Secret Manager...
 [entrypoint] Secret sync complete
 [entrypoint] Loaded environment from /repo/.envrc (15 vars)
 [entrypoint] GitHub token loaded and git credential configured
+[entrypoint] Bootstrap evidence: codex_skills=restored github_token=loaded gcp_auth=active secret_sync=synced envrc=loaded
 [entrypoint] Installing dependencies...
 [entrypoint] Dependencies installed
 [entrypoint] Attribution set: Crafted with love by ...

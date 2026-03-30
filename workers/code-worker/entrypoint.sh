@@ -5,6 +5,16 @@ set -euo pipefail
 # Code Worker Container Entrypoint
 # ==============================================================================
 
+BOOTSTRAP_GCP_AUTH="skipped"
+BOOTSTRAP_SECRET_SYNC="skipped"
+BOOTSTRAP_ENVRC="missing"
+BOOTSTRAP_GITHUB_TOKEN="missing"
+BOOTSTRAP_CODEX_SKILLS="missing"
+
+emit_bootstrap_evidence() {
+    echo "[entrypoint] Bootstrap evidence: codex_skills=${BOOTSTRAP_CODEX_SKILLS} github_token=${BOOTSTRAP_GITHUB_TOKEN} gcp_auth=${BOOTSTRAP_GCP_AUTH} secret_sync=${BOOTSTRAP_SECRET_SYNC} envrc=${BOOTSTRAP_ENVRC}"
+}
+
 setup_git_identity() {
     # Set identity at BOTH repo and global level.
     # Repo-level is critical because worktrees inherit the parent repo's
@@ -25,6 +35,7 @@ setup_git_identity() {
 
 setup_github_token() {
     if [ -f "/secrets/github-token" ]; then
+        BOOTSTRAP_GITHUB_TOKEN="loaded"
         # Point-in-time snapshot for convenience scripts; may go stale within
         # long-running attempts. The git credential helper and gh wrapper
         # (see Dockerfile) are the authoritative token sources — they re-read
@@ -36,6 +47,7 @@ setup_github_token() {
         git config --global credential.helper '!f() { echo "username=x-access-token"; echo "password=$(cat /secrets/github-token 2>/dev/null)"; }; f'
         echo "[entrypoint] GitHub token loaded and git credential configured"
     else
+        BOOTSTRAP_GITHUB_TOKEN="missing"
         echo "[entrypoint] WARNING: GitHub token not found at /secrets/github-token"
     fi
 }
@@ -249,6 +261,20 @@ run_codex_attempt() {
         return 1
     fi
 
+    local runtime_mode="fresh"
+    if [ "$continue_flag" = "1" ]; then
+        runtime_mode="resume"
+    fi
+    local thread_id_state="absent"
+    if [ -n "${CODEX_THREAD_ID:-}" ]; then
+        thread_id_state="present"
+    fi
+    local reasoning_effort_state="default"
+    if [ -n "${CODEX_REASONING_EFFORT:-}" ]; then
+        reasoning_effort_state="${CODEX_REASONING_EFFORT}"
+    fi
+    echo "[entrypoint] Codex runtime evidence: mode=${runtime_mode} thread_id=${thread_id_state} reasoning_effort=${reasoning_effort_state}"
+
     local prompt_file
     prompt_file="$(mktemp /tmp/codex-prompt.XXXXXX)"
     {
@@ -401,6 +427,7 @@ fi
 # ------------------------------------------------------------------------------
 if [ -d "/opt/codex-home/.agents/skills" ]; then
     cp -a /opt/codex-home/.agents/. /home/claude/.agents/
+    BOOTSTRAP_CODEX_SKILLS="restored"
     echo "[entrypoint] Codex skill discovery restored"
 fi
 
@@ -429,8 +456,10 @@ fi
 if [ -f "/secrets/gcp-sa.json" ]; then
     echo "[entrypoint] Activating GCP service account..."
     if gcloud auth activate-service-account --key-file=/secrets/gcp-sa.json 2>&1; then
+        BOOTSTRAP_GCP_AUTH="active"
         echo "[entrypoint] GCP auth successful"
     else
+        BOOTSTRAP_GCP_AUTH="failed"
         echo "[entrypoint] GCP auth failed (non-fatal)"
     fi
 fi
@@ -442,8 +471,10 @@ if [ -f "/secrets/gcp-sa.json" ] && [ -f "/repo/scripts/sync-secrets.sh" ]; then
     SYNC_PROJECT_ID="$(jq -r .project_id /secrets/gcp-sa.json)"
     echo "[entrypoint] Syncing secrets from GCP Secret Manager (project: ${SYNC_PROJECT_ID})..."
     if bash /repo/scripts/sync-secrets.sh dev --project-id "${SYNC_PROJECT_ID}"; then
+        BOOTSTRAP_SECRET_SYNC="synced"
         echo "[entrypoint] Secret sync complete"
     else
+        BOOTSTRAP_SECRET_SYNC="failed"
         echo "[entrypoint] Secret sync failed (non-fatal, will use existing .envrc if available)"
     fi
 fi
@@ -454,6 +485,7 @@ fi
 if [ -f "/repo/.envrc" ]; then
     source /repo/.envrc
     direnv allow /repo
+    BOOTSTRAP_ENVRC="loaded"
     echo "[entrypoint] Loaded environment from /repo/.envrc ($(grep -c '^export ' /repo/.envrc) vars)"
 fi
 
@@ -462,6 +494,8 @@ fi
 # ------------------------------------------------------------------------------
 setup_git_identity
 setup_github_token
+
+emit_bootstrap_evidence
 
 # Token freshness: The orchestrator's TokenRefresher updates /secrets/github-token
 # every 30 minutes via bind mount. The git credential helper reads this file directly
