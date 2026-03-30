@@ -1,6 +1,6 @@
 import { memo, useState } from 'react';
 import { ChevronDown, ChevronRight, Play, RotateCcw, ExternalLink, Check, X, Loader2, Clock, ScrollText, Trash2, GitMerge, Archive } from 'lucide-react';
-import type { IssueGroup, StepState } from '@/utils/issueGroups';
+import type { ActioningType, IssueGroup, StepState } from '@/utils/issueGroups';
 import { formatRelative } from '@/utils/dateFormat';
 import { IssueTimeline } from '@/components/code-tasks/IssueTimeline';
 
@@ -8,8 +8,11 @@ interface IssueGroupRowProps {
   group: IssueGroup;
   timeTick: number;
   onAction: (taskId: string, action: 'delete' | 'retry' | 'implement' | 'archive') => void;
+  onArchiveGroup: (taskIds: string[]) => void;
+  onDeleteGroup: (taskIds: string[]) => void;
   onOpenLogs: (taskId: string) => void;
   actioningTaskId?: string | null;
+  actioningType?: ActioningType | undefined;
 }
 
 // --- Left border accent color ---
@@ -19,6 +22,28 @@ function getAccentShadow(status: IssueGroup['aggregateStatus']): string {
   if (status === 'failed') return 'shadow-[inset_3px_0_0_theme(colors.red.500)]';
   if (status === 'active') return 'shadow-[inset_3px_0_0_theme(colors.blue.500)]';
   return '';
+}
+
+function getActionAccentShadow(actionType: ActioningType | undefined): string | null {
+  if (actionType === 'archive') return 'shadow-[inset_3px_0_0_theme(colors.amber.500)]';
+  if (actionType === 'delete') return 'shadow-[inset_3px_0_0_theme(colors.red.500)]';
+  return null;
+}
+
+function getActionShimmerClass(actionType: ActioningType | undefined): string {
+  if (actionType === 'archive') return 'shimmer-amber';
+  if (actionType === 'delete') return 'shimmer-red';
+  return '';
+}
+
+function ActionStateTag({ actionType }: { actionType: ActioningType | undefined }): React.JSX.Element | null {
+  if (actionType === 'archive') {
+    return <span className="ml-1.5 inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">Archiving…</span>;
+  }
+  if (actionType === 'delete') {
+    return <span className="ml-1.5 inline-flex items-center rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-red-400">Deleting…</span>;
+  }
+  return null;
 }
 
 // --- Pipeline step rendering ---
@@ -93,16 +118,40 @@ function stepLabel(name: string, state: StepState, compact?: boolean): string {
 
 const OUTPUT_CHIP = 'min-w-[4.5rem] h-[26px] justify-center';
 
-function WaveLoader({ compact }: { compact?: boolean | undefined }): React.JSX.Element {
+type WaveLoaderVariant = 'default' | 'archive' | 'delete';
+
+const WAVE_COLORS: Record<WaveLoaderVariant, { border: string; bg: string; trackBg: string; dotClass: string }> = {
+  default: {
+    border: 'border-blue-500/30',
+    bg: 'bg-blue-500/10',
+    trackBg: 'bg-blue-500/15',
+    dotClass: 'wave-dot',
+  },
+  archive: {
+    border: 'border-amber-500/30',
+    bg: 'bg-amber-500/10',
+    trackBg: 'bg-amber-500/15',
+    dotClass: 'wave-dot-amber',
+  },
+  delete: {
+    border: 'border-red-500/30',
+    bg: 'bg-red-500/10',
+    trackBg: 'bg-red-500/15',
+    dotClass: 'wave-dot-red',
+  },
+};
+
+function WaveLoader({ compact, variant = 'default' }: { compact?: boolean | undefined; variant?: WaveLoaderVariant | undefined }): React.JSX.Element {
   const px = compact === true ? 'px-2' : 'px-2.5';
+  const colors = WAVE_COLORS[variant];
   return (
     <span
       role="status"
       aria-label="Loading"
-      className={`${OUTPUT_CHIP} relative inline-flex items-center overflow-hidden rounded-full border border-blue-500/30 bg-blue-500/10 ${px} py-1`}
+      className={`${OUTPUT_CHIP} relative inline-flex items-center overflow-hidden rounded-full border ${colors.border} ${colors.bg} ${px} py-1`}
     >
-      <span className="relative h-1 w-full overflow-hidden rounded-full bg-blue-500/15">
-        <span className="wave-dot absolute top-0 h-full w-[30%] rounded-full" />
+      <span className={`relative h-1 w-full overflow-hidden rounded-full ${colors.trackBg}`}>
+        <span className={`${colors.dotClass} absolute top-0 h-full w-[30%] rounded-full`} />
       </span>
     </span>
   );
@@ -211,8 +260,11 @@ function IssueIdentifierLink({
 const IssueGroupRow = memo(function IssueGroupRow({
   group,
   onAction,
+  onArchiveGroup,
+  onDeleteGroup,
   onOpenLogs,
   actioningTaskId,
+  actioningType,
 }: IssueGroupRowProps): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -223,10 +275,15 @@ const IssueGroupRow = memo(function IssueGroupRow({
   const hasMergeAction = actionableStep?.agentType === 'merge';
   const hasImplementAction = actionableStep !== undefined && !hasMergeAction;
   const isActioning = actioningTaskId !== null && actioningTaskId !== undefined && (actioningTaskId === latestTask.id || group.tasks.some((t) => t.id === actioningTaskId));
+  const activeActionType: ActioningType | undefined = isActioning ? (actioningType ?? null) : undefined;
+  const waveVariant: WaveLoaderVariant = activeActionType === 'archive' ? 'archive' : activeActionType === 'delete' ? 'delete' : 'default';
+  const actionAccent = getActionAccentShadow(activeActionType);
+  const actionShimmer = getActionShimmerClass(activeActionType);
+  const isBeingRemoved = activeActionType === 'archive' || activeActionType === 'delete';
 
   function renderActionButton(compact: boolean): React.JSX.Element | null {
     const px = compact ? 'px-2' : 'px-2.5';
-    if (isActioning) return <WaveLoader compact={compact} />;
+    if (isActioning) return <WaveLoader compact={compact} variant={waveVariant} />;
     if (hasMergeAction && pipeline.pr !== null) {
       return (
         <a
@@ -296,7 +353,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
     <div>
       {/* Collapsed row */}
       <div
-        className={`group relative cursor-pointer rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800 ${getAccentShadow(aggregateStatus)}`}
+        className={`group relative cursor-pointer rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm transition-shadow dark:border-slate-700 dark:bg-slate-800 ${isBeingRemoved ? `opacity-50 pointer-events-none ${actionShimmer}` : 'hover:shadow-md'} ${actionAccent ?? getAccentShadow(aggregateStatus)}`}
         onClick={handleRowClick}
       >
         <div className="hidden grid-cols-[1fr_1fr_140px_120px_36px] items-center gap-2 lg:grid">
@@ -314,10 +371,13 @@ const IssueGroupRow = memo(function IssueGroupRow({
             <div className="min-w-0">
               {group.linearIssue !== undefined ? (
                 <>
-                  <IssueIdentifierLink
-                    linearIssue={group.linearIssue}
-                    linkClassName="font-mono text-sm text-blue-500 hover:text-blue-400 hover:underline"
-                  />
+                  <span className="inline-flex items-center">
+                    <IssueIdentifierLink
+                      linearIssue={group.linearIssue}
+                      linkClassName="font-mono text-sm text-blue-500 hover:text-blue-400 hover:underline"
+                    />
+                    <ActionStateTag actionType={activeActionType} />
+                  </span>
                   <p className="truncate text-xs text-slate-500 dark:text-slate-400">
                     {group.linearIssue.title}
                   </p>
@@ -325,6 +385,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
               ) : (
                 <p className="truncate text-sm text-slate-600 dark:text-slate-400">
                   {summaryOrPrompt(latestTask)}
+                  <ActionStateTag actionType={activeActionType} />
                 </p>
               )}
             </div>
@@ -407,6 +468,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
                     linearIssue={group.linearIssue}
                     linkClassName="font-mono text-blue-500 hover:text-blue-400 hover:underline"
                   />
+                  <ActionStateTag actionType={activeActionType} />
                   <span className="text-slate-400"> · </span>
                   <span className="text-xs text-slate-500 dark:text-slate-400">{createdRelative}</span>
                 </span>
@@ -415,6 +477,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
                   <span className="truncate text-slate-600 dark:text-slate-400">
                     {summaryOrPrompt(latestTask)}
                   </span>
+                  <ActionStateTag actionType={activeActionType} />
                   <span className="text-slate-400"> · </span>
                   <span className="text-xs text-slate-500 dark:text-slate-400">{createdRelative}</span>
                 </span>
@@ -481,9 +544,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
               <button
                 onClick={(e): void => {
                   e.stopPropagation();
-                  for (const task of group.tasks) {
-                    onAction(task.id, 'delete');
-                  }
+                  onDeleteGroup(group.tasks.map((t) => t.id));
                   setShowDeleteConfirm(false);
                 }}
                 className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-500"
@@ -518,9 +579,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
               <button
                 onClick={(e): void => {
                   e.stopPropagation();
-                  for (const task of group.tasks) {
-                    onAction(task.id, 'archive');
-                  }
+                  onArchiveGroup(group.tasks.map((t) => t.id));
                   setShowArchiveConfirm(false);
                 }}
                 className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-500"
@@ -560,7 +619,10 @@ const IssueGroupRow = memo(function IssueGroupRow({
   prev.group.pipeline.failedAttempts === next.group.pipeline.failedAttempts &&
   prev.group.mostRecentDispatchedAt === next.group.mostRecentDispatchedAt &&
   prev.actioningTaskId === next.actioningTaskId &&
+  prev.actioningType === next.actioningType &&
+  prev.onDeleteGroup === next.onDeleteGroup &&
   prev.onAction === next.onAction &&
+  prev.onArchiveGroup === next.onArchiveGroup &&
   prev.onOpenLogs === next.onOpenLogs,
 );
 

@@ -208,6 +208,17 @@ The `run-attempt` handler:
 7. If forensics enabled and exit code is 139 (segfault): captures crash forensics (core dumps, GDB backtraces, debug logs, session state, shell snapshots)
 8. If forensics enabled: tees runtime output to `claude-stream.log` or `codex-stream.log` in the forensics directory
 
+### Codex Automation Parity Evidence
+
+Codex does not run `.claude/hooks/*.sh` inside the worker. The retained non-interactive parity is instead surfaced through stable log evidence:
+
+- `[entrypoint] Bootstrap evidence: ...`
+  Shows whether Codex skill discovery, GitHub token setup, GCP auth, secret sync, and `.envrc` loading all executed during worker startup.
+- `[entrypoint] Codex runtime evidence: ...`
+  Shows whether the attempt is fresh vs resume, whether a thread id was available, and which reasoning effort mode is being used.
+
+Those log lines are the observable proof for the retained bootstrap/runtime slice. Completion/ownership/evidence enforcement remains orchestrator-owned through the execution prompt, completion verifier, and deep validator.
+
 ### Legacy Mode (default, `WORKER_MANAGED_MODE` unset)
 
 After startup, immediately calls the selected runtime attempt runner and exits with its exit code. No `docker exec` needed.

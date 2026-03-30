@@ -22,6 +22,7 @@ export interface WhatsAppError {
   code: WhatsAppErrorCode;
   message: string;
   details?: Record<string, unknown>;
+  httpStatus?: number;
 }
 
 /**

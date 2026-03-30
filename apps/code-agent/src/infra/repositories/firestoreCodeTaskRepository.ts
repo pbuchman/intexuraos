@@ -19,6 +19,7 @@ import type {
   ListTasksOutput,
   RepositoryError,
 } from '../../domain/repositories/codeTaskRepository.js';
+import { NON_ARCHIVED_STATUSES } from '../../domain/issueGrouping/constants.js';
 
 const DEDUP_WINDOW_MS = 5 * 60 * 1000; // 5 minutes (design line 1544)
 const DEDUP_CANDIDATE_LIMIT = 5; // Fetch up to 5 candidates for app-level active-status filtering
@@ -1095,11 +1096,54 @@ export const createFirestoreCodeTaskRepository = (deps: {
         });
       }
     },
+
+    listAllNonArchived: async (userId: string): Promise<Result<CodeTask[], RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('userId', '==', userId)
+          .where('status', 'in', NON_ARCHIVED_STATUSES)
+          .orderBy('createdAt', 'desc')
+          .get();
+
+        const tasks = snapshot.docs.map((doc: QueryDocumentSnapshot) =>
+          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
+        );
+
+        return ok(tasks);
+      } catch (error) {
+        logger.error({ error, userId }, 'Failed to list all non-archived tasks');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    listAllNonArchivedGlobal: async (): Promise<Result<CodeTask[], RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('status', 'in', NON_ARCHIVED_STATUSES)
+          .orderBy('updatedAt', 'asc')
+          .get();
+
+        const tasks = snapshot.docs.map((doc: QueryDocumentSnapshot) =>
+          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
+        );
+
+        return ok(tasks);
+      } catch (error) {
+        logger.error({ error }, 'Failed to list all non-archived tasks globally');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
   };
 };
 
 function getErrorMessage(error: unknown): string {
-  /* v8 ignore start -- upstream: catch blocks always throw Error instances — non-Error branch is unreachable @preserve */
+  /* v8 ignore start -- ts-type: defensive type narrowing -- catch blocks always throw Error instances so non-Error branch is unreachable @preserve */
   if (error instanceof Error) {
     return error.message;
   }
