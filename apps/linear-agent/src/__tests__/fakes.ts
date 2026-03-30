@@ -25,6 +25,8 @@ import type {
   LinearCommentRepository,
   LinearComment,
   CommentSummary,
+  PruneCandidateRepository,
+  StoredPruneCandidate,
 } from '../domain/index.js';
 import type { UserServiceClient, UserServiceError } from '@intexuraos/internal-clients';
 import type { CodeAgentClient, CodeAgentError, TriggerCodeTaskResponse } from '../domain/index.js';
@@ -1049,5 +1051,36 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     this.shouldFail = false;
     this.lastRequest = null;
     this.taskIdCounter = 1;
+  }
+}
+
+export class FakePruneCandidateRepository implements PruneCandidateRepository {
+  private candidates: StoredPruneCandidate[] = [];
+
+  async clearAll(): Promise<Result<void, LinearError>> {
+    this.candidates = [];
+    return ok(undefined);
+  }
+
+  async storeAll(candidates: StoredPruneCandidate[]): Promise<Result<void, LinearError>> {
+    this.candidates = [...candidates];
+    return ok(undefined);
+  }
+
+  async listAll(): Promise<Result<StoredPruneCandidate[], LinearError>> {
+    const sorted = [...this.candidates].sort((a, b) => b.score - a.score);
+    return ok(sorted);
+  }
+
+  reset(): void {
+    this.candidates = [];
+  }
+
+  seedCandidates(candidates: StoredPruneCandidate[]): void {
+    this.candidates = [...candidates];
+  }
+
+  getCandidates(): StoredPruneCandidate[] {
+    return this.candidates;
   }
 }
