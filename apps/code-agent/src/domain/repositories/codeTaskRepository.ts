@@ -300,4 +300,11 @@ export interface CodeTaskRepository {
    * Used by the issue-groups endpoint for server-side grouping.
    */
   listAllNonArchived(userId: string): Promise<Result<CodeTask[], RepositoryError>>;
+
+  /**
+   * List all non-archived tasks across all users.
+   * Used by the stale-group archiver scheduler to find archivable issue groups.
+   * Returns all tasks with non-archived statuses, ordered by updatedAt asc.
+   */
+  listAllNonArchivedGlobal(): Promise<Result<CodeTask[], RepositoryError>>;
 }
