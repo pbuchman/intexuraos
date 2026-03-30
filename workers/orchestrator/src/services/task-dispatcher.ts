@@ -2308,6 +2308,7 @@ export class TaskDispatcher {
         },
         linearIssueBody,
         planContent,
+        workerType: task.workerType,
       };
     } catch (error) {
       this.logger.warn(

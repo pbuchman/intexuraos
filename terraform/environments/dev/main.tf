@@ -277,6 +277,7 @@ locals {
   # Uses computed URLs to avoid circular dependencies
   common_service_env_vars = {
     INTEXURAOS_ENVIRONMENT                      = var.environment
+    INTEXURAOS_RUNTIME                          = "prod"
     INTEXURAOS_GCP_PROJECT_ID                   = var.project_id
     INTEXURAOS_USER_SERVICE_URL                 = "https://${local.services.user_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_NOTION_SERVICE_URL               = "https://${local.services.notion_service.name}-${local.cloud_run_url_suffix}"
@@ -1575,6 +1576,37 @@ resource "google_cloud_scheduler_job" "linear_sync_hourly" {
   ]
 }
 
+resource "google_cloud_scheduler_job" "linear_issues_prune_hourly" {
+  name        = "intexuraos-linear-issues-prune-hourly-${var.environment}"
+  description = "Prune redundant Linear issues when count exceeds threshold"
+  schedule    = "30 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}/internal/linear/prune-issues"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}"
+    }
+  }
+
+  retry_config {
+    retry_count          = 1
+    max_retry_duration   = "120s"
+    min_backoff_duration = "10s"
+    max_backoff_duration = "60s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_linear_agent,
+    module.linear_agent,
+  ]
+}
+
 # Chat Agent - In-app AI assistant with RAG
 module "chat_agent" {
   source = "../../modules/cloud-run-service"
@@ -1979,6 +2011,41 @@ resource "google_cloud_scheduler_job" "merge_queue_tick" {
 
   retry_config {
     retry_count = 0
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
+    module.code_agent,
+  ]
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Scheduler - Archive Stale Issue Groups (Hourly)
+# -----------------------------------------------------------------------------
+
+resource "google_cloud_scheduler_job" "archive_stale_groups" {
+  name        = "intexuraos-archive-stale-groups-${var.environment}"
+  description = "Archive issue groups with no activity for 7+ days"
+  schedule    = "0 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.code_agent.service_url}/internal/archive-stale-groups"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.code_agent.service_url
+    }
+  }
+
+  retry_config {
+    retry_count          = 1
+    max_retry_duration   = "60s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "30s"
   }
 
   depends_on = [

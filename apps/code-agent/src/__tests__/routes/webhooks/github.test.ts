@@ -119,6 +119,8 @@ describe('POST /webhooks/github', () => {
       findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
       findRecentRemediationForPR: vi.fn().mockResolvedValue(ok(null)),
       findPreservedPullRequestTask: vi.fn().mockResolvedValue(ok(null)),
+      listAllNonArchived: vi.fn().mockResolvedValue(ok([])),
+      listAllNonArchivedGlobal: vi.fn().mockResolvedValue(ok([])),
     };
 
     // Create mock PR summary repo
@@ -206,6 +208,7 @@ describe('POST /webhooks/github', () => {
       processHeartbeat: {} as never,
       detectZombieTasks: {} as never,
       cleanupTaskLogs: {} as never,
+      archiveStaleGroups: {} as never,
       metricsClient: {} as never,
       workerSettingsRepo: {} as never,
       workerHealthProbe: {} as never,

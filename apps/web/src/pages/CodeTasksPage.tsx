@@ -362,6 +362,45 @@ export function CodeTasksPage(): React.JSX.Element {
     [handleAction],
   );
 
+  const handleArchiveGroup = useCallback(
+    (taskIds: string[]): void => {
+      void (async (): Promise<void> => {
+        if (actionInFlightRef.current) return;
+        actionInFlightRef.current = true;
+        const firstId = taskIds[0];
+        if (firstId !== undefined) {
+          setActioningTaskId(firstId);
+        }
+        try {
+          const token = await getAccessToken();
+          for (const taskId of taskIds) {
+            await archiveCodeTask(token, taskId);
+          }
+          await refresh(false);
+        } catch (err: unknown) {
+          setActioningTaskId(null);
+          setActionError(
+            err instanceof ApiError
+              ? err
+              : new ApiError('UNKNOWN', err instanceof Error ? err.message : 'An unexpected error occurred', 0),
+          );
+        } finally {
+          actionInFlightRef.current = false;
+        }
+      })();
+    },
+    [getAccessToken, refresh],
+  );
+
+  const handleDeleteGroup = useCallback(
+    (taskIds: string[]): void => {
+      for (const taskId of taskIds) {
+        void deleteTask(taskId);
+      }
+    },
+    [deleteTask],
+  );
+
   const handleCloseErrorModal = useCallback((): void => {
     setActionError(null);
     lastActionRef.current = null;
@@ -441,6 +480,8 @@ export function CodeTasksPage(): React.JSX.Element {
                 group={group}
                 timeTick={timeTick}
                 onAction={fireAction}
+                onArchiveGroup={handleArchiveGroup}
+                onDeleteGroup={handleDeleteGroup}
                 onOpenLogs={setPreviewTaskId}
                 actioningTaskId={actioningTaskId}
               />

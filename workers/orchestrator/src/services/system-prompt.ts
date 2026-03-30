@@ -48,6 +48,18 @@ decisions, or implementation choices, you MUST:
 
 If no comments exist or no comments influenced decisions, skip this section entirely.`;
 
+const CODEX_SESSION_AUTOMATION_PARITY = `### Codex Session Automation Parity (minimum retained scope)
+Codex does NOT reproduce Claude hooks one-for-one.
+
+Retained guarantees for non-interactive Codex runs:
+- Worker bootstrap must emit \`[entrypoint] Bootstrap evidence:\` summarizing Codex skill restore, GitHub token setup, GCP auth, secret sync, and env loading.
+- Codex attempts must emit \`[entrypoint] Codex runtime evidence:\` summarizing fresh vs resume mode, thread-id presence, and reasoning effort mode.
+- Terraform/GCP guardrails stay enforced through this system prompt + repo rules rather than direct Claude hook execution.
+- Task completion enforcement lives in the orchestrator completion verifier + deep validator rather than Claude Stop hooks.
+- Interactive Claude-only edit nudges (for example post-edit rebuild reminders and detect-common-patterns warnings) are intentionally omitted for Codex.
+
+Use these evidence lines when judging whether retained Codex parity actually executed.`;
+
 export interface SystemPromptParams {
   taskId: string;
   linearIssueId?: string;
@@ -211,7 +223,7 @@ Note: For complex planned outcomes, you MUST include explicit proof of the paral
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '5.2.0',
+  version: '6.1.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const hasContinuationPr =
@@ -275,7 +287,7 @@ Before doing ANY work, you MUST read the Linear issue AND all its comments:
 
 ${COMMENT_DRIVEN_DECISION_LOG}
 
-### Mandatory Skill Order (non-negotiable)
+${workerType === 'codex' ? CODEX_SESSION_AUTOMATION_PARITY + '\n\n' : ''}### Mandatory Skill Order (non-negotiable)
 1. Start with \`superpowers:executing-plans\` (mandatory first skill)
 2. After implementation and PR creation, run \`superpowers:requesting-code-review\` (mandatory second skill)
 
@@ -930,22 +942,38 @@ gh pr checks <PR_NUMBER> --json name,state,bucket,workflow
 
 Submit your review summary and ALL inline comments in a SINGLE \`POST /reviews\` API call. NEVER post the summary and inline comments as separate API calls — this creates duplicate reviews on the PR.
 
+**Always write the review body to a temp file first**, then use \`-F body=@file\` (UPPERCASE -F) to read from that file. This avoids shell escaping issues with long markdown bodies. NEVER pass a file path as a literal string with lowercase -f — that posts the path text, not the file contents.
+
 For a review with inline comments:
 
 \`\`\`bash
+cat > /tmp/review-body.md << 'REVIEW_EOF'
+## Automated Code Review — plan_review
+
+(your full review body here)
+REVIEW_EOF
+
 gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \\
   -f event="COMMENT" \\
-  -f body="Review summary" \\
+  -F body=@/tmp/review-body.md \\
   -f 'comments=[{"path":"src/file.ts","line":42,"side":"RIGHT","body":"Comment text"}]'
 \`\`\`
 
 For a review with no inline comments (summary only):
 
 \`\`\`bash
+cat > /tmp/review-body.md << 'REVIEW_EOF'
+## Automated Code Review — plan_review
+
+(your full review body here)
+REVIEW_EOF
+
 gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \\
   -f event="COMMENT" \\
-  -f body="Review summary"
+  -F body=@/tmp/review-body.md
 \`\`\`
+
+**CRITICAL:** The flag is uppercase \`-F\` (not lowercase \`-f\`). Lowercase \`-f body=@/tmp/review-body.md\` sends the literal string "@/tmp/review-body.md" as the review body instead of reading the file. Uppercase \`-F\` reads file contents when the value starts with \`@\`.
 
 Do NOT use \`POST /pulls/{pr_number}/comments\` — that endpoint has different parameter requirements and leads to split reviews.
 Capture the numeric review ID from the \`POST /reviews\` response payload. You MUST report that \`review_id\` in \`REVIEW_AGENT_FINAL\`.
