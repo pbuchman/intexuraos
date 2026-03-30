@@ -110,3 +110,7 @@ export {
 export { parseExtractionResponse } from './extractionParser.js';
 export { buildIssueDescription } from './descriptionBuilder.js';
 export { checkProcessedAction, type CheckIdempotencyDeps } from './useCases/checkIdempotency.js';
+export {
+  pruneIssues,
+  type PruneIssuesDeps,
+} from './useCases/pruneIssuesUseCase.js';
