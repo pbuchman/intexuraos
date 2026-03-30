@@ -217,6 +217,7 @@ describe('Automation log integration flows', () => {
       processHeartbeat: {} as never,
       detectZombieTasks: {} as never,
       cleanupTaskLogs: {} as never,
+      archiveStaleGroups: {} as never,
       metricsClient: {} as never,
       workerSettingsRepo: {} as never,
       workerHealthProbe: {} as never,

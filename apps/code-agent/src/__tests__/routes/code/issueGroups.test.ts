@@ -23,6 +23,7 @@ import { createStatusMirrorService } from '../../../infra/services/statusMirrorS
 import { createProcessHeartbeatUseCase } from '../../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../../domain/usecases/detectZombieTasks.js';
 import { createCleanupTaskLogsUseCase } from '../../../domain/usecases/cleanupTaskLogs.js';
+import { createArchiveStaleGroupsUseCase } from '../../../domain/usecases/archiveStaleGroups.js';
 import { createNoOpMetricsClient } from '../../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../../infra/firestore/workerSettingsRepository.js';
 import { createFirestoreGitHubPREventsRepository } from '../../../infra/firestore/gitHubPREventsRepository.js';
@@ -189,6 +190,7 @@ describe('GET /code/issue-groups', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -747,6 +749,7 @@ describe('GET /code/issue-groups', () => {
         codeTaskRepository: failingRepo,
         logger,
       }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: failingRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -856,6 +859,7 @@ describe('GET /code/issue-groups', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
