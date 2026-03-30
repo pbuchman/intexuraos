@@ -950,6 +950,8 @@ describe('GET /code/issue-groups', () => {
 
     // Should fall back to start (index 0) since the cursor is invalid
     expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { data: { groups: unknown[] } };
+    expect(body.data.groups.length).toBeGreaterThan(0);
   });
 
   it('handles cursor with non-integer index gracefully', async () => {
@@ -964,6 +966,8 @@ describe('GET /code/issue-groups', () => {
     });
 
     expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { data: { groups: unknown[] } };
+    expect(body.data.groups.length).toBeGreaterThan(0);
   });
 
   it('serializes tasks with completedAt, parentTaskId, followUpReason, error fields', async () => {
