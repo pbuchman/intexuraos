@@ -282,7 +282,7 @@ export interface PruneStats {
   /** Number of issues remaining after storing candidates */
   remaining: number;
   /** Candidates that were stored for user review */
-  storedCandidates: { identifier: string; title: string; reason: string; score: number; category: string }[];
+  storedCandidates: Omit<PruneCandidate, 'id'>[];
   /** Duration of the pruning run in milliseconds */
   durationMs: number;
 }

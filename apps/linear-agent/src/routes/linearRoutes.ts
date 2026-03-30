@@ -8,6 +8,7 @@ import type { Logger } from 'pino';
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { listIssues, fullSync, retryFailedIssue, getIssueComments, getIssueDetail, confirmPruneDeletion } from '../domain/index.js';
+import { handleLinearError } from './routeUtils.js';
 
 interface ConnectionBody {
   apiKey: string;
@@ -17,25 +18,6 @@ interface ConnectionBody {
 
 interface ValidateBody {
   apiKey: string;
-}
-
-async function handleLinearError(
-  error: { code: string; message: string },
-  reply: FastifyReply
-): Promise<unknown> {
-  if (error.code === 'NOT_CONNECTED') {
-    return await reply.fail('FORBIDDEN', error.message);
-  }
-  if (error.code === 'INVALID_API_KEY') {
-    return await reply.fail('UNAUTHORIZED', error.message);
-  }
-  if (error.code === 'RATE_LIMIT') {
-    return await reply.fail('DOWNSTREAM_ERROR', error.message);
-  }
-  if (error.code === 'INTERNAL_ERROR') {
-    return await reply.fail('INTERNAL_ERROR', error.message);
-  }
-  return await reply.fail('DOWNSTREAM_ERROR', error.message);
 }
 
 export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {

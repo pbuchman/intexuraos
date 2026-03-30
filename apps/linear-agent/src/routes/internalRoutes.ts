@@ -8,6 +8,32 @@ import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-htt
 import { getServices } from '../services.js';
 import { processLinearAction, validateIssue, generateIssueTitle, fullSync, fullSyncAllUsers, pruneIssues } from '../domain/index.js';
 import { PRUNE_CONFIG } from '../config.js';
+import { handleLinearError } from './routeUtils.js';
+
+/**
+ * Validate auth for Cloud Scheduler (OIDC Bearer) or service-to-service (x-internal-auth).
+ * Returns true if authenticated, false and sends 401 if not.
+ */
+async function validateSchedulerOrInternalAuth(
+  request: FastifyRequest,
+  reply: FastifyReply
+): Promise<boolean> {
+  const authHeader = request.headers.authorization;
+  const isOidcAuth = typeof authHeader === 'string' && authHeader.startsWith('Bearer ');
+
+  if (isOidcAuth) {
+    request.log.info('Authenticated via OIDC token (Cloud Scheduler)');
+    return true;
+  }
+
+  const authResult = validateInternalAuth(request);
+  if (!authResult.valid) {
+    reply.status(401);
+    await reply.fail('UNAUTHORIZED', 'Unauthorized');
+    return false;
+  }
+  return true;
+}
 
 interface ProcessActionBody {
   action: {
@@ -16,19 +42,6 @@ interface ProcessActionBody {
     text: string;
     summary?: string;
   };
-}
-
-async function handleLinearError(
-  error: { code: string; message: string },
-  reply: FastifyReply
-): Promise<unknown> {
-  if (error.code === 'NOT_CONNECTED') {
-    return await reply.fail('FORBIDDEN', error.message);
-  }
-  if (error.code === 'INTERNAL_ERROR') {
-    return await reply.fail('INTERNAL_ERROR', error.message);
-  }
-  return await reply.fail('DOWNSTREAM_ERROR', error.message);
 }
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -436,20 +449,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     async (request: FastifyRequest, reply: FastifyReply) => {
       logIncomingRequest(request);
 
-      // Cloud Scheduler uses OIDC tokens validated by Cloud Run at infrastructure level.
-      // Direct service calls use x-internal-auth header.
-      const authHeader = request.headers.authorization;
-      const isOidcAuth = typeof authHeader === 'string' && authHeader.startsWith('Bearer ');
-
-      if (isOidcAuth) {
-        request.log.info('Authenticated via OIDC token (Cloud Scheduler)');
-      } else {
-        const authResult = validateInternalAuth(request);
-        if (!authResult.valid) {
-          reply.status(401);
-          return await reply.fail('UNAUTHORIZED', 'Unauthorized');
-        }
-      }
+      const isAuthed = await validateSchedulerOrInternalAuth(request, reply);
+      if (!isAuthed) return;
 
       const services = getServices();
 
@@ -654,20 +655,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     async (request: FastifyRequest, reply: FastifyReply) => {
       logIncomingRequest(request);
 
-      // Cloud Scheduler uses OIDC tokens validated by Cloud Run at infrastructure level.
-      // Direct service calls use x-internal-auth header.
-      const authHeader = request.headers.authorization;
-      const isOidcAuth = typeof authHeader === 'string' && authHeader.startsWith('Bearer ');
-
-      if (isOidcAuth) {
-        request.log.info('Authenticated via OIDC token (Cloud Scheduler)');
-      } else {
-        const authResult = validateInternalAuth(request);
-        if (!authResult.valid) {
-          reply.status(401);
-          return await reply.fail('UNAUTHORIZED', 'Unauthorized');
-        }
-      }
+      const isAuthed = await validateSchedulerOrInternalAuth(request, reply);
+      if (!isAuthed) return;
 
       const services = getServices();
 
