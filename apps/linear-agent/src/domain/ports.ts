@@ -4,6 +4,7 @@
  */
 
 import type { Result, CodeTaskWorkerType } from '@intexuraos/common-core';
+import type { Logger } from 'pino';
 import type {
   LinearConnection,
   LinearConnectionPublic,
@@ -18,6 +19,7 @@ import type {
   SyncedLinearIssue,
   LinearComment,
   CommentSummary,
+  PruneCandidate,
 } from './models.js';
 import type { LinearError } from './errors.js';
 
@@ -243,4 +245,14 @@ export interface LinearCommentRepository {
 
   /** Delete comment by ID */
   deleteById(id: string): Promise<Result<void, LinearError>>;
+}
+
+/** Classifies synced issues to find deletion candidates using LLM */
+export interface IssuePruningClassifier {
+  /** Score and rank issues for deletion based on configurable criteria */
+  classifyCandidates(
+    issues: SyncedLinearIssue[],
+    targetCount: number,
+    logger: Logger
+  ): Promise<Result<PruneCandidate[], LinearError>>;
 }

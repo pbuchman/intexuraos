@@ -15,6 +15,7 @@ export type {
   CodeAgentClient,
   CodeAgentError,
   TriggerCodeTaskResponse,
+  IssuePruningClassifier,
 } from './ports.js';
 export {
   processLinearAction,
