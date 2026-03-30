@@ -127,6 +127,7 @@ export async function pruneIssues(
   }
 
   // Step 6: Build and store new candidates
+  // Single timestamp for the entire batch — all candidates from one run share the same classification time
   const classifiedAt = new Date().toISOString();
   const storedCandidates: StoredPruneCandidate[] = candidates.map((candidate) => ({
     id: candidate.id,

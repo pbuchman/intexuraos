@@ -144,8 +144,9 @@ describe('pruneIssues', () => {
       return ok(undefined);
     });
 
-    await pruneIssues(deps);
+    const result = await pruneIssues(deps);
 
+    expect(result.ok).toBe(true);
     expect(callOrder).toEqual(['clearAll', 'storeAll']);
   });
 

@@ -115,3 +115,7 @@ export {
   pruneIssues,
   type PruneIssuesDeps,
 } from './useCases/pruneIssuesUseCase.js';
+export {
+  confirmPruneDeletion,
+  type ConfirmPruneDeletionDeps,
+} from './useCases/confirmPruneDeletionUseCase.js';
