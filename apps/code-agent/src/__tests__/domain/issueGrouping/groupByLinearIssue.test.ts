@@ -412,7 +412,7 @@ describe('derivePipeline', () => {
     expect(mergeStep?.state).toBe('actionable');
   });
 
-  it('creates merge step via review fallback when review completed with prNumber and needs_remediation=0', () => {
+  it('creates merge step via review fallback when review completed with prNumber, needs_remediation=0, and ready-to-merge label', () => {
     const tasks = [
       makeTask({
         id: 'task-1',
@@ -420,6 +420,18 @@ describe('derivePipeline', () => {
         agentType: 'review',
         prNumber: 42,
         result: { needs_remediation: '0' },
+        linearIssue: {
+          identifier: 'INT-100',
+          parentIdentifier: null,
+          title: 'Test',
+          state: { name: 'Done', type: 'completed' },
+          priority: 2,
+          assignee: null,
+          labels: [{ name: 'ready-to-merge' }],
+          url: 'https://linear.app/test',
+          commentCount: 0,
+          lastCommentAt: null,
+        },
       }),
     ];
 
@@ -428,6 +440,35 @@ describe('derivePipeline', () => {
     const mergeStep = pipeline.steps.find((s) => s.agentType === 'merge');
     expect(mergeStep).toBeDefined();
     expect(mergeStep?.state).toBe('actionable');
+  });
+
+  it('does NOT create merge step via review fallback when ready-to-merge label is absent', () => {
+    const tasks = [
+      makeTask({
+        id: 'task-1',
+        status: 'reviewed',
+        agentType: 'review',
+        prNumber: 42,
+        result: { needs_remediation: '0' },
+        linearIssue: {
+          identifier: 'INT-100',
+          parentIdentifier: null,
+          title: 'Test',
+          state: { name: 'Done', type: 'completed' },
+          priority: 2,
+          assignee: null,
+          labels: [{ name: 'code-task' }],
+          url: 'https://linear.app/test',
+          commentCount: 0,
+          lastCommentAt: null,
+        },
+      }),
+    ];
+
+    const pipeline = derivePipeline(tasks);
+
+    const mergeStep = pipeline.steps.find((s) => s.agentType === 'merge');
+    expect(mergeStep).toBeUndefined();
   });
 
   it('does not duplicate merge step when both execution and review qualify', () => {

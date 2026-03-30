@@ -10,15 +10,16 @@
  * - No client-side groupByLinearIssue / sortIssueGroups
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpDown, Clock, Plus } from 'lucide-react';
-import { Button, CodeTaskLogsModal, Layout } from '@/components';
+import { Button, CodeTaskLogsModal, Layout, TaskErrorModal } from '@/components';
 import { IssueGroupRow } from '@/components/code-tasks/IssueGroupRow';
 import { useAuth } from '@/context';
 import { useIssueGroups, useRapidPoll } from '@/hooks/useIssueGroups';
 import { useTimeTick } from '@/hooks';
-import { startImplementation, retryCodeTask } from '@/services/codeAgentApi';
+import { ApiError } from '@/services/apiClient';
+import { startImplementation, retryCodeTask, archiveCodeTask } from '@/services/codeAgentApi';
 import type { GroupStatus, SortOption } from '@/types/issueGroups';
 
 // V3 does not include 'archived' — backend excludes archived tasks
@@ -206,11 +207,12 @@ function SortSelector({ activeSort, onChangeSort }: SortSelectorProps): React.JS
 
 function ColumnHeader(): React.JSX.Element {
   return (
-    <div className="mb-1 hidden grid-cols-[1fr_1fr_140px_120px] px-4 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500 lg:grid">
+    <div className="mb-1 hidden grid-cols-[1fr_1fr_140px_120px_36px] px-4 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500 lg:grid">
       <div>Issue</div>
       <div>Pipeline</div>
       <div>Time</div>
-      <div>Actions</div>
+      <div>Output</div>
+      <div>Logs</div>
     </div>
   );
 }
@@ -223,6 +225,9 @@ export function CodeTasksPageV3(): React.JSX.Element {
   const [activeFilters, setActiveFilters] = useState<GroupStatus[]>(loadFiltersFromStorage);
   const [activeSort, setActiveSort] = useState<SortOption>(loadSortFromStorage);
   const [previewTaskId, setPreviewTaskId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<ApiError | null>(null);
+  const actionInFlightRef = useRef(false);
+  const lastActionRef = useRef<{ taskId: string; action: 'retry' | 'implement' | 'archive' } | null>(null);
 
   // Server-side grouping, filtering, sorting, pagination
   const {
@@ -265,34 +270,58 @@ export function CodeTasksPageV3(): React.JSX.Element {
   }, []);
 
   const handleAction = useCallback(
-    async (taskId: string, action: 'delete' | 'retry' | 'implement') => {
+    async (taskId: string, action: 'delete' | 'retry' | 'implement' | 'archive') => {
       if (action === 'delete') {
-        // V3 doesn't support client-side delete — would need a dedicated endpoint
         return;
       }
+      if (actionInFlightRef.current) return;
+      actionInFlightRef.current = true;
+      lastActionRef.current = { taskId, action };
       setActioningTaskId(taskId);
       try {
         const token = await getAccessToken();
         if (action === 'implement') {
           await startImplementation(token, taskId);
-        }
-        if (action === 'retry') {
+        } else if (action === 'archive') {
+          await archiveCodeTask(token, taskId);
+        } else {
           await retryCodeTask(token, { taskId });
         }
         await refresh(false);
-      } catch {
+        lastActionRef.current = null;
+      } catch (err: unknown) {
         setActioningTaskId(null);
+        setActionError(
+          err instanceof ApiError
+            ? err
+            : new ApiError('UNKNOWN', err instanceof Error ? err.message : 'An unexpected error occurred', 0),
+        );
+      } finally {
+        actionInFlightRef.current = false;
       }
     },
     [getAccessToken, refresh, setActioningTaskId],
   );
 
   const fireAction = useCallback(
-    (taskId: string, action: 'delete' | 'retry' | 'implement'): void => {
+    (taskId: string, action: 'delete' | 'retry' | 'implement' | 'archive'): void => {
       void handleAction(taskId, action);
     },
     [handleAction],
   );
+
+  const handleCloseErrorModal = useCallback((): void => {
+    setActionError(null);
+    lastActionRef.current = null;
+  }, []);
+
+  const handleRetryFromModal = useCallback((): void => {
+    setActionError(null);
+    const last = lastActionRef.current;
+    if (last !== null) {
+      void handleAction(last.taskId, last.action);
+    }
+  }, [handleAction]);
 
   if (loading && groups.length === 0) {
     return (
@@ -394,6 +423,13 @@ export function CodeTasksPageV3(): React.JSX.Element {
           onClose={(): void => { setPreviewTaskId(null); }}
         />
       ) : null}
+
+      <TaskErrorModal
+        isOpen={actionError !== null}
+        error={actionError}
+        onClose={handleCloseErrorModal}
+        onRetry={handleRetryFromModal}
+      />
     </Layout>
   );
 }
