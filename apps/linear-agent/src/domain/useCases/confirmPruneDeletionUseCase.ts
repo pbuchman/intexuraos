@@ -20,7 +20,7 @@ import type {
 
 export interface ConfirmPruneDeletionDeps {
   connectionRepo: Pick<LinearConnectionRepository, 'getAllConnectedUserIds' | 'getFullConnection'>;
-  issueRepo: Pick<LinearIssueRepository, 'listByUserId' | 'deleteById'>;
+  issueRepo: Pick<LinearIssueRepository, 'findUserIdsByIssueId' | 'deleteById'>;
   linearClient: Pick<LinearApiClient, 'deleteIssue'>;
   pruneCandidateRepo: PruneCandidateRepository;
   logger: Logger;
@@ -30,16 +30,17 @@ export interface ConfirmPruneDeletionDeps {
  * Execute deletion of all stored prune candidates.
  *
  * 1. Load all candidates from Firestore
- * 2. Get an API key from the first connected user
- * 3. Build a map of issue ID → userIds for multi-tenant cleanup
- * 4. Delete each candidate from Linear, clean up local Firestore copies
- * 5. Clear the prune candidates collection
+ * 2. Get an API key from the first connected user (all users share one Linear workspace)
+ * 3. Delete each candidate from Linear, clean up local Firestore copies per-user
+ * 4. Clear the prune candidates collection
  */
 export async function confirmPruneDeletion(
   deps: ConfirmPruneDeletionDeps
 ): Promise<Result<PruneDeleteStats, LinearError>> {
   const { connectionRepo, issueRepo, linearClient, pruneCandidateRepo, logger } = deps;
   const startTime = Date.now();
+
+  logger.info('Starting prune candidate deletion workflow');
 
   // Step 1: Load all candidates
   const candidatesResult = await pruneCandidateRepo.listAll();
@@ -82,28 +83,8 @@ export async function confirmPruneDeletion(
 
   const apiKey = connection.apiKey;
 
-  // Step 4: Build issue-to-users map for multi-tenant cleanup
-  const issueToUsers = new Map<string, string[]>();
-
-  for (const userId of userIds) {
-    const issuesResult = await issueRepo.listByUserId(userId);
-    if (!issuesResult.ok) {
-      logger.warn({ userId, error: issuesResult.error }, 'Failed to list issues for user, skipping for local cleanup');
-      continue;
-    }
-
-    for (const issue of issuesResult.value) {
-      const existing = issueToUsers.get(issue.id);
-      if (existing !== undefined) {
-        existing.push(userId);
-      } else {
-        issueToUsers.set(issue.id, [userId]);
-      }
-    }
-  }
-
-  // Step 5: Delete each candidate
-  const deletedCandidates: string[] = [];
+  // Step 3: Delete each candidate from Linear and clean up local copies
+  let deleted = 0;
   const failedDeletions: { identifier: string; error: string }[] = [];
 
   for (const candidate of candidates) {
@@ -121,29 +102,36 @@ export async function confirmPruneDeletion(
 
     logger.info({ identifier: candidate.identifier }, 'Issue deleted successfully');
 
-    // Clean up local Firestore copies
-    const owningUserIds = issueToUsers.get(candidate.id) ?? [];
-    for (const userId of owningUserIds) {
-      const localDeleteResult = await issueRepo.deleteById(candidate.id, userId);
-      if (!localDeleteResult.ok) {
-        logger.warn(
-          { identifier: candidate.identifier, userId, error: localDeleteResult.error },
-          'Failed to delete local Firestore copy (non-fatal)'
-        );
+    // Clean up local Firestore copies — find which users have this issue synced
+    const userIdsResult = await issueRepo.findUserIdsByIssueId(candidate.id);
+    if (userIdsResult.ok) {
+      for (const userId of userIdsResult.value) {
+        const localDeleteResult = await issueRepo.deleteById(candidate.id, userId);
+        if (!localDeleteResult.ok) {
+          logger.warn(
+            { identifier: candidate.identifier, userId, error: localDeleteResult.error },
+            'Failed to delete local Firestore copy (non-fatal)'
+          );
+        }
       }
+    } else {
+      logger.warn(
+        { identifier: candidate.identifier, error: userIdsResult.error },
+        'Failed to find users for local cleanup (non-fatal)'
+      );
     }
 
-    deletedCandidates.push(candidate.id);
+    deleted++;
   }
 
-  // Step 6: Clear the prune candidates collection
+  // Step 4: Clear the prune candidates collection
   const clearResult = await pruneCandidateRepo.clearAll();
   if (!clearResult.ok) {
     logger.warn({ error: clearResult.error }, 'Failed to clear prune candidates collection (non-fatal — issues already deleted from Linear)');
   }
 
   return ok({
-    deleted: deletedCandidates.length,
+    deleted,
     failedDeletions,
     durationMs: Date.now() - startTime,
   });
