@@ -241,6 +241,7 @@ describe('GET /code/github-pr-events', () => {
       processHeartbeat: import('../../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       workerSettingsRepo: ReturnType<typeof createWorkerSettingsRepository>;
       workerHealthProbe: import('../../../domain/ports/workerHealthProbe.js').WorkerHealthProbe;
       gitHubPREventRepo: import('../../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
