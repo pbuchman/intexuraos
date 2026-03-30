@@ -392,6 +392,15 @@ export function CodeTasksPage(): React.JSX.Element {
     [getAccessToken, refresh],
   );
 
+  const handleDeleteGroup = useCallback(
+    (taskIds: string[]): void => {
+      for (const taskId of taskIds) {
+        void deleteTask(taskId);
+      }
+    },
+    [deleteTask],
+  );
+
   const handleCloseErrorModal = useCallback((): void => {
     setActionError(null);
     lastActionRef.current = null;
@@ -472,6 +481,7 @@ export function CodeTasksPage(): React.JSX.Element {
                 timeTick={timeTick}
                 onAction={fireAction}
                 onArchiveGroup={handleArchiveGroup}
+                onDeleteGroup={handleDeleteGroup}
                 onOpenLogs={setPreviewTaskId}
                 actioningTaskId={actioningTaskId}
               />
