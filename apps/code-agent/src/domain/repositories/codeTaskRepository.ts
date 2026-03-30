@@ -293,4 +293,11 @@ export interface CodeTaskRepository {
    * List execution tasks waiting for scheduler-backed execution-memory post-run processing.
    */
   listPendingExecutionMemoryPostRun(limit: number): Promise<Result<CodeTask[], RepositoryError>>;
+
+  /**
+   * List all non-archived tasks for a user.
+   * Returns all tasks with non-archived statuses, ordered by createdAt desc.
+   * Used by the issue-groups endpoint for server-side grouping.
+   */
+  listAllNonArchived(userId: string): Promise<Result<CodeTask[], RepositoryError>>;
 }

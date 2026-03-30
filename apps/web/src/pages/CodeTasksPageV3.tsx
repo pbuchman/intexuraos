@@ -1,27 +1,29 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+/**
+ * Code Tasks V3 page with backend-driven issue grouping.
+ *
+ * Parallel implementation to CodeTasksPage — accessible at /code-tasks-v3
+ * (hidden route, no sidebar nav entry).
+ *
+ * Key differences from CodeTasksPage:
+ * - Grouping, filtering, sorting, and pagination happen on the backend
+ * - Counts are always accurate (reflect all non-archived tasks)
+ * - No client-side groupByLinearIssue / sortIssueGroups
+ */
+
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpDown, Clock, Plus } from 'lucide-react';
 import { Button, CodeTaskLogsModal, Layout, TaskErrorModal } from '@/components';
 import { IssueGroupRow } from '@/components/code-tasks/IssueGroupRow';
 import { useAuth } from '@/context';
-import { useCodeTasks, useTimeTick } from '@/hooks';
+import { useIssueGroups, useRapidPoll } from '@/hooks/useIssueGroups';
+import { useTimeTick } from '@/hooks';
 import { ApiError } from '@/services/apiClient';
 import { startImplementation, retryCodeTask, archiveCodeTask } from '@/services/codeAgentApi';
-import { ACTIVE_STATUSES, groupByLinearIssue, sortIssueGroups } from '@/utils/issueGroups';
-import type { IssueGroup, GroupStatus, SortOption } from '@/utils/issueGroups';
-import type { CodeTaskStatus } from '@/types';
+import type { GroupStatus, SortOption } from '@/types/issueGroups';
 
-// Statuses shown by default (all except archived — INT-711)
-export const DEFAULT_VISIBLE_STATUSES: CodeTaskStatus[] = [
-  'queued', 'dispatched', 'running', 'planned', 'implemented', 'reviewed', 'failed', 'interrupted', 'cancelled',
-];
-
-// All statuses including archived — used when the user enables the Archived filter
-const ALL_STATUSES_INCLUDING_ARCHIVED: CodeTaskStatus[] = [
-  ...DEFAULT_VISIBLE_STATUSES, 'archived',
-];
-
-const ALL_GROUP_STATUSES: GroupStatus[] = ['active', 'needs-action', 'done', 'failed', 'archived'];
+// V3 does not include 'archived' — backend excludes archived tasks
+const ALL_GROUP_STATUSES: GroupStatus[] = ['active', 'needs-action', 'done', 'failed'];
 
 const GROUP_STATUS_CONFIG: Record<GroupStatus, { label: string; dotClass: string; activeClass: string }> = {
   active: {
@@ -44,20 +46,15 @@ const GROUP_STATUS_CONFIG: Record<GroupStatus, { label: string; dotClass: string
     dotClass: 'bg-red-500',
     activeClass: 'border-red-500 bg-red-50 text-red-700 dark:border-red-400 dark:bg-red-900/30 dark:text-red-400',
   },
-  archived: {
-    label: 'Archived',
-    dotClass: 'bg-slate-400',
-    activeClass: 'border-slate-400 bg-slate-50 text-slate-600 dark:border-slate-500 dark:bg-slate-800 dark:text-slate-400',
-  },
 };
 
 const INACTIVE_SEGMENT_CLASS =
   'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500';
 
-const STORAGE_KEY = 'code-tasks-group-filter';
-const SORT_STORAGE_KEY = 'code-tasks-sort';
+const STORAGE_KEY = 'code-tasks-v3-group-filter';
+const SORT_STORAGE_KEY = 'code-tasks-v3-sort';
 
-const DEFAULT_NON_ARCHIVED: GroupStatus[] = ['active', 'needs-action', 'done', 'failed'];
+const DEFAULT_FILTERS = ALL_GROUP_STATUSES;
 
 const SORT_OPTIONS: { key: SortOption; label: string }[] = [
   { key: 'linear-id', label: 'Linear' },
@@ -74,43 +71,40 @@ function loadSortFromStorage(): SortOption {
   return 'linear-id';
 }
 
-function loadFiltersFromStorage(): Set<GroupStatus> {
+function loadFiltersFromStorage(): GroupStatus[] {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored !== null) {
     try {
       const parsed = JSON.parse(stored) as unknown;
       if (Array.isArray(parsed)) {
-        return new Set(
-          parsed.filter((s): s is GroupStatus =>
-            ALL_GROUP_STATUSES.includes(s as GroupStatus),
-          ),
+        const valid = parsed.filter((s): s is GroupStatus =>
+          ALL_GROUP_STATUSES.includes(s as GroupStatus),
         );
+        if (valid.length > 0) {
+          return valid;
+        }
       }
     } catch {
       // Invalid JSON, use default
     }
   }
-  // Default: show all except archived
-  return new Set<GroupStatus>(DEFAULT_NON_ARCHIVED);
+  return DEFAULT_FILTERS;
 }
 
 // --- PageHeader ---
 
 interface PageHeaderProps {
-  issueGroups: IssueGroup[];
+  counts: Record<GroupStatus, number>;
+  totalGroups: number;
 }
 
-function PageHeader({ issueGroups }: PageHeaderProps): React.JSX.Element {
-  const totalIssues = issueGroups.length;
-  const needsAttention = issueGroups.filter((g) => g.aggregateStatus === 'needs-action').length;
-  const failedCount = issueGroups.filter((g) => g.aggregateStatus === 'failed').length;
-
-  const parts: string[] = [`${String(totalIssues)} issue${totalIssues !== 1 ? 's' : ''}`];
-  if (needsAttention > 0) {
-    parts.push(`${String(needsAttention)} needs attention`);
+function PageHeader({ counts, totalGroups }: PageHeaderProps): React.JSX.Element {
+  const parts: string[] = [`${String(totalGroups)} issue${totalGroups !== 1 ? 's' : ''}`];
+  if (counts['needs-action'] > 0) {
+    parts.push(`${String(counts['needs-action'])} needs attention`);
   }
-  if (failedCount > 0) {
-    parts.push(`${String(failedCount)} failed`);
+  if (counts.failed > 0) {
+    parts.push(`${String(counts.failed)} failed`);
   }
 
   return (
@@ -144,28 +138,30 @@ function PageHeader({ issueGroups }: PageHeaderProps): React.JSX.Element {
 
 interface StatusPipelineProps {
   counts: Record<GroupStatus, number>;
-  activeFilters: Set<GroupStatus>;
+  activeFilters: GroupStatus[];
   onToggle: (status: GroupStatus) => void;
 }
 
 function StatusPipeline({ counts, activeFilters, onToggle }: StatusPipelineProps): React.JSX.Element {
+  const activeSet = useMemo(() => new Set(activeFilters), [activeFilters]);
+
   return (
     <div className="mb-4 flex flex-wrap gap-2">
       {ALL_GROUP_STATUSES.map((status) => {
-        const config = GROUP_STATUS_CONFIG[status];
+        const cfg = GROUP_STATUS_CONFIG[status];
         const count = counts[status];
-        const isActive = activeFilters.has(status);
+        const isActive = activeSet.has(status);
 
         return (
           <button
             key={status}
             onClick={(): void => { onToggle(status); }}
             className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors ${
-              isActive ? config.activeClass : INACTIVE_SEGMENT_CLASS
+              isActive ? cfg.activeClass : INACTIVE_SEGMENT_CLASS
             }`}
           >
-            <span className={`inline-block h-2 w-2 rounded-full ${config.dotClass}`} />
-            {config.label}
+            <span className={`inline-block h-2 w-2 rounded-full ${cfg.dotClass}`} />
+            {cfg.label}
             <span className="font-medium">{String(count)}</span>
           </button>
         );
@@ -221,96 +217,49 @@ function ColumnHeader(): React.JSX.Element {
   );
 }
 
-// --- CodeTasksPage ---
+// --- CodeTasksPageV3 ---
 
-export function CodeTasksPage(): React.JSX.Element {
+export function CodeTasksPageV3(): React.JSX.Element {
   const { getAccessToken } = useAuth();
 
-  const [activeFilters, setActiveFilters] = useState<Set<GroupStatus>>(loadFiltersFromStorage);
+  const [activeFilters, setActiveFilters] = useState<GroupStatus[]>(loadFiltersFromStorage);
   const [activeSort, setActiveSort] = useState<SortOption>(loadSortFromStorage);
   const [previewTaskId, setPreviewTaskId] = useState<string | null>(null);
-  const [actioningTaskId, setActioningTaskId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<ApiError | null>(null);
   const actionInFlightRef = useRef(false);
   const lastActionRef = useRef<{ taskId: string; action: 'retry' | 'implement' | 'archive' } | null>(null);
 
-  // When the Archived filter is active, include 'archived' in the API status filter
-  // so the backend returns archived tasks. Otherwise use default (non-archived) statuses.
-  const apiStatuses = useMemo(
-    () => activeFilters.has('archived') ? ALL_STATUSES_INCLUDING_ARCHIVED : DEFAULT_VISIBLE_STATUSES,
-    [activeFilters],
-  );
-
-  const { tasks, loading, loadingMore, error, hasMore, loadMore, deleteTask, refresh } = useCodeTasks({
-    status: apiStatuses,
+  // Server-side grouping, filtering, sorting, pagination
+  const {
+    groups,
+    counts,
+    totalGroups,
+    loading,
+    loadingMore,
+    error,
+    hasMore,
+    loadMore,
+    refresh,
+  } = useIssueGroups({
+    groupStatus: activeFilters,
+    sortBy: activeSort,
   });
 
-  const hasActiveTasks = useMemo(
-    () => tasks.some((t) => ACTIVE_STATUSES.has(t.status)),
-    [tasks],
-  );
-  const timeTick = useTimeTick(30000, hasActiveTasks);
+  // Rapid polling after user actions
+  const { actioningTaskId, setActioningTaskId } = useRapidPoll(null, groups, refresh);
 
-  const allGroups = useMemo(() => groupByLinearIssue(tasks), [tasks]);
-
-  // --- Rapid poll + transition detection while an action is in flight ---
-  const rapidPollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (actioningTaskId === null) return;
-    const pollId = setInterval(() => { refresh(false).catch(() => undefined); }, 3000);
-    rapidPollTimeoutRef.current = setTimeout(() => { rapidPollTimeoutRef.current = null; setActioningTaskId(null); }, 30000);
-    return (): void => {
-      clearInterval(pollId);
-      if (rapidPollTimeoutRef.current !== null) {
-        clearTimeout(rapidPollTimeoutRef.current);
-        rapidPollTimeoutRef.current = null;
-      }
-    };
-  }, [actioningTaskId, refresh]);
-
-  useEffect(() => {
-    if (actioningTaskId === null) return;
-    if (actionInFlightRef.current) return;
-    const group = allGroups.find(
-      (g) => g.latestTask.id === actioningTaskId || g.tasks.some((t) => t.id === actioningTaskId),
-    );
-    if (group === undefined || (group.aggregateStatus !== 'failed' && group.aggregateStatus !== 'needs-action')) {
-      setActioningTaskId(null);
-    }
-  }, [actioningTaskId, allGroups]);
-
-  const filteredGroups = useMemo(() => {
-    const filtered =
-      activeFilters.size === 0
-        ? allGroups
-        : allGroups.filter((g) => activeFilters.has(g.aggregateStatus));
-    return sortIssueGroups(filtered, activeSort);
-  }, [allGroups, activeFilters, activeSort]);
-
-  const counts = useMemo(() => {
-    const c: Record<GroupStatus, number> = {
-      active: 0,
-      'needs-action': 0,
-      done: 0,
-      failed: 0,
-      archived: 0,
-    };
-    for (const g of allGroups) {
-      c[g.aggregateStatus]++;
-    }
-    return c;
-  }, [allGroups]);
+  const timeTick = useTimeTick(30000, counts.active > 0);
 
   const handleToggleFilter = useCallback((status: GroupStatus): void => {
     setActiveFilters((prev) => {
-      const next = new Set(prev);
-      if (next.has(status)) {
-        next.delete(status);
+      const set = new Set(prev);
+      if (set.has(status)) {
+        set.delete(status);
       } else {
-        next.add(status);
+        set.add(status);
       }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify([...next]));
+      const next = [...set];
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       return next;
     });
   }, []);
@@ -323,7 +272,6 @@ export function CodeTasksPage(): React.JSX.Element {
   const handleAction = useCallback(
     async (taskId: string, action: 'delete' | 'retry' | 'implement' | 'archive') => {
       if (action === 'delete') {
-        void deleteTask(taskId);
         return;
       }
       if (actionInFlightRef.current) return;
@@ -352,7 +300,7 @@ export function CodeTasksPage(): React.JSX.Element {
         actionInFlightRef.current = false;
       }
     },
-    [deleteTask, getAccessToken, refresh],
+    [getAccessToken, refresh, setActioningTaskId],
   );
 
   const fireAction = useCallback(
@@ -389,7 +337,7 @@ export function CodeTasksPage(): React.JSX.Element {
         }
       })();
     },
-    [getAccessToken, refresh],
+    [getAccessToken, refresh, setActioningTaskId],
   );
 
   const handleCloseErrorModal = useCallback((): void => {
@@ -405,7 +353,7 @@ export function CodeTasksPage(): React.JSX.Element {
     }
   }, [handleAction]);
 
-  if (loading && tasks.length === 0) {
+  if (loading && groups.length === 0) {
     return (
       <Layout>
         <div className="flex items-center justify-center py-12">
@@ -417,7 +365,7 @@ export function CodeTasksPage(): React.JSX.Element {
 
   return (
     <Layout>
-      <PageHeader issueGroups={allGroups} />
+      <PageHeader counts={counts} totalGroups={totalGroups} />
 
       <StatusPipeline
         counts={counts}
@@ -433,27 +381,26 @@ export function CodeTasksPage(): React.JSX.Element {
         </div>
       ) : null}
 
-      {filteredGroups.length === 0 ? (
+      {groups.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <div className="py-12 text-center">
             <p className="mb-4 text-slate-600 dark:text-slate-300">
-              {activeFilters.size > 0 && tasks.length > 0
+              {activeFilters.length > 0 && totalGroups > 0
                 ? 'No issues match the selected filters'
                 : 'No code tasks yet'}
             </p>
-            {activeFilters.size > 0 && tasks.length > 0 ? (
+            {activeFilters.length > 0 && totalGroups > 0 ? (
               <button
                 onClick={(): void => {
-                  const defaults = new Set<GroupStatus>(DEFAULT_NON_ARCHIVED);
-                  setActiveFilters(defaults);
-                  localStorage.setItem(STORAGE_KEY, JSON.stringify([...defaults]));
+                  setActiveFilters(DEFAULT_FILTERS);
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_FILTERS));
                 }}
                 className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-700"
               >
                 Clear filters
               </button>
             ) : null}
-            {tasks.length === 0 ? (
+            {totalGroups === 0 ? (
               <Link to="/code-tasks/new" className="text-blue-600 underline dark:text-blue-400">
                 Create your first code task
               </Link>
@@ -465,7 +412,7 @@ export function CodeTasksPage(): React.JSX.Element {
           <ColumnHeader />
 
           <div className="space-y-1">
-            {filteredGroups.map((group) => (
+            {groups.map((group) => (
               <IssueGroupRow
                 key={group.linearIssueId ?? group.latestTask.id}
                 group={group}
