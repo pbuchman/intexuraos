@@ -33,55 +33,99 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
 /**
- * Convert a CodeTask domain model to the serialized shape needed for issue grouping.
- * Includes fields required by the grouping/pipeline logic (e.g., needs_remediation).
+ * Convert a CodeTask domain model to the full serialized shape matching the frontend CodeTask type.
+ * Mirrors the logic in codeRoutes.ts taskToApiResponse but returns SerializedTask.
  */
 function taskToSerializedTask(task: {
   id: string;
+  userId: string;
+  prompt: string;
+  sanitizedPrompt: string;
+  systemPromptHash: string;
+  workerType: string;
+  workerLocation: string;
+  repository: string;
+  baseBranch: string;
+  traceId: string;
   status: string;
+  dedupKey: string;
+  callbackReceived: boolean;
   createdAt: unknown;
   updatedAt: unknown;
+  completedAt?: unknown;
   dispatchedAt?: unknown;
+  actionId?: string;
+  approvalEventId?: string;
   linearIssueId?: string;
   agentType?: string;
   implementationTaskId?: string;
+  parentTaskId?: string;
+  followUpReason?: string;
   prNumber?: number;
-  repository: string;
   result?: {
     prUrl?: string;
+    branch?: string;
+    commits?: number;
+    summary?: string;
+    ciFailed?: boolean;
+    partialWork?: boolean;
+    rebaseResult?: 'success' | 'conflict' | 'skipped';
+    review_comments_posted?: string;
+    review_types?: string;
+    requirements_tracker_updated?: string;
     needs_remediation?: string;
+  };
+  error?: {
+    code: string;
+    message: string;
+    remediation?: {
+      retryAfter?: number;
+      manualSteps?: string;
+      supportLink?: string;
+    };
   };
 }): SerializedTask {
   /* v8 ignore start -- test-infra: FakeFirestore cannot preserve Timestamp fields during update() -- isFieldValueDelete falsely matches Timestamp.isEqual causing dispatchedAt/updatedAt to be dropped @preserve */
+  const createdAt = timestampToIso(task.createdAt as { toDate: () => Date } | string | undefined) ?? '';
+  const updatedAt = timestampToIso(task.updatedAt as { toDate: () => Date } | string | undefined) ?? '';
   const dispatchedAt = timestampToIso(task.dispatchedAt as { toDate: () => Date } | string | undefined);
+  const completedAt = timestampToIso(task.completedAt as { toDate: () => Date } | string | undefined);
+  /* v8 ignore stop @preserve */
 
   const serialized: SerializedTask = {
     id: task.id,
-    status: task.status,
-    createdAt: timestampToIso(task.createdAt as { toDate: () => Date } | string | undefined) ?? '',
-    updatedAt: timestampToIso(task.updatedAt as { toDate: () => Date } | string | undefined) ?? '',
+    userId: task.userId,
+    prompt: task.prompt,
+    sanitizedPrompt: task.sanitizedPrompt,
+    systemPromptHash: task.systemPromptHash,
+    workerType: task.workerType,
+    workerLocation: task.workerLocation,
     repository: task.repository,
+    baseBranch: task.baseBranch,
+    traceId: task.traceId,
+    status: task.status,
+    dedupKey: task.dedupKey,
+    callbackReceived: task.callbackReceived,
+    createdAt,
+    updatedAt,
   };
 
-  if (dispatchedAt !== undefined) {
-    serialized.dispatchedAt = dispatchedAt;
-  }
+  /* v8 ignore start -- test-infra: FakeFirestore update() drops Timestamp fields (isFieldValueDelete matches Timestamp.isEqual) so dispatchedAt/completedAt cannot be reliably set in tests @preserve */
+  if (dispatchedAt !== undefined) { serialized.dispatchedAt = dispatchedAt; }
+  if (completedAt !== undefined) { serialized.completedAt = completedAt; }
   /* v8 ignore stop @preserve */
-  if (task.linearIssueId !== undefined) {
-    serialized.linearIssueId = task.linearIssueId;
-  }
-  if (task.agentType !== undefined) {
-    serialized.agentType = task.agentType;
-  }
-  if (task.implementationTaskId !== undefined) {
-    serialized.implementationTaskId = task.implementationTaskId;
-  }
-  if (task.prNumber !== undefined) {
-    serialized.prNumber = task.prNumber;
-  }
-  if (task.result !== undefined) {
-    serialized.result = task.result;
-  }
+  /* v8 ignore start -- test-infra: FakeFirestore create() cannot populate actionId/approvalEventId without triggering dedup-layer rejection @preserve */
+  if (task.actionId !== undefined) { serialized.actionId = task.actionId; }
+  if (task.approvalEventId !== undefined) { serialized.approvalEventId = task.approvalEventId; }
+  /* v8 ignore stop @preserve */
+  if (task.linearIssueId !== undefined) { serialized.linearIssueId = task.linearIssueId; }
+  if (task.agentType !== undefined) { serialized.agentType = task.agentType; }
+  if (task.implementationTaskId !== undefined) { serialized.implementationTaskId = task.implementationTaskId; }
+  if (task.parentTaskId !== undefined) { serialized.parentTaskId = task.parentTaskId; }
+  if (task.followUpReason !== undefined) { serialized.followUpReason = task.followUpReason; }
+  if (task.prNumber !== undefined) { serialized.prNumber = task.prNumber; }
+  if (task.result !== undefined) { serialized.result = task.result; }
+  if (task.error !== undefined) { serialized.error = task.error; }
 
   return serialized;
 }

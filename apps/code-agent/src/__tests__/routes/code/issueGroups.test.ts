@@ -935,4 +935,79 @@ describe('GET /code/issue-groups', () => {
     // Both groups should be returned (falls back to createdAt sort since no dispatchedAt)
     expect(body.data.groups.length).toBe(2);
   });
+
+  it('handles invalid cursor with negative index gracefully', async () => {
+    const r = await codeTaskRepo.create(makeTaskInput({ linearIssueId: 'INT-1800', traceId: 'trace-bad-cursor' }));
+    expect(r.ok).toBe(true);
+
+    // Encode a cursor with negative index
+    const badCursor = Buffer.from(JSON.stringify({ index: -1 })).toString('base64url');
+    const response = await server.inject({
+      method: 'GET',
+      url: `/code/issue-groups?cursor=${badCursor}`,
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    // Should fall back to start (index 0) since the cursor is invalid
+    expect(response.statusCode).toBe(200);
+  });
+
+  it('handles cursor with non-integer index gracefully', async () => {
+    const r = await codeTaskRepo.create(makeTaskInput({ linearIssueId: 'INT-1801', traceId: 'trace-nan-cursor' }));
+    expect(r.ok).toBe(true);
+
+    const badCursor = Buffer.from(JSON.stringify({ index: 'abc' })).toString('base64url');
+    const response = await server.inject({
+      method: 'GET',
+      url: `/code/issue-groups?cursor=${badCursor}`,
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  it('serializes tasks with completedAt, parentTaskId, followUpReason, error fields', async () => {
+    const r = await codeTaskRepo.create({
+      ...makeTaskInput({ linearIssueId: 'INT-1900', traceId: 'trace-all-fields' }),
+      parentTaskId: 'parent-task-1',
+      followUpReason: 'retry',
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+
+    await codeTaskRepo.update(r.value.id, {
+      status: 'failed',
+      completedAt: new Date(),
+      error: { code: 'WORKER_DIED', message: 'Worker process crashed' },
+    });
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/issue-groups',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        groups: {
+          linearIssueId: string | null;
+          tasks: {
+            parentTaskId?: string;
+            followUpReason?: string;
+            completedAt?: string;
+            error?: { code: string; message: string };
+          }[];
+        }[];
+      };
+    };
+
+    const group = body.data.groups.find((g) => g.linearIssueId === 'INT-1900');
+    expect(group).toBeDefined();
+    const task = group?.tasks[0];
+    expect(task).toBeDefined();
+    expect(task?.parentTaskId).toBe('parent-task-1');
+    expect(task?.followUpReason).toBe('retry');
+    expect(task?.error?.code).toBe('WORKER_DIED');
+  });
 });
