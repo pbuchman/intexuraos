@@ -7,7 +7,7 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import type { Logger } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
-import type { LinearError } from '../domain/errors.js';
+import { handleLinearError } from './routeUtils.js';
 import {
   STATE_NAME_MAP,
   findStateId,
@@ -49,18 +49,6 @@ interface IssueResponse {
   identifier: string;
   title: string;
   url: string;
-}
-
-async function handleLinearError(
-  error: LinearError,
-  reply: FastifyReply
-): Promise<unknown> {
-  if (error.code === 'NOT_CONNECTED') {
-    reply.status(403);
-    return await reply.fail('FORBIDDEN', error.message);
-  }
-  reply.status(500);
-  return await reply.fail('DOWNSTREAM_ERROR', error.message);
 }
 
 export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done) => {

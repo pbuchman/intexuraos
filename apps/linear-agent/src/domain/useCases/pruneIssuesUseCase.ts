@@ -29,14 +29,6 @@ export interface PruneIssuesDeps {
   config: PruneConfig;
 }
 
-/**
- * Run the issue pruning workflow for all connected users.
- *
- * 1. Get all connected users and aggregate their synced issue count
- * 2. If total unique issues exceed activation threshold, classify candidates
- * 3. Clear old candidates from Firestore
- * 4. Store new candidates in Firestore for user review
- */
 export async function pruneIssues(
   deps: PruneIssuesDeps
 ): Promise<Result<PruneStats, LinearError>> {
@@ -45,7 +37,6 @@ export async function pruneIssues(
 
   logger.info({ config }, 'Starting issue pruning workflow');
 
-  // Step 1: Get all connected users
   const usersResult = await connectionRepo.getAllConnectedUserIds();
   if (!usersResult.ok) {
     return usersResult;
@@ -65,11 +56,13 @@ export async function pruneIssues(
     });
   }
 
-  // Step 2: Aggregate all issues across users (deduplicate by issue ID)
   const allIssuesMap = new Map<string, { issue: SyncedLinearIssue; userIds: string[] }>();
 
-  for (const userId of userIds) {
-    const issuesResult = await issueRepo.listByUserId(userId);
+  const issueResults = await Promise.all(
+    userIds.map(async (userId) => ({ userId, result: await issueRepo.listByUserId(userId) }))
+  );
+
+  for (const { userId, result: issuesResult } of issueResults) {
     if (!issuesResult.ok) {
       logger.error({ userId, error: issuesResult.error }, 'Failed to list issues for user, continuing');
       continue;
@@ -88,7 +81,6 @@ export async function pruneIssues(
   const totalActive = allIssuesMap.size;
   logger.info({ totalActive, threshold: config.activationThreshold }, 'Issue count check');
 
-  // Step 3: Check threshold
   if (totalActive <= config.activationThreshold) {
     logger.info(
       { totalActive, threshold: config.activationThreshold },
@@ -105,7 +97,6 @@ export async function pruneIssues(
     });
   }
 
-  // Step 4: Classify candidates using Gemini
   const allIssues = [...allIssuesMap.values()].map((entry) => entry.issue);
   const classifyResult = await classifier.classifyCandidates(
     allIssues,
@@ -120,22 +111,15 @@ export async function pruneIssues(
   const candidates = classifyResult.value;
   logger.info({ candidateCount: candidates.length }, 'Classification complete, storing candidates for review');
 
-  // Step 5: Clear old candidates from Firestore
   const clearResult = await pruneCandidateRepo.clearAll();
   if (!clearResult.ok) {
     return clearResult;
   }
 
-  // Step 6: Build and store new candidates
   // Single timestamp for the entire batch — all candidates from one run share the same classification time
   const classifiedAt = new Date().toISOString();
   const storedCandidates: StoredPruneCandidate[] = candidates.map((candidate) => ({
-    id: candidate.id,
-    identifier: candidate.identifier,
-    title: candidate.title,
-    reason: candidate.reason,
-    score: candidate.score,
-    category: candidate.category,
+    ...candidate,
     classifiedAt,
   }));
 
@@ -149,13 +133,7 @@ export async function pruneIssues(
     totalActive,
     stored: storedCandidates.length,
     remaining: totalActive,
-    storedCandidates: storedCandidates.map((c) => ({
-      identifier: c.identifier,
-      title: c.title,
-      reason: c.reason,
-      score: c.score,
-      category: c.category,
-    })),
+    storedCandidates,
     durationMs: Date.now() - startTime,
   };
 

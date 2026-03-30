@@ -26,14 +26,6 @@ export interface ConfirmPruneDeletionDeps {
   logger: Logger;
 }
 
-/**
- * Execute deletion of all stored prune candidates.
- *
- * 1. Load all candidates from Firestore
- * 2. Get an API key from the first connected user (all users share one Linear workspace)
- * 3. Delete each candidate from Linear, clean up local Firestore copies per-user
- * 4. Clear the prune candidates collection
- */
 export async function confirmPruneDeletion(
   deps: ConfirmPruneDeletionDeps
 ): Promise<Result<PruneDeleteStats, LinearError>> {
@@ -42,7 +34,6 @@ export async function confirmPruneDeletion(
 
   logger.info('Starting prune candidate deletion workflow');
 
-  // Step 1: Load all candidates
   const candidatesResult = await pruneCandidateRepo.listAll();
   if (!candidatesResult.ok) {
     return candidatesResult;
@@ -53,7 +44,6 @@ export async function confirmPruneDeletion(
     return ok({ deleted: 0, failedDeletions: [], durationMs: Date.now() - startTime });
   }
 
-  // Step 2: Get all connected user IDs
   const usersResult = await connectionRepo.getAllConnectedUserIds();
   if (!usersResult.ok) {
     return usersResult;
@@ -64,7 +54,7 @@ export async function confirmPruneDeletion(
     return err({ code: 'NOT_CONNECTED', message: 'No connected users found for API operations' });
   }
 
-  // Step 3: Get API key from first connected user
+  // All users share one Linear workspace — any connected user's API key is valid for deletions
   const firstUserId = userIds[0];
   /* v8 ignore start -- ts-type: noUncheckedIndexedAccess forces undefined check on userIds[0] despite length check above @preserve */
   if (firstUserId === undefined) {
@@ -83,7 +73,6 @@ export async function confirmPruneDeletion(
 
   const apiKey = connection.apiKey;
 
-  // Step 3: Delete each candidate from Linear and clean up local copies
   let deleted = 0;
   const failedDeletions: { identifier: string; error: string }[] = [];
 
@@ -102,7 +91,6 @@ export async function confirmPruneDeletion(
 
     logger.info({ identifier: candidate.identifier }, 'Issue deleted successfully');
 
-    // Clean up local Firestore copies — find which users have this issue synced
     const userIdsResult = await issueRepo.findUserIdsByIssueId(candidate.id);
     if (userIdsResult.ok) {
       for (const userId of userIdsResult.value) {
@@ -124,7 +112,6 @@ export async function confirmPruneDeletion(
     deleted++;
   }
 
-  // Step 4: Clear the prune candidates collection
   const clearResult = await pruneCandidateRepo.clearAll();
   if (!clearResult.ok) {
     logger.warn({ error: clearResult.error }, 'Failed to clear prune candidates collection (non-fatal — issues already deleted from Linear)');

@@ -22,15 +22,7 @@ interface PruneCandidateDoc {
 }
 
 function toStoredPruneCandidate(doc: PruneCandidateDoc): StoredPruneCandidate {
-  return {
-    id: doc.id,
-    identifier: doc.identifier,
-    title: doc.title,
-    score: doc.score,
-    reason: doc.reason,
-    category: doc.category as StoredPruneCandidate['category'],
-    classifiedAt: doc.classifiedAt,
-  };
+  return { ...doc, category: doc.category as StoredPruneCandidate['category'] };
 }
 
 const BATCH_LIMIT = 500;
@@ -38,18 +30,18 @@ const BATCH_LIMIT = 500;
 async function clearAll(): Promise<Result<void, LinearError>> {
   try {
     const db = getFirestore();
-    const snapshot = await db.collection(COLLECTION_NAME).get();
+    // listDocuments() returns refs without fetching field data — more efficient than get()
+    const refs = await db.collection(COLLECTION_NAME).listDocuments();
 
-    if (snapshot.empty) {
+    if (refs.length === 0) {
       return ok(undefined);
     }
 
-    const docs = snapshot.docs;
-    for (let i = 0; i < docs.length; i += BATCH_LIMIT) {
-      const chunk = docs.slice(i, i + BATCH_LIMIT);
+    for (let i = 0; i < refs.length; i += BATCH_LIMIT) {
+      const chunk = refs.slice(i, i + BATCH_LIMIT);
       const batch = db.batch();
-      for (const doc of chunk) {
-        batch.delete(doc.ref);
+      for (const ref of chunk) {
+        batch.delete(ref);
       }
       await batch.commit();
     }
@@ -72,16 +64,7 @@ async function storeAll(candidates: StoredPruneCandidate[]): Promise<Result<void
       const batch = db.batch();
       for (const candidate of chunk) {
         const docRef = db.collection(COLLECTION_NAME).doc(candidate.id);
-        const doc: PruneCandidateDoc = {
-          id: candidate.id,
-          identifier: candidate.identifier,
-          title: candidate.title,
-          score: candidate.score,
-          reason: candidate.reason,
-          category: candidate.category,
-          classifiedAt: candidate.classifiedAt,
-        };
-        batch.set(docRef, doc);
+        batch.set(docRef, { ...candidate } satisfies PruneCandidateDoc);
       }
       await batch.commit();
     }
