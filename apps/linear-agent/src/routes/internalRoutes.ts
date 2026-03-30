@@ -6,7 +6,7 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import type { Logger } from 'pino';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
-import { processLinearAction, validateIssue, generateIssueTitle, fullSync, fullSyncAllUsers } from '../domain/index.js';
+import { processLinearAction, validateIssue, generateIssueTitle, fullSync, fullSyncAllUsers, pruneIssues } from '../domain/index.js';
 
 interface ProcessActionBody {
   action: {
@@ -583,6 +583,129 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       );
 
       return await reply.ok(result.value); // @allow-result-access -- guarded by if (!result.ok) at line 563
+    }
+  );
+
+  // Issue pruning endpoint — triggered by Cloud Scheduler hourly (INT-1164)
+  fastify.post(
+    '/internal/linear/prune-issues',
+    {
+      schema: {
+        operationId: 'pruneIssues',
+        summary: 'Prune redundant Linear issues to stay under subscription limit',
+        description: 'Checks active issue count and, if above threshold, uses Gemini to classify and delete redundant issues',
+        tags: ['internal'],
+        response: {
+          200: {
+            description: 'Pruning completed (may have been skipped if below threshold)',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                required: ['skipped', 'totalActive', 'deleted', 'remaining', 'deletedCandidates', 'failedDeletions', 'durationMs'],
+                properties: {
+                  skipped: { type: 'boolean', description: 'Whether pruning was skipped' },
+                  skipReason: { type: 'string', description: 'Reason for skipping' },
+                  totalActive: { type: 'number', description: 'Total active issues before pruning' },
+                  deleted: { type: 'number', description: 'Number of issues deleted' },
+                  remaining: { type: 'number', description: 'Issues remaining after pruning' },
+                  deletedCandidates: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        identifier: { type: 'string' },
+                        title: { type: 'string' },
+                        reason: { type: 'string' },
+                      },
+                    },
+                  },
+                  failedDeletions: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        identifier: { type: 'string' },
+                        error: { type: 'string' },
+                      },
+                    },
+                  },
+                  durationMs: { type: 'number', description: 'Duration in milliseconds' },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          500: {
+            description: 'Internal Server Error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request);
+
+      // Cloud Scheduler uses OIDC tokens validated by Cloud Run at infrastructure level.
+      // Direct service calls use x-internal-auth header.
+      const authHeader = request.headers.authorization;
+      const isOidcAuth = typeof authHeader === 'string' && authHeader.startsWith('Bearer ');
+
+      if (isOidcAuth) {
+        request.log.info('Authenticated via OIDC token (Cloud Scheduler)');
+      } else {
+        const authResult = validateInternalAuth(request);
+        if (!authResult.valid) {
+          reply.status(401);
+          return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+        }
+      }
+
+      const services = getServices();
+
+      request.log.info('internal/pruneIssues: starting issue pruning');
+
+      const result = await pruneIssues({
+        connectionRepo: services.connectionRepository,
+        issueRepo: services.issueRepository,
+        linearClient: services.linearApiClient,
+        classifier: services.issuePruningClassifier,
+        logger: request.log as unknown as Logger,
+        config: {
+          activationThreshold: 200,
+          targetDeletionCount: 30,
+        },
+      });
+
+      if (!result.ok) {
+        return await handleLinearError(result.error, reply);
+      }
+
+      request.log.info(
+        {
+          skipped: result.value.skipped,
+          deleted: result.value.deleted,
+          remaining: result.value.remaining,
+        },
+        'internal/pruneIssues: pruning completed'
+      );
+
+      return await reply.ok(result.value);
     }
   );
 
