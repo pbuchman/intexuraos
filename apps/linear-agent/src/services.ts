@@ -72,18 +72,19 @@ export function initServices(config: ServiceConfig): void {
 
   // Create issue pruning classifier using platform Gemini API key
   const geminiApiKey = process.env['INTEXURAOS_GEMINI_APP_API_KEY'];
-  const issuePruningClassifier = geminiApiKey !== undefined && geminiApiKey !== ''
+  const geminiClient = geminiApiKey !== undefined && geminiApiKey !== ''
+    ? createGeminiClient({
+        apiKey: geminiApiKey,
+        model: LlmModels.Gemini25Flash,
+        userId: 'system:pruning',
+        pricing: TOOL_CALLING_PRICING[LlmModels.Gemini25Flash],
+        logger,
+      })
+    : null;
+
+  const issuePruningClassifier = geminiClient !== null
     ? createIssuePruningClassifier({
-        generate: async (prompt: string) => {
-          const geminiClient = createGeminiClient({
-            apiKey: geminiApiKey,
-            model: LlmModels.Gemini25Flash,
-            userId: 'system:pruning',
-            pricing: TOOL_CALLING_PRICING[LlmModels.Gemini25Flash],
-            logger,
-          });
-          return await geminiClient.generate(prompt);
-        },
+        generate: (prompt: string) => geminiClient.generate(prompt),
         logger,
       })
     : createIssuePruningClassifier({

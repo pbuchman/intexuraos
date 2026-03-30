@@ -7,6 +7,7 @@ import type { Logger } from 'pino';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { processLinearAction, validateIssue, generateIssueTitle, fullSync, fullSyncAllUsers, pruneIssues } from '../domain/index.js';
+import { PRUNE_CONFIG_RUNTIME } from '../config.js';
 
 interface ProcessActionBody {
   action: {
@@ -686,10 +687,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         linearClient: services.linearApiClient,
         classifier: services.issuePruningClassifier,
         logger: request.log as unknown as Logger,
-        config: {
-          activationThreshold: 200,
-          targetDeletionCount: 30,
-        },
+        config: PRUNE_CONFIG_RUNTIME,
       });
 
       if (!result.ok) {
