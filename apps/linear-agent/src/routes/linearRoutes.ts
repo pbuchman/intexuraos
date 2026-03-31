@@ -641,6 +641,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         issueRepo: services.issueRepository,
         connectionRepo: services.connectionRepository,
         linearClient: services.linearApiClient,
+        codeAgentClient: services.codeAgentClient,
         logger: request.log as unknown as Logger,
       });
 

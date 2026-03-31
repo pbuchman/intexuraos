@@ -223,6 +223,14 @@ class FakeCodeAgentClient implements CodeAgentClient {
   }): Promise<Result<{ codeTaskId: string }, { code: string; message: string }>> {
     return ok({ codeTaskId: 'task-123' });
   }
+
+  async notifyGroupSummaryRecompute(_request: {
+    userId: string;
+    linearIssueId: string;
+    labels: { id: string; name: string }[];
+  }): Promise<Result<void, { code: string; message: string }>> {
+    return ok(undefined);
+  }
 }
 
 // Test helper functions
