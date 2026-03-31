@@ -190,6 +190,12 @@ export interface IsolationProvider {
 
   listPreservedWorkers?(): Promise<{ containerId: string; taskId: string; preservedAt: string }[]>;
 
+  /**
+   * Check if a running worker environment is available for task resume.
+   * May clean up stale references as a side effect.
+   */
+  isResumeAvailable?(taskId: string): Promise<boolean>;
+
   listWorkerContainers?(): Promise<DiscoveredContainer[]>;
 
   startPeriodicCleanup?(): void;

@@ -213,6 +213,7 @@ describe('TaskDispatcher', () => {
     getResourceUsage: vi.fn(async () => ({ cpuPercent: 0, memoryUsedMB: 0, memoryLimitMB: 0 })),
     listWorkers: vi.fn(async () => []),
     cleanupTaskSession: vi.fn(async () => undefined),
+    isResumeAvailable: vi.fn(async () => true),
     isHealthy: vi.fn(() => true),
     pullImage: vi.fn(async (_taskId: string, onProgress?: (msg: string) => void) => {
       onProgress?.('Image pull completed in 2s');
@@ -7470,6 +7471,36 @@ describe('TaskDispatcher', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value).toEqual({ action: 'resumed' });
+      }
+    });
+
+    it('returns not_found when container is no longer available for resume', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-stale-container-task',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const state = await statePersistence.load();
+      const task = state.tasks['msg-stale-container-task'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      await statePersistence.save(state);
+
+      vi.mocked(
+        mockIsolationProvider as Required<IsolationProvider>
+      ).isResumeAvailable.mockResolvedValueOnce(false);
+      const result = await dispatcher.sendMessage('msg-stale-container-task', 'Follow-up');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('not_found');
       }
     });
   });
