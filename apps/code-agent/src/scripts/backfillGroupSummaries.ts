@@ -16,6 +16,8 @@ import { deriveAggregateStatusFromSummary } from '../domain/issueGrouping/derive
 import type { TaskGroupSummary, UserGroupCounts } from '../domain/models/taskGroupSummary.js';
 import type { CodeTask } from '../domain/models/codeTask.js';
 
+/* v8 ignore start -- module-init: standalone backfill script is never imported by test suites; cannot be unit-tested without a live Firestore connection @preserve */
+
 const logger = createAppLogger({ name: 'backfill-group-summaries' });
 
 // Mirror of constants.ts — inlined to avoid circular import issues in standalone script context
@@ -335,3 +337,4 @@ main().catch((error: unknown) => {
   logger.error({ error }, 'Backfill failed');
   process.exit(1);
 });
+/* v8 ignore stop @preserve */

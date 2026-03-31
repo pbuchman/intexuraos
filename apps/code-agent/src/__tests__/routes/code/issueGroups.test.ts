@@ -14,6 +14,7 @@ const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 
 import { buildServer } from '../../../server.js';
 import { resetServices, setServices } from '../../../services.js';
+import type { ServiceContainer } from '../../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
@@ -165,6 +166,55 @@ describe('GET /code/issue-groups', () => {
   let codeTaskRepo: CodeTaskRepository;
   let mockSummaries: TaskGroupSummary[];
   let mockCounts: UserGroupCounts;
+
+  function makeBaseServices(overrides: {
+    codeTaskRepo?: CodeTaskRepository;
+    groupSummaryRepo?: ReturnType<typeof makeGroupSummaryRepo>;
+  } = {}): ServiceContainer {
+    const actionsClient = createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger });
+    const linearClient = makeLinearAgentClient();
+    const repoToUse = overrides.codeTaskRepo ?? codeTaskRepo;
+    return {
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+      codeTaskRepo: repoToUse,
+      taskDispatcher: {
+        async dispatch(): Promise<Result<DispatchResult, DispatchError>> { return ok({ dispatched: true, workerLocation: 'mac' }); },
+        async cancelOnWorker() { return; },
+        async sendMessageToWorker() { return ok({ action: 'queued' }); },
+      } as TaskDispatcherService,
+      whatsappNotifier: createWhatsAppNotifier({ whatsappPublisher: { publishSendMessage: async () => ok(undefined) } as unknown as WhatsAppSendPublisher }),
+      logChunkRepo: createFirestoreLogChunkRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      logLineRepo: createFirestoreLogLineRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      actionsAgentClient: actionsClient,
+      linearAgentClient: linearClient,
+      rateLimitService: { async checkLimits() { return ok(undefined); }, async recordTaskStart() { return; }, async recordTaskComplete() { return; } } as RateLimitService,
+      linearIssueService: createLinearIssueService({ linearAgentClient: linearClient, logger }),
+      metricsClient: createNoOpMetricsClient(),
+      statusMirrorService: createStatusMirrorService({ actionsAgentClient: actionsClient, logger }),
+      processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: repoToUse, logger }),
+      detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: repoToUse, logger }),
+      cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: repoToUse, logger }),
+      workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      workerHealthProbe: mockWorkerHealthProbe,
+      gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
+      gitHubPRSummaryRepo: {} as never,
+      turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      userServiceClient: mockUserServiceClient,
+      gitHubPRClient: {} as never,
+      webhookRules: {} as never,
+      dispatchService: {} as never,
+      toolCallingClient: undefined,
+      eventDecisionRepo: createFirestoreEventDecisionRepository({ logger }),
+      dispatchRetryRepo: createFirestoreDispatchRetryRepository({ logger }),
+      unifiedEvaluator: {} as never,
+      automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
+      taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })) } as never,
+      mergeConflictDetector: { detectOnPush: vi.fn().mockResolvedValue(undefined), reconcile: vi.fn().mockResolvedValue(EMPTY_RECONCILE_RESULT) },
+      mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
+      groupSummaryRepo: overrides.groupSummaryRepo ?? makeGroupSummaryRepo(),
+    };
+  }
 
   beforeEach(async () => {
     mockSummaries = [];
@@ -1443,5 +1493,116 @@ describe('GET /code/issue-groups', () => {
       expect(body.success).toBe(false);
       expect(body.error?.code).toBe('INTERNAL_ERROR');
     });
+  });
+
+  it('returns 500 when listGroupSummaries fails', async () => {
+    setServices(makeBaseServices({
+      groupSummaryRepo: makeGroupSummaryRepo({
+        listGroupSummaries: async () => err({ code: 'FIRESTORE_ERROR' as const, message: 'Summaries fetch failed' }),
+      }),
+    }));
+
+    await server.close();
+    server = await buildServer();
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/issue-groups',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error?: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error?.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('returns 200 with no group when findRecentTasksByLinearIssue fails', async () => {
+    // When task fetch fails, the group has no tasks → groupByLinearIssue produces no entry for it.
+    // The route handles the error gracefully (warns + returns []) rather than failing.
+    const failingCodeTaskRepo: CodeTaskRepository = {
+      ...codeTaskRepo,
+      findRecentTasksByLinearIssue: async () => err({ code: 'FIRESTORE_ERROR' as const, message: 'DB error' }),
+    };
+
+    mockSummaries = [makeSummary({ linearIssueId: 'INT-2001' })];
+    mockCounts = { ...mockCounts, active: 1, totalGroups: 1 };
+
+    setServices(makeBaseServices({
+      codeTaskRepo: failingCodeTaskRepo,
+      groupSummaryRepo: makeGroupSummaryRepo({
+        getUserGroupCounts: async () => ok(mockCounts),
+        listGroupSummaries: async () => ok({ summaries: mockSummaries }),
+      }),
+    }));
+
+    await server.close();
+    server = await buildServer();
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/issue-groups',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    // Route returns 200 (error is non-fatal — logged as warn, group omitted)
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { data: { groups: unknown[] } };
+    // No group produced because tasks returned empty array (fetch failed)
+    expect(body.data.groups).toHaveLength(0);
+  });
+
+  it('returns empty tasks for standalone group when findById fails', async () => {
+    const standaloneTaskId = 'standalone-task-99';
+    const failingCodeTaskRepo: CodeTaskRepository = {
+      ...codeTaskRepo,
+      findById: async () => err({ code: 'NOT_FOUND' as const, message: 'Task not found' }),
+    };
+
+    const standaloneSummary: TaskGroupSummary = {
+      userId: 'test-user-id',
+      linearIssueId: null,
+      groupKey: `standalone_${standaloneTaskId}`,
+      taskCount: 1,
+      activeTaskCount: 1,
+      latestTaskStatus: 'queued',
+      latestTaskUpdatedAt: new Date() as unknown as import('@google-cloud/firestore').Timestamp,
+      agentTypesPresent: [],
+      hasCompletedPlanning: false,
+      hasCompletedExecution: false,
+      hasImplementationTaskId: false,
+      hasPrUrl: false,
+      prNumber: null,
+      latestReviewNeedsRemediation: null,
+      oldestTaskCreatedAt: new Date() as unknown as import('@google-cloud/firestore').Timestamp,
+      mostRecentDispatchedAt: null,
+      aggregateStatus: 'active',
+      updatedAt: new Date() as unknown as import('@google-cloud/firestore').Timestamp,
+    };
+
+    mockCounts = { ...mockCounts, active: 1, totalGroups: 1 };
+
+    setServices(makeBaseServices({
+      codeTaskRepo: failingCodeTaskRepo,
+      groupSummaryRepo: makeGroupSummaryRepo({
+        getUserGroupCounts: async () => ok(mockCounts),
+        listGroupSummaries: async () => ok({ summaries: [standaloneSummary] }),
+      }),
+    }));
+
+    await server.close();
+    server = await buildServer();
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/issue-groups',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    // Route returns 200 (error is non-fatal — logged as warn, group omitted)
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { data: { groups: unknown[] } };
+    // No group produced because tasks returned empty array (fetch failed)
+    expect(body.data.groups).toHaveLength(0);
   });
 });
