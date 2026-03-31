@@ -32,3 +32,6 @@ export {
 export { parseLinearIssueNumber, sortIssueGroups, comparePrNumber, compareStartedTime } from './sortIssueGroups.js';
 
 export { encodeCursor, decodeCursor } from './cursor.js';
+
+export type { GroupSummaryFields } from './deriveAggregateStatusFromSummary.js';
+export { deriveAggregateStatusFromSummary } from './deriveAggregateStatusFromSummary.js';
