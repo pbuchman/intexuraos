@@ -88,6 +88,11 @@ const codeTasksItems: NavItem[] = [
   { to: '/code-tasks/merge-queue', label: 'Merge Queue', icon: GitMerge },
 ];
 
+const linearItems: NavItem[] = [
+  { to: '/linear', label: 'Dashboard', icon: List },
+  { to: '/linear/prune-candidates', label: 'Issue Cleanup', icon: Scissors },
+];
+
 const cronAgentItems: NavItem[] = [
   { to: '/cron-agent', label: 'Schedules', icon: List },
   { to: '/cron-agent/executions', label: 'Executions', icon: Activity },
@@ -157,6 +162,9 @@ export function Sidebar(): React.JSX.Element {
   );
   const [isCodeTasksOpen, setIsCodeTasksOpen] = useState(() =>
     window.location.hash.includes('/code-tasks')
+  );
+  const [isLinearOpen, setIsLinearOpen] = useState(() =>
+    window.location.hash.includes('/linear')
   );
   const [isCronAgentOpen, setIsCronAgentOpen] = useState(() =>
     window.location.hash.includes('/cron-agent')
@@ -229,6 +237,13 @@ export function Sidebar(): React.JSX.Element {
   useEffect(() => {
     if (location.pathname.startsWith('/code-tasks')) {
       setIsCodeTasksOpen(true);
+    }
+  }, [location.pathname]);
+
+  // Auto-expand linear when on linear page
+  useEffect(() => {
+    if (location.pathname.startsWith('/linear')) {
+      setIsLinearOpen(true);
     }
   }, [location.pathname]);
 
@@ -615,37 +630,57 @@ export function Sidebar(): React.JSX.Element {
             ) : null}
           </div>
 
-          {/* Linear Issues */}
-          <NavLink
-            to="/linear"
-            end
-            className={({ isActive }): string =>
-              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                isActive
+          {/* Linear section (collapsible) */}
+          <div className="pt-2">
+            <button
+              onClick={(): void => {
+                if (!isLinearOpen) {
+                  void navigate(linearItems[0]?.to ?? '/linear');
+                }
+                setIsLinearOpen(!isLinearOpen);
+              }}
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                location.pathname.startsWith('/linear')
                   ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
-              }`
-            }
-          >
-            <LayoutList className="h-5 w-5 shrink-0" />
-            {!isCollapsed ? <span>Linear Issues</span> : null}
-          </NavLink>
+              }`}
+            >
+              <LayoutList className="h-5 w-5 shrink-0" />
+              {!isCollapsed ? (
+                <>
+                  <span className="flex-1 text-left">Linear</span>
+                  {isLinearOpen ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </>
+              ) : null}
+            </button>
 
-          {/* Issue Cleanup */}
-          <NavLink
-            to="/linear/prune-candidates"
-            end
-            className={({ isActive }): string =>
-              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                isActive
-                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
-              }`
-            }
-          >
-            <Scissors className="h-5 w-5 shrink-0" />
-            {!isCollapsed ? <span>Issue Cleanup</span> : null}
-          </NavLink>
+            {/* Linear sub-items */}
+            {isLinearOpen && !isCollapsed ? (
+              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3 dark:border-slate-600">
+                {linearItems.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === '/linear'}
+                    className={({ isActive }): string =>
+                      `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                        isActive
+                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200'
+                      }`
+                    }
+                  >
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    <span>{item.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            ) : null}
+          </div>
 
           {/* Calendar */}
           <NavLink
