@@ -11,18 +11,24 @@ import type {
   LinearIssueRepository,
   LinearCommentRepository,
   CodeAgentClient,
+  IssuePruningClassifier,
+  PruneCandidateRepository,
 } from './domain/index.js';
 import { createLinearConnectionRepository } from './infra/firestore/linearConnectionRepository.js';
+import { createPruneCandidateRepository } from './infra/firestore/pruneCandidateRepository.js';
 import { createLinearApiClient } from './infra/linear/linearApiClient.js';
 import { createLinearActionExtractionService } from './infra/llm/linearActionExtractionService.js';
 import { createFailedIssueRepository } from './infra/firestore/failedIssueRepository.js';
 import { createProcessedActionRepository } from './infra/firestore/processedActionRepository.js';
 import { createLinearIssueRepository } from './infra/firestore/linearIssueRepository.js';
 import { createLinearCommentRepository } from './infra/firestore/linearCommentRepository.js';
+import { createIssuePruningClassifier } from './infra/llm/issuePruningClassifier.js';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import { createCodeAgentHttpClient } from './infra/http/codeAgentHttpClient.js';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
 import { createAppLogger } from '@intexuraos/infra-sentry';
+import { createGeminiClient, TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
+import { LlmModels } from '@intexuraos/llm-contract';
 
 const logger = createAppLogger({ name: 'linear-agent' });
 
@@ -38,6 +44,8 @@ export interface ServiceContainer {
   commentRepository: LinearCommentRepository;
   userServiceClient: UserServiceClient;
   codeAgentClient: CodeAgentClient;
+  issuePruningClassifier: IssuePruningClassifier;
+  pruneCandidateRepository: PruneCandidateRepository;
 }
 
 export interface ServiceConfig {
@@ -65,6 +73,28 @@ export function initServices(config: ServiceConfig): void {
     logger
   );
 
+  // Create issue pruning classifier using platform Gemini API key
+  const geminiApiKey = process.env['INTEXURAOS_GEMINI_APP_API_KEY'];
+  const geminiClient = geminiApiKey !== undefined && geminiApiKey !== ''
+    ? createGeminiClient({
+        apiKey: geminiApiKey,
+        model: LlmModels.Gemini25Flash,
+        userId: 'system:pruning',
+        pricing: TOOL_CALLING_PRICING[LlmModels.Gemini25Flash],
+        logger,
+      })
+    : null;
+
+  const issuePruningClassifier = geminiClient !== null
+    ? createIssuePruningClassifier({
+        generate: (prompt: string) => geminiClient.generate(prompt),
+        logger,
+      })
+    : createIssuePruningClassifier({
+        generate: (_prompt: string) => Promise.resolve({ ok: false as const, error: { code: 'INVALID_KEY', message: 'No Gemini API key configured' } }),
+        logger,
+      });
+
   container = {
     connectionRepository: createLinearConnectionRepository(),
     linearApiClient: createLinearApiClient(),
@@ -75,6 +105,8 @@ export function initServices(config: ServiceConfig): void {
     commentRepository: createLinearCommentRepository(),
     userServiceClient,
     codeAgentClient,
+    issuePruningClassifier,
+    pruneCandidateRepository: createPruneCandidateRepository(),
   };
 }
 
