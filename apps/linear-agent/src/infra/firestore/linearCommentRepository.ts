@@ -128,13 +128,20 @@ export async function getCommentSummaries(
     const db = getFirestore();
     const summaryMap = new Map<string, { count: number; lastCommentAt: string | null }>();
 
+    const chunks: string[][] = [];
     for (let i = 0; i < issueIds.length; i += FIRESTORE_IN_LIMIT) {
-      const chunk = issueIds.slice(i, i + FIRESTORE_IN_LIMIT);
-      const snapshot = await db
-        .collection(COLLECTION_NAME)
-        .where('issueId', 'in', chunk)
-        .get();
+      chunks.push(issueIds.slice(i, i + FIRESTORE_IN_LIMIT));
+    }
 
+    const snapshots = await Promise.all(
+      chunks.map((chunk) =>
+        db.collection(COLLECTION_NAME)
+          .where('issueId', 'in', chunk)
+          .get()
+      )
+    );
+
+    for (const snapshot of snapshots) {
       for (const doc of snapshot.docs) {
         const data = doc.data() as LinearCommentDoc;
         const existing = summaryMap.get(data.issueId);
