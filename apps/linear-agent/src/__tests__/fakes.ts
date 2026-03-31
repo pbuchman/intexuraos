@@ -25,6 +25,8 @@ import type {
   LinearCommentRepository,
   LinearComment,
   CommentSummary,
+  PruneCandidateRepository,
+  StoredPruneCandidate,
 } from '../domain/index.js';
 import type { UserServiceClient, UserServiceError } from '@intexuraos/internal-clients';
 import type { CodeAgentClient, CodeAgentError, TriggerCodeTaskResponse } from '../domain/index.js';
@@ -423,6 +425,14 @@ export class FakeLinearApiClient implements LinearApiClient {
   ): Promise<Result<WorkflowState[], LinearError>> {
     if (this.shouldFail) return err(this.failError);
     return ok(this.workflowStates);
+  }
+
+  async deleteIssue(
+    _apiKey: string,
+    _issueId: string
+  ): Promise<Result<void, LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    return ok(undefined);
   }
 
   reset(): void {
@@ -1049,5 +1059,45 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     this.shouldFail = false;
     this.lastRequest = null;
     this.taskIdCounter = 1;
+  }
+}
+
+export class FakePruneCandidateRepository implements PruneCandidateRepository {
+  private candidates: StoredPruneCandidate[] = [];
+  private shouldFailListAll = false;
+  private failError: LinearError = { code: 'INTERNAL_ERROR', message: 'Database error' };
+
+  async clearAll(): Promise<Result<void, LinearError>> {
+    this.candidates = [];
+    return ok(undefined);
+  }
+
+  async storeAll(candidates: StoredPruneCandidate[]): Promise<Result<void, LinearError>> {
+    this.candidates = [...candidates];
+    return ok(undefined);
+  }
+
+  async listAll(): Promise<Result<StoredPruneCandidate[], LinearError>> {
+    if (this.shouldFailListAll) return err(this.failError);
+    const sorted = [...this.candidates].sort((a, b) => b.score - a.score);
+    return ok(sorted);
+  }
+
+  setListAllFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailListAll = fail;
+    if (error) this.failError = error;
+  }
+
+  reset(): void {
+    this.candidates = [];
+    this.shouldFailListAll = false;
+  }
+
+  seedCandidates(candidates: StoredPruneCandidate[]): void {
+    this.candidates = [...candidates];
+  }
+
+  getCandidates(): StoredPruneCandidate[] {
+    return [...this.candidates];
   }
 }
