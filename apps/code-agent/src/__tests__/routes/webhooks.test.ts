@@ -6224,6 +6224,8 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.received).toBe(true);
+      // Verify drain WAS called (so the rejection was actually exercised, not bypassed)
+      expect(mockDrain).toHaveBeenCalledOnce();
     });
   });
 });
