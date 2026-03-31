@@ -95,6 +95,7 @@ export function useIssueGroups(options: {
   const [hasMore, setHasMore] = useState(false);
   const isMountedRef = useRef(true);
   const isInitialLoadRef = useRef(true);
+  const isInitialMountRef = useRef(true);
   const loadedGroupCountRef = useRef(0);
 
   const refresh = useCallback(
@@ -183,10 +184,13 @@ export function useIssueGroups(options: {
     [getAccessToken, options.groupStatus, options.sortBy]
   );
 
-  // Initial load
+  // Initial load + parameter-change refresh
   useEffect(() => {
     isMountedRef.current = true;
-    void refresh();
+    const isInitial = isInitialMountRef.current;
+    isInitialMountRef.current = false;
+    // Initial mount → spinner (showLoading=true); parameter changes → progress bar (showLoading=false)
+    void refresh(isInitial);
     return (): void => {
       isMountedRef.current = false;
     };
