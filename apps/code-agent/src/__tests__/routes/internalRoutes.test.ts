@@ -27,6 +27,7 @@ vi.mock('../../domain/usecases/processExecutionMemoryBacklog.js', (): {
   processExecutionMemoryBacklog: (input: unknown): unknown => processExecutionMemoryBacklogMock(input),
 }));
 
+
 describe('POST /internal/merge-conflicts/reconcile', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
 
@@ -308,6 +309,7 @@ describe('POST /internal/execution-memory/process', () => {
     process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
     process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
     process.env['INTEXURAOS_ORCHESTRATOR_SECRET'] = 'test-orchestrator-secret';
+    process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] = 'true';
 
     setupTestServices();
     app = await buildServer();
@@ -397,6 +399,58 @@ describe('POST /internal/execution-memory/process', () => {
     expect(input).not.toHaveProperty('evaluatorClient');
     expect(input).not.toHaveProperty('distillerClient');
     expect(input).not.toHaveProperty('embeddingClient');
+  });
+
+  it('returns 200 with empty results when body is missing (no JSON payload)', async () => {
+    processExecutionMemoryBacklogMock.mockResolvedValue(ok({
+      claimed: 0,
+      completed: 0,
+      skipped: 0,
+      errored: 0,
+      taskIds: [],
+    }));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/execution-memory/process',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(processExecutionMemoryBacklogMock).toHaveBeenCalledWith(expect.objectContaining({
+      limit: 10,
+    }));
+  });
+
+  it('returns 200 with empty stats and does not call processExecutionMemoryBacklog when feature flag is disabled', async () => {
+    process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] = 'false';
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/execution-memory/process',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({
+      success: true,
+      data: {
+        claimed: 0,
+        completed: 0,
+        skipped: 0,
+        errored: 0,
+        taskIds: [],
+      },
+      diagnostics: expect.objectContaining({
+        requestId: expect.any(String),
+        durationMs: expect.any(Number),
+      }),
+    });
+    expect(processExecutionMemoryBacklogMock).not.toHaveBeenCalled();
   });
 });
 
