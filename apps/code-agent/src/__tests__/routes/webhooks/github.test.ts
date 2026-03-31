@@ -3328,15 +3328,17 @@ describe('POST /webhooks/github', () => {
     });
   });
 
-  describe('PR merge → QA transition', () => {
+  describe('PR close → handlePrClose (merge transitions + label cleanup)', () => {
     let mockMarkQa: ReturnType<typeof vi.fn>;
+    let mockRemoveLabel: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
       mockMarkQa = vi.fn().mockResolvedValue(undefined);
-      Object.assign(mockServices, { linearIssueService: { markQa: mockMarkQa, markTodo: vi.fn().mockResolvedValue(undefined) } });
+      mockRemoveLabel = vi.fn().mockResolvedValue(undefined);
+      Object.assign(mockServices, { linearIssueService: { markQa: mockMarkQa, markTodo: vi.fn().mockResolvedValue(undefined), removeLabel: mockRemoveLabel } });
     });
 
-    it('should call handlePrMerge when PR is closed with merge', async () => {
+    it('should transition to QA and remove label when PR is closed with merge', async () => {
       vi.mocked(mockServices.codeTaskRepo.findByPR).mockResolvedValue(
         ok({
           id: 'task_merge-1',
@@ -3374,13 +3376,21 @@ describe('POST /webhooks/github', () => {
       expect(mockMarkQa).toHaveBeenCalledWith('merge-user', 'INT-999');
     });
 
-    it('should NOT call handlePrMerge when PR is closed without merge', async () => {
+    it('should remove label but NOT transition state when PR closed without merge', async () => {
+      vi.mocked(mockServices.codeTaskRepo.findByPR).mockResolvedValue(
+        ok({
+          id: 'task_close-1',
+          userId: 'close-user',
+          linearIssueId: 'INT-888',
+        } as never)
+      );
+
       const closedPayload = createPullRequestPayload({
         action: 'closed',
         pull_request: {
           id: 101,
           number: 123,
-          title: 'Test PR',
+          title: '[INT-888] Test PR',
           body: 'Test description',
           state: 'closed',
           merged_at: null,
@@ -3400,11 +3410,12 @@ describe('POST /webhooks/github', () => {
         body: payload,
       });
 
-      await waitForDetachedAsync(() => vi.mocked(mockServices.unifiedEvaluator.evaluate).mock.calls.length >= 1);
+      await waitForDetachedAsync(() => mockRemoveLabel.mock.calls.length >= 1);
+      expect(mockRemoveLabel).toHaveBeenCalledWith('close-user', 'INT-888', 'ready-to-merge');
       expect(mockMarkQa).not.toHaveBeenCalled();
     });
 
-    it('should NOT call handlePrMerge when PR is opened', async () => {
+    it('should NOT call handlePrClose when PR is opened', async () => {
       const openedPayload = createPullRequestPayload({ action: 'opened' });
 
       const { payload, signature } = signPayload(openedPayload);
@@ -3422,6 +3433,7 @@ describe('POST /webhooks/github', () => {
 
       await waitForDetachedAsync(() => vi.mocked(mockServices.unifiedEvaluator.evaluate).mock.calls.length >= 1);
       expect(mockMarkQa).not.toHaveBeenCalled();
+      expect(mockRemoveLabel).not.toHaveBeenCalled();
     });
   });
 });
