@@ -46,7 +46,9 @@ function toExecutionMemory(doc: { id: string; data(): Record<string, unknown> })
     positiveCount: Number(data['positiveCount'] ?? 0),
     negativeCount: Number(data['negativeCount'] ?? 0),
     status: data['status'] as ExecutionMemory['status'],
+    /* v8 ignore start -- test-infra: FakeFirestore cannot preserve Timestamp class identity through set/get roundtrips @preserve */
     ...(data['lastAppliedAt'] instanceof Timestamp ? { lastAppliedAt: data['lastAppliedAt'] } : {}),
+    /* v8 ignore stop @preserve */
     createdAt: data['createdAt'] as Timestamp,
     updatedAt: data['updatedAt'] as Timestamp,
   };
