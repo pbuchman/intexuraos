@@ -1,3 +1,4 @@
+import type { Timestamp } from '@google-cloud/firestore';
 import type { Result } from '@intexuraos/common-core';
 import type {
   ExecutionMemory,
@@ -27,10 +28,12 @@ export interface CreateExecutionMemoryInput {
   fingerprint: string;
   distillationVersion: string;
   qualityScore: number;
+  distillationConfidence: number;
   applicationCount: number;
   positiveCount: number;
   negativeCount: number;
   status: ExecutionMemoryStatus;
+  lastAppliedAt?: Timestamp;
 }
 
 export interface UpdateExecutionMemoryInput {
@@ -52,10 +55,12 @@ export interface UpdateExecutionMemoryInput {
   fingerprint?: string;
   distillationVersion?: string;
   qualityScore?: number;
+  distillationConfidence?: number;
   applicationCount?: number;
   positiveCount?: number;
   negativeCount?: number;
   status?: ExecutionMemoryStatus;
+  lastAppliedAt?: Timestamp;
 }
 
 export interface FindNearestExecutionMemoryInput {

@@ -242,6 +242,7 @@ describe('processExecutionMemoryBacklog', () => {
       fingerprint: 'fp-existing',
       distillationVersion: 'execution-memory-distiller@1.0.0',
       qualityScore: 0.8,
+      distillationConfidence: 0.8,
       applicationCount: 1,
       positiveCount: 1,
       negativeCount: 0,

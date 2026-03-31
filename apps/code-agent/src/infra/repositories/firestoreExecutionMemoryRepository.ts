@@ -41,10 +41,12 @@ function toExecutionMemory(doc: { id: string; data(): Record<string, unknown> })
     fingerprint: getStringField(data, 'fingerprint'),
     distillationVersion: getStringField(data, 'distillationVersion'),
     qualityScore: Number(data['qualityScore'] ?? 0),
+    distillationConfidence: Number(data['distillationConfidence'] ?? data['qualityScore'] ?? 0),
     applicationCount: Number(data['applicationCount'] ?? 0),
     positiveCount: Number(data['positiveCount'] ?? 0),
     negativeCount: Number(data['negativeCount'] ?? 0),
     status: data['status'] as ExecutionMemory['status'],
+    ...(data['lastAppliedAt'] instanceof Timestamp ? { lastAppliedAt: data['lastAppliedAt'] } : {}),
     createdAt: data['createdAt'] as Timestamp,
     updatedAt: data['updatedAt'] as Timestamp,
   };
