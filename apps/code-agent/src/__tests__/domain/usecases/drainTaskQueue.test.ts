@@ -1002,6 +1002,57 @@ describe('drainTaskQueue', () => {
       }
     });
 
+    it('resets queuedAt when task is skipped due to PR-lock', async () => {
+      const task = createMockTask({ prNumber: 42, repository: 'pbuchman/intexuraos' });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockResolvedValue(
+        ok({ hasActive: true, taskId: 'running-task-999' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual(expect.objectContaining({ action: 'still_busy' }));
+      }
+
+      // Verify queuedAt was reset
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', {
+        queuedAt: expect.any(Date),
+      });
+    });
+
+    it('does not expire a PR-locked task even when TTL exceeded — resets queuedAt instead', async () => {
+      const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+      const task = createMockTask({
+        prNumber: 42,
+        repository: 'pbuchman/intexuraos',
+        queuedAt: Timestamp.fromDate(beyondTtl),
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockResolvedValue(
+        ok({ hasActive: true, taskId: 'running-task-999' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Task stays in queue (still_busy), NOT expired
+        expect(result.value).toEqual(expect.objectContaining({ action: 'still_busy' }));
+      }
+
+      // Verify queuedAt was reset (NOT marked as failed)
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', {
+        queuedAt: expect.any(Date),
+      });
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith('task-123', expect.objectContaining({
+        status: 'failed',
+      }));
+    });
+
     it('dispatches next PR task when first PR is blocked', async () => {
       const blocked = createMockTask({ id: 'task-pr42', prNumber: 42, repository: 'pbuchman/intexuraos' });
       const free = createMockTask({ id: 'task-pr99', prNumber: 99, repository: 'pbuchman/intexuraos' });
