@@ -112,6 +112,7 @@ describe('prepareExecutionMemoryContext', () => {
       fingerprint: `fp-${id}`,
       distillationVersion: 'execution-memory-distiller@1.0.0',
       qualityScore: 0.9,
+      distillationConfidence: 0.9,
       applicationCount: 3,
       positiveCount: 2,
       negativeCount: 0,

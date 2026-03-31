@@ -29,10 +29,12 @@ export interface ExecutionMemory {
   fingerprint: string;
   distillationVersion: string;
   qualityScore: number;
+  distillationConfidence: number;
   applicationCount: number;
   positiveCount: number;
   negativeCount: number;
   status: ExecutionMemoryStatus;
+  lastAppliedAt?: Timestamp;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

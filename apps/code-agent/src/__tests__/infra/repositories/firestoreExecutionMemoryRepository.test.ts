@@ -45,6 +45,7 @@ describe('firestoreExecutionMemoryRepository', () => {
     fingerprint: string;
     distillationVersion: string;
     qualityScore: number;
+    distillationConfidence: number;
     applicationCount: number;
     positiveCount: number;
     negativeCount: number;
@@ -69,6 +70,7 @@ describe('firestoreExecutionMemoryRepository', () => {
     fingerprint: 'fingerprint-123',
     distillationVersion: 'execution-memory-distiller@1.0.0',
     qualityScore: 0.8,
+    distillationConfidence: 0.8,
     applicationCount: 0,
     positiveCount: 0,
     negativeCount: 0,

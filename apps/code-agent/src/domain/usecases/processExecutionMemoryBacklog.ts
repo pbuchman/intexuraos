@@ -275,6 +275,7 @@ async function processOneTask(
       embeddingModel: 'text-embedding-3-small',
       fingerprint,
       distillationVersion: DISTILLATION_VERSION,
+      distillationConfidence: memory.confidence,
       qualityScore: computeQualityScore({
         applicationCount: 0,
         positiveCount: 0,
@@ -474,6 +475,7 @@ async function updateExistingMemory(
     embeddingModel: 'text-embedding-3-small',
     fingerprint,
     distillationVersion: DISTILLATION_VERSION,
+    distillationConfidence: confidence,
     qualityScore,
     applicationCount,
     positiveCount,
