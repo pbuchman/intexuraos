@@ -211,6 +211,14 @@
       "owner": "code-agent",
       "description": "Merge queue watch state for automated PR merging"
     },
+    "task_group_summaries": {
+      "owner": "code-agent",
+      "description": "Precomputed group-level aggregates for code task issue groups (one doc per userId+linearIssueId)"
+    },
+    "user_group_counts": {
+      "owner": "code-agent",
+      "description": "Per-user group status counts for code task filter badges (active, needs-action, done, failed)"
+    },
     "cron_schedules": {
       "owner": "cron-agent",
       "description": "User-defined recurring schedules with cron expressions and action definitions"

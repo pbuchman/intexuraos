@@ -80,6 +80,9 @@ import { createTaskEnqueueService } from './infra/services/taskEnqueueServiceImp
 import type { MergeQueueWatchRepository } from './domain/repositories/mergeQueueWatchRepository.js';
 import { createFirestoreMergeQueueWatchRepository } from './infra/firestore/mergeQueueWatchRepository.js';
 import { createUnauthorizedSenderCommentHandler } from './domain/services/unauthorizedSenderCommentHandler.js';
+import type { TaskGroupSummaryRepository } from './domain/ports/taskGroupSummaryRepository.js';
+import { createTaskGroupSummaryFirestoreRepository } from './infra/firestore/taskGroupSummaryFirestoreRepository.js';
+import { withGroupUpdates } from './infra/repositories/codeTaskRepositoryWithGroupUpdates.js';
 
 const GEMINI_TOOL_CALLING_MODEL = LlmModels.Gemini25Flash;
 const GEMINI_TOOL_CALLING_PRICING = TOOL_CALLING_PRICING[LlmModels.Gemini25Flash];
@@ -123,7 +126,7 @@ export interface ServiceContainer {
   automationLog: AutomationLog;
   taskEnqueueService: TaskEnqueueService;
   mergeQueueWatchRepo: MergeQueueWatchRepository;
-  // Optional so existing setServices() call sites in tests don't need updating
+  groupSummaryRepo?: TaskGroupSummaryRepository;
   createRemediationTaskFn?: (logger: Logger, request: CreateRemediationTaskRequest) => Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>>;
 }
 
@@ -336,7 +339,9 @@ export function initServices(config: ServiceConfig): void {
     },
   });
 
-  const codeTaskRepo = createFirestoreCodeTaskRepository({ firestore, logger });
+  const rawCodeTaskRepo = createFirestoreCodeTaskRepository({ firestore, logger });
+  const groupSummaryRepo = createTaskGroupSummaryFirestoreRepository({ firestore, logger });
+  const codeTaskRepo = withGroupUpdates(rawCodeTaskRepo, groupSummaryRepo, logger);
   const logLineRepo = createFirestoreLogLineRepository({ firestore, logger });
   const workerSettingsRepo = createWorkerSettingsRepository({ firestore, logger });
   const workerHealthProbe = createWorkerHealthProbe();
@@ -543,6 +548,7 @@ export function initServices(config: ServiceConfig): void {
     automationLog,
     taskEnqueueService,
     mergeQueueWatchRepo,
+    groupSummaryRepo,
     createRemediationTaskFn: (taskLogger: Logger, request: CreateRemediationTaskRequest): Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>> => createRemediationTask(
       {
         logger: taskLogger,

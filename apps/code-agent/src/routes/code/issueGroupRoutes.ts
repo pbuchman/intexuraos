@@ -12,15 +12,11 @@ import { timestampToIso } from '../codeRoutes.js';
 import type { JwtValidator } from '../codeRoutes.js';
 import {
   groupByLinearIssue,
-  sortIssueGroups,
-  encodeCursor,
-  decodeCursor,
 } from '../../domain/issueGrouping/index.js';
 import type {
   GroupStatus,
   SortOption,
   SerializedTask,
-  IssueGroup,
 } from '../../domain/issueGrouping/index.js';
 
 export interface CodeRoutesOptions {
@@ -166,7 +162,10 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           includeParams: true,
         });
 
-        const { codeTaskRepo, linearAgentClient } = getServices();
+        const { codeTaskRepo, linearAgentClient, groupSummaryRepo } = getServices();
+        // groupSummaryRepo is optional in ServiceContainer for test compatibility but always
+        // set in production (services.ts line 345).
+        const summaryRepo = groupSummaryRepo as NonNullable<typeof groupSummaryRepo>;
         /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId -- ?? fallback unreachable @preserve */
         const userId = request.user?.userId ?? 'unknown-user';
         /* v8 ignore stop @preserve */
@@ -190,34 +189,65 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           }
         }
 
-        let startIndex = 0;
-        if (request.query.cursor !== undefined && request.query.cursor !== '') {
-          try {
-            const decoded = decodeCursor(request.query.cursor);
-            startIndex = decoded.index;
-          } catch {
-            request.log.warn({ cursor: request.query.cursor }, 'Invalid pagination cursor, starting from beginning');
-            startIndex = 0;
+        // 1+2. Fetch counts and page summaries concurrently
+        const [countsResult, summariesResult] = await Promise.all([
+          summaryRepo.getUserGroupCounts(userId),
+          summaryRepo.listGroupSummaries({
+            userId,
+            sortBy,
+            limit,
+            ...(statusFilter !== undefined && { statusFilter }),
+            ...(request.query.cursor !== undefined && request.query.cursor !== '' && { cursor: request.query.cursor }),
+          }),
+        ]);
+        if (!countsResult.ok) {
+          request.log.error({ error: countsResult.error }, 'Failed to get group counts');
+          return await reply.fail('INTERNAL_ERROR', countsResult.error.message);
+        }
+        if (!summariesResult.ok) {
+          request.log.error({ error: summariesResult.error }, 'Failed to list group summaries');
+          return await reply.fail('INTERNAL_ERROR', summariesResult.error.message);
+        }
+        const countsValue = countsResult.value; // @allow-result-access -- narrowed by !countsResult.ok guard above
+        const { summaries, nextCursor: summariesNextCursor } = summariesResult.value;
+
+        // 3+4. Fetch tasks and hydrate Linear issues concurrently
+        const TASKS_PER_GROUP_LIMIT = 50;
+        const taskFetchesPromise = Promise.all(summaries.map(async (summary): Promise<SerializedTask[]> => {
+          if (summary.linearIssueId !== null) {
+            const tasksResult = await codeTaskRepo.findRecentTasksByLinearIssue(
+              summary.linearIssueId,
+              TASKS_PER_GROUP_LIMIT,
+            );
+            if (!tasksResult.ok) {
+              request.log.warn(
+                { linearIssueId: summary.linearIssueId, error: tasksResult.error },
+                'Failed to fetch tasks for linear group'
+              );
+              return [];
+            }
+            return tasksResult.value
+              .filter((t) => t.userId === userId && t.status !== 'archived')
+              .map((t) => taskToSerializedTask(t));
           }
-        }
+          const taskId = summary.groupKey.replace(/^standalone_/, '');
+          const taskResult = await codeTaskRepo.findById(taskId);
+          if (!taskResult.ok) {
+            request.log.warn({ taskId, error: taskResult.error }, 'Failed to fetch standalone task');
+            return [];
+          }
+          const task = taskResult.value;
+          if (task.userId !== userId || task.status === 'archived') {
+            return [];
+          }
+          return [taskToSerializedTask(task)];
+        }));
 
-        const listResult = await codeTaskRepo.listAllNonArchived(userId);
-        if (!listResult.ok) {
-          request.log.error({ error: listResult.error }, 'Failed to list non-archived tasks');
-          return await reply.fail('INTERNAL_ERROR', listResult.error.message);
-        }
+        const pageLinearIssueIds = summaries
+          .map((s) => s.linearIssueId)
+          .filter((id): id is string => id !== null);
 
-        const serializedTasks: SerializedTask[] = listResult.value.map((task) => taskToSerializedTask(task));
-
-        const linearIssueIds = Array.from(
-          new Set(
-            listResult.value
-              .map((task) => task.linearIssueId)
-              .filter((issueId): issueId is string => issueId !== undefined)
-          )
-        );
-
-        let hydratedIssuesByIdentifier = new Map<string, {
+        interface HydratedLinearIssue {
           identifier: string;
           parentIdentifier: string | null;
           title: string;
@@ -228,27 +258,31 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           url: string;
           commentCount: number;
           lastCommentAt: string | null;
-        }>();
-
-        if (linearIssueIds.length > 0) {
-          const linearIssuesResult = await linearAgentClient.fetchIssuesForDisplay({
-            userId,
-            identifiers: linearIssueIds,
-          });
-
-          if (linearIssuesResult.ok) {
-            hydratedIssuesByIdentifier = new Map(
-              linearIssuesResult.value.map((issue) => [issue.identifier, issue])
-            );
-          } else {
-            request.log.warn(
-              { userId, error: linearIssuesResult.error, issueCount: linearIssueIds.length },
-              'Failed to hydrate Linear issues for issue groups'
-            );
-          }
         }
 
-        const hydratedTasks: SerializedTask[] = serializedTasks.map((task) => {
+        const linearHydrationPromise = (async (): Promise<Map<string, HydratedLinearIssue>> => {
+          if (pageLinearIssueIds.length === 0) return new Map();
+          const linearIssuesResult = await linearAgentClient.fetchIssuesForDisplay({
+            userId,
+            identifiers: pageLinearIssueIds,
+          });
+          if (linearIssuesResult.ok) {
+            return new Map(linearIssuesResult.value.map((issue) => [issue.identifier, issue]));
+          }
+          request.log.warn(
+            { userId, error: linearIssuesResult.error, issueCount: pageLinearIssueIds.length },
+            'Failed to hydrate Linear issues for issue groups'
+          );
+          return new Map();
+        })();
+
+        const [tasksByGroup, hydratedIssuesByIdentifier] = await Promise.all([
+          taskFetchesPromise,
+          linearHydrationPromise,
+        ]);
+
+        // 5. Hydrate tasks with linear issue data and group them
+        const allPageTasks: SerializedTask[] = tasksByGroup.flat().map((task) => {
           if (task.linearIssueId !== undefined) {
             const linearIssue = hydratedIssuesByIdentifier.get(task.linearIssueId);
             if (linearIssue !== undefined) {
@@ -258,47 +292,37 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           return task;
         });
 
-        const allGroups = groupByLinearIssue(hydratedTasks);
+        const paginatedGroups = groupByLinearIssue(allPageTasks);
 
-        const globalCounts: Record<GroupStatus, number> = {
-          active: 0,
-          'needs-action': 0,
-          done: 0,
-          failed: 0,
-        };
-        for (const group of allGroups) {
-          globalCounts[group.aggregateStatus] += 1;
-        }
-
-        let filteredGroups: IssueGroup[];
+        // 6. Compute totalGroups from counts
+        let totalGroups: number;
         if (statusFilter !== undefined) {
-          const statusSet = new Set<GroupStatus>(statusFilter);
-          filteredGroups = allGroups.filter((g) => statusSet.has(g.aggregateStatus));
+          const countMap: Record<string, number> = {
+            active: countsValue.active,
+            'needs-action': countsValue.needsAction,
+            done: countsValue.done,
+            failed: countsValue.failed,
+          };
+          totalGroups = statusFilter.reduce((sum, s) => sum + (countMap[s] ?? 0), 0);
         } else {
-          filteredGroups = allGroups;
+          totalGroups = countsValue.totalGroups;
         }
-
-        const sortedGroups = sortIssueGroups(filteredGroups, sortBy);
-
-        const paginatedGroups = sortedGroups.slice(startIndex, startIndex + limit);
-        const hasMore = startIndex + limit < sortedGroups.length;
-        const nextCursor = hasMore ? encodeCursor(startIndex + limit) : undefined;
 
         request.log.info(
-          {
-            totalGroups: allGroups.length,
-            filteredGroups: filteredGroups.length,
-            returnedGroups: paginatedGroups.length,
-            hasMore,
-          },
+          { returnedGroups: paginatedGroups.length, hasMore: summariesNextCursor !== undefined },
           'Returning issue groups'
         );
 
         return await reply.ok({
           groups: paginatedGroups,
-          counts: globalCounts,
-          totalGroups: filteredGroups.length,
-          ...(nextCursor !== undefined && { nextCursor }),
+          counts: {
+            active: countsValue.active,
+            'needs-action': countsValue.needsAction,
+            done: countsValue.done,
+            failed: countsValue.failed,
+          },
+          totalGroups,
+          ...(summariesNextCursor !== undefined && { nextCursor: summariesNextCursor }),
         });
       }
     );
