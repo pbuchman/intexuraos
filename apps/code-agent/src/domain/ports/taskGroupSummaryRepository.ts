@@ -28,6 +28,17 @@ export interface TaskGroupSummaryRepository {
 
   /** Full recompute of a group from its tasks (for backfill/repair). */
   recomputeGroupFromTasks(userId: string, groupKey: string, tasks: CodeTask[]): Promise<void>;
+
+  /**
+   * Recompute aggregateStatus and persist label flags for the group identified by
+   * (userId, linearIssueId), using the provided Linear labels.
+   * Returns NOT_FOUND if no group summary exists for the given (userId, linearIssueId).
+   */
+  recomputeWithLabels(
+    userId: string,
+    linearIssueId: string,
+    labels: { id: string; name: string }[],
+  ): Promise<Result<void, GroupSummaryError>>;
 }
 
 export interface ListGroupSummariesInput {

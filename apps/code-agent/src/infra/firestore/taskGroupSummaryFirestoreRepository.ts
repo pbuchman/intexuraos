@@ -15,6 +15,7 @@ import type { Result } from '@intexuraos/common-core';
 import type { GroupStatus } from '../../domain/issueGrouping/types.js';
 import { deriveAggregateStatusFromSummary } from '../../domain/issueGrouping/deriveAggregateStatusFromSummary.js';
 import { REMEDIATION_NOT_NEEDED } from '../../domain/issueGrouping/constants.js';
+import { hasImplementationReadyLabel, hasMergeReadyLabel } from '../../domain/issueGrouping/labelHelpers.js';
 
 const SUMMARIES_COLLECTION = 'task_group_summaries';
 const COUNTS_COLLECTION = 'user_group_counts';
@@ -124,6 +125,13 @@ function docToSummary(data: Record<string, unknown>): TaskGroupSummary {
       ? toTimestamp(data['mostRecentDispatchedAt'])
       : null,
     aggregateStatus: String(data['aggregateStatus'] ?? 'done') as GroupStatus,
+    // Label flags are only present when recomputeWithLabels has been called; legacy docs omit them
+    ...(data['hasImplementationReadyLabel'] !== undefined
+      ? { hasImplementationReadyLabel: data['hasImplementationReadyLabel'] === true }
+      : {}),
+    ...(data['hasMergeReadyLabel'] !== undefined
+      ? { hasMergeReadyLabel: data['hasMergeReadyLabel'] === true }
+      : {}),
     updatedAt: toTimestamp(data['updatedAt']),
   };
   /* v8 ignore stop @preserve */
@@ -793,6 +801,72 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
           { userId, groupKey, error: getErrorMessage(error, 'Unknown error') },
           'recomputeGroupFromTasks: failed to recompute group summary (non-critical)'
         );
+      }
+    },
+
+    async recomputeWithLabels(
+      userId: string,
+      linearIssueId: string,
+      labels: { id: string; name: string }[],
+    ): Promise<Result<void, GroupSummaryError>> {
+      try {
+        const docId = `${userId}_${linearIssueId}`;
+        const summaryRef = firestore.collection(SUMMARIES_COLLECTION).doc(docId);
+        const countsRef = firestore.collection(COUNTS_COLLECTION).doc(userId);
+
+        const labelHasImplementationReady = hasImplementationReadyLabel(labels);
+        const labelHasMergeReady = hasMergeReadyLabel(labels);
+
+        const found = await firestore.runTransaction(async (tx) => {
+          const now = Timestamp.fromDate(new Date());
+          const summaryDoc = await tx.get(asDocRef(summaryRef));
+
+          if (!summaryDoc.exists) {
+            return false;
+          }
+
+          const countsDoc = await tx.get(asDocRef(countsRef));
+          /* v8 ignore start -- test-infra: FakeFirestore always has a counts doc after updateAfterCreate; the defaultCounts fallback cannot be reached in tests @preserve */
+          const existingCounts: UserGroupCounts = countsDoc.exists
+            ? docToCounts(countsDoc.data() as Record<string, unknown>)
+            : defaultCounts(userId);
+          /* v8 ignore stop @preserve */
+
+          const current = docToSummary(summaryDoc.data() as Record<string, unknown>);
+          const oldAggregateStatus = current.aggregateStatus;
+
+          const updated: TaskGroupSummary = {
+            ...current,
+            hasImplementationReadyLabel: labelHasImplementationReady,
+            hasMergeReadyLabel: labelHasMergeReady,
+            updatedAt: now,
+          };
+
+          const newAggregateStatus = deriveAggregateStatusFromSummary(updated);
+          updated.aggregateStatus = newAggregateStatus;
+
+          tx.set(asDocRef(summaryRef), updated as unknown as DocumentData);
+
+          if (newAggregateStatus !== oldAggregateStatus) {
+            const newCounts = applyStatusChangeDelta(existingCounts, oldAggregateStatus, newAggregateStatus);
+            newCounts.userId = userId;
+            newCounts.updatedAt = now;
+            tx.set(asDocRef(countsRef), newCounts as unknown as DocumentData);
+          }
+
+          return true;
+        });
+
+        if (!found) {
+          return err({ code: 'NOT_FOUND', message: `No group summary found for ${userId}/${linearIssueId}` });
+        }
+
+        return ok(undefined);
+      } catch (error) {
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: getErrorMessage(error, 'Failed to recompute group summary with labels'),
+        });
       }
     },
   };
