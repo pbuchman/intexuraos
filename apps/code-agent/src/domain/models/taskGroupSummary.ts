@@ -32,6 +32,10 @@ export interface TaskGroupSummary {
   oldestTaskCreatedAt: Timestamp;
   mostRecentDispatchedAt: Timestamp | null;
 
+  // Label flags from Linear (set via recomputeWithLabels, absent on legacy docs)
+  hasImplementationReadyLabel?: boolean;
+  hasMergeReadyLabel?: boolean;
+
   // Precomputed
   aggregateStatus: GroupStatus;
 
