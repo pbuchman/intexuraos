@@ -213,6 +213,7 @@ describe('GET /code/issue-groups', () => {
       taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })) } as never,
       mergeConflictDetector: { detectOnPush: vi.fn().mockResolvedValue(undefined), reconcile: vi.fn().mockResolvedValue(EMPTY_RECONCILE_RESULT) },
       mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: repoToUse, logger }),
       groupSummaryRepo: overrides.groupSummaryRepo ?? makeGroupSummaryRepo(),
     };
   }
@@ -976,7 +977,7 @@ describe('GET /code/issue-groups', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: failingRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -1319,6 +1320,7 @@ describe('GET /code/issue-groups', () => {
         taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })) } as never,
         mergeConflictDetector: { detectOnPush: vi.fn().mockResolvedValue(undefined), reconcile: vi.fn().mockResolvedValue(EMPTY_RECONCILE_RESULT) },
         mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
+        archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         groupSummaryRepo: makeGroupSummaryRepo({
           getUserGroupCounts: async () => ok(fakeCounts),
           listGroupSummaries: async () => ok({ summaries: [] }),
@@ -1415,6 +1417,7 @@ describe('GET /code/issue-groups', () => {
         taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })) } as never,
         mergeConflictDetector: { detectOnPush: vi.fn().mockResolvedValue(undefined), reconcile: vi.fn().mockResolvedValue(EMPTY_RECONCILE_RESULT) },
         mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
+        archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         groupSummaryRepo: makeGroupSummaryRepo({
           listGroupSummaries: async () => ok({ summaries: [fakeSummary] }),
         }),
@@ -1478,6 +1481,7 @@ describe('GET /code/issue-groups', () => {
         taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })) } as never,
         mergeConflictDetector: { detectOnPush: vi.fn().mockResolvedValue(undefined), reconcile: vi.fn().mockResolvedValue(EMPTY_RECONCILE_RESULT) },
         mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
+        archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         groupSummaryRepo: makeGroupSummaryRepo({
           getUserGroupCounts: async () => err({ code: 'FIRESTORE_ERROR' as const, message: 'Counts fetch failed' }),
         }),
