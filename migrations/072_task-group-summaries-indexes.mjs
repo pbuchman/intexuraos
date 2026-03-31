@@ -52,6 +52,15 @@ export const indexes = [
       { fieldPath: 'linearIssueId', order: 'DESCENDING' },
     ],
   },
+  {
+    collectionGroup: 'task_group_summaries',
+    queryScope: 'COLLECTION',
+    fields: [
+      { fieldPath: 'userId', order: 'ASCENDING' },
+      { fieldPath: 'aggregateStatus', order: 'ASCENDING' },
+      { fieldPath: 'prNumber', order: 'DESCENDING' },
+    ],
+  },
 ];
 
 export async function up(context) {
