@@ -322,7 +322,10 @@ describe('processExecutionMemoryBacklog', () => {
         ],
       }),
     }));
-    executionMemoryRepo.findById.mockResolvedValue(ok(createMemory()));
+    executionMemoryRepo.findById.mockResolvedValue(ok(createMemory({
+      distillationConfidence: 0.8,
+      qualityScore: 0.65,
+    })));
     executionMemoryRepo.update.mockResolvedValue(ok(createMemory({
       applicationCount: 2,
       positiveCount: 2,
@@ -412,9 +415,15 @@ describe('processExecutionMemoryBacklog', () => {
       memoryIdsUsed: ['mem-existing'],
       evaluationSummary: 'The previous verification memory directly helped the fix.',
     }));
+    // applicationCount goes 1→2, positiveCount 1→2
+    // effectiveness = (2+1)/(2+2) = 0.75
+    // confidence = 0.8 (distillationConfidence, NOT qualityScore)
+    // recency = 1 (no lastAppliedAt yet)
+    // qualityScore = 0.5*0.75 + 0.3*0.8 + 0.2*1 = 0.375 + 0.24 + 0.2 = 0.815
     expect(executionMemoryRepo.update).toHaveBeenCalledWith('mem-existing', expect.objectContaining({
       applicationCount: 2,
       positiveCount: 2,
+      qualityScore: expect.closeTo(0.815, 3),
     }));
     expect(executionMemoryRepo.create).toHaveBeenCalledWith(expect.objectContaining({
       sourceTaskId: 'task-1',
@@ -960,12 +969,15 @@ describe('processExecutionMemoryBacklog', () => {
           confidence: 0.1,
         },
         'fp-123',
-        [0.1, 0.2]
+        [0.1, 0.2],
+        'task-1',
+        undefined
       )
-    ).resolves.toBeUndefined();
+    ).resolves.toBe('mem-existing');
 
     expect(executionMemoryRepo.update).toHaveBeenLastCalledWith('mem-existing', expect.objectContaining({
       status: 'suppressed',
+      sourceTaskId: 'task-1',
       qualityScore: expect.any(Number),
     }));
 
@@ -1003,7 +1015,9 @@ describe('processExecutionMemoryBacklog', () => {
           confidence: 0.9,
         },
         'fp-123',
-        [0.1, 0.2]
+        [0.1, 0.2],
+        'task-1',
+        'INT-1098'
       )
     ).rejects.toThrow('update failed');
   });
@@ -1080,15 +1094,17 @@ describe('processExecutionMemoryBacklog', () => {
       )
     ).resolves.toEqual({
       status: 'completed',
-      generatedMemoryIds: [],
+      generatedMemoryIds: ['mem-exact', 'mem-near'],
       evaluationSummary: 'Used the prior verification lesson for route coverage.',
     });
 
     expect(executionMemoryRepo.update).toHaveBeenCalledWith('mem-exact', expect.objectContaining({
       title: 'Exact match memory',
+      sourceTaskId: 'task-1',
     }));
     expect(executionMemoryRepo.update).toHaveBeenCalledWith('mem-near', expect.objectContaining({
       title: 'Near duplicate memory',
+      sourceTaskId: 'task-1',
     }));
     expect(executionMemoryRepo.create).not.toHaveBeenCalled();
   });
@@ -1388,5 +1404,30 @@ describe('processExecutionMemoryBacklog', () => {
         errorMessage: 'create failed',
       }),
     }));
+  });
+
+  it('computes recency decay from lastAppliedAt', () => {
+    const ninetyDaysAgo = Timestamp.fromDate(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000));
+    const result = processExecutionMemoryBacklogTestables.computeQualityScore({
+      applicationCount: 5,
+      positiveCount: 3,
+      confidence: 0.8,
+      lastAppliedAt: ninetyDaysAgo,
+    });
+    // effectiveness = (3+1)/(5+2) ≈ 0.5714
+    // recency = max(0, 1 - 90/180) = 0.5
+    // qualityScore = 0.5*0.5714 + 0.3*0.8 + 0.2*0.5 = 0.2857 + 0.24 + 0.1 = 0.6257
+    expect(result).toBeCloseTo(0.6257, 2);
+  });
+
+  it('defaults recency to 1 when lastAppliedAt is undefined', () => {
+    const result = processExecutionMemoryBacklogTestables.computeQualityScore({
+      applicationCount: 0,
+      positiveCount: 0,
+      confidence: 0.8,
+    });
+    // effectiveness = 1/2 = 0.5, recency = 1
+    // 0.5*0.5 + 0.3*0.8 + 0.2*1 = 0.25 + 0.24 + 0.2 = 0.69
+    expect(result).toBeCloseTo(0.69, 2);
   });
 });

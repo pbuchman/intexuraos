@@ -224,7 +224,8 @@ async function processOneTask(
 
     const exactMatch = exactMatchResult.value;
     if (exactMatch !== null) {
-      await updateExistingMemory(exactMatch.id, exactMatch.applicationCount, exactMatch.positiveCount, exactMatch.negativeCount, memory.confidence, deps, memory, fingerprint, embeddingResult.value);
+      const updatedId = await updateExistingMemory(exactMatch.id, exactMatch.applicationCount, exactMatch.positiveCount, exactMatch.negativeCount, memory.confidence, deps, memory, fingerprint, embeddingResult.value, task.id, task.linearIssueId);
+      generatedMemoryIds.push(updatedId);
       continue;
     }
 
@@ -242,7 +243,7 @@ async function processOneTask(
       candidate.memoryType === memory.memoryType && candidate.vectorScore >= 0.94
     );
     if (mergeCandidate !== undefined) {
-      await updateExistingMemory(
+      const updatedId = await updateExistingMemory(
         mergeCandidate.id,
         mergeCandidate.applicationCount,
         mergeCandidate.positiveCount,
@@ -251,8 +252,11 @@ async function processOneTask(
         deps,
         memory,
         fingerprint,
-        embeddingResult.value
+        embeddingResult.value,
+        task.id,
+        task.linearIssueId
       );
+      generatedMemoryIds.push(updatedId);
       continue;
     }
 
@@ -384,7 +388,8 @@ async function evaluateApplication(
     const qualityScore = computeQualityScore({
       applicationCount,
       positiveCount,
-      confidence: memory.qualityScore,
+      confidence: memory.distillationConfidence,
+      ...(memory.lastAppliedAt !== undefined && { lastAppliedAt: memory.lastAppliedAt }),
     });
 
     await deps.executionMemoryRepo.update(outcome.memoryId, {
@@ -392,6 +397,7 @@ async function evaluateApplication(
       positiveCount,
       negativeCount,
       qualityScore,
+      lastAppliedAt: Timestamp.now(),
       status: shouldSuppressMemory(applicationCount, negativeCount, qualityScore) ? 'suppressed' : 'active',
     });
   }
@@ -453,13 +459,16 @@ async function updateExistingMemory(
   deps: ProcessExecutionMemoryBacklogDeps,
   memory: z.infer<typeof DistillationSchema>['memories'][number],
   fingerprint: string,
-  embedding: number[]
-): Promise<void> {
+  embedding: number[],
+  sourceTaskId: string,
+  sourceLinearIssueId: string | undefined // @allow-undefined-type -- function param, not optional property
+): Promise<string> {
   const qualityScore = computeQualityScore({ applicationCount, positiveCount, confidence });
   const status = shouldSuppressMemory(applicationCount, negativeCount, qualityScore) ? 'suppressed' : 'active';
 
   const updateResult = await deps.executionMemoryRepo.update(memoryId, {
-    sourceTaskId: memoryId,
+    sourceTaskId,
+    ...(sourceLinearIssueId !== undefined && { sourceLinearIssueId }),
     memoryType: memory.memoryType,
     title: memory.title,
     appliesWhen: memory.appliesWhen,
@@ -486,6 +495,8 @@ async function updateExistingMemory(
   if (!updateResult.ok) {
     throw new Error(updateResult.error.message);
   }
+
+  return memoryId;
 }
 
 function shouldSuppressMemory(
@@ -501,9 +512,14 @@ function computeQualityScore(params: {
   applicationCount: number;
   positiveCount: number;
   confidence: number;
+  lastAppliedAt?: Timestamp;
 }): number {
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  const RECENCY_DECAY_DAYS = 180;
   const effectiveness = (params.positiveCount + 1) / (params.applicationCount + 2);
-  const recency = 1;
+  const recency = params.lastAppliedAt !== undefined
+    ? Math.max(0, Math.min(1, 1 - (Date.now() - params.lastAppliedAt.toDate().getTime()) / (RECENCY_DECAY_DAYS * MS_PER_DAY)))
+    : 1;
   return (0.5 * effectiveness) + (0.3 * params.confidence) + (0.2 * recency);
 }
 
