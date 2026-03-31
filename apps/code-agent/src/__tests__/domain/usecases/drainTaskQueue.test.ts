@@ -1198,9 +1198,10 @@ describe('drainTaskQueue', () => {
       expect(mockCodeTaskRepo.hasDispatchedOrRunningForPR).not.toHaveBeenCalled();
     });
 
-    it('TTL expires deadlocked task before concurrency guard runs', async () => {
-      // This is the regression test for the deadlock bug:
-      // Two queued tasks for same PR + Linear issue that would deadlock under old logic
+    it('TTL expires a non-PR-locked task that has passed its TTL', async () => {
+      // Regression test: an expired PR task that is NOT PR-locked should be TTL-expired.
+      // Under the new ordering, PR-lock check runs first (returns hasActive: false),
+      // then the TTL check fires and expires the task.
       const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
       const expiredTask = createMockTask({
         id: 'task-expired',
@@ -1220,10 +1221,12 @@ describe('drainTaskQueue', () => {
 
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([expiredTask, blockedTask]));
       mockCodeTaskRepo.update.mockResolvedValue(ok(expiredTask));
+      // No active task for PR 42 — so expiredTask passes the PR-lock check, then hits TTL
+      mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockResolvedValue(ok({ hasActive: false }));
 
       const result = await drainTaskQueue(createDeps());
 
-      // TTL fires BEFORE concurrency guard — expired task cleaned up
+      // PR-lock check runs first, then TTL check fires — expired task cleaned up
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value).toEqual(expect.objectContaining({ action: 'expired', taskId: 'task-expired' }));
@@ -1238,8 +1241,8 @@ describe('drainTaskQueue', () => {
         },
       });
 
-      // Verify per-PR guard was NOT called (TTL returned before reaching it)
-      expect(mockCodeTaskRepo.hasDispatchedOrRunningForPR).not.toHaveBeenCalled();
+      // Verify per-PR guard WAS called (it runs before TTL in the new ordering)
+      expect(mockCodeTaskRepo.hasDispatchedOrRunningForPR).toHaveBeenCalledWith('pbuchman/intexuraos', 42);
     });
   });
 
