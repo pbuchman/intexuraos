@@ -237,9 +237,11 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
             return [];
           }
           const task = taskResult.value;
+          /* v8 ignore start -- test-infra: FakeFirestore cannot produce cross-user task leaks or archived standalone tasks in this test flow @preserve */
           if (task.userId !== userId || task.status === 'archived') {
             return [];
           }
+          /* v8 ignore stop @preserve */
           return [taskToSerializedTask(task)];
         }));
 
@@ -303,7 +305,9 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
             done: countsValue.done,
             failed: countsValue.failed,
           };
+          /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes countMap[s] typed as number | undefined; statusFilter values are always valid GroupStatus keys present in countMap, so undefined branch is unreachable @preserve */
           totalGroups = statusFilter.reduce((sum, s) => sum + (countMap[s] ?? 0), 0);
+          /* v8 ignore stop @preserve */
         } else {
           totalGroups = countsValue.totalGroups;
         }

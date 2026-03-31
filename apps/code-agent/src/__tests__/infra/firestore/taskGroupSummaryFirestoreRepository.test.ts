@@ -469,6 +469,39 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(doc.get('prNumber')).toBe(55);
     });
 
+    it('updates existingGroup: sets hasPrUrl without prNumber when prUrl set but prNumber absent', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.now();
+      const task1 = makeTask({
+        id: 'task-1',
+        linearIssueId: 'INT-PRUNONUM',
+        status: 'planned',
+        createdAt: now,
+        updatedAt: now,
+      });
+      const task2 = makeTask({
+        id: 'task-2',
+        linearIssueId: 'INT-PRUNONUM',
+        agentType: 'execution',
+        status: 'implemented',
+        result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/99' },
+        // prNumber intentionally absent — exercises false branch of `if (task.prNumber !== undefined)`
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await repo.updateAfterCreate(task1);
+      await repo.updateAfterCreate(task2);
+
+      const doc = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-PRUNONUM').get();
+      expect(doc.get('hasPrUrl')).toBe(true);
+      // prNumber stays null since task2 has no prNumber
+      expect(doc.get('prNumber')).toBeNull();
+    });
+
     it('updates existingGroup: updates latestReviewNeedsRemediation', async () => {
       const repo = createTaskGroupSummaryFirestoreRepository({
         firestore: fakeFirestore as unknown as Firestore,
