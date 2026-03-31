@@ -8,12 +8,15 @@
  * Idempotent — uses .set() (overwrite). Safe to re-run.
  */
 
-/* eslint-disable no-console, @typescript-eslint/restrict-template-expressions */
+/* eslint-disable @typescript-eslint/restrict-template-expressions */
 
 import { Firestore, Timestamp } from '@google-cloud/firestore';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 import { deriveAggregateStatusFromSummary } from '../domain/issueGrouping/deriveAggregateStatusFromSummary.js';
 import type { TaskGroupSummary, UserGroupCounts } from '../domain/models/taskGroupSummary.js';
 import type { CodeTask } from '../domain/models/codeTask.js';
+
+const logger = createAppLogger({ name: 'backfill-group-summaries' });
 
 // Mirror of constants.ts — inlined to avoid circular import issues in standalone script context
 const NON_ARCHIVED_STATUSES = [
@@ -236,7 +239,7 @@ async function main(): Promise<void> {
   const db = new Firestore();
   const now = Timestamp.fromDate(new Date());
 
-  console.log('Fetching all non-archived tasks from code_tasks...');
+  logger.info('Fetching all non-archived tasks from code_tasks...');
 
   const snapshot = await db
     .collection('code_tasks')
@@ -252,7 +255,7 @@ async function main(): Promise<void> {
     } as CodeTask;
   });
 
-  console.log(`Fetched ${allTasks.length} non-archived tasks.`);
+  logger.info(`Fetched ${allTasks.length} non-archived tasks.`);
 
   // Group tasks by (userId, groupKey)
   const groupMap = new Map<string, { userId: string; groupKey: string; tasks: CodeTask[] }>();
@@ -269,7 +272,7 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log(`Found ${groupMap.size} unique groups across ${new Set(allTasks.map((t) => t.userId)).size} users.`);
+  logger.info(`Found ${groupMap.size} unique groups across ${new Set(allTasks.map((t) => t.userId)).size} users.`);
 
   // Compute summaries for all groups, indexed by docId for O(1) lookup
   const summaryMap = new Map<string, TaskGroupSummary>();
@@ -304,7 +307,7 @@ async function main(): Promise<void> {
     allWrites.push({ docId: userId, collection: COUNTS_COLLECTION, data: counts });
   }
 
-  console.log(`Writing ${allWrites.length} documents (${groupMap.size} summaries + ${userCounts.size} user counts)...`);
+  logger.info(`Writing ${allWrites.length} documents (${groupMap.size} summaries + ${userCounts.size} user counts)...`);
 
   let writtenCount = 0;
 
@@ -319,16 +322,16 @@ async function main(): Promise<void> {
 
     await batch.commit();
     writtenCount += chunk.length;
-    console.log(`  Committed batch: ${writtenCount}/${allWrites.length} documents written`);
+    logger.info(`  Committed batch: ${writtenCount}/${allWrites.length} documents written`);
   }
 
   const userCount = summariesByUser.size;
-  console.log(
+  logger.info(
     `Backfill complete. Processed ${allTasks.length} tasks, ${groupMap.size} groups for ${userCount} users.`
   );
 }
 
 main().catch((error: unknown) => {
-  console.error('Backfill failed:', error);
+  logger.error({ error }, 'Backfill failed');
   process.exit(1);
 });

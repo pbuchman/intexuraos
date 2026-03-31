@@ -4,6 +4,8 @@ import type { SerializedTask } from '../../../domain/issueGrouping/index.js';
 import {
   deriveAggregateStatus,
   derivePipeline,
+  encodeCursor,
+  decodeCursor,
   groupByLinearIssue,
 } from '../../../domain/issueGrouping/index.js';
 
@@ -690,5 +692,34 @@ describe('derivePipeline', () => {
     expect(pipeline.steps).toHaveLength(2);
     expect(pipeline.steps[1]?.agentType).toBe('execution');
     expect(pipeline.steps[1]?.state).toBe('actionable');
+  });
+});
+
+describe('cursor encoding/decoding', () => {
+  it('encodes and decodes an index round-trip', () => {
+    const encoded = encodeCursor(5);
+    const decoded = decodeCursor(encoded);
+    expect(decoded.index).toBe(5);
+  });
+
+  it('encodes index 0', () => {
+    const encoded = encodeCursor(0);
+    const decoded = decodeCursor(encoded);
+    expect(decoded.index).toBe(0);
+  });
+
+  it('throws on non-integer index', () => {
+    const bad = Buffer.from(JSON.stringify({ index: 1.5 })).toString('base64url');
+    expect(() => decodeCursor(bad)).toThrow('Invalid cursor index');
+  });
+
+  it('throws on negative index', () => {
+    const bad = Buffer.from(JSON.stringify({ index: -1 })).toString('base64url');
+    expect(() => decodeCursor(bad)).toThrow('Invalid cursor index');
+  });
+
+  it('throws on non-numeric index', () => {
+    const bad = Buffer.from(JSON.stringify({ index: 'abc' })).toString('base64url');
+    expect(() => decodeCursor(bad)).toThrow('Invalid cursor index');
   });
 });
