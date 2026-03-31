@@ -600,6 +600,17 @@ export class TaskDispatcher {
     }
 
     if (task.status === 'completed' || task.status === 'failed' || task.status === 'interrupted') {
+      // Verify the container is still available before accepting the resume.
+      // isResumeAvailable performs a synchronous Docker inspect so the caller gets a
+      // synchronous 'not_found' error instead of a silent async RESUME_ATTEMPT_FAILED.
+      const isAvailable = (await this.isolation.provider.isResumeAvailable?.(taskId)) ?? false;
+      if (!isAvailable) {
+        return {
+          ok: false,
+          error: { type: 'not_found', message: 'Worker container no longer available for resume' },
+        };
+      }
+
       const wasCompleted = task.status === 'completed';
       await this.teardownAttempt(taskId, true);
 
