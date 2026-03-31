@@ -171,10 +171,28 @@ export async function drainTaskQueue(
       (a, b) => a.createdAt.toMillis() - b.createdAt.toMillis()
     );
 
-    // Find first dispatchable candidate with TTL-first + per-PR guard
+    // Find first dispatchable candidate with per-PR guard + TTL check
     let task: CodeTask | null = null;
     for (const candidate of roundRobinCandidates) {
-      // TTL check FIRST — expire deadlocked tasks before they block forever
+      // Per-PR concurrency guard FIRST — don't expire tasks that are merely PR-locked
+      if (candidate.prNumber !== undefined) {
+        const prActiveResult = await codeTaskRepo.hasDispatchedOrRunningForPR(candidate.repository, candidate.prNumber);
+        if (prActiveResult.ok && prActiveResult.value.hasActive) {
+          logger.info({
+            taskId: candidate.id,
+            repository: candidate.repository,
+            prNumber: candidate.prNumber,
+            activeTaskId: prActiveResult.value.taskId,
+          }, 'Skipping queued task — dispatched/running task exists for same PR');
+
+          // Reset TTL so PR-lock-blocked time does not count toward expiry
+          await codeTaskRepo.update(candidate.id, { queuedAt: new Date() });
+
+          continue;
+        }
+      }
+
+      // TTL check — only for tasks that are actually dispatchable (not PR-locked)
       const queuedAt = candidate.queuedAt?.toDate() ?? candidate.createdAt.toDate();
       const ttlMs = config.queue.ttlMinutes * 60 * 1000;
       const now = Date.now();
@@ -208,20 +226,6 @@ export async function drainTaskQueue(
         }
 
         return ok({ action: 'expired', taskId: candidate.id, locksToCleanup });
-      }
-
-      // Per-PR concurrency guard: only dispatched/running tasks block (NOT queued)
-      if (candidate.prNumber !== undefined) {
-        const prActiveResult = await codeTaskRepo.hasDispatchedOrRunningForPR(candidate.repository, candidate.prNumber);
-        if (prActiveResult.ok && prActiveResult.value.hasActive) {
-          logger.info({
-            taskId: candidate.id,
-            repository: candidate.repository,
-            prNumber: candidate.prNumber,
-            activeTaskId: prActiveResult.value.taskId,
-          }, 'Skipping queued task — dispatched/running task exists for same PR');
-          continue;
-        }
       }
 
       task = candidate;
