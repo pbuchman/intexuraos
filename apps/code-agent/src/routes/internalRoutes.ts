@@ -4,6 +4,7 @@ import { getServices } from '../services.js';
 import { authenticateInternalScheduler } from './helpers/internalAuth.js';
 import { getLinearIssueContext } from '../domain/usecases/getLinearIssueContext.js';
 import { processExecutionMemoryBacklog } from '../domain/usecases/processExecutionMemoryBacklog.js';
+import { loadConfig } from '../config.js';
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // POST /internal/merge-conflicts/reconcile - triggered by Cloud Scheduler (INT-1023)
@@ -196,7 +197,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
 
-  fastify.post<{ Body: { limit?: number } }>(
+  fastify.post<{ Body: { limit?: number } | null }>(
     '/internal/execution-memory/process',
     {
       schema: {
@@ -206,16 +207,12 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           'Called by Cloud Scheduler. Claims pending execution-memory post-run tasks and evaluates/distills reusable lessons.',
         tags: ['internal'],
         body: {
-          anyOf: [
-            {
-              type: 'object',
-              additionalProperties: false,
-              properties: {
-                limit: { type: 'number', minimum: 1, maximum: 50 },
-              },
-            },
-            { type: 'null' },
-          ],
+          type: 'object',
+          nullable: true,
+          additionalProperties: false,
+          properties: {
+            limit: { type: 'number', minimum: 1, maximum: 50 },
+          },
         },
         response: {
           200: {
@@ -297,6 +294,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
 
+      if (!loadConfig().executionMemoryEnabled) {
+        return await reply.ok({ claimed: 0, completed: 0, skipped: 0, errored: 0, taskIds: [] });
+      }
+
       const services = getServices();
       const result = await processExecutionMemoryBacklog({
         logger: services.logger,
@@ -318,7 +319,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           embeddingClient: services.executionMemoryEmbeddingClient,
         }),
         /* v8 ignore stop @preserve */
-        limit: request.body.limit ?? 10,
+        limit: request.body?.limit ?? 10,
       });
 
       if (!result.ok) {
