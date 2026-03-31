@@ -82,6 +82,7 @@ function createFakeInnerRepo(): CodeTaskRepository {
     countQueued: vi.fn(),
     findPlannedTaskByLinearIssue: vi.fn(),
     listAllNonArchived: vi.fn(),
+    listAllNonArchivedGlobal: vi.fn(),
   };
 }
 

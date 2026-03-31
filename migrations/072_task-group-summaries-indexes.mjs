@@ -11,7 +11,8 @@
 export const metadata = {
   id: '072',
   name: 'task-group-summaries-indexes',
-  description: 'Composite indexes for task_group_summaries supporting status-filtered queries with multiple sort options (updatedAt, created-time, started-time, linear-id)',
+  description:
+    'Composite indexes for task_group_summaries supporting status-filtered queries with multiple sort options (updatedAt, created-time, started-time, linear-id)',
   createdAt: '2026-03-31',
 };
 
