@@ -269,9 +269,16 @@ async function handleNewTaskRetry(
       executionMemoryApplicationRepo: deps.executionMemory?.executionMemoryApplicationRepo,
     });
 
-    await codeTaskRepo.update(entry.taskId, {
+    const memoryUpdateResult = await codeTaskRepo.update(entry.taskId, {
       executionMemoryContext: taskExecutionMemoryContext,
     });
+
+    if (!memoryUpdateResult.ok) {
+      logger.warn(
+        { taskId: entry.taskId, error: memoryUpdateResult.error },
+        'Failed to persist execution memory context before dispatch'
+      );
+    }
   }
 
   const dispatchExecutionMemoryContext = toDispatchExecutionMemoryContext(taskExecutionMemoryContext);

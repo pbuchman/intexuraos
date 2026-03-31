@@ -282,6 +282,42 @@ describe('drainRetryQueue', () => {
     }));
   });
 
+  it('logs a warning when persisting execution memory context fails but still proceeds with dispatch', async () => {
+    mockExecutionMemoryEnabled = true;
+    mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+    mockCodeTaskRepo.findById.mockResolvedValue(ok({
+      ...sampleTask,
+      linearIssueId: 'INT-1098',
+      agentType: 'execution',
+    }));
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'matched',
+      applicationId: 'app-456',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'Some query',
+      matchedMemories: [],
+    });
+    // First update (memory persistence) fails; subsequent updates (task status) succeed
+    mockCodeTaskRepo.update
+      .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'write failed' }))
+      .mockResolvedValue(ok(sampleTask));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+
+    const result = await drainRetryQueue(buildDeps());
+
+    expect(result.ok).toBe(true);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task_xyz',
+        error: expect.objectContaining({ code: 'FIRESTORE_ERROR' }),
+      }),
+      'Failed to persist execution memory context before dispatch'
+    );
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalled();
+    if (!result.ok) return;
+    expect(result.value.action).toBe('dispatched');
+  });
+
   afterEach(() => {
     _resetRetryDrainGuard();
   });
