@@ -92,6 +92,7 @@ function makeGroupSummaryRepo(overrides: Partial<TaskGroupSummaryRepository> = {
     getUserGroupCounts: async (): ReturnType<TaskGroupSummaryRepository['getUserGroupCounts']> => ok(defaultCounts),
     listGroupSummaries: async (): ReturnType<TaskGroupSummaryRepository['listGroupSummaries']> => ok({ summaries: [] }),
     recomputeGroupFromTasks: async (): Promise<void> => { return; },
+    recomputeWithLabels: async (): ReturnType<TaskGroupSummaryRepository['recomputeWithLabels']> => ok(undefined),
     ...overrides,
   };
 }
@@ -196,6 +197,7 @@ describe('GET /code/issue-groups', () => {
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: repoToUse, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: repoToUse, logger }),
       cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: repoToUse, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: repoToUse, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
@@ -976,7 +978,7 @@ describe('GET /code/issue-groups', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: failingRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -1302,6 +1304,7 @@ describe('GET /code/issue-groups', () => {
         processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+        archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
         workerHealthProbe: mockWorkerHealthProbe,
         gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
@@ -1398,6 +1401,7 @@ describe('GET /code/issue-groups', () => {
         processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+        archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
         workerHealthProbe: mockWorkerHealthProbe,
         gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
@@ -1461,6 +1465,7 @@ describe('GET /code/issue-groups', () => {
         processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+        archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
         workerHealthProbe: mockWorkerHealthProbe,
         gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),

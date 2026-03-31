@@ -219,6 +219,12 @@ export interface CodeAgentClient {
     actionId: string;
     approvalEventId: string;
   }): Promise<Result<TriggerCodeTaskResponse, CodeAgentError>>;
+
+  notifyGroupSummaryRecompute(request: {
+    userId: string;
+    linearIssueId: string;
+    labels: { id: string; name: string }[];
+  }): Promise<Result<void, CodeAgentError>>;
 }
 
 /** Repository for locally synced Linear comments */

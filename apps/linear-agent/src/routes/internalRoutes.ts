@@ -458,6 +458,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         issueRepo: services.issueRepository,
         connectionRepo: services.connectionRepository,
         linearClient: services.linearApiClient,
+        codeAgentClient: services.codeAgentClient,
         logger: request.log as unknown as Logger,
         getAllConnectedUserIds: async () => await services.connectionRepository.getAllConnectedUserIds(),
       });
@@ -563,6 +564,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         issueRepo: services.issueRepository,
         connectionRepo: services.connectionRepository,
         linearClient: services.linearApiClient,
+        codeAgentClient: services.codeAgentClient,
         logger: request.log as unknown as Logger,
       });
 

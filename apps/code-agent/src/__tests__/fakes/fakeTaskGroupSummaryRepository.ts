@@ -7,13 +7,14 @@
 
 import { Timestamp } from '@google-cloud/firestore';
 import type { Result } from '@intexuraos/common-core';
-import { ok } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
 import type {
   TaskGroupSummaryRepository,
   ListGroupSummariesInput,
   ListGroupSummariesOutput,
   GroupSummaryError,
 } from '../../domain/ports/taskGroupSummaryRepository.js';
+import { hasImplementationReadyLabel, hasMergeReadyLabel } from '../../domain/issueGrouping/labelHelpers.js';
 import type { TaskGroupSummary, UserGroupCounts } from '../../domain/models/taskGroupSummary.js';
 import type { CodeTask } from '../../domain/models/codeTask.js';
 import { deriveAggregateStatusFromSummary } from '../../domain/issueGrouping/deriveAggregateStatusFromSummary.js';
@@ -282,6 +283,26 @@ export function createFakeTaskGroupSummaryRepository(): FakeTaskGroupSummaryRepo
         return;
       }
       upsertSummary(computeSummaryFromTasks(userId, groupKey, tasks));
+    },
+
+    async recomputeWithLabels(
+      userId: string,
+      linearIssueId: string,
+      labels: { id: string; name: string }[],
+    ): Promise<Result<void, GroupSummaryError>> {
+      const key = summaryKey(userId, linearIssueId);
+      const current = summaries.get(key);
+      if (current === undefined) {
+        return err({ code: 'NOT_FOUND', message: `No group summary found for ${userId}/${linearIssueId}` });
+      }
+      const updated: TaskGroupSummary = {
+        ...current,
+        hasImplementationReadyLabel: hasImplementationReadyLabel(labels),
+        hasMergeReadyLabel: hasMergeReadyLabel(labels),
+      };
+      updated.aggregateStatus = deriveAggregateStatusFromSummary(updated);
+      upsertSummary(updated);
+      return ok(undefined);
     },
 
     getSummary(userId: string, groupKey: string): TaskGroupSummary | undefined {

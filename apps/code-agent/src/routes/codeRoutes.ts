@@ -618,6 +618,146 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     }
   );
 
+  // POST /internal/code/group-summary/recompute - Called by linear-agent after label changes
+  fastify.post<{
+    Body: {
+      userId: string;
+      linearIssueId: string;
+      labels: { id: string; name: string }[];
+    };
+  }>(
+    '/internal/code/group-summary/recompute',
+    {
+      schema: {
+        operationId: 'recomputeGroupSummary',
+        summary: 'Recompute group summary aggregateStatus using Linear labels',
+        description: 'Internal endpoint called by linear-agent after label changes to recompute needs-action status accurately.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          properties: {
+            userId: { type: 'string' },
+            linearIssueId: { type: 'string' },
+            labels: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  name: { type: 'string' },
+                },
+                required: ['id', 'name'],
+              },
+            },
+          },
+          required: ['userId', 'linearIssueId', 'labels'],
+        },
+        response: {
+          200: {
+            description: 'Recomputed successfully',
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  status: { type: 'string', enum: ['recomputed'] },
+                },
+                required: ['status'],
+              },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          404: {
+            description: 'No group summary found for the given userId/linearIssueId',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['NOT_FOUND'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          500: {
+            description: 'Server error',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: { userId: string; linearIssueId: string; labels: { id: string; name: string }[] } }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/code/group-summary/recompute',
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for group-summary recompute');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      const services = getServices();
+      const body = request.body;
+
+      /* v8 ignore start -- test-infra: groupSummaryRepo is always set in production services.ts; FakeFirestore test setup cannot produce undefined here @preserve */
+      if (services.groupSummaryRepo === undefined) {
+        request.log.warn({ userId: body.userId, linearIssueId: body.linearIssueId }, 'groupSummaryRepo not available');
+        return await reply.fail('INTERNAL_ERROR', 'Group summary repository not configured');
+      }
+      /* v8 ignore stop @preserve */
+
+      const result = await services.groupSummaryRepo.recomputeWithLabels(
+        body.userId,
+        body.linearIssueId,
+        body.labels,
+      );
+
+      if (!result.ok) {
+        if (result.error.code === 'NOT_FOUND') {
+          return await reply.fail('NOT_FOUND', result.error.message);
+        }
+        request.log.warn({ error: result.error.message }, 'Failed to recompute group summary');
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      return await reply.ok({ status: 'recomputed' });
+    }
+  );
+
   // PATCH /internal/code-tasks/:taskId - Worker callback (will become webhook later)
   fastify.patch<{
     Params: { taskId: string };
