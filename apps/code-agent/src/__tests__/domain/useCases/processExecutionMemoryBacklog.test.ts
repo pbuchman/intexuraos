@@ -325,6 +325,7 @@ describe('processExecutionMemoryBacklog', () => {
     executionMemoryRepo.findById.mockResolvedValue(ok(createMemory({
       distillationConfidence: 0.8,
       qualityScore: 0.65,
+      lastAppliedAt: Timestamp.fromDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
     })));
     executionMemoryRepo.update.mockResolvedValue(ok(createMemory({
       applicationCount: 2,
@@ -418,12 +419,12 @@ describe('processExecutionMemoryBacklog', () => {
     // applicationCount goes 1→2, positiveCount 1→2
     // effectiveness = (2+1)/(2+2) = 0.75
     // confidence = 0.8 (distillationConfidence, NOT qualityScore)
-    // recency = 1 (no lastAppliedAt yet)
-    // qualityScore = 0.5*0.75 + 0.3*0.8 + 0.2*1 = 0.375 + 0.24 + 0.2 = 0.815
+    // recency = max(0, min(1, 1 - 30/180)) ≈ 0.8333 (lastAppliedAt = 30 days ago)
+    // qualityScore = 0.5*0.75 + 0.3*0.8 + 0.2*0.8333 ≈ 0.375 + 0.24 + 0.1667 ≈ 0.7817
     expect(executionMemoryRepo.update).toHaveBeenCalledWith('mem-existing', expect.objectContaining({
       applicationCount: 2,
       positiveCount: 2,
-      qualityScore: expect.closeTo(0.815, 3),
+      qualityScore: expect.closeTo(0.7817, 1),
     }));
     expect(executionMemoryRepo.create).toHaveBeenCalledWith(expect.objectContaining({
       sourceTaskId: 'task-1',
