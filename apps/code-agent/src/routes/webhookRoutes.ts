@@ -18,6 +18,7 @@ import { formatMetricsLogLines } from '../domain/formatters/metricsLogFormatter.
 import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
 import { parseLinearIdentifierFromUrl } from '../domain/utils/linearIdentifierParser.js';
 import { parseOwnerRepo } from '../domain/utils/parseOwnerRepo.js';
+import { drainTaskQueue } from '../domain/usecases/drainTaskQueue.js';
 
 /**
  * Best-effort: record a task_failed automation log event for PR-linked tasks.
@@ -825,6 +826,27 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           await deletePRTaskLock(firestore, task.repository, task.prNumber, request.log);
         }
       };
+
+      const triggerDrainForPR = async (): Promise<void> => {
+        if (task.prNumber === undefined) return;
+        logger.info({ taskId, prNumber: task.prNumber }, 'Triggering post-completion drain for same-PR queued tasks');
+        try {
+          const services = getServices();
+          await drainTaskQueue({
+            logger: services.logger,
+            codeTaskRepo: services.codeTaskRepo,
+            taskDispatcher: services.taskDispatcher,
+            linearAgentClient: services.linearAgentClient,
+            whatsappNotifier: services.whatsappNotifier,
+            workerSettingsRepo: services.workerSettingsRepo,
+            taskEnqueueService: services.taskEnqueueService,
+            orchestratorSecret: loadConfig().orchestratorSecret,
+          });
+        } catch (drainErr) {
+          logger.warn({ taskId, prNumber: task.prNumber, error: drainErr }, 'Post-completion drain failed (non-blocking)');
+        }
+      };
+
       // Step 3: Update task based on status
       if (status === 'completed') {
         // Trace which agent type is being handled for debugging
@@ -1369,6 +1391,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           'Task marked as completed'
         );
         await flushPendingTaskLogLines(taskId);
+        await triggerDrainForPR();
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
@@ -1394,6 +1417,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             }
             await cleanupLockIfPR();
             await flushPendingTaskLogLines(taskId);
+            await triggerDrainForPR();
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
           }
@@ -1442,6 +1466,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         request.log.info({ taskId, error: taskError }, 'Task marked as failed');
         await flushPendingTaskLogLines(taskId);
+        await triggerDrainForPR();
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
@@ -1494,6 +1519,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         request.log.info({ taskId }, 'Task marked as interrupted');
         await flushPendingTaskLogLines(taskId);
+        await triggerDrainForPR();
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
