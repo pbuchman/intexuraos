@@ -49,7 +49,7 @@ const defaultInput = {
   formattedTranscript: '[MSG-001] ASSISTANT tool_use: Bash\n  command: "pnpm run ci:tracked"',
   agentClaims: {
     outcome: 'implemented' as const,
-    superpowers_executing_plans: 'used' as const,
+    superpowers_subagent_driven_dev: 'used' as const,
     superpowers_requesting_code_review: 'used' as const,
     gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/1071',
     summary: 'Implemented the fix.',
@@ -194,7 +194,7 @@ describe('buildDeepValidationPrompt', () => {
       formattedTranscript: 'test',
       agentClaims: {
         outcome: 'implemented',
-        superpowers_executing_plans: 'used',
+        superpowers_subagent_driven_dev: 'used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: '',
         summary: 'Done.',
@@ -221,7 +221,7 @@ describe('buildDeepValidationPrompt', () => {
       formattedTranscript: '[MSG-001] ASSISTANT tool_use: Bash\n  command: "pnpm run ci:tracked"',
       agentClaims: {
         outcome: 'implemented',
-        superpowers_executing_plans: 'not used',
+        superpowers_subagent_driven_dev: 'not used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/1071',
         summary: 'Implemented the fix.',
@@ -234,7 +234,7 @@ describe('buildDeepValidationPrompt', () => {
     expect(prompt).toContain('Section 1: Claim Verification');
     expect(prompt).toContain('Section 2: Contract Verification');
     expect(prompt).toContain('Section 3: Plan vs Reality');
-    expect(prompt).toContain('"superpowers_executing_plans": "not used"');
+    expect(prompt).toContain('"superpowers_subagent_driven_dev": "not used"');
     expect(prompt).toContain('Fix the PWA header logo shift');
     expect(prompt).toContain('Update tests first');
   });
@@ -244,7 +244,7 @@ describe('buildDeepValidationPrompt', () => {
       formattedTranscript: 'No evidence lines in this transcript',
       agentClaims: {
         outcome: 'implemented',
-        superpowers_executing_plans: 'used',
+        superpowers_subagent_driven_dev: 'used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: '',
         summary: 'Done.',
@@ -264,7 +264,7 @@ describe('buildDeepValidationPrompt', () => {
       formattedTranscript: 'transcript',
       agentClaims: {
         outcome: 'implemented',
-        superpowers_executing_plans: 'used',
+        superpowers_subagent_driven_dev: 'used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: '',
         summary: 'Done.',
@@ -284,7 +284,7 @@ describe('buildDeepValidationPrompt', () => {
         formattedTranscript: 'transcript',
         agentClaims: {
           outcome: 'implemented',
-          superpowers_executing_plans: 'used',
+          superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'used',
           gh_pr_url: '',
           summary: 'Done.',
@@ -305,7 +305,7 @@ describe('buildDeepValidationPrompt', () => {
       formattedTranscript: 'transcript here',
       agentClaims: {
         outcome: 'implemented',
-        superpowers_executing_plans: 'used',
+        superpowers_subagent_driven_dev: 'used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: '',
         summary: 'Done.',
@@ -323,7 +323,7 @@ describe('buildDeepValidationPrompt', () => {
       formattedTranscript: 'test',
       agentClaims: {
         outcome: 'implemented',
-        superpowers_executing_plans: 'used',
+        superpowers_subagent_driven_dev: 'used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: '',
         summary: 'Done.',
@@ -347,7 +347,7 @@ describe('buildDeepValidationPrompt', () => {
       formattedTranscript: longTranscript,
       agentClaims: {
         outcome: 'implemented',
-        superpowers_executing_plans: 'used',
+        superpowers_subagent_driven_dev: 'used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: '',
         summary: 'Done.',

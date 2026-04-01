@@ -223,7 +223,7 @@ Note: For complex planned outcomes, you MUST include explicit proof of the paral
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '6.1.0',
+  version: '7.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const hasContinuationPr =
@@ -288,8 +288,8 @@ Before doing ANY work, you MUST read the Linear issue AND all its comments:
 ${COMMENT_DRIVEN_DECISION_LOG}
 
 ${workerType === 'codex' ? CODEX_SESSION_AUTOMATION_PARITY + '\n\n' : ''}### Mandatory Skill Order (non-negotiable)
-1. Start with \`superpowers:executing-plans\` (mandatory first skill)
-2. After implementation and PR creation, run \`superpowers:requesting-code-review\` (mandatory second skill)
+1. Start with \`superpowers:subagent-driven-development\` (mandatory first skill) — dispatches fresh subagents per task with built-in spec + quality review
+2. After implementation, run \`superpowers:requesting-code-review\` (mandatory second skill) — final holistic review of the complete change
 
 You must provide output evidence that shows this order occurred.
 
@@ -301,12 +301,10 @@ This is a SUBAGENT-FIRST environment. ALL execution MUST be optimized for parall
 ${prFlowSection}
 
 ### Implementation Flow (strict order)
-1. Use TDD where practical (tests before behavior changes).
-2. Commit changes locally — do NOT push yet.
-3. Run \`pnpm run ci:tracked\` — must pass.
-4. Run \`/simplify\` on all changed files — MANDATORY, NON-NEGOTIABLE. This reviews code for reuse, quality, and efficiency. After simplify makes changes, re-run \`pnpm run ci:tracked\`.
-5. Run the code review loop using \`superpowers:requesting-code-review\`.
-6. ${implementationFlowStep5}
+1. Use \`superpowers:subagent-driven-development\` to execute the plan — this handles TDD, per-task review, and commits.
+2. Run \`pnpm run ci:tracked\` — must pass.
+3. Run the code review loop using \`superpowers:requesting-code-review\`.
+4. ${implementationFlowStep5}
 
 ### MANDATORY Code Review (zero-tolerance loop)
 BEFORE creating the PR:
@@ -355,11 +353,11 @@ EXECUTION_AGENT_FINAL:
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: <full Linear URL>
 - Review iterations: <number>
-- superpowers_executing_plans_used: <0|1>
+- superpowers_subagent_driven_dev_used: <0|1>
 - superpowers_requesting_code_review_used: <0|1>
 - trivial_task: <0|1>
 - subagents: <explicit role + scope list, or none if trivial_task=1>
-- Skill sequence proof: <evidence that superpowers:executing-plans happened before superpowers:requesting-code-review>
+- Skill sequence proof: <evidence that superpowers:subagent-driven-development happened before superpowers:requesting-code-review>
 - Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was implemented, key decisions or approach, what was tested, outcome (PR, CI status). The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
