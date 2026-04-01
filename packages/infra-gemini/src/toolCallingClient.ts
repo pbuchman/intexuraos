@@ -169,7 +169,13 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
             const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
             const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
             const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
-            const iterationUsage = normalizeUsage(inputTokens, outputTokens, false, pricing, thinkingTokens);
+            const iterationUsage = normalizeUsage(
+              inputTokens,
+              outputTokens,
+              false,
+              pricing,
+              thinkingTokens
+            );
             aggregatedUsage = addUsage(aggregatedUsage, iterationUsage);
 
             // Extract parts from response
