@@ -634,9 +634,9 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
 
       // Transition Linear issues on PR close (merge → QA + remove label; close → remove label only)
       if (parsedEvent.eventType === 'pull_request' && parsedEvent.action === 'closed') {
-        const { codeTaskRepo, linearIssueService, userServiceClient, taskDispatcher, workerSettingsRepo } = getServices();
+        const { codeTaskRepo, linearIssueService, userServiceClient, taskDispatcher, workerSettingsRepo, groupSummaryRepo } = getServices();
         void handlePrClose(
-          { codeTaskRepo, linearIssueService, userServiceClient, taskDispatcher, workerSettingsRepo, logger },
+          { codeTaskRepo, linearIssueService, userServiceClient, taskDispatcher, workerSettingsRepo, groupSummaryRepo: groupSummaryRepo as NonNullable<typeof groupSummaryRepo>, logger },
           {
             repository: parsedEvent.repository,
             prNumber: parsedEvent.pullRequestNumber,

@@ -1189,6 +1189,18 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               });
 
               // Best-effort: set review-outcome label on the associated Linear issue
+              // Skip if PR is already merged — handlePrClose already cleaned up labels.
+              let prAlreadyMerged = false;
+              try {
+                const prMergeSummary = await gitHubPRSummaryRepo.findByPullRequest(task.repository, prNumber);
+                prAlreadyMerged = prMergeSummary.ok && prMergeSummary.value !== null && prMergeSummary.value.mergedAt !== null;
+              } catch {
+                // gitHubPRSummaryRepo may not be fully initialized — assume not merged
+              }
+
+              if (prAlreadyMerged) {
+                request.log.debug({ taskId, prNumber }, 'Skipping review-outcome label — PR already merged');
+              } else {
               try {
                 const originResult = await codeTaskRepo.findOriginTaskByPR(task.repository, prNumber);
                 let targetLinearIssueId: string | undefined;
@@ -1240,6 +1252,22 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                       } else {
                         request.log.info({ taskId, prNumber, label, linearIssueId: targetLinearIssueId, source },
                           'Set review-outcome label');
+
+                        // Best-effort: recompute group summary with the new label so
+                        // cached aggregateStatus reflects the actionable state.
+                        const { groupSummaryRepo: summaryRepoForLabel } = getServices();
+                        if (summaryRepoForLabel !== undefined && targetLinearIssueId !== undefined) {
+                          const updatedLabels: { id: string; name: string }[] = [
+                            ...issueValidation.value.labels.map((l) => ({ id: '', name: l })),
+                            { id: '', name: label },
+                          ];
+                          void summaryRepoForLabel.recomputeWithLabels(
+                            targetUserId, targetLinearIssueId, updatedLabels,
+                          ).catch((recomputeErr: unknown) => {
+                            request.log.warn({ linearIssueId: targetLinearIssueId, error: recomputeErr },
+                              'Failed to recompute group summary after review-outcome label (best-effort)');
+                          });
+                        }
                       }
                     } else {
                       request.log.warn({ taskId, prNumber, label, error: labelResult.error },
@@ -1252,6 +1280,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 }
               } catch (labelError: unknown) {
                 request.log.warn({ error: labelError, taskId, prNumber }, 'Failed to set review-outcome label (best-effort)');
+              }
               }
             } else {
               const { createRemediationTaskFn, logger: remediationLogger } = getServices();
