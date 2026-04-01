@@ -14,6 +14,14 @@ export type {
 } from '@intexuraos/llm-contract';
 
 /**
+ * Options for the generate method.
+ */
+export interface GenerateOptions {
+  /** Request a specific response format from the model (e.g., JSON mode). */
+  responseFormat?: { type: 'json_object' | 'text' };
+}
+
+/**
  * Configuration for creating an OpenRouter client.
  *
  * OpenRouter provides access to multiple frontier models from various providers
