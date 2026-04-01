@@ -8,6 +8,7 @@ import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
 import type { TaskDispatcherService } from '../../../domain/services/taskDispatcher.js';
 import type { WorkerSettingsRepository } from '../../../domain/ports/workerSettingsRepository.js';
+import type { TaskGroupSummaryRepository } from '../../../domain/ports/taskGroupSummaryRepository.js';
 import { createMockLogger } from '../../helpers/mockLogger.js';
 
 function createBaseTask(overrides: Partial<CodeTask> = {}): CodeTask {
@@ -75,6 +76,9 @@ describe('handlePrClose (merged and closed-without-merge)', () => {
   let mockWorkerSettingsRepo: {
     getSettings: ReturnType<typeof vi.fn>;
   };
+  let mockGroupSummaryRepo: {
+    recomputeWithLabels: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     mockLogger = createMockLogger();
@@ -98,6 +102,9 @@ describe('handlePrClose (merged and closed-without-merge)', () => {
     mockWorkerSettingsRepo = {
       getSettings: vi.fn().mockResolvedValue(ok(null)),
     };
+    mockGroupSummaryRepo = {
+      recomputeWithLabels: vi.fn().mockResolvedValue(ok(undefined)),
+    };
   });
 
   function buildDeps(): HandlePrCloseDeps {
@@ -107,6 +114,7 @@ describe('handlePrClose (merged and closed-without-merge)', () => {
       userServiceClient: mockUserServiceClient as unknown as UserServiceClient,
       taskDispatcher: mockTaskDispatcher as unknown as TaskDispatcherService,
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as WorkerSettingsRepository,
+      groupSummaryRepo: mockGroupSummaryRepo as unknown as TaskGroupSummaryRepository,
       logger: mockLogger,
     };
   }
@@ -481,6 +489,38 @@ describe('handlePrClose (merged and closed-without-merge)', () => {
 
       expect(mockCodeTaskRepo.findPreservedPullRequestTask).not.toHaveBeenCalled();
       expect(mockTaskDispatcher.cancelOnWorker).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('group summary recompute after label removal', () => {
+    it('calls recomputeWithLabels for each discovered Linear issue after merge', async () => {
+      mockCodeTaskRepo.findByPR.mockResolvedValue(
+        ok(createBaseTask({ linearIssueId: 'INT-100', userId: 'user-from-task' }))
+      );
+
+      await handlePrClose(buildDeps(), createMergedInput());
+
+      expect(mockGroupSummaryRepo.recomputeWithLabels).toHaveBeenCalledWith('user-from-task', 'INT-100', []);
+    });
+
+    it('calls recomputeWithLabels on close without merge (label is removed either way)', async () => {
+      mockCodeTaskRepo.findByPR.mockResolvedValue(
+        ok(createBaseTask({ linearIssueId: 'INT-200', userId: 'user-x' }))
+      );
+
+      await handlePrClose(buildDeps(), createClosedInput());
+
+      expect(mockGroupSummaryRepo.recomputeWithLabels).toHaveBeenCalledWith('user-x', 'INT-200', []);
+    });
+
+    it('does not throw when recomputeWithLabels rejects', async () => {
+      mockCodeTaskRepo.findByPR.mockResolvedValue(
+        ok(createBaseTask({ linearIssueId: 'INT-300', userId: 'user-y' }))
+      );
+      mockGroupSummaryRepo.recomputeWithLabels.mockRejectedValue(new Error('firestore down'));
+
+      // Should not throw — fire-and-forget
+      await expect(handlePrClose(buildDeps(), createMergedInput())).resolves.toBeUndefined();
     });
   });
 
