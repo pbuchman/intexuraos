@@ -292,8 +292,8 @@ body.dark {
 }
 
 .shimmer-refresh { --shimmer-light: rgba(59, 130, 246, 0.06); --shimmer-mid: rgba(59, 130, 246, 0.12); }
-.shimmer-amber { --shimmer-light: rgba(245, 158, 11, 0.05); --shimmer-mid: rgba(245, 158, 11, 0.10); }
-.shimmer-red { --shimmer-light: rgba(239, 68, 68, 0.05); --shimmer-mid: rgba(239, 68, 68, 0.10); }
+.shimmer-amber { --shimmer-light: rgba(245, 158, 11, 0.08); --shimmer-mid: rgba(245, 158, 11, 0.18); }
+.shimmer-red { --shimmer-light: rgba(239, 68, 68, 0.08); --shimmer-mid: rgba(239, 68, 68, 0.18); }
 
 /* Indeterminate progress bar */
 @keyframes progress-slide {
