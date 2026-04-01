@@ -812,6 +812,8 @@ describe('processExecutionMemoryBacklog', () => {
     }));
     executionMemoryRepo.findById.mockResolvedValueOnce(err({ message: 'memory lookup failed' }));
 
+    const updateCallsBefore = executionMemoryRepo.update.mock.calls.length;
+
     await expect(
       processExecutionMemoryBacklogTestables.evaluateApplication(
         createTask({ result: undefined }),
@@ -828,7 +830,89 @@ describe('processExecutionMemoryBacklog', () => {
           limit: 10,
         }
       )
-    ).rejects.toThrow('memory lookup failed');
+    ).resolves.toBe('negative summary');
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ memoryId: 'mem-existing', error: 'memory lookup failed' }),
+      'Failed to load memory for evaluation outcome, skipping'
+    );
+    expect(executionMemoryRepo.update.mock.calls.length).toBe(updateCallsBefore);
+  });
+
+  it('skips evaluator outcomes for unknown memory IDs with a warning', async () => {
+    executionMemoryApplicationRepo.findById.mockResolvedValueOnce(ok(createApplicationRecord()));
+    executionMemoryApplicationRepo.update.mockResolvedValueOnce(ok(createApplicationRecord()));
+    evaluatorClient.generate.mockResolvedValueOnce(ok({
+      content: JSON.stringify({
+        summary: 'hallucinated evaluation',
+        perMemory: [
+          {
+            memoryId: 'hallucinated-id',
+            outcome: 'positive',
+            reason: 'Seems good.',
+            confidence: 0.9,
+          },
+          {
+            memoryId: 'mem-existing',
+            outcome: 'neutral',
+            reason: 'Applied but no clear impact.',
+            confidence: 0.7,
+          },
+        ],
+      }),
+    }));
+    executionMemoryRepo.findById.mockResolvedValueOnce(ok(createMemory()));
+    executionMemoryRepo.update.mockResolvedValueOnce(ok(createMemory()));
+
+    const summary = await processExecutionMemoryBacklogTestables.evaluateApplication(
+      createTask(),
+      [{ text: 'log line' }],
+      {
+        logger,
+        codeTaskRepo: codeTaskRepo as never,
+        logLineRepo: logLineRepo as never,
+        turnMetricsRepo: turnMetricsRepo as never,
+        linearAgentClient: linearAgentClient as never,
+        executionMemoryRepo: executionMemoryRepo as never,
+        executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+        evaluatorClient: evaluatorClient as never,
+        limit: 10,
+      }
+    );
+    expect(summary).toBe('hallucinated evaluation');
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ memoryId: 'hallucinated-id' }),
+      'Evaluator returned outcome for unknown memory ID, skipping'
+    );
+    expect(executionMemoryRepo.findById).toHaveBeenCalledTimes(1);
+    expect(executionMemoryRepo.findById).toHaveBeenCalledWith('mem-existing');
+  });
+
+  it('skips backlog task when claim update fails', async () => {
+    const task = createTask();
+    codeTaskRepo.listPendingExecutionMemoryPostRun.mockResolvedValue(ok([task]));
+    codeTaskRepo.update.mockResolvedValue(err({ message: 'concurrent claim conflict' }));
+
+    const result = await processExecutionMemoryBacklog({
+      logger,
+      codeTaskRepo: codeTaskRepo as never,
+      logLineRepo: logLineRepo as never,
+      turnMetricsRepo: turnMetricsRepo as never,
+      linearAgentClient: linearAgentClient as never,
+      executionMemoryRepo: executionMemoryRepo as never,
+      executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+      limit: 10,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.claimed).toBe(1);
+      expect(result.value.errored).toBe(1);
+      expect(result.value.completed).toBe(0);
+    }
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: task.id, error: 'concurrent claim conflict' }),
+      'Failed to claim execution memory backlog task, skipping'
+    );
   });
 
   it('throws from evaluation and distillation helpers when the model output is invalid', async () => {
