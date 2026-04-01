@@ -172,9 +172,24 @@ describe('renderComplianceMarkdown', () => {
     const reportWithAnomalies: AgentComplianceReport = {
       ...validReport,
       anomalies: [
-        { type: 'fabrication', severity: 'critical', msgRef: 'MSG-042', description: 'Agent claimed CI passed but exit code was 1' },
-        { type: 'ignored_error', severity: 'warning', msgRef: 'MSG-030', description: 'Build error was logged but agent continued' },
-        { type: 'laziness', severity: 'minor', msgRef: 'MSG-055', description: 'Agent skipped running tests after minor refactor' },
+        {
+          type: 'fabrication',
+          severity: 'critical',
+          msgRef: 'MSG-042',
+          description: 'Agent claimed CI passed but exit code was 1',
+        },
+        {
+          type: 'ignored_error',
+          severity: 'warning',
+          msgRef: 'MSG-030',
+          description: 'Build error was logged but agent continued',
+        },
+        {
+          type: 'laziness',
+          severity: 'minor',
+          msgRef: 'MSG-055',
+          description: 'Agent skipped running tests after minor refactor',
+        },
       ],
       claimVerification: {
         ...validReport.claimVerification,
@@ -202,9 +217,50 @@ describe('renderComplianceMarkdown', () => {
   });
 
   it('renders pass emoji for clean reports', () => {
-    const markdown = renderComplianceMarkdown(validReport, { costUsd: 0.01, model: 'test-model', promptVersion: '1.0.0' });
+    const markdown = renderComplianceMarkdown(validReport, {
+      costUsd: 0.01,
+      model: 'test-model',
+      promptVersion: '1.0.0',
+    });
     expect(markdown).toContain('\u{1F7E2}');
     expect(markdown).toContain('No anomalies');
+  });
+
+  it('renders critical emoji for failed claims and non-compliant contract', () => {
+    const failedReport: AgentComplianceReport = {
+      claimVerification: {
+        ciTrackedCalled: { called: false, exitCode: null, msgRef: null },
+        prCreated: { created: false, url: null, msgRef: null },
+        commitCount: 0,
+        summaryAccurate: true,
+        summaryContradictions: [],
+      },
+      contractCompliance: {
+        subagentDrivenDevInvoked: { invoked: false, msgRef: null },
+        requestingCodeReviewInvoked: { invoked: false, msgRef: null },
+        codeReviewerDispatched: { dispatched: false, msgRef: null },
+        correctOrder: false,
+        skillViolations: ['Skills were loaded out of order'],
+      },
+      anomalies: [],
+      executionMetrics: {
+        totalMessages: 10,
+        hookViolationCount: 0,
+        toolErrorCount: 0,
+        subagentDispatchCount: 0,
+      },
+    };
+    const markdown = renderComplianceMarkdown(failedReport, {
+      costUsd: 0.01,
+      model: 'test-model',
+      promptVersion: '1.0.0',
+    });
+    // CI tracked called should show critical (false branch)
+    expect(markdown).toContain('\u{1F534} Critical');
+    // Skill violations should be rendered
+    expect(markdown).toContain('Skills were loaded out of order');
+    // N/A for null msgRefs
+    expect(markdown).toContain('N/A');
   });
 });
 
@@ -212,7 +268,10 @@ describe('OrchestratorAgentComplianceValidator', () => {
   it('happy path: returns structured report and posts PR comment', async () => {
     generateMock.mockResolvedValue({
       ok: true,
-      value: { content: JSON.stringify(validReport), usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, costUsd: 0.042 } },
+      value: {
+        content: JSON.stringify(validReport),
+        usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, costUsd: 0.042 },
+      },
     });
     const validator = new OrchestratorAgentComplianceValidator(logger, defaultConfig);
     const onProgress = vi.fn();
@@ -225,7 +284,15 @@ describe('OrchestratorAgentComplianceValidator', () => {
     expect(result?.promptVersion).toBe(AGENT_COMPLIANCE_PROMPT_VERSION);
     expect(execFileMock).toHaveBeenCalledTimes(1);
     expect(execFileMock.mock.calls[0]?.[0]).toBe('gh');
-    expect(execFileMock.mock.calls[0]?.[1]).toEqual(['pr', 'comment', '1071', '--repo', 'pbuchman/intexuraos', '--body-file', expect.any(String)]);
+    expect(execFileMock.mock.calls[0]?.[1]).toEqual([
+      'pr',
+      'comment',
+      '1071',
+      '--repo',
+      'pbuchman/intexuraos',
+      '--body-file',
+      expect.any(String),
+    ]);
     const bodyArg = postedCommentBodies[0] ?? '';
     expect(bodyArg).toContain('### Agent Compliance Report');
     expect(bodyArg).toContain('@ignore');
@@ -239,7 +306,10 @@ describe('OrchestratorAgentComplianceValidator', () => {
   it('strips code fences from response before parsing', async () => {
     generateMock.mockResolvedValue({
       ok: true,
-      value: { content: '```json\n' + JSON.stringify(validReport) + '\n```', usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, costUsd: 0.042 } },
+      value: {
+        content: '```json\n' + JSON.stringify(validReport) + '\n```',
+        usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, costUsd: 0.042 },
+      },
     });
     const validator = new OrchestratorAgentComplianceValidator(logger, defaultConfig);
     const result = await validator.validate(defaultInput);
@@ -250,8 +320,20 @@ describe('OrchestratorAgentComplianceValidator', () => {
   it('repair flow: first response fails Zod, second succeeds', async () => {
     const invalidResponse = JSON.stringify({ invalid: true });
     generateMock
-      .mockResolvedValueOnce({ ok: true, value: { content: invalidResponse, usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, costUsd: 0.02 } } })
-      .mockResolvedValueOnce({ ok: true, value: { content: JSON.stringify(validReport), usage: { inputTokens: 800, outputTokens: 400, totalTokens: 1200, costUsd: 0.018 } } });
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: invalidResponse,
+          usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, costUsd: 0.02 },
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify(validReport),
+          usage: { inputTokens: 800, outputTokens: 400, totalTokens: 1200, costUsd: 0.018 },
+        },
+      });
     const validator = new OrchestratorAgentComplianceValidator(logger, defaultConfig);
     const onProgress = vi.fn();
     const result = await validator.validate(defaultInput, onProgress);
@@ -267,22 +349,54 @@ describe('OrchestratorAgentComplianceValidator', () => {
 
   it('returns null when both initial and repair calls fail Zod validation', async () => {
     generateMock
-      .mockResolvedValueOnce({ ok: true, value: { content: JSON.stringify({ invalid: true }), usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, costUsd: 0.02 } } })
-      .mockResolvedValueOnce({ ok: true, value: { content: JSON.stringify({ stillInvalid: true }), usage: { inputTokens: 800, outputTokens: 400, totalTokens: 1200, costUsd: 0.018 } } });
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({ invalid: true }),
+          usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, costUsd: 0.02 },
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({ stillInvalid: true }),
+          usage: { inputTokens: 800, outputTokens: 400, totalTokens: 1200, costUsd: 0.018 },
+        },
+      });
     const validator = new OrchestratorAgentComplianceValidator(logger, defaultConfig);
     const result = await validator.validate(defaultInput);
     expect(result).toBeNull();
-    expect(loggerWarn).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'task_abc' }), expect.stringContaining('repair also failed'));
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task_abc' }),
+      expect.stringContaining('repair also failed')
+    );
   });
 
   it('transcript too long: returns transcriptTooLong true and posts comment', async () => {
     const longInput = { ...defaultInput, formattedTranscript: 'A'.repeat(720_001) };
-    execFileMock.mockImplementation((_cmd: string, args: string[], _opts: unknown, cb: (err: Error | null, result: { stdout: string }) => void) => {
-      const bodyFileIndex = args.indexOf('--body-file');
-      if (bodyFileIndex === -1) { cb(null, { stdout: '' }); return; }
-      const bodyFilePath = args[bodyFileIndex + 1];
-      void readFile(String(bodyFilePath), 'utf8').then((body) => { postedCommentBodies.push(body); cb(null, { stdout: '' }); }).catch((error: unknown) => { cb(error as Error, { stdout: '' }); });
-    });
+    execFileMock.mockImplementation(
+      (
+        _cmd: string,
+        args: string[],
+        _opts: unknown,
+        cb: (err: Error | null, result: { stdout: string }) => void
+      ) => {
+        const bodyFileIndex = args.indexOf('--body-file');
+        if (bodyFileIndex === -1) {
+          cb(null, { stdout: '' });
+          return;
+        }
+        const bodyFilePath = args[bodyFileIndex + 1];
+        void readFile(String(bodyFilePath), 'utf8')
+          .then((body) => {
+            postedCommentBodies.push(body);
+            cb(null, { stdout: '' });
+          })
+          .catch((error: unknown) => {
+            cb(error as Error, { stdout: '' });
+          });
+      }
+    );
     const validator = new OrchestratorAgentComplianceValidator(logger, defaultConfig);
     const onProgress = vi.fn();
     const result = await validator.validate(longInput, onProgress);
@@ -296,29 +410,54 @@ describe('OrchestratorAgentComplianceValidator', () => {
   });
 
   it('returns null when LLM call fails', async () => {
-    generateMock.mockResolvedValue({ ok: false, error: { code: 'API_ERROR', message: 'service unavailable' } });
+    generateMock.mockResolvedValue({
+      ok: false,
+      error: { code: 'API_ERROR', message: 'service unavailable' },
+    });
     const validator = new OrchestratorAgentComplianceValidator(logger, defaultConfig);
     const onProgress = vi.fn();
     const result = await validator.validate(defaultInput, onProgress);
     expect(result).toBeNull();
-    expect(loggerError).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'task_abc' }), 'Compliance validation LLM call failed');
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task_abc' }),
+      'Compliance validation LLM call failed'
+    );
     const progressCalls = onProgress.mock.calls.map((call) => String(call[0]));
     expect(progressCalls[1]).toContain('LLM call failed');
   });
 
   it('returns result even when PR comment posting fails', async () => {
-    generateMock.mockResolvedValue({ ok: true, value: { content: JSON.stringify(validReport), usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, costUsd: 0.042 } } });
-    execFileMock.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null) => void) => { cb(new Error('gh CLI not found')); });
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: {
+        content: JSON.stringify(validReport),
+        usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, costUsd: 0.042 },
+      },
+    });
+    execFileMock.mockImplementation(
+      (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null) => void) => {
+        cb(new Error('gh CLI not found'));
+      }
+    );
     const validator = new OrchestratorAgentComplianceValidator(logger, defaultConfig);
     const onProgress = vi.fn();
     const result = await validator.validate(defaultInput, onProgress);
     expect(result).not.toBeNull();
     expect(result?.report).toEqual(validReport);
-    expect(loggerError).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'task_abc' }), 'Failed to post compliance validation PR comment');
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task_abc' }),
+      'Failed to post compliance validation PR comment'
+    );
   });
 
   it('works without onProgress callback', async () => {
-    generateMock.mockResolvedValue({ ok: true, value: { content: JSON.stringify(validReport), usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, costUsd: 0.042 } } });
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: {
+        content: JSON.stringify(validReport),
+        usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, costUsd: 0.042 },
+      },
+    });
     const validator = new OrchestratorAgentComplianceValidator(logger, defaultConfig);
     const result = await validator.validate(defaultInput);
     expect(result).not.toBeNull();
@@ -327,11 +466,78 @@ describe('OrchestratorAgentComplianceValidator', () => {
 
   it('returns null when repair LLM call itself fails', async () => {
     generateMock
-      .mockResolvedValueOnce({ ok: true, value: { content: JSON.stringify({ invalid: true }), usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, costUsd: 0.02 } } })
-      .mockResolvedValueOnce({ ok: false, error: { code: 'TIMEOUT', message: 'request timed out' } });
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({ invalid: true }),
+          usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, costUsd: 0.02 },
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        error: { code: 'TIMEOUT', message: 'request timed out' },
+      });
     const validator = new OrchestratorAgentComplianceValidator(logger, defaultConfig);
     const result = await validator.validate(defaultInput);
     expect(result).toBeNull();
-    expect(loggerWarn).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'task_abc' }), expect.stringContaining('repair LLM call failed'));
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task_abc' }),
+      expect.stringContaining('repair LLM call failed')
+    );
+  });
+
+  it('repair flow: still returns report when PR comment posting fails', async () => {
+    const invalidResponse = JSON.stringify({ invalid: true });
+    generateMock
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: invalidResponse,
+          usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, costUsd: 0.02 },
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify(validReport),
+          usage: { inputTokens: 800, outputTokens: 400, totalTokens: 1200, costUsd: 0.018 },
+        },
+      });
+    execFileMock.mockImplementation(
+      (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null) => void) => {
+        cb(new Error('gh failed'));
+      }
+    );
+    const validator = new OrchestratorAgentComplianceValidator(logger, defaultConfig);
+    const onProgress = vi.fn();
+    const result = await validator.validate(defaultInput, onProgress);
+    expect(result).not.toBeNull();
+    expect(result?.report).toEqual(validReport);
+    const progressCalls = onProgress.mock.calls.map((call) => String(call[0]));
+    expect(progressCalls).toContain('PR comment failed (see server logs)');
+  });
+
+  it('logs stderr from gh command errors', async () => {
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: {
+        content: JSON.stringify(validReport),
+        usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, costUsd: 0.042 },
+      },
+    });
+    const ghError = new Error('Command failed') as Error & { stderr: string };
+    ghError.stderr = 'gh: not logged in';
+    execFileMock.mockImplementation(
+      (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null) => void) => {
+        cb(ghError);
+      }
+    );
+    const validator = new OrchestratorAgentComplianceValidator(logger, defaultConfig);
+    const result = await validator.validate(defaultInput);
+    expect(result).not.toBeNull();
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task_abc', stderr: 'gh: not logged in' }),
+      'Failed to post compliance validation PR comment'
+    );
   });
 });
