@@ -22,6 +22,7 @@ import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { LinearIssueService } from '../services/linearIssueService.js';
 import type { TaskDispatcherService } from '../services/taskDispatcher.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
+import type { TaskGroupSummaryRepository } from '../ports/taskGroupSummaryRepository.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { extractIntIssueId } from '../utils/linearIdentifierParser.js';
 import { resolveWorkerCredentials } from '../services/gitHubDispatchService.js';
@@ -36,6 +37,7 @@ export interface HandlePrCloseDeps {
   userServiceClient: UserServiceClient;
   taskDispatcher: TaskDispatcherService;
   workerSettingsRepo: WorkerSettingsRepository;
+  groupSummaryRepo: TaskGroupSummaryRepository;
   logger: Logger;
 }
 
@@ -50,7 +52,7 @@ export interface HandlePrCloseInput {
 }
 
 export async function handlePrClose(deps: HandlePrCloseDeps, input: HandlePrCloseInput): Promise<void> {
-  const { codeTaskRepo, linearIssueService, userServiceClient, taskDispatcher, workerSettingsRepo, logger } = deps;
+  const { codeTaskRepo, linearIssueService, userServiceClient, taskDispatcher, workerSettingsRepo, groupSummaryRepo, logger } = deps;
   const { repository, prNumber, prBody, prTitle, prAuthorLogin, senderLogin, isMerged } = input;
 
   // Map of linearIssueId → userId (deduplicates)
@@ -154,6 +156,15 @@ export async function handlePrClose(deps: HandlePrCloseDeps, input: HandlePrClos
         return Promise.all(promises);
       })
     );
+
+    // Best-effort: recompute group summary now that ready-to-merge label is removed.
+    // Passing [] ensures hasMergeReadyLabel becomes false in the cached summary.
+    for (const [linearIssueId, userId] of issueMap) {
+      void groupSummaryRepo.recomputeWithLabels(userId, linearIssueId, []).catch((recomputeErr: unknown) => {
+        logger.warn({ linearIssueId, error: recomputeErr },
+          'handlePrClose: failed to recompute group summary (best-effort)');
+      });
+    }
   }
 
   // Best-effort: destroy preserved pull_request container (only on merge)
