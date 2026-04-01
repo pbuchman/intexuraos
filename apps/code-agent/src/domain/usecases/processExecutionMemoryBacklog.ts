@@ -103,7 +103,7 @@ export async function processExecutionMemoryBacklog(
     const attempts = (task.executionMemoryPostRun?.attempts ?? 0) + 1;
     const lastAttemptAt = Timestamp.now();
 
-    await deps.codeTaskRepo.update(task.id, {
+    const claimResult = await deps.codeTaskRepo.update(task.id, {
       executionMemoryPostRun: {
         status: 'processing',
         attempts,
@@ -111,6 +111,15 @@ export async function processExecutionMemoryBacklog(
         generatedMemoryIds: task.executionMemoryPostRun?.generatedMemoryIds ?? [],
       },
     });
+
+    if (!claimResult.ok) {
+      deps.logger.warn(
+        { taskId: task.id, error: claimResult.error.message },
+        'Failed to claim execution memory backlog task, skipping'
+      );
+      summary.errored += 1;
+      continue;
+    }
 
     try {
       const processed = await processOneTask(task, deps);
@@ -375,10 +384,24 @@ async function evaluateApplication(
     completedAt: new Date(),
   });
 
+  const knownMemoryIds = new Set(application.matchedMemories.map((m: { memoryId: string }) => m.memoryId));
+
   for (const outcome of parsed.perMemory) {
+    if (!knownMemoryIds.has(outcome.memoryId)) {
+      deps.logger.warn(
+        { taskId: task.id, memoryId: outcome.memoryId },
+        'Evaluator returned outcome for unknown memory ID, skipping'
+      );
+      continue;
+    }
+
     const memoryResult = await deps.executionMemoryRepo.findById(outcome.memoryId);
     if (!memoryResult.ok) {
-      throw new Error(memoryResult.error.message);
+      deps.logger.warn(
+        { taskId: task.id, memoryId: outcome.memoryId, error: memoryResult.error.message },
+        'Failed to load memory for evaluation outcome, skipping'
+      );
+      continue;
     }
 
     const memory = memoryResult.value;
