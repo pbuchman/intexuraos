@@ -38,8 +38,8 @@ const DEFAULT_MAX_ITERATIONS = 5;
  */
 export const TOOL_CALLING_PRICING: Record<ToolCallingModel, ModelPricing> = {
   [LlmModels.Gemini25Flash]: {
-    inputPricePerMillion: 0.5,
-    outputPricePerMillion: 2.0,
+    inputPricePerMillion: 0.3,
+    outputPricePerMillion: 2.5,
     groundingCostPerRequest: 0,
   },
 };
@@ -168,7 +168,8 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
             // Aggregate usage
             const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
             const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
-            const iterationUsage = normalizeUsage(inputTokens, outputTokens, false, pricing);
+            const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
+            const iterationUsage = normalizeUsage(inputTokens, outputTokens, false, pricing, thinkingTokens);
             aggregatedUsage = addUsage(aggregatedUsage, iterationUsage);
 
             // Extract parts from response
@@ -359,11 +360,13 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
 }
 
 function addUsage(a: NormalizedUsage, b: NormalizedUsage): NormalizedUsage {
+  const thinkingTokens = (a.thinkingTokens ?? 0) + (b.thinkingTokens ?? 0);
   return {
     inputTokens: a.inputTokens + b.inputTokens,
     outputTokens: a.outputTokens + b.outputTokens,
     totalTokens: a.totalTokens + b.totalTokens,
     costUsd: a.costUsd + b.costUsd,
+    ...(thinkingTokens > 0 && { thinkingTokens }),
   };
 }
 
