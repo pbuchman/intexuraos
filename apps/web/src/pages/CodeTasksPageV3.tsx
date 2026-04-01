@@ -435,13 +435,13 @@ export function CodeTasksPageV3(): React.JSX.Element {
         <div>
           <ColumnHeader />
 
-          {refreshing ? (
-            <div className="mb-2 h-0.5 w-full overflow-hidden rounded-full bg-slate-700">
+          <div className={`mb-2 h-0.5 w-full overflow-hidden rounded-full ${refreshing ? 'bg-slate-700' : ''}`}>
+            {refreshing ? (
               <div className="animate-progress-slide h-full w-2/5 rounded-full bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
-            </div>
-          ) : null}
+            ) : null}
+          </div>
 
-          <div className={`space-y-1 ${refreshing ? 'opacity-50 pointer-events-none' : ''}`}>
+          <div className={`space-y-1 ${refreshing && actioningType === null ? 'opacity-50 pointer-events-none' : ''}`}>
             {groups.map((group) => (
               <IssueGroupRow
                 key={group.linearIssueId ?? group.latestTask.id}
