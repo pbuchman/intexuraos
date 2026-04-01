@@ -131,7 +131,13 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
         const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
         const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
-        const usage = normalizeUsage(inputTokens, outputTokens, groundingEnabled, pricing, thinkingTokens);
+        const usage = normalizeUsage(
+          inputTokens,
+          outputTokens,
+          groundingEnabled,
+          pricing,
+          thinkingTokens
+        );
 
         await auditContext.success({
           response: text,
