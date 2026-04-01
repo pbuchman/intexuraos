@@ -327,6 +327,7 @@ export function CodeTasksPageV3(): React.JSX.Element {
       void (async (): Promise<void> => {
         if (actionInFlightRef.current) return;
         actionInFlightRef.current = true;
+        const actionStart = Date.now();
         const firstId = taskIds[0];
         if (firstId !== undefined) {
           setActioningTaskId(firstId);
@@ -336,6 +337,12 @@ export function CodeTasksPageV3(): React.JSX.Element {
           const token = await getAccessToken();
           for (const taskId of taskIds) {
             await apiFn(token, taskId);
+          }
+          // Ensure the row shimmer animation is visible before refresh removes the row
+          const MIN_ANIMATION_MS = 1200;
+          const elapsed = Date.now() - actionStart;
+          if (elapsed < MIN_ANIMATION_MS) {
+            await new Promise<void>((resolve) => { setTimeout(resolve, MIN_ANIMATION_MS - elapsed); });
           }
           await refresh(false);
         } catch (err: unknown) {
