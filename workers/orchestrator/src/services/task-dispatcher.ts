@@ -2331,38 +2331,45 @@ export class TaskDispatcher {
           '/internal/webhooks/task-complete',
           '/internal/webhooks/compliance-report'
         );
-        void this.webhookClient
-          .send({
-            url: complianceReportUrl,
-            secret: task.webhookSecret,
-            payload: {
-              taskId: input.taskId,
-              prNumber: input.prNumber,
-              report: result.report,
-              model: result.model,
-              promptVersion: result.promptVersion,
-              costUsd: result.costUsd,
-              workerType: input.workerType,
-              transcriptTooLong: result.transcriptTooLong,
-            },
-            taskId,
-          })
-          .then((webhookResult) => {
-            if (webhookResult.ok) {
-              this.logger.info({ taskId }, 'Compliance report webhook delivered');
-            } else {
+        if (!task.webhookUrl.includes('/internal/webhooks/task-complete')) {
+          this.logger.warn(
+            { taskId, webhookUrl: task.webhookUrl },
+            'Compliance report webhook URL does not contain expected path — skipping delivery'
+          );
+        } else {
+          void this.webhookClient
+            .send({
+              url: complianceReportUrl,
+              secret: task.webhookSecret,
+              payload: {
+                taskId: input.taskId,
+                prNumber: input.prNumber,
+                report: result.report,
+                model: result.model,
+                promptVersion: result.promptVersion,
+                costUsd: result.costUsd,
+                workerType: input.workerType,
+                transcriptTooLong: result.transcriptTooLong,
+              },
+              taskId,
+            })
+            .then((webhookResult) => {
+              if (webhookResult.ok) {
+                this.logger.info({ taskId }, 'Compliance report webhook delivered');
+              } else {
+                this.logger.warn(
+                  { taskId, error: webhookResult.error.message },
+                  'Compliance report webhook delivery failed'
+                );
+              }
+            })
+            .catch((error: unknown) => {
               this.logger.warn(
-                { taskId, error: webhookResult.error.message },
-                'Compliance report webhook delivery failed'
+                { taskId, error: getErrorMessage(error) },
+                'Compliance report webhook send error'
               );
-            }
-          })
-          .catch((error: unknown) => {
-            this.logger.warn(
-              { taskId, error: getErrorMessage(error) },
-              'Compliance report webhook send error'
-            );
-          });
+            });
+        }
       } else {
         this.appendOrchestratorTaskLog(taskId, 'Compliance validation completed without result');
         this.logger.warn({ taskId }, 'Compliance validation completed without result');

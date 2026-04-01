@@ -131,8 +131,8 @@ describe('buildCompliancePrompt', () => {
       workerType: 'auto',
     });
 
-    expect(result).not.toBe('TRANSCRIPT_TOO_LONG');
-    const prompt = result as string;
+    expect(result.ok).toBe(true);
+    const prompt = (result as { ok: true; prompt: string }).prompt;
     expect(prompt).toContain('[agent-compliance-prompt v' + AGENT_COMPLIANCE_PROMPT_VERSION + ']');
     expect(prompt).toContain('"outcome": "implemented"');
     expect(prompt).toContain('"superpowers_subagent_driven_dev": "used"');
@@ -153,7 +153,10 @@ describe('buildCompliancePrompt', () => {
       agentClaims: defaultClaims,
       workerType: 'auto',
     });
-    expect(result).toBe('TRANSCRIPT_TOO_LONG');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe('TRANSCRIPT_TOO_LONG');
+    }
   });
 
   it('does not return TRANSCRIPT_TOO_LONG for exactly max-length transcript', () => {
@@ -163,7 +166,7 @@ describe('buildCompliancePrompt', () => {
       agentClaims: defaultClaims,
       workerType: 'auto',
     });
-    expect(result).not.toBe('TRANSCRIPT_TOO_LONG');
+    expect(result.ok).toBe(true);
   });
 });
 
