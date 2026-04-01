@@ -100,8 +100,8 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
 
   // Merge-ready fallback for review tasks: if the review step completed with
   // needs_remediation === '0' AND the ready-to-merge label is still present.
-  // The label check is essential: handlePrMerge removes ready-to-merge when
-  // a PR is merged, preventing a stale merge button on already-merged PRs.
+  // The label check is essential: handlePrClose removes ready-to-merge when
+  // a PR is closed (merged or not), preventing a stale merge button.
   const reviewEntry = stepMap.get('review');
   if (
     reviewEntry?.step.state === 'completed' &&
