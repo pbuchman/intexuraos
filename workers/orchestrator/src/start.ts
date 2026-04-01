@@ -745,6 +745,17 @@ async function bootstrap(): Promise<void> {
     logger
   );
 
+  const openRouterApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '';
+  const complianceValidatorModel = process.env['INTEXURAOS_COMPLIANCE_MODEL'] ?? 'xiaomi/mimo-v2-pro';
+
+  logger.info(
+    {
+      complianceValidatorModel,
+      hasOpenRouterApiKey: openRouterApiKey.length > 0,
+    },
+    'Agent compliance validator configuration'
+  );
+
   const executionDeepValidator = new OrchestratorExecutionDeepValidator(logger, {
     model: LlmModels.Gemini25Flash,
     geminiApiKey: geminiVerifierKey,

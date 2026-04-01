@@ -513,6 +513,7 @@ module "secret_manager" {
     "INTEXURAOS_MINIMAX_APP_API_KEY"   = "MiniMax API key for orchestrator worker containers"
     "INTEXURAOS_GEMINI_APP_API_KEY"    = "Gemini API key for orchestrator completion verifier"
     "INTEXURAOS_DASHSCOPE_APP_API_KEY" = "Dashscope API key for orchestrator glm and qwen worker containers"
+    "INTEXURAOS_OPENROUTER_APP_API_KEY" = "OpenRouter API key for agent compliance validator"
     # External service API keys for worker containers
     "INTEXURAOS_LINEAR_API_KEY"    = "Linear API key passed to code worker containers"
     "INTEXURAOS_SENTRY_AUTH_TOKEN" = "Sentry auth token passed to code worker containers"
@@ -580,6 +581,7 @@ locals {
     INTEXURAOS_MINIMAX_APP_API_KEY   = module.secret_manager.secret_ids["INTEXURAOS_MINIMAX_APP_API_KEY"]
     INTEXURAOS_GEMINI_APP_API_KEY    = module.secret_manager.secret_ids["INTEXURAOS_GEMINI_APP_API_KEY"]
     INTEXURAOS_DASHSCOPE_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_DASHSCOPE_APP_API_KEY"]
+    INTEXURAOS_OPENROUTER_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_OPENROUTER_APP_API_KEY"]
     INTEXURAOS_DASH0_OTLP_ENDPOINT   = module.secret_manager.secret_ids["INTEXURAOS_DASH0_OTLP_ENDPOINT"]
     INTEXURAOS_DASH0_AUTH_TOKEN      = module.secret_manager.secret_ids["INTEXURAOS_DASH0_AUTH_TOKEN"]
   }
