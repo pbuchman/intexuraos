@@ -993,6 +993,7 @@ describe('drainTaskQueue', () => {
       mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockResolvedValue(
         ok({ hasActive: true, taskId: 'running-task-999' })
       );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
 
       const result = await drainTaskQueue(createDeps());
 
@@ -1085,6 +1086,7 @@ describe('drainTaskQueue', () => {
       mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockResolvedValue(
         ok({ hasActive: true, taskId: 'some-running-task' })
       );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task1));
 
       const result = await drainTaskQueue(createDeps());
 
