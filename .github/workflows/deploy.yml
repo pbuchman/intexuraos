@@ -159,6 +159,7 @@ jobs:
           bash cloudbuild/scripts/build-push-monitored.sh web-agent apps/web-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh code-agent apps/code-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh chat-agent apps/chat-agent/Dockerfile &
+          bash cloudbuild/scripts/build-push-monitored.sh cron-agent apps/cron-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh hellscript-agent apps/hellscript-agent/Dockerfile &
           wait
 

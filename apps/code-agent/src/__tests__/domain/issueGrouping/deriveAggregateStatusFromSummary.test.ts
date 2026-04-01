@@ -40,7 +40,31 @@ describe('deriveAggregateStatusFromSummary', () => {
     ).toBe('needs-action');
   });
 
-  it('returns needs-action when execution completed with PR and review says no remediation needed', () => {
+  it('returns needs-action when execution completed with PR, review says no remediation, and merge-ready label present', () => {
+    expect(
+      deriveAggregateStatusFromSummary({
+        ...base,
+        hasCompletedExecution: true,
+        hasPrUrl: true,
+        latestReviewNeedsRemediation: false,
+        hasMergeReadyLabel: true,
+      }),
+    ).toBe('needs-action');
+  });
+
+  it('does not return needs-action for merge case when hasMergeReadyLabel is false', () => {
+    expect(
+      deriveAggregateStatusFromSummary({
+        ...base,
+        hasCompletedExecution: true,
+        hasPrUrl: true,
+        latestReviewNeedsRemediation: false,
+        hasMergeReadyLabel: false,
+      }),
+    ).not.toBe('needs-action');
+  });
+
+  it('does not return needs-action for merge case when hasMergeReadyLabel is undefined (conservative default)', () => {
     expect(
       deriveAggregateStatusFromSummary({
         ...base,
@@ -48,7 +72,7 @@ describe('deriveAggregateStatusFromSummary', () => {
         hasPrUrl: true,
         latestReviewNeedsRemediation: false,
       }),
-    ).toBe('needs-action');
+    ).not.toBe('needs-action');
   });
 
   it('does not return needs-action when hasImplementationTaskId is true (execution in progress)', () => {
@@ -67,6 +91,7 @@ describe('deriveAggregateStatusFromSummary', () => {
       hasCompletedExecution: true,
       hasPrUrl: true,
       latestReviewNeedsRemediation: null,
+      hasMergeReadyLabel: true,
     });
     expect(result).not.toBe('needs-action');
   });
@@ -77,6 +102,7 @@ describe('deriveAggregateStatusFromSummary', () => {
       hasCompletedExecution: true,
       hasPrUrl: true,
       latestReviewNeedsRemediation: true,
+      hasMergeReadyLabel: true,
     });
     expect(result).not.toBe('needs-action');
   });
@@ -106,7 +132,7 @@ describe('deriveAggregateStatusFromSummary', () => {
     ).toBe('active');
   });
 
-  it('returns needs-action via rule 3 when both planning and execution completed', () => {
+  it('returns needs-action via rule 3 when both planning and execution completed and merge-ready label present', () => {
     expect(
       deriveAggregateStatusFromSummary({
         ...base,
@@ -114,6 +140,42 @@ describe('deriveAggregateStatusFromSummary', () => {
         hasCompletedExecution: true,
         hasPrUrl: true,
         latestReviewNeedsRemediation: false,
+        hasMergeReadyLabel: true,
+      }),
+    ).toBe('needs-action');
+  });
+
+  it('returns needs-action for planning case when hasImplementationReadyLabel is undefined (pessimistic default)', () => {
+    expect(
+      deriveAggregateStatusFromSummary({
+        ...base,
+        hasCompletedPlanning: true,
+        hasCompletedExecution: false,
+        hasImplementationTaskId: false,
+      }),
+    ).toBe('needs-action');
+  });
+
+  it('does not return needs-action for planning case when hasImplementationReadyLabel is false', () => {
+    expect(
+      deriveAggregateStatusFromSummary({
+        ...base,
+        hasCompletedPlanning: true,
+        hasCompletedExecution: false,
+        hasImplementationTaskId: false,
+        hasImplementationReadyLabel: false,
+      }),
+    ).not.toBe('needs-action');
+  });
+
+  it('returns needs-action for planning case when hasImplementationReadyLabel is true', () => {
+    expect(
+      deriveAggregateStatusFromSummary({
+        ...base,
+        hasCompletedPlanning: true,
+        hasCompletedExecution: false,
+        hasImplementationTaskId: false,
+        hasImplementationReadyLabel: true,
       }),
     ).toBe('needs-action');
   });

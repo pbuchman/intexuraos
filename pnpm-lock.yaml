@@ -893,6 +893,9 @@ importers:
       '@intexuraos/infra-firestore':
         specifier: workspace:*
         version: link:../../packages/infra-firestore
+      '@intexuraos/infra-gemini':
+        specifier: workspace:*
+        version: link:../../packages/infra-gemini
       '@intexuraos/infra-otel':
         specifier: workspace:*
         version: link:../../packages/infra-otel

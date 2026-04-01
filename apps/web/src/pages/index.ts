@@ -9,6 +9,7 @@ export { GoogleCalendarConnectionPage } from './GoogleCalendarConnectionPage.js'
 export { GitHubConnectionPage } from './GitHubConnectionPage.js';
 export { LinearConnectionPage } from './LinearConnectionPage.js';
 export { LinearIssuesPage } from './LinearIssuesPage.js';
+export { LinearPruneCandidatesPage } from './LinearPruneCandidatesPage.js';
 export { WhatsAppConnectionPage } from './WhatsAppConnectionPage.js';
 export { WhatsAppNotesPage } from './WhatsAppNotesPage.js';
 export { MobileNotificationsConnectionPage } from './MobileNotificationsConnectionPage.js';
