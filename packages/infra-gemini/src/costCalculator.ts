@@ -34,7 +34,12 @@ export function normalizeUsage(
   pricing: ModelPricing,
   thinkingTokens?: number
 ): NormalizedUsage {
-  const usage: TokenUsage = { inputTokens, outputTokens, groundingEnabled, thinkingTokens };
+  const usage: TokenUsage = {
+    inputTokens,
+    outputTokens,
+    groundingEnabled,
+    ...(thinkingTokens !== undefined && { thinkingTokens }),
+  };
   return {
     inputTokens,
     outputTokens,

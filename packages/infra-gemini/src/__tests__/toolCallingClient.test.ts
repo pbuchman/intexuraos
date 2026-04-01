@@ -548,7 +548,7 @@ describe('createGeminiToolCallingClient', () => {
           name: 'get_weather',
           description: 'Get weather',
           parameters: { type: 'object', properties: { city: { type: 'string' } } },
-          run: async () => JSON.stringify({ temp: 20, condition: 'sunny' }),
+          run: async (): Promise<string> => JSON.stringify({ temp: 20, condition: 'sunny' }),
         },
       ],
     });
