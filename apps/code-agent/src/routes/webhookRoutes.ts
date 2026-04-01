@@ -833,7 +833,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         try {
           const services = getServices();
           await drainTaskQueue({
-            logger: services.logger,
+            logger,
             codeTaskRepo: services.codeTaskRepo,
             taskDispatcher: services.taskDispatcher,
             linearAgentClient: services.linearAgentClient,
