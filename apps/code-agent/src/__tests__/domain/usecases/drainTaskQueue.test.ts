@@ -1024,6 +1024,33 @@ describe('drainTaskQueue', () => {
       });
     });
 
+    it('logs warning and continues when queuedAt reset fails for PR-locked task', async () => {
+      const task = createMockTask({ prNumber: 42, repository: 'pbuchman/intexuraos' });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockResolvedValue(
+        ok({ hasActive: true, taskId: 'running-task-999' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR', message: 'Write failed' })
+      );
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual(expect.objectContaining({ action: 'still_busy' }));
+      }
+
+      // Verify warning was logged about the failed reset
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-123',
+          error: { code: 'FIRESTORE_ERROR', message: 'Write failed' },
+        }),
+        'Failed to reset queuedAt for PR-locked task — TTL clock continues from original queuedAt',
+      );
+    });
+
     it('does not expire a PR-locked task even when TTL exceeded — resets queuedAt instead', async () => {
       const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
       const task = createMockTask({
