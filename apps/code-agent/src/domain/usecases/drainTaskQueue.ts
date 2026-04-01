@@ -186,7 +186,13 @@ export async function drainTaskQueue(
           }, 'Skipping queued task — dispatched/running task exists for same PR');
 
           // Reset TTL so PR-lock-blocked time does not count toward expiry
-          await codeTaskRepo.update(candidate.id, { queuedAt: new Date() });
+          const resetResult = await codeTaskRepo.update(candidate.id, { queuedAt: new Date() });
+          if (!resetResult.ok) {
+            logger.warn(
+              { taskId: candidate.id, error: resetResult.error },
+              'Failed to reset queuedAt for PR-locked task — TTL clock continues from original queuedAt',
+            );
+          }
 
           continue;
         }
