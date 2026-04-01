@@ -352,6 +352,22 @@ describe('POST /internal/webhooks/compliance-report', () => {
     expect(response.statusCode).toBe(401);
   });
 
+  it('returns 401 when task has no webhookSecret (nullish coalescing fallback)', async () => {
+    mockCodeTaskRepo.findById.mockResolvedValue(ok({
+      id: TASK_ID,
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-123',
+      status: 'completed',
+      // webhookSecret intentionally omitted — exercises ?? null path
+    }));
+
+    const body = buildValidPayload();
+    const response = await sendComplianceReport(body);
+
+    expect(response.statusCode).toBe(401);
+  });
+
   it('returns 500 when Firestore write fails', async () => {
     // Make the task lookup succeed for signature validation, but make Firestore write fail
     const brokenFirestore = {
