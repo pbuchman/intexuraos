@@ -1274,8 +1274,8 @@ export class TaskDispatcher {
       base.planning_unclear_clarification = agentData.unclear_clarification;
     } else if (agentData.agentType === 'execution') {
       base.execution_outcome_label = agentData.outcome;
-      base.execution_superpowers_executing_plans_used =
-        agentData.superpowers_executing_plans === 'used' ? '1' : '0';
+      base.execution_superpowers_subagent_driven_dev_used =
+        agentData.superpowers_subagent_driven_dev === 'used' ? '1' : '0';
       base.execution_superpowers_requesting_code_review_used =
         agentData.superpowers_requesting_code_review === 'used' ? '1' : '0';
       if (agentData.gh_pr_url !== '') {
@@ -2312,7 +2312,7 @@ export class TaskDispatcher {
         formattedTranscript,
         agentClaims: {
           outcome: agentData.outcome,
-          superpowers_executing_plans: agentData.superpowers_executing_plans,
+          superpowers_subagent_driven_dev: agentData.superpowers_subagent_driven_dev,
           superpowers_requesting_code_review: agentData.superpowers_requesting_code_review,
           gh_pr_url: agentData.gh_pr_url,
           summary: agentData.summary,

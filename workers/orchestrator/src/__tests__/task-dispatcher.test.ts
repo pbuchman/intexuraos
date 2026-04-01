@@ -1661,7 +1661,7 @@ describe('TaskDispatcher', () => {
         agentData: {
           agentType: 'execution',
           outcome: 'implemented',
-          superpowers_executing_plans: 'used',
+          superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'used',
           gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/900',
           summary: 'Execution completed successfully',
@@ -1702,7 +1702,7 @@ describe('TaskDispatcher', () => {
             status: 'completed',
             result: expect.objectContaining({
               execution_outcome_label: 'implemented',
-              execution_superpowers_executing_plans_used: '1',
+              execution_superpowers_subagent_driven_dev_used: '1',
               execution_superpowers_requesting_code_review_used: '1',
               execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
             }),
@@ -1720,7 +1720,7 @@ describe('TaskDispatcher', () => {
         agentData: {
           agentType: 'execution',
           outcome: 'already_completed',
-          superpowers_executing_plans: 'used',
+          superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'not used',
           gh_pr_url: '',
           summary: 'Work was already merged into development branch',
@@ -2430,7 +2430,7 @@ describe('TaskDispatcher', () => {
           trace: dummyTrace,
           agentData: {
             agentType: 'execution',
-            superpowers_executing_plans: 'used',
+            superpowers_subagent_driven_dev: 'used',
             superpowers_requesting_code_review: 'used',
             gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
             summary: 'Completed successfully',
@@ -4183,7 +4183,7 @@ describe('TaskDispatcher', () => {
       agentData: {
         agentType: 'execution' as const,
         outcome: 'implemented' as const,
-        superpowers_executing_plans: 'used',
+        superpowers_subagent_driven_dev: 'used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/123',
         summary: 'Done.',
@@ -4247,7 +4247,7 @@ describe('TaskDispatcher', () => {
       expect(input?.taskId).toBe('deep-val-test');
       expect(input?.prNumber).toBe(123);
       expect(input?.repository).toBe('pbuchman/intexuraos');
-      expect(input?.agentClaims.superpowers_executing_plans).toBe('used');
+      expect(input?.agentClaims.superpowers_subagent_driven_dev).toBe('used');
       expect(input?.workerType).toBe('auto');
       expect(mockReadSessionTranscript).toHaveBeenCalled();
       expect(mockReadPlanFile).not.toHaveBeenCalled();
@@ -4352,7 +4352,7 @@ describe('TaskDispatcher', () => {
         repository: 'pbuchman/intexuraos',
         formattedTranscript: '[MSG-001] test',
         agentClaims: {
-          superpowers_executing_plans: 'used',
+          superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'used',
           gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/123',
           summary: 'Done.',
@@ -4409,7 +4409,7 @@ describe('TaskDispatcher', () => {
         repository: 'pbuchman/intexuraos',
         formattedTranscript: '[MSG-001] test',
         agentClaims: {
-          superpowers_executing_plans: 'used',
+          superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'used',
           gh_pr_url: '',
           summary: 'Done.',
@@ -4643,7 +4643,7 @@ describe('TaskDispatcher', () => {
         repository: 'pbuchman/intexuraos',
         formattedTranscript: '[MSG-001] test',
         agentClaims: {
-          superpowers_executing_plans: 'used',
+          superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'used',
           gh_pr_url: '',
           summary: 'Done.',
@@ -6220,7 +6220,7 @@ describe('TaskDispatcher', () => {
           trace: dummyTrace,
           agentData: {
             agentType: 'execution',
-            superpowers_executing_plans: 'used',
+            superpowers_subagent_driven_dev: 'used',
             superpowers_requesting_code_review: 'used',
             gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/900',
             summary: 'Done',
