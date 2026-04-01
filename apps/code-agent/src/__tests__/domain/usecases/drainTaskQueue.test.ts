@@ -993,6 +993,7 @@ describe('drainTaskQueue', () => {
       mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockResolvedValue(
         ok({ hasActive: true, taskId: 'running-task-999' })
       );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
 
       const result = await drainTaskQueue(createDeps());
 
@@ -1000,6 +1001,84 @@ describe('drainTaskQueue', () => {
       if (result.ok) {
         expect(result.value).toEqual(expect.objectContaining({ action: 'still_busy' }));
       }
+    });
+
+    it('resets queuedAt when task is skipped due to PR-lock', async () => {
+      const task = createMockTask({ prNumber: 42, repository: 'pbuchman/intexuraos' });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockResolvedValue(
+        ok({ hasActive: true, taskId: 'running-task-999' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual(expect.objectContaining({ action: 'still_busy' }));
+      }
+
+      // Verify queuedAt was reset
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', {
+        queuedAt: expect.any(Date),
+      });
+    });
+
+    it('logs warning and continues when queuedAt reset fails for PR-locked task', async () => {
+      const task = createMockTask({ prNumber: 42, repository: 'pbuchman/intexuraos' });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockResolvedValue(
+        ok({ hasActive: true, taskId: 'running-task-999' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR', message: 'Write failed' })
+      );
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual(expect.objectContaining({ action: 'still_busy' }));
+      }
+
+      // Verify warning was logged about the failed reset
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-123',
+          error: { code: 'FIRESTORE_ERROR', message: 'Write failed' },
+        }),
+        'Failed to reset queuedAt for PR-locked task — TTL clock continues from original queuedAt',
+      );
+    });
+
+    it('does not expire a PR-locked task even when TTL exceeded — resets queuedAt instead', async () => {
+      const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+      const task = createMockTask({
+        prNumber: 42,
+        repository: 'pbuchman/intexuraos',
+        queuedAt: Timestamp.fromDate(beyondTtl),
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockResolvedValue(
+        ok({ hasActive: true, taskId: 'running-task-999' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Task stays in queue (still_busy), NOT expired
+        expect(result.value).toEqual(expect.objectContaining({ action: 'still_busy' }));
+      }
+
+      // Verify queuedAt was reset (NOT marked as failed)
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', {
+        queuedAt: expect.any(Date),
+      });
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith('task-123', expect.objectContaining({
+        status: 'failed',
+      }));
     });
 
     it('dispatches next PR task when first PR is blocked', async () => {
@@ -1034,6 +1113,7 @@ describe('drainTaskQueue', () => {
       mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockResolvedValue(
         ok({ hasActive: true, taskId: 'some-running-task' })
       );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task1));
 
       const result = await drainTaskQueue(createDeps());
 
@@ -1147,9 +1227,10 @@ describe('drainTaskQueue', () => {
       expect(mockCodeTaskRepo.hasDispatchedOrRunningForPR).not.toHaveBeenCalled();
     });
 
-    it('TTL expires deadlocked task before concurrency guard runs', async () => {
-      // This is the regression test for the deadlock bug:
-      // Two queued tasks for same PR + Linear issue that would deadlock under old logic
+    it('TTL expires a non-PR-locked task that has passed its TTL', async () => {
+      // Regression test: an expired PR task that is NOT PR-locked should be TTL-expired.
+      // Under the new ordering, PR-lock check runs first (returns hasActive: false),
+      // then the TTL check fires and expires the task.
       const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
       const expiredTask = createMockTask({
         id: 'task-expired',
@@ -1169,10 +1250,12 @@ describe('drainTaskQueue', () => {
 
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([expiredTask, blockedTask]));
       mockCodeTaskRepo.update.mockResolvedValue(ok(expiredTask));
+      // No active task for PR 42 — so expiredTask passes the PR-lock check, then hits TTL
+      mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockResolvedValue(ok({ hasActive: false }));
 
       const result = await drainTaskQueue(createDeps());
 
-      // TTL fires BEFORE concurrency guard — expired task cleaned up
+      // PR-lock check runs first, then TTL check fires — expired task cleaned up
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value).toEqual(expect.objectContaining({ action: 'expired', taskId: 'task-expired' }));
@@ -1187,8 +1270,8 @@ describe('drainTaskQueue', () => {
         },
       });
 
-      // Verify per-PR guard was NOT called (TTL returned before reaching it)
-      expect(mockCodeTaskRepo.hasDispatchedOrRunningForPR).not.toHaveBeenCalled();
+      // Verify per-PR guard WAS called (it runs before TTL in the new ordering)
+      expect(mockCodeTaskRepo.hasDispatchedOrRunningForPR).toHaveBeenCalledWith('pbuchman/intexuraos', 42);
     });
   });
 
