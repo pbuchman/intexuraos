@@ -381,7 +381,7 @@ describe('useRapidPoll', () => {
   it('does not poll when actioningTaskId is null', () => {
     const mockRefresh = vi.fn().mockResolvedValue(undefined);
 
-    renderHook(() => useRapidPoll(null, [], mockRefresh));
+    renderHook(() => useRapidPoll(null, [], mockRefresh, null));
 
     vi.advanceTimersByTime(10000);
 
@@ -392,7 +392,7 @@ describe('useRapidPoll', () => {
     const mockRefresh = vi.fn().mockResolvedValue(undefined);
     const groups = [makeGroup({ aggregateStatus: 'failed', latestTask: makeTask({ id: 'task-action' }) })];
 
-    renderHook(() => useRapidPoll('task-action', groups, mockRefresh));
+    renderHook(() => useRapidPoll('task-action', groups, mockRefresh, 'retry'));
 
     vi.advanceTimersByTime(3001);
 
@@ -403,7 +403,7 @@ describe('useRapidPoll', () => {
     const mockRefresh = vi.fn().mockResolvedValue(undefined);
     const groups = [makeGroup({ aggregateStatus: 'failed', latestTask: makeTask({ id: 'task-x' }) })];
 
-    const { result } = renderHook(() => useRapidPoll('task-x', groups, mockRefresh));
+    const { result } = renderHook(() => useRapidPoll('task-x', groups, mockRefresh, 'retry'));
 
     await act(async () => {
       vi.advanceTimersByTime(30001);
@@ -412,11 +412,11 @@ describe('useRapidPoll', () => {
     expect(result.current.actioningTaskId).toBeNull();
   });
 
-  it('clears actioning state when group transitions out of failed/needs-action', async () => {
+  it('clears actioning state when group transitions out of failed/needs-action for retry', async () => {
     const mockRefresh = vi.fn().mockResolvedValue(undefined);
     const groups = [makeGroup({ aggregateStatus: 'active', latestTask: makeTask({ id: 'task-y' }) })];
 
-    const { result } = renderHook(() => useRapidPoll('task-y', groups, mockRefresh));
+    const { result } = renderHook(() => useRapidPoll('task-y', groups, mockRefresh, 'retry'));
 
     // Group is 'active' (not failed/needs-action), so actioning should clear
     await waitFor(() => {
@@ -424,12 +424,41 @@ describe('useRapidPoll', () => {
     });
   });
 
+  it('does NOT clear actioning state for archive on non-failed group', async () => {
+    const mockRefresh = vi.fn().mockResolvedValue(undefined);
+    const groups = [makeGroup({ aggregateStatus: 'done', latestTask: makeTask({ id: 'task-archive' }) })];
+
+    const { result } = renderHook(() => useRapidPoll('task-archive', groups, mockRefresh, 'archive'));
+
+    // Give effects time to run
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
+
+    // Archive action should NOT be cleared despite group being 'done'
+    expect(result.current.actioningTaskId).toBe('task-archive');
+  });
+
+  it('does NOT clear actioning state for delete on non-failed group', async () => {
+    const mockRefresh = vi.fn().mockResolvedValue(undefined);
+    const groups = [makeGroup({ aggregateStatus: 'active', latestTask: makeTask({ id: 'task-delete' }) })];
+
+    const { result } = renderHook(() => useRapidPoll('task-delete', groups, mockRefresh, 'delete'));
+
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
+
+    // Delete action should NOT be cleared despite group being 'active'
+    expect(result.current.actioningTaskId).toBe('task-delete');
+  });
+
   it('exposes setActioningTaskId', () => {
     const mockRefresh = vi.fn().mockResolvedValue(undefined);
     // Provide a group with failed status so the effect doesn't immediately clear
     const groups = [makeGroup({ aggregateStatus: 'failed', latestTask: makeTask({ id: 'task-new' }) })];
 
-    const { result } = renderHook(() => useRapidPoll(null, groups, mockRefresh));
+    const { result } = renderHook(() => useRapidPoll(null, groups, mockRefresh, null));
 
     act(() => {
       result.current.setActioningTaskId('task-new');
