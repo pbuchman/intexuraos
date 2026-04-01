@@ -1252,6 +1252,22 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                       } else {
                         request.log.info({ taskId, prNumber, label, linearIssueId: targetLinearIssueId, source },
                           'Set review-outcome label');
+
+                        // Best-effort: recompute group summary with the new label so
+                        // cached aggregateStatus reflects the actionable state.
+                        const { groupSummaryRepo: summaryRepoForLabel } = getServices();
+                        if (summaryRepoForLabel !== undefined && targetLinearIssueId !== undefined) {
+                          const updatedLabels: { id: string; name: string }[] = [
+                            ...issueValidation.value.labels.map((l) => ({ id: '', name: l })),
+                            { id: '', name: label },
+                          ];
+                          void summaryRepoForLabel.recomputeWithLabels(
+                            targetUserId, targetLinearIssueId, updatedLabels,
+                          ).catch((recomputeErr: unknown) => {
+                            request.log.warn({ linearIssueId: targetLinearIssueId, error: recomputeErr },
+                              'Failed to recompute group summary after review-outcome label (best-effort)');
+                          });
+                        }
                       }
                     } else {
                       request.log.warn({ taskId, prNumber, label, error: labelResult.error },

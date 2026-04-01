@@ -5078,6 +5078,50 @@ describe('POST /internal/webhooks/task-complete', () => {
       );
       expect(labelCalls).toHaveLength(0);
     });
+
+    it('recomputes group summary after setting review-outcome label', async () => {
+      await createOriginTask({ traceId: 'trace_label_summary', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_summary_review' });
+
+      const mockRecomputeWithLabels = vi.fn().mockResolvedValue(ok(undefined));
+      setServices({
+        ...getServices(),
+        groupSummaryRepo: {
+          recomputeWithLabels: mockRecomputeWithLabels,
+        } as never,
+      });
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockRecomputeWithLabels).toHaveBeenCalledWith(
+        'user-123',
+        'INT-500',
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'ready-to-merge' }),
+        ]),
+      );
+    });
+
+    it('does not throw when recomputeWithLabels fails after label set', async () => {
+      await createOriginTask({ traceId: 'trace_label_summary_fail', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_summary_fail_review' });
+
+      const mockRecomputeWithLabels = vi.fn().mockRejectedValue(new Error('firestore down'));
+      setServices({
+        ...getServices(),
+        groupSummaryRepo: {
+          recomputeWithLabels: mockRecomputeWithLabels,
+        } as never,
+      });
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      // Should complete successfully — recompute is fire-and-forget
+      expect(response.statusCode).toBe(200);
+    });
   });
 
   describe('remediation task-complete → requiresReReview persistence', () => {
