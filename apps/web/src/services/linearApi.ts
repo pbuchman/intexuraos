@@ -259,4 +259,53 @@ export async function removeWebhookSecret(
   );
 }
 
+/** Prune candidate from Gemini classification */
+export interface PruneCandidateResponse {
+  id: string;
+  identifier: string;
+  title: string;
+  score: number;
+  reason: string;
+  category: 'cancelled' | 'duplicate' | 'sub-issue' | 'simple-fix' | 'review-only' | 'other';
+  classifiedAt: string;
+}
+
+interface ListPruneCandidatesResponse {
+  candidates: PruneCandidateResponse[];
+}
+
+/**
+ * List all issues scheduled for deletion
+ */
+export async function listPruneCandidates(
+  accessToken: string
+): Promise<PruneCandidateResponse[]> {
+  const response = await apiRequest<ListPruneCandidatesResponse>(
+    config.linearAgentUrl,
+    '/linear/prune-candidates',
+    accessToken
+  );
+  return response.candidates;
+}
+
+interface DeletePruneCandidatesResponse {
+  deleted: number;
+  failedDeletions: { identifier: string; error: string }[];
+  durationMs: number;
+}
+
+/**
+ * Delete all scheduled prune candidates from Linear
+ */
+export async function deletePruneCandidates(
+  accessToken: string
+): Promise<DeletePruneCandidatesResponse> {
+  return await apiRequest<DeletePruneCandidatesResponse>(
+    config.linearAgentUrl,
+    '/linear/prune-candidates',
+    accessToken,
+    { method: 'DELETE' }
+  );
+}
+
 export type { ValidateResponse, SaveConnectionRequest };

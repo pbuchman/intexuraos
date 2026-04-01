@@ -62,6 +62,13 @@ vi.mock('@intexuraos/internal-clients', async () => ({
   fetchWithAuth: vi.fn(),
 }));
 
+// Mock drainTaskQueue so tests can assert it is (or is not) called
+vi.mock('../../domain/usecases/drainTaskQueue.js', () => ({
+  drainTaskQueue: vi.fn().mockResolvedValue({ ok: true, value: { action: 'dispatched' } }),
+  _resetDrainGuard: vi.fn(),
+}));
+import * as drainTaskQueueModule from '../../domain/usecases/drainTaskQueue.js';
+
 describe('POST /internal/webhooks/task-complete', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -6206,6 +6213,164 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
       expect(markInReviewSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('triggers drain on task completion (INT-1098)', () => {
+    it('calls drainTaskQueue when completed task has prNumber', async () => {
+      const mockDrain = vi.mocked(drainTaskQueueModule.drainTaskQueue);
+      mockDrain.mockClear();
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_drain_1',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          branch: 'fix/drain-test',
+          commits: 1,
+          summary: 'Test drain trigger',
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.received).toBe(true);
+      expect(mockDrain).toHaveBeenCalledOnce();
+    });
+
+    it('does not call drainTaskQueue when completed task has no prNumber', async () => {
+      const mockDrain = vi.mocked(drainTaskQueueModule.drainTaskQueue);
+      mockDrain.mockClear();
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug no pr',
+        sanitizedPrompt: 'Fix the bug no pr',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_drain_2',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          branch: 'fix/no-pr-drain',
+          commits: 1,
+          summary: 'No PR, no drain',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.received).toBe(true);
+      expect(mockDrain).not.toHaveBeenCalled();
+    });
+
+    it('returns { received: true } even when drainTaskQueue throws', async () => {
+      const mockDrain = vi.mocked(drainTaskQueueModule.drainTaskQueue);
+      mockDrain.mockClear();
+      mockDrain.mockRejectedValueOnce(new Error('drain exploded'));
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug drain throws',
+        sanitizedPrompt: 'Fix the bug drain throws',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_drain_3',
+        prNumber: 99,
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          branch: 'fix/drain-throws',
+          commits: 1,
+          summary: 'Drain will throw',
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/99',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.received).toBe(true);
+      // Verify drain WAS called (so the rejection was actually exercised, not bypassed)
+      expect(mockDrain).toHaveBeenCalledOnce();
     });
   });
 });

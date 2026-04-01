@@ -47,6 +47,7 @@ import {
   LlmCostsPage,
   LinearConnectionPage,
   LinearIssuesPage,
+  LinearPruneCandidatesPage,
   ResearchAgentPage,
   LlmPricingPage,
   LoginPage,
@@ -550,6 +551,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <CalendarPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/linear/prune-candidates"
+        element={
+          <ProtectedRoute>
+            <LinearPruneCandidatesPage />
           </ProtectedRoute>
         }
       />

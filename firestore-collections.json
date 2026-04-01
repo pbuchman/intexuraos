@@ -154,6 +154,10 @@
       "owner": "linear-agent",
       "description": "Synced Linear issue comments from webhook events"
     },
+    "linear_prune_candidates": {
+      "owner": "linear-agent",
+      "description": "Prune candidates classified by Gemini for user review before deletion"
+    },
     "code_tasks": {
       "owner": "code-agent",
       "description": "Code execution tasks",
