@@ -249,7 +249,7 @@ export function CodeTasksPageV3(): React.JSX.Element {
   });
 
   // Rapid polling after user actions
-  const { actioningTaskId, setActioningTaskId } = useRapidPoll(null, groups, refresh);
+  const { actioningTaskId, setActioningTaskId } = useRapidPoll(null, groups, refresh, actioningType);
 
   // Sync actioningType when rapid poll clears actioningTaskId
   useEffect(() => {
