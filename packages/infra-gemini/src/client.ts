@@ -61,7 +61,7 @@ function createRequestContext(
   model: string,
   prompt: string,
   userId: string,
-  researchId: string | undefined,
+  researchId: string | undefined, // @allow-undefined-type -- function parameter, not a property; ?: syntax is invalid here
   auditSink?: AuditSink
 ): { requestId: string; startTime: Date; auditContext: AuditContext } {
   const requestId = randomUUID();
@@ -130,7 +130,8 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         const groundingEnabled = hasGroundingMetadata(response);
         const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
         const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
-        const usage = normalizeUsage(inputTokens, outputTokens, groundingEnabled, pricing);
+        const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
+        const usage = normalizeUsage(inputTokens, outputTokens, groundingEnabled, pricing, thinkingTokens);
 
         await auditContext.success({
           response: text,
@@ -170,7 +171,8 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         const text = response.text ?? '';
         const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
         const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
-        const usage = normalizeUsage(inputTokens, outputTokens, false, pricing);
+        const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
+        const usage = normalizeUsage(inputTokens, outputTokens, false, pricing, thinkingTokens);
 
         await auditContext.success({
           response: text,
