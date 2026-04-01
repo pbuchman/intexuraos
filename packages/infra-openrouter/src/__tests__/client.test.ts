@@ -765,6 +765,78 @@ describe('createOpenRouterClient', () => {
       }
     });
 
+    it('includes response_format in request body when responseFormat option is provided', async () => {
+      let capturedBody: Record<string, unknown> | undefined;
+
+      nock(API_BASE_URL)
+        .post('/chat/completions', (body) => {
+          capturedBody = body as Record<string, unknown>;
+          return true;
+        })
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: '{"key": "value"}', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 50, completion_tokens: 20, total_tokens: 70 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      await client.generate('Return JSON', { responseFormat: { type: 'json_object' } });
+
+      expect(capturedBody).toHaveProperty('response_format', { type: 'json_object' });
+    });
+
+    it('does NOT include response_format in request body when no options are provided', async () => {
+      let capturedBody: Record<string, unknown> | undefined;
+
+      nock(API_BASE_URL)
+        .post('/chat/completions', (body) => {
+          capturedBody = body as Record<string, unknown>;
+          return true;
+        })
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'Plain text response', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 50, completion_tokens: 20, total_tokens: 70 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      await client.generate('Write something');
+
+      expect(capturedBody).not.toHaveProperty('response_format');
+    });
+
     it('handles empty choices array in generate', async () => {
       nock(API_BASE_URL)
         .post('/chat/completions')
