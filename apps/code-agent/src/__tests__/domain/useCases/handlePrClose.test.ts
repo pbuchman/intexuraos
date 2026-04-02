@@ -42,6 +42,7 @@ function createInput(overrides: Partial<HandlePrCloseInput> = {}): HandlePrClose
     prAuthorLogin: null,
     senderLogin: 'pbuchman',
     isMerged: false,
+    sourceTimestamp: '2026-04-02T00:00:00.000Z',
     ...overrides,
   };
 }
@@ -500,7 +501,12 @@ describe('handlePrClose (merged and closed-without-merge)', () => {
 
       await handlePrClose(buildDeps(), createMergedInput());
 
-      expect(mockGroupSummaryRepo.recomputeWithLabels).toHaveBeenCalledWith('user-from-task', 'INT-100', []);
+      expect(mockGroupSummaryRepo.recomputeWithLabels).toHaveBeenCalledWith(
+        'user-from-task',
+        'INT-100',
+        [],
+        '2026-04-02T00:00:00.000Z',
+      );
     });
 
     it('calls recomputeWithLabels on close without merge (label is removed either way)', async () => {
@@ -510,7 +516,12 @@ describe('handlePrClose (merged and closed-without-merge)', () => {
 
       await handlePrClose(buildDeps(), createClosedInput());
 
-      expect(mockGroupSummaryRepo.recomputeWithLabels).toHaveBeenCalledWith('user-x', 'INT-200', []);
+      expect(mockGroupSummaryRepo.recomputeWithLabels).toHaveBeenCalledWith(
+        'user-x',
+        'INT-200',
+        [],
+        '2026-04-02T00:00:00.000Z',
+      );
     });
 
     it('does not throw when recomputeWithLabels rejects', async () => {

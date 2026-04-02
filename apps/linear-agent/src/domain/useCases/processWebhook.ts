@@ -182,6 +182,7 @@ export async function processWebhook(
           userId: uid,
           linearIssueId: event.data.identifier,
           labels: event.data.labels.map((l) => ({ id: l.id, name: l.name })),
+          sourceTimestamp: event.data.updatedAt,
         }).catch((e: unknown) => {
           deps.logger.warn({ error: e, linearIssueId: event.data.identifier }, 'Failed to notify code-agent of label change');
         });

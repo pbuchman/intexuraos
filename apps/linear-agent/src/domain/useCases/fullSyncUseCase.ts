@@ -98,6 +98,7 @@ export async function fullSync(
       userId,
       linearIssueId: syncedIssue.identifier,
       labels: syncedIssue.labels.map((l) => ({ id: l.id, name: l.name })),
+      sourceTimestamp: syncedIssue.updatedAt,
     }).catch((e: unknown) => {
       logger.warn({ error: e, linearIssueId: syncedIssue.identifier }, 'Failed to notify code-agent of label change');
     });
