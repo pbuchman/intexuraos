@@ -574,16 +574,16 @@ module "claude_code_dev" {
 locals {
   # Secrets that ALL services need
   common_service_secrets = {
-    INTEXURAOS_AUTH_JWKS_URL          = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    INTEXURAOS_AUTH_ISSUER            = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    INTEXURAOS_AUTH_AUDIENCE          = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
-    INTEXURAOS_INTERNAL_AUTH_TOKEN    = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-    INTEXURAOS_SENTRY_DSN             = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
-    INTEXURAOS_MINIMAX_APP_API_KEY    = module.secret_manager.secret_ids["INTEXURAOS_MINIMAX_APP_API_KEY"]
-    INTEXURAOS_GEMINI_APP_API_KEY     = module.secret_manager.secret_ids["INTEXURAOS_GEMINI_APP_API_KEY"]
-    INTEXURAOS_DASHSCOPE_APP_API_KEY  = module.secret_manager.secret_ids["INTEXURAOS_DASHSCOPE_APP_API_KEY"]
-    INTEXURAOS_DASH0_OTLP_ENDPOINT    = module.secret_manager.secret_ids["INTEXURAOS_DASH0_OTLP_ENDPOINT"]
-    INTEXURAOS_DASH0_AUTH_TOKEN       = module.secret_manager.secret_ids["INTEXURAOS_DASH0_AUTH_TOKEN"]
+    INTEXURAOS_AUTH_JWKS_URL         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER           = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN   = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+    INTEXURAOS_SENTRY_DSN            = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
+    INTEXURAOS_MINIMAX_APP_API_KEY   = module.secret_manager.secret_ids["INTEXURAOS_MINIMAX_APP_API_KEY"]
+    INTEXURAOS_GEMINI_APP_API_KEY    = module.secret_manager.secret_ids["INTEXURAOS_GEMINI_APP_API_KEY"]
+    INTEXURAOS_DASHSCOPE_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_DASHSCOPE_APP_API_KEY"]
+    INTEXURAOS_DASH0_OTLP_ENDPOINT   = module.secret_manager.secret_ids["INTEXURAOS_DASH0_OTLP_ENDPOINT"]
+    INTEXURAOS_DASH0_AUTH_TOKEN      = module.secret_manager.secret_ids["INTEXURAOS_DASH0_AUTH_TOKEN"]
   }
 }
 
@@ -1655,7 +1655,10 @@ module "web_agent" {
 
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/web-agent:latest"
 
-  secrets = local.common_service_secrets
+  secrets = merge(local.common_service_secrets, {
+    INTEXURAOS_CLOUDFLARE_ACCOUNT_ID = module.secret_manager.secret_ids["INTEXURAOS_CLOUDFLARE_ACCOUNT_ID"]
+    INTEXURAOS_CLOUDFLARE_API_TOKEN  = module.secret_manager.secret_ids["INTEXURAOS_CLOUDFLARE_API_TOKEN"]
+  })
   env_vars = local.common_service_env_vars
 
   depends_on = [
