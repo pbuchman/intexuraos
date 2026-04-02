@@ -636,6 +636,39 @@ describe.sequential('Claude Hooks - Validation', () => {
 
       expectAllowed(result);
     });
+
+    it('blocks setting assignee on server save_issue variant', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.linearServerSaveIssue({ id: 'INT-123', assignee: 'me' }),
+      });
+
+      expectBlocked(result, {
+        pattern: /BLOCKED/i,
+        messageIncludes: 'assign',
+      });
+    });
+
+    it('blocks setting delegate on server save_issue variant', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.linearServerSaveIssue({ id: 'INT-123', delegate: 'agent-1' }),
+      });
+
+      expectBlocked(result, {
+        pattern: /BLOCKED/i,
+        messageIncludes: 'delegat',
+      });
+    });
+
+    it('allows server save_issue variant with valid state and no assignee', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.linearServerSaveIssue({ id: 'INT-123', state: 'In Progress' }),
+      });
+
+      expectAllowed(result);
+    });
   });
 
   describe('validate-terraform.sh', () => {
