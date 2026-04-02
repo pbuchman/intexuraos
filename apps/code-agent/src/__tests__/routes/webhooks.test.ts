@@ -2349,7 +2349,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           commits: 2,
           summary: 'Implemented execution task',
           execution_outcome_label: 'implemented' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
           execution_memory_ids_used: 'mem_142,mem_155',
