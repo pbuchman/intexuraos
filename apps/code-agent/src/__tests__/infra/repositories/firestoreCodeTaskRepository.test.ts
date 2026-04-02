@@ -1764,6 +1764,58 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.implementationTaskId).toBeUndefined();
     });
 
+    it('sets and clears fanOutChildTaskIds', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const setResult = await repo.update(created.value.id, {
+        fanOutChildTaskIds: ['task-child-1', 'task-child-2'],
+      });
+      expect(setResult.ok).toBe(true);
+      if (!setResult.ok) return;
+      expect(setResult.value.fanOutChildTaskIds).toEqual(['task-child-1', 'task-child-2']);
+
+      const clearResult = await repo.update(created.value.id, {
+        fanOutChildTaskIds: null,
+      });
+      expect(clearResult.ok).toBe(true);
+      if (!clearResult.ok) return;
+      expect(clearResult.value.fanOutChildTaskIds).toBeUndefined();
+    });
+
+    it('accepts external transaction via options parameter for update', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const result = await (fakeFirestore as unknown as Firestore).runTransaction(async (tx) => {
+        return repo.update(
+          created.value.id,
+          {
+            implementationTaskId: 'task-child-1',
+            fanOutChildTaskIds: ['task-child-1'],
+          },
+          { transaction: tx },
+        );
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.implementationTaskId).toBe('task-child-1');
+      expect(result.value.fanOutChildTaskIds).toEqual(['task-child-1']);
+    });
+
     it('updates workerLocation when provided in update input', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -3165,6 +3217,30 @@ describe('firestoreCodeTaskRepository', () => {
       await repo.update(created.value.id, { status: 'planned' });
 
       const result = await repo.findPlannedTaskByLinearIssue('INT-503');
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toBeNull();
+    });
+
+    it('returns null when planned task already has fanOutChildTaskIds', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({
+        linearIssueId: 'INT-504',
+        agentType: 'planning',
+      }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, {
+        status: 'planned',
+        fanOutChildTaskIds: ['task-child-1'],
+      });
+
+      const result = await repo.findPlannedTaskByLinearIssue('INT-504');
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.value).toBeNull();

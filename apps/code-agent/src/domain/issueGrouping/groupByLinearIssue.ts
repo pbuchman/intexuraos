@@ -74,6 +74,7 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
     planningEntry?.step.state === 'completed' &&
     executionEntry === undefined &&
     planningEntry.task.implementationTaskId === undefined &&
+    (planningEntry.task.fanOutChildTaskIds === undefined || planningEntry.task.fanOutChildTaskIds.length === 0) &&
     hasImplementationReadyLabel(planningEntry.task.linearIssue?.labels)
   ) {
     // Insert synthetic execution step right after planning

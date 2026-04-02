@@ -118,6 +118,12 @@ export interface LinearApiClient {
     identifier: string
   ): Promise<Result<LinearIssueWithTeam | null, LinearError>>;
 
+  /** Get direct children for a parent issue from live Linear API. */
+  getDirectChildren(
+    apiKey: string,
+    issueId: string
+  ): Promise<Result<LinearIssue[] | null, LinearError>>;
+
   /** Update an issue's workflow state */
   updateIssueState(
     apiKey: string,

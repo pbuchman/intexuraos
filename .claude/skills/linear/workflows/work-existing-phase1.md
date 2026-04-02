@@ -212,11 +212,11 @@ The completion-validator hook checks:
 
 ## Forbidden Actions
 
-| Action                      | Why Forbidden                              |
-| --------------------------- | ------------------------------------------ |
-| Writing implementation code | Phase 1 is design only                     |
-| Creating feature branches   | No code changes in Phase 1                 |
-| Running CI                  | No code to test                            |
-| Creating implementation PRs | Only design PRs if complex                 |
-| Skipping Test Requirements  | MANDATORY for all implementation           |
-| Setting assignee/delegate   | User-only responsibility. Blocked by hook  |
+| Action                      | Why Forbidden                             |
+| --------------------------- | ----------------------------------------- |
+| Writing implementation code | Phase 1 is design only                    |
+| Creating feature branches   | No code changes in Phase 1                |
+| Running CI                  | No code to test                           |
+| Creating implementation PRs | Only design PRs if complex                |
+| Skipping Test Requirements  | MANDATORY for all implementation          |
+| Setting assignee/delegate   | User-only responsibility. Blocked by hook |

@@ -121,8 +121,14 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
     : undefined;
   const isTaskWorkerOnline = taskWorkerStatus === undefined || taskWorkerStatus.healthy;
   const workerStatusTag: WorkerStatusTag | null = taskWorkerStatus?.status ?? null;
+  const implementationTaskIds =
+    task.fanOutChildTaskIds !== undefined && task.fanOutChildTaskIds.length > 0
+      ? task.fanOutChildTaskIds
+      : task.implementationTaskId !== undefined
+        ? [task.implementationTaskId]
+        : [];
   const isImplementable = task.status === 'planned' &&
-    task.implementationTaskId === undefined &&
+    implementationTaskIds.length === 0 &&
     task.linearIssueId !== undefined &&
     hasImplementationReadyLabel(task.linearIssue?.labels);
   const isMergeable = isTaskMergeable(task);
@@ -139,8 +145,8 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
       {task.parentTaskId !== undefined && task.followUpReason === 'execution_implement' ? (
         <DesignTaskBanner parentTaskId={task.parentTaskId} />
       ) : null}
-      {task.agentType === 'planning' && task.implementationTaskId !== undefined ? (
-        <ImplementationLinkBanner implementationTaskId={task.implementationTaskId} />
+      {task.agentType === 'planning' && implementationTaskIds.length > 0 ? (
+        <ImplementationLinkBanner implementationTaskIds={implementationTaskIds} />
       ) : null}
 
       <MemoTaskPromptCard prompt={task.prompt} sanitizedPrompt={task.sanitizedPrompt} />
@@ -172,6 +178,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
         implementing={implementing}
         implementError={implementError}
         {...(task.implementationTaskId !== undefined ? { implementationTaskId: task.implementationTaskId } : {})}
+        {...(implementationTaskIds.length > 0 ? { implementationTaskIds } : {})}
         selectedWorkerType={selectedWorkerType}
         originalWorkerType={task.workerType}
         showDropdown={showImplementDropdown}
@@ -210,7 +217,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
         onArchive={(): void => { void handleArchive(); }}
         {...(prUrl !== undefined ? { prUrl } : {})}
         {...(task.linearIssue?.url !== undefined ? { linearIssueUrl: task.linearIssue.url } : {})}
-        linksInNextSteps={isImplementable || task.implementationTaskId !== undefined || isMergeable}
+        linksInNextSteps={isImplementable || implementationTaskIds.length > 0 || isMergeable}
       />
     </Layout>
   );
@@ -356,16 +363,21 @@ function DesignTaskBanner({ parentTaskId }: { parentTaskId: string }): React.JSX
   );
 }
 
-function ImplementationLinkBanner({ implementationTaskId }: { implementationTaskId: string }): React.JSX.Element {
+function ImplementationLinkBanner({ implementationTaskIds }: { implementationTaskIds: string[] }): React.JSX.Element {
   return (
     <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
       {'This task is the planning step of the IntexuraOS Agent-Based Code Task Execution Flow. '}
-      <a
-        href={`/#/code-tasks/${implementationTaskId}`}
-        className="font-medium underline hover:no-underline"
-      >
-        {'IMPLEMENTATION'}
-      </a>
+      {implementationTaskIds.map((taskId, index) => (
+        <span key={taskId}>
+          {index > 0 ? ', ' : null}
+          <a
+            href={`/#/code-tasks/${taskId}`}
+            className="font-medium underline hover:no-underline"
+          >
+            {implementationTaskIds.length > 1 ? `IMPLEMENTATION ${String(index + 1)}` : 'IMPLEMENTATION'}
+          </a>
+        </span>
+      ))}
     </div>
   );
 }

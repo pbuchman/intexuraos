@@ -271,11 +271,11 @@ The completion-validator hook checks:
 
 ## Forbidden Actions
 
-| Action                  | Why Forbidden                              |
-| ----------------------- | ------------------------------------------ |
-| Asking for confirmation | Non-interactive mode                       |
-| Skipping CI             | CI is mandatory gate                       |
-| Skipping code review    | Review loop is mandatory                   |
-| Partial commits         | Complete the full cycle                    |
-| Manual Linear updates   | Use MCP for all state transitions          |
+| Action                    | Why Forbidden                             |
+| ------------------------- | ----------------------------------------- |
+| Asking for confirmation   | Non-interactive mode                      |
+| Skipping CI               | CI is mandatory gate                      |
+| Skipping code review      | Review loop is mandatory                  |
+| Partial commits           | Complete the full cycle                   |
+| Manual Linear updates     | Use MCP for all state transitions         |
 | Setting assignee/delegate | User-only responsibility. Blocked by hook |

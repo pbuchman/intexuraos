@@ -68,7 +68,9 @@ function computeSummaryFromTasks(
     (t) => (t.agentType === 'execution' && (t.status === 'implemented' || t.status === 'reviewed'))
       || (t.agentType === 'review' && t.status === 'reviewed'),
   );
-  const hasImplementationTaskId = tasks.some((t) => t.implementationTaskId !== undefined);
+  const hasImplementationTaskId = tasks.some(
+    (t) => t.implementationTaskId !== undefined || (t.fanOutChildTaskIds !== undefined && t.fanOutChildTaskIds.length > 0),
+  );
   const hasPrUrl = tasks.some((t) => t.result?.prUrl !== undefined);
   const prNumber = tasks.find((t) => t.prNumber !== undefined)?.prNumber ?? null;
 

@@ -55,6 +55,7 @@ function taskToSerializedTask(task: {
   linearIssueId?: string;
   agentType?: string;
   implementationTaskId?: string;
+  fanOutChildTaskIds?: string[];
   parentTaskId?: string;
   followUpReason?: string;
   prNumber?: number;
@@ -119,6 +120,7 @@ function taskToSerializedTask(task: {
   if (task.linearIssueId !== undefined) { serialized.linearIssueId = task.linearIssueId; }
   if (task.agentType !== undefined) { serialized.agentType = task.agentType; }
   if (task.implementationTaskId !== undefined) { serialized.implementationTaskId = task.implementationTaskId; }
+  if (task.fanOutChildTaskIds !== undefined) { serialized.fanOutChildTaskIds = task.fanOutChildTaskIds; }
   if (task.parentTaskId !== undefined) { serialized.parentTaskId = task.parentTaskId; }
   if (task.followUpReason !== undefined) { serialized.followUpReason = task.followUpReason; }
   if (task.prNumber !== undefined) { serialized.prNumber = task.prNumber; }

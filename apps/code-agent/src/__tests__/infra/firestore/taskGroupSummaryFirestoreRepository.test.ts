@@ -2039,6 +2039,29 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(doc.get('hasImplementationTaskId')).toBe(true);
     });
 
+    it('sets implementationTaskId flag when any task has fanOutChildTaskIds', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.now();
+
+      const task = makeTask({
+        id: 'task-fanout',
+        userId: 'user-4',
+        linearIssueId: 'INT-FANOUTRC',
+        status: 'planned',
+        fanOutChildTaskIds: ['task-child-1', 'task-child-2'],
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await repo.recomputeGroupFromTasks('user-4', 'INT-FANOUTRC', [task]);
+
+      const doc = await fakeFirestore.collection('task_group_summaries').doc('user-4_INT-FANOUTRC').get();
+      expect(doc.get('hasImplementationTaskId')).toBe(true);
+    });
+
     it('sets hasCompletedExecution for execution agent with reviewed status', async () => {
       const repo = createTaskGroupSummaryFirestoreRepository({
         firestore: fakeFirestore as unknown as Firestore,

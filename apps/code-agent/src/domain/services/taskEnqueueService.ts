@@ -17,6 +17,11 @@ export interface EnqueueTaskInput {
   userId: string;
 }
 
+export interface EnqueueManyTasksInput {
+  taskIds: string[];
+  userId: string;
+}
+
 export interface EnqueueResult {
   taskId: string;
   queuePosition: number;
@@ -42,6 +47,15 @@ export interface TaskEnqueueService {
    * 5. Returns queue position info
    *
    * If queue is full, marks the task as failed and returns queue_full error.
-   */
+  */
   enqueue(input: EnqueueTaskInput): Promise<Result<EnqueueResult, EnqueueError>>;
+
+  /**
+   * Enqueue multiple already-created queued tasks as one fan-out batch.
+   *
+   * Intended for complex parent implementation where all child tasks already
+   * exist with status='queued'. Implementations may treat queuedAt stamping as
+   * best-effort as long as the tasks remain dispatchable via createdAt.
+   */
+  enqueueMany?(input: EnqueueManyTasksInput): Promise<Result<EnqueueResult[], EnqueueError>>;
 }

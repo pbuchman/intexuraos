@@ -95,6 +95,7 @@ async function handleLinearWebhook(
     // Call domain use case
     const result = await processWebhook(payload, {
       connectionRepository: services.connectionRepository,
+      linearApiClient: services.linearApiClient,
       issueRepository: services.issueRepository,
       commentRepository: services.commentRepository,
       codeAgentClient: services.codeAgentClient,

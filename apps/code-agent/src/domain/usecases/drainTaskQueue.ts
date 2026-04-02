@@ -303,35 +303,66 @@ export async function drainTaskQueue(
     if (shouldFanOut(hasChildren, linearIssueLabels) && task.linearIssueId !== undefined) {
       logger.info({ taskId: task.id, linearIssueId: task.linearIssueId }, 'Drain fan-out triggered: parent issue has code-task children');
 
-      const fanOutResult = await fanOutChildTasks(
-        {
-          logger,
-          codeTaskRepo,
-          linearAgentClient,
-          taskEnqueueService: deps.taskEnqueueService,
-          orchestratorSecret: deps.orchestratorSecret,
-        },
-        {
-          parentTask: task,
+      if (linearIssueUuid === undefined) {
+        logger.warn({ taskId: task.id, linearIssueId: task.linearIssueId }, 'Drain fan-out skipped: live parent UUID unavailable');
+      } else {
+        const directChildrenResult = await linearAgentClient.fetchDirectChildrenLive({
           userId: task.userId,
-          linearIssueId: task.linearIssueId,
-          ...(linearIssueUuid !== undefined && { parentIssueUuid: linearIssueUuid }),
-        },
-      );
+          issueId: linearIssueUuid,
+        });
 
-      if (fanOutResult.ok) {
-        logger.info(
-          { taskId: task.id, childTaskIds: fanOutResult.value.childTaskIds },
-          'Drain fan-out completed, parent task marked as implemented',
-        );
-        return ok({ action: 'dispatched', taskId: task.id });
+        if (directChildrenResult.ok) {
+          const directChildren = directChildrenResult.value.filter((child) => child.parentId === linearIssueUuid);
+          const fanOutResult = await fanOutChildTasks(
+            {
+              logger,
+              codeTaskRepo,
+              taskEnqueueService: deps.taskEnqueueService,
+              orchestratorSecret: deps.orchestratorSecret,
+            },
+            {
+              planningTask: task,
+              userId: task.userId,
+              childIssues: directChildren,
+              workerType: task.workerType,
+            },
+          );
+
+          if (fanOutResult.ok) {
+            const cancelParentResult = await codeTaskRepo.update(task.id, {
+              status: 'cancelled',
+              completedAt: new Date(),
+              error: {
+                code: 'fan_out_parent_cancelled',
+                message: 'Parent complex task replaced by direct child execution tasks',
+              },
+            });
+            if (!cancelParentResult.ok) {
+              logger.warn(
+                { taskId: task.id, error: cancelParentResult.error },
+                'Drain fan-out succeeded but failed to cancel parent task',
+              );
+            }
+
+            logger.info(
+              { taskId: task.id, childTaskIds: fanOutResult.value.childTaskIds },
+              'Drain fan-out completed, parent task cancelled in favor of child execution tasks',
+            );
+            return ok({ action: 'dispatched', taskId: fanOutResult.value.primaryChildTaskId });
+          }
+
+          // Fan-out failed — fall through to normal dispatch
+          logger.warn(
+            { taskId: task.id, error: fanOutResult.error },
+            'Drain fan-out failed, falling back to normal dispatch',
+          );
+        } else {
+          logger.warn(
+            { taskId: task.id, linearIssueId: task.linearIssueId, error: directChildrenResult.error },
+            'Drain fan-out could not fetch live direct children, falling back to normal dispatch',
+          );
+        }
       }
-
-      // Fan-out failed — fall through to normal dispatch
-      logger.warn(
-        { taskId: task.id, error: fanOutResult.error },
-        'Drain fan-out failed, falling back to normal dispatch',
-      );
     }
 
     const agentType = resolveTaskAgentType(task, linearIssueLabels);
