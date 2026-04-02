@@ -174,3 +174,32 @@ export const researchSchema = {
     'startedAt',
   ],
 } as const;
+
+export const llmResultStatusSchema = {
+  type: 'object',
+  properties: {
+    provider: storedLlmProviderSchema,
+    model: { type: 'string' },
+    status: { type: 'string', enum: ['pending', 'processing', 'completed', 'failed'] },
+  },
+  required: ['provider', 'model', 'status'],
+} as const;
+
+export const researchSummarySchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string' },
+    userId: { type: 'string' },
+    title: { type: 'string' },
+    status: researchStatusSchema,
+    selectedModels: { type: 'array', items: storedModelSchema },
+    synthesisModel: storedModelSchema,
+    startedAt: { type: 'string' },
+    completedAt: { type: 'string', nullable: true },
+    favourite: { type: 'boolean', nullable: true },
+    llmResultStatuses: { type: 'array', items: llmResultStatusSchema },
+    totalCostUsd: { type: 'number', nullable: true },
+    partialFailure: { ...partialFailureSchema, nullable: true },
+  },
+  required: ['id', 'userId', 'title', 'status', 'selectedModels', 'synthesisModel', 'startedAt', 'llmResultStatuses'],
+} as const;

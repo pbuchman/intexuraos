@@ -3,7 +3,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fullSync, fullSyncAllUsers, type FullSyncDeps } from '../../../domain/useCases/fullSyncUseCase.js';
-import { FakeLinearIssueRepository, FakeLinearConnectionRepository, FakeLinearApiClient } from '../../fakes.js';
+import { FakeLinearIssueRepository, FakeLinearConnectionRepository, FakeLinearApiClient, FakeCodeAgentClient } from '../../fakes.js';
 import { createFakeLogger } from '../../testUtils.js';
 import type { LinearIssue } from '../../../domain/index.js';
 import type { Result } from '@intexuraos/common-core';
@@ -33,6 +33,7 @@ describe('fullSync', () => {
   let issueRepo: FakeLinearIssueRepository;
   let connectionRepo: FakeLinearConnectionRepository;
   let linearClient: FakeLinearApiClient;
+  let codeAgentClient: FakeCodeAgentClient;
   let deps: FullSyncDeps;
   const userId = 'user-123';
 
@@ -42,10 +43,12 @@ describe('fullSync', () => {
     issueRepo = new FakeLinearIssueRepository();
     connectionRepo = new FakeLinearConnectionRepository();
     linearClient = new FakeLinearApiClient();
+    codeAgentClient = new FakeCodeAgentClient();
     deps = {
       issueRepo,
       connectionRepo,
       linearClient,
+      codeAgentClient,
       logger: createFakeLogger(),
     };
 
@@ -265,6 +268,7 @@ describe('fullSync — multi-user same-team isolation', () => {
   let issueRepo: FakeLinearIssueRepository;
   let connectionRepo: FakeLinearConnectionRepository;
   let linearClient: FakeLinearApiClient;
+  let codeAgentClient: FakeCodeAgentClient;
   let deps: FullSyncDeps;
 
   beforeEach(() => {
@@ -273,10 +277,12 @@ describe('fullSync — multi-user same-team isolation', () => {
     issueRepo = new FakeLinearIssueRepository();
     connectionRepo = new FakeLinearConnectionRepository();
     linearClient = new FakeLinearApiClient();
+    codeAgentClient = new FakeCodeAgentClient();
     deps = {
       issueRepo,
       connectionRepo,
       linearClient,
+      codeAgentClient,
       logger: createFakeLogger(),
     };
   });
@@ -419,6 +425,7 @@ describe('fullSyncAllUsers', () => {
   let issueRepo: FakeLinearIssueRepository;
   let connectionRepo: FakeLinearConnectionRepository;
   let linearClient: FakeLinearApiClient;
+  let codeAgentClient: FakeCodeAgentClient;
   let deps: FullSyncDeps & { getAllConnectedUserIds: () => Promise<Result<string[], LinearError>> };
 
   beforeEach(() => {
@@ -427,10 +434,12 @@ describe('fullSyncAllUsers', () => {
     issueRepo = new FakeLinearIssueRepository();
     connectionRepo = new FakeLinearConnectionRepository();
     linearClient = new FakeLinearApiClient();
+    codeAgentClient = new FakeCodeAgentClient();
     deps = {
       issueRepo,
       connectionRepo,
       linearClient,
+      codeAgentClient,
       logger: createFakeLogger(),
       getAllConnectedUserIds: vi.fn().mockResolvedValue({ ok: true, value: ['user-1', 'user-2'] }),
     };

@@ -28,6 +28,7 @@ import {
   mapLinearError,
   filterIssuesByCompletionDate,
   mapIssuesWithBatchedStates,
+  DEFAULT_COMPLETED_SINCE_DAYS,
   mapSingleIssue,
   mapSingleIssueWithTeam,
 } from './linearMappers.js';
@@ -49,6 +50,7 @@ export {
   mapLinearError,
   createDedupKey,
   filterIssuesByCompletionDate,
+  DEFAULT_COMPLETED_SINCE_DAYS,
   clearClientCache,
   getClientCacheSize,
   getDedupCacheSize,
@@ -123,7 +125,8 @@ export function createLinearApiClient(): LinearApiClient {
       teamId: string,
       options?: { completedSinceDays?: number }
     ): Promise<Result<LinearIssue[], LinearError>> {
-      const completedSinceDays = options?.completedSinceDays ?? 7;
+      const completedSinceDays =
+        options?.completedSinceDays ?? DEFAULT_COMPLETED_SINCE_DAYS;
       const dedupKey = createDedupKey(
         'listIssues',
         apiKey.slice(0, 8),
@@ -354,6 +357,27 @@ export function createLinearApiClient(): LinearApiClient {
         return ok(states);
       } catch (error) {
         logger.error({ error, teamId }, 'Failed to fetch Linear workflow states');
+        return err(mapLinearError(error));
+      }
+    },
+
+    async deleteIssue(apiKey: string, issueId: string): Promise<Result<void, LinearError>> {
+      try {
+        logger.info({ issueId }, 'Deleting Linear issue (soft-delete)');
+
+        const client = getOrCreateClient(apiKey);
+        const issue = await client.issue(issueId);
+        const result = await issue.delete();
+
+        if (!result.success) {
+          logger.error({ issueId }, 'Failed to delete issue - API returned failure');
+          return err({ code: 'API_ERROR', message: `Failed to delete issue ${issueId}` });
+        }
+
+        logger.info({ issueId }, 'Issue deleted successfully (soft-delete)');
+        return ok(undefined);
+      } catch (error) {
+        logger.error({ error, issueId }, 'Failed to delete Linear issue');
         return err(mapLinearError(error));
       }
     },

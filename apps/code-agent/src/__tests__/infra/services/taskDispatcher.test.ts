@@ -270,6 +270,74 @@ describe('taskDispatcherImpl', () => {
       expect(body['agentType']).toBe('planning');
     });
 
+    it('threads executionMemoryContext for execution-agent tasks', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      vi.mocked(global.fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      await service.dispatch({
+        taskId: 'task-memory-context',
+        prompt: 'Fix callback route logging and tests',
+        systemPromptHash: 'hash-123',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        agentType: 'execution',
+        executionMemoryContext: {
+          applicationId: 'app_123',
+          retrievalVersion: 'execution-memory-retrieval@1.0.0',
+          querySummary: 'Auth0 callback bug touching route logging and verification.',
+          matchedMemories: [
+            {
+              memoryId: 'mem_142',
+              title: 'Log incoming requests when changing callback routes',
+              memoryType: 'pitfall_pattern',
+              score: 0.93,
+              appliesWhen: 'A route handler changes auth callback request handling.',
+              action: 'Update route logging and preserve request context.',
+              avoid: 'Do not add the route change without request logging coverage.',
+              verification: 'Cover the route with app.inject assertions.',
+            },
+          ],
+        },
+      });
+
+      const fetchCall = vi.mocked(global.fetch).mock.calls[0];
+      if (!fetchCall) throw new Error('Fetch was not called');
+      const options = fetchCall[1];
+      if (!options || typeof options.body !== 'string') throw new Error('Missing body');
+      const body = JSON.parse(options.body) as Record<string, unknown>;
+
+      expect(body).toMatchObject({
+        taskId: 'task-memory-context',
+        agentType: 'execution',
+        executionMemoryContext: {
+          applicationId: 'app_123',
+          retrievalVersion: 'execution-memory-retrieval@1.0.0',
+          querySummary: 'Auth0 callback bug touching route logging and verification.',
+          matchedMemories: [
+            {
+              memoryId: 'mem_142',
+              title: 'Log incoming requests when changing callback routes',
+              memoryType: 'pitfall_pattern',
+              score: 0.93,
+              appliesWhen: 'A route handler changes auth callback request handling.',
+              action: 'Update route logging and preserve request context.',
+              avoid: 'Do not add the route change without request logging coverage.',
+              verification: 'Cover the route with app.inject assertions.',
+            },
+          ],
+        },
+      });
+    });
+
     it('falls back to second worker on 503', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
@@ -943,40 +1011,6 @@ describe('taskDispatcherImpl', () => {
       const body = JSON.parse(options.body as string);
 
       expect(body.linearIssueId).toBe('INT-123');
-    });
-
-    it('includes planningPrBranch and planningPrUrl in body when provided', async () => {
-      const service = createTaskDispatcherService(baseDeps);
-      const mockFetch = vi.mocked(global.fetch);
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ status: 'accepted' }),
-      } as Response);
-
-      await service.dispatch({
-        taskId: 'task-123',
-        prompt: 'Test',
-        systemPromptHash: 'abc123',
-        repository: 'test/repo',
-        baseBranch: 'main',
-        workerType: 'opus',
-        webhookUrl: 'https://example.com/webhook',
-        webhookSecret: 'whsec_test',
-        workerCredentials: testWorkerCredentials,
-        linearIssueLabels: [],
-        hasChildren: false,
-        planningPrBranch: 'plan/my-feature',
-        planningPrUrl: 'https://github.com/org/repo/pull/42',
-      });
-
-      const fetchCall = mockFetch.mock.calls[0];
-      if (!fetchCall) throw new Error('Fetch was not called');
-      const options = fetchCall[1];
-      if (!options) throw new Error('Fetch options not found');
-      const body = JSON.parse(options.body as string) as Record<string, unknown>;
-
-      expect(body['planningPrBranch']).toBe('plan/my-feature');
-      expect(body['planningPrUrl']).toBe('https://github.com/org/repo/pull/42');
     });
 
     it('includes trackingCommentId in body when provided', async () => {

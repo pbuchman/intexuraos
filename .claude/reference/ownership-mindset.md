@@ -68,3 +68,25 @@ May acknowledge pre-existing state ONLY when user EXPLICITLY instructs:
 - "This is a known issue, skip it for now"
 
 Without explicit instruction, assume responsibility for everything encountered.
+
+---
+
+## Infrastructure Incidents
+
+Ownership extends beyond code to the infrastructure that runs it:
+
+- **Container crashes** → Own the investigation through to root cause and fix
+- **Build pipeline failures** → Own the pipeline, not just the code it builds
+- **Environment mismatches** → Own the environment configuration
+- **Service outages on dev** → Triage immediately, act without asking permission
+
+During active incidents, the bias is toward action. Rebuild images, restart services, apply hotfixes. Ask permission only for destructive/irreversible actions (data deletion, force push).
+
+### Additional Forbidden Language (Infrastructure)
+
+| Forbidden                       | Why                                       |
+| ------------------------------- | ----------------------------------------- |
+| "upstream bug/issue/defect"     | Investigate deeper — check your env first |
+| "outside my scope"              | Nothing is outside scope during incidents |
+| "the tool has a defect"         | Check your environment first              |
+| "beyond the scope of this task" | If it blocks success, it's in scope       |

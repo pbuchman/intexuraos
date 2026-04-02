@@ -1,7 +1,9 @@
 import { createToken, describe, expect, it, setupTestContext, clearTestLogs, getTestLoggerStream, beforeEach, afterEach, beforeAll, afterAll, setupJwksServer, teardownJwksServer, resetServices, setServices } from '../testUtils.js';
 import { buildServer } from '../../server.js';
 import type { FastifyInstance } from 'fastify';
-import type { LinearConnection } from '../../domain/models.js';
+import type { LinearConnection, StoredPruneCandidate } from '../../domain/models.js';
+import type { LinearError } from '../../domain/errors.js';
+import type { Result } from '@intexuraos/common-core';
 import {
   FakeLinearConnectionRepository,
   FakeLinearApiClient,
@@ -1932,6 +1934,14 @@ describe('linearRoutes logging coverage', () => {
     userServiceClient: new FakeUserServiceClient(),
     commentRepository: new FakeLinearCommentRepository(),
     codeAgentClient: new FakeCodeAgentClient(),
+    issuePruningClassifier: {
+      classifyCandidates: async (): Promise<Result<[], never>> => ({ ok: true as const, value: [] }),
+    },
+    pruneCandidateRepository: {
+      clearAll: async (): Promise<Result<void, LinearError>> => ({ ok: true as const, value: undefined }),
+      storeAll: async (): Promise<Result<void, LinearError>> => ({ ok: true as const, value: undefined }),
+      listAll: async (): Promise<Result<StoredPruneCandidate[], LinearError>> => ({ ok: true as const, value: [] }),
+    },
   };
 
   beforeAll(async () => {

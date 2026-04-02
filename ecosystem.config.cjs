@@ -24,7 +24,9 @@ const COMMON_SERVICE_ENV = {
   INTEXURAOS_MINIMAX_APP_API_KEY: process.env.INTEXURAOS_MINIMAX_APP_API_KEY,
   INTEXURAOS_GEMINI_APP_API_KEY: process.env.INTEXURAOS_GEMINI_APP_API_KEY,
   INTEXURAOS_DASHSCOPE_APP_API_KEY: process.env.INTEXURAOS_DASHSCOPE_APP_API_KEY,
+  INTEXURAOS_OPENROUTER_APP_API_KEY: process.env.INTEXURAOS_OPENROUTER_APP_API_KEY,
   INTEXURAOS_ENVIRONMENT: process.env.INTEXURAOS_ENVIRONMENT ?? 'dev',
+  INTEXURAOS_RUNTIME: 'dev',
   INTEXURAOS_DASH0_OTLP_ENDPOINT: process.env.INTEXURAOS_DASH0_OTLP_ENDPOINT,
   INTEXURAOS_DASH0_AUTH_TOKEN: process.env.INTEXURAOS_DASH0_AUTH_TOKEN,
 };
@@ -108,6 +110,8 @@ const SERVICE_ENV_MAPPINGS = {
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
     INTEXURAOS_TOKEN_ENCRYPTION_KEY: process.env.INTEXURAOS_TOKEN_ENCRYPTION_KEY,
     INTEXURAOS_GITHUB_WEBHOOK_SECRET: process.env.INTEXURAOS_GITHUB_WEBHOOK_SECRET,
+    INTEXURAOS_EXECUTION_MEMORY_ENABLED: process.env.INTEXURAOS_EXECUTION_MEMORY_ENABLED ?? 'false',
+    INTEXURAOS_OPENAI_APP_API_KEY: process.env.INTEXURAOS_OPENAI_APP_API_KEY,
     INTEXURAOS_QUEUE_MAX_SIZE: process.env.INTEXURAOS_QUEUE_MAX_SIZE ?? '50',
     INTEXURAOS_QUEUE_TTL_MINUTES: process.env.INTEXURAOS_QUEUE_TTL_MINUTES ?? '30',
     INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS: process.env.INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS ?? '3',
@@ -167,6 +171,7 @@ const WAIT_SCRIPT = path.resolve(__dirname, 'scripts/pm2-wait-start.mjs');
  * old pnpm → sh → tsx → node chain into tsx → node (2 processes).
  * PM2's treekill cleans both on restart — no orphan children.
  * Uses PM2's native file watching for change detection.
+ * Watches src/ so deploys to the dev VM auto-restart the service.
  */
 function createServiceConfig(name, port, options = {}) {
   const { waitForService } = options;
@@ -188,7 +193,9 @@ function createServiceConfig(name, port, options = {}) {
     autorestart: true,
     kill_timeout: 5000,
     restart_delay: 5000,
-    watch: false,
+    watch: ['src'],
+    ignore_watch: ['**/*.test.ts', '**/*.spec.ts', '**/__tests__/**'],
+    watch_delay: 1000,
   };
 
   if (waitForService) {

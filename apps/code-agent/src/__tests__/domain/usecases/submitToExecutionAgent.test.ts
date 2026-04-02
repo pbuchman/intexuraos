@@ -38,6 +38,7 @@ describe('submitToExecutionAgent', () => {
     hasActiveTaskForLinearIssue: ReturnType<typeof vi.fn>;
     hasDispatchedOrRunningForPR: ReturnType<typeof vi.fn>;
     countQueued: ReturnType<typeof vi.fn>;
+    findPlannedTaskByLinearIssue: ReturnType<typeof vi.fn>;
   };
   let mockLinearAgentClient: {
     validateIssue: ReturnType<typeof vi.fn>;
@@ -53,6 +54,13 @@ describe('submitToExecutionAgent', () => {
   };
   let mockWorkerSettingsRepo: {
     getSettings: ReturnType<typeof vi.fn>;
+  };
+  let mockGitHubPRClient: {
+    getPullRequestStatus: ReturnType<typeof vi.fn>;
+    mergePullRequest: ReturnType<typeof vi.fn>;
+  };
+  let mockUserServiceClient: {
+    getOAuthToken: ReturnType<typeof vi.fn>;
   };
 
   const userId = 'user_123';
@@ -110,6 +118,8 @@ describe('submitToExecutionAgent', () => {
       metricsClient: mockMetricsClient as unknown as SubmitToExecutionAgentDeps['metricsClient'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as SubmitToExecutionAgentDeps['workerSettingsRepo'],
       orchestratorSecret: 'test-orchestrator-secret',
+      gitHubPRClient: mockGitHubPRClient as unknown as SubmitToExecutionAgentDeps['gitHubPRClient'],
+      userServiceClient: mockUserServiceClient as unknown as SubmitToExecutionAgentDeps['userServiceClient'],
     };
   }
 
@@ -205,6 +215,7 @@ describe('submitToExecutionAgent', () => {
       hasActiveTaskForLinearIssue: vi.fn(),
       hasDispatchedOrRunningForPR: vi.fn(),
       countQueued: vi.fn(),
+      findPlannedTaskByLinearIssue: vi.fn(),
     };
 
     mockLinearAgentClient = {
@@ -224,6 +235,15 @@ describe('submitToExecutionAgent', () => {
 
     mockWorkerSettingsRepo = {
       getSettings: vi.fn(),
+    };
+
+    mockGitHubPRClient = {
+      getPullRequestStatus: vi.fn().mockResolvedValue(ok({ state: 'open', mergedAt: null, headRef: 'plan/test' })),
+      mergePullRequest: vi.fn().mockResolvedValue(ok({ sha: 'abc123', merged: true })),
+    };
+
+    mockUserServiceClient = {
+      getOAuthToken: vi.fn().mockResolvedValue(ok({ accessToken: 'ghp_test_token' })),
     };
   });
 
@@ -248,6 +268,7 @@ describe('submitToExecutionAgent', () => {
     it('returns invalid_status when task status is not completed', async () => {
       const mockTask = createMockTask({ status: 'running' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockCodeTaskRepo.findPlannedTaskByLinearIssue.mockResolvedValue(ok(null));
 
       const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
@@ -263,6 +284,7 @@ describe('submitToExecutionAgent', () => {
     it('returns invalid_status when agentType is not planning', async () => {
       const mockTask = createMockTask({ agentType: 'execution' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockCodeTaskRepo.findPlannedTaskByLinearIssue.mockResolvedValue(ok(null));
 
       const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
@@ -816,7 +838,23 @@ describe('submitToExecutionAgent', () => {
       );
     });
 
-    it('stores planning PR info on execution task when original task has result with branch and planning_pr_url', async () => {
+    it('merges plan PR before creating execution task when planning_pr_url exists', async () => {
+      setupHappyPathMocks({
+        result: {
+          branch: 'plan/my-feature',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/42',
+        },
+      });
+
+      const result = await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+      expect(mockGitHubPRClient.mergePullRequest).toHaveBeenCalledWith(
+        'ghp_test_token', 'pbuchman', 'intexuraos', 42, 'merge', expect.any(String),
+      );
+    });
+
+    it('does not include planningPrBranch or planningPrUrl on execution task', async () => {
       setupHappyPathMocks({
         result: {
           branch: 'plan/my-feature',
@@ -826,23 +864,19 @@ describe('submitToExecutionAgent', () => {
 
       await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
 
-      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          planningPrBranch: 'plan/my-feature',
-          planningPrUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
-        })
-      );
-    });
-
-    it('omits planning PR fields from execution task when original task has no result', async () => {
-      setupHappyPathMocks();
-
-      await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
-
       const createCall = mockCodeTaskRepo.create.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
       expect(createCall).toBeDefined();
       expect(createCall?.['planningPrBranch']).toBeUndefined();
       expect(createCall?.['planningPrUrl']).toBeUndefined();
+    });
+
+    it('skips plan PR merge when planning task has no planning_pr_url', async () => {
+      setupHappyPathMocks();
+
+      const result = await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+      expect(mockGitHubPRClient.mergePullRequest).not.toHaveBeenCalled();
     });
 
     it('calls enqueue after successful task creation', async () => {
@@ -894,6 +928,100 @@ describe('submitToExecutionAgent', () => {
           workerLocation: 'queued',
         })
       );
+    });
+  });
+
+  describe('plan PR merge', () => {
+    it('returns plan_pr_merge_failed when plan PR merge fails', async () => {
+      setupHappyPathMocks({
+        result: {
+          branch: 'plan/my-feature',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/42',
+        },
+      });
+      mockGitHubPRClient.getPullRequestStatus.mockResolvedValue(ok({ state: 'open', mergedAt: null, headRef: 'plan/test' }));
+      mockGitHubPRClient.mergePullRequest.mockResolvedValue(err({
+        code: 'API_ERROR' as const,
+        message: '405 Method Not Allowed - merge conflict',
+      }));
+
+      const result = await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('plan_pr_merge_failed');
+      }
+      // Verify no execution task was created
+      expect(mockCodeTaskRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('returns plan_pr_merge_failed when GitHub token is unavailable', async () => {
+      setupHappyPathMocks({
+        result: {
+          branch: 'plan/my-feature',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/42',
+        },
+      });
+      mockUserServiceClient.getOAuthToken.mockResolvedValue(err({
+        code: 'NOT_FOUND',
+        message: 'Token not found',
+      }));
+
+      const result = await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('plan_pr_merge_failed');
+        expect(result.error.message).toContain('GitHub OAuth token');
+      }
+      expect(mockCodeTaskRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('succeeds when plan PR is already merged', async () => {
+      setupHappyPathMocks({
+        result: {
+          branch: 'plan/my-feature',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/42',
+        },
+      });
+      mockGitHubPRClient.getPullRequestStatus.mockResolvedValue(ok({
+        state: 'closed', mergedAt: new Date(), headRef: 'plan/test',
+      }));
+
+      const result = await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+      expect(mockGitHubPRClient.mergePullRequest).not.toHaveBeenCalled();
+    });
+
+    it('merges plan PR before fan-out for complex tasks', async () => {
+      setupHappyPathMocks({
+        result: {
+          branch: 'plan/my-feature',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/42',
+        },
+      });
+      // Override to complex-task label
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'uuid-parent-123',
+          identifier: linearIssueId,
+          title: 'Complex Feature',
+          url: `https://linear.app/pbuchman/issue/${linearIssueId}`,
+          labels: ['complex-task'],
+          childCount: 3,
+          parentId: null,
+        })
+      );
+      mockFanOutChildTasks.mockResolvedValue(
+        ok({ childTaskIds: ['child_1', 'child_2'], parentTaskId: 'task_parent_exec' })
+      );
+
+      const result = await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+      // Verify merge happened before any task creation
+      expect(mockGitHubPRClient.mergePullRequest).toHaveBeenCalled();
     });
   });
 
@@ -1301,6 +1429,234 @@ describe('submitToExecutionAgent', () => {
         expect.objectContaining({ linearIssueId }),
         expect.stringContaining('Failed to check for active tasks')
       );
+    });
+  });
+
+  describe('planning task resolver', () => {
+    it('resolves review task to planning task via linearIssueId', async () => {
+      // The user calls /implement on a review task
+      const reviewTask = createMockTask({
+        id: 'task_review',
+        agentType: 'review',
+        status: 'reviewed',
+        linearIssueId: 'INT-100',
+      });
+      // The planning task exists for the same Linear issue
+      const planningTask = createMockTask({
+        id: 'task_planning',
+        agentType: 'planning',
+        status: 'planned',
+        linearIssueId: 'INT-100',
+      });
+
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(reviewTask));
+      mockCodeTaskRepo.findPlannedTaskByLinearIssue.mockResolvedValue(ok(planningTask));
+
+      // Set up remaining happy-path mocks using the PLANNING task
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(ok({ hasActive: false }));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [enabledWorker] }));
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'INT-100',
+          identifier: 'INT-100',
+          title: 'My Feature',
+          url: 'https://linear.app/pbuchman/issue/INT-100',
+          labels: ['code-task'],
+          childCount: 0,
+          parentId: null,
+        })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok({ ...planningTask, implementationTaskId: 'task_exec' }));
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok({
+          ...planningTask,
+          id: 'task_exec',
+          agentType: 'execution' as const,
+          followUpReason: 'execution_implement' as const,
+          parentTaskId: 'task_planning',
+          traceId: 'execution-trace-abc',
+          workerType: 'auto' as const,
+          webhookSecret: 'webhook-secret',
+        })
+      );
+      mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
+      mockLinearAgentClient.addComment.mockResolvedValue(ok({}));
+      mockTaskEnqueueService.enqueue.mockResolvedValue(ok({ taskId: 'task_exec', queuePosition: 1 }));
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId: 'task_review',
+        userId,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.implementationOf).toBe('task_planning');
+      }
+      // Verify resolver was called with the review task's linearIssueId
+      expect(mockCodeTaskRepo.findPlannedTaskByLinearIssue).toHaveBeenCalledWith('INT-100');
+    });
+
+    it('returns invalid_status when resolver finds no planning task', async () => {
+      const reviewTask = createMockTask({
+        id: 'task_review',
+        agentType: 'review',
+        status: 'reviewed',
+        linearIssueId: 'INT-100',
+      });
+
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(reviewTask));
+      mockCodeTaskRepo.findPlannedTaskByLinearIssue.mockResolvedValue(ok(null));
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId: 'task_review',
+        userId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('invalid_status');
+      }
+    });
+
+    it('returns invalid_status when non-planning task has no linearIssueId', async () => {
+      const taskWithoutLinear = createMockTask({
+        id: 'task_no_linear',
+        agentType: 'review',
+        status: 'reviewed',
+      });
+      delete (taskWithoutLinear as { linearIssueId?: string }).linearIssueId;
+
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(taskWithoutLinear));
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId: 'task_no_linear',
+        userId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('invalid_status');
+      }
+      // Should NOT attempt resolver without linearIssueId
+      expect(mockCodeTaskRepo.findPlannedTaskByLinearIssue).not.toHaveBeenCalled();
+    });
+
+    it('resolves remediation task to planning task', async () => {
+      const remediationTask = createMockTask({
+        id: 'task_remediation',
+        agentType: 'remediation',
+        status: 'implemented',
+        linearIssueId: 'INT-100',
+      });
+      const planningTask = createMockTask({
+        id: 'task_planning',
+        agentType: 'planning',
+        status: 'planned',
+        linearIssueId: 'INT-100',
+      });
+
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(remediationTask));
+      mockCodeTaskRepo.findPlannedTaskByLinearIssue.mockResolvedValue(ok(planningTask));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(ok({ hasActive: false }));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [enabledWorker] }));
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'INT-100',
+          identifier: 'INT-100',
+          title: 'My Feature',
+          url: 'https://linear.app/pbuchman/issue/INT-100',
+          labels: ['code-task'],
+          childCount: 0,
+          parentId: null,
+        })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok({ ...planningTask, implementationTaskId: 'task_exec' }));
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok({
+          ...planningTask,
+          id: 'task_exec',
+          agentType: 'execution' as const,
+          followUpReason: 'execution_implement' as const,
+          parentTaskId: 'task_planning',
+          traceId: 'execution-trace-abc',
+          workerType: 'auto' as const,
+          webhookSecret: 'webhook-secret',
+        })
+      );
+      mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
+      mockLinearAgentClient.addComment.mockResolvedValue(ok({}));
+      mockTaskEnqueueService.enqueue.mockResolvedValue(ok({ taskId: 'task_exec', queuePosition: 1 }));
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId: 'task_remediation',
+        userId,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.implementationOf).toBe('task_planning');
+      }
+    });
+
+    it('returns invalid_status when resolved planning task belongs to different user', async () => {
+      const reviewTask = createMockTask({
+        id: 'task_review',
+        agentType: 'review',
+        status: 'reviewed',
+        linearIssueId: 'INT-100',
+      });
+      const otherUsersPlanningTask = createMockTask({
+        id: 'task_planning',
+        agentType: 'planning',
+        status: 'planned',
+        linearIssueId: 'INT-100',
+        userId: 'other-user-id',
+      });
+
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(reviewTask));
+      mockCodeTaskRepo.findPlannedTaskByLinearIssue.mockResolvedValue(ok(otherUsersPlanningTask));
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId: 'task_review',
+        userId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('invalid_status');
+      }
+      // Verify security event is logged with both user IDs
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestedByUserId: userId,
+          taskOwnedByUserId: 'other-user-id',
+        }),
+        'Security: resolved planning task belongs to different user'
+      );
+    });
+
+    it('returns invalid_status when resolver errors', async () => {
+      const reviewTask = createMockTask({
+        id: 'task_review',
+        agentType: 'review',
+        status: 'reviewed',
+        linearIssueId: 'INT-100',
+      });
+
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(reviewTask));
+      mockCodeTaskRepo.findPlannedTaskByLinearIssue.mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR' as const, message: 'Firestore error' })
+      );
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId: 'task_review',
+        userId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('invalid_status');
+      }
     });
   });
 });

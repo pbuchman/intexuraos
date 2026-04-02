@@ -12,6 +12,7 @@ import type {
   DispatchRequest,
   DispatchResult,
   DispatchWorkerCredentials,
+  ExecutionMemoryPromptContext,
 } from '../../domain/services/taskDispatcher.js';
 import type { TaskDispatcherDeps, TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
@@ -59,12 +60,11 @@ interface WorkerTaskRequest {
   linearIssueId?: string;
   traceId?: string;
   agentType?: AgentType;
+  executionMemoryContext?: ExecutionMemoryPromptContext;
   trackingCommentId?: string;
   prNumber?: number;
   continuationPrNumber?: number;
   continuationPrBranch?: string;
-  planningPrBranch?: string;
-  planningPrUrl?: string;
   reviewTypes?: string[];
 }
 
@@ -131,6 +131,9 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     if (request.agentType !== undefined) {
       taskRequest.agentType = request.agentType;
     }
+    if (request.executionMemoryContext !== undefined) {
+      taskRequest.executionMemoryContext = request.executionMemoryContext;
+    }
     if (request.trackingCommentId !== undefined) {
       taskRequest.trackingCommentId = request.trackingCommentId;
     }
@@ -142,12 +145,6 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     }
     if (request.continuationPrBranch !== undefined) {
       taskRequest.continuationPrBranch = request.continuationPrBranch;
-    }
-    if (request.planningPrBranch !== undefined) {
-      taskRequest.planningPrBranch = request.planningPrBranch;
-    }
-    if (request.planningPrUrl !== undefined) {
-      taskRequest.planningPrUrl = request.planningPrUrl;
     }
     if (request.reviewTypes !== undefined) {
       taskRequest.reviewTypes = request.reviewTypes;

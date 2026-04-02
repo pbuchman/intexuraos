@@ -11,6 +11,7 @@ export {
   resetFirestore,
   setFirestore,
   FieldValue,
+  Timestamp,
   type Firestore,
 } from './firestore.js';
 

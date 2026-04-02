@@ -1,4 +1,5 @@
 import type { OrchestratorStatus } from './state.js';
+import type { ExecutionMemoryPromptContext } from './execution-memory.js';
 import type { WorkerType } from '../services/isolation/types.js';
 import type { WorkerAuthProvider, WorkerAuthState } from '../services/worker-auth/index.js';
 
@@ -24,6 +25,8 @@ export interface CreateTaskRequest {
   retriedFrom?: string;
   /** Agent type determined by code-agent routing analysis. */
   agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
+  /** Prompt-ready execution memory context prepared by code-agent retrieval. */
+  executionMemoryContext?: ExecutionMemoryPromptContext;
   /** Existing PR tracking comment to reuse instead of creating a new one. */
   trackingCommentId?: string;
   /** PR number this task is operating on. Used to enforce one-per-PR container preservation. */
@@ -32,10 +35,6 @@ export interface CreateTaskRequest {
   continuationPrNumber?: number;
   /** Existing PR branch to continue instead of creating a fresh PR. */
   continuationPrBranch?: string;
-  /** Branch name of planning PR to merge into execution worktree. */
-  planningPrBranch?: string;
-  /** PR URL to close after successful execution. */
-  planningPrUrl?: string;
   /** Review types requested for review agent tasks. */
   reviewTypes?: string[];
 }

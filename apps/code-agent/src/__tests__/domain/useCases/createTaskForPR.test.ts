@@ -106,6 +106,9 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async listQueued(): ReturnType<CodeTaskRepository['listQueued']> {
       return ok([]);
     },
+    async listPendingExecutionMemoryPostRun(): ReturnType<CodeTaskRepository['listPendingExecutionMemoryPostRun']> {
+      return ok([]);
+    },
     async countQueued(): ReturnType<CodeTaskRepository['countQueued']> {
       return ok(0);
     },
@@ -126,6 +129,12 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     },
     async findPreservedPullRequestTask(): ReturnType<CodeTaskRepository['findPreservedPullRequestTask']> {
       return ok(null);
+    },
+    async listAllNonArchived(): ReturnType<CodeTaskRepository['listAllNonArchived']> {
+      return ok([]);
+    },
+    async listAllNonArchivedGlobal(): ReturnType<CodeTaskRepository['listAllNonArchivedGlobal']> {
+      return ok([]);
     },
   };
 }

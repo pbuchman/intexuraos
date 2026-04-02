@@ -2,7 +2,7 @@
  * JSON schemas for research endpoints.
  */
 
-import { researchSchema, supportedModelSchema } from './common.js';
+import { researchSchema, researchSummarySchema, supportedModelSchema } from './common.js';
 
 export const createResearchBodySchema = {
   type: 'object',
@@ -83,7 +83,7 @@ export const listResearchesResponseSchema = {
       properties: {
         items: {
           type: 'array',
-          items: researchSchema,
+          items: researchSummarySchema,
         },
         nextCursor: { type: 'string', nullable: true },
       },

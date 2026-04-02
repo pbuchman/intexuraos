@@ -37,14 +37,13 @@ describe('ConfirmSubmitModal', () => {
       <ConfirmSubmitModal
         isOpen
         taskTitle="Implement feature"
-        workerName="home-dev"
         workerType="codex"
         onConfirm={vi.fn().mockResolvedValue(undefined)}
         onCancel={vi.fn()}
       />
     );
 
-    expect(screen.getByText((content) => content.includes('(Codex)'))).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes('Codex'))).toBeInTheDocument();
   });
 
   it('invokes onConfirm when submit is clicked', () => {
@@ -54,7 +53,6 @@ describe('ConfirmSubmitModal', () => {
       <ConfirmSubmitModal
         isOpen
         taskTitle="Implement feature"
-        workerName="home-dev"
         workerType="codex"
         onConfirm={onConfirm}
         onCancel={vi.fn()}

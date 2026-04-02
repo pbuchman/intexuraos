@@ -22,6 +22,11 @@ import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../utils
 import { archiveRetriedTaskAfterDispatch } from '../utils/archiveRetriedTaskAfterDispatch.js';
 import { shouldFanOut, fanOutChildTasks } from './fanOutChildTasks.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
+import {
+  prepareExecutionMemoryContext,
+  toDispatchExecutionMemoryContext,
+  type PrepareExecutionMemoryResources,
+} from './prepareExecutionMemoryContext.js';
 
 /** Max candidates fetched per drain cycle for the per-resource concurrency guard. */
 const DRAIN_CANDIDATE_BATCH_SIZE = 10;
@@ -65,6 +70,7 @@ export interface DrainTaskQueueDeps {
   workerSettingsRepo: WorkerSettingsRepository;
   taskEnqueueService: TaskEnqueueService;
   orchestratorSecret: string;
+  executionMemory?: PrepareExecutionMemoryResources;
 }
 
 export async function drainTaskQueue(
@@ -171,10 +177,34 @@ export async function drainTaskQueue(
       (a, b) => a.createdAt.toMillis() - b.createdAt.toMillis()
     );
 
-    // Find first dispatchable candidate with TTL-first + per-PR guard
+    // Find first dispatchable candidate with per-PR guard + TTL check
     let task: CodeTask | null = null;
     for (const candidate of roundRobinCandidates) {
-      // TTL check FIRST — expire deadlocked tasks before they block forever
+      // Per-PR concurrency guard FIRST — don't expire tasks that are merely PR-locked
+      if (candidate.prNumber !== undefined) {
+        const prActiveResult = await codeTaskRepo.hasDispatchedOrRunningForPR(candidate.repository, candidate.prNumber);
+        if (prActiveResult.ok && prActiveResult.value.hasActive) {
+          logger.info({
+            taskId: candidate.id,
+            repository: candidate.repository,
+            prNumber: candidate.prNumber,
+            activeTaskId: prActiveResult.value.taskId,
+          }, 'Skipping queued task — dispatched/running task exists for same PR');
+
+          // Reset TTL so PR-lock-blocked time does not count toward expiry
+          const resetResult = await codeTaskRepo.update(candidate.id, { queuedAt: new Date() });
+          if (!resetResult.ok) {
+            logger.warn(
+              { taskId: candidate.id, error: resetResult.error },
+              'Failed to reset queuedAt for PR-locked task — TTL clock continues from original queuedAt',
+            );
+          }
+
+          continue;
+        }
+      }
+
+      // TTL check — only for tasks that are actually dispatchable (not PR-locked)
       const queuedAt = candidate.queuedAt?.toDate() ?? candidate.createdAt.toDate();
       const ttlMs = config.queue.ttlMinutes * 60 * 1000;
       const now = Date.now();
@@ -208,20 +238,6 @@ export async function drainTaskQueue(
         }
 
         return ok({ action: 'expired', taskId: candidate.id, locksToCleanup });
-      }
-
-      // Per-PR concurrency guard: only dispatched/running tasks block (NOT queued)
-      if (candidate.prNumber !== undefined) {
-        const prActiveResult = await codeTaskRepo.hasDispatchedOrRunningForPR(candidate.repository, candidate.prNumber);
-        if (prActiveResult.ok && prActiveResult.value.hasActive) {
-          logger.info({
-            taskId: candidate.id,
-            repository: candidate.repository,
-            prNumber: candidate.prNumber,
-            activeTaskId: prActiveResult.value.taskId,
-          }, 'Skipping queued task — dispatched/running task exists for same PR');
-          continue;
-        }
       }
 
       task = candidate;
@@ -320,6 +336,37 @@ export async function drainTaskQueue(
 
     const agentType = resolveTaskAgentType(task, linearIssueLabels);
     const dispatchLabels = ensureDispatchLabelsForAgentType(linearIssueLabels, agentType);
+    let taskExecutionMemoryContext = task.executionMemoryContext;
+
+    if (
+      config.executionMemoryEnabled
+      && agentType === 'execution'
+      && taskExecutionMemoryContext === undefined
+    ) {
+      taskExecutionMemoryContext = await prepareExecutionMemoryContext({
+        task,
+        linearIssueLabels: dispatchLabels,
+        logger,
+        linearAgentClient,
+        queryClient: deps.executionMemory?.queryClient,
+        embeddingClient: deps.executionMemory?.embeddingClient,
+        executionMemoryRepo: deps.executionMemory?.executionMemoryRepo,
+        executionMemoryApplicationRepo: deps.executionMemory?.executionMemoryApplicationRepo,
+      });
+
+      const memoryUpdateResult = await codeTaskRepo.update(task.id, {
+        executionMemoryContext: taskExecutionMemoryContext,
+      });
+
+      if (!memoryUpdateResult.ok) {
+        logger.warn(
+          { taskId: task.id, error: memoryUpdateResult.error },
+          'Failed to persist execution memory context before dispatch'
+        );
+      }
+    }
+
+    const dispatchExecutionMemoryContext = toDispatchExecutionMemoryContext(taskExecutionMemoryContext);
 
     // Step 5: Attempt dispatch
     const webhookUrl = `${config.serviceUrl}/internal/webhooks/task-complete`;
@@ -344,11 +391,12 @@ export async function drainTaskQueue(
       }),
       ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
       // INT-949: Dispatch metadata fields from task document
-      ...(task.planningPrBranch !== undefined && { planningPrBranch: task.planningPrBranch }),
-      ...(task.planningPrUrl !== undefined && { planningPrUrl: task.planningPrUrl }),
       ...(task.trackingCommentId !== undefined && { trackingCommentId: task.trackingCommentId }),
       ...(task.retriedFrom !== undefined && { retriedFrom: task.retriedFrom }),
       ...(task.reviewTypes !== undefined && { reviewTypes: task.reviewTypes }),
+      ...(dispatchExecutionMemoryContext !== undefined && {
+        executionMemoryContext: dispatchExecutionMemoryContext,
+      }),
       ...(task.prNumber !== undefined && { prNumber: task.prNumber }),
     });
 

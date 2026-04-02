@@ -24,6 +24,7 @@ import {
   CodeTaskViewPageV2,
   CodeTaskNewPage,
   CodeTasksPage,
+  CodeTasksPageV3,
   CronExecutionsPage,
   CronScheduleNewPage,
   CronSchedulesPage,
@@ -46,6 +47,7 @@ import {
   LlmCostsPage,
   LinearConnectionPage,
   LinearIssuesPage,
+  LinearPruneCandidatesPage,
   ResearchAgentPage,
   LlmPricingPage,
   LoginPage,
@@ -301,6 +303,14 @@ function AppRoutes(): React.JSX.Element {
         }
       />
       <Route
+        path="/code-tasks-v3"
+        element={
+          <ProtectedRoute>
+            <CodeTasksPageV3 />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/code-tasks/new"
         element={
           <ProtectedRoute>
@@ -541,6 +551,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <CalendarPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/linear/prune-candidates"
+        element={
+          <ProtectedRoute>
+            <LinearPruneCandidatesPage />
           </ProtectedRoute>
         }
       />

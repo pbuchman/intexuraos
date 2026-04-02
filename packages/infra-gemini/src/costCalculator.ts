@@ -12,11 +12,12 @@ export function calculateTextCost(usage: TokenUsage, pricing: ModelPricing): num
 
   const inputCost = usage.inputTokens * inputPrice;
   const outputCost = usage.outputTokens * outputPrice;
+  const thinkingCost = (usage.thinkingTokens ?? 0) * outputPrice;
 
   // Safe Math: Calculate Grounding Scaled
   const groundingCostScaled = (usage.groundingEnabled === true ? groundingPrice : 0) * 1_000_000;
 
-  const totalScaledCost = inputCost + outputCost + groundingCostScaled;
+  const totalScaledCost = inputCost + outputCost + thinkingCost + groundingCostScaled;
 
   return Math.round(totalScaledCost) / 1_000_000;
 }
@@ -30,14 +31,21 @@ export function normalizeUsage(
   inputTokens: number,
   outputTokens: number,
   groundingEnabled: boolean,
-  pricing: ModelPricing
+  pricing: ModelPricing,
+  thinkingTokens?: number
 ): NormalizedUsage {
-  const usage: TokenUsage = { inputTokens, outputTokens, groundingEnabled };
+  const usage: TokenUsage = {
+    inputTokens,
+    outputTokens,
+    groundingEnabled,
+    ...(thinkingTokens !== undefined && { thinkingTokens }),
+  };
   return {
     inputTokens,
     outputTokens,
     totalTokens: inputTokens + outputTokens,
     costUsd: calculateTextCost(usage, pricing),
     ...(groundingEnabled && { groundingEnabled: true }),
+    ...(thinkingTokens !== undefined && thinkingTokens > 0 && { thinkingTokens }),
   };
 }

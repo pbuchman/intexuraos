@@ -1,10 +1,10 @@
 /**
  * List researches usecase.
- * Retrieves user's researches with pagination.
+ * Retrieves user's researches with summary projections for list views.
  */
 
 import type { Result } from '@intexuraos/common-core';
-import type { Research } from '../models/index.js';
+import type { ResearchSummary } from '../models/index.js';
 import type { RepositoryError, ResearchRepository } from '../ports/index.js';
 
 export interface ListResearchesParams {
@@ -14,7 +14,7 @@ export interface ListResearchesParams {
 }
 
 export interface ListResearchesResult {
-  items: Research[];
+  items: ResearchSummary[];
   nextCursor?: string;
 }
 
@@ -30,5 +30,5 @@ export async function listResearches(
     options.cursor = params.cursor;
   }
 
-  return await deps.researchRepo.findByUserId(params.userId, options);
+  return await deps.researchRepo.findSummariesByUserId(params.userId, options);
 }

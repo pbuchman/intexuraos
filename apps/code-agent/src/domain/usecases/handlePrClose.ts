@@ -1,8 +1,14 @@
 /**
- * Use case: Transition associated Linear issues on PR merge.
+ * Use case: Handle PR close events (merged or closed without merge).
  *
- * Plan PRs (detected by `[plan]` in title) transition to Todo.
- * All other PRs transition to QA.
+ * When merged:
+ * - Plan PRs (detected by `[plan]` in title) transition to Todo.
+ * - All other PRs transition to QA.
+ * - Remove `ready-to-merge` label.
+ * - Destroy preserved pull_request container.
+ *
+ * When closed without merge:
+ * - Remove `ready-to-merge` label only (no state transition).
  *
  * Discovery methods:
  * 1. Code task lookup via findByPR / findLatestExecutionTaskByPR
@@ -16,6 +22,7 @@ import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { LinearIssueService } from '../services/linearIssueService.js';
 import type { TaskDispatcherService } from '../services/taskDispatcher.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
+import type { TaskGroupSummaryRepository } from '../ports/taskGroupSummaryRepository.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { extractIntIssueId } from '../utils/linearIdentifierParser.js';
 import { resolveWorkerCredentials } from '../services/gitHubDispatchService.js';
@@ -24,27 +31,29 @@ function isPlanPr(prTitle: string | null): boolean {
   return prTitle !== null && /\[plan\]/i.test(prTitle);
 }
 
-export interface HandlePrMergeDeps {
+export interface HandlePrCloseDeps {
   codeTaskRepo: CodeTaskRepository;
   linearIssueService: LinearIssueService;
   userServiceClient: UserServiceClient;
   taskDispatcher: TaskDispatcherService;
   workerSettingsRepo: WorkerSettingsRepository;
+  groupSummaryRepo: TaskGroupSummaryRepository;
   logger: Logger;
 }
 
-export interface HandlePrMergeInput {
+export interface HandlePrCloseInput {
   repository: string;
   prNumber: number;
   prBody: string | null;
   prTitle: string | null;
   prAuthorLogin: string | null;
   senderLogin: string;
+  isMerged: boolean;
 }
 
-export async function handlePrMerge(deps: HandlePrMergeDeps, input: HandlePrMergeInput): Promise<void> {
-  const { codeTaskRepo, linearIssueService, userServiceClient, taskDispatcher, workerSettingsRepo, logger } = deps;
-  const { repository, prNumber, prBody, prTitle, prAuthorLogin, senderLogin } = input;
+export async function handlePrClose(deps: HandlePrCloseDeps, input: HandlePrCloseInput): Promise<void> {
+  const { codeTaskRepo, linearIssueService, userServiceClient, taskDispatcher, workerSettingsRepo, groupSummaryRepo, logger } = deps;
+  const { repository, prNumber, prBody, prTitle, prAuthorLogin, senderLogin, isMerged } = input;
 
   // Map of linearIssueId → userId (deduplicates)
   const issueMap = new Map<string, string>();
@@ -59,7 +68,7 @@ export async function handlePrMerge(deps: HandlePrMergeDeps, input: HandlePrMerg
   if (!findByPRResult.ok) {
     logger.warn(
       { error: findByPRResult.error, repository, prNumber },
-      'handlePrMerge: findByPR failed'
+      'handlePrClose: findByPR failed'
     );
   } else if (findByPRResult.value?.linearIssueId !== undefined) {
     issueMap.set(findByPRResult.value.linearIssueId, findByPRResult.value.userId);
@@ -68,7 +77,7 @@ export async function handlePrMerge(deps: HandlePrMergeDeps, input: HandlePrMerg
   if (!findLatestResult.ok) {
     logger.warn(
       { error: findLatestResult.error, repository, prNumber },
-      'handlePrMerge: findLatestExecutionTaskByPR failed'
+      'handlePrClose: findLatestExecutionTaskByPR failed'
     );
   } else if (findLatestResult.value?.linearIssueId !== undefined) {
     if (!issueMap.has(findLatestResult.value.linearIssueId)) {
@@ -98,14 +107,14 @@ export async function handlePrMerge(deps: HandlePrMergeDeps, input: HandlePrMerg
       for (const issueId of textIssueIds) {
         logger.warn(
           { linearIssueId: issueId, login, error: userResult.error },
-          'handlePrMerge: failed to resolve userId for PR body/title issue'
+          'handlePrClose: failed to resolve userId for PR body/title issue'
         );
       }
     } else if (userResult.value === null) {
       for (const issueId of textIssueIds) {
         logger.warn(
           { linearIssueId: issueId, login },
-          'handlePrMerge: failed to resolve userId — user not found'
+          'handlePrClose: failed to resolve userId — user not found'
         );
       }
     } else {
@@ -116,44 +125,62 @@ export async function handlePrMerge(deps: HandlePrMergeDeps, input: HandlePrMerg
     }
   }
 
-  // --- Transition ---
+  // --- Transition / Label Cleanup ---
 
   if (issueMap.size === 0) {
-    logger.debug({ repository, prNumber }, 'No Linear issues found for merged PR');
+    logger.debug({ repository, prNumber, isMerged }, 'No Linear issues found for closed PR');
   } else {
-    const isPlan = isPlanPr(prTitle);
+    const isPlan = isMerged ? isPlanPr(prTitle) : false;
     const mark = isPlan
       ? linearIssueService.markTodo.bind(linearIssueService)
       : linearIssueService.markQa.bind(linearIssueService);
-    const targetState = isPlan ? 'todo' : 'qa';
 
     await Promise.all(
       [...issueMap].map(([linearIssueId, userId]) => {
-        logger.info(
-          { linearIssueId, userId, repository, prNumber, targetState },
-          'Transitioning Linear issue on PR merge'
-        );
-        // Remove ready-to-merge label so the merge button disappears in the UI
-        return Promise.all([
-          mark(userId, linearIssueId),
+        const promises: Promise<void>[] = [
           linearIssueService.removeLabel(userId, linearIssueId, 'ready-to-merge'),
-        ]);
+        ];
+        if (isMerged) {
+          const targetState = isPlan ? 'todo' : 'qa';
+          logger.info(
+            { linearIssueId, userId, repository, prNumber, targetState },
+            'Transitioning Linear issue on PR merge'
+          );
+          promises.push(mark(userId, linearIssueId));
+        } else {
+          logger.info(
+            { linearIssueId, userId, repository, prNumber },
+            'Removing ready-to-merge label on PR close without merge'
+          );
+        }
+        return Promise.all(promises);
       })
     );
+
+    // Best-effort: recompute group summary now that ready-to-merge label is removed.
+    // Passing [] ensures hasMergeReadyLabel becomes false in the cached summary.
+    for (const [linearIssueId, userId] of issueMap) {
+      void groupSummaryRepo.recomputeWithLabels(userId, linearIssueId, []).catch((recomputeErr: unknown) => {
+        logger.warn({ linearIssueId, error: recomputeErr },
+          'handlePrClose: failed to recompute group summary (best-effort)');
+      });
+    }
   }
 
-  // Best-effort: destroy preserved pull_request container for merged PR
-  try {
-    const preservedResult = await codeTaskRepo.findPreservedPullRequestTask(repository, prNumber);
-    if (preservedResult.ok && preservedResult.value !== null) {
-      const preserved = preservedResult.value;
-      logger.info({ taskId: preserved.id, prNumber }, 'Destroying preserved container for merged PR');
-      const workerCreds = await resolveWorkerCredentials(
-        workerSettingsRepo, preserved.userId, preserved.workerLocation,
-      );
-      await taskDispatcher.cancelOnWorker(preserved.id, preserved.workerLocation, workerCreds);
+  // Best-effort: destroy preserved pull_request container (only on merge)
+  if (isMerged) {
+    try {
+      const preservedResult = await codeTaskRepo.findPreservedPullRequestTask(repository, prNumber);
+      if (preservedResult.ok && preservedResult.value !== null) {
+        const preserved = preservedResult.value;
+        logger.info({ taskId: preserved.id, prNumber }, 'Destroying preserved container for merged PR');
+        const workerCreds = await resolveWorkerCredentials(
+          workerSettingsRepo, preserved.userId, preserved.workerLocation,
+        );
+        await taskDispatcher.cancelOnWorker(preserved.id, preserved.workerLocation, workerCreds);
+      }
+    } catch (error) {
+      logger.warn({ prNumber, error }, 'Failed to cleanup preserved container on PR merge (best-effort)');
     }
-  } catch (error) {
-    logger.warn({ prNumber, error }, 'Failed to cleanup preserved container on PR merge (best-effort)');
   }
 }

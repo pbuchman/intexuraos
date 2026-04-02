@@ -119,4 +119,51 @@ describe('FirestoreTurnMetricsRepository', () => {
       }
     });
   });
+
+  describe('listByTask', () => {
+    it('returns all stored metrics ordered by attempt ascending', async () => {
+      const repo = createFirestoreTurnMetricsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.store('task-123', 2, createMetrics({ attempt: 2, timestamp: '2025-01-01T02:00:00Z' }));
+      await repo.store('task-123', 1, createMetrics({ attempt: 1, timestamp: '2025-01-01T01:00:00Z' }));
+
+      const result = await repo.listByTask('task-123');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.map((metric) => metric.attempt)).toEqual([1, 2]);
+    });
+
+    it('returns FIRESTORE_ERROR when query fails', async () => {
+      const brokenFirestore = {
+        collection: (): object => ({
+          doc: (): object => ({
+            collection: (): object => ({
+              orderBy: (): object => ({
+                get: (): never => {
+                  throw new Error('Firestore unavailable');
+                },
+              }),
+            }),
+          }),
+        }),
+      } as unknown as Firestore;
+
+      const repo = createFirestoreTurnMetricsRepository({
+        firestore: brokenFirestore,
+        logger,
+      });
+
+      const result = await repo.listByTask('task-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('FIRESTORE_ERROR');
+      }
+    });
+  });
 });
