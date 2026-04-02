@@ -186,6 +186,46 @@ describe('LlmSummarizer', () => {
       expect(llmClient.getCallCount()).toBe(2);
     });
 
+    it('omits optional metadata hints from the repair prompt when they are not provided', async () => {
+      llmClient.setResponses([
+        { ok: true, content: '   ' },
+        { ok: true, content: 'Fixed summary.' },
+      ]);
+
+      const result = await summarizer.summarize('content', { url: 'https://example.com' }, llmClient);
+
+      expect(result.ok).toBe(true);
+
+      const repairPrompt = llmClient.getPrompts()[1];
+      expect(repairPrompt).toContain('URL: https://example.com');
+      expect(repairPrompt).not.toContain('Title hint:');
+      expect(repairPrompt).not.toContain('Description hint:');
+    });
+
+    it('includes optional metadata hints in the repair prompt when they are provided', async () => {
+      llmClient.setResponses([
+        { ok: true, content: '   ' },
+        { ok: true, content: 'Fixed summary.' },
+      ]);
+
+      const result = await summarizer.summarize(
+        'content',
+        {
+          url: 'https://example.com',
+          title: 'Example title',
+          description: 'Example description',
+        },
+        llmClient
+      );
+
+      expect(result.ok).toBe(true);
+
+      const repairPrompt = llmClient.getPrompts()[1];
+      expect(repairPrompt).toContain('URL: https://example.com');
+      expect(repairPrompt).toContain('Title hint: Example title');
+      expect(repairPrompt).toContain('Description hint: Example description');
+    });
+
     it('returns REPAIR_FAILED when LLM fails during repair', async () => {
       llmClient.setResponses([
         { ok: true, content: '[{"json": "format"}]' },

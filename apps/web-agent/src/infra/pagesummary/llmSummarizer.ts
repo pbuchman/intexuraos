@@ -72,7 +72,7 @@ async function attemptRepair(
     originalContent,
     invalidResponse,
     errorMessage: parseError.message,
-    ...(url !== undefined && { url }),
+    url,
     ...(title !== undefined && { title }),
     ...(description !== undefined && { description }),
   });
@@ -144,7 +144,7 @@ export function createLlmSummarizer(logger: Logger): LlmSummarizer {
 
       // Build prompt and append content
       const prompt = summaryPrompt.build({
-        ...(options.url !== undefined && { url: options.url }),
+        url: options.url,
         ...(options.title !== undefined && { title: options.title }),
         ...(options.description !== undefined && { description: options.description }),
         maxSentences,
