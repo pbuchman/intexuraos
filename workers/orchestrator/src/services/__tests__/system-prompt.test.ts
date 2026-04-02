@@ -236,14 +236,14 @@ describe('system-prompt', () => {
     expect(result).not.toContain('superpowers:requesting-code-review');
   });
 
-  it('does not include executing-plans or receiving-code-review in remediation prompt', () => {
+  it('does not include subagent-driven-development or receiving-code-review in remediation prompt', () => {
     const result = remediationPrompt.build({
       ...baseParams,
       agentType: 'remediation',
       continuationPrNumber: 901,
       continuationPrBranch: 'fix/remediation-901',
     });
-    expect(result).not.toContain('superpowers:executing-plans');
+    expect(result).not.toContain('superpowers:subagent-driven-development');
     expect(result).not.toContain('superpowers:receiving-code-review');
   });
 
@@ -439,7 +439,7 @@ describe('system-prompt', () => {
     expect(result).toContain('source of truth');
     expect(result).toContain('Linear MCP tools');
     expect(result).toContain('Do NOT use the `/linear` skill');
-    expect(result).toContain('superpowers:executing-plans');
+    expect(result).toContain('superpowers:subagent-driven-development');
     expect(result).toContain('superpowers:requesting-code-review');
     expect(result).toContain('gh pr create');
     expect(result).toContain('EXECUTION_AGENT_FINAL:');
@@ -1196,8 +1196,8 @@ describe('system-prompt', () => {
     expect(planningPrompt.version).toBe('3.2.0');
   });
 
-  it('execution prompt version is 6.1.0', () => {
-    expect(executionPrompt.version).toBe('6.1.0');
+  it('execution prompt version is 7.0.0', () => {
+    expect(executionPrompt.version).toBe('7.0.0');
   });
 
   it('remediation prompt version is 3.1.0', () => {

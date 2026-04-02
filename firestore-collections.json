@@ -161,7 +161,7 @@
     "code_tasks": {
       "owner": "code-agent",
       "description": "Code execution tasks",
-      "subcollections": ["logs", "log_lines", "turn_metrics"]
+      "subcollections": ["logs", "log_lines", "turn_metrics", "compliance_reports"]
     },
     "user_spend": {
       "owner": "code-agent",

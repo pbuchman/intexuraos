@@ -42,7 +42,7 @@ import type { CompletionControlConfig, IsolationConfig } from './services/task-d
 import { LlmModels } from '@intexuraos/llm-contract';
 import { OrchestratorCompletionVerifier } from './services/completion-verifier.js';
 import { TurnMetricsCollector } from './services/turn-metrics-collector.js';
-import { OrchestratorExecutionDeepValidator } from './services/execution-deep-validator.js';
+import { OrchestratorAgentComplianceValidator } from './services/agent-compliance-validator.js';
 
 const DEFAULT_PORT = 8199;
 const DEFAULT_CAPACITY = 2;
@@ -745,11 +745,30 @@ async function bootstrap(): Promise<void> {
     logger
   );
 
-  const executionDeepValidator = new OrchestratorExecutionDeepValidator(logger, {
-    model: LlmModels.Gemini25Flash,
-    geminiApiKey: geminiVerifierKey,
-    auditLogPath: llmAuditLogPath,
-  });
+  const openRouterApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '';
+  const complianceValidatorModel =
+    process.env['INTEXURAOS_COMPLIANCE_MODEL'] ?? 'xiaomi/mimo-v2-pro';
+
+  logger.info(
+    {
+      complianceValidatorModel,
+      hasOpenRouterApiKey: openRouterApiKey.length > 0,
+    },
+    'Agent compliance validator configuration'
+  );
+
+  const agentComplianceValidator =
+    openRouterApiKey !== ''
+      ? new OrchestratorAgentComplianceValidator(logger, {
+          openRouterApiKey,
+          model: complianceValidatorModel,
+          pricing: {
+            inputPricePerMillion: 1.0,
+            outputPricePerMillion: 3.0,
+          },
+          auditLogPath: llmAuditLogPath,
+        })
+      : undefined;
 
   const dispatcher = new TaskDispatcher(
     config,
@@ -762,7 +781,7 @@ async function bootstrap(): Promise<void> {
     isolationConfig,
     completionControl,
     turnMetricsCollector,
-    executionDeepValidator
+    agentComplianceValidator
   );
 
   // Credential monitoring loop — trigger Docker-based refresh when near expiry

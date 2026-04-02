@@ -143,7 +143,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       planning_pr_url?: string;
       planning_unclear_clarification?: string;
       execution_outcome_label?: 'implemented' | 'already_completed';
-      execution_superpowers_executing_plans_used?: '0' | '1';
+      execution_superpowers_subagent_driven_dev_used?: '0' | '1';
       execution_superpowers_requesting_code_review_used?: '0' | '1';
       execution_linear_issue_url?: string;
       review_id?: string;
@@ -196,7 +196,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 planning_superpowers_writing_plans_used: { type: 'string' },
                 planning_linear_url: { type: 'string' },
                 execution_outcome_label: { type: 'string' },
-                execution_superpowers_executing_plans_used: { type: 'string' },
+                execution_superpowers_subagent_driven_dev_used: { type: 'string' },
                 execution_superpowers_requesting_code_review_used: { type: 'string' },
                 review_id: { type: 'string' },
                 review_comments_posted: { type: 'string' },
