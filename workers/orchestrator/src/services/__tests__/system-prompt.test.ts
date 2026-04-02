@@ -449,6 +449,17 @@ describe('system-prompt', () => {
     expect(result).not.toContain('- Turn summary:');
   });
 
+  it('pins execution final block memory self-report fields', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+    const finalBlockStart = result.indexOf('EXECUTION_AGENT_FINAL:');
+    const finalBlockEnd = result.indexOf('```', finalBlockStart);
+    const finalBlock = result.slice(finalBlockStart, finalBlockEnd);
+
+    expect(finalBlock).toContain('- memory_ids_used: <comma-separated list or "none">');
+    expect(finalBlock).toContain('- memory_ids_rejected: <comma-separated list or "none">');
+    expect(finalBlock).toContain('- memory_usage_summary: <brief note, or "none">');
+  });
+
   it('builds execution continuation instructions when an open PR is inherited', () => {
     const result = buildSystemPrompt({
       ...baseParams,
