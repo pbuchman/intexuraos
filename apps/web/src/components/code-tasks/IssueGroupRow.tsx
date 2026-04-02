@@ -30,9 +30,9 @@ function getActionAccentShadow(actionType: ActioningType | undefined): string | 
   return null;
 }
 
-function getActionShimmerClass(actionType: ActioningType | undefined): string {
-  if (actionType === 'archive') return 'shimmer-amber';
-  if (actionType === 'delete') return 'shimmer-red';
+function getRemovalStateClasses(actionType: ActioningType | undefined): string {
+  if (actionType === 'archive') return 'pointer-events-none shimmer-amber bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800';
+  if (actionType === 'delete') return 'pointer-events-none shimmer-red bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800';
   return '';
 }
 
@@ -278,7 +278,6 @@ const IssueGroupRow = memo(function IssueGroupRow({
   const activeActionType: ActioningType | undefined = isActioning ? (actioningType ?? null) : undefined;
   const waveVariant: WaveLoaderVariant = activeActionType === 'archive' ? 'archive' : activeActionType === 'delete' ? 'delete' : 'default';
   const actionAccent = getActionAccentShadow(activeActionType);
-  const actionShimmer = getActionShimmerClass(activeActionType);
   const isBeingRemoved = activeActionType === 'archive' || activeActionType === 'delete';
 
   function renderActionButton(compact: boolean): React.JSX.Element | null {
@@ -353,7 +352,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
     <div>
       {/* Collapsed row */}
       <div
-        className={`group relative cursor-pointer rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm transition-shadow dark:border-slate-700 dark:bg-slate-800 ${isBeingRemoved ? `opacity-50 pointer-events-none ${actionShimmer}` : 'hover:shadow-md'} ${actionAccent ?? getAccentShadow(aggregateStatus)}`}
+        className={`group relative cursor-pointer rounded-lg border px-4 py-3 text-sm transition-all duration-300 ${isBeingRemoved ? getRemovalStateClasses(activeActionType) : 'border-slate-200 bg-white hover:shadow-md dark:border-slate-700 dark:bg-slate-800'} ${actionAccent ?? getAccentShadow(aggregateStatus)}`}
         onClick={handleRowClick}
       >
         <div className="hidden grid-cols-[1fr_1fr_140px_120px_36px] items-center gap-2 lg:grid">

@@ -249,7 +249,7 @@ export function CodeTasksPageV3(): React.JSX.Element {
   });
 
   // Rapid polling after user actions
-  const { actioningTaskId, setActioningTaskId } = useRapidPoll(null, groups, refresh);
+  const { actioningTaskId, setActioningTaskId } = useRapidPoll(null, groups, refresh, actioningType);
 
   // Sync actioningType when rapid poll clears actioningTaskId
   useEffect(() => {
@@ -327,6 +327,7 @@ export function CodeTasksPageV3(): React.JSX.Element {
       void (async (): Promise<void> => {
         if (actionInFlightRef.current) return;
         actionInFlightRef.current = true;
+        const actionStart = Date.now();
         const firstId = taskIds[0];
         if (firstId !== undefined) {
           setActioningTaskId(firstId);
@@ -336,6 +337,12 @@ export function CodeTasksPageV3(): React.JSX.Element {
           const token = await getAccessToken();
           for (const taskId of taskIds) {
             await apiFn(token, taskId);
+          }
+          // Ensure the row shimmer animation is visible before refresh removes the row
+          const MIN_ANIMATION_MS = 1200;
+          const elapsed = Date.now() - actionStart;
+          if (elapsed < MIN_ANIMATION_MS) {
+            await new Promise<void>((resolve) => { setTimeout(resolve, MIN_ANIMATION_MS - elapsed); });
           }
           await refresh(false);
         } catch (err: unknown) {
@@ -435,13 +442,13 @@ export function CodeTasksPageV3(): React.JSX.Element {
         <div>
           <ColumnHeader />
 
-          {refreshing ? (
-            <div className="mb-2 h-0.5 w-full overflow-hidden rounded-full bg-slate-700">
+          <div className={`mb-2 h-0.5 w-full overflow-hidden rounded-full ${refreshing ? 'bg-slate-700' : ''}`}>
+            {refreshing ? (
               <div className="animate-progress-slide h-full w-2/5 rounded-full bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
-            </div>
-          ) : null}
+            ) : null}
+          </div>
 
-          <div className={`space-y-1 ${refreshing ? 'opacity-50 pointer-events-none' : ''}`}>
+          <div className={`space-y-1 ${refreshing && actioningType === null ? 'opacity-50 pointer-events-none' : ''}`}>
             {groups.map((group) => (
               <IssueGroupRow
                 key={group.linearIssueId ?? group.latestTask.id}

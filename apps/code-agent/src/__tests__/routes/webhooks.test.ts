@@ -2252,7 +2252,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           commits: 2,
           summary: 'Implemented execution task',
           execution_outcome_label: 'implemented' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2451,7 +2451,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           commits: 2,
           summary: 'Implemented execution task',
           execution_outcome_label: 'implemented' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2565,7 +2565,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           commits: 2,
           summary: 'Implemented execution task',
           execution_outcome_label: 'implemented' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
           execution_linear_issue_url: '[INT-123](https://linear.app/pbuchman/issue/INT-123)',
         },
@@ -2650,7 +2650,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           prUrl: 'https://github.com/pbuchman/intexuraos/pull/902',
           execution_outcome_label: 'implemented' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-999',
         },
@@ -2713,7 +2713,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         status: 'completed' as const,
         result: {
           execution_outcome_label: 'implemented' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2791,7 +2791,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'Work was already merged into development',
           execution_outcome_label: 'already_completed' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2874,7 +2874,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'The feature was already implemented and merged in PR #850',
           execution_outcome_label: 'already_completed' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2946,7 +2946,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'Work already done',
           execution_outcome_label: 'already_completed' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -3020,7 +3020,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'Work already done',
           execution_outcome_label: 'already_completed' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -3095,7 +3095,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'Work already done',
           execution_outcome_label: 'already_completed' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -5169,6 +5169,35 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(labelMetaCalls).toHaveLength(0);
     });
 
+    it('skips review-outcome label when PR is already merged', async () => {
+      await createOriginTask({ traceId: 'trace_label_merged', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_merged_review' });
+
+      // Simulate PR already merged by providing a gitHubPRSummaryRepo with mergedAt set
+      const mockFindByPullRequest = vi.fn().mockResolvedValue(
+        ok({ mergedAt: new Date('2026-04-01T09:35:00Z') })
+      );
+      setServices({
+        ...getServices(),
+        gitHubPRSummaryRepo: {
+          ...getServices().gitHubPRSummaryRepo,
+          findByPullRequest: mockFindByPullRequest,
+        },
+      });
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      // updateIssueMetadata should NOT have been called for label addition
+      const labelCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].addLabels !== undefined
+      );
+      expect(labelCalls).toHaveLength(0);
+    });
+
     it('does NOT set labels when needs_remediation is not "0"', async () => {
       await createOriginTask({ traceId: 'trace_label_remediation', agentType: 'execution' });
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_remediation_review' });
@@ -5193,6 +5222,50 @@ describe('POST /internal/webhooks/task-complete', () => {
           (call[0].addLabels.includes('ready-to-merge') || call[0].addLabels.includes('ready-to-implement'))
       );
       expect(labelCalls).toHaveLength(0);
+    });
+
+    it('recomputes group summary after setting review-outcome label', async () => {
+      await createOriginTask({ traceId: 'trace_label_summary', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_summary_review' });
+
+      const mockRecomputeWithLabels = vi.fn().mockResolvedValue(ok(undefined));
+      setServices({
+        ...getServices(),
+        groupSummaryRepo: {
+          recomputeWithLabels: mockRecomputeWithLabels,
+        } as never,
+      });
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockRecomputeWithLabels).toHaveBeenCalledWith(
+        'user-123',
+        'INT-500',
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'ready-to-merge' }),
+        ]),
+      );
+    });
+
+    it('does not throw when recomputeWithLabels fails after label set', async () => {
+      await createOriginTask({ traceId: 'trace_label_summary_fail', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_summary_fail_review' });
+
+      const mockRecomputeWithLabels = vi.fn().mockRejectedValue(new Error('firestore down'));
+      setServices({
+        ...getServices(),
+        groupSummaryRepo: {
+          recomputeWithLabels: mockRecomputeWithLabels,
+        } as never,
+      });
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      // Should complete successfully — recompute is fire-and-forget
+      expect(response.statusCode).toBe(200);
     });
   });
 

@@ -482,10 +482,86 @@ describe('createGeminiToolCallingClient', () => {
 
   it('exports TOOL_CALLING_PRICING with gemini-2.5-flash', () => {
     expect(TOOL_CALLING_PRICING[LlmModels.Gemini25Flash]).toEqual({
-      inputPricePerMillion: 0.5,
-      outputPricePerMillion: 2.0,
+      inputPricePerMillion: 0.3,
+      outputPricePerMillion: 2.5,
       groundingCostPerRequest: 0,
     });
+  });
+
+  it('includes thinking tokens in aggregated usage', async () => {
+    // First call: tool call with thinking tokens
+    mockGenerateContent.mockResolvedValueOnce({
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                functionCall: {
+                  name: 'get_weather',
+                  args: { city: 'London' },
+                },
+              },
+            ],
+          },
+        },
+      ],
+      usageMetadata: {
+        promptTokenCount: 100,
+        candidatesTokenCount: 20,
+        thoughtsTokenCount: 50,
+      },
+    });
+    // Second call: final text response with thinking tokens
+    mockGenerateContent.mockResolvedValueOnce({
+      candidates: [
+        {
+          content: {
+            parts: [{ text: 'The weather in London is sunny.' }],
+          },
+        },
+      ],
+      usageMetadata: {
+        promptTokenCount: 200,
+        candidatesTokenCount: 30,
+        thoughtsTokenCount: 80,
+      },
+    });
+
+    const pricing: ModelPricing = {
+      inputPricePerMillion: 0.3,
+      outputPricePerMillion: 2.5,
+      groundingCostPerRequest: 0,
+    };
+    const client = createGeminiToolCallingClient({
+      apiKey: 'test-key',
+      model: LlmModels.Gemini25Flash,
+      userId: 'test-user',
+      pricing,
+      logger: mockLogger,
+    });
+
+    const result = await client.run({
+      systemPrompt: 'You are a weather assistant.',
+      messages: [{ role: 'user', content: 'Weather in London?' }],
+      tools: [
+        {
+          name: 'get_weather',
+          description: 'Get weather',
+          parameters: { type: 'object', properties: { city: { type: 'string' } } },
+          run: async (): Promise<string> => JSON.stringify({ temp: 20, condition: 'sunny' }),
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // Aggregated: input 100+200=300, output 20+30=50, thinking 50+80=130
+      expect(result.value.usage.inputTokens).toBe(300);
+      expect(result.value.usage.outputTokens).toBe(50);
+      expect(result.value.usage.thinkingTokens).toBe(130);
+      // Cost: (300*0.3 + 50*2.5 + 130*2.5) / 1_000_000 = (90 + 125 + 325) / 1_000_000 = 0.00054
+      expect(result.value.usage.costUsd).toBeCloseTo(0.00054, 6);
+    }
   });
 
   it('passes usageSink to createUsageLogger when provided', async () => {

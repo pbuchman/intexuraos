@@ -8,6 +8,7 @@ import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { useAuth } from '@/context';
 import { listIssueGroups as listIssueGroupsApi } from '@/services/issueGroupsApi';
 import type { GroupStatus, IssueGroup, ListIssueGroupsResponse, SortOption } from '@/types/issueGroups';
+import type { ActioningType } from '@/utils/issueGroups';
 
 const DEFAULT_LIMIT = 20;
 const MAX_SINGLE_REQUEST_LIMIT = 100;
@@ -269,13 +270,14 @@ export function useIssueGroups(options: {
 }
 
 /**
- * Hook for rapid polling after user actions (implement, retry).
+ * Hook for rapid polling after user actions (implement, retry, archive, delete).
  * Polls every 3s for 30s, then stops.
  */
 export function useRapidPoll(
   actioningTaskId: string | null,
   groups: IssueGroup[],
   refresh: (showLoading?: boolean) => Promise<void>,
+  actioningType: ActioningType,
 ): {
   actioningTaskId: string | null;
   setActioningTaskId: (id: string | null) => void;
@@ -307,16 +309,19 @@ export function useRapidPoll(
     };
   }, [currentActioningId, refresh]);
 
-  // Clear actioning state when the group transitions out of failed/needs-action
+  // Clear actioning state when the group transitions out of failed/needs-action.
+  // Skip for archive/delete — those groups may be in any status and will be
+  // removed from the list entirely once refresh returns updated data.
   useEffect(() => {
     if (currentActioningId === null) return;
+    if (actioningType === 'archive' || actioningType === 'delete') return;
     const group = groups.find(
       (g) => g.latestTask.id === currentActioningId || g.tasks.some((t) => t.id === currentActioningId),
     );
     if (group === undefined || (group.aggregateStatus !== 'failed' && group.aggregateStatus !== 'needs-action')) {
       setActioningTaskId(null);
     }
-  }, [currentActioningId, groups]);
+  }, [currentActioningId, groups, actioningType]);
 
   return { actioningTaskId: currentActioningId, setActioningTaskId };
 }
