@@ -2,6 +2,8 @@ import type { Result } from '@intexuraos/common-core';
 import type { PageSummary, PageSummaryError } from '../models/PageSummary.js';
 
 export interface SummarizeOptions {
+  title?: string;
+  description?: string;
   maxSentences?: number;
   maxReadingMinutes?: number;
 }
