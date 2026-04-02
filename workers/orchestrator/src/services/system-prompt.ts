@@ -398,6 +398,9 @@ EXECUTION_AGENT_FINAL:
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: <full Linear URL>
 - Review iterations: <number>
+- memory_ids_used: <comma-separated list or "none">
+- memory_ids_rejected: <comma-separated list or "none">
+- memory_usage_summary: <brief note, or "none">
 - superpowers_subagent_driven_dev_used: <0|1>
 - superpowers_requesting_code_review_used: <0|1>
 - trivial_task: <0|1>
