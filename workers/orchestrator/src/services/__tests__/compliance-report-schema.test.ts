@@ -115,7 +115,11 @@ describe('AgentComplianceReportSchema', () => {
     const report = buildPassingReport();
     // Force an invalid type via raw object
     const raw = JSON.parse(JSON.stringify(report)) as Record<string, unknown>;
-    (raw as { anomalies: { type: string; severity: string; msgRef: string; description: string }[] }).anomalies = [
+    (
+      raw as {
+        anomalies: { type: string; severity: string; msgRef: string; description: string }[];
+      }
+    ).anomalies = [
       {
         type: 'unknown_type',
         severity: 'critical',
@@ -130,7 +134,11 @@ describe('AgentComplianceReportSchema', () => {
 
   it('rejects a report with an invalid severity', () => {
     const raw = JSON.parse(JSON.stringify(buildPassingReport())) as Record<string, unknown>;
-    (raw as { anomalies: { type: string; severity: string; msgRef: string; description: string }[] }).anomalies = [
+    (
+      raw as {
+        anomalies: { type: string; severity: string; msgRef: string; description: string }[];
+      }
+    ).anomalies = [
       {
         type: 'fabrication',
         severity: 'extreme',
@@ -151,7 +159,9 @@ describe('AgentComplianceReportSchema', () => {
   it('rejects when claimVerification is missing fields', () => {
     const report = buildPassingReport();
     const raw = JSON.parse(JSON.stringify(report)) as Record<string, unknown>;
-    (raw as { claimVerification: Record<string, unknown> }).claimVerification = { ciTrackedCalled: { called: true } };
+    (raw as { claimVerification: Record<string, unknown> }).claimVerification = {
+      ciTrackedCalled: { called: true },
+    };
 
     const result = AgentComplianceReportSchema.safeParse(raw);
     expect(result.success).toBe(false);

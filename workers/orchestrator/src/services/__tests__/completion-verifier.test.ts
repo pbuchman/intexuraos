@@ -169,6 +169,9 @@ describe('EXECUTION_SCHEMA', () => {
       superpowers_subagent_driven_dev: 'used',
       superpowers_requesting_code_review: 'not used',
       gh_pr_url: 'https://github.com/org/repo/pull/1',
+      memory_ids_used: 'MEM-142,MEM-155',
+      memory_ids_rejected: 'MEM-188',
+      memory_usage_summary: 'Used route logging and route coverage lessons.',
       summary: 'Implemented the feature.',
     });
     expect(result.success).toBe(true);
@@ -179,6 +182,9 @@ describe('EXECUTION_SCHEMA', () => {
       superpowers_subagent_driven_dev: 'maybe',
       superpowers_requesting_code_review: 'used',
       gh_pr_url: '',
+      memory_ids_used: '',
+      memory_ids_rejected: '',
+      memory_usage_summary: '',
       summary: 'x',
     });
     expect(result.success).toBe(false);
@@ -434,6 +440,9 @@ describe('buildExecutionPrompt', () => {
     expect(prompt).toContain('superpowers_subagent_driven_dev');
     expect(prompt).toContain('superpowers_requesting_code_review');
     expect(prompt).toContain('gh_pr_url');
+    expect(prompt).toContain('memory_ids_used');
+    expect(prompt).toContain('memory_ids_rejected');
+    expect(prompt).toContain('memory_usage_summary');
     expect(prompt).toContain('exec-log');
   });
 
@@ -644,6 +653,9 @@ describe('OrchestratorCompletionVerifier', () => {
       superpowers_subagent_driven_dev: 'used',
       superpowers_requesting_code_review: 'used',
       gh_pr_url: 'https://github.com/org/repo/pull/901',
+      memory_ids_used: 'mem_142,mem_155',
+      memory_ids_rejected: 'mem_188',
+      memory_usage_summary: 'Used route logging and coverage lessons.',
       summary: 'Implemented the feature.',
     });
 
@@ -670,6 +682,9 @@ describe('OrchestratorCompletionVerifier', () => {
         superpowers_subagent_driven_dev: 'used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: 'https://github.com/org/repo/pull/901',
+        memory_ids_used: 'mem_142,mem_155',
+        memory_ids_rejected: 'mem_188',
+        memory_usage_summary: 'Used route logging and coverage lessons.',
         summary: 'Implemented the feature.',
       });
       expect(result.trace).toEqual({
@@ -1160,6 +1175,9 @@ describe('verify — fatal exit code pre-check', () => {
           superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'not used',
           gh_pr_url: '',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
           summary: 'Failed normally.',
         }),
         usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },

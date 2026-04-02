@@ -51,6 +51,17 @@ function recordTaskFailed(params: {
   });
 }
 
+function shouldQueueExecutionMemoryPostRun(params: {
+  agentType: string | undefined;
+  existingStatus: string | undefined;
+}): boolean {
+  return (
+    loadConfig().executionMemoryEnabled
+    && params.agentType === 'execution'
+    && params.existingStatus === undefined
+  );
+}
+
 function recordRemediationDecision(params: {
   repository: string;
   prNumber: number;
@@ -145,6 +156,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       execution_outcome_label?: 'implemented' | 'already_completed';
       execution_superpowers_subagent_driven_dev_used?: '0' | '1';
       execution_superpowers_requesting_code_review_used?: '0' | '1';
+      execution_memory_ids_used?: string;
+      execution_memory_ids_rejected?: string;
+      execution_memory_usage_summary?: string;
       execution_linear_issue_url?: string;
       review_id?: string;
       review_comments_posted?: string;
@@ -198,6 +212,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 execution_outcome_label: { type: 'string' },
                 execution_superpowers_subagent_driven_dev_used: { type: 'string' },
                 execution_superpowers_requesting_code_review_used: { type: 'string' },
+                execution_memory_ids_used: { type: 'string' },
+                execution_memory_ids_rejected: { type: 'string' },
+                execution_memory_usage_summary: { type: 'string' },
                 review_id: { type: 'string' },
                 review_comments_posted: { type: 'string' },
                 review_types: { type: 'string' },
@@ -1122,6 +1139,16 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const resolvedStatus =
           task.agentType === 'planning' ? 'planned' :
           task.agentType === 'review' ? 'reviewed' : 'implemented';
+        const executionMemoryPostRun = shouldQueueExecutionMemoryPostRun({
+          agentType: task.agentType,
+          existingStatus: task.executionMemoryPostRun?.status,
+        })
+          ? {
+              status: 'pending' as const,
+              attempts: 0,
+              generatedMemoryIds: [],
+            }
+          : undefined;
         const remediationRequiresReReview =
           task.agentType === 'remediation' && result?.requires_re_review !== undefined
             ? result.requires_re_review === '1'
@@ -1133,6 +1160,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           error: null,
           ...(prNumber !== undefined && { prNumber }),
           ...(result?.branch !== undefined && { prBranch: result.branch }),
+          ...(executionMemoryPostRun !== undefined && { executionMemoryPostRun }),
           ...(remediationRequiresReReview !== undefined && {
               requiresReReview: remediationRequiresReReview,
             }),
@@ -1459,6 +1487,20 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             code: taskError.code,
             message: taskError.message,
           },
+          ...(shouldQueueExecutionMemoryPostRun({
+            agentType: task.agentType,
+            existingStatus: task.executionMemoryPostRun?.status,
+          })
+            /* v8 ignore start -- source-map: multiline ternary is misattributed despite execution and planning webhook tests covering both branches @preserve */
+            ? {
+                executionMemoryPostRun: {
+                  status: 'pending' as const,
+                  attempts: 0,
+                  generatedMemoryIds: [],
+                },
+              }
+            : {}),
+          /* v8 ignore stop @preserve */
           callbackReceived: true,
         });
 

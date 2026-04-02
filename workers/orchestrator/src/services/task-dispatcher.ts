@@ -344,6 +344,9 @@ export class TaskDispatcher {
         ...(request.actionId !== undefined && { actionId: request.actionId }),
         ...(request.retriedFrom !== undefined && { retriedFrom: request.retriedFrom }),
         ...(request.agentType !== undefined && { agentType: request.agentType }),
+        ...(request.executionMemoryContext !== undefined && {
+          executionMemoryContext: request.executionMemoryContext,
+        }),
         ...(request.trackingCommentId !== undefined && {
           trackingCommentId: request.trackingCommentId,
         }),
@@ -1281,6 +1284,9 @@ export class TaskDispatcher {
         agentData.superpowers_subagent_driven_dev === 'used' ? '1' : '0';
       base.execution_superpowers_requesting_code_review_used =
         agentData.superpowers_requesting_code_review === 'used' ? '1' : '0';
+      base.execution_memory_ids_used = agentData.memory_ids_used;
+      base.execution_memory_ids_rejected = agentData.memory_ids_rejected;
+      base.execution_memory_usage_summary = agentData.memory_usage_summary;
       if (agentData.gh_pr_url !== '') {
         base.prUrl = agentData.gh_pr_url;
       }
@@ -1690,6 +1696,9 @@ export class TaskDispatcher {
           }),
           ...(task.continuationPrBranch !== undefined && {
             continuationPrBranch: task.continuationPrBranch,
+          }),
+          ...(task.executionMemoryContext !== undefined && {
+            executionMemoryContext: task.executionMemoryContext,
           }),
           ...(task.reviewTypes !== undefined && { reviewTypes: task.reviewTypes }),
         }) +
@@ -2296,6 +2305,9 @@ export class TaskDispatcher {
           superpowers_subagent_driven_dev: agentData.superpowers_subagent_driven_dev,
           superpowers_requesting_code_review: agentData.superpowers_requesting_code_review,
           gh_pr_url: agentData.gh_pr_url,
+          memory_ids_used: agentData.memory_ids_used,
+          memory_ids_rejected: agentData.memory_ids_rejected,
+          memory_usage_summary: agentData.memory_usage_summary,
           summary: agentData.summary,
         },
         workerType: task.workerType,

@@ -22,6 +22,11 @@ import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../utils
 import { archiveRetriedTaskAfterDispatch } from '../utils/archiveRetriedTaskAfterDispatch.js';
 import { shouldFanOut, fanOutChildTasks } from './fanOutChildTasks.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
+import {
+  prepareExecutionMemoryContext,
+  toDispatchExecutionMemoryContext,
+  type PrepareExecutionMemoryResources,
+} from './prepareExecutionMemoryContext.js';
 
 /** Max candidates fetched per drain cycle for the per-resource concurrency guard. */
 const DRAIN_CANDIDATE_BATCH_SIZE = 10;
@@ -65,6 +70,7 @@ export interface DrainTaskQueueDeps {
   workerSettingsRepo: WorkerSettingsRepository;
   taskEnqueueService: TaskEnqueueService;
   orchestratorSecret: string;
+  executionMemory?: PrepareExecutionMemoryResources;
 }
 
 export async function drainTaskQueue(
@@ -330,6 +336,37 @@ export async function drainTaskQueue(
 
     const agentType = resolveTaskAgentType(task, linearIssueLabels);
     const dispatchLabels = ensureDispatchLabelsForAgentType(linearIssueLabels, agentType);
+    let taskExecutionMemoryContext = task.executionMemoryContext;
+
+    if (
+      config.executionMemoryEnabled
+      && agentType === 'execution'
+      && taskExecutionMemoryContext === undefined
+    ) {
+      taskExecutionMemoryContext = await prepareExecutionMemoryContext({
+        task,
+        linearIssueLabels: dispatchLabels,
+        logger,
+        linearAgentClient,
+        queryClient: deps.executionMemory?.queryClient,
+        embeddingClient: deps.executionMemory?.embeddingClient,
+        executionMemoryRepo: deps.executionMemory?.executionMemoryRepo,
+        executionMemoryApplicationRepo: deps.executionMemory?.executionMemoryApplicationRepo,
+      });
+
+      const memoryUpdateResult = await codeTaskRepo.update(task.id, {
+        executionMemoryContext: taskExecutionMemoryContext,
+      });
+
+      if (!memoryUpdateResult.ok) {
+        logger.warn(
+          { taskId: task.id, error: memoryUpdateResult.error },
+          'Failed to persist execution memory context before dispatch'
+        );
+      }
+    }
+
+    const dispatchExecutionMemoryContext = toDispatchExecutionMemoryContext(taskExecutionMemoryContext);
 
     // Step 5: Attempt dispatch
     const webhookUrl = `${config.serviceUrl}/internal/webhooks/task-complete`;
@@ -357,6 +394,9 @@ export async function drainTaskQueue(
       ...(task.trackingCommentId !== undefined && { trackingCommentId: task.trackingCommentId }),
       ...(task.retriedFrom !== undefined && { retriedFrom: task.retriedFrom }),
       ...(task.reviewTypes !== undefined && { reviewTypes: task.reviewTypes }),
+      ...(dispatchExecutionMemoryContext !== undefined && {
+        executionMemoryContext: dispatchExecutionMemoryContext,
+      }),
       ...(task.prNumber !== undefined && { prNumber: task.prNumber }),
     });
 
