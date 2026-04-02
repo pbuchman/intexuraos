@@ -47,6 +47,7 @@ import {
 } from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
 import type {
+  GenerateOptions,
   OpenRouterConfig,
   OpenRouterError,
   OpenRouterKeyInfo,
@@ -56,7 +57,16 @@ import type {
 } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 
-export type OpenRouterClient = Pick<LLMClient, 'research' | 'generate'> & {
+export type OpenRouterClient = Pick<LLMClient, 'research'> & {
+  /**
+   * Generates text completion without web search.
+   * Optionally accepts generation options (e.g., response format).
+   */
+  generate: (
+    prompt: string,
+    options?: GenerateOptions
+  ) => Promise<Result<GenerateResult, OpenRouterError>>;
+
   /**
    * Validate an OpenRouter API key using the lightweight /api/v1/key endpoint.
    * This is a free, no-token-cost introspection call.
@@ -276,7 +286,10 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       }
     },
 
-    async generate(prompt: string): Promise<Result<GenerateResult, OpenRouterError>> {
+    async generate(
+      prompt: string,
+      options?: GenerateOptions
+    ): Promise<Result<GenerateResult, OpenRouterError>> {
       const { auditContext } = createRequestContext('generate', model, prompt, userId, researchId);
 
       try {
@@ -289,6 +302,9 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
             },
           ],
           temperature: 0.2,
+          ...(options?.responseFormat !== undefined && {
+            response_format: options.responseFormat,
+          }),
         };
 
         const response = await fetchWithTimeout(
