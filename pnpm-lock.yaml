@@ -2018,6 +2018,9 @@ importers:
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../../packages/common-core
+      '@intexuraos/infra-openrouter':
+        specifier: workspace:*
+        version: link:../../packages/infra-openrouter
       '@intexuraos/llm-audit':
         specifier: workspace:*
         version: link:../../packages/llm-audit
@@ -2030,6 +2033,9 @@ importers:
       '@intexuraos/llm-pricing':
         specifier: workspace:*
         version: link:../../packages/llm-pricing
+      '@intexuraos/llm-utils':
+        specifier: workspace:*
+        version: link:../../packages/llm-utils
       '@octokit/core':
         specifier: ^6.1.0
         version: 6.1.6
