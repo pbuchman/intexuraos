@@ -1196,8 +1196,8 @@ describe('system-prompt', () => {
     expect(planningPrompt.version).toBe('3.2.0');
   });
 
-  it('execution prompt version is 7.0.0', () => {
-    expect(executionPrompt.version).toBe('7.0.0');
+  it('execution prompt version is 8.0.0', () => {
+    expect(executionPrompt.version).toBe('8.0.0');
   });
 
   it('remediation prompt version is 3.1.0', () => {
