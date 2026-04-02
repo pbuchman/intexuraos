@@ -228,6 +228,7 @@ class FakeCodeAgentClient implements CodeAgentClient {
     userId: string;
     linearIssueId: string;
     labels: { id: string; name: string }[];
+    sourceTimestamp: string;
   }): Promise<Result<void, { code: string; message: string }>> {
     return ok(undefined);
   }

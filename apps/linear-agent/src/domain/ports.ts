@@ -230,6 +230,7 @@ export interface CodeAgentClient {
     userId: string;
     linearIssueId: string;
     labels: { id: string; name: string }[];
+    sourceTimestamp: string;
   }): Promise<Result<void, CodeAgentError>>;
 }
 

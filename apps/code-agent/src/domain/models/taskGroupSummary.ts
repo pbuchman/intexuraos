@@ -35,6 +35,7 @@ export interface TaskGroupSummary {
   // Label flags from Linear (set via recomputeWithLabels, absent on legacy docs)
   hasImplementationReadyLabel?: boolean;
   hasMergeReadyLabel?: boolean;
+  labelsUpdatedAt?: Timestamp;
 
   // Precomputed
   aggregateStatus: GroupStatus;
