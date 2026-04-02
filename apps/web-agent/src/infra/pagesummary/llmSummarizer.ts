@@ -15,6 +15,8 @@ import { summaryPrompt, summaryRepairPrompt } from './buildSummaryRepairPrompt.j
  */
 export interface SummarizeOptions {
   url: string;
+  title?: string;
+  description?: string;
   maxSentences?: number;
   maxReadingMinutes?: number;
 }
@@ -57,6 +59,8 @@ async function attemptRepair(
   invalidResponse: string,
   parseError: ParseError,
   url: string,
+  title: string | undefined,
+  description: string | undefined,
   logger: Logger
 ): Promise<Result<PageSummary, PageSummaryError>> {
   logger.warn(
@@ -68,6 +72,9 @@ async function attemptRepair(
     originalContent,
     invalidResponse,
     errorMessage: parseError.message,
+    ...(url !== undefined && { url }),
+    ...(title !== undefined && { title }),
+    ...(description !== undefined && { description }),
   });
 
   const repairResult = await llmClient.generate(repairPrompt);
@@ -136,7 +143,13 @@ export function createLlmSummarizer(logger: Logger): LlmSummarizer {
       );
 
       // Build prompt and append content
-      const prompt = summaryPrompt.build({ maxSentences, maxReadingMinutes });
+      const prompt = summaryPrompt.build({
+        ...(options.url !== undefined && { url: options.url }),
+        ...(options.title !== undefined && { title: options.title }),
+        ...(options.description !== undefined && { description: options.description }),
+        maxSentences,
+        maxReadingMinutes,
+      });
       const fullPrompt = `${prompt}\n\nContent to summarize:\n${content}`;
 
       // Generate summary
@@ -161,6 +174,8 @@ export function createLlmSummarizer(logger: Logger): LlmSummarizer {
           result.value.content,
           parsed.error,
           options.url,
+          options.title,
+          options.description,
           logger
         );
       }
