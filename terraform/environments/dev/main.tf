@@ -582,7 +582,6 @@ locals {
     INTEXURAOS_MINIMAX_APP_API_KEY    = module.secret_manager.secret_ids["INTEXURAOS_MINIMAX_APP_API_KEY"]
     INTEXURAOS_GEMINI_APP_API_KEY     = module.secret_manager.secret_ids["INTEXURAOS_GEMINI_APP_API_KEY"]
     INTEXURAOS_DASHSCOPE_APP_API_KEY  = module.secret_manager.secret_ids["INTEXURAOS_DASHSCOPE_APP_API_KEY"]
-    INTEXURAOS_OPENROUTER_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_OPENROUTER_APP_API_KEY"]
     INTEXURAOS_DASH0_OTLP_ENDPOINT    = module.secret_manager.secret_ids["INTEXURAOS_DASH0_OTLP_ENDPOINT"]
     INTEXURAOS_DASH0_AUTH_TOKEN       = module.secret_manager.secret_ids["INTEXURAOS_DASH0_AUTH_TOKEN"]
   }
@@ -1656,10 +1655,7 @@ module "web_agent" {
 
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/web-agent:latest"
 
-  secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_CLOUDFLARE_ACCOUNT_ID = module.secret_manager.secret_ids["INTEXURAOS_CLOUDFLARE_ACCOUNT_ID"]
-    INTEXURAOS_CLOUDFLARE_API_TOKEN  = module.secret_manager.secret_ids["INTEXURAOS_CLOUDFLARE_API_TOKEN"]
-  })
+  secrets = local.common_service_secrets
   env_vars = local.common_service_env_vars
 
   depends_on = [
