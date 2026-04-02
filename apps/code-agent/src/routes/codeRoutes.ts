@@ -746,6 +746,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       userId: string;
       linearIssueId: string;
       labels: { id: string; name: string }[];
+      sourceTimestamp: string;
     };
   }>(
     '/internal/code/group-summary/recompute',
@@ -771,8 +772,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                 required: ['id', 'name'],
               },
             },
+            sourceTimestamp: { type: 'string', format: 'date-time' },
           },
-          required: ['userId', 'linearIssueId', 'labels'],
+          required: ['userId', 'linearIssueId', 'labels', 'sourceTimestamp'],
         },
         response: {
           200: {
@@ -841,7 +843,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { userId: string; linearIssueId: string; labels: { id: string; name: string }[] } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { userId: string; linearIssueId: string; labels: { id: string; name: string }[]; sourceTimestamp: string } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /internal/code/group-summary/recompute',
       });
@@ -866,6 +868,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         body.userId,
         body.linearIssueId,
         body.labels,
+        body.sourceTimestamp,
       );
 
       if (!result.ok) {

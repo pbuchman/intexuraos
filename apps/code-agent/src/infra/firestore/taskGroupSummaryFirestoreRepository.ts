@@ -64,6 +64,13 @@ function computeReviewNeedsRemediation(task: CodeTask): boolean | null {
   return null;
 }
 
+function hasCompletedExecutionTask(task: CodeTask): boolean {
+  return (
+    (task.agentType === 'execution' && (task.status === 'implemented' || task.status === 'reviewed')) ||
+    (task.agentType === 'pull_request' && task.status === 'implemented')
+  );
+}
+
 /**
  * Helper to ensure a value is a Timestamp.
  */
@@ -132,6 +139,9 @@ function docToSummary(data: Record<string, unknown>): TaskGroupSummary {
     ...(data['hasMergeReadyLabel'] !== undefined
       ? { hasMergeReadyLabel: data['hasMergeReadyLabel'] === true }
       : {}),
+    ...(data['labelsUpdatedAt'] !== undefined && data['labelsUpdatedAt'] !== null
+      ? { labelsUpdatedAt: toTimestamp(data['labelsUpdatedAt']) }
+      : {}),
     updatedAt: toTimestamp(data['updatedAt']),
   };
   /* v8 ignore stop @preserve */
@@ -177,9 +187,7 @@ function buildInitialSummary(task: CodeTask, now: Timestamp): Omit<TaskGroupSumm
   const agentTypesPresent: string[] = task.agentType !== undefined ? [task.agentType] : [];
   const hasPrUrl = task.result?.prUrl !== undefined;
   const hasCompletedPlanning = task.agentType === 'planning' && task.status === 'planned';
-  const hasCompletedExecution =
-    (task.agentType === 'execution' && (task.status === 'implemented' || task.status === 'reviewed')) ||
-    (task.agentType === 'review' && task.status === 'reviewed');
+  const hasCompletedExecution = hasCompletedExecutionTask(task);
   const hasImplementationTaskId = task.implementationTaskId !== undefined;
   const latestReviewNeedsRemediation = computeReviewNeedsRemediation(task);
   const prNumber = hasPrUrl && task.prNumber !== undefined ? task.prNumber : null;
@@ -317,10 +325,7 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
             if (task.agentType === 'planning' && task.status === 'planned') {
               updated.hasCompletedPlanning = true;
             }
-            if (
-              (task.agentType === 'execution' && (task.status === 'implemented' || task.status === 'reviewed')) ||
-              (task.agentType === 'review' && task.status === 'reviewed')
-            ) {
+            if (hasCompletedExecutionTask(task)) {
               updated.hasCompletedExecution = true;
             }
             /* v8 ignore start -- ts-type: FakeFirestore cannot produce a task where implementationTaskId is undefined when the branch is already covered; v8 undercounts false-branch due to optional-chaining transpilation in ESM @preserve */
@@ -429,10 +434,7 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
           if (newTask.agentType === 'planning' && newTask.status === 'planned') {
             updated.hasCompletedPlanning = true;
           }
-          if (
-            (newTask.agentType === 'execution' && (newTask.status === 'implemented' || newTask.status === 'reviewed')) ||
-            (newTask.agentType === 'review' && newTask.status === 'reviewed')
-          ) {
+          if (hasCompletedExecutionTask(newTask)) {
             updated.hasCompletedExecution = true;
           }
           if (newTask.implementationTaskId !== undefined) {
@@ -670,6 +672,9 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
         }
 
         const now = Timestamp.fromDate(new Date());
+        const docId = `${userId}_${groupKey}`;
+        const summaryRef = firestore.collection(SUMMARIES_COLLECTION).doc(docId);
+        const countsRef = firestore.collection(COUNTS_COLLECTION).doc(userId);
 
         // Compute all summary fields from the task array
         let taskCount = 0;
@@ -703,10 +708,7 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
           if (task.agentType === 'planning' && task.status === 'planned') {
             hasCompletedPlanning = true;
           }
-          if (
-            (task.agentType === 'execution' && (task.status === 'implemented' || task.status === 'reviewed')) ||
-            (task.agentType === 'review' && task.status === 'reviewed')
-          ) {
+          if (hasCompletedExecutionTask(task)) {
             hasCompletedExecution = true;
           }
           if (task.implementationTaskId !== undefined) {
@@ -758,18 +760,6 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
           }
         }
 
-        const summaryFields = {
-          activeTaskCount,
-          hasCompletedPlanning,
-          hasCompletedExecution,
-          hasImplementationTaskId,
-          hasPrUrl,
-          latestTaskStatus,
-          latestReviewNeedsRemediation,
-        };
-
-        const aggregateStatus = deriveAggregateStatusFromSummary(summaryFields);
-
         const summary: TaskGroupSummary = {
           userId,
           linearIssueId,
@@ -789,13 +779,52 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
           oldestTaskCreatedAt: oldestTaskCreatedAt ?? now,
           /* v8 ignore stop @preserve */
           mostRecentDispatchedAt,
-          aggregateStatus,
+          aggregateStatus: 'done',
           updatedAt: now,
         };
 
-        const docId = `${userId}_${groupKey}`;
-        const ref = firestore.collection(SUMMARIES_COLLECTION).doc(docId);
-        await ref.set(summary as unknown as DocumentData);
+        await firestore.runTransaction(async (tx) => {
+          const existingSummaryDoc = await tx.get(asDocRef(summaryRef));
+          const countsDoc = await tx.get(asDocRef(countsRef));
+          const existingCounts: UserGroupCounts = countsDoc.exists
+            ? docToCounts(countsDoc.data() as Record<string, unknown>)
+            : defaultCounts(userId);
+          const existingSummary = existingSummaryDoc.exists
+            ? docToSummary(existingSummaryDoc.data() as Record<string, unknown>)
+            : null;
+
+          if (existingSummary !== null) {
+            if (existingSummary.hasImplementationReadyLabel !== undefined) {
+              summary.hasImplementationReadyLabel = existingSummary.hasImplementationReadyLabel;
+            }
+            if (existingSummary.hasMergeReadyLabel !== undefined) {
+              summary.hasMergeReadyLabel = existingSummary.hasMergeReadyLabel;
+            }
+            if (existingSummary.labelsUpdatedAt !== undefined) {
+              summary.labelsUpdatedAt = existingSummary.labelsUpdatedAt;
+            }
+          }
+
+          const newAggregateStatus = deriveAggregateStatusFromSummary(summary);
+          summary.aggregateStatus = newAggregateStatus;
+
+          tx.set(asDocRef(summaryRef), summary as unknown as DocumentData, { merge: true });
+
+          if (existingSummary === null) {
+            const newCounts = applyNewGroupDelta(existingCounts, newAggregateStatus);
+            newCounts.userId = userId;
+            newCounts.updatedAt = now;
+            tx.set(asDocRef(countsRef), newCounts as unknown as DocumentData);
+            return;
+          }
+
+          if (existingSummary.aggregateStatus !== newAggregateStatus) {
+            const newCounts = applyStatusChangeDelta(existingCounts, existingSummary.aggregateStatus, newAggregateStatus);
+            newCounts.userId = userId;
+            newCounts.updatedAt = now;
+            tx.set(asDocRef(countsRef), newCounts as unknown as DocumentData);
+          }
+        });
       } catch (error) {
         logger.warn(
           { userId, groupKey, error: getErrorMessage(error, 'Unknown error') },
@@ -808,6 +837,7 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
       userId: string,
       linearIssueId: string,
       labels: { id: string; name: string }[],
+      sourceTimestamp: string,
     ): Promise<Result<void, GroupSummaryError>> {
       try {
         const docId = `${userId}_${linearIssueId}`;
@@ -816,13 +846,14 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
 
         const labelHasImplementationReady = hasImplementationReadyLabel(labels);
         const labelHasMergeReady = hasMergeReadyLabel(labels);
+        const sourceTs = Timestamp.fromDate(new Date(sourceTimestamp));
 
-        const found = await firestore.runTransaction(async (tx) => {
+        const result = await firestore.runTransaction(async (tx) => {
           const now = Timestamp.fromDate(new Date());
           const summaryDoc = await tx.get(asDocRef(summaryRef));
 
           if (!summaryDoc.exists) {
-            return false;
+            return 'missing' as const;
           }
 
           const countsDoc = await tx.get(asDocRef(countsRef));
@@ -833,12 +864,16 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
           /* v8 ignore stop @preserve */
 
           const current = docToSummary(summaryDoc.data() as Record<string, unknown>);
+          if (current.labelsUpdatedAt !== undefined && sourceTs.toMillis() < current.labelsUpdatedAt.toMillis()) {
+            return 'stale' as const;
+          }
           const oldAggregateStatus = current.aggregateStatus;
 
           const updated: TaskGroupSummary = {
             ...current,
             hasImplementationReadyLabel: labelHasImplementationReady,
             hasMergeReadyLabel: labelHasMergeReady,
+            labelsUpdatedAt: sourceTs,
             updatedAt: now,
           };
 
@@ -854,10 +889,10 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
             tx.set(asDocRef(countsRef), newCounts as unknown as DocumentData);
           }
 
-          return true;
+          return 'updated' as const;
         });
 
-        if (!found) {
+        if (result === 'missing') {
           return err({ code: 'NOT_FOUND', message: `No group summary found for ${userId}/${linearIssueId}` });
         }
 

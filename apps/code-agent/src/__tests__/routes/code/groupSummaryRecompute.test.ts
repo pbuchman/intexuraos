@@ -40,6 +40,8 @@ import { Timestamp } from '@google-cloud/firestore';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
 
 describe('POST /internal/code/group-summary/recompute', () => {
+  const sourceTimestamp = '2026-04-02T12:34:56.000Z';
+
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
   let logger: Logger;
   let server: Awaited<ReturnType<typeof buildServer>>;
@@ -224,6 +226,7 @@ describe('POST /internal/code/group-summary/recompute', () => {
         userId: 'user-1',
         linearIssueId: 'INT-100',
         labels: [],
+        sourceTimestamp,
       },
     });
 
@@ -242,6 +245,7 @@ describe('POST /internal/code/group-summary/recompute', () => {
         userId: 'user-1',
         linearIssueId: 'INT-MISSING',
         labels: [],
+        sourceTimestamp,
       },
     });
 
@@ -269,6 +273,7 @@ describe('POST /internal/code/group-summary/recompute', () => {
         userId: 'user-1',
         linearIssueId: 'INT-100',
         labels: [{ id: 'lbl-1', name: 'ready-to-implement' }],
+        sourceTimestamp,
       },
     });
 
@@ -276,6 +281,36 @@ describe('POST /internal/code/group-summary/recompute', () => {
     const json = response.json() as { success: boolean; data: { status: string } };
     expect(json.success).toBe(true);
     expect(json.data.status).toBe('recomputed');
+  });
+
+  it('passes the caller-provided source timestamp to recomputeWithLabels', async () => {
+    const repoSpy = vi.spyOn(groupSummaryRepo, 'recomputeWithLabels');
+    const task = makeTask({
+      userId: 'user-1',
+      linearIssueId: 'INT-TIME',
+      agentType: 'planning',
+      status: 'planned',
+    });
+    await groupSummaryRepo.updateAfterCreate(task);
+
+    await server.inject({
+      method: 'POST',
+      url: '/internal/code/group-summary/recompute',
+      headers: { 'X-Internal-Auth': 'test-internal-token' },
+      payload: {
+        userId: 'user-1',
+        linearIssueId: 'INT-TIME',
+        labels: [{ id: 'lbl-1', name: 'ready-to-implement' }],
+        sourceTimestamp,
+      },
+    });
+
+    expect(repoSpy).toHaveBeenCalledWith(
+      'user-1',
+      'INT-TIME',
+      [{ id: 'lbl-1', name: 'ready-to-implement' }],
+      sourceTimestamp,
+    );
   });
 
   it('updates the group summary label flags in the repo', async () => {
@@ -295,6 +330,7 @@ describe('POST /internal/code/group-summary/recompute', () => {
         userId: 'user-1',
         linearIssueId: 'INT-200',
         labels: [{ id: 'lbl-merge', name: 'ready-to-merge' }],
+        sourceTimestamp,
       },
     });
 
@@ -317,6 +353,7 @@ describe('POST /internal/code/group-summary/recompute', () => {
         userId: 'user-1',
         linearIssueId: 'INT-999',
         labels: [],
+        sourceTimestamp,
       },
     });
 
