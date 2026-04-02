@@ -128,10 +128,12 @@ export function createCodeAgentHttpClient(
 
         if (!response.ok) {
           const errorText = await response.text();
-          logger.warn(
-            { status: response.status, error: errorText, linearIssueId: request.linearIssueId },
-            'code-agent notifyGroupSummaryRecompute failed'
-          );
+          const logPayload = { status: response.status, error: errorText, linearIssueId: request.linearIssueId };
+          if (response.status === 404) {
+            logger.info(logPayload, 'code-agent notifyGroupSummaryRecompute failed');
+          } else {
+            logger.warn(logPayload, 'code-agent notifyGroupSummaryRecompute failed');
+          }
 
           if (response.status >= 500) {
             return err({ code: 'UNAVAILABLE', message: 'code-agent unavailable' });
