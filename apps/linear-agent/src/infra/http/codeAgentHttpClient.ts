@@ -101,6 +101,7 @@ export function createCodeAgentHttpClient(
       userId: string;
       linearIssueId: string;
       labels: { id: string; name: string }[];
+      sourceTimestamp: string;
     }): Promise<Result<void, CodeAgentError>> {
       const url = `${baseUrl}/internal/code/group-summary/recompute`;
 
@@ -120,6 +121,7 @@ export function createCodeAgentHttpClient(
             userId: request.userId,
             linearIssueId: request.linearIssueId,
             labels: request.labels,
+            sourceTimestamp: request.sourceTimestamp,
           }),
           signal: controller.signal,
         });

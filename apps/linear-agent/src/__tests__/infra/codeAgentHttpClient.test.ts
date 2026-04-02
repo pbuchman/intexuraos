@@ -168,6 +168,7 @@ describe('notifyGroupSummaryRecompute', () => {
       { id: 'label-1', name: 'ready-to-implement' },
       { id: 'label-2', name: 'feature' },
     ],
+    sourceTimestamp: '2026-04-02T12:34:56.000Z',
   };
 
   beforeEach(() => {
@@ -191,14 +192,15 @@ describe('notifyGroupSummaryRecompute', () => {
     const result = await client.notifyGroupSummaryRecompute(validRecomputeRequest);
 
     expect(result.ok).toBe(true);
-    expect(capturedBody).toEqual({
-      userId: 'user-123',
-      linearIssueId: 'INT-456',
-      labels: [
-        { id: 'label-1', name: 'ready-to-implement' },
-        { id: 'label-2', name: 'feature' },
-      ],
-    });
+      expect(capturedBody).toEqual({
+        userId: 'user-123',
+        linearIssueId: 'INT-456',
+        labels: [
+          { id: 'label-1', name: 'ready-to-implement' },
+          { id: 'label-2', name: 'feature' },
+        ],
+        sourceTimestamp: '2026-04-02T12:34:56.000Z',
+      });
   });
 
   it('sends X-Internal-Auth header', async () => {

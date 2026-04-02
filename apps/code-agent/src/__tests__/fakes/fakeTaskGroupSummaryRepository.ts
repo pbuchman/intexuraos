@@ -22,6 +22,13 @@ import type { SortOption } from '../../domain/issueGrouping/types.js';
 
 const ACTIVE_STATUSES = new Set(['queued', 'dispatched', 'running']);
 
+function hasCompletedExecutionTask(task: CodeTask): boolean {
+  return (
+    (task.agentType === 'execution' && (task.status === 'implemented' || task.status === 'reviewed')) ||
+    (task.agentType === 'pull_request' && task.status === 'implemented')
+  );
+}
+
 function now(): Timestamp {
   return Timestamp.now();
 }
@@ -64,10 +71,7 @@ function computeSummaryFromTasks(
   );
 
   const hasCompletedPlanning = tasks.some((t) => t.agentType === 'planning' && t.status === 'planned');
-  const hasCompletedExecution = tasks.some(
-    (t) => (t.agentType === 'execution' && (t.status === 'implemented' || t.status === 'reviewed'))
-      || (t.agentType === 'review' && t.status === 'reviewed'),
-  );
+  const hasCompletedExecution = tasks.some((t) => hasCompletedExecutionTask(t));
   const hasImplementationTaskId = tasks.some((t) => t.implementationTaskId !== undefined);
   const hasPrUrl = tasks.some((t) => t.result?.prUrl !== undefined);
   const prNumber = tasks.find((t) => t.prNumber !== undefined)?.prNumber ?? null;
@@ -282,23 +286,43 @@ export function createFakeTaskGroupSummaryRepository(): FakeTaskGroupSummaryRepo
         removeSummary(userId, groupKey);
         return;
       }
-      upsertSummary(computeSummaryFromTasks(userId, groupKey, tasks));
+      const current = summaries.get(summaryKey(userId, groupKey));
+      const next = computeSummaryFromTasks(userId, groupKey, tasks);
+      if (current !== undefined) {
+        if (current.hasImplementationReadyLabel !== undefined) {
+          next.hasImplementationReadyLabel = current.hasImplementationReadyLabel;
+        }
+        if (current.hasMergeReadyLabel !== undefined) {
+          next.hasMergeReadyLabel = current.hasMergeReadyLabel;
+        }
+        if (current.labelsUpdatedAt !== undefined) {
+          next.labelsUpdatedAt = current.labelsUpdatedAt;
+        }
+        next.aggregateStatus = deriveAggregateStatusFromSummary(next);
+      }
+      upsertSummary(next);
     },
 
     async recomputeWithLabels(
       userId: string,
       linearIssueId: string,
       labels: { id: string; name: string }[],
+      sourceTimestamp: string,
     ): Promise<Result<void, GroupSummaryError>> {
       const key = summaryKey(userId, linearIssueId);
       const current = summaries.get(key);
       if (current === undefined) {
         return err({ code: 'NOT_FOUND', message: `No group summary found for ${userId}/${linearIssueId}` });
       }
+      const sourceTs = Timestamp.fromDate(new Date(sourceTimestamp));
+      if (current.labelsUpdatedAt !== undefined && sourceTs.toMillis() < current.labelsUpdatedAt.toMillis()) {
+        return ok(undefined);
+      }
       const updated: TaskGroupSummary = {
         ...current,
         hasImplementationReadyLabel: hasImplementationReadyLabel(labels),
         hasMergeReadyLabel: hasMergeReadyLabel(labels),
+        labelsUpdatedAt: sourceTs,
       };
       updated.aggregateStatus = deriveAggregateStatusFromSummary(updated);
       upsertSummary(updated);
