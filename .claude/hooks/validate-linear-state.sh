@@ -1,6 +1,7 @@
 #!/bin/bash
-# BLOCK: Linear MCP state transitions to QA or Done
-# Agents can only move issues to "In Review" at most
+# BLOCK: Linear MCP guardrails
+# 1. State transitions to QA or Done (agents stop at "In Review")
+# 2. Setting assignee or delegate (user-only responsibility)
 # Exit 0 = allow, Exit 2 = block with stderr message
 
 set -euo pipefail
@@ -16,10 +17,54 @@ HOOK_NAME="validate-linear-state"
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
 
-# Only check Linear update_issue tools
-if [[ "$TOOL_NAME" != "mcp__linear__update_issue" && "$TOOL_NAME" != "mcp__linear-server__update_issue" ]]; then
+# Only check Linear issue mutation tools
+if [[ "$TOOL_NAME" != "mcp__linear__update_issue" && \
+      "$TOOL_NAME" != "mcp__linear-server__update_issue" && \
+      "$TOOL_NAME" != "mcp__linear__save_issue" && \
+      "$TOOL_NAME" != "mcp__linear-server__save_issue" ]]; then
     exit 0
 fi
+
+# --- Assignment check (block assignee and delegate) ---
+
+ASSIGNEE=$(echo "$INPUT" | jq -r '.tool_input.assignee // .tool_input.assigneeId // ""')
+DELEGATE=$(echo "$INPUT" | jq -r '.tool_input.delegate // ""')
+
+if [[ -n "$ASSIGNEE" ]]; then
+    log_blocked "$HOOK_NAME" "forbidden-assignment" \
+        "Agent attempted to set assignee to '$ASSIGNEE'" \
+        "Issue assignment is the user's responsibility"
+
+    cat >&2 << 'EOF'
+
+BLOCKED: Agents cannot assign Linear issues.
+
+Setting assignee, assigneeId, or delegate is forbidden.
+Issue assignment is exclusively the user's responsibility.
+
+Remove the assignee/assigneeId field from your tool call and retry.
+EOF
+    exit 2
+fi
+
+if [[ -n "$DELEGATE" ]]; then
+    log_blocked "$HOOK_NAME" "forbidden-delegation" \
+        "Agent attempted to set delegate to '$DELEGATE'" \
+        "Issue delegation is the user's responsibility"
+
+    cat >&2 << 'EOF'
+
+BLOCKED: Agents cannot delegate Linear issues.
+
+Setting the delegate field is forbidden.
+Issue delegation is exclusively the user's responsibility.
+
+Remove the delegate field from your tool call and retry.
+EOF
+    exit 2
+fi
+
+# --- State transition check ---
 
 # Get the state being set
 STATE=$(echo "$INPUT" | jq -r '.tool_input.state // ""')
