@@ -135,10 +135,34 @@ export const HookFixtureBuilder = {
    * Creates a Linear save_issue MCP tool input fixture
    */
   linearSaveIssue(
-    fields: { id?: string; state?: string; assignee?: string; delegate?: string; [key: string]: unknown } = {}
+    fields: {
+      id?: string;
+      state?: string;
+      assignee?: string;
+      delegate?: string;
+      [key: string]: unknown;
+    } = {}
   ): LinearSaveIssueInput {
     return {
       tool_name: 'mcp__linear__save_issue',
+      tool_input: { ...fields },
+    };
+  },
+
+  /**
+   * Creates a Linear save_issue MCP tool input fixture (alternate server)
+   */
+  linearServerSaveIssue(
+    fields: {
+      id?: string;
+      state?: string;
+      assignee?: string;
+      delegate?: string;
+      [key: string]: unknown;
+    } = {}
+  ): LinearSaveIssueInput {
+    return {
+      tool_name: 'mcp__linear-server__save_issue',
       tool_input: { ...fields },
     };
   },
