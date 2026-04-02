@@ -145,6 +145,8 @@ Common patterns logged by hooks:
 | `gh-pr-checks-polling`       | BLOCKED | validate-polling           | Using sleep + gh pr checks               |
 | `ownership-violation`        | BLOCKED | ownership-check            | Using forbidden ownership language       |
 | `forbidden-state-transition` | BLOCKED | validate-linear-state      | Agent trying to set QA/Done status       |
+| `forbidden-assignment`       | BLOCKED | validate-linear-state      | Agent trying to assign issue             |
+| `forbidden-delegation`       | BLOCKED | validate-linear-state      | Agent trying to delegate issue           |
 | `phase1-incomplete`          | BLOCKED | completion-validator       | Phase 1 missing code-task/unclear label  |
 | `phase2-incomplete`          | BLOCKED | completion-validator       | Phase 2 missing PR/CI/Linear artifacts   |
 
