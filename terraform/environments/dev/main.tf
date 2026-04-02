@@ -574,17 +574,16 @@ module "claude_code_dev" {
 locals {
   # Secrets that ALL services need
   common_service_secrets = {
-    INTEXURAOS_AUTH_JWKS_URL          = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    INTEXURAOS_AUTH_ISSUER            = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    INTEXURAOS_AUTH_AUDIENCE          = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
-    INTEXURAOS_INTERNAL_AUTH_TOKEN    = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-    INTEXURAOS_SENTRY_DSN             = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
-    INTEXURAOS_MINIMAX_APP_API_KEY    = module.secret_manager.secret_ids["INTEXURAOS_MINIMAX_APP_API_KEY"]
-    INTEXURAOS_GEMINI_APP_API_KEY     = module.secret_manager.secret_ids["INTEXURAOS_GEMINI_APP_API_KEY"]
-    INTEXURAOS_DASHSCOPE_APP_API_KEY  = module.secret_manager.secret_ids["INTEXURAOS_DASHSCOPE_APP_API_KEY"]
-    INTEXURAOS_OPENROUTER_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_OPENROUTER_APP_API_KEY"]
-    INTEXURAOS_DASH0_OTLP_ENDPOINT    = module.secret_manager.secret_ids["INTEXURAOS_DASH0_OTLP_ENDPOINT"]
-    INTEXURAOS_DASH0_AUTH_TOKEN       = module.secret_manager.secret_ids["INTEXURAOS_DASH0_AUTH_TOKEN"]
+    INTEXURAOS_AUTH_JWKS_URL         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER           = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN   = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+    INTEXURAOS_SENTRY_DSN            = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
+    INTEXURAOS_MINIMAX_APP_API_KEY   = module.secret_manager.secret_ids["INTEXURAOS_MINIMAX_APP_API_KEY"]
+    INTEXURAOS_GEMINI_APP_API_KEY    = module.secret_manager.secret_ids["INTEXURAOS_GEMINI_APP_API_KEY"]
+    INTEXURAOS_DASHSCOPE_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_DASHSCOPE_APP_API_KEY"]
+    INTEXURAOS_DASH0_OTLP_ENDPOINT   = module.secret_manager.secret_ids["INTEXURAOS_DASH0_OTLP_ENDPOINT"]
+    INTEXURAOS_DASH0_AUTH_TOKEN      = module.secret_manager.secret_ids["INTEXURAOS_DASH0_AUTH_TOKEN"]
   }
 }
 
