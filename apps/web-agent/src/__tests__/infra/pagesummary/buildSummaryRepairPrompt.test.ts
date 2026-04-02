@@ -105,6 +105,28 @@ describe('summaryPrompt (PromptBuilder)', () => {
     expect(prompt).toContain('Focus on the SPECIFIC CONTENT');
     expect(prompt).toContain('Do NOT describe what the platform is');
   });
+
+  it('includes main-content selection rules and metadata hints when provided', () => {
+    const input: SummaryPromptInput = {
+      url: 'https://www.linkedin.com/jobs/view/123',
+      title: 'SEEKR hiring AI Engineer in London Area, United Kingdom',
+      description: 'AI Engineer role focused on applied AI systems in London.',
+      maxSentences: 10,
+      maxReadingMinutes: 2,
+    };
+    const prompt = summaryPrompt.build(input);
+
+    expect(prompt).toContain('## MAIN CONTENT SELECTION');
+    expect(prompt).toContain('Do NOT assume the first paragraphs are the main content');
+    expect(prompt).toContain('cookie/privacy banners');
+    expect(prompt).toContain('URL: https://www.linkedin.com/jobs/view/123');
+    expect(prompt).toContain(
+      'Title hint: SEEKR hiring AI Engineer in London Area, United Kingdom'
+    );
+    expect(prompt).toContain(
+      'Description hint: AI Engineer role focused on applied AI systems in London.'
+    );
+  });
 });
 
 describe('buildSummaryRepairPrompt (convenience function)', () => {
