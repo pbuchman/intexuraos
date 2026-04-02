@@ -18,6 +18,7 @@ export {
 } from './allowlist.js';
 export { calculateTextCost, normalizeUsage, toModelPricing } from './costCalculator.js';
 export type {
+  GenerateOptions,
   OpenRouterConfig,
   OpenRouterError,
   OpenRouterModelInfo,

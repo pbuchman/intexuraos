@@ -25,6 +25,8 @@
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-factory": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
+    "@intexuraos/llm-utils": "workspace:*",
+    "@intexuraos/infra-openrouter": "workspace:*",
     "@octokit/core": "^6.1.0",
     "@octokit/plugin-retry": "^7.1.0",
     "async-mutex": "^0.5.0",
