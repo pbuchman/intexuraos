@@ -1,48 +1,46 @@
 /**
- * Use case: Fan out child code tasks from a parent issue.
+ * Use case: create and enqueue execution child tasks for a complex parent issue.
  *
- * When a parent Linear issue has children with `code-task` labels,
- * creates separate code tasks for each child and queues them for dispatch.
- * The parent task is marked as `implemented` (fan-out completed) without
- * being dispatched to a worker.
- *
- * INT-962: Auto fan-out for parent issues with code-task children.
+ * Child discovery happens before this use case using live Linear data. This helper
+ * only filters qualifying children, persists child execution tasks, links them back
+ * to the planning task, and enqueues them as a batch.
  */
 
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import { randomUUID } from 'node:crypto';
-import type { CodeTask } from '../models/codeTask.js';
+import type FirebaseFirestore from '@google-cloud/firestore';
+import type { CodeTask, WorkerType } from '../models/codeTask.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
-import type { LinearAgentClient, IssueTreeNode } from '../ports/linearAgentClient.js';
+import type { IssueTreeNode } from '../ports/linearAgentClient.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
 import { hasCodeTaskLabel } from '../utils/labelUtils.js';
 import { generateWebhookSecret } from '../utils/secrets.js';
+import type { RepositoryError } from '../repositories/codeTaskRepository.js';
 
 export interface FanOutChildTasksDeps {
   logger: Logger;
   codeTaskRepo: CodeTaskRepository;
-  linearAgentClient: LinearAgentClient;
   taskEnqueueService: TaskEnqueueService;
   orchestratorSecret: string;
 }
 
 export interface FanOutChildTasksRequest {
-  parentTask: CodeTask;
+  planningTask: CodeTask;
   userId: string;
-  linearIssueId: string;
-  /** Pre-resolved UUID from a prior validateIssue call, avoids redundant API call. */
-  parentIssueUuid?: string;
+  childIssues: IssueTreeNode[];
+  workerType: WorkerType;
 }
 
 export interface FanOutChildTasksResult {
   childTaskIds: string[];
-  parentTaskId: string;
+  primaryChildTaskId: string;
+  primaryChildIssueId: string;
 }
 
 export type FanOutChildTasksErrorCode =
   | 'no_qualifying_children'
-  | 'linear_unavailable'
+  | 'queue_full'
   | 'internal_error';
 
 export interface FanOutChildTasksError {
@@ -60,144 +58,203 @@ export function shouldFanOut(hasChildren: boolean, linearIssueLabels: string[]):
   return hasChildren && hasCodeTaskLabel(linearIssueLabels);
 }
 
-/**
- * Create a single child task and enqueue it (best-effort enqueue).
- * Returns the child task ID on success, or null on failure.
- */
-async function createAndEnqueueChild(
-  deps: Pick<FanOutChildTasksDeps, 'codeTaskRepo' | 'taskEnqueueService' | 'logger' | 'orchestratorSecret'>,
-  parentTask: CodeTask,
-  child: IssueTreeNode,
-  userId: string,
-): Promise<string | null> {
-  const { codeTaskRepo, taskEnqueueService, logger } = deps;
-  const childTaskId = `task_${randomUUID()}`;
-  const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, childTaskId);
+interface PreparedChildTask {
+  child: IssueTreeNode;
+  taskId: string;
+}
 
-  const createResult = await codeTaskRepo.create({
-    id: childTaskId,
-    userId,
-    // prompt stores a descriptive summary; sanitizedPrompt is the child identifier
-    // sent to the worker (the worker reads the Linear issue for full instructions)
-    prompt: `[Fan-out from ${parentTask.linearIssueId ?? 'parent'}] ${child.identifier}`,
-    sanitizedPrompt: child.identifier,
-    webhookSecret,
-    systemPromptHash: parentTask.systemPromptHash,
-    workerType: parentTask.workerType,
-    workerLocation: parentTask.workerLocation,
-    repository: parentTask.repository,
-    baseBranch: parentTask.baseBranch,
-    traceId: `trace-fanout-${String(Date.now())}-${child.identifier}`,
-    approvalEventId: `fanout_approval_${randomUUID()}`,
-    linearIssueId: child.identifier,
-    agentType: 'execution',
-    initialStatus: 'queued',
+function getQualifyingChildren(childIssues: IssueTreeNode[]): IssueTreeNode[] {
+  return childIssues
+    .filter((child) => hasCodeTaskLabel(child.labels))
+    .sort((a, b) => a.identifier.localeCompare(b.identifier));
+}
+
+function buildPreparedChildren(childIssues: IssueTreeNode[]): PreparedChildTask[] {
+  return childIssues.map((child) => ({
+    child,
+    taskId: `task_${randomUUID()}`,
+  }));
+}
+
+function getFanOutParentDescriptor(planningTask: CodeTask): string {
+  return planningTask.linearIssueId ?? planningTask.id;
+}
+
+async function persistBatchTransactional(
+  deps: FanOutChildTasksDeps,
+  request: FanOutChildTasksRequest,
+  preparedChildren: PreparedChildTask[],
+  primaryChildTaskId: string,
+): Promise<Result<void, FanOutChildTasksError>> {
+  const { codeTaskRepo } = deps;
+  const { planningTask, userId, workerType } = request;
+  const childTaskIds = preparedChildren.map(({ taskId }) => taskId);
+  const parentDescriptor = getFanOutParentDescriptor(planningTask);
+
+  const persistWithTransaction = async (transaction: FirebaseFirestore.Transaction): Promise<Result<void, RepositoryError>> => {
+    const lockResult = await codeTaskRepo.update(
+      planningTask.id,
+      {
+        implementationTaskId: primaryChildTaskId,
+        fanOutChildTaskIds: childTaskIds,
+      },
+      { transaction },
+    );
+    if (!lockResult.ok) {
+      return err({ code: 'FIRESTORE_ERROR', message: 'Failed to link complex child tasks to planning task' });
+    }
+
+    for (const prepared of preparedChildren) {
+      const createResult = await codeTaskRepo.create(
+        {
+          id: prepared.taskId,
+          userId,
+          prompt: `[Fan-out from ${parentDescriptor}] ${prepared.child.identifier}`,
+          sanitizedPrompt: prepared.child.identifier,
+          webhookSecret: generateWebhookSecret(deps.orchestratorSecret, prepared.taskId),
+          systemPromptHash: planningTask.systemPromptHash,
+          workerType,
+          workerLocation: 'queued',
+          repository: planningTask.repository,
+          baseBranch: planningTask.baseBranch,
+          traceId: `execution-${planningTask.traceId}-${prepared.child.identifier}`,
+          approvalEventId: `fanout_approval_${randomUUID()}`,
+          linearIssueId: prepared.child.identifier,
+          parentTaskId: planningTask.id,
+          followUpReason: 'execution_implement',
+          agentType: 'execution',
+          initialStatus: 'queued',
+        },
+        { transaction },
+      );
+
+      if (!createResult.ok) {
+        return err({ code: 'FIRESTORE_ERROR', message: `Failed to create child execution task for ${prepared.child.identifier}` });
+      }
+    }
+
+    return ok(undefined);
+  };
+
+  if (codeTaskRepo.runInTransaction !== undefined) {
+    const transactionResult = await codeTaskRepo.runInTransaction(persistWithTransaction);
+    if (!transactionResult.ok) {
+      return err({ code: 'internal_error', message: transactionResult.error.message });
+    }
+    return ok(undefined);
+  }
+
+  const lockResult = await codeTaskRepo.update(planningTask.id, {
+    implementationTaskId: primaryChildTaskId,
+    fanOutChildTaskIds: childTaskIds,
   });
-
-  if (!createResult.ok) {
-    logger.warn(
-      { childIdentifier: child.identifier, error: createResult.error },
-      'Fan-out: failed to create child task, skipping',
-    );
-    return null;
+  if (!lockResult.ok) {
+    return err({ code: 'internal_error', message: 'Failed to link complex child tasks to planning task' });
   }
 
-  // Best-effort enqueue — if it fails, the task is still in 'queued' status
-  // and can be picked up by drainTaskQueue
-  const enqueueResult = await taskEnqueueService.enqueue({ taskId: childTaskId, userId });
-  if (!enqueueResult.ok) {
-    logger.warn(
-      { childTaskId, error: enqueueResult.error },
-      'Fan-out: failed to enqueue child task (task remains queued)',
-    );
+  const createdTaskIds: string[] = [];
+  for (const prepared of preparedChildren) {
+    const createResult = await codeTaskRepo.create({
+      id: prepared.taskId,
+      userId,
+      prompt: `[Fan-out from ${parentDescriptor}] ${prepared.child.identifier}`,
+      sanitizedPrompt: prepared.child.identifier,
+      webhookSecret: generateWebhookSecret(deps.orchestratorSecret, prepared.taskId),
+      systemPromptHash: planningTask.systemPromptHash,
+      workerType,
+      workerLocation: 'queued',
+      repository: planningTask.repository,
+      baseBranch: planningTask.baseBranch,
+      traceId: `execution-${planningTask.traceId}-${prepared.child.identifier}`,
+      approvalEventId: `fanout_approval_${randomUUID()}`,
+      linearIssueId: prepared.child.identifier,
+      parentTaskId: planningTask.id,
+      followUpReason: 'execution_implement',
+      agentType: 'execution',
+      initialStatus: 'queued',
+    });
+    if (!createResult.ok) {
+      for (const createdTaskId of createdTaskIds) {
+        await codeTaskRepo.deleteTask(createdTaskId, userId);
+      }
+      await codeTaskRepo.update(planningTask.id, {
+        implementationTaskId: null,
+        fanOutChildTaskIds: null,
+      });
+      return err({
+        code: 'internal_error',
+        message: `Failed to create child execution task for ${prepared.child.identifier}`,
+      });
+    }
+    createdTaskIds.push(prepared.taskId);
   }
 
-  logger.info({ childTaskId, childIdentifier: child.identifier }, 'Fan-out: child task created and enqueued');
-  return childTaskId;
+  return ok(undefined);
 }
 
 export async function fanOutChildTasks(
   deps: FanOutChildTasksDeps,
   request: FanOutChildTasksRequest,
 ): Promise<Result<FanOutChildTasksResult, FanOutChildTasksError>> {
-  const { logger, codeTaskRepo, linearAgentClient } = deps;
-  const { parentTask, userId, linearIssueId } = request;
+  const { logger, codeTaskRepo, taskEnqueueService } = deps;
+  const { planningTask, userId, childIssues } = request;
 
-  // Step 1: Resolve parent UUID — reuse caller-provided UUID to avoid redundant API call
-  let parentUuid = request.parentIssueUuid;
-
-  if (parentUuid === undefined) {
-    const validateResult = await linearAgentClient.validateIssue({
-      userId,
-      identifier: linearIssueId,
-    });
-
-    if (!validateResult.ok) {
-      logger.warn({ linearIssueId, error: validateResult.error }, 'Fan-out: failed to validate parent issue');
-      return err({ code: 'linear_unavailable', message: validateResult.error.message });
-    }
-
-    parentUuid = validateResult.value.id;
-  }
-
-  // Step 2: Fetch issue tree
-  const treeResult = await linearAgentClient.fetchIssueTree({
-    userId,
-    issueId: parentUuid,
-  });
-
-  if (!treeResult.ok) {
-    logger.warn({ linearIssueId, error: treeResult.error }, 'Fan-out: failed to fetch issue tree');
-    return err({ code: 'linear_unavailable', message: treeResult.error.message });
-  }
-
-  // Step 3: Filter direct children with code-task label
-  const qualifyingChildren = treeResult.value.descendants.filter(
-    (node: IssueTreeNode) => node.parentId === parentUuid && hasCodeTaskLabel(node.labels),
-  );
-
+  const qualifyingChildren = getQualifyingChildren(childIssues);
   if (qualifyingChildren.length === 0) {
-    logger.info({ linearIssueId, descendantCount: treeResult.value.descendants.length }, 'Fan-out: no qualifying children with code-task label');
+    logger.info({ linearIssueId: planningTask.linearIssueId, childCount: childIssues.length }, 'Fan-out: no qualifying live direct children');
     return err({ code: 'no_qualifying_children', message: 'No direct children with code-task label found' });
   }
 
-  logger.info(
-    { linearIssueId, qualifyingChildCount: qualifyingChildren.length },
-    'Fan-out: creating child tasks',
-  );
-
-  // Step 4: Create child tasks concurrently.
-  // createAndEnqueueChild catches all errors internally and returns null on failure,
-  // so Promise.all is safe here (no rejections possible).
-  const results = await Promise.all(
-    qualifyingChildren.map((child) => createAndEnqueueChild(deps, parentTask, child, userId)),
-  );
-
-  const childTaskIds = results.filter((id): id is string => id !== null);
-
-  if (childTaskIds.length === 0) {
-    return err({ code: 'internal_error', message: 'All child task creations failed' });
+  const preparedChildren = buildPreparedChildren(qualifyingChildren);
+  const primaryChild = preparedChildren[0];
+  /* v8 ignore start -- ts-type: noUncheckedIndexedAccess forces an undefined check after preparedChildren[0]; buildPreparedChildren preserves length after the qualifyingChildren guard @preserve */
+  if (primaryChild === undefined) {
+    return err({ code: 'internal_error', message: 'No child execution tasks were created' });
+  }
+  /* v8 ignore stop @preserve */
+  const persistResult = await persistBatchTransactional(deps, request, preparedChildren, primaryChild.taskId);
+  if (!persistResult.ok) {
+    return persistResult;
   }
 
-  // Step 5: Mark the parent task as implemented (fan-out completed)
-  const updateResult = await codeTaskRepo.update(parentTask.id, {
-    status: 'implemented',
-    completedAt: new Date(),
-    result: {
-      summary: `Fan-out completed: created ${String(childTaskIds.length)} child task(s) from ${String(qualifyingChildren.length)} qualifying children. Child tasks: ${childTaskIds.join(', ')}`,
-      execution_outcome_label: 'implemented',
-    },
-  });
-
-  if (!updateResult.ok) {
-    logger.warn(
-      { parentTaskId: parentTask.id, error: updateResult.error },
-      'Fan-out: failed to mark parent task as implemented',
-    );
+  const childTaskIds = preparedChildren.map(({ taskId }) => taskId);
+  if (taskEnqueueService.enqueueMany !== undefined) {
+    const enqueueResult = await taskEnqueueService.enqueueMany({ taskIds: childTaskIds, userId });
+    if (!enqueueResult.ok && enqueueResult.error.code === 'queue_full') {
+      await codeTaskRepo.update(planningTask.id, {
+        implementationTaskId: null,
+        fanOutChildTaskIds: null,
+      });
+      return err({ code: 'queue_full', message: enqueueResult.error.message });
+    }
+    if (!enqueueResult.ok) {
+      logger.warn(
+        { taskIds: childTaskIds, error: enqueueResult.error },
+        'Fan-out: batch enqueue degraded, tasks remain queued without queuedAt stamps',
+      );
+    }
+  } else {
+    for (const childTaskId of childTaskIds) {
+      const enqueueResult = await taskEnqueueService.enqueue({ taskId: childTaskId, userId });
+      if (!enqueueResult.ok && enqueueResult.error.code === 'queue_full') {
+        await codeTaskRepo.update(planningTask.id, {
+          implementationTaskId: null,
+          fanOutChildTaskIds: null,
+        });
+        return err({ code: 'queue_full', message: enqueueResult.error.message });
+      }
+      if (!enqueueResult.ok) {
+        logger.warn(
+          { childTaskId, error: enqueueResult.error },
+          'Fan-out: failed to enqueue child task (task remains queued)',
+        );
+      }
+    }
   }
 
   return ok({
     childTaskIds,
-    parentTaskId: parentTask.id,
+    primaryChildTaskId: primaryChild.taskId,
+    primaryChildIssueId: primaryChild.child.identifier,
   });
 }

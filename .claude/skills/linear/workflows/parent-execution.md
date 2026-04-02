@@ -432,14 +432,14 @@ If execution is interrupted mid-workflow:
 
 ## Forbidden Patterns
 
-| Pattern                      | Why It's Wrong                              |
-| ---------------------------- | ------------------------------------------- |
-| Creating branch per child    | Creates merge hell, loses context           |
-| Stopping after each child    | Defeats purpose of continuous execution     |
-| Creating PR per child        | Fragments review, loses cohesion            |
-| Skipping CI between children | Accumulates failures, harder to debug       |
-| Moving parent to Done        | Only user can mark Done (terminal state)    |
-| Setting assignee/delegate    | User-only responsibility. Blocked by hook   |
+| Pattern                      | Why It's Wrong                            |
+| ---------------------------- | ----------------------------------------- |
+| Creating branch per child    | Creates merge hell, loses context         |
+| Stopping after each child    | Defeats purpose of continuous execution   |
+| Creating PR per child        | Fragments review, loses cohesion          |
+| Skipping CI between children | Accumulates failures, harder to debug     |
+| Moving parent to Done        | Only user can mark Done (terminal state)  |
+| Setting assignee/delegate    | User-only responsibility. Blocked by hook |
 
 ---
 

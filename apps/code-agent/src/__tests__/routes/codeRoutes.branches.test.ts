@@ -359,6 +359,7 @@ describe('codeRoutes branch coverage', () => {
       await repo.update(created.value.id, {
         status: 'failed',
         implementationTaskId: 'impl-task-1',
+        fanOutChildTaskIds: ['child-task-1', 'child-task-2'],
         error: { code: 'WORKER_ERROR', message: 'Worker crashed' },
       });
 
@@ -373,7 +374,8 @@ describe('codeRoutes branch coverage', () => {
       expect(body.success).toBe(true);
       const task = body.data;
       // Fastify serialization strips fields not in schema (actionId, approvalEventId),
-      // but the code paths in taskToApiResponse are still executed.
+      // but the code paths in taskToApiResponse are still executed. fanOutChildTaskIds
+      // is included in the serializer path for coverage even if Fastify strips it here.
       expect(task.implementationTaskId).toBe('impl-task-1');
       expect(task.parentTaskId).toBe('parent-task-1');
       expect(task.followUpReason).toBe('retry');
@@ -1278,6 +1280,24 @@ describe('codeRoutes branch coverage', () => {
       expect(body.error.code).toBe('WORKER_NOT_CONFIGURED');
     });
 
+    it('returns 409 for complex_task_no_qualifying_children error', async () => {
+      mockedSubmitToExecutionAgent.mockResolvedValue(err({
+        code: 'complex_task_no_qualifying_children',
+        message: 'Complex task has no direct child issues with code-task label',
+      }));
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/submit-phase2',
+        headers: { 'x-internal-auth': 'test-internal-token' },
+        payload: { taskId: 'task-123', userId: 'test-user-id' },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('CONFLICT');
+    });
+
     it('returns 409 for already_implemented error', async () => {
       mockedSubmitToExecutionAgent.mockResolvedValue(err({
         code: 'already_implemented',
@@ -1623,6 +1643,24 @@ describe('codeRoutes branch coverage', () => {
 
       const body = JSON.parse(response.body);
       expect(body.error.code).toBe('WORKER_NOT_CONFIGURED');
+    });
+
+    it('returns 409 for complex_task_no_qualifying_children', async () => {
+      mockedSubmitToExecutionAgent.mockResolvedValue(err({
+        code: 'complex_task_no_qualifying_children',
+        message: 'Complex task has no direct child issues with code-task label',
+      }));
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/tasks/task-123/implement',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('CONFLICT');
     });
 
     it('returns 409 for already_implemented', async () => {

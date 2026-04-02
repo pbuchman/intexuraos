@@ -80,6 +80,11 @@ export interface IssueTreeResponse {
   descendants: IssueTreeNode[];
 }
 
+export interface DirectChildrenRequest {
+  userId: string;
+  issueId: string;
+}
+
 export interface LinearIssueForDisplay {
   identifier: string;
   parentIdentifier: string | null;
@@ -143,6 +148,8 @@ export interface LinearAgentClient {
     userId: string;
     issueId: string;
   }): Promise<Result<IssueTreeResponse, LinearAgentError>>;
+
+  fetchDirectChildrenLive(request: DirectChildrenRequest): Promise<Result<IssueTreeNode[], LinearAgentError>>;
 
   updateIssueMetadata(request: {
     userId: string;

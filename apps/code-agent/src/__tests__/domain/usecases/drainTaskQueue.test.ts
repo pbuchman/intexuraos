@@ -93,6 +93,7 @@ describe('drainTaskQueue', () => {
   let mockLinearAgentClient: {
     validateIssue: ReturnType<typeof vi.fn>;
     fetchIssueTree: ReturnType<typeof vi.fn>;
+    fetchDirectChildrenLive: ReturnType<typeof vi.fn>;
   };
   let mockWhatsappNotifier: {
     notifyTaskStarted: ReturnType<typeof vi.fn>;
@@ -141,6 +142,7 @@ describe('drainTaskQueue', () => {
     mockLinearAgentClient = {
       validateIssue: vi.fn(),
       fetchIssueTree: vi.fn(),
+      fetchDirectChildrenLive: vi.fn(),
     };
 
     mockWhatsappNotifier = {
@@ -1444,15 +1446,12 @@ describe('drainTaskQueue', () => {
         })
       );
 
-      // fetchIssueTree returns children with code-task labels
-      mockLinearAgentClient.fetchIssueTree.mockResolvedValue(
-        ok({
-          root: { id: 'parent-uuid', identifier: 'INT-956', url: '', parentId: null, labels: ['code-task'], assigneeId: null, state: 'Backlog' },
-          descendants: [
-            { id: 'child-uuid-1', identifier: 'INT-957', url: '', parentId: 'parent-uuid', labels: ['code-task'], assigneeId: null, state: 'Backlog' },
-            { id: 'child-uuid-2', identifier: 'INT-958', url: '', parentId: 'parent-uuid', labels: ['code-task'], assigneeId: null, state: 'Backlog' },
-          ],
-        })
+      // fetchDirectChildrenLive returns children with code-task labels
+      mockLinearAgentClient.fetchDirectChildrenLive.mockResolvedValue(
+        ok([
+          { id: 'child-uuid-1', identifier: 'INT-957', url: '', parentId: 'parent-uuid', labels: ['code-task'], assigneeId: null, state: 'Backlog' },
+          { id: 'child-uuid-2', identifier: 'INT-958', url: '', parentId: 'parent-uuid', labels: ['code-task'], assigneeId: null, state: 'Backlog' },
+        ])
       );
 
       mockCodeTaskRepo.create.mockResolvedValue(ok(createMockTask({ id: 'child-task' })));
@@ -1462,7 +1461,8 @@ describe('drainTaskQueue', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-123' });
+        expect(result.value.action).toBe('dispatched');
+        expect(result.value.taskId).toMatch(/^task_/);
       }
 
       // Verify child tasks were created
@@ -1486,13 +1486,10 @@ describe('drainTaskQueue', () => {
         })
       );
 
-      mockLinearAgentClient.fetchIssueTree.mockResolvedValue(
-        ok({
-          root: { id: 'parent-uuid', identifier: 'INT-956', url: '', parentId: null, labels: ['code-task'], assigneeId: null, state: 'Backlog' },
-          descendants: [
-            { id: 'child-uuid-1', identifier: 'INT-959', url: '', parentId: 'parent-uuid', labels: ['feature'], assigneeId: null, state: 'Backlog' },
-          ],
-        })
+      mockLinearAgentClient.fetchDirectChildrenLive.mockResolvedValue(
+        ok([
+          { id: 'child-uuid-1', identifier: 'INT-959', url: '', parentId: 'parent-uuid', labels: ['feature'], assigneeId: null, state: 'Backlog' },
+        ])
       );
 
       // Normal dispatch should proceed
@@ -1538,6 +1535,117 @@ describe('drainTaskQueue', () => {
 
       // Normal dispatch should proceed (no fan-out)
       expect(mockTaskDispatcher.dispatch).toHaveBeenCalled();
+    });
+
+    it('falls back to normal dispatch when live parent UUID is missing from validation response', async () => {
+      const task = createMockTask({ linearIssueId: 'INT-956' });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      setupWorkerSettings();
+
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: undefined as unknown as string,
+          identifier: 'INT-956',
+          title: 'Parent issue',
+          url: 'https://linear.app/intexura/issue/INT-956',
+          labels: ['code-task'],
+          childCount: 2,
+          parentId: null,
+        }),
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' }),
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-123' });
+      }
+      expect(mockLinearAgentClient.fetchDirectChildrenLive).not.toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-123', linearIssueId: 'INT-956' }),
+        'Drain fan-out skipped: live parent UUID unavailable',
+      );
+    });
+
+    it('logs a warning and still returns dispatched when parent cancellation fails after successful fan-out', async () => {
+      const task = createMockTask({ linearIssueId: 'INT-956', agentType: 'execution' });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      setupWorkerSettings();
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'parent-uuid',
+          identifier: 'INT-956',
+          title: 'Parent issue',
+          url: 'https://linear.app/intexura/issue/INT-956',
+          labels: ['code-task'],
+          childCount: 1,
+          parentId: null,
+        }),
+      );
+      mockLinearAgentClient.fetchDirectChildrenLive.mockResolvedValue(
+        ok([
+          { id: 'child-uuid-1', identifier: 'INT-957', url: '', parentId: 'parent-uuid', labels: ['code-task'], assigneeId: null, state: 'Backlog' },
+        ]),
+      );
+      mockCodeTaskRepo.create.mockResolvedValue(ok(createMockTask({ id: 'child-task' })));
+      mockCodeTaskRepo.update
+        .mockResolvedValueOnce(ok(createMockTask({ implementationTaskId: 'child-task' })))
+        .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'cancel failed' }));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('dispatched');
+        expect(result.value.taskId).toMatch(/^task_/);
+      }
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-123', error: { code: 'FIRESTORE_ERROR', message: 'cancel failed' } }),
+        'Drain fan-out succeeded but failed to cancel parent task',
+      );
+    });
+
+    it('falls back to normal dispatch when live direct-children fetch fails', async () => {
+      const task = createMockTask({ linearIssueId: 'INT-956' });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      setupWorkerSettings();
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'parent-uuid',
+          identifier: 'INT-956',
+          title: 'Parent issue',
+          url: 'https://linear.app/intexura/issue/INT-956',
+          labels: ['code-task'],
+          childCount: 2,
+          parentId: null,
+        }),
+      );
+      mockLinearAgentClient.fetchDirectChildrenLive.mockResolvedValue(
+        err({ code: 'UNAVAILABLE', message: 'children unavailable' }),
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' }),
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-123' });
+      }
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-123',
+          linearIssueId: 'INT-956',
+          error: { code: 'UNAVAILABLE', message: 'children unavailable' },
+        }),
+        'Drain fan-out could not fetch live direct children, falling back to normal dispatch',
+      );
     });
   });
 

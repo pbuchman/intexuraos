@@ -12,6 +12,7 @@ import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js
 import type {
   TaskEnqueueService,
   EnqueueTaskInput,
+  EnqueueManyTasksInput,
   EnqueueResult,
   EnqueueError,
 } from '../../domain/services/taskEnqueueService.js';
@@ -106,5 +107,78 @@ export class TaskEnqueueServiceImpl implements TaskEnqueueService {
       taskId,
       queuePosition,
     });
+  }
+
+  async enqueueMany(input: EnqueueManyTasksInput): Promise<Result<EnqueueResult[], EnqueueError>> {
+    const { taskIds, userId } = input;
+    if (taskIds.length === 0) {
+      return ok([]);
+    }
+
+    const config = loadConfig();
+    const tasks = [];
+
+    for (const taskId of taskIds) {
+      const findResult = await this.codeTaskRepo.findById(taskId);
+      if (!findResult.ok) {
+        this.logger.error({ taskId, error: findResult.error }, 'Failed to find task for batch enqueue');
+        return err({ code: 'task_not_found', message: `Task ${taskId} not found or not accessible` });
+      }
+      tasks.push(findResult.value);
+    }
+
+    const countResult = await this.codeTaskRepo.countQueued();
+    if (!countResult.ok) {
+      this.logger.error({ error: countResult.error }, 'Failed to count queued tasks for batch enqueue');
+      return err({ code: 'internal_error', message: 'Failed to check queue capacity' });
+    }
+
+    const queueCount = countResult.value;
+    const baseQueueCount = Math.max(0, queueCount - taskIds.length);
+
+    if (queueCount >= config.queue.maxSize) {
+      await Promise.all(
+        taskIds.map(async (taskId) => {
+          await this.codeTaskRepo.update(taskId, {
+            status: 'failed',
+            error: {
+              code: 'queue_full',
+              message: `All workers are busy and the queue is full (${String(queueCount)}/${String(config.queue.maxSize)}). Please try again in a few minutes.`,
+            },
+          });
+        }),
+      );
+
+      this.logger.warn(
+        { taskIds, queueCount, maxSize: config.queue.maxSize },
+        'Queue full, batch enqueue failed',
+      );
+      return err({
+        code: 'queue_full',
+        message: 'All workers are busy and the queue is full. Please try again in a few minutes.',
+      });
+    }
+
+    const results: EnqueueResult[] = [];
+
+    for (const [index, task] of tasks.entries()) {
+      const queuedAt = new Date();
+      const updateResult = await this.codeTaskRepo.update(task.id, { queuedAt });
+      const effectiveTask = updateResult.ok ? updateResult.value : task;
+      if (!updateResult.ok) {
+        this.logger.warn({ taskId: task.id, error: updateResult.error }, 'Failed to update task with queuedAt during batch enqueue');
+      }
+
+      const queuePosition = baseQueueCount + index + 1;
+      const notifyResult = await this.whatsappNotifier.notifyTaskQueued(userId, effectiveTask, queuePosition);
+      if (!notifyResult.ok) {
+        this.logger.warn({ taskId: task.id, error: notifyResult.error }, 'Failed to send queue notification during batch enqueue');
+      }
+
+      this.logger.info({ taskId: task.id, queuePosition }, 'Task enqueued for dispatch as part of batch');
+      results.push({ taskId: task.id, queuePosition });
+    }
+
+    return ok(results);
   }
 }

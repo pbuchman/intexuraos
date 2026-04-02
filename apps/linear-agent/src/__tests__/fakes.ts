@@ -352,6 +352,18 @@ export class FakeLinearApiClient implements LinearApiClient {
     return ok(issue ?? null);
   }
 
+  async getDirectChildren(
+    _apiKey: string,
+    issueId: string
+  ): Promise<Result<LinearIssue[] | null, LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    const issue = this.issues.find((i) => i.id === issueId);
+    if (!issue) {
+      return ok(null);
+    }
+    return ok(issue.children);
+  }
+
   async updateIssueState(
     _apiKey: string,
     issueId: string,
