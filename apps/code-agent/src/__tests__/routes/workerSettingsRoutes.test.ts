@@ -39,6 +39,7 @@ import { createStatusMirrorService } from '../../infra/services/statusMirrorServ
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
+import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
 import { createNoOpMetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import { ok, err } from '@intexuraos/common-core';
@@ -153,6 +154,7 @@ describe('Worker Settings Routes', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo,
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({

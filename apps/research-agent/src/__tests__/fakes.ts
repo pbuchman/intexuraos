@@ -13,21 +13,23 @@ import {
   type ResearchContext,
   type SynthesisContext,
 } from '@intexuraos/llm-prompts';
-import type {
-  LabelGenerateResult,
-  LlmError,
-  LlmProvider,
-  LlmResearchProvider,
-  LlmResearchResult,
-  LlmResult,
-  LlmSynthesisProvider,
-  LlmSynthesisResult,
-  NotificationError,
-  RepositoryError,
-  Research,
-  ResearchRepository,
-  TitleGenerateResult,
-  TitleGenerator,
+import {
+  toResearchSummary,
+  type LabelGenerateResult,
+  type LlmError,
+  type LlmProvider,
+  type LlmResearchProvider,
+  type LlmResearchResult,
+  type LlmResult,
+  type LlmSynthesisProvider,
+  type LlmSynthesisResult,
+  type NotificationError,
+  type RepositoryError,
+  type Research,
+  type ResearchRepository,
+  type ResearchSummary,
+  type TitleGenerateResult,
+  type TitleGenerator,
 } from '../domain/research/index.js';
 import type {
   ContextInferenceProvider,
@@ -99,6 +101,34 @@ export class FakeResearchRepository implements ResearchRepository {
     const items = Array.from(this.researches.values())
       .filter((r) => r.userId === userId)
       .slice(0, limit);
+
+    return ok({ items });
+  }
+
+  async findSummariesByUserId(
+    userId: string,
+    options?: { limit?: number; cursor?: string }
+  ): Promise<Result<{ items: ResearchSummary[]; nextCursor?: string }, RepositoryError>> {
+    if (this.failNextFind) {
+      this.failNextFind = false;
+      return err({ code: 'FIRESTORE_ERROR', message: 'Test find failure' });
+    }
+
+    const limit = options?.limit ?? 50;
+    const allItems = Array.from(this.researches.values())
+      .filter((r) => r.userId === userId);
+
+    // Sort: favourites first (desc), then by startedAt desc
+    allItems.sort((a, b) => {
+      const aFav = a.favourite === true ? 1 : 0;
+      const bFav = b.favourite === true ? 1 : 0;
+      if (aFav !== bFav) {
+        return bFav - aFav;
+      }
+      return b.startedAt.localeCompare(a.startedAt);
+    });
+
+    const items: ResearchSummary[] = allItems.slice(0, limit).map((r) => toResearchSummary(r));
 
     return ok({ items });
   }

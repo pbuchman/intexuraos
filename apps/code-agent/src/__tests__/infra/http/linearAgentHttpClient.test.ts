@@ -1204,6 +1204,7 @@ describe('linearAgentHttpClient', () => {
         data: {
           id: 'issue-123',
           identifier: 'INT-123',
+          parentIdentifier: 'INT-100',
           title: 'Test Issue',
           description: null,
           state: { name: 'Backlog', type: 'backlog' },
@@ -1231,6 +1232,7 @@ describe('linearAgentHttpClient', () => {
 
       if (result.ok) {
         expect(result.value.identifier).toBe('INT-123');
+        expect(result.value.parentIdentifier).toBe('INT-100');
         expect(result.value.title).toBe('Test Issue');
         expect(result.value.state.name).toBe('Backlog');
         expect(result.value.priority).toBe(0);

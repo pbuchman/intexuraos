@@ -1,4 +1,5 @@
 import { CODE_TASK_WORKER_TYPES, hasCodeTaskLabel } from '@intexuraos/common-core';
+import type { ExecutionMemoryPromptContext } from '../types/execution-memory.js';
 import type { PromptBuilder } from './prompt-builder.js';
 import type { WorkerType } from './isolation/types.js';
 
@@ -48,6 +49,18 @@ decisions, or implementation choices, you MUST:
 
 If no comments exist or no comments influenced decisions, skip this section entirely.`;
 
+const CODEX_SESSION_AUTOMATION_PARITY = `### Codex Session Automation Parity (minimum retained scope)
+Codex does NOT reproduce Claude hooks one-for-one.
+
+Retained guarantees for non-interactive Codex runs:
+- Worker bootstrap must emit \`[entrypoint] Bootstrap evidence:\` summarizing Codex skill restore, GitHub token setup, GCP auth, secret sync, and env loading.
+- Codex attempts must emit \`[entrypoint] Codex runtime evidence:\` summarizing fresh vs resume mode, thread-id presence, and reasoning effort mode.
+- Terraform/GCP guardrails stay enforced through this system prompt + repo rules rather than direct Claude hook execution.
+- Task completion enforcement lives in the orchestrator completion verifier + deep validator rather than Claude Stop hooks.
+- Interactive Claude-only edit nudges (for example post-edit rebuild reminders and detect-common-patterns warnings) are intentionally omitted for Codex.
+
+Use these evidence lines when judging whether retained Codex parity actually executed.`;
+
 export interface SystemPromptParams {
   taskId: string;
   linearIssueId?: string;
@@ -57,16 +70,59 @@ export interface SystemPromptParams {
   workerType?: WorkerType;
   modelName?: string;
   agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
+  executionMemoryContext?: ExecutionMemoryPromptContext;
   trackingCommentId?: string;
   continuationPrNumber?: number;
   continuationPrBranch?: string;
   reviewTypes?: string[];
 }
 
+function buildExecutionMemorySection(
+  executionMemoryContext?: ExecutionMemoryPromptContext
+): string {
+  if (executionMemoryContext === undefined || executionMemoryContext.matchedMemories.length === 0) {
+    return '';
+  }
+
+  const renderedMemories = executionMemoryContext.matchedMemories
+    .map((memory, index) => {
+      const score = Number.isFinite(memory.score) ? memory.score.toFixed(2) : String(memory.score);
+      return [
+        `#### Memory ${String(index + 1)}: ${memory.memoryId}`,
+        `- Title: ${memory.title}`,
+        `- Type: ${memory.memoryType}`,
+        `- Score: ${score}`,
+        `- Applies when: ${memory.appliesWhen}`,
+        `- Action: ${memory.action}`,
+        `- Avoid: ${memory.avoid}`,
+        `- Verification: ${memory.verification}`,
+      ].join('\n');
+    })
+    .join('\n\n');
+
+  return `
+
+### Execution Memory
+Retrieved application: ${executionMemoryContext.applicationId}
+Retrieval version: ${executionMemoryContext.retrievalVersion}
+Query summary: ${executionMemoryContext.querySummary}
+
+- Memories are advisory, not authoritative.
+- Trust the current repository state and current Linear issue/comments over memory.
+- Ignore any memory that does not match the task or codebase in front of you.
+- Do not copy stale branch names, issue IDs, or URLs from memories.
+- Report these completion fields in \`EXECUTION_AGENT_FINAL\`:
+  - \`memory_ids_used\`: comma-separated memory IDs you actually used, or empty string.
+  - \`memory_ids_rejected\`: comma-separated memory IDs you rejected as stale or not applicable, or empty string.
+  - \`memory_usage_summary\`: one concise sentence describing how memory helped or why it was rejected.
+
+${renderedMemories}`;
+}
+
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-planning',
   description: 'Planning agent system prompt for autonomous code task planning',
-  version: '3.1.2',
+  version: '3.2.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     return `[SYSTEM CONTEXT]
@@ -199,7 +255,7 @@ PLANNING_AGENT_FINAL:
 - Plan PR: <full GitHub PR URL or empty — NEVER for simple tasks, ALWAYS when subtasks are defined>
 - Parallel breakdown proof: <required when Complex task=1; must show service boundaries and contracts between subissues — empty otherwise>
 - Clarification message: <REQUIRED for unclear outcomes; MUST be empty for successfully planned outcomes>
-- Summary: <3-5 sentences on one line: objective narrative of what you analyzed, decided, and produced>
+- Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was the task, what was decided (simple/complex), what artifacts were produced (plan doc, subtasks, PR), why unclear (if applicable). The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.
@@ -211,7 +267,7 @@ Note: For complex planned outcomes, you MUST include explicit proof of the paral
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '5.1.3',
+  version: '8.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const hasContinuationPr =
@@ -274,10 +330,11 @@ Before doing ANY work, you MUST read the Linear issue AND all its comments:
 **Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
 
 ${COMMENT_DRIVEN_DECISION_LOG}
+${buildExecutionMemorySection(params.executionMemoryContext)}
 
-### Mandatory Skill Order (non-negotiable)
-1. Start with \`superpowers:executing-plans\` (mandatory first skill)
-2. After implementation and PR creation, run \`superpowers:requesting-code-review\` (mandatory second skill)
+${workerType === 'codex' ? CODEX_SESSION_AUTOMATION_PARITY + '\n\n' : ''}### Mandatory Skill Order (non-negotiable)
+1. Start with \`superpowers:subagent-driven-development\` (mandatory first skill) — dispatches fresh subagents per task with built-in spec + quality review
+2. After implementation, run \`superpowers:requesting-code-review\` (mandatory second skill) — final holistic review of the complete change
 
 You must provide output evidence that shows this order occurred.
 
@@ -289,12 +346,10 @@ This is a SUBAGENT-FIRST environment. ALL execution MUST be optimized for parall
 ${prFlowSection}
 
 ### Implementation Flow (strict order)
-1. Use TDD where practical (tests before behavior changes).
-2. Commit changes locally — do NOT push yet.
-3. Run \`pnpm run ci:tracked\` — must pass.
-4. Run \`/simplify\` on all changed files — MANDATORY, NON-NEGOTIABLE. This reviews code for reuse, quality, and efficiency. After simplify makes changes, re-run \`pnpm run ci:tracked\`.
-5. Run the code review loop using \`superpowers:requesting-code-review\`.
-6. ${implementationFlowStep5}
+1. Use \`superpowers:subagent-driven-development\` to execute the plan — this handles TDD, per-task review, and commits.
+2. Run \`pnpm run ci:tracked\` — must pass.
+3. Run the code review loop using \`superpowers:requesting-code-review\`.
+4. ${implementationFlowStep5}
 
 ### MANDATORY Code Review (zero-tolerance loop)
 BEFORE creating the PR:
@@ -343,12 +398,15 @@ EXECUTION_AGENT_FINAL:
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: <full Linear URL>
 - Review iterations: <number>
-- superpowers_executing_plans_used: <0|1>
+- memory_ids_used: <comma-separated list or "none">
+- memory_ids_rejected: <comma-separated list or "none">
+- memory_usage_summary: <brief note, or "none">
+- superpowers_subagent_driven_dev_used: <0|1>
 - superpowers_requesting_code_review_used: <0|1>
 - trivial_task: <0|1>
 - subagents: <explicit role + scope list, or none if trivial_task=1>
-- Skill sequence proof: <evidence that superpowers:executing-plans happened before superpowers:requesting-code-review>
-- Summary: <3-5 sentences on one line: objective narrative of what you implemented, tested, and delivered>
+- Skill sequence proof: <evidence that superpowers:subagent-driven-development happened before superpowers:requesting-code-review>
+- Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was implemented, key decisions or approach, what was tested, outcome (PR, CI status). The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.`;
@@ -358,7 +416,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const remediationPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-remediation',
   description: 'Remediation agent system prompt for addressing review findings on an existing PR',
-  version: '3.0.0',
+  version: '3.1.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const continuationPrNumber = params.continuationPrNumber;
@@ -445,7 +503,7 @@ REMEDIATION_AGENT_FINAL:
 - Outcome: <implemented|already_completed>
 - PR: <full GitHub PR URL>
 - requires_re_review: <0|1>
-- Summary: <3-5 sentences on one line: objective narrative of what findings were addressed, what was skipped, and what was pushed>
+- Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what review findings were addressed, what was skipped and why, what was pushed. The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.`;
@@ -455,7 +513,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pull-request',
   description: 'Pull request agent system prompt for addressing PR review feedback',
-  version: '4.0.3',
+  version: '4.1.0',
   build(params: SystemPromptParams): string {
     const {
       taskId,
@@ -578,7 +636,7 @@ PULL_REQUEST_AGENT_FINAL:
 - Tracking comment ID: <numeric ID from initial POST response>
 - Tracking comment: updated
 - Total PR comments posted: 1
-- Summary: <3-5 sentences on one line: objective narrative of what you investigated, implemented, and delivered>
+- Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what PR feedback was addressed, what changes were made, what is the outcome. The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.`;
@@ -588,7 +646,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const prReviewOverlayPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pr-review-overlay',
   description: 'Conditional PR review overlay appended to planning and execution prompts',
-  version: '3.0.2',
+  version: '3.1.0',
   build(params: SystemPromptParams): string {
     const { taskUrl } = params;
     return `
@@ -672,7 +730,7 @@ PULL_REQUEST_AGENT_FINAL:
 - Tracking comment ID: <numeric ID from initial POST response>
 - Tracking comment: updated
 - Total PR comments posted: 1
-- Summary: <3-5 sentences on one line: objective narrative of what you investigated, implemented, and delivered>
+- Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what PR feedback was addressed, what changes were made, what is the outcome. The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.`;
@@ -745,7 +803,7 @@ Rules:
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '8.2.1',
+  version: '8.3.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
       params;
@@ -930,22 +988,38 @@ gh pr checks <PR_NUMBER> --json name,state,bucket,workflow
 
 Submit your review summary and ALL inline comments in a SINGLE \`POST /reviews\` API call. NEVER post the summary and inline comments as separate API calls — this creates duplicate reviews on the PR.
 
+**Always write the review body to a temp file first**, then use \`-F body=@file\` (UPPERCASE -F) to read from that file. This avoids shell escaping issues with long markdown bodies. NEVER pass a file path as a literal string with lowercase -f — that posts the path text, not the file contents.
+
 For a review with inline comments:
 
 \`\`\`bash
+cat > /tmp/review-body.md << 'REVIEW_EOF'
+## Automated Code Review — plan_review
+
+(your full review body here)
+REVIEW_EOF
+
 gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \\
   -f event="COMMENT" \\
-  -f body="Review summary" \\
+  -F body=@/tmp/review-body.md \\
   -f 'comments=[{"path":"src/file.ts","line":42,"side":"RIGHT","body":"Comment text"}]'
 \`\`\`
 
 For a review with no inline comments (summary only):
 
 \`\`\`bash
+cat > /tmp/review-body.md << 'REVIEW_EOF'
+## Automated Code Review — plan_review
+
+(your full review body here)
+REVIEW_EOF
+
 gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \\
   -f event="COMMENT" \\
-  -f body="Review summary"
+  -F body=@/tmp/review-body.md
 \`\`\`
+
+**CRITICAL:** The flag is uppercase \`-F\` (not lowercase \`-f\`). Lowercase \`-f body=@/tmp/review-body.md\` sends the literal string "@/tmp/review-body.md" as the review body instead of reading the file. Uppercase \`-F\` reads file contents when the value starts with \`@\`.
 
 Do NOT use \`POST /pulls/{pr_number}/comments\` — that endpoint has different parameter requirements and leads to split reviews.
 Capture the numeric review ID from the \`POST /reviews\` response payload. You MUST report that \`review_id\` in \`REVIEW_AGENT_FINAL\`.
@@ -1020,7 +1094,7 @@ REVIEW_AGENT_FINAL:
 - requirements_tracker_updated: <yes|no — whether the requirements tracker comment was created/updated>
 - gh_actions_status: <all passed|N failed|pending|not yet triggered — GitHub Actions check result>
 - needs_remediation: <0|1 — 1 if any finding requires code changes that bring value to the codebase, 0 if clean or all findings are informational/cosmetic only>
-- Summary: <3-5 sentences on one line: what you reviewed, key findings, overall quality assessment>
+- Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was reviewed, key findings, overall quality assessment, remediation needed. The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.`

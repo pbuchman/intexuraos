@@ -13,6 +13,7 @@ export interface IssueDisplayResponse {
   url: string;
   commentCount: number;
   lastCommentAt: string | null;
+  parentIdentifier: string | null;
 }
 
 /**
@@ -31,7 +32,8 @@ export function buildIssueDisplayResponse(
     labels: { id: string; name: string; color: string }[];
     url: string;
   },
-  commentSummary: { commentCount: number; lastCommentAt: string | null }
+  commentSummary: { commentCount: number; lastCommentAt: string | null },
+  parentIdentifier?: string | null
 ): IssueDisplayResponse {
   return {
     identifier: issue.identifier,
@@ -45,6 +47,7 @@ export function buildIssueDisplayResponse(
     url: issue.url,
     commentCount: commentSummary.commentCount,
     lastCommentAt: commentSummary.lastCommentAt,
+    parentIdentifier: parentIdentifier ?? null,
   };
 }
 

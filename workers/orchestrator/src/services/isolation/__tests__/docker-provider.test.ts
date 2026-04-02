@@ -1039,6 +1039,115 @@ describe('DockerProvider', () => {
     });
   });
 
+  describe('isResumeAvailable', () => {
+    it('returns true when preserved worker container is running', async () => {
+      const config = createTestConfig({ taskId: 'resume-task-1' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('resume-task-1');
+
+      const result = await provider.isResumeAvailable('resume-task-1');
+
+      expect(result).toBe(true);
+    });
+
+    it('returns false and cleans up preserved entry when container is stopped', async () => {
+      const config = createTestConfig({ taskId: 'resume-task-2' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('resume-task-2');
+
+      mocks.mockContainer.inspect.mockResolvedValueOnce({ State: { Running: false } });
+
+      const result = await provider.isResumeAvailable('resume-task-2');
+
+      expect(result).toBe(false);
+      expect(await provider.listPreservedWorkers()).toHaveLength(0);
+    });
+
+    it('returns false and cleans up preserved entry when container no longer exists', async () => {
+      const config = createTestConfig({ taskId: 'resume-task-3' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('resume-task-3');
+
+      mocks.mockContainer.inspect.mockRejectedValueOnce(new Error('No such container'));
+
+      const result = await provider.isResumeAvailable('resume-task-3');
+
+      expect(result).toBe(false);
+      expect(await provider.listPreservedWorkers()).toHaveLength(0);
+    });
+
+    it('returns false when no container entry exists and orphan lookup fails', async () => {
+      mocks.mockContainer.inspect.mockRejectedValueOnce(new Error('No such container'));
+
+      const result = await provider.isResumeAvailable('nonexistent-task');
+
+      expect(result).toBe(false);
+    });
+
+    it('returns true for running orphaned container when no map entry exists', async () => {
+      mocks.mockContainer.inspect.mockResolvedValueOnce({ State: { Running: true } });
+
+      const result = await provider.isResumeAvailable('orphan-task');
+
+      expect(result).toBe(true);
+    });
+
+    it('returns false for stopped orphaned container when no map entry exists', async () => {
+      mocks.mockContainer.inspect.mockResolvedValueOnce({ State: { Running: false } });
+
+      const result = await provider.isResumeAvailable('orphan-task-stopped');
+
+      expect(result).toBe(false);
+    });
+
+    it('returns false for stopped active worker container (not preserved)', async () => {
+      // Container in workers map (not preservedWorkers) — preserved is undefined
+      const config = createTestConfig({ taskId: 'active-stopped-task' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      mocks.mockContainer.inspect.mockResolvedValueOnce({ State: { Running: false } });
+
+      const result = await provider.isResumeAvailable('active-stopped-task');
+
+      expect(result).toBe(false);
+      // preservedWorkers should not be touched since task was never preserved
+      expect(await provider.listPreservedWorkers()).toHaveLength(0);
+    });
+  });
+
+  describe('preserved container restore with stopped container', () => {
+    it('falls through to new container creation when preserved container is stopped', async () => {
+      const config = createTestConfig({ taskId: 'stale-preserved-task' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('stale-preserved-task');
+
+      expect(await provider.listPreservedWorkers()).toHaveLength(1);
+
+      // Preserved container is stopped, and no orphan container exists either
+      mocks.mockContainer.inspect.mockResolvedValueOnce({ State: { Running: false } });
+      mocks.mockContainer.inspect.mockRejectedValueOnce(new Error('No such container'));
+      mocks.mockDocker.createContainer.mockClear();
+
+      await provider.createWorker(
+        createTestConfig({
+          taskId: 'stale-preserved-task',
+          continueSession: true,
+          prompt: 'Resume prompt',
+        })
+      );
+
+      // Should have fallen through to create new container
+      expect(mocks.mockDocker.createContainer).toHaveBeenCalled();
+      // Stale preserved entry should be cleaned up
+      expect(await provider.listPreservedWorkers()).toHaveLength(0);
+    });
+  });
+
   describe('startup failure cleanup', () => {
     it('cleans up secrets and session dirs on image pull failure', async () => {
       const fs = await import('node:fs');

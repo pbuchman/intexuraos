@@ -7,7 +7,7 @@ import { useResearches } from '@/hooks';
 import { formatRelative } from '@/utils/dateFormat';
 import { stripMarkdown } from '@/utils';
 import { toggleResearchFavourite } from '@/services/researchAgentApi';
-import { type Research } from '@/services/researchAgentApi.types';
+import { type ResearchSummary } from '@/services/researchAgentApi.types';
 import {
   ALL_RESEARCH_GROUP_STATUSES,
   deriveGroupStatus,
@@ -58,7 +58,7 @@ function safeTimestamp(dateStr: string): number {
   return Number.isNaN(ms) ? 0 : ms;
 }
 
-function sortResearches(items: Research[], sort: ResearchSortOption): Research[] {
+function sortResearches(items: ResearchSummary[], sort: ResearchSortOption): ResearchSummary[] {
   const sorted = [...items];
   if (sort === 'created') {
     sorted.sort((a, b) => safeTimestamp(b.startedAt) - safeTimestamp(a.startedAt));
@@ -177,7 +177,7 @@ function SortSelector({ activeSort, onChangeSort }: SortSelectorProps): React.JS
 // --- ResearchRow ---
 
 interface ResearchRowProps {
-  research: Research;
+  research: ResearchSummary;
   onDelete: () => Promise<void>;
   onToggleFavourite: (researchId: string, favourite: boolean) => void;
   updatingFavourite: string | null;
@@ -336,7 +336,7 @@ const ResearchRow = memo(function ResearchRow({ research, onDelete, onToggleFavo
 // --- Main Page ---
 
 export function ResearchListPage(): React.JSX.Element {
-  const { researches, loading, loadingMore, error, hasMore, loadMore, deleteResearch, refresh } =
+  const { researches, loading, loadingMore, error, hasMore, loadMore, deleteResearch, updateResearchLocally } =
     useResearches();
   const { getAccessToken } = useAuth();
   const [updatingFavourite, setUpdatingFavourite] = useState<string | null>(null);
@@ -347,12 +347,14 @@ export function ResearchListPage(): React.JSX.Element {
   const handleToggleFavourite = (researchId: string, favourite: boolean): void => {
     setUpdatingFavourite(researchId);
     setFavouriteError(null);
+    updateResearchLocally(researchId, { favourite });
+
     void (async (): Promise<void> => {
       try {
         const token = await getAccessToken();
         await toggleResearchFavourite(token, researchId, favourite);
-        await refresh();
       } catch (err) {
+        updateResearchLocally(researchId, { favourite: !favourite });
         setFavouriteError(err instanceof Error ? err.message : 'Failed to update favourite');
       } finally {
         setUpdatingFavourite(null);

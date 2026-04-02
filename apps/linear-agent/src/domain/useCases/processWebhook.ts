@@ -177,6 +177,14 @@ export async function processWebhook(
           firstSuccessAction = result.value.value.action; // @allow-result-access -- guarded by result.value.ok
           firstSuccessIssueId = result.value.value.issueId; // @allow-result-access -- guarded by result.value.ok
         }
+
+        void deps.codeAgentClient.notifyGroupSummaryRecompute({
+          userId: uid,
+          linearIssueId: event.data.identifier,
+          labels: event.data.labels.map((l) => ({ id: l.id, name: l.name })),
+        }).catch((e: unknown) => {
+          deps.logger.warn({ error: e, linearIssueId: event.data.identifier }, 'Failed to notify code-agent of label change');
+        });
       } else {
         /* v8 ignore start -- upstream: FakeLinearIssueRepository's syncSingleIssue always returns a resolved Result, so Promise.allSettled never produces a 'rejected' entry; the inner ok===true ternary branch is also unreachable because the else branch only executes when result.value.ok is false @preserve */
         const error = result.status === 'rejected' ? String(result.reason) : (result.value.ok ? '' : result.value.error);

@@ -239,3 +239,69 @@ body.dark {
   border-top: none !important;
 }
 
+/* Code task loading wave animation */
+@keyframes wave-travel {
+  0%   { transform: translateX(-100%); opacity: 0.4; filter: hue-rotate(0deg); }
+  15%  { opacity: 1; }
+  50%  { filter: hue-rotate(40deg); }
+  85%  { opacity: 1; }
+  100% { transform: translateX(330%); opacity: 0.4; filter: hue-rotate(0deg); }
+}
+
+.wave-dot,
+.wave-dot-amber,
+.wave-dot-red {
+  left: 0;
+  animation: wave-travel 1.4s ease-in-out infinite;
+}
+
+.wave-dot { background: radial-gradient(ellipse at center, rgba(99, 102, 241, 0.9) 0%, rgba(59, 130, 246, 0.5) 60%, transparent 100%); }
+.wave-dot-amber { background: radial-gradient(ellipse at center, rgba(245, 158, 11, 0.9) 0%, rgba(251, 191, 36, 0.5) 60%, transparent 100%); }
+.wave-dot-red { background: radial-gradient(ellipse at center, rgba(239, 68, 68, 0.9) 0%, rgba(248, 113, 113, 0.5) 60%, transparent 100%); }
+
+/* Row shimmer overlay — single keyframe, color via CSS custom properties */
+@keyframes shimmer-sweep {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.shimmer-refresh,
+.shimmer-amber,
+.shimmer-red {
+  position: relative;
+}
+
+.shimmer-refresh::after,
+.shimmer-amber::after,
+.shimmer-red::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 0.5rem;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--shimmer-light) 40%,
+    var(--shimmer-mid) 50%,
+    var(--shimmer-light) 60%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-sweep 1.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.shimmer-refresh { --shimmer-light: rgba(59, 130, 246, 0.06); --shimmer-mid: rgba(59, 130, 246, 0.12); }
+.shimmer-amber { --shimmer-light: rgba(245, 158, 11, 0.08); --shimmer-mid: rgba(245, 158, 11, 0.18); }
+.shimmer-red { --shimmer-light: rgba(239, 68, 68, 0.08); --shimmer-mid: rgba(239, 68, 68, 0.18); }
+
+/* Indeterminate progress bar */
+@keyframes progress-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
+.animate-progress-slide {
+  animation: progress-slide 1.5s ease-in-out infinite;
+}
+

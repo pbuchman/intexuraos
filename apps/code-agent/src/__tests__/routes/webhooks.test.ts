@@ -45,6 +45,7 @@ import type { StatusMirrorService } from '../../infra/services/statusMirrorServi
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
+import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
@@ -60,6 +61,13 @@ import type { Result } from '@intexuraos/common-core';
 vi.mock('@intexuraos/internal-clients', async () => ({
   fetchWithAuth: vi.fn(),
 }));
+
+// Mock drainTaskQueue so tests can assert it is (or is not) called
+vi.mock('../../domain/usecases/drainTaskQueue.js', () => ({
+  drainTaskQueue: vi.fn().mockResolvedValue({ ok: true, value: { action: 'dispatched' } }),
+  _resetDrainGuard: vi.fn(),
+}));
+import * as drainTaskQueueModule from '../../domain/usecases/drainTaskQueue.js';
 
 describe('POST /internal/webhooks/task-complete', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -207,6 +215,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
@@ -257,6 +266,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
@@ -279,6 +289,7 @@ describe('POST /internal/webhooks/task-complete', () => {
   });
 
   afterEach(() => {
+    delete process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'];
     resetServices();
     resetFirestore();
     vi.clearAllMocks();
@@ -2241,7 +2252,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           commits: 2,
           summary: 'Implemented execution task',
           execution_outcome_label: 'implemented' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2280,6 +2291,102 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.status).toBe('implemented');
       expect(getResult.value.result?.execution_outcome_label).toBe('implemented');
       expect(getResult.value.result?.execution_linear_issue_url).toContain('/INT-123');
+    });
+
+    it('marks execution memory post-run pending and stores memory usage fields when feature flag is enabled', async () => {
+      process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] = 'true';
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Implement the task',
+        sanitizedPrompt: 'Implement the task',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 't-exec-memory-pending',
+        linearIssueId: 'INT-123',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'execution',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const validateIssueSpy = vi.spyOn(getServices().linearAgentClient, 'validateIssue');
+      validateIssueSpy.mockReset();
+      validateIssueSpy
+        .mockResolvedValueOnce(
+          ok({
+            id: 'routed-uuid',
+            identifier: 'INT-123',
+            title: 'Routed issue',
+            url: 'https://linear.app/pbuchman/issue/INT-123',
+            labels: ['code-task'],
+            childCount: 0,
+            parentId: null,
+          })
+        )
+        .mockResolvedValueOnce(
+          ok({
+            id: 'routed-uuid',
+            identifier: 'INT-123',
+            title: 'Routed issue',
+            url: 'https://linear.app/pbuchman/issue/INT-123',
+            labels: ['code-task'],
+            childCount: 0,
+            parentId: null,
+          })
+        );
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/901',
+          branch: 'feat/execution-agent',
+          commits: 2,
+          summary: 'Implemented execution task',
+          execution_outcome_label: 'implemented' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
+          execution_superpowers_requesting_code_review_used: '1' as const,
+          execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
+          execution_memory_ids_used: 'mem_142,mem_155',
+          execution_memory_ids_rejected: 'mem_188',
+          execution_memory_usage_summary: 'Used route logging and coverage lessons.',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.executionMemoryPostRun).toEqual(
+        expect.objectContaining({
+          status: 'pending',
+          attempts: 0,
+          generatedMemoryIds: [],
+        })
+      );
+      expect(getResult.value.result?.execution_memory_ids_used).toBe('mem_142,mem_155');
+      expect(getResult.value.result?.execution_memory_ids_rejected).toBe('mem_188');
+      expect(getResult.value.result?.execution_memory_usage_summary).toBe(
+        'Used route logging and coverage lessons.'
+      );
     });
 
     it('does not post implementation completion comment when the final update fails', async () => {
@@ -2344,7 +2451,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           commits: 2,
           summary: 'Implemented execution task',
           execution_outcome_label: 'implemented' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2366,6 +2473,54 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(gitHubPRClient.postPRComment).not.toHaveBeenCalled();
 
       updateSpy.mockRestore();
+    });
+
+    it('does not queue execution-memory post-run work for non-execution agents', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Implement the task',
+        sanitizedPrompt: 'Implement the task',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_non_execution',
+        linearIssueId: 'INT-123',
+        agentType: 'planning',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Planned the task',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.executionMemoryPostRun).toBeUndefined();
     });
 
     it('handles markdown-wrapped execution_linear_issue_url in execution completion', async () => {
@@ -2410,7 +2565,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           commits: 2,
           summary: 'Implemented execution task',
           execution_outcome_label: 'implemented' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
           execution_linear_issue_url: '[INT-123](https://linear.app/pbuchman/issue/INT-123)',
         },
@@ -2495,7 +2650,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           prUrl: 'https://github.com/pbuchman/intexuraos/pull/902',
           execution_outcome_label: 'implemented' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-999',
         },
@@ -2558,7 +2713,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         status: 'completed' as const,
         result: {
           execution_outcome_label: 'implemented' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2636,7 +2791,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'Work was already merged into development',
           execution_outcome_label: 'already_completed' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2719,7 +2874,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'The feature was already implemented and merged in PR #850',
           execution_outcome_label: 'already_completed' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2791,7 +2946,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'Work already done',
           execution_outcome_label: 'already_completed' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2865,7 +3020,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'Work already done',
           execution_outcome_label: 'already_completed' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2940,7 +3095,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'Work already done',
           execution_outcome_label: 'already_completed' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -5014,6 +5169,35 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(labelMetaCalls).toHaveLength(0);
     });
 
+    it('skips review-outcome label when PR is already merged', async () => {
+      await createOriginTask({ traceId: 'trace_label_merged', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_merged_review' });
+
+      // Simulate PR already merged by providing a gitHubPRSummaryRepo with mergedAt set
+      const mockFindByPullRequest = vi.fn().mockResolvedValue(
+        ok({ mergedAt: new Date('2026-04-01T09:35:00Z') })
+      );
+      setServices({
+        ...getServices(),
+        gitHubPRSummaryRepo: {
+          ...getServices().gitHubPRSummaryRepo,
+          findByPullRequest: mockFindByPullRequest,
+        },
+      });
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      // updateIssueMetadata should NOT have been called for label addition
+      const labelCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].addLabels !== undefined
+      );
+      expect(labelCalls).toHaveLength(0);
+    });
+
     it('does NOT set labels when needs_remediation is not "0"', async () => {
       await createOriginTask({ traceId: 'trace_label_remediation', agentType: 'execution' });
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_remediation_review' });
@@ -5038,6 +5222,50 @@ describe('POST /internal/webhooks/task-complete', () => {
           (call[0].addLabels.includes('ready-to-merge') || call[0].addLabels.includes('ready-to-implement'))
       );
       expect(labelCalls).toHaveLength(0);
+    });
+
+    it('recomputes group summary after setting review-outcome label', async () => {
+      await createOriginTask({ traceId: 'trace_label_summary', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_summary_review' });
+
+      const mockRecomputeWithLabels = vi.fn().mockResolvedValue(ok(undefined));
+      setServices({
+        ...getServices(),
+        groupSummaryRepo: {
+          recomputeWithLabels: mockRecomputeWithLabels,
+        } as never,
+      });
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockRecomputeWithLabels).toHaveBeenCalledWith(
+        'user-123',
+        'INT-500',
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'ready-to-merge' }),
+        ]),
+      );
+    });
+
+    it('does not throw when recomputeWithLabels fails after label set', async () => {
+      await createOriginTask({ traceId: 'trace_label_summary_fail', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_summary_fail_review' });
+
+      const mockRecomputeWithLabels = vi.fn().mockRejectedValue(new Error('firestore down'));
+      setServices({
+        ...getServices(),
+        groupSummaryRepo: {
+          recomputeWithLabels: mockRecomputeWithLabels,
+        } as never,
+      });
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      // Should complete successfully — recompute is fire-and-forget
+      expect(response.statusCode).toBe(200);
     });
   });
 
@@ -6060,6 +6288,164 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(markInReviewSpy).not.toHaveBeenCalled();
     });
   });
+
+  describe('triggers drain on task completion (INT-1098)', () => {
+    it('calls drainTaskQueue when completed task has prNumber', async () => {
+      const mockDrain = vi.mocked(drainTaskQueueModule.drainTaskQueue);
+      mockDrain.mockClear();
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_drain_1',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          branch: 'fix/drain-test',
+          commits: 1,
+          summary: 'Test drain trigger',
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.received).toBe(true);
+      expect(mockDrain).toHaveBeenCalledOnce();
+    });
+
+    it('does not call drainTaskQueue when completed task has no prNumber', async () => {
+      const mockDrain = vi.mocked(drainTaskQueueModule.drainTaskQueue);
+      mockDrain.mockClear();
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug no pr',
+        sanitizedPrompt: 'Fix the bug no pr',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_drain_2',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          branch: 'fix/no-pr-drain',
+          commits: 1,
+          summary: 'No PR, no drain',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.received).toBe(true);
+      expect(mockDrain).not.toHaveBeenCalled();
+    });
+
+    it('returns { received: true } even when drainTaskQueue throws', async () => {
+      const mockDrain = vi.mocked(drainTaskQueueModule.drainTaskQueue);
+      mockDrain.mockClear();
+      mockDrain.mockRejectedValueOnce(new Error('drain exploded'));
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug drain throws',
+        sanitizedPrompt: 'Fix the bug drain throws',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_drain_3',
+        prNumber: 99,
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          branch: 'fix/drain-throws',
+          commits: 1,
+          summary: 'Drain will throw',
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/99',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.received).toBe(true);
+      // Verify drain WAS called (so the rejection was actually exercised, not bypassed)
+      expect(mockDrain).toHaveBeenCalledOnce();
+    });
+  });
 });
 
 describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
@@ -6180,6 +6566,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
@@ -6230,6 +6617,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
@@ -6553,6 +6941,7 @@ describe('POST /internal/logs', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
@@ -6603,6 +6992,7 @@ describe('POST /internal/logs', () => {
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
@@ -7438,6 +7828,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
@@ -7488,6 +7879,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
@@ -8222,6 +8614,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
       gitHubPRSummaryRepo: {} as never,
@@ -8267,6 +8660,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
@@ -9473,6 +9867,7 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
       gitHubPRSummaryRepo: {} as never,
@@ -9492,6 +9887,7 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;

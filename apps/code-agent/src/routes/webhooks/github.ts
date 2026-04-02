@@ -28,7 +28,7 @@ import type {
   GitHubWebhookAuditEvent,
   GitHubWebhookNormalizationStatus,
 } from '../../domain/models/gitHubWebhookAuditEvent.js';
-import { handlePrMerge } from '../../domain/usecases/handlePrMerge.js';
+import { handlePrClose } from '../../domain/usecases/handlePrClose.js';
 import type { GitHubEventLogEntry } from '../../domain/models/gitHubEventLogEntry.js';
 
 export const ALLOWED_BOTS = new Set([
@@ -632,11 +632,11 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         });
       });
 
-      // Transition Linear issues to QA when PR is merged
-      if (parsedEvent.eventType === 'pull_request' && parsedEvent.action === 'closed' && parsedEvent.mergedAt !== null) {
-        const { codeTaskRepo, linearIssueService, userServiceClient, taskDispatcher, workerSettingsRepo } = getServices();
-        void handlePrMerge(
-          { codeTaskRepo, linearIssueService, userServiceClient, taskDispatcher, workerSettingsRepo, logger },
+      // Transition Linear issues on PR close (merge → QA + remove label; close → remove label only)
+      if (parsedEvent.eventType === 'pull_request' && parsedEvent.action === 'closed') {
+        const { codeTaskRepo, linearIssueService, userServiceClient, taskDispatcher, workerSettingsRepo, groupSummaryRepo } = getServices();
+        void handlePrClose(
+          { codeTaskRepo, linearIssueService, userServiceClient, taskDispatcher, workerSettingsRepo, groupSummaryRepo: groupSummaryRepo as NonNullable<typeof groupSummaryRepo>, logger },
           {
             repository: parsedEvent.repository,
             prNumber: parsedEvent.pullRequestNumber,
@@ -644,9 +644,10 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
             prTitle: parsedEvent.title,
             prAuthorLogin: parsedEvent.prAuthorLogin,
             senderLogin: parsedEvent.senderLogin,
+            isMerged: parsedEvent.mergedAt !== null,
           },
-        ).catch((mergeErr: unknown) => {
-          logger.error({ mergeErr }, 'Unhandled error in handlePrMerge');
+        ).catch((closeErr: unknown) => {
+          logger.error({ closeErr }, 'Unhandled error in handlePrClose');
         });
       }
 

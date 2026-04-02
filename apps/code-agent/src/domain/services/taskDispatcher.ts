@@ -6,6 +6,7 @@
 
 import type { Result, Logger } from '@intexuraos/common-core';
 import type { AgentType, WorkerType } from '../models/codeTask.js';
+import type { ExecutionMemoryType } from '../models/executionMemory.js';
 import type { WorkerLocation } from '../models/worker.js';
 import type { WorkerHealthProbe } from '../ports/workerHealthProbe.js';
 
@@ -22,6 +23,24 @@ export interface DispatchWorkerCredentials {
     cfAccessClientSecret: string;
     dispatchSigningSecret: string;
   }[];
+}
+
+export interface ExecutionMemoryPromptMemory {
+  memoryId: string;
+  title: string;
+  memoryType: ExecutionMemoryType;
+  score: number;
+  appliesWhen: string;
+  action: string;
+  avoid: string;
+  verification: string;
+}
+
+export interface ExecutionMemoryPromptContext {
+  applicationId: string;
+  retrievalVersion: string;
+  querySummary: string;
+  matchedMemories: ExecutionMemoryPromptMemory[];
 }
 
 /**
@@ -47,6 +66,8 @@ export interface DispatchRequest {
   retriedFrom?: string;
   /** Agent type for orchestrator agent-based routing. */
   agentType?: AgentType;
+  /** Prompt-ready execution memory context prepared by code-agent retrieval. */
+  executionMemoryContext?: ExecutionMemoryPromptContext;
   /** Existing PR tracking comment to reuse for pull_request tasks. */
   trackingCommentId?: string;
   /** PR number this task is operating on. Used to enforce one-per-PR container preservation. */
@@ -55,10 +76,6 @@ export interface DispatchRequest {
   continuationPrNumber?: number;
   /** Existing PR branch to continue instead of creating a fresh PR. */
   continuationPrBranch?: string;
-  /** Branch name of planning PR to merge into execution worktree. */
-  planningPrBranch?: string;
-  /** PR URL to close after successful execution. */
-  planningPrUrl?: string;
   /** Review types requested for review agent tasks. */
   reviewTypes?: string[];
 }

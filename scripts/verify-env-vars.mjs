@@ -106,20 +106,28 @@ function findTsFiles(dir, files = []) {
  * Extract REQUIRED_ENV array from a service's index.ts file.
  */
 function extractRequiredEnv(indexContent) {
-  const requiredEnvPattern = /const\s+REQUIRED_ENV\s*=\s*\[([\s\S]*?)\];/;
-  const match = indexContent.match(requiredEnvPattern);
+  const vars = [];
 
-  if (!match) {
-    return [];
+  // Extract from REQUIRED_ENV
+  const requiredEnvPattern = /const\s+REQUIRED_ENV\s*=\s*\[([\s\S]*?)\];/;
+  const requiredMatch = indexContent.match(requiredEnvPattern);
+  if (requiredMatch) {
+    const stringPattern = /'([^']+)'/g;
+    let stringMatch;
+    while ((stringMatch = stringPattern.exec(requiredMatch[1])) !== null) {
+      vars.push(stringMatch[1]);
+    }
   }
 
-  // Extract string literals from the array
-  const vars = [];
-  const stringPattern = /'([^']+)'/g;
-  let stringMatch;
-
-  while ((stringMatch = stringPattern.exec(match[1])) !== null) {
-    vars.push(stringMatch[1]);
+  // Also extract from PRODUCTION_ONLY_ENV (validated in production, optional in E2E)
+  const productionEnvPattern = /const\s+PRODUCTION_ONLY_ENV\s*=\s*\[([\s\S]*?)\];/;
+  const productionMatch = indexContent.match(productionEnvPattern);
+  if (productionMatch) {
+    const stringPattern = /'([^']+)'/g;
+    let stringMatch;
+    while ((stringMatch = stringPattern.exec(productionMatch[1])) !== null) {
+      vars.push(stringMatch[1]);
+    }
   }
 
   return vars;

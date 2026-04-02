@@ -120,6 +120,10 @@ const intexuraPlugin: FastifyPluginCallback = (
     }
   );
 
+  fastify.setNotFoundHandler((_request: FastifyRequest, reply: FastifyReply): void => {
+    void reply.fail('NOT_FOUND', 'Route not found');
+  });
+
   done();
 };
 
