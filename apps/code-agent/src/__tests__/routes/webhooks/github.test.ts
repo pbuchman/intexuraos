@@ -112,6 +112,7 @@ describe('POST /webhooks/github', () => {
       deleteTask: vi.fn().mockResolvedValue(ok(undefined)),
       listQueuedByAge: vi.fn().mockResolvedValue(ok([])),
       listQueued: vi.fn().mockResolvedValue(ok([])),
+      listPendingExecutionMemoryPostRun: vi.fn().mockResolvedValue(ok([])),
       countQueued: vi.fn().mockResolvedValue(ok(0)),
       findRecentTasksByLinearIssue: vi.fn().mockResolvedValue(ok([])),
       findPlannedTaskByLinearIssue: vi.fn().mockResolvedValue(ok(null)),

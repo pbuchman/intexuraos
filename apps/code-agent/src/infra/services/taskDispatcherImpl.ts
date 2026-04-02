@@ -12,6 +12,7 @@ import type {
   DispatchRequest,
   DispatchResult,
   DispatchWorkerCredentials,
+  ExecutionMemoryPromptContext,
 } from '../../domain/services/taskDispatcher.js';
 import type { TaskDispatcherDeps, TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
@@ -59,6 +60,7 @@ interface WorkerTaskRequest {
   linearIssueId?: string;
   traceId?: string;
   agentType?: AgentType;
+  executionMemoryContext?: ExecutionMemoryPromptContext;
   trackingCommentId?: string;
   prNumber?: number;
   continuationPrNumber?: number;
@@ -128,6 +130,9 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     }
     if (request.agentType !== undefined) {
       taskRequest.agentType = request.agentType;
+    }
+    if (request.executionMemoryContext !== undefined) {
+      taskRequest.executionMemoryContext = request.executionMemoryContext;
     }
     if (request.trackingCommentId !== undefined) {
       taskRequest.trackingCommentId = request.trackingCommentId;

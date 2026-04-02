@@ -19,6 +19,15 @@ import { resetFirestore } from '@intexuraos/infra-firestore';
 import { setupTestServices } from '../helpers/mockServices.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
 
+const processExecutionMemoryBacklogMock = vi.fn();
+
+vi.mock('../../domain/usecases/processExecutionMemoryBacklog.js', (): {
+  processExecutionMemoryBacklog: (input: unknown) => unknown;
+} => ({
+  processExecutionMemoryBacklog: (input: unknown): unknown => processExecutionMemoryBacklogMock(input),
+}));
+
+
 describe('POST /internal/merge-conflicts/reconcile', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
 
@@ -41,6 +50,7 @@ describe('POST /internal/merge-conflicts/reconcile', () => {
     resetServices();
     resetFirestore();
     nock.cleanAll();
+    processExecutionMemoryBacklogMock.mockReset();
   });
 
   it('returns 401 when no auth header is provided', async () => {
@@ -284,6 +294,163 @@ describe('GET /internal/linear/issue-context/:identifier', () => {
     const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
     expect(body.success).toBe(false);
     expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+  });
+});
+
+describe('POST /internal/execution-memory/process', () => {
+  let app: Awaited<ReturnType<typeof buildServer>>;
+
+  beforeEach(async () => {
+    nock('http://actions-agent').persist().patch(/\/internal\/actions\/.*\/status/).reply(200, { success: true });
+    nock('http://linear-agent:8086').persist().post(/\/.*/).reply(200, { success: true });
+
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.intexuraos.cloud';
+    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
+    process.env['INTEXURAOS_ORCHESTRATOR_SECRET'] = 'test-orchestrator-secret';
+    process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] = 'true';
+
+    setupTestServices();
+    app = await buildServer();
+  });
+
+  afterEach(() => {
+    resetServices();
+    resetFirestore();
+    nock.cleanAll();
+    processExecutionMemoryBacklogMock.mockReset();
+  });
+
+  it('returns 401 when no auth header is provided', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/execution-memory/process',
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('returns backlog processor stats when internal auth is valid', async () => {
+    processExecutionMemoryBacklogMock.mockResolvedValue(ok({
+      claimed: 2,
+      completed: 1,
+      skipped: 1,
+      errored: 0,
+      taskIds: ['task-1', 'task-2'],
+    }));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/execution-memory/process',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+      },
+      payload: {
+        limit: 2,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(processExecutionMemoryBacklogMock).toHaveBeenCalledWith(expect.objectContaining({
+      limit: 2,
+    }));
+    expect(JSON.parse(response.body)).toEqual({
+      success: true,
+      data: {
+        claimed: 2,
+        completed: 1,
+        skipped: 1,
+        errored: 0,
+        taskIds: ['task-1', 'task-2'],
+      },
+      diagnostics: expect.objectContaining({
+        requestId: expect.any(String),
+        durationMs: expect.any(Number),
+      }),
+    });
+  });
+
+  it('returns 500 with the default limit when optional execution-memory clients are unavailable', async () => {
+    const services = getServices();
+    const {
+      executionMemoryEvaluatorClient: _evaluatorClient,
+      executionMemoryDistillerClient: _distillerClient,
+      executionMemoryEmbeddingClient: _embeddingClient,
+      ...servicesWithoutOptionalClients
+    } = services;
+    setServices(servicesWithoutOptionalClients);
+    processExecutionMemoryBacklogMock.mockResolvedValue(err({ message: 'processor failed' }));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/execution-memory/process',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+      },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(processExecutionMemoryBacklogMock).toHaveBeenCalledWith(expect.objectContaining({
+      limit: 10,
+    }));
+    const input = processExecutionMemoryBacklogMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(input).not.toHaveProperty('evaluatorClient');
+    expect(input).not.toHaveProperty('distillerClient');
+    expect(input).not.toHaveProperty('embeddingClient');
+  });
+
+  it('returns 200 with empty results when body is missing (no JSON payload)', async () => {
+    processExecutionMemoryBacklogMock.mockResolvedValue(ok({
+      claimed: 0,
+      completed: 0,
+      skipped: 0,
+      errored: 0,
+      taskIds: [],
+    }));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/execution-memory/process',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(processExecutionMemoryBacklogMock).toHaveBeenCalledWith(expect.objectContaining({
+      limit: 10,
+    }));
+  });
+
+  it('returns 200 with empty stats and does not call processExecutionMemoryBacklog when feature flag is disabled', async () => {
+    process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] = 'false';
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/execution-memory/process',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({
+      success: true,
+      data: {
+        claimed: 0,
+        completed: 0,
+        skipped: 0,
+        errored: 0,
+        taskIds: [],
+      },
+      diagnostics: expect.objectContaining({
+        requestId: expect.any(String),
+        durationMs: expect.any(Number),
+      }),
+    });
+    expect(processExecutionMemoryBacklogMock).not.toHaveBeenCalled();
   });
 });
 

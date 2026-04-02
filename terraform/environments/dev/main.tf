@@ -1462,11 +1462,13 @@ module "code_agent" {
     INTEXURAOS_ORCHESTRATOR_SECRET   = module.secret_manager.secret_ids["INTEXURAOS_ORCHESTRATOR_SECRET"]
     INTEXURAOS_TOKEN_ENCRYPTION_KEY  = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
     INTEXURAOS_GITHUB_WEBHOOK_SECRET = module.secret_manager.secret_ids["INTEXURAOS_GITHUB_WEBHOOK_SECRET"]
+    INTEXURAOS_OPENAI_APP_API_KEY    = module.secret_manager.secret_ids["INTEXURAOS_OPENAI_APP_API_KEY"]
   })
 
   env_vars = merge(local.common_service_env_vars, {
     INTEXURAOS_SERVICE_URL                = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
+    INTEXURAOS_EXECUTION_MEMORY_ENABLED   = "false"
     INTEXURAOS_QUEUE_MAX_SIZE             = "50"
     INTEXURAOS_QUEUE_TTL_MINUTES          = "30"
     INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS   = "3"
@@ -2036,6 +2038,41 @@ resource "google_cloud_scheduler_job" "archive_stale_groups" {
   http_target {
     http_method = "POST"
     uri         = "${module.code_agent.service_url}/internal/archive-stale-groups"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.code_agent.service_url
+    }
+  }
+
+  retry_config {
+    retry_count          = 1
+    max_retry_duration   = "60s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "30s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
+    module.code_agent,
+  ]
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Scheduler - Execution Memory Post-Run Processing (INT-1098)
+# -----------------------------------------------------------------------------
+
+resource "google_cloud_scheduler_job" "execution_memory_process" {
+  name        = "intexuraos-execution-memory-process-${var.environment}"
+  description = "Process pending execution memory post-run evaluations and distillations"
+  schedule    = "*/5 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.code_agent.service_url}/internal/execution-memory/process"
 
     oidc_token {
       service_account_email = google_service_account.cloud_scheduler.email

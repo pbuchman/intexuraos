@@ -1135,6 +1135,45 @@ describe('TaskDispatcher', () => {
       expect(task).not.toBeNull();
       expect(task?.trackingCommentId).toBe('12345');
     });
+
+    it('should persist executionMemoryContext when provided', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'test-task-execution-memory-context',
+        workerType: 'auto',
+        prompt: 'Fix callback logging and route coverage',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        agentType: 'execution',
+        executionMemoryContext: {
+          applicationId: 'app_123',
+          retrievalVersion: 'execution-memory-retrieval@1.0.0',
+          querySummary: 'Callback logging, route verification, and env propagation.',
+          matchedMemories: [
+            {
+              memoryId: 'mem_142',
+              title: 'Log incoming requests on callback routes',
+              memoryType: 'pitfall_pattern',
+              score: 0.94,
+              appliesWhen: 'A callback route changes request handling.',
+              action: 'Update request logging with the route change.',
+              avoid: 'Do not copy stale branch names from memories.',
+              verification: 'Add app.inject coverage for the route.',
+            },
+          ],
+        },
+      };
+
+      const result = await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const task = await dispatcher.getTask('test-task-execution-memory-context');
+      expect(task?.executionMemoryContext).toEqual(request.executionMemoryContext);
+    });
   });
 
   describe('Error handling edge cases', () => {
@@ -1660,6 +1699,9 @@ describe('TaskDispatcher', () => {
           superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'used',
           gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/900',
+          memory_ids_used: 'mem_142,mem_155',
+          memory_ids_rejected: 'mem_188',
+          memory_usage_summary: 'Used route logging and coverage lessons.',
           summary: 'Execution completed successfully',
         },
       });
@@ -1701,6 +1743,9 @@ describe('TaskDispatcher', () => {
               execution_superpowers_subagent_driven_dev_used: '1',
               execution_superpowers_requesting_code_review_used: '1',
               execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
+              execution_memory_ids_used: 'mem_142,mem_155',
+              execution_memory_ids_rejected: 'mem_188',
+              execution_memory_usage_summary: 'Used route logging and coverage lessons.',
             }),
           }),
         })
@@ -1719,6 +1764,10 @@ describe('TaskDispatcher', () => {
           superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'not used',
           gh_pr_url: '',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary:
+            'The supplied memories were not needed because the work already existed.',
           summary: 'Work was already merged into development branch',
         },
       });
@@ -4182,6 +4231,10 @@ describe('TaskDispatcher', () => {
         superpowers_subagent_driven_dev: 'used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/123',
+        memory_ids_used: 'mem_142',
+        memory_ids_rejected: '',
+        memory_usage_summary:
+          'Used the execution memory to align the implementation with prior patterns.',
         summary: 'Done.',
       },
     };
@@ -4298,6 +4351,9 @@ describe('TaskDispatcher', () => {
           superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'used',
           gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/123',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
           summary: 'Done.',
         },
         workerType: 'auto',
@@ -4356,6 +4412,9 @@ describe('TaskDispatcher', () => {
           superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'used',
           gh_pr_url: '',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
           summary: 'Done.',
         },
         workerType: 'auto',
@@ -4589,6 +4648,9 @@ describe('TaskDispatcher', () => {
           superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'used',
           gh_pr_url: '',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
           summary: 'Done.',
         },
         workerType: 'auto',
