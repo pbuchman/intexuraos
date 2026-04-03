@@ -280,6 +280,7 @@ export function CodeTaskLogViewer({
               <button
                 type="button"
                 onClick={toggleClaudeFilter}
+                aria-pressed={claudeFilter}
                 className={`rounded-md px-2 py-1 text-xs transition-colors ${
                   claudeFilter
                     ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
@@ -326,13 +327,13 @@ export function CodeTaskLogViewer({
             </div>
           ) : (
             logs.map((line, index) => {
-              if (claudeFilter) {
-                const tag = extractTag(line.text);
-                if (tag !== 'claude') return null;
-              }
               const block = bodyLineMap.get(index);
               if (block !== undefined && index > block.headerIdx) {
                 return null;
+              }
+              if (claudeFilter) {
+                const tag = extractTag(line.text);
+                if (tag !== 'claude') return null;
               }
 
               const collapsible = block !== undefined && countVisualLines(logs, block.bodyStart, block.bodyEnd) >= 4;
