@@ -87,7 +87,7 @@ describe('system-prompt', () => {
   it('enforces Plan PR rules in PLANNING_AGENT_FINAL', () => {
     const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
 
-    expect(result).toContain('NEVER for simple tasks, ALWAYS when subtasks are defined');
+    expect(result).toContain('NEVER for SIMPLE tasks, ALWAYS for PLAN-DOC and COMPLEX tasks');
   });
 
   it('enforces Clarification message rules in PLANNING_AGENT_FINAL', () => {
@@ -111,7 +111,7 @@ describe('system-prompt', () => {
       '### Complexity Judgment (MANDATORY — NON-NEGOTIABLE, after Reading section above)'
     );
     expect(result).toContain('COMPLEXITY_JUDGMENT:');
-    expect(result).toContain('- Decision: <SIMPLE|COMPLEX>');
+    expect(result).toContain('- Decision: <SIMPLE|PLAN-DOC|COMPLEX>');
     expect(result).toContain(
       'Do NOT edit the issue, create subtasks, write docs, or open PRs until this block is output'
     );
@@ -120,6 +120,40 @@ describe('system-prompt', () => {
     const judgmentIdx = result.indexOf('### Complexity Judgment');
     const simpleComplexIdx = result.indexOf('### Simple vs Complex');
     expect(judgmentIdx).toBeLessThan(simpleComplexIdx);
+  });
+
+  it('includes the PLAN-DOC tier section in the planning prompt', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('PLAN-DOC task (no subtasks, but needs a plan document)');
+  });
+
+  it('includes the Self-Verification section in the planning prompt', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('### Self-Verification (MANDATORY before completion)');
+  });
+
+  it('includes the strengthened SIMPLE guardrail text in the planning prompt', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('3+ implementation steps');
+  });
+
+  it('places PLAN-DOC section between SIMPLE and COMPLEX sections', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    const simpleIdx = result.indexOf('**SIMPLE task:**');
+    const planDocIdx = result.indexOf('**PLAN-DOC task');
+    const complexIdx = result.indexOf('**COMPLEX task');
+    expect(simpleIdx).toBeLessThan(planDocIdx);
+    expect(planDocIdx).toBeLessThan(complexIdx);
+  });
+
+  it('includes the updated COMPLEX header with descriptive text', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('subtasks + plan doc + PR, all together');
   });
 
   it('includes PR Description Format in planning prompt with Linear link, task URL, worker type, and model', () => {
@@ -1167,8 +1201,8 @@ describe('system-prompt', () => {
     }
   });
 
-  it('planning prompt version is 3.2.0', () => {
-    expect(planningPrompt.version).toBe('3.2.0');
+  it('planning prompt version is 4.0.0', () => {
+    expect(planningPrompt.version).toBe('4.0.0');
   });
 
   it('execution prompt version is 5.2.0', () => {

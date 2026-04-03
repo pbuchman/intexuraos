@@ -1256,6 +1256,7 @@ export class TaskDispatcher {
         agentData.superpowers_writing_plans === 'used' ? '1' : '0';
       base.planning_linear_url = agentData.linear_url;
       base.planning_is_complex = agentData.is_complex;
+      base.planning_has_plan_doc = agentData.has_plan_doc;
       base.planning_subtask_urls = agentData.subtask_urls;
       if (agentData.pr_url !== '') {
         base.planning_pr_url = agentData.pr_url;
