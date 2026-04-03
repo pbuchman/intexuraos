@@ -1165,8 +1165,8 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "latestTaskUpdatedAt",
-          "order": "DESCENDING"
+          "fieldPath": "oldestTaskCreatedAt",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -1220,6 +1220,148 @@
         },
         {
           "fieldPath": "prNumber",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "execution_memories",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "embedding",
+          "order": "ASCENDING",
+          "vectorConfig": {
+            "dimension": 1536,
+            "flatIndexEnabled": true
+          }
+        }
+      ]
+    },
+    {
+      "collectionGroup": "execution_memories",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "repository",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "embedding",
+          "order": "ASCENDING",
+          "vectorConfig": {
+            "dimension": 1536,
+            "flatIndexEnabled": true
+          }
+        }
+      ]
+    },
+    {
+      "collectionGroup": "code_tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "agentType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "executionMemoryPostRun.status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "completedAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "task_group_summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "linearIssueId",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "task_group_summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "prNumber",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "task_group_summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "oldestTaskCreatedAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "task_group_summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mostRecentDispatchedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "task_group_summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "aggregateStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "latestTaskUpdatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "task_group_summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "latestTaskUpdatedAt",
           "order": "DESCENDING"
         }
       ]
