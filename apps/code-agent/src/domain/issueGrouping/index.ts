@@ -29,7 +29,7 @@ export {
   groupByLinearIssue,
 } from './groupByLinearIssue.js';
 
-export { parseLinearIssueNumber, sortIssueGroups, comparePrNumber, compareStartedTime } from './sortIssueGroups.js';
+export { parseLinearIssueNumber, sortIssueGroups, comparePrNumber, compareDispatched } from './sortIssueGroups.js';
 
 export { encodeCursor, decodeCursor } from './cursor.js';
 

@@ -382,7 +382,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
     if (aggregateStatus === 'active') return <WaveLoader compact={compact} />;
     return null;
   }
-  const createdRelative = formatRelative(latestTask.createdAt);
+  const updatedRelative = formatRelative(latestTask.updatedAt);
 
   const handleRowClick = (): void => {
     setExpanded((prev) => !prev);
@@ -449,8 +449,8 @@ const IssueGroupRow = memo(function IssueGroupRow({
           {/* Time column */}
           <div className="text-xs">
             <p className="text-slate-400 dark:text-slate-500">
-              <span className="text-slate-500 dark:text-slate-600">Created</span>{' '}
-              {createdRelative}
+              <span className="text-slate-500 dark:text-slate-600">Updated</span>{' '}
+              {updatedRelative}
             </p>
             <p className="text-slate-400 dark:text-slate-500">
               <span className="text-slate-500 dark:text-slate-600">Dispatched</span>{' '}
@@ -529,7 +529,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
                   />
                   <ActionStateTag actionType={effectiveActionType} />
                   <span className="text-slate-400"> · </span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">{createdRelative}</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">{updatedRelative}</span>
                 </span>
               ) : (
                 <span className="text-sm">
@@ -538,7 +538,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
                   </span>
                   <ActionStateTag actionType={effectiveActionType} />
                   <span className="text-slate-400"> · </span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">{createdRelative}</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">{updatedRelative}</span>
                 </span>
               )}
             </div>

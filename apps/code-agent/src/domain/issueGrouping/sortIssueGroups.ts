@@ -35,8 +35,8 @@ export function comparePrNumber(a: IssueGroup, b: IssueGroup): number {
   return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
 }
 
-/** Comparator for started-time sort. Exported for direct testing. */
-export function compareStartedTime(a: IssueGroup, b: IssueGroup): number {
+/** Comparator for dispatched sort. Exported for direct testing. */
+export function compareDispatched(a: IssueGroup, b: IssueGroup): number {
   const aDispatched = a.mostRecentDispatchedAt;
   const bDispatched = b.mostRecentDispatchedAt;
 
@@ -76,13 +76,13 @@ export function sortIssueGroups(groups: IssueGroup[], sortBy: SortOption): Issue
     return sorted;
   }
 
-  // created-time: sort by createdAt desc
-  if (sortBy === 'created-time') {
-    sorted.sort((a, b) => b.latestTask.createdAt.localeCompare(a.latestTask.createdAt));
+  // last-updated: sort by updatedAt desc
+  if (sortBy === 'last-updated') {
+    sorted.sort((a, b) => b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt));
     return sorted;
   }
 
-  // started-time (final variant): sort by most recent dispatchedAt desc
-  sorted.sort(compareStartedTime);
+  // dispatched (final variant): sort by most recent dispatchedAt desc
+  sorted.sort(compareDispatched);
   return sorted;
 }

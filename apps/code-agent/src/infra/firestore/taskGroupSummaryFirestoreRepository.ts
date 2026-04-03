@@ -618,10 +618,10 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
           case 'pr-number':
             query = query.orderBy('prNumber', 'desc');
             break;
-          case 'created-time':
-            query = query.orderBy('oldestTaskCreatedAt', 'asc');
+          case 'last-updated':
+            query = query.orderBy('latestTaskUpdatedAt', 'desc');
             break;
-          case 'started-time':
+          case 'dispatched':
             query = query.orderBy('mostRecentDispatchedAt', 'desc');
             break;
         }

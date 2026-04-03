@@ -157,10 +157,10 @@ function summaryKey(userId: string, groupKey: string): string {
 function sortSummaries(summaries: TaskGroupSummary[], sortBy: SortOption): TaskGroupSummary[] {
   const sorted = [...summaries];
   switch (sortBy) {
-    case 'created-time':
-      sorted.sort((a, b) => b.oldestTaskCreatedAt.toMillis() - a.oldestTaskCreatedAt.toMillis());
+    case 'last-updated':
+      sorted.sort((a, b) => b.latestTaskUpdatedAt.toMillis() - a.latestTaskUpdatedAt.toMillis());
       break;
-    case 'started-time':
+    case 'dispatched':
       sorted.sort((a, b) => {
         const aMs = a.mostRecentDispatchedAt?.toMillis() ?? 0;
         const bMs = b.mostRecentDispatchedAt?.toMillis() ?? 0;

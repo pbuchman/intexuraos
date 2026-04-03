@@ -1669,7 +1669,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
 
       const result = await repo.listGroupSummaries({
         userId: 'user-2',
-        sortBy: 'created-time',
+        sortBy: 'last-updated',
         limit: 10,
       });
 
@@ -1722,7 +1722,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(result.value.summaries).toHaveLength(1);
     });
 
-    it('sorts by started-time', async () => {
+    it('sorts by dispatched', async () => {
       const repo = createTaskGroupSummaryFirestoreRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -1757,7 +1757,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
 
       const result = await repo.listGroupSummaries({
         userId: 'user-6',
-        sortBy: 'started-time',
+        sortBy: 'dispatched',
         limit: 10,
       });
 
