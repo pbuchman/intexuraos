@@ -14,43 +14,43 @@
 
 ### Modified
 
-| Service | Method | Path | Change |
-| --- | --- | --- | --- |
-| None | - | - | No HTTP endpoint contract changes are required for the minimum parity slice |
+| Service | Method | Path | Change                                                                      |
+| ------- | ------ | ---- | --------------------------------------------------------------------------- |
+| None    | -      | -    | No HTTP endpoint contract changes are required for the minimum parity slice |
 
 ### Created
 
-| Service | Method | Path | Change |
-| --- | --- | --- | --- |
-| None | - | - | No new HTTP endpoints |
+| Service | Method | Path | Change                |
+| ------- | ------ | ---- | --------------------- |
+| None    | -      | -    | No new HTTP endpoints |
 
 ### Removed
 
-| Service | Method | Path | Change |
-| --- | --- | --- | --- |
-| None | - | - | No endpoint removals |
+| Service | Method | Path | Change               |
+| ------- | ------ | ---- | -------------------- |
+| None    | -      | -    | No endpoint removals |
 
 ### Unchanged
 
-| Service | Method | Path | Change |
-| --- | --- | --- | --- |
-| `workers/orchestrator` | `POST` | `/tasks` | Dispatch flow stays unchanged; only prompt/validation wording changes |
-| `apps/code-agent` | `POST` | `/internal/webhooks/task-complete` | Completion webhook schema stays unchanged for this minimum slice |
+| Service                | Method | Path                               | Change                                                                |
+| ---------------------- | ------ | ---------------------------------- | --------------------------------------------------------------------- |
+| `workers/orchestrator` | `POST` | `/tasks`                           | Dispatch flow stays unchanged; only prompt/validation wording changes |
+| `apps/code-agent`      | `POST` | `/internal/webhooks/task-complete` | Completion webhook schema stays unchanged for this minimum slice      |
 
 ## Current Claude Hook Parity Matrix
 
-| Claude hook behavior | Current Claude owner | Codex bucket | Retained? | Codex owner | Observable evidence |
-| --- | --- | --- | --- | --- | --- |
-| Session-start build and env readiness (`session-start-build.sh`) | Repo hook at session start | Codex-side startup/bootstrap logic | Yes | `workers/code-worker/entrypoint.sh` | `[entrypoint] Bootstrap evidence: ...` plus startup log lines for GCP auth, secret sync, and env loading |
-| CI output capture reminders (`validate-ci-output-capture.sh`) | PreToolUse block | Orchestrator/runtime contract | Yes | Execution prompt + completion/deep validation | Transcript shows `pnpm run ci:tracked`; deep validator checks final claims against transcript |
-| Terraform emulator clearing (`validate-terraform.sh`) | PreToolUse block | Orchestrator/runtime contract | Yes | Execution prompt + repo rules | Transcript shows compliant Terraform invocation when used; prompt explicitly instructs the rule |
-| GCloud resource-creation guardrail (`validate-gcloud-resources.sh`) | PreToolUse block | Orchestrator/runtime contract | Yes | Execution prompt + repo rules | Transcript shows Terraform-based path or absence of forbidden direct creation |
-| Coverage reminders and v8-ignore nudges | PreToolUse/PostToolUse hook mix | Codex-side startup/bootstrap/config logic | No | Repo rules + tests already enforced in CI | CI remains the proof; no Codex hook parity layer added |
-| TypeScript / route anti-pattern reminders (`detect-common-patterns.sh`) | PostToolUse soft block | Intentionally Claude-only and explicitly dropped for Codex | No | None | Explicitly documented as dropped |
-| Rebuild after git / typecheck after edit reminders | PostToolUse automation | Intentionally Claude-only and explicitly dropped for Codex | No | None | Explicitly documented as dropped |
-| Completion final-block validation (`completion-validator.sh`) | Stop hook | Better enforced in orchestrator/runtime instead of Codex config | Yes | Orchestrator completion verifier | Final execution block + webhook completion result |
-| Ownership language enforcement (`ownership-check.sh`) | Stop hook | Better enforced in orchestrator/runtime instead of Codex config | Yes | Execution prompt + deep validator | Prompt contract plus transcript/deep-validation evidence |
-| Evidence-before-assertions enforcement (`evidence-check.sh`) | Stop hook | Better enforced in orchestrator/runtime instead of Codex config | Yes | Execution prompt + deep validator | Transcript must contain verification evidence; deep validator checks claims vs transcript |
+| Claude hook behavior                                                    | Current Claude owner            | Codex bucket                                                    | Retained? | Codex owner                                   | Observable evidence                                                                                      |
+| ----------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------- | --------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Session-start build and env readiness (`session-start-build.sh`)        | Repo hook at session start      | Codex-side startup/bootstrap logic                              | Yes       | `workers/code-worker/entrypoint.sh`           | `[entrypoint] Bootstrap evidence: ...` plus startup log lines for GCP auth, secret sync, and env loading |
+| CI output capture reminders (`validate-ci-output-capture.sh`)           | PreToolUse block                | Orchestrator/runtime contract                                   | Yes       | Execution prompt + completion/deep validation | Transcript shows `pnpm run ci:tracked`; deep validator checks final claims against transcript            |
+| Terraform emulator clearing (`validate-terraform.sh`)                   | PreToolUse block                | Orchestrator/runtime contract                                   | Yes       | Execution prompt + repo rules                 | Transcript shows compliant Terraform invocation when used; prompt explicitly instructs the rule          |
+| GCloud resource-creation guardrail (`validate-gcloud-resources.sh`)     | PreToolUse block                | Orchestrator/runtime contract                                   | Yes       | Execution prompt + repo rules                 | Transcript shows Terraform-based path or absence of forbidden direct creation                            |
+| Coverage reminders and v8-ignore nudges                                 | PreToolUse/PostToolUse hook mix | Codex-side startup/bootstrap/config logic                       | No        | Repo rules + tests already enforced in CI     | CI remains the proof; no Codex hook parity layer added                                                   |
+| TypeScript / route anti-pattern reminders (`detect-common-patterns.sh`) | PostToolUse soft block          | Intentionally Claude-only and explicitly dropped for Codex      | No        | None                                          | Explicitly documented as dropped                                                                         |
+| Rebuild after git / typecheck after edit reminders                      | PostToolUse automation          | Intentionally Claude-only and explicitly dropped for Codex      | No        | None                                          | Explicitly documented as dropped                                                                         |
+| Completion final-block validation (`completion-validator.sh`)           | Stop hook                       | Better enforced in orchestrator/runtime instead of Codex config | Yes       | Orchestrator completion verifier              | Final execution block + webhook completion result                                                        |
+| Ownership language enforcement (`ownership-check.sh`)                   | Stop hook                       | Better enforced in orchestrator/runtime instead of Codex config | Yes       | Execution prompt + deep validator             | Prompt contract plus transcript/deep-validation evidence                                                 |
+| Evidence-before-assertions enforcement (`evidence-check.sh`)            | Stop hook                       | Better enforced in orchestrator/runtime instead of Codex config | Yes       | Execution prompt + deep validator             | Transcript must contain verification evidence; deep validator checks claims vs transcript                |
 
 ## Minimum Viable Parity Scope
 

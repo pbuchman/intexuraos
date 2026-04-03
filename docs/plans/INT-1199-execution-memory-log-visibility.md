@@ -148,30 +148,30 @@ Rules:
 
 ### Code-Agent
 
-| File | Action | Responsibility |
-| --- | --- | --- |
-| `apps/code-agent/src/domain/services/taskDispatcher.ts` | Modify | Add `ExecutionMemoryVisibilityContext` to the dispatch contract |
-| `apps/code-agent/src/infra/services/taskDispatcherImpl.ts` | Modify | Serialize the new visibility payload into the orchestrator request |
-| `apps/code-agent/src/domain/usecases/prepareExecutionMemoryContext.ts` | Modify | Return both prompt-safe context and richer visibility metadata from one retrieval pass |
-| `apps/code-agent/src/domain/usecases/drainTaskQueue.ts` | Modify | Persist retrieval-time `[memory]` lines for first dispatch |
-| `apps/code-agent/src/domain/usecases/drainRetryQueue.ts` | Modify | Persist retrieval-time `[memory]` lines for retry dispatch |
-| `apps/code-agent/src/routes/webhookRoutes.ts` | Modify | Persist completion/post-run `[memory]` lines after webhook acceptance |
-| `apps/code-agent/src/domain/formatters/executionMemoryLogFormatter.ts` | Create | Build bounded, stable `[memory]` lines from retrieval and post-run data |
-| `apps/code-agent/src/__tests__/domain/useCases/prepareExecutionMemoryContext.test.ts` | Modify | Cover visibility payload fields and selection counts |
-| `apps/code-agent/src/__tests__/domain/usecases/drainTaskQueue.test.ts` | Modify | Assert retrieval log lines are written on first dispatch |
-| `apps/code-agent/src/__tests__/domain/usecases/drainRetryQueue.test.ts` | Modify | Assert retrieval log lines are written on retry dispatch |
-| `apps/code-agent/src/__tests__/routes/webhooks.test.ts` | Modify | Assert completion/post-run `[memory]` lines are written |
+| File                                                                                  | Action | Responsibility                                                                         |
+| ------------------------------------------------------------------------------------- | ------ | -------------------------------------------------------------------------------------- |
+| `apps/code-agent/src/domain/services/taskDispatcher.ts`                               | Modify | Add `ExecutionMemoryVisibilityContext` to the dispatch contract                        |
+| `apps/code-agent/src/infra/services/taskDispatcherImpl.ts`                            | Modify | Serialize the new visibility payload into the orchestrator request                     |
+| `apps/code-agent/src/domain/usecases/prepareExecutionMemoryContext.ts`                | Modify | Return both prompt-safe context and richer visibility metadata from one retrieval pass |
+| `apps/code-agent/src/domain/usecases/drainTaskQueue.ts`                               | Modify | Persist retrieval-time `[memory]` lines for first dispatch                             |
+| `apps/code-agent/src/domain/usecases/drainRetryQueue.ts`                              | Modify | Persist retrieval-time `[memory]` lines for retry dispatch                             |
+| `apps/code-agent/src/routes/webhookRoutes.ts`                                         | Modify | Persist completion/post-run `[memory]` lines after webhook acceptance                  |
+| `apps/code-agent/src/domain/formatters/executionMemoryLogFormatter.ts`                | Create | Build bounded, stable `[memory]` lines from retrieval and post-run data                |
+| `apps/code-agent/src/__tests__/domain/useCases/prepareExecutionMemoryContext.test.ts` | Modify | Cover visibility payload fields and selection counts                                   |
+| `apps/code-agent/src/__tests__/domain/usecases/drainTaskQueue.test.ts`                | Modify | Assert retrieval log lines are written on first dispatch                               |
+| `apps/code-agent/src/__tests__/domain/usecases/drainRetryQueue.test.ts`               | Modify | Assert retrieval log lines are written on retry dispatch                               |
+| `apps/code-agent/src/__tests__/routes/webhooks.test.ts`                               | Modify | Assert completion/post-run `[memory]` lines are written                                |
 
 ### Orchestrator
 
-| File | Action | Responsibility |
-| --- | --- | --- |
-| `workers/orchestrator/src/types/api.ts` | Modify | Accept the new visibility field on `CreateTaskRequest` |
-| `workers/orchestrator/src/types/schemas.ts` | Modify | Validate the visibility payload for all retrieval outcomes |
-| `workers/orchestrator/src/types/execution-memory.ts` | Modify | Define the shared visibility shape used by the dispatcher |
-| `workers/orchestrator/src/services/task-dispatcher.ts` | Modify | Emit `[memory]` retrieval, injection, and completion lines via `appendOrchestratorTaskLog()` |
-| `workers/orchestrator/src/__tests__/create-task-request-schema.test.ts` | Modify | Cover the visibility payload schema |
-| `workers/orchestrator/src/__tests__/task-dispatcher.test.ts` | Modify | Assert runtime log lines for matched / none / error retrieval and completion self-report |
+| File                                                                    | Action | Responsibility                                                                               |
+| ----------------------------------------------------------------------- | ------ | -------------------------------------------------------------------------------------------- |
+| `workers/orchestrator/src/types/api.ts`                                 | Modify | Accept the new visibility field on `CreateTaskRequest`                                       |
+| `workers/orchestrator/src/types/schemas.ts`                             | Modify | Validate the visibility payload for all retrieval outcomes                                   |
+| `workers/orchestrator/src/types/execution-memory.ts`                    | Modify | Define the shared visibility shape used by the dispatcher                                    |
+| `workers/orchestrator/src/services/task-dispatcher.ts`                  | Modify | Emit `[memory]` retrieval, injection, and completion lines via `appendOrchestratorTaskLog()` |
+| `workers/orchestrator/src/__tests__/create-task-request-schema.test.ts` | Modify | Cover the visibility payload schema                                                          |
+| `workers/orchestrator/src/__tests__/task-dispatcher.test.ts`            | Modify | Assert runtime log lines for matched / none / error retrieval and completion self-report     |
 
 ## Parallel Breakdown
 
