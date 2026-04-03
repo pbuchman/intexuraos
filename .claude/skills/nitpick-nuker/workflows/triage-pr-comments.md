@@ -89,13 +89,16 @@ Determine:
 1. Document reason
 2. Track: `{ id, type, author, action: "skipped", reason: "why skipped" }`
 
-### 3e. Reply to Comment
+### 3d. Reply to Comment
 
 **After processing each comment, post a reply explaining the outcome.** This gives comment authors immediate visibility into what was done and why.
+
+Reply format template: `.claude/skills/nitpick-nuker/templates/inline-reply.md`
 
 Build the reply message using this format:
 
 **For FIX:**
+
 ```
 ## 😄 Action Taken
 
@@ -110,6 +113,7 @@ _Automatically processed by Nitpick Nuker._
 ```
 
 **For SKIP:**
+
 ```
 ## 😄 Action Taken
 
@@ -132,7 +136,7 @@ Post the reply:
 
 **Important:** Post the reply BEFORE adding the 😄 reaction. This ensures the reply is visible before the comment gets marked as processed.
 
-### 3d. Mark as Processed (after reply is posted)
+### 3e. Mark as Processed (after reply is posted)
 
 ```bash
 # Add 😄 reaction to mark as processed

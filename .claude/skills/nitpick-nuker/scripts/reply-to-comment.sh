@@ -33,6 +33,7 @@ REPO=$(echo "$REPO_INFO" | cut -d'/' -f2)
 case "$COMMENT_TYPE" in
   issue_comment)
     # Reply to issue comment by posting a new comment on the PR
+    # Node ID conversion not needed - we post to the PR, not the comment
     gh api "repos/${OWNER}/${REPO}/issues/${PR_NUMBER}/comments" \
       -X POST \
       -f body="$MESSAGE" \
@@ -41,6 +42,19 @@ case "$COMMENT_TYPE" in
 
   review_comment)
     # Reply to review comment using the replies endpoint
+    # If ID starts with PRRC_, convert node ID to database ID
+    if [[ "$COMMENT_ID" =~ ^PRRC_ ]]; then
+      COMMENT_ID=$(gh api graphql -f query='
+        query($id: ID!) {
+          node(id: $id) {
+            ... on PullRequestReviewComment {
+              databaseId
+            }
+          }
+        }
+      ' -f id="$COMMENT_ID" --jq '.data.node.databaseId')
+    fi
+
     gh api "repos/${OWNER}/${REPO}/pulls/comments/${COMMENT_ID}/replies" \
       -X POST \
       -f body="$MESSAGE" \
