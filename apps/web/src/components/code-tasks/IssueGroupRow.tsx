@@ -13,6 +13,11 @@ interface IssueGroupRowProps {
   onOpenLogs: (taskId: string) => void;
   actioningTaskId?: string | null;
   actioningType?: ActioningType | undefined;
+  isSelected?: boolean;
+  isSelectable?: boolean;
+  isBatchActioning?: boolean;
+  onToggleSelection?: ((groupKey: string) => void) | undefined;
+  groupKey?: string;
 }
 
 // --- Left border accent color ---
@@ -255,6 +260,36 @@ function IssueIdentifierLink({
   );
 }
 
+// --- Selection checkbox ---
+
+function SelectionCheckbox({
+  isSelected,
+  groupKey,
+  identifier,
+  onToggle,
+  extraClass,
+}: {
+  isSelected: boolean;
+  groupKey: string;
+  identifier: string;
+  onToggle: (key: string) => void;
+  extraClass?: string;
+}): React.JSX.Element {
+  return (
+    <input
+      type="checkbox"
+      checked={isSelected}
+      onChange={(e): void => {
+        e.stopPropagation();
+        onToggle(groupKey);
+      }}
+      onClick={(e): void => { e.stopPropagation(); }}
+      className={`h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500 dark:border-slate-600 dark:bg-slate-700${extraClass !== undefined ? ` ${extraClass}` : ''}`}
+      aria-label={isSelected ? `Deselect ${identifier} for archive` : `Select ${identifier} for archive`}
+    />
+  );
+}
+
 // --- Main component ---
 
 const IssueGroupRow = memo(function IssueGroupRow({
@@ -265,6 +300,11 @@ const IssueGroupRow = memo(function IssueGroupRow({
   onOpenLogs,
   actioningTaskId,
   actioningType,
+  isSelected = false,
+  isSelectable = false,
+  isBatchActioning = false,
+  onToggleSelection,
+  groupKey,
 }: IssueGroupRowProps): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -275,14 +315,14 @@ const IssueGroupRow = memo(function IssueGroupRow({
   const hasMergeAction = actionableStep?.agentType === 'merge';
   const hasImplementAction = actionableStep !== undefined && !hasMergeAction;
   const isActioning = actioningTaskId !== null && actioningTaskId !== undefined && (actioningTaskId === latestTask.id || group.tasks.some((t) => t.id === actioningTaskId));
-  const activeActionType: ActioningType | undefined = isActioning ? (actioningType ?? null) : undefined;
-  const waveVariant: WaveLoaderVariant = activeActionType === 'archive' ? 'archive' : activeActionType === 'delete' ? 'delete' : 'default';
-  const actionAccent = getActionAccentShadow(activeActionType);
-  const isBeingRemoved = activeActionType === 'archive' || activeActionType === 'delete';
+  const effectiveActionType: ActioningType | undefined = isBatchActioning ? 'archive' : isActioning ? (actioningType ?? null) : undefined;
+  const waveVariant: WaveLoaderVariant = effectiveActionType === 'archive' ? 'archive' : effectiveActionType === 'delete' ? 'delete' : 'default';
+  const actionAccent = getActionAccentShadow(effectiveActionType);
+  const isBeingRemoved = effectiveActionType === 'archive' || effectiveActionType === 'delete';
 
   function renderActionButton(compact: boolean): React.JSX.Element | null {
     const px = compact ? 'px-2' : 'px-2.5';
-    if (isActioning) return <WaveLoader compact={compact} variant={waveVariant} />;
+    if (isActioning || isBatchActioning) return <WaveLoader compact={compact} variant={waveVariant} />;
     if (hasMergeAction && pipeline.pr !== null) {
       return (
         <a
@@ -352,10 +392,21 @@ const IssueGroupRow = memo(function IssueGroupRow({
     <div>
       {/* Collapsed row */}
       <div
-        className={`group relative cursor-pointer rounded-lg border px-4 py-3 text-sm transition-all duration-300 ${isBeingRemoved ? getRemovalStateClasses(activeActionType) : 'border-slate-200 bg-white hover:shadow-md dark:border-slate-700 dark:bg-slate-800'} ${actionAccent ?? getAccentShadow(aggregateStatus)}`}
+        className={`group relative cursor-pointer rounded-lg border px-4 py-3 text-sm transition-all duration-300 ${isBeingRemoved ? getRemovalStateClasses(effectiveActionType) : 'border-slate-200 bg-white hover:shadow-md dark:border-slate-700 dark:bg-slate-800'} ${actionAccent ?? getAccentShadow(aggregateStatus)}`}
         onClick={handleRowClick}
       >
-        <div className="hidden grid-cols-[1fr_1fr_140px_120px_36px] items-center gap-2 lg:grid">
+        <div className="hidden grid-cols-[28px_1fr_1fr_140px_120px_36px] items-center gap-2 lg:grid">
+          {/* Checkbox column */}
+          <div className="flex items-center justify-center">
+            {isSelectable && onToggleSelection !== undefined && groupKey !== undefined ? (
+              <SelectionCheckbox
+                isSelected={isSelected}
+                groupKey={groupKey}
+                identifier={group.linearIssue?.identifier ?? 'issue'}
+                onToggle={onToggleSelection}
+              />
+            ) : null}
+          </div>
           {/* Issue column */}
           <div className="flex items-center gap-2 overflow-hidden">
             <button
@@ -375,7 +426,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
                       linearIssue={group.linearIssue}
                       linkClassName="font-mono text-sm text-blue-500 hover:text-blue-400 hover:underline"
                     />
-                    <ActionStateTag actionType={activeActionType} />
+                    <ActionStateTag actionType={effectiveActionType} />
                   </span>
                   <p className="truncate text-xs text-slate-500 dark:text-slate-400">
                     {group.linearIssue.title}
@@ -384,7 +435,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
               ) : (
                 <p className="truncate text-sm text-slate-600 dark:text-slate-400">
                   {summaryOrPrompt(latestTask)}
-                  <ActionStateTag actionType={activeActionType} />
+                  <ActionStateTag actionType={effectiveActionType} />
                 </p>
               )}
             </div>
@@ -451,6 +502,15 @@ const IssueGroupRow = memo(function IssueGroupRow({
         {/* Mobile layout (< lg) */}
         <div className="flex flex-col gap-2 lg:hidden">
           <div className="flex items-center gap-2">
+            {isSelectable && onToggleSelection !== undefined && groupKey !== undefined ? (
+              <SelectionCheckbox
+                isSelected={isSelected}
+                groupKey={groupKey}
+                identifier={group.linearIssue?.identifier ?? 'issue'}
+                onToggle={onToggleSelection}
+                extraClass="flex-shrink-0"
+              />
+            ) : null}
             <button
               className="flex-shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
             >
@@ -467,7 +527,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
                     linearIssue={group.linearIssue}
                     linkClassName="font-mono text-blue-500 hover:text-blue-400 hover:underline"
                   />
-                  <ActionStateTag actionType={activeActionType} />
+                  <ActionStateTag actionType={effectiveActionType} />
                   <span className="text-slate-400"> · </span>
                   <span className="text-xs text-slate-500 dark:text-slate-400">{createdRelative}</span>
                 </span>
@@ -476,7 +536,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
                   <span className="truncate text-slate-600 dark:text-slate-400">
                     {summaryOrPrompt(latestTask)}
                   </span>
-                  <ActionStateTag actionType={activeActionType} />
+                  <ActionStateTag actionType={effectiveActionType} />
                   <span className="text-slate-400"> · </span>
                   <span className="text-xs text-slate-500 dark:text-slate-400">{createdRelative}</span>
                 </span>
@@ -619,10 +679,15 @@ const IssueGroupRow = memo(function IssueGroupRow({
   prev.group.mostRecentDispatchedAt === next.group.mostRecentDispatchedAt &&
   prev.actioningTaskId === next.actioningTaskId &&
   prev.actioningType === next.actioningType &&
+  prev.isSelected === next.isSelected &&
+  prev.isSelectable === next.isSelectable &&
+  prev.isBatchActioning === next.isBatchActioning &&
+  prev.groupKey === next.groupKey &&
   prev.onDeleteGroup === next.onDeleteGroup &&
   prev.onAction === next.onAction &&
   prev.onArchiveGroup === next.onArchiveGroup &&
-  prev.onOpenLogs === next.onOpenLogs,
+  prev.onOpenLogs === next.onOpenLogs &&
+  prev.onToggleSelection === next.onToggleSelection,
 );
 
 export { IssueGroupRow };
