@@ -347,6 +347,63 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(doc.get('hasCompletedExecution')).toBe(false);
     });
 
+    it('sets hasCompletedExecutionAgent when execution agent created with implemented status', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.now();
+      const task = makeTask({
+        id: 'task-ea-exec1',
+        linearIssueId: 'INT-EAEXEC1',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: now,
+        updatedAt: now,
+      });
+      await repo.updateAfterCreate(task);
+      const doc = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-EAEXEC1').get();
+      expect(doc.get('hasCompletedExecutionAgent')).toBe(true);
+    });
+
+    it('does not set hasCompletedExecutionAgent for pull_request agent with implemented status', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.now();
+      const task = makeTask({
+        id: 'task-ea-pr1',
+        linearIssueId: 'INT-EAPR1',
+        agentType: 'pull_request',
+        status: 'implemented',
+        createdAt: now,
+        updatedAt: now,
+      });
+      await repo.updateAfterCreate(task);
+      const doc = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-EAPR1').get();
+      expect(doc.get('hasCompletedExecutionAgent')).toBe(false);
+    });
+
+    it('does not set hasCompletedExecutionAgent for review agent with reviewed status', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.now();
+      const task = makeTask({
+        id: 'task-ea-rev1',
+        linearIssueId: 'INT-EAREV1',
+        agentType: 'review',
+        status: 'reviewed',
+        createdAt: now,
+        updatedAt: now,
+      });
+      await repo.updateAfterCreate(task);
+      const doc = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-EAREV1').get();
+      expect(doc.get('hasCompletedExecutionAgent')).toBe(false);
+    });
+
     it('does not increment taskCount when archived task added to existing group', async () => {
       const repo = createTaskGroupSummaryFirestoreRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -1164,6 +1221,31 @@ describe('taskGroupSummaryFirestoreRepository', () => {
 
       const doc = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-REVEXEC2').get();
       expect(doc.get('hasCompletedExecution')).toBe(false);
+    });
+
+    it('sets hasCompletedExecutionAgent when execution agent transitions to implemented on status change', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.now();
+      const task = makeTask({
+        id: 'task-ea-sc1',
+        linearIssueId: 'INT-EASC1',
+        agentType: 'execution',
+        status: 'running',
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await repo.updateAfterCreate(task);
+
+      const oldTask = { ...task };
+      const newTask = { ...task, status: 'implemented' as const };
+      await repo.updateAfterStatusChange(oldTask, newTask);
+
+      const doc = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-EASC1').get();
+      expect(doc.get('hasCompletedExecutionAgent')).toBe(true);
     });
 
     it('sets hasPrUrl without prNumber when prUrl present but prNumber absent', async () => {
@@ -2134,6 +2216,52 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(doc.get('hasCompletedExecution')).toBe(true);
     });
 
+    it('sets hasCompletedExecutionAgent for execution agent with reviewed status in recomputeGroupFromTasks', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.now();
+
+      const task = makeTask({
+        id: 'task-ea-rc1',
+        userId: 'user-4',
+        linearIssueId: 'INT-EARC1',
+        agentType: 'execution',
+        status: 'reviewed',
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await repo.recomputeGroupFromTasks('user-4', 'INT-EARC1', [task]);
+
+      const doc = await fakeFirestore.collection('task_group_summaries').doc('user-4_INT-EARC1').get();
+      expect(doc.get('hasCompletedExecutionAgent')).toBe(true);
+    });
+
+    it('does not set hasCompletedExecutionAgent for pull_request agent in recomputeGroupFromTasks', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.now();
+
+      const task = makeTask({
+        id: 'task-ea-prc1',
+        userId: 'user-4',
+        linearIssueId: 'INT-EAPRC1',
+        agentType: 'pull_request',
+        status: 'implemented',
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await repo.recomputeGroupFromTasks('user-4', 'INT-EAPRC1', [task]);
+
+      const doc = await fakeFirestore.collection('task_group_summaries').doc('user-4_INT-EAPRC1').get();
+      expect(doc.get('hasCompletedExecutionAgent')).toBe(false);
+    });
+
     it('sets latestReviewNeedsRemediation from review task result (no-remediation)', async () => {
       const repo = createTaskGroupSummaryFirestoreRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -2362,7 +2490,8 @@ describe('taskGroupSummaryFirestoreRepository', () => {
 
       const countsDoc = await fakeFirestore.collection('user_group_counts').doc('user-4').get();
       expect(countsDoc.get('needsAction')).toBe(0);
-      expect(countsDoc.get('done')).toBe(1);
+      // Execution agent completed with no review yet → 'active' (rule 1b keeps group active until review clears)
+      expect(countsDoc.get('active')).toBe(1);
     });
 
     it('does not update mostRecentDispatchedAt with earlier timestamp', async () => {

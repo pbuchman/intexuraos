@@ -23,6 +23,8 @@ export interface TaskGroupSummary {
   agentTypesPresent: string[];
   hasCompletedPlanning: boolean;
   hasCompletedExecution: boolean;
+  /** True when an execution-agent task (not pull_request) has completed. */
+  hasCompletedExecutionAgent: boolean;
   hasImplementationTaskId: boolean;
   hasPrUrl: boolean;
   prNumber: number | null;
