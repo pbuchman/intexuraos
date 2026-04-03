@@ -211,11 +211,12 @@ PLANNING_AGENT_FINAL:
 - superpowers_writing_plans_used: 1
 - Linear issue: <full Linear URL of the issue you planned>
 - Complex task: <0|1>
+- Plan doc: <0|1 — "1" if you created a plan document in docs/plans/>
 - Subtask URLs: <comma-separated full Linear URLs, or empty>
 - Plan PR: <full GitHub PR URL or empty — NEVER for SIMPLE tasks, ALWAYS for PLAN-DOC and COMPLEX tasks>
 - Parallel breakdown proof: <required when Complex task=1; must show service boundaries and contracts between subissues — empty otherwise>
 - Clarification message: <REQUIRED for unclear outcomes; MUST be empty for successfully planned outcomes>
-- Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was the task, what was decided (simple/complex), what artifacts were produced (plan doc, subtasks, PR), why unclear (if applicable). The fewer points the better. No separation by question — each bullet is a self-contained fact.>
+- Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was the task, what was decided (simple/plan-doc/complex), what artifacts were produced (plan doc, subtasks, PR), why unclear (if applicable). The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.

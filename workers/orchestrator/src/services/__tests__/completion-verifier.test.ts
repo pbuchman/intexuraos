@@ -129,6 +129,25 @@ describe('PLANNING_SCHEMA', () => {
     }
   });
 
+  it('accepts plan-doc task with has_plan_doc=1 and is_complex=0', () => {
+    const result = PLANNING_SCHEMA.safeParse({
+      outcome: 'planned',
+      superpowers_writing_plans: 'used',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-700',
+      is_complex: '0',
+      has_plan_doc: '1',
+      subtask_urls: '',
+      pr_url: 'https://github.com/pbuchman/intexuraos/pull/960',
+      summary: 'Plan-doc task planned.',
+      unclear_clarification: '',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.has_plan_doc).toBe('1');
+      expect(result.data.is_complex).toBe('0');
+    }
+  });
+
   it('accepts simple task with empty subtask_urls', () => {
     const result = PLANNING_SCHEMA.safeParse({
       outcome: 'planned',
