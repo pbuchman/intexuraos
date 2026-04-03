@@ -3,7 +3,7 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi, afterEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { CodeTaskNewPage } from '../pages/CodeTaskNewPage.js';
 import type { LinearIssueOption } from '../hooks/useLinearIssueOptions.js';
@@ -37,6 +37,7 @@ vi.mock('@/context', () => ({
 // Mock @/services/codeAgentApi (imported directly in CodeTaskNewPage for timeout recovery)
 vi.mock('@/services/codeAgentApi', () => ({
   listCodeTasks: vi.fn(),
+  submitCodeTask: vi.fn().mockResolvedValue({ status: 'submitted', codeTaskId: 'task-123' }),
 }));
 
 // Mock @/services/apiClient
@@ -53,9 +54,6 @@ vi.mock('@/services/apiClient', () => ({
 
 // Mock @/hooks
 vi.mock('@/hooks', () => ({
-  useCodeTasks: (): { submitTask: Mock } => ({
-    submitTask: vi.fn(),
-  }),
   useLinearIssueOptions: (): {
     groupedOptions: Record<string, LinearIssueOption[]>;
     loading: boolean;

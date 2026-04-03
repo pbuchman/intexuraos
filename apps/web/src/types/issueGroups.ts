@@ -8,6 +8,7 @@ import type { CodeTask } from './index.js';
 
 export type GroupStatus = 'active' | 'needs-action' | 'done' | 'failed';
 export type SortOption = 'linear-id' | 'pr-number' | 'created-time' | 'started-time';
+export type ActioningType = 'archive' | 'delete' | 'implement' | 'retry' | null;
 export type StepState = 'completed' | 'running' | 'dispatched' | 'queued' | 'failed' | 'waiting' | 'actionable';
 
 export interface PipelineStepData {

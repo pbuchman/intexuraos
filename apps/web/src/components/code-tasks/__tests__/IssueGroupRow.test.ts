@@ -2,7 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { CodeTask } from '@/types';
-import { groupByLinearIssue } from '@/utils/issueGroups';
+import type { IssueGroup } from '@/types/issueGroups';
 import { IssueGroupRow } from '../IssueGroupRow.js';
 
 function createTask(overrides: Partial<CodeTask> & { id: string }): CodeTask {
@@ -31,27 +31,30 @@ function createTask(overrides: Partial<CodeTask> & { id: string }): CodeTask {
 
 describe('IssueGroupRow', () => {
   it('renders parent breadcrumbs for subtask linear issues', () => {
-    const [group] = groupByLinearIssue([
-      createTask({
-        id: 'task-123',
-        linearIssueId: 'INT-1154',
-        linearIssue: {
-          identifier: 'INT-1154',
-          parentIdentifier: 'INT-1121',
-          title: 'Child Linear Issue',
-          state: { name: 'In Progress', type: 'started' },
-          priority: 1,
-          assignee: null,
-          labels: [{ id: 'label-1', name: 'backend' }],
-          url: 'https://linear.app/pbuchman/issue/INT-1154',
-          commentCount: 0,
-          lastCommentAt: null,
-        },
-      }),
-    ]);
-    if (group === undefined) {
-      throw new Error('Expected issue group to be created');
-    }
+    const task = createTask({
+      id: 'task-123',
+      linearIssueId: 'INT-1154',
+      linearIssue: {
+        identifier: 'INT-1154',
+        parentIdentifier: 'INT-1121',
+        title: 'Child Linear Issue',
+        state: { name: 'In Progress', type: 'started' },
+        priority: 1,
+        assignee: null,
+        labels: [{ id: 'label-1', name: 'backend' }],
+        url: 'https://linear.app/pbuchman/issue/INT-1154',
+        commentCount: 0,
+        lastCommentAt: null,
+      },
+    });
+    const group: IssueGroup = {
+      linearIssueId: 'INT-1154',
+      linearIssue: task.linearIssue,
+      tasks: [task],
+      pipeline: { steps: [], pr: null, failedAttempts: 0, archivedCount: 0 },
+      latestTask: task,
+      aggregateStatus: 'active',
+    };
 
     const html = renderToStaticMarkup(createElement(IssueGroupRow, {
       group,
