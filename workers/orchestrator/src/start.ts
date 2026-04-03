@@ -195,13 +195,22 @@ async function validateThirdPartyApiKey(
     return;
   }
 
-  const url =
-    config.model !== undefined
+  // OpenRouter uses a lightweight key introspection endpoint instead of a real inference request,
+  // because free-tier models are frequently rate-limited upstream regardless of key validity.
+  const isOpenRouter = config.apiBaseUrl.includes('openrouter.ai');
+
+  const url = isOpenRouter
+    ? `${config.apiBaseUrl}/v1/key`
+    : config.model !== undefined
       ? `${config.apiBaseUrl}/v1/messages`
       : `${config.apiBaseUrl}/v1/models`;
 
-  const fetchOptions =
-    config.model !== undefined
+  const fetchOptions = isOpenRouter
+    ? {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${apiKey}` },
+      }
+    : config.model !== undefined
       ? {
           method: 'POST',
           headers: {
@@ -331,16 +340,13 @@ async function validateWorkerApiKeys(
   }
 
   // Validate all third-party API keys in parallel.
-  // GLM, Qwen, and Kimi all use the same DashScope API key.
+  // GLM, Qwen, and Kimi all use the same DashScope API key — validate once via qwen.
   await Promise.all([
     minimaxKey !== ''
       ? validateThirdPartyApiKey('minimax', minimaxKey, suffix, logger)
       : Promise.resolve(),
     dashscopeKey !== ''
-      ? Promise.all([
-          validateThirdPartyApiKey('qwen', dashscopeKey, suffix, logger),
-          validateThirdPartyApiKey('kimi', dashscopeKey, suffix, logger),
-        ])
+      ? validateThirdPartyApiKey('qwen', dashscopeKey, suffix, logger)
       : Promise.resolve(),
     openRouterKey !== ''
       ? validateThirdPartyApiKey('openrouter-free', openRouterKey, suffix, logger)
