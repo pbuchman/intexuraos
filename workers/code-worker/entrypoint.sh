@@ -225,6 +225,10 @@ read_linear_mcp_timeout_ms() {
         echo "60000"
         return
     fi
+    # Cap at 1 hour to prevent arithmetic overflow in timeout_s conversion
+    if [ "$timeout_ms" -gt 3600000 ]; then
+        timeout_ms=3600000
+    fi
     echo "$timeout_ms"
 }
 
