@@ -197,4 +197,21 @@ describe('Codex runtime contract', () => {
 
     expect(runtime.flushAttemptState(state)).toEqual([]);
   });
+
+  it('passes through the stable Linear MCP timeout marker from entrypoint output', () => {
+    const runtime = getRuntime('codex');
+    const state = runtime.createAttemptState('codex-task-10', createLogger());
+
+    // The entrypoint emits this line when the `timeout` command kills the Codex process,
+    // replacing the exit code 124 with the stable marker below.
+    const marker = '[entrypoint] MCP timeout server=linear timeout_ms=60000';
+
+    const events = runtime.processLogChunk(state, marker + '\n');
+
+    // The marker must appear verbatim in the log stream for operator scanning.
+    expect(events).toContainEqual({
+      type: 'log',
+      text: marker + '\n',
+    });
+  });
 });

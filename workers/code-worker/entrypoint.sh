@@ -213,6 +213,21 @@ run_claude_attempt() {
     return "$exit_code"
 }
 
+read_linear_mcp_timeout_ms() {
+    local mcp_json="/repo/.mcp.json"
+    if [ ! -f "$mcp_json" ]; then
+        echo "60000"
+        return
+    fi
+    local timeout_ms
+    timeout_ms=$(jq -r '.mcpServers.linear.timeoutMs // empty' "$mcp_json" 2>/dev/null || true)
+    if [ -z "$timeout_ms" ] || ! [[ "$timeout_ms" =~ ^[0-9]+$ ]]; then
+        echo "60000"
+        return
+    fi
+    echo "$timeout_ms"
+}
+
 run_codex_attempt() {
     if [ ! -d "/repo" ]; then
         echo "[entrypoint] ERROR: /repo directory not mounted" >&2
@@ -273,7 +288,12 @@ run_codex_attempt() {
     if [ -n "${CODEX_REASONING_EFFORT:-}" ]; then
         reasoning_effort_state="${CODEX_REASONING_EFFORT}"
     fi
-    echo "[entrypoint] Codex runtime evidence: mode=${runtime_mode} thread_id=${thread_id_state} reasoning_effort=${reasoning_effort_state}"
+
+    local linear_timeout_ms
+    linear_timeout_ms=$(read_linear_mcp_timeout_ms)
+    local timeout_s=$(( (linear_timeout_ms + 999) / 1000 ))
+
+    echo "[entrypoint] Codex runtime evidence: mode=${runtime_mode} thread_id=${thread_id_state} reasoning_effort=${reasoning_effort_state} linear_mcp_timeout_ms=${linear_timeout_ms}"
 
     local prompt_file
     prompt_file="$(mktemp /tmp/codex-prompt.XXXXXX)"
@@ -290,40 +310,60 @@ run_codex_attempt() {
         echo "[entrypoint] Codex reasoning effort: ${CODEX_REASONING_EFFORT}"
     fi
 
+    local raw_exit=0
+    local log_file
+    log_file="$(mktemp /tmp/codex-output.XXXXXX)"
     set +e
+
     if [ -n "$attempt_forensics_dir" ]; then
         if [ "$continue_flag" = "1" ]; then
-            codex exec resume --json \
+            timeout --signal=TERM --kill-after=10 "${timeout_s}s" \
+                codex exec resume --json \
                 --skip-git-repo-check \
                 --dangerously-bypass-approvals-and-sandbox \
                 "${effort_args[@]}" \
                 "${CODEX_THREAD_ID}" \
-                - < "$prompt_file" 2>&1 | tee -a "${attempt_forensics_dir}/codex-stream.log"
+                - < "$prompt_file" > "$log_file" 2>&1 || raw_exit=$?
         else
-            codex exec --json \
+            timeout --signal=TERM --kill-after=10 "${timeout_s}s" \
+                codex exec --json \
                 --skip-git-repo-check \
                 --dangerously-bypass-approvals-and-sandbox \
                 "${effort_args[@]}" \
-                - < "$prompt_file" 2>&1 | tee -a "${attempt_forensics_dir}/codex-stream.log"
+                - < "$prompt_file" > "$log_file" 2>&1 || raw_exit=$?
         fi
     else
         if [ "$continue_flag" = "1" ]; then
-            codex exec resume --json \
+            timeout --signal=TERM --kill-after=10 "${timeout_s}s" \
+                codex exec resume --json \
                 --skip-git-repo-check \
                 --dangerously-bypass-approvals-and-sandbox \
                 "${effort_args[@]}" \
                 "${CODEX_THREAD_ID}" \
-                - < "$prompt_file"
+                - < "$prompt_file" > "$log_file" 2>&1 || raw_exit=$?
         else
-            codex exec --json \
+            timeout --signal=TERM --kill-after=10 "${timeout_s}s" \
+                codex exec --json \
                 --skip-git-repo-check \
                 --dangerously-bypass-approvals-and-sandbox \
                 "${effort_args[@]}" \
-                - < "$prompt_file"
+                - < "$prompt_file" > "$log_file" 2>&1 || raw_exit=$?
         fi
     fi
-    local exit_code=$?
     set -e
+
+    if [ -n "$attempt_forensics_dir" ]; then
+        cat "$log_file" | tee -a "${attempt_forensics_dir}/codex-stream.log"
+    else
+        cat "$log_file"
+    fi
+    rm -f "$log_file"
+
+    local exit_code="$raw_exit"
+    if [ "$exit_code" -eq 124 ]; then
+        echo "[entrypoint] MCP timeout server=linear timeout_ms=${linear_timeout_ms}"
+        exit_code=1
+    fi
 
     rm -f "$prompt_file"
 
