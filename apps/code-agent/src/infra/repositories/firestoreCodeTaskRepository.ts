@@ -533,9 +533,11 @@ export const createFirestoreCodeTaskRepository = (deps: {
           // field. Filter them out so the returned CodeTask has a clean shape.
           const mergedData = { ...doc.data(), ...updateData };
           for (const [key, value] of Object.entries(mergedData)) {
+            /* v8 ignore start -- test-infra: FakeFirestore.runTransaction always merges updateData as plain objects, cannot produce FieldValue.delete() sentinel instances @preserve */
             if (value instanceof FieldValue) {
               delete mergedData[key];
             }
+            /* v8 ignore stop @preserve */
           }
           return ok(toCodeTask({ id: taskId, data: () => mergedData } as { id: string; data(): Record<string, unknown> }));
         }
