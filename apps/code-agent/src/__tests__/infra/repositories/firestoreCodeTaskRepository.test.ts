@@ -3,6 +3,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Timestamp, createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
+import type FirebaseFirestore from '@google-cloud/firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import type { Logger } from '@intexuraos/common-core';
 import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
@@ -1810,18 +1811,18 @@ describe('firestoreCodeTaskRepository', () => {
         const originalGet = tx.get.bind(tx);
         const originalUpdate = tx.update.bind(tx);
 
-        (tx as Record<string, unknown>).get = async (
-          ...args: Parameters<typeof originalGet>
-        ) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- FakeTransaction lacks proper interface; safe spy target
+        const txAny = tx as any;
+        type GetFn = typeof originalGet;
+        type UpdateFn = typeof originalUpdate;
+        txAny.get = async (...args: Parameters<GetFn>): Promise<unknown> => {
           if (updateCalled) {
             getCallsAfterUpdate.push('get-after-update');
           }
           return originalGet(...args);
         };
 
-        (tx as Record<string, unknown>).update = (
-          ...args: Parameters<typeof originalUpdate>
-        ) => {
+        txAny.update = (...args: Parameters<UpdateFn>): void => {
           updateCalled = true;
           return originalUpdate(...args);
         };
@@ -1829,7 +1830,7 @@ describe('firestoreCodeTaskRepository', () => {
         const updateResult = await repo.update(
           taskId,
           { status: 'running' },
-          { transaction: tx },
+          { transaction: tx as unknown as FirebaseFirestore.Transaction },
         );
         expect(updateResult.ok).toBe(true);
         if (!updateResult.ok) throw new Error('Update failed');
