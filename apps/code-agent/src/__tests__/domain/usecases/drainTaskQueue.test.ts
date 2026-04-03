@@ -385,6 +385,51 @@ describe('drainTaskQueue', () => {
     );
   });
 
+  it('logs warning when execution memory retrieval returns error status and still dispatches', async () => {
+    mockExecutionMemoryEnabled = true;
+    const task = createMockTask({
+      linearIssueId: 'INT-1098',
+      agentType: 'execution',
+    });
+
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    mockLinearAgentClient.validateIssue.mockResolvedValue(ok({
+      id: 'issue-123',
+      identifier: 'INT-1098',
+      title: 'Issue',
+      url: 'https://linear.app/intexura/issue/INT-1098',
+      labels: ['code-task'],
+      childCount: 0,
+      parentId: null,
+    }));
+    setupWorkerSettings();
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'error',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'Auth callback logging work',
+      errorCode: 'embedding_failed',
+      errorMessage: 'API timeout',
+    });
+    mockCodeTaskRepo.update.mockResolvedValue(ok({
+      ...task,
+      status: 'dispatched',
+    }));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task-123',
+        errorCode: 'embedding_failed',
+        errorMessage: 'API timeout',
+      }),
+      'Execution memory retrieval returned error status'
+    );
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledOnce();
+  });
+
   it('clears parent implementationTaskId when expired task has parentTaskId', async () => {
     const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
     const task = createMockTask({

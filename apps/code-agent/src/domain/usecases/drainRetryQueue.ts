@@ -269,6 +269,17 @@ async function handleNewTaskRetry(
       executionMemoryApplicationRepo: deps.executionMemory?.executionMemoryApplicationRepo,
     });
 
+    if (taskExecutionMemoryContext?.status === 'error') {
+      logger.warn(
+        {
+          taskId: entry.taskId,
+          errorCode: taskExecutionMemoryContext.errorCode,
+          errorMessage: taskExecutionMemoryContext.errorMessage,
+        },
+        'Execution memory retrieval returned error status'
+      );
+    }
+
     const memoryUpdateResult = await codeTaskRepo.update(entry.taskId, {
       executionMemoryContext: taskExecutionMemoryContext,
     });
