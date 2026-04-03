@@ -57,7 +57,7 @@ The non-transactional fallback (`fanOutChildTasks.ts:147-192`) calls `codeTaskRe
 | -------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------ |
 | `apps/code-agent/src/domain/usecases/fanOutChildTasks.ts`                              | Modify   | Remove transactional path from `persistBatchTransactional`                           |
 | `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts`                | Modify   | Fix `update` method's post-write read-back when inside a transaction                 |
-| `apps/code-agent/src/__tests__/domain/useCases/fanOutChildTasks.test.ts`               | Modify   | Remove transactional-path tests, add regression test for sequential create isolation |
+| `apps/code-agent/src/__tests__/domain/usecases/fanOutChildTasks.test.ts`               | Modify   | Remove transactional-path tests, add regression test for sequential create isolation |
 | `apps/code-agent/src/__tests__/infra/repositories/firestoreCodeTaskRepository.test.ts` | Modify   | Add test for `update` with transaction returning merged data without read-back       |
 
 ---
@@ -161,7 +161,15 @@ if (options?.transaction !== undefined) {
   options.transaction.update(docRef, updateData);
   // Inside an external transaction, avoid read-after-write by merging
   // the known updates into the already-read doc data in memory.
+  // Important: strip FieldValue.delete() sentinels — spread would leave
+  // delete-sentinel objects in the merged result instead of omitting the
+  // field. Filter them out so the returned CodeTask has a clean shape.
   const mergedData = { ...doc.data(), ...updateData };
+  for (const [key, value] of Object.entries(mergedData)) {
+    if (value instanceof FieldValue) {
+      delete mergedData[key];
+    }
+  }
   return ok(toCodeTask({ id: taskId, data: () => mergedData } as { id: string; data(): Record<string, unknown> }));
 }
 
@@ -199,13 +207,13 @@ Fixes latent bug exposed by fan-out transaction (INT-1199)."
 
 **Files:**
 - Modify: `apps/code-agent/src/domain/usecases/fanOutChildTasks.ts:83-193`
-- Modify: `apps/code-agent/src/__tests__/domain/useCases/fanOutChildTasks.test.ts`
+- Modify: `apps/code-agent/src/__tests__/domain/usecases/fanOutChildTasks.test.ts`
 
 The transactional path wraps `update` + multiple `create` calls in a single Firestore transaction, violating read-before-write ordering. The non-transactional sequential path already handles partial failure with manual cleanup. Remove the transactional branch and always use the sequential path.
 
 - [ ] **Step 1: Write the regression test**
 
-In `apps/code-agent/src/__tests__/domain/useCases/fanOutChildTasks.test.ts`, add a test that verifies each child task creation is independent (not sharing a transaction):
+In `apps/code-agent/src/__tests__/domain/usecases/fanOutChildTasks.test.ts`, add a test that verifies each child task creation is independent (not sharing a transaction):
 
 ```typescript
 it('creates child tasks with independent create calls, not inside a shared transaction', async () => {
@@ -234,7 +242,7 @@ it('creates child tasks with independent create calls, not inside a shared trans
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd apps/code-agent && pnpm vitest run src/__tests__/domain/useCases/fanOutChildTasks.test.ts -t "creates child tasks with independent create calls"`
+Run: `cd apps/code-agent && pnpm vitest run src/__tests__/domain/usecases/fanOutChildTasks.test.ts -t "creates child tasks with independent create calls"`
 Expected: FAIL — the current code passes a shared transaction to each create call.
 
 - [ ] **Step 3: Remove the transactional branch from `persistBatchTransactional`**
@@ -335,18 +343,18 @@ Search the test file for ALL references to `runInTransaction` and update accordi
 
 - [ ] **Step 6: Run test to verify new regression test passes**
 
-Run: `cd apps/code-agent && pnpm vitest run src/__tests__/domain/useCases/fanOutChildTasks.test.ts -t "creates child tasks with independent create calls"`
+Run: `cd apps/code-agent && pnpm vitest run src/__tests__/domain/usecases/fanOutChildTasks.test.ts -t "creates child tasks with independent create calls"`
 Expected: PASS
 
 - [ ] **Step 7: Run full fan-out test suite**
 
-Run: `cd apps/code-agent && pnpm vitest run src/__tests__/domain/useCases/fanOutChildTasks.test.ts`
+Run: `cd apps/code-agent && pnpm vitest run src/__tests__/domain/usecases/fanOutChildTasks.test.ts`
 Expected: All tests pass.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add apps/code-agent/src/domain/usecases/fanOutChildTasks.ts apps/code-agent/src/__tests__/domain/useCases/fanOutChildTasks.test.ts
+git add apps/code-agent/src/domain/usecases/fanOutChildTasks.ts apps/code-agent/src/__tests__/domain/usecases/fanOutChildTasks.test.ts
 git commit -m "fix(code-agent): remove transactional path from fan-out to fix read-after-write
 
 persistBatchTransactional wrapped update + create calls in a single
@@ -378,7 +386,7 @@ Read `apps/code-agent/src/domain/usecases/drainTaskQueue.ts` and search for `fan
 
 - [ ] **Step 2: Run the drain queue tests**
 
-Run: `cd apps/code-agent && pnpm vitest run src/__tests__/domain/useCases/drainTaskQueue.test.ts`
+Run: `cd apps/code-agent && pnpm vitest run src/__tests__/domain/usecases/drainTaskQueue.test.ts`
 Expected: All tests pass (no changes needed if drain queue doesn't wrap fan-out in its own transaction).
 
 - [ ] **Step 3: Commit (if changes were needed)**
