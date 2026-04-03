@@ -4267,4 +4267,140 @@ describe('DockerProvider', () => {
       expect(gitBinds).toHaveLength(0);
     });
   });
+
+  describe('captureSegfaultForensics error handling', () => {
+    it('writes String(error) when execInstance.inspect throws a non-Error', async () => {
+      const fsModule = await import('node:fs');
+
+      const mockExecInstance = {
+        inspect: vi.fn().mockRejectedValue('connection lost' as unknown as Error),
+      };
+
+      const mockContainer = {
+        inspect: vi.fn().mockResolvedValue({ State: { Running: false } }),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (provider as any).captureSegfaultForensics(
+        'segfault-task',
+        mockContainer,
+        mockExecInstance,
+        '/tmp/forensics/segfault-1',
+        '/var/crash/segfault-1'
+      );
+
+      const writeFileCalls = (fsModule.promises.writeFile as ReturnType<typeof vi.fn>).mock.calls;
+      const errorTxtCall = writeFileCalls.find(
+        (c: unknown[]) =>
+          typeof c[0] === 'string' && (c[0] as string).includes('exec-inspect.error.txt')
+      );
+      expect(errorTxtCall).toBeDefined();
+      expect(errorTxtCall?.[1]).toBe('connection lost');
+    });
+  });
+
+  describe('orphan resume gcpSaKeyPath handling', () => {
+    it('skips gcp-sa.json copy when gcpSaKeyPath does not exist', async () => {
+      const fsModule = await import('node:fs');
+
+      (fsModule.existsSync as Mock).mockImplementation((filePath: unknown) => {
+        if (typeof filePath === 'string' && filePath.includes('gcp-sa.json')) {
+          return false;
+        }
+        return true;
+      });
+
+      mocks.mockContainer.inspect.mockResolvedValueOnce({
+        State: { Running: true },
+        Id: 'orphan-gcp-sa-test',
+      });
+      mocks.mockDocker.createContainer.mockClear();
+
+      const handle = await provider.createWorker(
+        createTestConfig({
+          taskId: 'orphan-gcp-sa-task',
+          continueSession: true,
+        })
+      );
+
+      expect(handle.containerId).toBe('orphan-gcp-sa-test');
+
+      const copyFileCalls = (fsModule.promises.copyFile as ReturnType<typeof vi.fn>).mock.calls;
+      const gcpSaCopyCalls = copyFileCalls.filter(
+        (c: unknown[]) => typeof c[1] === 'string' && (c[1] as string).includes('gcp-sa.json')
+      );
+      expect(gcpSaCopyCalls).toHaveLength(0);
+    });
+
+    it('copies gcp-sa.json when gcpSaKeyPath exists', async () => {
+      const fsModule = await import('node:fs');
+
+      (fsModule.existsSync as Mock).mockImplementation(() => true);
+
+      mocks.mockContainer.inspect.mockResolvedValueOnce({
+        State: { Running: true },
+        Id: 'orphan-gcp-sa-copy',
+      });
+      mocks.mockDocker.createContainer.mockClear();
+
+      await provider.createWorker(
+        createTestConfig({
+          taskId: 'orphan-gcp-sa-copy-task',
+          continueSession: true,
+        })
+      );
+
+      const copyFileCalls = (fsModule.promises.copyFile as ReturnType<typeof vi.fn>).mock.calls;
+      const gcpSaCopyCalls = copyFileCalls.filter(
+        (c: unknown[]) => typeof c[1] === 'string' && (c[1] as string).includes('gcp-sa.json')
+      );
+      expect(gcpSaCopyCalls).toHaveLength(1);
+      expect(gcpSaCopyCalls?.[0]?.[0]).toBe('/test/gcp-sa.json');
+    });
+  });
+
+  describe('periodic cleanup idempotency', () => {
+    afterEach(() => {
+      provider.stopPeriodicCleanup();
+    });
+
+    it('startPeriodicCleanup is idempotent - second call does not log again', () => {
+      provider.startPeriodicCleanup();
+      const firstCallCount = (mockLogger.info as ReturnType<typeof vi.fn>).mock.calls.length;
+
+      provider.startPeriodicCleanup();
+      const secondCallCount = (mockLogger.info as ReturnType<typeof vi.fn>).mock.calls.length;
+
+      expect(secondCallCount).toBe(firstCallCount);
+    });
+
+    it('stopPeriodicCleanup does not throw when interval was never started', () => {
+      expect(() => provider.stopPeriodicCleanup()).not.toThrow();
+      expect(mockLogger.info).not.toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'Stopped periodic container cleanup' })
+      );
+    });
+  });
+
+  describe('health monitor idempotency', () => {
+    afterEach(() => {
+      provider.stopHealthMonitor();
+    });
+
+    it('startHealthMonitor is idempotent - second call is a no-op', () => {
+      provider.startHealthMonitor();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const intervalId = (provider as any).healthMonitorIntervalId;
+
+      provider.startHealthMonitor();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const intervalIdAfterSecond = (provider as any).healthMonitorIntervalId;
+
+      expect(intervalIdAfterSecond).toBe(intervalId);
+    });
+
+    it('stopHealthMonitor does not throw when interval was never started', () => {
+      expect(() => provider.stopHealthMonitor()).not.toThrow();
+    });
+  });
 });
