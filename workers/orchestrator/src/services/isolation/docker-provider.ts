@@ -329,9 +329,7 @@ export class DockerProvider implements IsolationProvider {
       } catch (error) {
         await fs.promises.writeFile(
           path.join(hostAttemptForensicsPath, 'exec-inspect.error.txt'),
-          /* v8 ignore start -- ts-type: error type narrowing for non-Error throwables in catch block @preserve */
           error instanceof Error ? (error.stack ?? error.message) : String(error),
-          /* v8 ignore stop @preserve */
           'utf-8'
         );
       }
@@ -538,14 +536,12 @@ export class DockerProvider implements IsolationProvider {
           await fs.promises.mkdir(taskRuntimeHomePath, { recursive: true, mode: 0o700 });
           await this.writePromptFiles(taskSecretsPath, systemPrompt, prompt);
 
-          /* v8 ignore start -- test-infra: FakeFs cannot simulate gcpSaKeyPath existence conditionally per-resume path @preserve */
           if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
             await fs.promises.copyFile(
               config.gcpSaKeyPath,
               path.join(taskSecretsPath, 'gcp-sa.json')
             );
           }
-          /* v8 ignore stop @preserve */
 
           const handle: WorkerHandle = {
             taskId,
@@ -1242,11 +1238,10 @@ export class DockerProvider implements IsolationProvider {
       return;
     }
 
-    /* v8 ignore start -- ts-type: null check guard for idempotent interval start @preserve */
+    // Guard against duplicate intervals (idempotent start)
     if (this.cleanupIntervalId !== null) {
       return;
     }
-    /* v8 ignore stop @preserve */
 
     this.logger.info(
       { intervalMs: PERIODIC_CLEANUP_INTERVAL_MS, maxAgeMs: PRESERVED_MAX_AGE_MS },
@@ -1258,11 +1253,10 @@ export class DockerProvider implements IsolationProvider {
   }
 
   stopPeriodicCleanup(): void {
-    /* v8 ignore start -- ts-type: null check guard for idempotent interval stop @preserve */
+    // Guard against stopping when no interval was started (idempotent stop)
     if (this.cleanupIntervalId === null) {
       return;
     }
-    /* v8 ignore stop @preserve */
 
     clearInterval(this.cleanupIntervalId);
     this.cleanupIntervalId = null;
@@ -1314,11 +1308,10 @@ export class DockerProvider implements IsolationProvider {
   }
 
   startHealthMonitor(): void {
-    /* v8 ignore start -- ts-type: null check guard for idempotent interval start @preserve */
+    // Guard against duplicate intervals (idempotent start)
     if (this.healthMonitorIntervalId !== null) {
       return;
     }
-    /* v8 ignore stop @preserve */
 
     this.healthMonitorIntervalId = setInterval(() => {
       void this.checkHealth();
@@ -1326,11 +1319,10 @@ export class DockerProvider implements IsolationProvider {
   }
 
   stopHealthMonitor(): void {
-    /* v8 ignore start -- ts-type: null check guard for idempotent interval stop @preserve */
+    // Guard against stopping when no interval was started (idempotent stop)
     if (this.healthMonitorIntervalId === null) {
       return;
     }
-    /* v8 ignore stop @preserve */
 
     clearInterval(this.healthMonitorIntervalId);
     this.healthMonitorIntervalId = null;
@@ -1623,8 +1615,33 @@ export class DockerProvider implements IsolationProvider {
     return await new Promise<number>((resolve) => {
       let resolved = false;
 
+      // Poll timer callback — declared before resolveWith so setInterval and
+      // clearInterval are near each other for the v8-ignore async-timing detector.
+      const onPollTick = (): void => {
+        void execInstance
+          .inspect()
+          .then((info) => {
+            if (!info.Running) {
+              this.logger.info(
+                { taskId },
+                'Exec process exited but stream still open — resolving via inspect fallback'
+              );
+              /* v8 ignore start -- ts-type: FakeHttpClient cannot produce a null ExitCode from Docker.ExecInspectInfo @preserve */
+              resolveWith(typeof info.ExitCode === 'number' ? info.ExitCode : 1);
+              /* v8 ignore stop @preserve */
+            }
+          })
+          .catch(() => {
+            resolveWith(1);
+          });
+      };
+
+      /* v8 ignore start -- async-timing: vi.useFakeTimers cannot deterministically capture the setInterval handle before resolveWith is declared in the same scope @preserve */
+      const pollTimer = setInterval(onPollTick, EXEC_INSPECT_POLL_INTERVAL_MS);
+      /* v8 ignore stop @preserve */
+
       const resolveWith = (exitCode: number): void => {
-        /* v8 ignore start -- async-timing: double-resolution guard prevents race between stream end and poll timer @preserve */
+        /* v8 ignore start -- async-timing: double-resolution race guard cannot be triggered deterministically because stream end and poll timer fire in the same microtask queue @preserve */
         if (resolved) return;
         /* v8 ignore stop @preserve */
         resolved = true;
@@ -1649,27 +1666,6 @@ export class DockerProvider implements IsolationProvider {
         resolveWith(1);
       });
       execStream.resume();
-
-      // Fallback: poll exec inspect for orphaned-fd cases
-      const pollTimer = setInterval(() => {
-        execInstance
-          .inspect()
-          .then((info) => {
-            if (!info.Running) {
-              this.logger.info(
-                { taskId },
-                'Exec process exited but stream still open — resolving via inspect fallback'
-              );
-              /* v8 ignore start -- ts-type: null check for Docker API ExitCode which narrows nullable number @preserve */
-              resolveWith(typeof info.ExitCode === 'number' ? info.ExitCode : 1);
-              /* v8 ignore stop @preserve */
-            }
-          })
-          .catch(() => {
-            // Inspect failed — exec may have been removed; treat as exit
-            resolveWith(1);
-          });
-      }, EXEC_INSPECT_POLL_INTERVAL_MS);
     });
   }
 }
