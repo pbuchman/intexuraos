@@ -5,7 +5,7 @@
 #
 # Usage: ./reply-to-comment.sh <comment_type> <comment_id> <pr_number> <message>
 #        comment_type: "issue_comment", "review_comment", or "review_body"
-#        comment_id: The database ID (numeric)
+#        comment_id: The database ID (numeric) or node ID (PRRC_...)
 #        pr_number: The PR number
 #        message: The reply message
 
@@ -19,7 +19,7 @@ MESSAGE="${4:-}"
 if [[ -z "$COMMENT_TYPE" || -z "$COMMENT_ID" || -z "$PR_NUMBER" || -z "$MESSAGE" ]]; then
   echo "Usage: $0 <comment_type> <comment_id> <pr_number> <message>" >&2
   echo "  comment_type: issue_comment, review_comment, or review_body" >&2
-  echo "  comment_id: The comment's database ID (numeric)" >&2
+  echo "  comment_id: The comment's database ID (numeric) or node ID (PRRC_...)" >&2
   echo "  pr_number: The PR number" >&2
   echo "  message: The reply message" >&2
   exit 1
@@ -33,7 +33,9 @@ REPO=$(echo "$REPO_INFO" | cut -d'/' -f2)
 case "$COMMENT_TYPE" in
   issue_comment)
     # Reply to issue comment by posting a new comment on the PR
-    # Node ID conversion not needed - we post to the PR, not the comment
+    # Note: $COMMENT_ID is not used in this API call because GitHub's issue
+    # comments API doesn't support threading — we post a new top-level comment
+    # on the PR instead. The ID is kept for logging/traceability only.
     gh api "repos/${OWNER}/${REPO}/issues/${PR_NUMBER}/comments" \
       -X POST \
       -f body="$MESSAGE" \
@@ -53,6 +55,12 @@ case "$COMMENT_TYPE" in
           }
         }
       ' -f id="$COMMENT_ID" --jq '.data.node.databaseId')
+
+      # Guard: ensure conversion succeeded
+      if [[ -z "$COMMENT_ID" || "$COMMENT_ID" == "null" ]]; then
+        echo "ERROR: Failed to resolve node ID to database ID" >&2
+        exit 1
+      fi
     fi
 
     gh api "repos/${OWNER}/${REPO}/pulls/comments/${COMMENT_ID}/replies" \
