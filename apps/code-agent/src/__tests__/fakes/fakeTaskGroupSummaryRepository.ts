@@ -158,7 +158,7 @@ function sortSummaries(summaries: TaskGroupSummary[], sortBy: SortOption): TaskG
   const sorted = [...summaries];
   switch (sortBy) {
     case 'last-updated':
-      sorted.sort((a, b) => b.oldestTaskCreatedAt.toMillis() - a.oldestTaskCreatedAt.toMillis());
+      sorted.sort((a, b) => b.latestTaskUpdatedAt.toMillis() - a.latestTaskUpdatedAt.toMillis());
       break;
     case 'dispatched':
       sorted.sort((a, b) => {
