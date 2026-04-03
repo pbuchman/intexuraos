@@ -12,7 +12,7 @@ import type { ExecutionMemoryRepository } from '../repositories/executionMemoryR
 import type { ExecutionMemoryApplicationRepository } from '../repositories/executionMemoryApplicationRepository.js';
 import type { ExecutionMemoryEmbeddingClient } from './prepareExecutionMemoryContext.js';
 
-const DISTILLATION_VERSION = 'execution-memory-distiller@1.0.0';
+const DISTILLATION_VERSION = 'execution-memory-distiller@2.0.0';
 const EVALUATION_VERSION = 'execution-memory-evaluator@1.0.0';
 const MAX_LOG_LINES = 350;
 const MAX_EVALUATION_LOG_LINES = 200;
@@ -462,7 +462,36 @@ async function distillTask(
     `Linear comments: ${issueContext.comments.map((comment) => comment.body).join('\n')}`,
     `Recent logs:\n${logs.map((line) => line.text).join('\n')}`,
     `Turn metrics:\n${JSON.stringify(turnMetrics)}`,
-    'Return JSON only.',
+    [
+      'Return JSON only. Use this exact schema:',
+      '{',
+      '  "decision": "create" | "skip",',
+      '  "skipReason": "infra_only" | "insufficient_signal" | "already_completed" | "no_reusable_lesson",  // required when decision is "skip"',
+      '  "evidenceSummary": "string (non-empty, summarize what happened)",',
+      '  "memories": [  // empty array when decision is "skip"',
+      '    {',
+      '      "memoryType": "implementation_pattern" | "verification_pattern" | "pitfall_pattern",',
+      '      "title": "string (short descriptive title)",',
+      '      "appliesWhen": "string (when this memory should be applied)",',
+      '      "action": "string (what to do)",',
+      '      "avoid": "string (what to avoid)",',
+      '      "verification": "string (how to verify correctness)",',
+      '      "evidenceSummary": "string (evidence from this task)",',
+      '      "retrievalText": "string (text used for semantic search matching)",',
+      '      "keywords": ["string"],',
+      '      "labelHints": ["string"],',
+      '      "componentHints": ["string"],',
+      '      "confidence": 0.0 to 1.0',
+      '    }',
+      '  ]',
+      '}',
+      '',
+      'Example (skip):',
+      '{"decision":"skip","skipReason":"no_reusable_lesson","evidenceSummary":"Task was a trivial typo fix with no reusable pattern.","memories":[]}',
+      '',
+      'Example (create):',
+      '{"decision":"create","evidenceSummary":"Discovered that route handlers need serialization tests.","memories":[{"memoryType":"verification_pattern","title":"Verify route serialization","appliesWhen":"Modifying route handlers","action":"Add app.inject tests for response shape","avoid":"Skipping serialization checks","verification":"Run route tests and check response schema","evidenceSummary":"Route handler returned wrong shape without test coverage","retrievalText":"route handler serialization verification test coverage","keywords":["route","serialization"],"labelHints":["testing"],"componentHints":["api"],"confidence":0.85}]}',
+    ].join('\n'),
   ].join('\n\n');
 
   const result = await deps.distillerClient.generate(prompt);
@@ -557,7 +586,8 @@ function parseCsv(value: string | undefined): string[] {
 }
 
 function parseJsonObject(response: string): unknown {
-  const match = /\{[\s\S]*\}/.exec(response);
+  const stripped = response.replace(/```(?:json)?\s*\n?([\s\S]*?)```/g, '$1');
+  const match = /\{[\s\S]*\}/.exec(stripped);
   if (match === null) {
     throw new Error('Response did not contain JSON');
   }
