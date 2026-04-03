@@ -54,6 +54,10 @@ describe('extractDispatchWorkerType', () => {
     expect(extractDispatchWorkerType('@worker codex-xhigh')).toBe('codex-xhigh');
   });
 
+  it('extracts openrouter-free from @worker openrouter-free', () => {
+    expect(extractDispatchWorkerType('@worker openrouter-free')).toBe('openrouter-free');
+  });
+
   it('rejects qwen3.5-plus explicit form', () => {
     expect(extractDispatchWorkerType('@worker qwen3.5-plus')).toBeUndefined();
   });

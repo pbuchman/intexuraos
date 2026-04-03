@@ -17,6 +17,7 @@ const WORKER_TYPE_ALIASES: Record<string, WorkerType> = {
   kimi: 'kimi',
   codex: 'codex',
   'codex-xhigh': 'codex-xhigh',
+  'openrouter-free': 'openrouter-free',
 };
 
 // Build regex from patterns for maintainability
