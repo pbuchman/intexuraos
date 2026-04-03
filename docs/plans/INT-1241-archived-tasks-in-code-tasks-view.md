@@ -148,18 +148,36 @@ In the same file, find `docToCounts` and add:
 archived: Number(data['archived'] ?? 0),
 ```
 
-- [ ] **Step 4: Update delta functions**
+- [ ] **Step 4: Update `statusToCountField` to handle `'archived'`**
 
-Find `applyNewGroupDelta`, `applyDeleteGroupDelta`, and `applyStatusChangeDelta`. Each must handle the `'archived'` status. For example in `applyNewGroupDelta`:
+The delta functions (`applyNewGroupDelta`, `applyDeleteGroupDelta`, `applyStatusChangeDelta`) all delegate status-to-field mapping to `statusToCountField` at line 44. This function must be updated to handle `'archived'` or TypeScript strict mode will flag a non-exhaustive switch once `GroupStatus` includes `'archived'`.
+
+In `apps/code-agent/src/infra/firestore/taskGroupSummaryFirestoreRepository.ts`, update `statusToCountField`:
 
 ```typescript
-// When newStatus is 'archived', increment archived count
-case 'archived':
-  result.archived = (result.archived ?? 0) + 1;
-  break;
+// Before (line 44-51)
+function statusToCountField(status: GroupStatus): 'active' | 'needsAction' | 'done' | 'failed' {
+  switch (status) {
+    case 'active': return 'active';
+    case 'needs-action': return 'needsAction';
+    case 'done': return 'done';
+    case 'failed': return 'failed';
+  }
+}
+
+// After
+function statusToCountField(status: GroupStatus): 'active' | 'needsAction' | 'done' | 'failed' | 'archived' {
+  switch (status) {
+    case 'active': return 'active';
+    case 'needs-action': return 'needsAction';
+    case 'done': return 'done';
+    case 'failed': return 'failed';
+    case 'archived': return 'archived';
+  }
+}
 ```
 
-And in `applyStatusChangeDelta`, handle transitioning from/to `'archived'`.
+This single change ensures all three delta functions correctly handle `'archived'` status transitions — no additional changes to the delta functions themselves are needed since they use `statusToCountField` to map the status to the correct `UserGroupCounts` field key.
 
 - [ ] **Step 5: Write failing tests for the new `archived` count field**
 
@@ -552,6 +570,8 @@ git commit -m "feat(INT-1241): add mutually exclusive archived filter to code ta
 - Create: `scripts/backfill-archived-group-summaries.ts` (one-time script)
 
 Existing archived groups had their summary docs **deleted**. A backfill is needed to recreate them with `aggregateStatus: 'archived'`.
+
+**Note:** Some existing scripts in `scripts/` use `.mjs` extension (e.g., `backfill-research-favourite.mjs`). This script uses `.ts` extension and runs via `npx tsx`, which is available as a dev dependency. The `.ts` extension is preferred for new scripts since it provides full type-checking.
 
 - [ ] **Step 1: Write the backfill script**
 
