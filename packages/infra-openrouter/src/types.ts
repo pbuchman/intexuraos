@@ -5,6 +5,7 @@
  */
 
 import type { Logger } from '@intexuraos/common-core';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 
 export type {
   LLMError as OpenRouterError,
@@ -59,6 +60,8 @@ export interface OpenRouterConfig {
   timeoutMs?: number;
   /** Pino logger for structured LLM usage logging */
   logger: Logger;
+  /** Optional usage sink override. Defaults to FirestoreUsageSink. */
+  usageSink?: UsageSink;
 }
 
 /**
