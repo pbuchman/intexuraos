@@ -3,7 +3,6 @@ import { exec, type ChildProcess } from 'node:child_process';
 import {
   TaskDispatcher,
   type IsolationConfig,
-
   getTaskEventUrl,
   hasFatalExitCodeField,
 } from '../services/task-dispatcher.js';
@@ -2023,7 +2022,8 @@ describe('TaskDispatcher', () => {
       internalState.taskExitCodes.set('exit-code-pending-test', 1);
       internalState.pendingMessages.set('exit-code-pending-test', ['queued message']);
 
-      const createWorkerCallsBefore = vi.mocked(mockIsolationProvider.createWorker).mock.calls.length;
+      const createWorkerCallsBefore = vi.mocked(mockIsolationProvider.createWorker).mock.calls
+        .length;
 
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
       await vi.advanceTimersByTimeAsync(30 * 1000);
@@ -2032,7 +2032,8 @@ describe('TaskDispatcher', () => {
       expect(task?.status).toBe('failed');
 
       // Pending messages should NOT have triggered a new worker (no new createWorker call)
-      const createWorkerCallsAfter = vi.mocked(mockIsolationProvider.createWorker).mock.calls.length;
+      const createWorkerCallsAfter = vi.mocked(mockIsolationProvider.createWorker).mock.calls
+        .length;
       expect(createWorkerCallsAfter).toBe(createWorkerCallsBefore);
 
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
@@ -8443,7 +8444,6 @@ describe('TaskDispatcher', () => {
     });
   });
 });
-
 
 describe('hasFatalExitCodeField', () => {
   it('returns the field for fatal_exit_code_137', () => {

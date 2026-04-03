@@ -9319,7 +9319,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     vi.mocked(lac.validateIssue).mockReset();
     vi.mocked(lac.validateIssue).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'down' }));
 
-    const payload = { taskId: task.id, status: 'completed' as const, result: { execution_outcome_label: 'already_completed' as const, summary: 'done' } };
+    const payload = { taskId: task.id, status: 'completed' as const, result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/42', execution_outcome_label: 'already_completed' as const, summary: 'done' } };
     const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
     const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
     expect(response.statusCode).toBe(200);
