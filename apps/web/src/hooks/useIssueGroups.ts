@@ -8,7 +8,7 @@ import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { useAuth } from '@/context';
 import { listIssueGroups as listIssueGroupsApi } from '@/services/issueGroupsApi';
 import type { GroupStatus, IssueGroup, ListIssueGroupsResponse, SortOption } from '@/types/issueGroups';
-import type { ActioningType } from '@/utils/issueGroups';
+import type { ActioningType } from '@/types/issueGroups';
 
 const DEFAULT_LIMIT = 20;
 const MAX_SINGLE_REQUEST_LIMIT = 100;
