@@ -1,7 +1,7 @@
 import { CODE_TASK_WORKER_TYPES, type CodeTaskWorkerType } from '@intexuraos/common-core/code-task-worker-types';
 import type { CodeTaskExecutionMemoryContext, CodeTaskStatus, WorkerStatusTag } from '@/types';
 
-// --- Worker types (shared by V2TaskActions + V2NextSteps) ---
+// --- Worker types (shared by TaskActions + NextSteps) ---
 
 export type WorkerType = CodeTaskWorkerType;
 
@@ -72,7 +72,10 @@ export function isActiveStatus(status: CodeTaskStatus): boolean {
   return status === 'queued' || status === 'dispatched' || status === 'running';
 }
 
-// --- Shared link buttons (used by V2TaskActions + V2NextSteps) ---
+/** Terminal statuses eligible for archive/delete actions. */
+export const ARCHIVABLE_STATUSES: ReadonlySet<string> = new Set(['failed', 'cancelled', 'interrupted', 'planned', 'implemented', 'reviewed']);
+
+// --- Shared link buttons (used by TaskActions + NextSteps) ---
 
 export function GitHubButton({ href }: { href: string }): React.JSX.Element {
   return (

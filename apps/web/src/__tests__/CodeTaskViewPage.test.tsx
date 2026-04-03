@@ -1,11 +1,11 @@
 /**
- * Tests for CodeTaskViewPageV2 PR link fallback behavior.
+ * Tests for CodeTaskViewPage PR link fallback behavior.
  * @vitest-environment jsdom
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
-import { CodeTaskViewPageV2 } from '../pages/CodeTaskViewPageV2.js';
+import { CodeTaskViewPage } from '../pages/CodeTaskViewPage.js';
 import type { TaskViewState } from '../hooks/useTaskView.js';
 import type { CodeTask } from '../types/index.js';
 
@@ -65,8 +65,8 @@ vi.mock('@/components/PREventsGroup.js', () => ({
   ),
 }));
 
-vi.mock('@/components/code-tasks/v2/V2LogStream.js', () => ({
-  V2LogStream: (): React.JSX.Element => <div>Log stream</div>,
+vi.mock('@/components/code-tasks/LogStream.js', () => ({
+  LogStream: (): React.JSX.Element => <div>Log stream</div>,
 }));
 
 function createTask(overrides?: Partial<CodeTask>): CodeTask {
@@ -122,7 +122,7 @@ function createTaskViewState(task: CodeTask | null): TaskViewState {
   };
 }
 
-describe('CodeTaskViewPageV2', () => {
+describe('CodeTaskViewPage', () => {
   beforeEach(() => {
     mockUseWorkersStatus.mockReturnValue({ status: null });
   });
@@ -137,7 +137,7 @@ describe('CodeTaskViewPageV2', () => {
       createTask({ prNumber: 1504 })
     ));
 
-    render(<CodeTaskViewPageV2 />);
+    render(<CodeTaskViewPage />);
 
     expect(screen.getByRole('link', { name: 'GitHub' })).toHaveAttribute(
       'href',
@@ -154,7 +154,7 @@ describe('CodeTaskViewPageV2', () => {
       })
     ));
 
-    render(<CodeTaskViewPageV2 />);
+    render(<CodeTaskViewPage />);
 
     expect(screen.getByRole('link', { name: 'GitHub' })).toHaveAttribute(
       'href',
@@ -167,7 +167,7 @@ describe('CodeTaskViewPageV2', () => {
       createTask()
     ));
 
-    render(<CodeTaskViewPageV2 />);
+    render(<CodeTaskViewPage />);
 
     expect(screen.queryByRole('link', { name: 'GitHub' })).not.toBeInTheDocument();
   });
