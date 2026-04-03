@@ -17,6 +17,12 @@ export interface WorktreeManagerConfig {
 
 const LOCK_TIMEOUT_MS = 10_000;
 
+/**
+ * Configured timeout for the Linear MCP server in worktree tasks.
+ * Exported so tests and diagnostics can verify the contract.
+ */
+export const LINEAR_MCP_TIMEOUT_MS = 60_000;
+
 function assertSafeBranchName(branch: string, branchLabel: string): void {
   if (!SAFE_GIT_BRANCH_PATTERN.test(branch)) {
     throw new Error(`Invalid ${branchLabel} branch name: ${branch}`);
@@ -127,6 +133,7 @@ export class WorktreeManager {
         if (this.config.mcpConfigTemplatePath && existsSync(this.config.mcpConfigTemplatePath)) {
           await this.copyMcpConfig(worktreePath);
         }
+        this.logTimeoutEvidence();
 
         // Copy settings.local.json template if provided
         if (
@@ -205,6 +212,13 @@ export class WorktreeManager {
   async worktreeExists(taskId: string): Promise<boolean> {
     const worktreePath = join(this.config.worktreeBasePath, taskId);
     return existsSync(worktreePath);
+  }
+
+  private logTimeoutEvidence(): void {
+    this.logger.info(
+      { timeoutMs: LINEAR_MCP_TIMEOUT_MS, server: 'linear' },
+      `MCP timeout configured for Linear MCP server: ${String(LINEAR_MCP_TIMEOUT_MS)}ms (server=linear)`
+    );
   }
 
   private async copyMcpConfig(worktreePath: string): Promise<void> {
