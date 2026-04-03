@@ -16,7 +16,6 @@ describe('fanOutChildTasks', () => {
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     deleteTask: ReturnType<typeof vi.fn>;
-    runInTransaction: ReturnType<typeof vi.fn>;
   };
   let mockTaskEnqueueService: {
     enqueue: ReturnType<typeof vi.fn>;
@@ -97,7 +96,6 @@ describe('fanOutChildTasks', () => {
       create: vi.fn().mockResolvedValue(ok(createPlanningTask({ id: 'task-created' }))),
       update: vi.fn().mockResolvedValue(ok(createPlanningTask({ implementationTaskId: 'task-child-1' }))),
       deleteTask: vi.fn().mockResolvedValue(ok(undefined)),
-      runInTransaction: vi.fn(async (operation) => await operation({})),
     };
     mockTaskEnqueueService = {
       enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'task-created', queuePosition: 1 })),
@@ -173,6 +171,29 @@ describe('fanOutChildTasks', () => {
     });
   });
 
+  it('creates child tasks with independent create calls, not inside a shared transaction', async () => {
+    const planningTask = createPlanningTask();
+    const createCallOptions: Array<{ transaction?: unknown } | undefined> = [];
+
+    mockCodeTaskRepo.create.mockImplementation(async (input: { id: string }, options?: { transaction?: unknown }) => {
+      createCallOptions.push(options);
+      return ok(createPlanningTask({ id: input.id, agentType: 'execution', parentTaskId: planningTask.id }));
+    });
+
+    const result = await fanOutChildTasks(createDeps(), {
+      planningTask,
+      userId: 'user-123',
+      childIssues: [qualifyingChild1, qualifyingChild2],
+      workerType: 'claude-code',
+    });
+
+    expect(result.ok).toBe(true);
+    // Each create call should NOT receive a transaction option
+    for (const opt of createCallOptions) {
+      expect(opt?.transaction).toBeUndefined();
+    }
+  });
+
   it('uses the planning task id in child prompts when the parent has no linearIssueId', async () => {
     const planningTask = createPlanningTask();
     delete (planningTask as Partial<CodeTask>).linearIssueId;
@@ -190,26 +211,6 @@ describe('fanOutChildTasks', () => {
         prompt: `[Fan-out from ${planningTask.id}] ${qualifyingChild1.identifier}`,
       }),
       expect.anything(),
-    );
-  });
-
-  it('uses the planning task id in non-transaction child prompts when the parent has no linearIssueId', async () => {
-    const planningTask = createPlanningTask();
-    delete (planningTask as Partial<CodeTask>).linearIssueId;
-    mockCodeTaskRepo.runInTransaction = undefined as unknown as ReturnType<typeof vi.fn>;
-
-    const result = await fanOutChildTasks(createDeps(), {
-      planningTask,
-      userId: 'user-123',
-      childIssues: [qualifyingChild1],
-      workerType: 'auto',
-    });
-
-    expect(result.ok).toBe(true);
-    expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        prompt: `[Fan-out from ${planningTask.id}] ${qualifyingChild1.identifier}`,
-      }),
     );
   });
 
@@ -275,7 +276,7 @@ describe('fanOutChildTasks', () => {
     expect(mockTaskEnqueueService.enqueue).toHaveBeenCalledTimes(1);
   });
 
-  it('returns internal_error when transactional planning linkage update fails', async () => {
+  it('returns internal_error when linkage update fails', async () => {
     mockCodeTaskRepo.update.mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'lock failed' }));
 
     const result = await fanOutChildTasks(createDeps(), {
@@ -295,7 +296,7 @@ describe('fanOutChildTasks', () => {
     expect(mockCodeTaskRepo.create).not.toHaveBeenCalled();
   });
 
-  it('returns internal_error when transactional child task creation fails', async () => {
+  it('returns internal_error when child task creation fails', async () => {
     mockCodeTaskRepo.create.mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'create failed' }));
 
     const result = await fanOutChildTasks(createDeps(), {
@@ -314,52 +315,9 @@ describe('fanOutChildTasks', () => {
     }
   });
 
-  it('returns internal_error when runInTransaction fails', async () => {
-    mockCodeTaskRepo.runInTransaction.mockResolvedValueOnce(
-      err({ code: 'FIRESTORE_ERROR', message: 'transaction failed' }),
-    );
-
-    const result = await fanOutChildTasks(createDeps(), {
-      planningTask: createPlanningTask(),
-      userId: 'user-123',
-      childIssues: [qualifyingChild1],
-      workerType: 'auto',
-    });
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toEqual({
-        code: 'internal_error',
-        message: 'transaction failed',
-      });
-    }
-  });
-
-  it('returns internal_error when non-transaction linkage update fails', async () => {
-    mockCodeTaskRepo.runInTransaction = undefined as unknown as ReturnType<typeof vi.fn>;
-    mockCodeTaskRepo.update.mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'lock failed' }));
-
-    const result = await fanOutChildTasks(createDeps(), {
-      planningTask: createPlanningTask(),
-      userId: 'user-123',
-      childIssues: [qualifyingChild1],
-      workerType: 'auto',
-    });
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toEqual({
-        code: 'internal_error',
-        message: 'Failed to link complex child tasks to planning task',
-      });
-    }
-    expect(mockCodeTaskRepo.create).not.toHaveBeenCalled();
-  });
-
-  it('deletes created child tasks and clears linkage when non-transaction child creation fails', async () => {
+  it('deletes created child tasks and clears linkage when child creation fails', async () => {
     const planningTask = createPlanningTask();
     let firstCreatedTaskId = '';
-    mockCodeTaskRepo.runInTransaction = undefined as unknown as ReturnType<typeof vi.fn>;
     mockCodeTaskRepo.create
       .mockImplementationOnce(async (input) => {
         firstCreatedTaskId = input.id;
