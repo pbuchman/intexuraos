@@ -249,7 +249,6 @@ async function main(): Promise<void> {
   const snapshot = await db
     .collection('code_tasks')
     .where('status', 'in', [...NON_ARCHIVED_STATUSES])
-    .orderBy('createdAt', 'desc')
     .get();
 
   const allTasks = snapshot.docs.map((doc) => {
