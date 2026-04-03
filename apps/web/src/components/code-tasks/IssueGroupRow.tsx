@@ -284,7 +284,7 @@ function SelectionCheckbox({
         onToggle(groupKey);
       }}
       onClick={(e): void => { e.stopPropagation(); }}
-      className={`h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500 dark:border-slate-600 dark:bg-slate-700${extraClass !== undefined ? ` ${extraClass}` : ''}`}
+      className={`h-4 w-4 checked:border-amber-600 checked:bg-amber-600 dark:checked:border-amber-500 dark:checked:bg-amber-500${extraClass !== undefined ? ` ${extraClass}` : ''}`}
       aria-label={isSelected ? `Deselect ${identifier} for archive` : `Select ${identifier} for archive`}
     />
   );
