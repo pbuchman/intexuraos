@@ -69,6 +69,7 @@ describe('PLANNING_SCHEMA', () => {
       superpowers_writing_plans: 'used',
       linear_url: 'https://linear.app/pbuchman/issue/INT-100',
       is_complex: '0',
+      has_plan_doc: '0',
       subtask_urls: '',
       pr_url: '',
       summary: 'Planned the task.',
@@ -83,6 +84,7 @@ describe('PLANNING_SCHEMA', () => {
       superpowers_writing_plans: 'not used',
       linear_url: '',
       is_complex: '0',
+      has_plan_doc: '0',
       subtask_urls: '',
       pr_url: '',
       summary: 'Could not plan.',
@@ -97,6 +99,7 @@ describe('PLANNING_SCHEMA', () => {
       superpowers_writing_plans: 'used',
       linear_url: 'https://linear.app/pbuchman/issue/INT-631',
       is_complex: '1',
+      has_plan_doc: '1',
       subtask_urls: '',
       pr_url: 'https://github.com/pbuchman/intexuraos/pull/950',
       summary: 'Planned and created PR.',
@@ -111,6 +114,7 @@ describe('PLANNING_SCHEMA', () => {
       superpowers_writing_plans: 'used',
       linear_url: 'https://linear.app/pbuchman/issue/INT-631',
       is_complex: '1',
+      has_plan_doc: '1',
       subtask_urls:
         'https://linear.app/pbuchman/issue/INT-632/subtask-one,https://linear.app/pbuchman/issue/INT-633/subtask-two',
       pr_url: '',
@@ -125,12 +129,32 @@ describe('PLANNING_SCHEMA', () => {
     }
   });
 
+  it('accepts plan-doc task with has_plan_doc=1 and is_complex=0', () => {
+    const result = PLANNING_SCHEMA.safeParse({
+      outcome: 'planned',
+      superpowers_writing_plans: 'used',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-700',
+      is_complex: '0',
+      has_plan_doc: '1',
+      subtask_urls: '',
+      pr_url: 'https://github.com/pbuchman/intexuraos/pull/960',
+      summary: 'Plan-doc task planned.',
+      unclear_clarification: '',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.has_plan_doc).toBe('1');
+      expect(result.data.is_complex).toBe('0');
+    }
+  });
+
   it('accepts simple task with empty subtask_urls', () => {
     const result = PLANNING_SCHEMA.safeParse({
       outcome: 'planned',
       superpowers_writing_plans: 'not used',
       linear_url: 'https://linear.app/pbuchman/issue/INT-640',
       is_complex: '0',
+      has_plan_doc: '0',
       subtask_urls: '',
       pr_url: '',
       summary: 'Simple task planned.',
@@ -148,6 +172,7 @@ describe('PLANNING_SCHEMA', () => {
       superpowers_writing_plans: 'used',
       linear_url: '',
       is_complex: '0',
+      has_plan_doc: '0',
       subtask_urls: '',
       pr_url: '',
       summary: 'x',
@@ -415,6 +440,7 @@ describe('buildPlanningPrompt', () => {
     expect(prompt).toContain('superpowers_writing_plans');
     expect(prompt).toContain('linear_url');
     expect(prompt).toContain('is_complex');
+    expect(prompt).toContain('has_plan_doc');
     expect(prompt).toContain('subtask_urls');
     expect(prompt).toContain('pr_url');
     expect(prompt).toContain('unclear_clarification');
@@ -565,6 +591,7 @@ describe('OrchestratorCompletionVerifier', () => {
       superpowers_writing_plans: 'used',
       linear_url: 'https://linear.app/pbuchman/issue/INT-100',
       is_complex: '0',
+      has_plan_doc: '0',
       subtask_urls: '',
       pr_url: '',
       summary: 'The agent planned successfully.',
@@ -596,6 +623,7 @@ describe('OrchestratorCompletionVerifier', () => {
         superpowers_writing_plans: 'used',
         linear_url: 'https://linear.app/pbuchman/issue/INT-100',
         is_complex: '0',
+        has_plan_doc: '0',
         subtask_urls: '',
         pr_url: '',
         summary: 'The agent planned successfully.',
@@ -617,6 +645,7 @@ describe('OrchestratorCompletionVerifier', () => {
             superpowers_writing_plans: 'not used',
             linear_url: '',
             is_complex: '0',
+            has_plan_doc: '0',
             subtask_urls: '',
             pr_url: '',
             summary: 'Could not plan.',
@@ -951,6 +980,7 @@ describe('OrchestratorCompletionVerifier', () => {
       superpowers_writing_plans: 'used',
       linear_url: 'https://linear.app/pbuchman/issue/INT-100',
       is_complex: '0',
+      has_plan_doc: '0',
       subtask_urls: '',
       pr_url: '',
       summary: 'Planned.',
@@ -1040,6 +1070,7 @@ describe('OrchestratorCompletionVerifier', () => {
         superpowers_writing_plans: 'used',
         linear_url: 'https://linear.app/pbuchman/issue/INT-50',
         is_complex: '0',
+        has_plan_doc: '0',
         subtask_urls: '',
         pr_url: '',
         summary: 'Planned.',
@@ -1146,6 +1177,7 @@ describe('verify — fatal exit code pre-check', () => {
           superpowers_writing_plans: 'used',
           linear_url: 'https://linear.app/pbuchman/issue/INT-100',
           is_complex: '0',
+          has_plan_doc: '0',
           subtask_urls: '',
           pr_url: '',
           summary: 'Planned.',
