@@ -326,7 +326,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(doc.get('latestReviewNeedsRemediation')).toBeNull();
     });
 
-    it('sets hasCompletedExecution for review agent with reviewed status', async () => {
+    it('does not set hasCompletedExecution for review agent with reviewed status', async () => {
       const repo = createTaskGroupSummaryFirestoreRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -344,7 +344,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       await repo.updateAfterCreate(task);
 
       const doc = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-REVEXEC').get();
-      expect(doc.get('hasCompletedExecution')).toBe(true);
+      expect(doc.get('hasCompletedExecution')).toBe(false);
     });
 
     it('does not increment taskCount when archived task added to existing group', async () => {
@@ -890,7 +890,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(doc.get('hasCompletedPlanning')).toBe(true);
     });
 
-    it('sets hasCompletedExecution when review task reviewed', async () => {
+    it('does not set hasCompletedExecution when review task reviewed', async () => {
       const repo = createTaskGroupSummaryFirestoreRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -912,7 +912,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       await repo.updateAfterStatusChange(oldTask, newTask);
 
       const doc = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-REV2').get();
-      expect(doc.get('hasCompletedExecution')).toBe(true);
+      expect(doc.get('hasCompletedExecution')).toBe(false);
     });
 
     it('sets hasImplementationTaskId on status change', async () => {
@@ -1141,7 +1141,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(doc.get('hasCompletedExecution')).toBe(true);
     });
 
-    it('sets hasCompletedExecution when review agent transitions to reviewed', async () => {
+    it('does not set hasCompletedExecution when review agent transitions to reviewed', async () => {
       const repo = createTaskGroupSummaryFirestoreRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -1163,7 +1163,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       await repo.updateAfterStatusChange(oldTask, newTask);
 
       const doc = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-REVEXEC2').get();
-      expect(doc.get('hasCompletedExecution')).toBe(true);
+      expect(doc.get('hasCompletedExecution')).toBe(false);
     });
 
     it('sets hasPrUrl without prNumber when prUrl present but prNumber absent', async () => {
@@ -2085,7 +2085,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(doc.get('hasCompletedExecution')).toBe(true);
     });
 
-    it('sets hasCompletedExecution for review-only reviewed tasks', async () => {
+    it('does not set hasCompletedExecution for review-only reviewed tasks', async () => {
       const repo = createTaskGroupSummaryFirestoreRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -2105,7 +2105,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       await repo.recomputeGroupFromTasks('user-4', 'INT-REVONLY', [task]);
 
       const doc = await fakeFirestore.collection('task_group_summaries').doc('user-4_INT-REVONLY').get();
-      expect(doc.get('hasCompletedExecution')).toBe(true);
+      expect(doc.get('hasCompletedExecution')).toBe(false);
       expect(doc.get('aggregateStatus')).toBe('done');
     });
 

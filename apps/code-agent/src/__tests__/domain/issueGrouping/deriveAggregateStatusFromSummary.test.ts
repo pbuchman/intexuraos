@@ -132,6 +132,18 @@ describe('deriveAggregateStatusFromSummary', () => {
     ).toBe('active');
   });
 
+  it('returns needs-action for merge case even without hasCompletedExecution (review-only workflow)', () => {
+    expect(
+      deriveAggregateStatusFromSummary({
+        ...base,
+        hasCompletedExecution: false,
+        hasPrUrl: true,
+        latestReviewNeedsRemediation: false,
+        hasMergeReadyLabel: true,
+      }),
+    ).toBe('needs-action');
+  });
+
   it('returns needs-action via rule 3 when both planning and execution completed and merge-ready label present', () => {
     expect(
       deriveAggregateStatusFromSummary({

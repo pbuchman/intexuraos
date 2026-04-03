@@ -110,7 +110,7 @@ function computeSummaryFromTasks(
 
     if (
       (task.agentType === 'execution' && (task.status === 'implemented' || task.status === 'reviewed')) ||
-      (task.agentType === 'review' && task.status === 'reviewed')
+      (task.agentType === 'pull_request' && task.status === 'implemented')
     ) {
       hasCompletedExecution = true;
     }
