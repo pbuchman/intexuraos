@@ -1515,4 +1515,121 @@ describe('processExecutionMemoryBacklog', () => {
     // 0.5*0.5 + 0.3*0.8 + 0.2*1 = 0.25 + 0.24 + 0.2 = 0.69
     expect(result).toBeCloseTo(0.69, 2);
   });
+
+  describe('parseJsonObject', () => {
+    it('extracts JSON from raw JSON string', () => {
+      const input = '{"decision":"create","evidenceSummary":"test"}';
+      const result = processExecutionMemoryBacklogTestables.parseJsonObject(input);
+      expect(result).toEqual({ decision: 'create', evidenceSummary: 'test' });
+    });
+
+    it('extracts JSON from markdown code fences with json tag', () => {
+      const input = '```json\n{"decision":"skip","evidenceSummary":"no signal"}\n```';
+      const result = processExecutionMemoryBacklogTestables.parseJsonObject(input);
+      expect(result).toEqual({ decision: 'skip', evidenceSummary: 'no signal' });
+    });
+
+    it('extracts JSON from plain markdown code fences', () => {
+      const input = '```\n{"decision":"create","evidenceSummary":"found pattern"}\n```';
+      const result = processExecutionMemoryBacklogTestables.parseJsonObject(input);
+      expect(result).toEqual({ decision: 'create', evidenceSummary: 'found pattern' });
+    });
+
+    it('extracts JSON surrounded by extra text and code fences', () => {
+      const input = 'Here is the result:\n```json\n{"decision":"create","evidenceSummary":"test"}\n```\nDone.';
+      const result = processExecutionMemoryBacklogTestables.parseJsonObject(input);
+      expect(result).toEqual({ decision: 'create', evidenceSummary: 'test' });
+    });
+
+    it('throws when response contains no JSON', () => {
+      expect(() => processExecutionMemoryBacklogTestables.parseJsonObject('no json here')).toThrow(
+        'Response did not contain JSON'
+      );
+    });
+  });
+
+  describe('DISTILLATION_VERSION', () => {
+    it('is at major version 2 for schema-guided prompt', () => {
+      // Access via distillTask prompt — we verify the version string is exported
+      // by checking it appears in the distiller prompt passed to the client
+      const capturedPrompt: string[] = [];
+      distillerClient.generate.mockImplementation((prompt: string) => {
+        capturedPrompt.push(prompt);
+        return Promise.resolve(ok({
+          content: JSON.stringify({
+            decision: 'skip',
+            skipReason: 'no_reusable_lesson',
+            evidenceSummary: 'Nothing reusable.',
+            memories: [],
+          }),
+        }));
+      });
+
+      return processExecutionMemoryBacklogTestables.distillTask(
+        createTask(),
+        [{ text: 'log line' }],
+        [],
+        { description: null, comments: [] },
+        {
+          logger,
+          codeTaskRepo: codeTaskRepo as never,
+          logLineRepo: logLineRepo as never,
+          turnMetricsRepo: turnMetricsRepo as never,
+          linearAgentClient: linearAgentClient as never,
+          executionMemoryRepo: executionMemoryRepo as never,
+          executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+          distillerClient: distillerClient as never,
+          limit: 10,
+        }
+      ).then(() => {
+        expect(capturedPrompt[0]).toContain('execution-memory-distiller@2.0.0');
+      });
+    });
+  });
+
+  describe('distiller prompt schema guidance', () => {
+    it('includes explicit JSON schema guidance in the prompt', async () => {
+      const capturedPrompt: string[] = [];
+      distillerClient.generate.mockImplementation((prompt: string) => {
+        capturedPrompt.push(prompt);
+        return Promise.resolve(ok({
+          content: JSON.stringify({
+            decision: 'skip',
+            skipReason: 'no_reusable_lesson',
+            evidenceSummary: 'Nothing reusable.',
+            memories: [],
+          }),
+        }));
+      });
+
+      await processExecutionMemoryBacklogTestables.distillTask(
+        createTask(),
+        [{ text: 'log line' }],
+        [],
+        { description: 'Test issue', comments: [] },
+        {
+          logger,
+          codeTaskRepo: codeTaskRepo as never,
+          logLineRepo: logLineRepo as never,
+          turnMetricsRepo: turnMetricsRepo as never,
+          linearAgentClient: linearAgentClient as never,
+          executionMemoryRepo: executionMemoryRepo as never,
+          executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+          distillerClient: distillerClient as never,
+          limit: 10,
+        }
+      );
+
+      const prompt = capturedPrompt[0] ?? '';
+      expect(prompt).toContain('"decision"');
+      expect(prompt).toContain('"evidenceSummary"');
+      expect(prompt).toContain('"memories"');
+      expect(prompt).toContain('"memoryType"');
+      expect(prompt).toContain('implementation_pattern');
+      expect(prompt).toContain('verification_pattern');
+      expect(prompt).toContain('pitfall_pattern');
+      expect(prompt).toContain('"create"');
+      expect(prompt).toContain('"skip"');
+    });
+  });
 });
