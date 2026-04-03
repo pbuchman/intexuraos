@@ -1232,6 +1232,7 @@ export interface CodeTask {
   prNumber?: number;
   agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
   implementationTaskId?: string;
+  fanOutChildTaskIds?: string[];
   parentTaskId?: string;
   followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement' | 'merge_conflict';
   result?: CodeTaskResult;
@@ -1288,6 +1289,7 @@ export interface StartImplementationResponse {
   resourceUrl: string;
   workerLocation: string;
   implementationOf: string;
+  childTaskIds?: string[];
 }
 
 /**

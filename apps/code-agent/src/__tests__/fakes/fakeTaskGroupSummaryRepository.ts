@@ -25,7 +25,8 @@ const ACTIVE_STATUSES = new Set(['queued', 'dispatched', 'running']);
 function hasCompletedExecutionTask(task: CodeTask): boolean {
   return (
     (task.agentType === 'execution' && (task.status === 'implemented' || task.status === 'reviewed')) ||
-    (task.agentType === 'pull_request' && task.status === 'implemented')
+    (task.agentType === 'pull_request' && task.status === 'implemented') ||
+    (task.agentType === 'review' && task.status === 'reviewed')
   );
 }
 
@@ -72,7 +73,9 @@ function computeSummaryFromTasks(
 
   const hasCompletedPlanning = tasks.some((t) => t.agentType === 'planning' && t.status === 'planned');
   const hasCompletedExecution = tasks.some((t) => hasCompletedExecutionTask(t));
-  const hasImplementationTaskId = tasks.some((t) => t.implementationTaskId !== undefined);
+  const hasImplementationTaskId = tasks.some(
+    (t) => t.implementationTaskId !== undefined || (t.fanOutChildTaskIds !== undefined && t.fanOutChildTaskIds.length > 0),
+  );
   const hasPrUrl = tasks.some((t) => t.result?.prUrl !== undefined);
   const prNumber = tasks.find((t) => t.prNumber !== undefined)?.prNumber ?? null;
 

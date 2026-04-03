@@ -8,7 +8,7 @@
 import type { Result } from '@intexuraos/common-core';
 // @allow-pino-import -- type-only import for Logger interface @preserve
 import type { Logger } from 'pino';
-import type { LinearConnectionRepository, LinearIssueRepository, LinearCommentRepository, CodeAgentClient } from '../ports.js';
+import type { LinearConnectionRepository, LinearIssueRepository, LinearCommentRepository, CodeAgentClient, LinearApiClient } from '../ports.js';
 import type { LinearWebhookUpdatedFrom } from '../webhookTypes.js';
 import { WEBHOOK_TYPES } from '../webhookTypes.js';
 import type { WebhookAction } from '../webhookTypes.js';
@@ -18,6 +18,7 @@ import { syncCommentFromWebhook } from './syncCommentFromWebhook.js';
 
 export interface ProcessWebhookDeps {
   connectionRepository: LinearConnectionRepository;
+  linearApiClient: LinearApiClient;
   issueRepository: LinearIssueRepository;
   commentRepository: LinearCommentRepository;
   codeAgentClient: CodeAgentClient;
@@ -153,6 +154,8 @@ export async function processWebhook(
       userIds.map((uid) =>
         syncSingleIssue(event, uid, {
           issueRepo: issueRepository,
+          connectionRepo: connectionRepository,
+          linearApiClient: deps.linearApiClient,
           logger,
         })
       )

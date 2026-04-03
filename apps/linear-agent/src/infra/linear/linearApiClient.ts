@@ -226,6 +226,35 @@ export function createLinearApiClient(): LinearApiClient {
       }
     },
 
+    async getDirectChildren(
+      apiKey: string,
+      issueId: string
+    ): Promise<Result<LinearIssue[] | null, LinearError>> {
+      const dedupKey = createDedupKey('getDirectChildren', apiKey.slice(0, 8), issueId);
+
+      try {
+        const mapped = await withDeduplication(dedupKey, async () => {
+          logger.info({ issueId }, 'Fetching direct child issues');
+
+          const client = getOrCreateClient(apiKey);
+          const issue = await client.issue(issueId);
+          const childrenConnection = await issue.children();
+
+          return await Promise.all(childrenConnection.nodes.map(async (child) => await mapSingleIssue(child)));
+        });
+
+        return ok(mapped);
+      } catch (error) {
+        const errorMessage = getErrorMessage(error);
+        if (errorMessage.includes('not found') || errorMessage.includes('Entity not found')) {
+          logger.info({ issueId }, 'Parent issue not found for direct child fetch');
+          return ok(null);
+        }
+        logger.error({ error, issueId }, 'Failed to fetch direct child issues');
+        return err(mapLinearError(error));
+      }
+    },
+
     async updateIssueState(
       apiKey: string,
       issueId: string,

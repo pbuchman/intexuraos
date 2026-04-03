@@ -240,6 +240,10 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
         descendants: [],
       }));
     },
+    fetchDirectChildrenLive(request): ReturnType<LinearAgentClient['fetchDirectChildrenLive']> {
+      logger.info({ issueId: request.issueId }, '[E2E] Mock live direct children fetch');
+      return Promise.resolve(ok([]));
+    },
     updateIssueMetadata(request): ReturnType<LinearAgentClient['updateIssueMetadata']> {
       logger.info(
         { issueId: request.issueId, addLabels: request.addLabels, removeLabels: request.removeLabels, assigneeId: request.assigneeId },

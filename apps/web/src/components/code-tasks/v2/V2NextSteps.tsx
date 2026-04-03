@@ -13,6 +13,7 @@ interface V2NextStepsProps {
   implementing: boolean;
   implementError: string | null;
   implementationTaskId?: string;
+  implementationTaskIds?: string[];
   selectedWorkerType: WorkerType;
   originalWorkerType: WorkerType;
   showDropdown: boolean;
@@ -30,6 +31,7 @@ export function V2NextSteps({
   implementing,
   implementError,
   implementationTaskId,
+  implementationTaskIds,
   selectedWorkerType,
   originalWorkerType,
   showDropdown,
@@ -41,19 +43,42 @@ export function V2NextSteps({
   isMergeable,
   mergeUrl,
 }: V2NextStepsProps): React.JSX.Element | null {
-  if (!isImplementable && isMergeable !== true && implementationTaskId === undefined && implementError === null) return null;
+  const effectiveImplementationTaskIds =
+    implementationTaskIds !== undefined && implementationTaskIds.length > 0
+      ? implementationTaskIds
+      : implementationTaskId !== undefined
+        ? [implementationTaskId]
+        : [];
+  const primaryImplementationTaskId = effectiveImplementationTaskIds[0];
+
+  if (!isImplementable && isMergeable !== true && effectiveImplementationTaskIds.length === 0 && implementError === null) return null;
 
   return (
     <div className="mt-4">
-      {implementationTaskId !== undefined ? (
-        <div className="flex items-center gap-3">
-          <a
-            href={`/#/code-tasks/${implementationTaskId}`}
-            className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
-          >
-            <Play className="h-4 w-4" />
-            View Implementation
-          </a>
+      {effectiveImplementationTaskIds.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-3">
+          {primaryImplementationTaskId !== undefined ? (
+            <a
+              href={`/#/code-tasks/${primaryImplementationTaskId}`}
+              className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
+            >
+              <Play className="h-4 w-4" />
+              {effectiveImplementationTaskIds.length > 1 ? 'View Primary Implementation' : 'View Implementation'}
+            </a>
+          ) : null}
+          {effectiveImplementationTaskIds.length > 1 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {effectiveImplementationTaskIds.slice(1).map((taskId, index) => (
+                <a
+                  key={taskId}
+                  href={`/#/code-tasks/${taskId}`}
+                  className="inline-flex items-center rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-emerald-900/20"
+                >
+                  {`Child ${String(index + 2)}`}
+                </a>
+              ))}
+            </div>
+          ) : null}
           {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
           {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
         </div>

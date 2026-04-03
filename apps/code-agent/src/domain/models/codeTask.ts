@@ -193,6 +193,7 @@ export interface CodeTask {
   followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement' | 'ci_failure' | 'merge_conflict';
   agentType?: AgentType;
   implementationTaskId?: string;
+  fanOutChildTaskIds?: string[];
 
   // Results
   result?: TaskResult;

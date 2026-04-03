@@ -71,6 +71,7 @@ export interface UpdateTaskInput {
   cancelNonceExpiresAt?: string | null;
   pendingUserMessages?: string[];
   implementationTaskId?: string | null;
+  fanOutChildTaskIds?: string[] | null;
   // PR correlation (INT-465): populated on task completion from result.prUrl
   prNumber?: number;
   prBranch?: string;
@@ -126,8 +127,13 @@ export interface CodeTaskRepository {
 
   update(
     taskId: string,
-    input: UpdateTaskInput
+    input: UpdateTaskInput,
+    options?: { transaction?: FirebaseFirestore.Transaction }
   ): Promise<Result<CodeTask, RepositoryError>>;
+
+  runInTransaction?<T>(
+    operation: (transaction: FirebaseFirestore.Transaction) => Promise<Result<T, RepositoryError>>
+  ): Promise<Result<T, RepositoryError>>;
 
   list(input: ListTasksInput): Promise<Result<ListTasksOutput, RepositoryError>>;
 

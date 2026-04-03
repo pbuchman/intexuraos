@@ -469,19 +469,19 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   : `partial URL extraction (${String(subtaskUrls.length)} URLs < ${String(originalIssue.childCount)} children)`;
               request.log.warn(
                 { taskId, linearIssueId: task.linearIssueId, subtaskUrlCount: subtaskUrls.length, childCount: originalIssue.childCount },
-                `Complex planning: ${reason} — falling back to fetchIssueTree`
+                `Complex planning: ${reason} — falling back to fetchDirectChildrenLive`
               );
 
-              const treeResult = await linearAgentClient.fetchIssueTree({
+              const directChildrenResult = await linearAgentClient.fetchDirectChildrenLive({
                 userId: task.userId,
                 issueId: originalIssueUuid,
               });
-              if (!treeResult.ok) {
-                return { ok: false, message: `Failed to fetch issue tree: ${treeResult.error.message}` };
+              if (!directChildrenResult.ok) {
+                return { ok: false, message: `Failed to fetch live direct children: ${directChildrenResult.error.message}` };
               }
 
-              const directChildren = treeResult.value.descendants.filter(
-                (d) => d.parentId === originalIssueUuid
+              const directChildren = directChildrenResult.value.filter(
+                (child) => child.parentId === originalIssueUuid
               );
 
               for (const child of directChildren) {

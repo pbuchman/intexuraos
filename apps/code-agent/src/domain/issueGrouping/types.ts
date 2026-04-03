@@ -47,6 +47,7 @@ export interface SerializedTask {
   linearIssueId?: string;
   agentType?: string;
   implementationTaskId?: string;
+  fanOutChildTaskIds?: string[];
   parentTaskId?: string;
   followUpReason?: string;
   prNumber?: number;

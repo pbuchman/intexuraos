@@ -60,6 +60,7 @@ export type SubmitToExecutionAgentErrorCode =
   | 'no_linear_issue'
   | 'already_implemented'
   | 'active_task_exists'
+  | 'complex_task_no_qualifying_children'
   | 'label_not_ready'
   | 'worker_not_configured'
   | 'queue_full'
@@ -194,14 +195,45 @@ export async function submitToExecutionAgent(
 
   // Step 4: Guard against duplicate implementation
   if (planningTask.implementationTaskId !== undefined) {
+    const existingTaskId = planningTask.implementationTaskId;
     logger.warn(
-      { taskId: planningTask.id, existingImplementationTaskId: planningTask.implementationTaskId },
+      {
+        taskId: planningTask.id,
+        existingImplementationTaskId: planningTask.implementationTaskId,
+        fanOutChildTaskIds: planningTask.fanOutChildTaskIds,
+      },
       'Implementation already started for this task'
     );
     return err({
       code: 'already_implemented',
       message: 'Implementation already started',
-      existingTaskId: planningTask.implementationTaskId,
+      existingTaskId,
+    });
+  }
+
+  if (planningTask.fanOutChildTaskIds !== undefined && planningTask.fanOutChildTaskIds.length > 0) {
+    const existingTaskId = planningTask.fanOutChildTaskIds[0];
+    /* v8 ignore start -- upstream: fanOutChildTaskIds.length > 0 guard above guarantees the first child task id exists here @preserve */
+    if (existingTaskId === undefined) {
+      return err({
+        code: 'already_implemented',
+        message: 'Implementation already started',
+        existingTaskId: '',
+      });
+    }
+    /* v8 ignore stop @preserve */
+    logger.warn(
+      {
+        taskId: planningTask.id,
+        existingImplementationTaskId: planningTask.implementationTaskId,
+        fanOutChildTaskIds: planningTask.fanOutChildTaskIds,
+      },
+      'Implementation already started for this task'
+    );
+    return err({
+      code: 'already_implemented',
+      message: 'Implementation already started',
+      existingTaskId,
     });
   }
 
@@ -308,6 +340,145 @@ export async function submitToExecutionAgent(
     logger.info({ planningPrUrl }, 'Plan PR merged into development — proceeding with execution task creation');
   }
 
+  // Resolution chain: Linear label > explicit request > user setting > 'auto'
+  const labelWorkerType = getWorkerTypeFromLabels(freshLabels);
+  let effectiveWorkerType: WorkerType = labelWorkerType ?? workerType ?? 'auto';
+  if (effectiveWorkerType === 'auto') {
+    if (settings?.defaultExecutionWorkerType !== undefined) {
+      effectiveWorkerType = settings.defaultExecutionWorkerType;
+      logger.info({ userId, defaultExecutionWorkerType: effectiveWorkerType }, 'Using user default execution worker type');
+    }
+  }
+
+  if (isComplexTask) {
+    const directChildrenResult = await linearAgentClient.fetchDirectChildrenLive({
+      userId,
+      issueId: validateResult.value.id,
+    });
+
+    if (!directChildrenResult.ok) {
+      logger.error(
+        { linearIssueId, issueId: validateResult.value.id, error: directChildrenResult.error },
+        'Failed to fetch live direct children for complex task',
+      );
+      return err({
+        code: 'internal_error',
+        message: 'Failed to fetch child issues for complex implementation',
+      });
+    }
+
+    const directChildren = directChildrenResult.value.filter((child) => child.parentId === validateResult.value.id);
+    if (directChildren.length === 0) {
+      logger.warn({ linearIssueId, issueId: validateResult.value.id }, 'Complex task has no live direct children');
+      return err({
+        code: 'complex_task_no_qualifying_children',
+        message: 'Complex task has no direct child issues with code-task label',
+      });
+    }
+
+    logger.info(
+      { linearIssueId, issueId: validateResult.value.id, childIdentifiers: directChildren.map((child) => child.identifier) },
+      'Complex task detected, triggering live child fan-out',
+    );
+
+    const fanOutResult = await fanOutChildTasks(
+      { logger, codeTaskRepo, taskEnqueueService, orchestratorSecret: deps.orchestratorSecret },
+      {
+        planningTask,
+        userId,
+        childIssues: directChildren,
+        workerType: effectiveWorkerType,
+      },
+    );
+
+    if (!fanOutResult.ok) {
+      if (fanOutResult.error.code === 'no_qualifying_children') {
+        return err({
+          code: 'complex_task_no_qualifying_children',
+          message: fanOutResult.error.message,
+        });
+      }
+      if (fanOutResult.error.code === 'queue_full') {
+        return err({
+          code: 'queue_full',
+          message: fanOutResult.error.message,
+        });
+      }
+      logger.error({ linearIssueId, error: fanOutResult.error }, 'Complex task fan-out failed');
+      return err({ code: 'internal_error', message: `Fan-out failed: ${fanOutResult.error.message}` });
+    }
+
+    const webUrl = process.env['INTEXURAOS_WEB_URL'] ?? 'https://intexuraos.cloud';
+    const qualifyingChildren = directChildren
+      .filter((child) => hasCodeTaskLabel(child.labels))
+      .sort((a, b) => a.identifier.localeCompare(b.identifier));
+
+    const updateParentIssueResult = await linearAgentClient.updateIssueState({
+      userId,
+      issueId: linearIssueId,
+      state: 'in_progress',
+    });
+    if (!updateParentIssueResult.ok) {
+      logger.warn(
+        { linearIssueId, error: updateParentIssueResult.error },
+        'Failed to update parent Linear issue to In Progress for complex execution',
+      );
+    }
+
+    const childTaskLines = qualifyingChildren.map((child, index) => {
+      const taskId = fanOutResult.value.childTaskIds[index];
+      return taskId !== undefined
+        ? `- ${child.identifier}: [${taskId}](${webUrl}/#/code-tasks/${taskId})`
+        : `- ${child.identifier}`;
+    }).join('\n');
+
+    const parentCommentResult = await linearAgentClient.addComment({
+      userId,
+      issueId: linearIssueId,
+      body: `🚀 **Execution Agent implementation started for child tasks**
+
+**Design task:** [${planningTask.id}](${webUrl}/#/code-tasks/${planningTask.id})
+**Child implementation tasks:**
+${childTaskLines}`,
+    });
+    if (!parentCommentResult.ok) {
+      logger.warn(
+        { linearIssueId, error: parentCommentResult.error },
+        'Failed to add complex Execution Agent start comment to parent Linear issue',
+      );
+    }
+
+    await Promise.all(
+      qualifyingChildren.map(async (child, index) => {
+        await linearAgentClient.updateIssueState({
+          userId,
+          issueId: child.identifier,
+          state: 'in_progress',
+        }).catch(() => undefined);
+        const childTaskId = fanOutResult.value.childTaskIds[index];
+        if (childTaskId === undefined) {
+          return;
+        }
+        await linearAgentClient.addComment({
+          userId,
+          issueId: child.identifier,
+          body: `🚀 **Execution Agent implementation started**
+
+**Design task:** [${planningTask.id}](${webUrl}/#/code-tasks/${planningTask.id})
+**Implementation task:** [${childTaskId}](${webUrl}/#/code-tasks/${childTaskId})`,
+        }).catch(() => undefined);
+      }),
+    );
+
+    return ok({
+      codeTaskId: fanOutResult.value.primaryChildTaskId,
+      resourceUrl: `/#/code-tasks/${fanOutResult.value.primaryChildTaskId}`,
+      workerLocation: 'queued' as WorkerLocation,
+      implementationOf: planningTask.id,
+      childTaskIds: fanOutResult.value.childTaskIds,
+    });
+  }
+
   // Step 9: SET implementationTaskId on planning task BEFORE dispatch (optimistic lock)
   const executionTaskId = `task_${randomUUID()}`;
 
@@ -324,15 +495,6 @@ export async function submitToExecutionAgent(
   }
 
   // Step 10: Create the Execution Agent task
-  // Resolution chain: Linear label > explicit request > user setting > 'auto'
-  const labelWorkerType = getWorkerTypeFromLabels(freshLabels);
-  let effectiveWorkerType: WorkerType = labelWorkerType ?? workerType ?? 'auto';
-  if (effectiveWorkerType === 'auto') {
-    if (settings?.defaultExecutionWorkerType !== undefined) {
-      effectiveWorkerType = settings.defaultExecutionWorkerType;
-      logger.info({ userId, defaultExecutionWorkerType: effectiveWorkerType }, 'Using user default execution worker type');
-    }
-  }
   const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, executionTaskId);
   const createInput = {
     id: executionTaskId,
@@ -410,44 +572,7 @@ export async function submitToExecutionAgent(
     );
   }
 
-  // Step 12: Complex-task fan-out or normal enqueue
-  if (isComplexTask) {
-    logger.info({ linearIssueId, executionTaskId }, 'Complex task detected, triggering fan-out of child tasks');
-
-    const fanOutResult = await fanOutChildTasks(
-      { logger, codeTaskRepo, linearAgentClient, taskEnqueueService, orchestratorSecret: deps.orchestratorSecret },
-      {
-        parentTask: executionTask,
-        userId,
-        linearIssueId,
-        parentIssueUuid: validateResult.value.id,
-      },
-    );
-
-    if (!fanOutResult.ok) {
-      logger.error(
-        { linearIssueId, error: fanOutResult.error },
-        'Fan-out failed for complex task, rolling back'
-      );
-      await codeTaskRepo.update(planningTask.id, { implementationTaskId: null });
-      return err({ code: 'internal_error', message: `Fan-out failed: ${fanOutResult.error.message}` });
-    }
-
-    logger.info(
-      { executionTaskId, childTaskIds: fanOutResult.value.childTaskIds },
-      'Complex task fan-out completed'
-    );
-
-    return ok({
-      codeTaskId: executionTaskId,
-      resourceUrl: `/#/code-tasks/${executionTaskId}`,
-      workerLocation: 'queued' as WorkerLocation,
-      implementationOf: planningTask.id,
-      childTaskIds: fanOutResult.value.childTaskIds,
-    });
-  }
-
-  // Step 12b: Normal enqueue for single tasks
+  // Step 12: Normal enqueue for single tasks
   const enqueueResult = await taskEnqueueService.enqueue({
     taskId: executionTaskId,
     userId,
