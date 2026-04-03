@@ -852,3 +852,126 @@ describe('WorktreeManager - git stderr error handling', () => {
     await expect(manager.removeWorktree('task-remove-empty')).resolves.toBeUndefined();
   });
 });
+
+describe('LINEAR_MCP_TIMEOUT_MS constant', () => {
+  it('should export 60000ms timeout for Linear MCP server', async () => {
+    const { LINEAR_MCP_TIMEOUT_MS } = await import('../services/worktree-manager.js');
+    expect(LINEAR_MCP_TIMEOUT_MS).toBe(60_000);
+  });
+});
+
+describe('WorktreeManager - timeout evidence logging', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'timeout-logging-test-'));
+  const repoPath = join(tempDir, 'repo');
+  const worktreeBasePath = join(tempDir, 'worktrees');
+  const mcpConfigTemplatePath = join(tempDir, 'mcp-template.json');
+
+  const mockConfig = {
+    repositoryPath: repoPath,
+    worktreeBasePath,
+    mcpConfigTemplatePath,
+  };
+
+  let mockLoggerWithSpies: Logger;
+
+  beforeEach(async () => {
+    mockExecAsyncImpl = defaultExecAsync;
+    mkdirSync(tempDir, { recursive: true });
+    mkdirSync(repoPath, { recursive: true });
+
+    // Create MCP config template with {{PLACEHOLDER}} syntax
+    const template = JSON.stringify({
+      linear: { apiKey: '{{LINEAR_API_KEY}}', timeoutMs: 60_000 },
+      sentry: { authToken: '{{SENTRY_AUTH_TOKEN}}' },
+    });
+    writeFileSync(mcpConfigTemplatePath, template, 'utf-8');
+
+    // Fresh logger per test
+    mockLoggerWithSpies = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    };
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('should log MCP timeout evidence after MCP config copy', async () => {
+    process.env['INTEXURAOS_LINEAR_API_KEY'] = 'test-linear-key';
+    process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'] = 'test-sentry-token';
+
+    vi.resetModules();
+    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+    const manager = new WM(mockConfig, mockLoggerWithSpies);
+
+    await manager.createWorktree('task-timeout-log', 'feature-branch');
+
+    const infoSpy = vi.mocked(mockLoggerWithSpies.info);
+    expect(infoSpy).toHaveBeenCalledWith(
+      { timeoutMs: 60_000, server: 'linear' },
+      expect.stringContaining('MCP timeout')
+    );
+    expect(infoSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ server: 'linear' }),
+      expect.stringContaining('server=linear')
+    );
+
+    delete process.env['INTEXURAOS_LINEAR_API_KEY'];
+    delete process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
+  });
+
+  it('should log MCP timeout evidence even without MCP config template', async () => {
+    vi.resetModules();
+    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+    const manager = new WM(
+      { ...mockConfig, mcpConfigTemplatePath: join(tempDir, 'non-existent.json') },
+      mockLoggerWithSpies
+    );
+
+    await manager.createWorktree('task-no-template-timeout', 'feature-branch');
+
+    const infoSpy = vi.mocked(mockLoggerWithSpies.info);
+    expect(infoSpy).toHaveBeenCalledWith(
+      { timeoutMs: 60_000, server: 'linear' },
+      expect.stringContaining('MCP timeout')
+    );
+  });
+
+  it('should include server=linear in log message', async () => {
+    vi.resetModules();
+    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+    const manager = new WM(mockConfig, mockLoggerWithSpies);
+
+    await manager.createWorktree('task-server-check', 'feature-branch');
+
+    const infoSpy = vi.mocked(mockLoggerWithSpies.info);
+    const timeoutLogCall = infoSpy.mock.calls.find(
+      (call) => typeof call[1] === 'string' && call[1].includes('server=linear')
+    );
+    expect(timeoutLogCall).toBeDefined();
+    expect(timeoutLogCall?.[0]).toEqual(
+      expect.objectContaining({ server: 'linear', timeoutMs: 60_000 })
+    );
+  });
+
+  it('should use the correct timeout value in logging', async () => {
+    vi.resetModules();
+    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+    const manager = new WM(mockConfig, mockLoggerWithSpies);
+
+    await manager.createWorktree('task-value-check', 'feature-branch');
+
+    const infoSpy = vi.mocked(mockLoggerWithSpies.info);
+    const timeoutLogCall = infoSpy.mock.calls.find(
+      (call) =>
+        typeof call[0] === 'object' &&
+        call[0] !== null &&
+        (call[0] as Record<string, unknown>)['server'] === 'linear'
+    );
+    expect(timeoutLogCall).toBeDefined();
+    expect(timeoutLogCall?.[0]).toEqual(expect.objectContaining({ timeoutMs: 60_000 }));
+  });
+});
