@@ -1066,6 +1066,27 @@ export class TaskDispatcher {
 
     // Verification passed
     if (verification.passed && verification.agentData !== undefined) {
+      // Non-zero exit code overrides verifier passed decision
+      if (exitCode !== undefined && exitCode !== 0) {
+        this.appendOrchestratorTaskLog(
+          task.taskId,
+          `Non-zero exit code (${String(exitCode)}) overrides verifier passed decision`
+        );
+        await this.flushTaskLogs(task.taskId);
+        await this.collectTurnMetrics(task, attempt);
+        await this.teardownAttempt(task.taskId, false);
+        const error: TaskError = {
+          code: 'TASK_EXIT_CODE_OVERRIDE',
+          message: `Non-zero exit code (${String(exitCode)}) overrides verifier passed decision`,
+          remediation: { action: 'retry' },
+        };
+        await this.finalizeTask(task, 'failed', {
+          ...(result !== undefined && { result }),
+          error,
+        });
+        return;
+      }
+
       const pendingQueue = this.pendingMessages.get(task.taskId);
       if (pendingQueue !== undefined && pendingQueue.length > 0) {
         this.pendingMessages.delete(task.taskId);
