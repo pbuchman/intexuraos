@@ -1165,8 +1165,8 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "oldestTaskCreatedAt",
-          "order": "ASCENDING"
+          "fieldPath": "latestTaskUpdatedAt",
+          "order": "DESCENDING"
         }
       ]
     },

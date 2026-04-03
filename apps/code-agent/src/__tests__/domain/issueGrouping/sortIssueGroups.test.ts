@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { IssueGroup, PipelineState, SerializedTask } from '../../../domain/issueGrouping/index.js';
-import { parseLinearIssueNumber, sortIssueGroups, comparePrNumber, compareStartedTime } from '../../../domain/issueGrouping/index.js';
+import { parseLinearIssueNumber, sortIssueGroups, comparePrNumber, compareDispatched } from '../../../domain/issueGrouping/index.js';
 
 function makeTask(overrides: Partial<SerializedTask> & { id: string }): SerializedTask {
   return {
@@ -150,15 +150,15 @@ describe('sortIssueGroups', () => {
     });
   });
 
-  describe('sort by created-time', () => {
-    it('sorts by latestTask.createdAt desc', () => {
+  describe('sort by last-updated', () => {
+    it('sorts by latestTask.updatedAt desc', () => {
       const groups = [
-        makeGroup({ latestTask: makeTask({ id: 't1', createdAt: '2026-03-01T10:00:00.000Z' }) }),
-        makeGroup({ latestTask: makeTask({ id: 't2', createdAt: '2026-03-10T10:00:00.000Z' }) }),
-        makeGroup({ latestTask: makeTask({ id: 't3', createdAt: '2026-03-05T10:00:00.000Z' }) }),
+        makeGroup({ latestTask: makeTask({ id: 't1', updatedAt: '2026-03-01T10:00:00.000Z' }) }),
+        makeGroup({ latestTask: makeTask({ id: 't2', updatedAt: '2026-03-10T10:00:00.000Z' }) }),
+        makeGroup({ latestTask: makeTask({ id: 't3', updatedAt: '2026-03-05T10:00:00.000Z' }) }),
       ];
 
-      const sorted = sortIssueGroups(groups, 'created-time');
+      const sorted = sortIssueGroups(groups, 'last-updated');
 
       expect(sorted[0]?.latestTask.id).toBe('t2');
       expect(sorted[1]?.latestTask.id).toBe('t3');
@@ -166,7 +166,7 @@ describe('sortIssueGroups', () => {
     });
   });
 
-  describe('sort by started-time', () => {
+  describe('sort by dispatched', () => {
     it('sorts groups with dispatchedAt first, then by createdAt', () => {
       const groups = [
         makeGroup({
@@ -182,7 +182,7 @@ describe('sortIssueGroups', () => {
         }),
       ];
 
-      const sorted = sortIssueGroups(groups, 'started-time');
+      const sorted = sortIssueGroups(groups, 'dispatched');
 
       expect(sorted[0]?.latestTask.id).toBe('t3');
       expect(sorted[1]?.latestTask.id).toBe('t2');
@@ -195,14 +195,14 @@ describe('sortIssueGroups', () => {
         makeGroup({ latestTask: makeTask({ id: 't2', createdAt: '2026-03-05T10:00:00.000Z' }) }),
       ];
 
-      const sorted = sortIssueGroups(groups, 'started-time');
+      const sorted = sortIssueGroups(groups, 'dispatched');
 
       expect(sorted[0]?.latestTask.id).toBe('t2');
       expect(sorted[1]?.latestTask.id).toBe('t1');
     });
   });
 
-  describe('sort by started-time (additional branches)', () => {
+  describe('sort by dispatched (additional branches)', () => {
     it('exercises both aDispatched and bDispatched branches with 3 groups', () => {
       // With 3 groups (2 with dispatchedAt, 1 without), the sort comparator
       // ensures both `aDispatched !== undefined` and `bDispatched !== undefined` branches are hit.
@@ -220,7 +220,7 @@ describe('sortIssueGroups', () => {
         }),
       ];
 
-      const sorted = sortIssueGroups(groups, 'started-time');
+      const sorted = sortIssueGroups(groups, 'dispatched');
 
       expect(sorted[0]?.latestTask.id).toBe('t-late');
       expect(sorted[1]?.latestTask.id).toBe('t-early');
@@ -300,7 +300,7 @@ describe('sortIssueGroups', () => {
     });
   });
 
-  describe('sort by started-time (all comparator branches)', () => {
+  describe('sort by dispatched (all comparator branches)', () => {
     it('exercises bDispatched-only branch when first element has no dispatch', () => {
       // 3 elements: [noDispatch-1, noDispatch-2, withDispatch] — ensures both
       // (a=noDispatch, b=withDispatch) and (a=noDispatch, b=noDispatch) are hit.
@@ -317,7 +317,7 @@ describe('sortIssueGroups', () => {
         }),
       ];
 
-      const sorted = sortIssueGroups(groups, 'started-time');
+      const sorted = sortIssueGroups(groups, 'dispatched');
 
       // Dispatched group first, then noDispatch groups sorted by createdAt desc
       expect(sorted[0]?.latestTask.id).toBe('t-dispatched');
@@ -373,28 +373,28 @@ describe('comparePrNumber (direct comparator)', () => {
   });
 });
 
-describe('compareStartedTime (direct comparator)', () => {
+describe('compareDispatched (direct comparator)', () => {
   it('sorts by dispatchedAt desc when both have it', () => {
     const a = makeGroup({ mostRecentDispatchedAt: '2026-03-01T10:00:00.000Z' });
     const b = makeGroup({ mostRecentDispatchedAt: '2026-03-05T10:00:00.000Z' });
-    expect(compareStartedTime(a, b)).toBeGreaterThan(0);
+    expect(compareDispatched(a, b)).toBeGreaterThan(0);
   });
 
   it('returns -1 when only a has dispatchedAt', () => {
     const a = makeGroup({ mostRecentDispatchedAt: '2026-03-01T10:00:00.000Z' });
     const b = makeGroup({});
-    expect(compareStartedTime(a, b)).toBe(-1);
+    expect(compareDispatched(a, b)).toBe(-1);
   });
 
   it('returns 1 when only b has dispatchedAt', () => {
     const a = makeGroup({ latestTask: makeTask({ id: 't1', createdAt: '2026-03-01T10:00:00.000Z' }) });
     const b = makeGroup({ mostRecentDispatchedAt: '2026-03-05T10:00:00.000Z', latestTask: makeTask({ id: 't2', createdAt: '2026-03-01T10:00:00.000Z' }) });
-    expect(compareStartedTime(a, b)).toBe(1);
+    expect(compareDispatched(a, b)).toBe(1);
   });
 
   it('falls back to createdAt when neither has dispatchedAt', () => {
     const a = makeGroup({ latestTask: makeTask({ id: 't1', createdAt: '2026-03-01T10:00:00.000Z' }) });
     const b = makeGroup({ latestTask: makeTask({ id: 't2', createdAt: '2026-03-05T10:00:00.000Z' }) });
-    expect(compareStartedTime(a, b)).toBeGreaterThan(0);
+    expect(compareDispatched(a, b)).toBeGreaterThan(0);
   });
 });

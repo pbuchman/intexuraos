@@ -5,7 +5,7 @@
 
 export type GroupStatus = 'active' | 'needs-action' | 'done' | 'failed';
 export type StepState = 'completed' | 'running' | 'dispatched' | 'queued' | 'failed' | 'waiting' | 'actionable';
-export type SortOption = 'linear-id' | 'pr-number' | 'created-time' | 'started-time';
+export type SortOption = 'linear-id' | 'pr-number' | 'dispatched' | 'last-updated';
 
 export interface PipelineStepData {
   agentType: string;

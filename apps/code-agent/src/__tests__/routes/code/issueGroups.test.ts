@@ -623,8 +623,8 @@ describe('GET /code/issue-groups', () => {
     expect(issueIds).toEqual(['INT-701', 'INT-702', 'INT-700']);
   });
 
-  it('sorts by created-time when requested', async () => {
-    // Create tasks in order; created-time sort should be newest first
+  it('sorts by last-updated when requested', async () => {
+    // Create tasks in order; last-updated sort should be newest first
     const r1 = await codeTaskRepo.create(makeTaskInput({ linearIssueId: 'INT-800', traceId: 'trace-ct1' }));
     expect(r1.ok).toBe(true);
     if (!r1.ok) return;
@@ -643,14 +643,14 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups?sortBy=created-time',
+      url: '/code/issue-groups?sortBy=last-updated',
       headers: { authorization: 'Bearer test-token' },
     });
 
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body) as { data: { groups: { linearIssueId: string | null }[] } };
     const issueIds = body.data.groups.map((g) => g.linearIssueId);
-    // sortIssueGroups applies createdAt desc; INT-801 created after INT-800
+    // sortIssueGroups applies updatedAt desc; INT-801 updated after INT-800
     // so INT-801 correctly appears first (coincides with linear-id desc: 801 > 800)
     expect(issueIds).toEqual(['INT-801', 'INT-800']);
   });
@@ -1152,10 +1152,10 @@ describe('GET /code/issue-groups', () => {
     expect(group?.tasks[0]?.linearIssue).toBeUndefined();
   });
 
-  it('accepts sortBy=started-time and returns groups', async () => {
-    // Covers route accepting started-time sort option
+  it('accepts sortBy=dispatched and returns groups', async () => {
+    // Covers route accepting dispatched sort option
     // Note: dispatchedAt cannot be set via FakeFirestore update (Timestamp/FieldValue.delete conflict),
-    // so the sort falls back to createdAt. This still exercises the started-time code path.
+    // so the sort falls back to createdAt. This still exercises the dispatched code path.
     const r1 = await codeTaskRepo.create(makeTaskInput({ linearIssueId: 'INT-1700', traceId: 'trace-started1' }));
     expect(r1.ok).toBe(true);
     if (!r1.ok) return;
@@ -1174,13 +1174,13 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups?sortBy=started-time',
+      url: '/code/issue-groups?sortBy=dispatched',
       headers: { authorization: 'Bearer test-token' },
     });
 
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body) as { data: { groups: { linearIssueId: string | null }[] } };
-    // Both groups should be returned (falls back to createdAt sort since no dispatchedAt)
+    // Both groups should be returned (falls back to createdAt sort since no dispatchedAt in dispatched sort)
     expect(body.data.groups.length).toBe(2);
   });
 
