@@ -55,6 +55,7 @@ function makeLinearAgentClient(): LinearAgentClient {
     generateTitle: (req) => Promise.resolve(ok({ title: req.description.slice(0, 80), issueType: 'feature' })),
     addComment: () => Promise.resolve(ok({ commentId: 'c1' })),
     fetchIssueTree: (req) => Promise.resolve(ok({ root: { id: req.issueId, identifier: `INT-${req.issueId}`, url: `https://linear.app/${req.issueId}`, parentId: null, labels: [], assigneeId: null, state: 'Backlog' }, descendants: [] })),
+    fetchDirectChildrenLive: () => Promise.resolve(ok([])),
     updateIssueMetadata: () => Promise.resolve(ok({ droppedLabels: [] })),
     fetchIssueForDisplay: (req) => Promise.resolve(ok({ identifier: req.identifier, parentIdentifier: null, title: `Mock ${req.identifier}`, state: { name: 'In Progress', type: 'started' }, priority: 2, assignee: null, labels: [], url: `https://linear.app/${req.identifier}`, commentCount: 0, lastCommentAt: null })),
     fetchIssuesForDisplay: (req) => Promise.resolve(ok(req.identifiers.map((identifier) => ({
@@ -800,7 +801,7 @@ describe('GET /code/issue-groups', () => {
     expect(response.statusCode).toBe(401);
   });
 
-  it('serializes tasks with agentType, implementationTaskId, prNumber, and result fields', async () => {
+  it('serializes tasks with agentType, implementationTaskId, fanOutChildTaskIds, prNumber, and result fields', async () => {
     // Covers items 12-14: taskToSerializedTask optional field conditionals
     // Note: dispatchedAt (item 11) cannot be tested here because the fake Firestore's
     // update() treats Timestamp objects as FieldValue.delete() sentinels (they both have isEqual).
@@ -816,6 +817,7 @@ describe('GET /code/issue-groups', () => {
     await codeTaskRepo.update(r1.value.id, {
       status: 'implemented',
       implementationTaskId: 'task-impl-1',
+      fanOutChildTaskIds: ['task-child-1', 'task-child-2'],
       prNumber: 42,
       result: { prUrl: 'https://github.com/org/repo/pull/42' },
     });
@@ -837,6 +839,7 @@ describe('GET /code/issue-groups', () => {
           tasks: {
             agentType?: string;
             implementationTaskId?: string;
+            fanOutChildTaskIds?: string[];
             prNumber?: number;
             result?: { prUrl?: string };
             createdAt: string;
@@ -851,6 +854,7 @@ describe('GET /code/issue-groups', () => {
     expect(task).toBeDefined();
     expect(task?.agentType).toBe('execution');
     expect(task?.implementationTaskId).toBe('task-impl-1');
+    expect(task?.fanOutChildTaskIds).toEqual(['task-child-1', 'task-child-2']);
     expect(task?.prNumber).toBe(42);
     expect(task?.result?.prUrl).toBe('https://github.com/org/repo/pull/42');
     expect(task?.createdAt).toBeDefined();

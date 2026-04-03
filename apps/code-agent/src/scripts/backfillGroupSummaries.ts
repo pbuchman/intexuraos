@@ -115,7 +115,10 @@ function computeSummaryFromTasks(
       hasCompletedExecution = true;
     }
 
-    if (task.implementationTaskId !== undefined) {
+    if (
+      task.implementationTaskId !== undefined ||
+      (task.fanOutChildTaskIds !== undefined && task.fanOutChildTaskIds.length > 0)
+    ) {
       hasImplementationTaskId = true;
     }
 

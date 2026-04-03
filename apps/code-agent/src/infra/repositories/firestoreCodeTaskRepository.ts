@@ -411,11 +411,14 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
     update: async (
       taskId: string,
-      input: UpdateTaskInput
+      input: UpdateTaskInput,
+      options?: { transaction?: FirebaseFirestore.Transaction }
     ): Promise<Result<CodeTask, RepositoryError>> => {
       try {
         const docRef = collection.doc(taskId);
-        const doc = await docRef.get();
+        const doc = options?.transaction !== undefined
+          ? await options.transaction.get(docRef)
+          : await docRef.get();
 
         if (!doc.exists) {
           return err({
@@ -486,6 +489,11 @@ export const createFirestoreCodeTaskRepository = (deps: {
             ? FieldValue.delete()
             : input.implementationTaskId;
         }
+        if (input.fanOutChildTaskIds !== undefined) {
+          updateData['fanOutChildTaskIds'] = input.fanOutChildTaskIds === null
+            ? FieldValue.delete()
+            : input.fanOutChildTaskIds;
+        }
         if (input.prNumber !== undefined) {
           updateData['prNumber'] = input.prNumber;
         }
@@ -516,10 +524,16 @@ export const createFirestoreCodeTaskRepository = (deps: {
           updateData['requiresReReview'] = input.requiresReReview;
         }
 
-        await docRef.update(updateData);
+        if (options?.transaction !== undefined) {
+          options.transaction.update(docRef, updateData);
+        } else {
+          await docRef.update(updateData);
+        }
 
         // Fetch updated document
-        const updatedDoc = await docRef.get();
+        const updatedDoc = options?.transaction !== undefined
+          ? await options.transaction.get(docRef)
+          : await docRef.get();
         return ok(toCodeTask(updatedDoc as { id: string; data(): Record<string, unknown> }));
       } catch (error) {
         logger.error({ error, taskId, input }, 'Failed to update task');
@@ -974,14 +988,31 @@ export const createFirestoreCodeTaskRepository = (deps: {
         const doc = snapshot.docs[0]!;
         const task = toCodeTask(doc as { id: string; data(): Record<string, unknown> });
 
-        // Only return if implementationTaskId is not already set
-        if (task.implementationTaskId !== undefined) {
+        // Only return if implementation has not already been launched
+        if (
+          task.implementationTaskId !== undefined ||
+          (task.fanOutChildTaskIds !== undefined && task.fanOutChildTaskIds.length > 0)
+        ) {
           return ok(null);
         }
 
         return ok(task);
       } catch (error) {
         logger.error({ error, linearIssueId }, 'Failed to find planned task by Linear issue');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    runInTransaction: async <T>(
+      operation: (transaction: FirebaseFirestore.Transaction) => Promise<Result<T, RepositoryError>>
+    ): Promise<Result<T, RepositoryError>> => {
+      try {
+        return await firestore.runTransaction(async (transaction) => await operation(transaction));
+      } catch (error) {
+        logger.error({ error }, 'Failed to run repository transaction');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,

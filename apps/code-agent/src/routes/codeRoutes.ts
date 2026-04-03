@@ -179,6 +179,7 @@ const codeTaskSchema = {
     agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request', 'review'] },
     prNumber: { type: 'number', nullable: true },
     implementationTaskId: { type: 'string' },
+    fanOutChildTaskIds: { type: 'array', items: { type: 'string' } },
     parentTaskId: { type: 'string' },
     followUpReason: { type: 'string' },
     result: {
@@ -282,6 +283,7 @@ function taskToApiResponse(task: {
   prNumber?: number;
   agentType?: AgentType;
   implementationTaskId?: string;
+  fanOutChildTaskIds?: string[];
   parentTaskId?: string;
   followUpReason?: string;
   result?: {
@@ -335,6 +337,7 @@ function taskToApiResponse(task: {
   prNumber?: number;
   agentType?: AgentType;
   implementationTaskId?: string;
+  fanOutChildTaskIds?: string[];
   parentTaskId?: string;
   followUpReason?: string;
   result?: {
@@ -450,6 +453,7 @@ function taskToApiResponse(task: {
     ...(task.prNumber !== undefined && { prNumber: task.prNumber }),
     ...(task.agentType !== undefined && { agentType: task.agentType }),
     ...(task.implementationTaskId !== undefined && { implementationTaskId: task.implementationTaskId }),
+    ...(task.fanOutChildTaskIds !== undefined && { fanOutChildTaskIds: task.fanOutChildTaskIds }),
     ...(task.parentTaskId !== undefined && { parentTaskId: task.parentTaskId }),
     ...(task.followUpReason !== undefined && { followUpReason: task.followUpReason }),
     ...(task.result !== undefined && { result: task.result }),
@@ -3140,6 +3144,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                   resourceUrl: { type: 'string' },
                   workerLocation: { type: 'string' },
                   implementationOf: { type: 'string' },
+                  childTaskIds: { type: 'array', items: { type: 'string' } },
                 },
               },
             },
@@ -3200,6 +3205,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           case 'no_linear_issue':
           case 'label_not_ready':
             return await reply.fail('INVALID_REQUEST', error.message, undefined, { serverCode: error.code });
+          case 'complex_task_no_qualifying_children':
+            return await reply.fail('CONFLICT', error.message, undefined, { serverCode: error.code });
           case 'worker_not_configured':
             return await reply.fail('WORKER_NOT_CONFIGURED', error.message);
           case 'already_implemented':
@@ -3838,6 +3845,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                   resourceUrl: { type: 'string' },
                   workerLocation: { type: 'string' },
                   implementationOf: { type: 'string' },
+                  childTaskIds: { type: 'array', items: { type: 'string' } },
                 },
               },
             },
@@ -3978,6 +3986,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           case 'no_linear_issue':
           case 'label_not_ready':
             return reply.fail('INVALID_REQUEST', error.message, undefined, { serverCode: error.code });
+          case 'complex_task_no_qualifying_children':
+            return reply.fail('CONFLICT', error.message, undefined, { serverCode: error.code });
           case 'worker_not_configured':
             return reply.fail('WORKER_NOT_CONFIGURED', error.message);
           case 'already_implemented':

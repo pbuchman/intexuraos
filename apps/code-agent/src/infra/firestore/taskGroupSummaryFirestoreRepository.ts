@@ -67,7 +67,8 @@ function computeReviewNeedsRemediation(task: CodeTask): boolean | null {
 function hasCompletedExecutionTask(task: CodeTask): boolean {
   return (
     (task.agentType === 'execution' && (task.status === 'implemented' || task.status === 'reviewed')) ||
-    (task.agentType === 'pull_request' && task.status === 'implemented')
+    (task.agentType === 'pull_request' && task.status === 'implemented') ||
+    (task.agentType === 'review' && task.status === 'reviewed')
   );
 }
 
@@ -188,7 +189,7 @@ function buildInitialSummary(task: CodeTask, now: Timestamp): Omit<TaskGroupSumm
   const hasPrUrl = task.result?.prUrl !== undefined;
   const hasCompletedPlanning = task.agentType === 'planning' && task.status === 'planned';
   const hasCompletedExecution = hasCompletedExecutionTask(task);
-  const hasImplementationTaskId = task.implementationTaskId !== undefined;
+  const hasImplementationTaskId = hasImplementationLink(task);
   const latestReviewNeedsRemediation = computeReviewNeedsRemediation(task);
   const prNumber = hasPrUrl && task.prNumber !== undefined ? task.prNumber : null;
   const mostRecentDispatchedAt = task.dispatchedAt !== undefined ? toTimestamp(task.dispatchedAt) : null;
@@ -212,6 +213,10 @@ function buildInitialSummary(task: CodeTask, now: Timestamp): Omit<TaskGroupSumm
     mostRecentDispatchedAt,
     updatedAt: now,
   };
+}
+
+function hasImplementationLink(task: CodeTask): boolean {
+  return task.implementationTaskId !== undefined || (task.fanOutChildTaskIds !== undefined && task.fanOutChildTaskIds.length > 0);
 }
 
 /**
@@ -328,8 +333,8 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
             if (hasCompletedExecutionTask(task)) {
               updated.hasCompletedExecution = true;
             }
-            /* v8 ignore start -- ts-type: FakeFirestore cannot produce a task where implementationTaskId is undefined when the branch is already covered; v8 undercounts false-branch due to optional-chaining transpilation in ESM @preserve */
-            if (task.implementationTaskId !== undefined) {
+            /* v8 ignore start -- ts-type: FakeFirestore cannot produce a task where implementationTaskId/fanOutChildTaskIds are absent when the branch is already covered; v8 undercounts false-branch due to optional-chaining transpilation in ESM @preserve */
+            if (hasImplementationLink(task)) {
               updated.hasImplementationTaskId = true;
             }
             /* v8 ignore stop @preserve */
@@ -437,7 +442,7 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
           if (hasCompletedExecutionTask(newTask)) {
             updated.hasCompletedExecution = true;
           }
-          if (newTask.implementationTaskId !== undefined) {
+          if (hasImplementationLink(newTask)) {
             updated.hasImplementationTaskId = true;
           }
           if (newTask.result?.prUrl !== undefined) {
@@ -711,7 +716,7 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
           if (hasCompletedExecutionTask(task)) {
             hasCompletedExecution = true;
           }
-          if (task.implementationTaskId !== undefined) {
+          if (hasImplementationLink(task)) {
             hasImplementationTaskId = true;
           }
           if (task.result?.prUrl !== undefined) {

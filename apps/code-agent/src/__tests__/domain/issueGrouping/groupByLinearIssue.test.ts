@@ -185,6 +185,36 @@ describe('groupByLinearIssue', () => {
     expect(groups[0]?.linearIssueId).toBe('INT-200');
     expect(groups[1]?.linearIssueId).toBe('INT-100');
   });
+
+  it('does not add an actionable execution step when planning task already fanned out to child tasks', () => {
+    const tasks = [
+      makeTask({
+        id: 'task-1',
+        linearIssueId: 'INT-100',
+        status: 'planned',
+        agentType: 'planning',
+        fanOutChildTaskIds: ['task-child-1', 'task-child-2'],
+        linearIssue: {
+          identifier: 'INT-100',
+          title: 'Test',
+          state: { name: 'In Progress', type: 'started' },
+          priority: 1,
+          assignee: null,
+          labels: [{ name: 'ready-to-implement' }],
+          url: 'https://linear.app/INT-100',
+          commentCount: 0,
+          lastCommentAt: null,
+        },
+      }),
+    ];
+
+    const pipeline = derivePipeline(tasks);
+
+    expect(pipeline.steps).toEqual([
+      expect.objectContaining({ agentType: 'planning', state: 'completed' }),
+    ]);
+    expect(pipeline.steps.some((step) => step.agentType === 'execution' && step.state === 'actionable')).toBe(false);
+  });
 });
 
 describe('deriveAggregateStatus', () => {

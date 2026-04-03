@@ -4,8 +4,26 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { syncSingleIssue, type SyncSingleIssueDeps } from '../../../domain/useCases/syncSingleIssueUseCase.js';
 import type { LinearWebhookEvent } from '../../../domain/webhookTypes.js';
-import { FakeLinearIssueRepository } from '../../fakes.js';
-import { createFakeLogger } from '../../testUtils.js';
+import {
+  FakeLinearApiClient,
+  FakeLinearConnectionRepository,
+  FakeLinearIssueRepository,
+} from '../../fakes.js';
+import type { Logger } from 'pino';
+import type { LinearIssue } from '../../../domain/models.js';
+
+function createFakeLogger(): Logger {
+  return {
+    info: () => undefined,
+    warn: () => undefined,
+    error: () => undefined,
+    debug: () => undefined,
+    trace: () => undefined,
+    fatal: () => undefined,
+    silent: () => undefined,
+    level: 'info',
+  } as unknown as Logger;
+}
 
 function createTestEvent(overrides: Partial<LinearWebhookEvent> = {}): LinearWebhookEvent {
   return {
@@ -33,6 +51,8 @@ function createTestEvent(overrides: Partial<LinearWebhookEvent> = {}): LinearWeb
 
 describe('syncSingleIssue', () => {
   let issueRepo: FakeLinearIssueRepository;
+  let connectionRepo: FakeLinearConnectionRepository;
+  let linearApiClient: FakeLinearApiClient;
   let deps: SyncSingleIssueDeps;
   const userId = 'user-123';
 
@@ -40,8 +60,21 @@ describe('syncSingleIssue', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-01-15T12:00:00.000Z'));
     issueRepo = new FakeLinearIssueRepository();
+    connectionRepo = new FakeLinearConnectionRepository();
+    linearApiClient = new FakeLinearApiClient();
+    connectionRepo.seedConnection({
+      userId,
+      apiKey: 'linear-api-key-test',
+      teamId: 'team-1',
+      teamName: 'Engineering',
+      connected: true,
+      createdAt: '2025-01-01T00:00:00.000Z',
+      updatedAt: '2025-01-01T00:00:00.000Z',
+    });
     deps = {
       issueRepo,
+      connectionRepo,
+      linearApiClient,
       logger: createFakeLogger(),
     };
   });
@@ -77,6 +110,85 @@ describe('syncSingleIssue', () => {
         expect(saved.value.assigneeName).toBe('Test User');
         expect(saved.value.labels).toEqual([{ id: 'label-1', name: 'bug', color: '' }]);
         expect(saved.value.userId).toBe(userId);
+      }
+    });
+
+    it('hydrates parent relationship from live Linear before saving', async () => {
+      const event = createTestEvent({
+        action: 'create',
+        data: createTestEvent().data,
+      });
+      const hydratedIssue: LinearIssue = {
+        id: 'issue-uuid-1',
+        identifier: 'INT-123',
+        title: 'Hydrated Issue',
+        description: 'Hydrated description',
+        priority: 2,
+        state: { id: 'state-1', name: 'In Progress', type: 'started' },
+        url: 'https://linear.app/team/issue/INT-123',
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-02T00:00:00.000Z',
+        completedAt: null,
+        parentId: 'parent-uuid-1',
+        childCount: 2,
+        children: [],
+        labels: [{ id: 'label-live', name: 'code-task', color: '#000000' }],
+        assignee: { id: 'user-live', name: 'Hydrated Assignee' },
+      };
+      linearApiClient.seedIssue(hydratedIssue);
+
+      const result = await syncSingleIssue(event, userId, deps);
+
+      expect(result.ok).toBe(true);
+      const saved = await issueRepo.findById('issue-uuid-1');
+      expect(saved.ok).toBe(true);
+      if (saved.ok && saved.value) {
+        expect(saved.value.title).toBe('Hydrated Issue');
+        expect(saved.value.parentId).toBe('parent-uuid-1');
+        expect(saved.value.assigneeId).toBe('user-live');
+        expect(saved.value.labels).toEqual([{ id: 'label-live', name: 'code-task', color: '#000000' }]);
+      }
+    });
+
+    it('falls back to webhook payload when live hydration fails', async () => {
+      linearApiClient.setFailure(true, { code: 'API_ERROR', message: 'Linear unavailable' });
+      const event = createTestEvent({
+        action: 'create',
+        data: {
+          ...createTestEvent().data,
+          parent: { id: 'parent-from-webhook' },
+        },
+      });
+
+      const result = await syncSingleIssue(event, userId, deps);
+
+      expect(result.ok).toBe(true);
+      const saved = await issueRepo.findById('issue-uuid-1');
+      expect(saved.ok).toBe(true);
+      if (saved.ok && saved.value) {
+        expect(saved.value.title).toBe('Test Issue');
+        expect(saved.value.parentId).toBe('parent-from-webhook');
+      }
+    });
+
+    it('falls back to webhook payload when connection lookup fails before hydration', async () => {
+      connectionRepo.setGetFullConnectionFailure(true, { code: 'INTERNAL_ERROR', message: 'connection failed' });
+      const event = createTestEvent({
+        action: 'create',
+        data: {
+          ...createTestEvent().data,
+          parent: { id: 'parent-from-webhook' },
+        },
+      });
+
+      const result = await syncSingleIssue(event, userId, deps);
+
+      expect(result.ok).toBe(true);
+      const saved = await issueRepo.findById('issue-uuid-1');
+      expect(saved.ok).toBe(true);
+      if (saved.ok && saved.value) {
+        expect(saved.value.title).toBe('Test Issue');
+        expect(saved.value.parentId).toBe('parent-from-webhook');
       }
     });
   });

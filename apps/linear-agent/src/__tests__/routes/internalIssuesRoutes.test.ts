@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { err } from '@intexuraos/common-core';
+
+vi.mock('@intexuraos/infra-gemini', () => ({
+  createGeminiClient: vi.fn(),
+  TOOL_CALLING_PRICING: {},
+}));
+
 import { buildServer } from '../../server.js';
 import { setServices, resetServices } from '../../services.js';
 import type { FastifyInstance } from 'fastify';
@@ -2344,6 +2350,239 @@ describe('internalIssuesRoutes', () => {
       expect(body.data.descendants[0]?.labels).toEqual(['frontend']);
       expect(body.data.descendants[0]?.assigneeId).toBe('user-B');
       expect(body.data.descendants[0]?.state).toBe('Backlog');
+    });
+  });
+
+  describe('GET /internal/linear/issues/:issueId/direct-children', () => {
+    it('returns 401 when internal auth is missing', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/root-live-1/direct-children',
+        headers: { 'x-user-id': testUserId },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 401 when X-User-Id header is missing', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/root-live-1/direct-children',
+        headers: internalAuthHeader,
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns live direct children from Linear API', async () => {
+      const child1: LinearIssue = {
+        id: 'child-1',
+        identifier: 'ENG-501',
+        title: 'Child One',
+        description: null,
+        priority: 2,
+        state: { id: 'state-1', name: 'Backlog', type: 'backlog' },
+        url: 'https://linear.app/test/ENG-501',
+        createdAt: '2024-01-02T00:00:00.000Z',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+        completedAt: null,
+        parentId: 'root-live-1',
+        childCount: 0,
+        children: [],
+        labels: [{ id: 'label-1', name: 'code-task', color: '#000000' }],
+        assignee: { id: 'user-1', name: 'Ada' },
+      };
+      const child2: LinearIssue = {
+        id: 'child-2',
+        identifier: 'ENG-502',
+        title: 'Child Two',
+        description: null,
+        priority: 1,
+        state: { id: 'state-2', name: 'In Progress', type: 'started' },
+        url: 'https://linear.app/test/ENG-502',
+        createdAt: '2024-01-03T00:00:00.000Z',
+        updatedAt: '2024-01-03T00:00:00.000Z',
+        completedAt: null,
+        parentId: 'root-live-1',
+        childCount: 0,
+        children: [],
+        labels: [{ id: 'label-2', name: 'backend', color: '#ffffff' }],
+        assignee: null,
+      };
+      fakeLinearClient.seedIssue({
+        id: 'root-live-1',
+        identifier: 'ENG-500',
+        title: 'Root Live',
+        description: null,
+        priority: 0,
+        state: { id: 'state-0', name: 'Backlog', type: 'backlog' },
+        url: 'https://linear.app/test/ENG-500',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        completedAt: null,
+        parentId: null,
+        childCount: 2,
+        children: [child1, child2],
+        labels: [],
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/root-live-1/direct-children',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          id: string;
+          identifier: string;
+          parentId: string | null;
+          labels: string[];
+          assigneeId: string | null;
+          state: string;
+        }[];
+      };
+      expect(body.success).toBe(true);
+      expect(body.data).toEqual([
+        expect.objectContaining({
+          id: 'child-1',
+          identifier: 'ENG-501',
+          parentId: 'root-live-1',
+          labels: ['code-task'],
+          assigneeId: 'user-1',
+          state: 'Backlog',
+        }),
+        expect.objectContaining({
+          id: 'child-2',
+          identifier: 'ENG-502',
+          parentId: 'root-live-1',
+          labels: ['backend'],
+          assigneeId: null,
+          state: 'In Progress',
+        }),
+      ]);
+    });
+
+    it('normalizes missing child parentId to null in the response', async () => {
+      const { parentId: _unusedParentId, ...childWithoutParentId }: LinearIssue = {
+        id: 'child-1',
+        identifier: 'ENG-501',
+        title: 'Child One',
+        description: null,
+        priority: 0,
+        state: { id: 'state-0', name: 'Backlog', type: 'backlog' as const },
+        url: 'https://linear.app/test/ENG-501',
+        createdAt: '2024-01-02T00:00:00.000Z',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+        completedAt: null,
+        parentId: 'root-live-1',
+        childCount: 0,
+        children: [],
+        labels: [{ id: 'label-1', name: 'code-task', color: '#000000' }],
+        assignee: { id: 'user-1', name: 'Pat' },
+      };
+
+      fakeLinearClient.seedIssue({
+        id: 'root-live-1',
+        identifier: 'ENG-500',
+        title: 'Root Live',
+        description: null,
+        priority: 0,
+        state: { id: 'state-0', name: 'Backlog', type: 'backlog' },
+        url: 'https://linear.app/test/ENG-500',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        completedAt: null,
+        parentId: null,
+        childCount: 1,
+        children: [childWithoutParentId],
+        labels: [],
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/root-live-1/direct-children',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { id: string; parentId: string | null }[];
+      };
+      expect(body.success).toBe(true);
+      expect(body.data).toEqual([
+        expect.objectContaining({
+          id: 'child-1',
+          parentId: null,
+        }),
+      ]);
+    });
+
+    it('returns 404 when live parent issue is not found', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/missing-parent/direct-children',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns Linear client errors when API key lookup fails', async () => {
+      fakeConnectionRepo.setApiKeyFailure(true, { code: 'INTERNAL_ERROR', message: 'lookup failed' });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/root-live-1/direct-children',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns FORBIDDEN when user has no Linear API key', async () => {
+      await fakeConnectionRepo.disconnect(testUserId);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/root-live-1/direct-children',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('returns downstream errors from getDirectChildren', async () => {
+      fakeLinearClient.setFailure(true, { code: 'API_ERROR', message: 'linear down' });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/root-live-1/direct-children',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
     });
   });
 });
