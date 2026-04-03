@@ -67,8 +67,7 @@ function computeReviewNeedsRemediation(task: CodeTask): boolean | null {
 function hasCompletedExecutionTask(task: CodeTask): boolean {
   return (
     (task.agentType === 'execution' && (task.status === 'implemented' || task.status === 'reviewed')) ||
-    (task.agentType === 'pull_request' && task.status === 'implemented') ||
-    (task.agentType === 'review' && task.status === 'reviewed')
+    (task.agentType === 'pull_request' && task.status === 'implemented')
   );
 }
 
