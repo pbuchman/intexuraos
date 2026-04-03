@@ -54,24 +54,24 @@
 
 ### Orchestrator-owned files
 
-| File | Action | Responsibility |
-| --- | --- | --- |
-| `.mcp.json` | Modify | Declare the Linear timeout contract in the template copied into worktrees |
-| `workers/orchestrator/src/services/worktree-manager.ts` | Modify | Preserve timeout config while substituting secrets into copied worktree files |
-| `workers/orchestrator/src/services/task-dispatcher.ts` | Modify | Ensure timeout evidence from runtime output is retained in forwarded task logs |
-| `workers/orchestrator/src/services/runtime/processors/codex-log-processor.ts` | Modify | Preserve or normalize the stable timeout marker in Codex log output |
-| `workers/orchestrator/src/__tests__/worktree-manager.test.ts` | Modify | Assert generated MCP config includes `timeoutMs: 60000` |
-| `workers/orchestrator/src/__tests__/task-dispatcher.test.ts` | Modify | Assert stable timeout evidence reaches the task log stream |
+| File                                                                          | Action | Responsibility                                                                 |
+| ----------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------ |
+| `.mcp.json`                                                                   | Modify | Declare the Linear timeout contract in the template copied into worktrees      |
+| `workers/orchestrator/src/services/worktree-manager.ts`                       | Modify | Preserve timeout config while substituting secrets into copied worktree files  |
+| `workers/orchestrator/src/services/task-dispatcher.ts`                        | Modify | Ensure timeout evidence from runtime output is retained in forwarded task logs |
+| `workers/orchestrator/src/services/runtime/processors/codex-log-processor.ts` | Modify | Preserve or normalize the stable timeout marker in Codex log output            |
+| `workers/orchestrator/src/__tests__/worktree-manager.test.ts`                 | Modify | Assert generated MCP config includes `timeoutMs: 60000`                        |
+| `workers/orchestrator/src/__tests__/task-dispatcher.test.ts`                  | Modify | Assert stable timeout evidence reaches the task log stream                     |
 
 ### Code-worker-owned files
 
-| File | Action | Responsibility |
-| --- | --- | --- |
-| `workers/code-worker/entrypoint.sh` | Modify | Run Codex with explicit runtime enforcement for the Linear MCP timeout and surface failure evidence |
-| `workers/code-worker/Dockerfile` | Modify | Add any required runtime utility or environment support for timeout enforcement |
-| `workers/orchestrator/src/services/runtime/__tests__/codex-runtime.test.ts` | Modify | Assert runtime failure behavior for timed out Linear MCP calls |
-| `workers/orchestrator/src/__tests__/integration.test.ts` | Modify | Assert end-to-end timeout completion and cleanup behavior |
-| `docs/setup/11-claude-code-mcp-setup.md` | Modify | Document the enforced Linear MCP timeout contract if operator-visible behavior changes |
+| File                                                                        | Action | Responsibility                                                                                      |
+| --------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------- |
+| `workers/code-worker/entrypoint.sh`                                         | Modify | Run Codex with explicit runtime enforcement for the Linear MCP timeout and surface failure evidence |
+| `workers/code-worker/Dockerfile`                                            | Modify | Add any required runtime utility or environment support for timeout enforcement                     |
+| `workers/orchestrator/src/services/runtime/__tests__/codex-runtime.test.ts` | Modify | Assert runtime failure behavior for timed out Linear MCP calls                                      |
+| `workers/orchestrator/src/__tests__/integration.test.ts`                    | Modify | Assert end-to-end timeout completion and cleanup behavior                                           |
+| `docs/setup/11-claude-code-mcp-setup.md`                                    | Modify | Document the enforced Linear MCP timeout contract if operator-visible behavior changes              |
 
 ## Parallel Breakdown
 

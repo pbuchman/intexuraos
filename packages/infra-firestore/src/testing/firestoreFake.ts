@@ -782,21 +782,6 @@ class FakeTransaction {
     const key = `${docRef._collectionName}/${docRef.id}`;
     this.pendingWrites.set(key, { data: {} as DocumentData, deleted: true });
   }
-
-  /**
-   * Read multiple documents within the transaction.
-   */
-  getAll(...documentRefs: FakeDocumentReference[]): Promise<FakeDocumentSnapshot[]> {
-    return Promise.all(documentRefs.map((docRef) => this.get(docRef) as Promise<FakeDocumentSnapshot>));
-  }
-
-  /**
-   * Create a document within the transaction.
-   */
-  create(docRef: FakeDocumentReference, data: DocumentData): void {
-    const key = `${docRef._collectionName}/${docRef.id}`;
-    this.pendingWrites.set(key, { data, deleted: false });
-  }
 }
 
 /**
