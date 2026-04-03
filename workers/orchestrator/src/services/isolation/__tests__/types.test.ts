@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { WORKER_TYPES } from '../types.js';
+import { WORKER_TYPES, type WorkerSecrets } from '../types.js';
 
 describe('WORKER_TYPES configuration', () => {
   it('stays in sync with the shared code task worker type list', async () => {
@@ -73,5 +73,25 @@ describe('WORKER_TYPES configuration', () => {
     expect(WORKER_TYPES['openrouter-free'].apiKeyEnvVar).toBe('OPENROUTER_API_KEY');
     expect(WORKER_TYPES['openrouter-free'].model).toBe('qwen/qwen3.6-plus:free');
     expect(WORKER_TYPES['openrouter-free'].effort).toBe('high');
+  });
+
+  it('every apiKeyEnvVar referenced by a worker type is a valid WorkerSecrets field', () => {
+    const workerSecretsKeys: ReadonlySet<string> = new Set<keyof WorkerSecrets>([
+      'ANTHROPIC_API_KEY',
+      'LINEAR_API_KEY',
+      'SENTRY_AUTH_TOKEN',
+      'MINIMAX_API_KEY',
+      'DASHSCOPE_API_KEY',
+      'OPENROUTER_API_KEY',
+    ]);
+
+    for (const [workerType, config] of Object.entries(WORKER_TYPES)) {
+      if (config.apiKeyEnvVar !== undefined) {
+        expect(
+          workerSecretsKeys.has(config.apiKeyEnvVar),
+          `${workerType} references apiKeyEnvVar '${config.apiKeyEnvVar}' which is not in WorkerSecrets`
+        ).toBe(true);
+      }
+    }
   });
 });
