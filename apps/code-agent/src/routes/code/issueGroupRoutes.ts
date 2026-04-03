@@ -12,6 +12,7 @@ import { timestampToIso } from '../codeRoutes.js';
 import type { JwtValidator } from '../codeRoutes.js';
 import {
   groupByLinearIssue,
+  sortIssueGroups,
 } from '../../domain/issueGrouping/index.js';
 import type {
   GroupStatus,
@@ -296,7 +297,8 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           return task;
         });
 
-        const paginatedGroups = groupByLinearIssue(allPageTasks);
+        const unsortedGroups = groupByLinearIssue(allPageTasks);
+        const paginatedGroups = sortIssueGroups(unsortedGroups, sortBy);
 
         // 6. Compute totalGroups from counts
         let totalGroups: number;
