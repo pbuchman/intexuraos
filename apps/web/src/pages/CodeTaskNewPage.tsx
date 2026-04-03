@@ -6,11 +6,11 @@ import MDEditor from '@uiw/react-md-editor';
 import rehypeSanitize from 'rehype-sanitize';
 import { Button, Card, Layout, ConfirmSubmitModal, TaskConflictModal, TaskErrorModal, LinearIssueSelectorModal } from '@/components';
 import type { ConflictReason } from '@/components';
-import { useCodeTasks, useLinearIssueOptions, useWorkersStatus, findRecentTask } from '@/hooks';
+import { useLinearIssueOptions, useWorkersStatus, findRecentTask } from '@/hooks';
 import type { CodeTaskWorkerType } from '@/types';
 import type { LinearIssueOption } from '@/hooks/useLinearIssueOptions';
 import { ApiError, parseConflictError } from '@/services/apiClient';
-import { listCodeTasks } from '@/services/codeAgentApi';
+import { listCodeTasks, submitCodeTask } from '@/services/codeAgentApi';
 import { useAuth } from '@/context';
 import { WORKER_TYPE_METADATA } from '@/components/workers/shared.js';
 
@@ -37,7 +37,6 @@ const LONG_SUBMIT_DELAY_MS = 10000;
 
 export function CodeTaskNewPage(): React.JSX.Element {
   const navigate = useNavigate();
-  const { submitTask } = useCodeTasks();
   const { getAccessToken } = useAuth();
   const { groupedOptions, loading: linearLoading, error: linearError } = useLinearIssueOptions();
 
@@ -147,7 +146,8 @@ export function CodeTaskNewPage(): React.JSX.Element {
         requestData.linearIssueId = selectedIssue.identifier;
       }
 
-      const taskId = await submitTask(requestData);
+      const token = await getAccessToken();
+      const { codeTaskId: taskId } = await submitCodeTask(token, requestData);
       clearLongSubmitTimer();
       void navigate(`/code-tasks/${taskId}`);
     } catch (err) {
