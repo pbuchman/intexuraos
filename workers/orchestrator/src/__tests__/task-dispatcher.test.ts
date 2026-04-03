@@ -1898,6 +1898,7 @@ describe('TaskDispatcher', () => {
           pr_url: '',
           summary: 'Task completed',
           unclear_clarification: '',
+          has_plan_doc: '0',
         },
       });
       vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
@@ -1944,6 +1945,7 @@ describe('TaskDispatcher', () => {
           pr_url: '',
           summary: 'Task completed',
           unclear_clarification: '',
+          has_plan_doc: '0',
         },
       });
       vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
@@ -2002,6 +2004,7 @@ describe('TaskDispatcher', () => {
           pr_url: '',
           summary: 'Task completed',
           unclear_clarification: '',
+          has_plan_doc: '0',
         },
       });
       vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
@@ -2045,6 +2048,7 @@ describe('TaskDispatcher', () => {
           pr_url: '',
           summary: 'Task completed',
           unclear_clarification: '',
+          has_plan_doc: '0',
         },
       });
       vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
