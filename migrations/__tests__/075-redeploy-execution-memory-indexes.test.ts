@@ -1,7 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { metadata, up } from '../075_redeploy-execution-memory-indexes.mjs'; // @allow-missing-js -- .mjs import
 
 describe('migration 075 – redeploy execution memory indexes', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
   it('has correct metadata', () => {
     expect(metadata).toMatchObject({
       id: '075',
