@@ -86,7 +86,7 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
   }
 
   // Guard: do not show merge button while any task is actively processing
-  const hasActiveTask = tasks.some((t) => t.status !== 'archived' && ACTIVE_STATUSES.has(t.status));
+  const hasActiveTask = tasks.some((t) => ACTIVE_STATUSES.has(t.status));
 
   // Merge-ready logic: if execution step is completed, PR exists, and ready-to-merge label present
   if (
