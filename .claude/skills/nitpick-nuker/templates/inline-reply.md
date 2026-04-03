@@ -7,4 +7,5 @@ ${STATUS_EMOJI} **${ACTION_TEXT}**
 ${DETAILS_TEXT}
 
 ---
+
 _Automatically processed by Nitpick Nuker._
