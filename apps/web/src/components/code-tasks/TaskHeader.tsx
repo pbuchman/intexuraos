@@ -44,6 +44,14 @@ export function TaskHeader({ task, workerStatusTag }: TaskHeaderProps): React.JS
       : task.executionMemoryContext.status === 'none'
         ? 'Memory: none'
         : 'Memory: error';
+
+  const executionMemoryTooltip =
+    task.executionMemoryContext?.status === 'error'
+      ? [task.executionMemoryContext.errorCode, task.executionMemoryContext.errorMessage]
+          .filter(Boolean)
+          .join(' — ') || undefined
+      : undefined;
+
   const prUrl = getTaskMergeUrl(task);
 
   return (
@@ -75,8 +83,19 @@ export function TaskHeader({ task, workerStatusTag }: TaskHeaderProps): React.JS
           </span>
         ) : null}
         {executionMemoryChip !== null && task.executionMemoryContext !== undefined ? (
-          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium ${EXECUTION_MEMORY_STATUS_STYLES[task.executionMemoryContext.status]}`}>
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium ${EXECUTION_MEMORY_STATUS_STYLES[task.executionMemoryContext.status]}`}
+            title={executionMemoryTooltip}
+          >
             {executionMemoryChip}
+          </span>
+        ) : null}
+        {task.executionMemoryPostRun?.status === 'error' ? (
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium ${EXECUTION_MEMORY_STATUS_STYLES.error}`}
+            title={task.executionMemoryPostRun.errorMessage}
+          >
+            Post-run: error
           </span>
         ) : null}
       </div>
