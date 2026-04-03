@@ -28,12 +28,12 @@ const FALLBACK_STATUS: StatusConfig = {
   icon: 'AlertCircle',
 };
 
-interface V2TaskHeaderProps {
+interface TaskHeaderProps {
   task: CodeTask;
   workerStatusTag: WorkerStatusTag | null;
 }
 
-export function V2TaskHeader({ task, workerStatusTag }: V2TaskHeaderProps): React.JSX.Element {
+export function TaskHeader({ task, workerStatusTag }: TaskHeaderProps): React.JSX.Element {
   // Runtime guard: Firestore data may contain status values outside the CodeTaskStatus union
   const status = (STATUS_MAP[task.status] as StatusConfig | undefined) ?? { ...FALLBACK_STATUS, label: task.status };
   const StatusIcon = ICON_MAP[status.icon];

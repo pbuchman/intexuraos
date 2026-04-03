@@ -9,14 +9,12 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import { randomUUID } from 'node:crypto';
-import type FirebaseFirestore from '@google-cloud/firestore';
 import type { CodeTask, WorkerType } from '../models/codeTask.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { IssueTreeNode } from '../ports/linearAgentClient.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
 import { hasCodeTaskLabel } from '../utils/labelUtils.js';
 import { generateWebhookSecret } from '../utils/secrets.js';
-import type { RepositoryError } from '../repositories/codeTaskRepository.js';
 
 export interface FanOutChildTasksDeps {
   logger: Logger;
@@ -80,7 +78,7 @@ function getFanOutParentDescriptor(planningTask: CodeTask): string {
   return planningTask.linearIssueId ?? planningTask.id;
 }
 
-async function persistBatchTransactional(
+async function persistBatch(
   deps: FanOutChildTasksDeps,
   request: FanOutChildTasksRequest,
   preparedChildren: PreparedChildTask[],
@@ -91,59 +89,10 @@ async function persistBatchTransactional(
   const childTaskIds = preparedChildren.map(({ taskId }) => taskId);
   const parentDescriptor = getFanOutParentDescriptor(planningTask);
 
-  const persistWithTransaction = async (transaction: FirebaseFirestore.Transaction): Promise<Result<void, RepositoryError>> => {
-    const lockResult = await codeTaskRepo.update(
-      planningTask.id,
-      {
-        implementationTaskId: primaryChildTaskId,
-        fanOutChildTaskIds: childTaskIds,
-      },
-      { transaction },
-    );
-    if (!lockResult.ok) {
-      return err({ code: 'FIRESTORE_ERROR', message: 'Failed to link complex child tasks to planning task' });
-    }
-
-    for (const prepared of preparedChildren) {
-      const createResult = await codeTaskRepo.create(
-        {
-          id: prepared.taskId,
-          userId,
-          prompt: `[Fan-out from ${parentDescriptor}] ${prepared.child.identifier}`,
-          sanitizedPrompt: prepared.child.identifier,
-          webhookSecret: generateWebhookSecret(deps.orchestratorSecret, prepared.taskId),
-          systemPromptHash: planningTask.systemPromptHash,
-          workerType,
-          workerLocation: 'queued',
-          repository: planningTask.repository,
-          baseBranch: planningTask.baseBranch,
-          traceId: `execution-${planningTask.traceId}-${prepared.child.identifier}`,
-          approvalEventId: `fanout_approval_${randomUUID()}`,
-          linearIssueId: prepared.child.identifier,
-          parentTaskId: planningTask.id,
-          followUpReason: 'execution_implement',
-          agentType: 'execution',
-          initialStatus: 'queued',
-        },
-        { transaction },
-      );
-
-      if (!createResult.ok) {
-        return err({ code: 'FIRESTORE_ERROR', message: `Failed to create child execution task for ${prepared.child.identifier}` });
-      }
-    }
-
-    return ok(undefined);
-  };
-
-  if (codeTaskRepo.runInTransaction !== undefined) {
-    const transactionResult = await codeTaskRepo.runInTransaction(persistWithTransaction);
-    if (!transactionResult.ok) {
-      return err({ code: 'internal_error', message: transactionResult.error.message });
-    }
-    return ok(undefined);
-  }
-
+  // Link children to the planning task first.
+  // Sequential create calls follow — each runs its own internal dedup transaction,
+  // which correctly orders reads before writes (unlike a shared outer transaction
+  // that would violate Firestore's read-before-write constraint).
   const lockResult = await codeTaskRepo.update(planningTask.id, {
     implementationTaskId: primaryChildTaskId,
     fanOutChildTaskIds: childTaskIds,
@@ -212,7 +161,7 @@ export async function fanOutChildTasks(
     return err({ code: 'internal_error', message: 'No child execution tasks were created' });
   }
   /* v8 ignore stop @preserve */
-  const persistResult = await persistBatchTransactional(deps, request, preparedChildren, primaryChild.taskId);
+  const persistResult = await persistBatch(deps, request, preparedChildren, primaryChild.taskId);
   if (!persistResult.ok) {
     return persistResult;
   }

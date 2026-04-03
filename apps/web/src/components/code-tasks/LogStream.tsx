@@ -1,9 +1,9 @@
-import { CodeTaskLogViewer } from '../CodeTaskLogViewer.js';
+import { CodeTaskLogViewer } from './CodeTaskLogViewer.js';
 import type { MessageStatus } from '@/hooks';
 import type { LogLine } from '@/hooks/useCodeTaskLogs.js';
 import type { CodeTaskStatus } from '@/types';
 
-interface V2LogStreamProps {
+interface LogStreamProps {
   logs: LogLine[];
   isActive: boolean;
   listenerHealthy: boolean;
@@ -17,6 +17,6 @@ interface V2LogStreamProps {
   workerName: string;
 }
 
-export function V2LogStream(props: V2LogStreamProps): React.JSX.Element {
+export function LogStream(props: LogStreamProps): React.JSX.Element {
   return <CodeTaskLogViewer {...props} />;
 }

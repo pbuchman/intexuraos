@@ -526,14 +526,22 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
         if (options?.transaction !== undefined) {
           options.transaction.update(docRef, updateData);
-        } else {
-          await docRef.update(updateData);
+          // Inside an external transaction, avoid read-after-write by merging
+          // the known updates into the already-read doc data in memory.
+          // Important: strip FieldValue.delete() sentinels — spread would leave
+          // delete-sentinel objects in the merged result instead of omitting the
+          // field. Filter them out so the returned CodeTask has a clean shape.
+          const mergedData = { ...doc.data(), ...updateData };
+          for (const [key, value] of Object.entries(mergedData)) {
+            if (value instanceof FieldValue) {
+              delete mergedData[key];
+            }
+          }
+          return ok(toCodeTask({ id: taskId, data: () => mergedData } as { id: string; data(): Record<string, unknown> }));
         }
 
-        // Fetch updated document
-        const updatedDoc = options?.transaction !== undefined
-          ? await options.transaction.get(docRef)
-          : await docRef.get();
+        await docRef.update(updateData);
+        const updatedDoc = await docRef.get();
         return ok(toCodeTask(updatedDoc as { id: string; data(): Record<string, unknown> }));
       } catch (error) {
         logger.error({ error, taskId, input }, 'Failed to update task');

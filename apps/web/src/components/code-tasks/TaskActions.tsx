@@ -10,7 +10,7 @@ import { Button } from '@/components';
 import { GitHubButton, LinearButton, WORKER_TYPES, WORKER_TYPE_LABELS } from './shared.js';
 import type { WorkerType } from './shared.js';
 
-interface V2TaskActionsProps {
+interface TaskActionsProps {
   isActive: boolean;
   cancelling: boolean;
   cancelError: string | null;
@@ -39,7 +39,7 @@ interface V2TaskActionsProps {
   linksInNextSteps: boolean;
 }
 
-export function V2TaskActions({
+export function TaskActions({
   isActive, cancelling, cancelError, onCancel,
   isRetryable, retrying, retryError,
   selectedWorkerType, originalWorkerType, showDropdown, onToggleDropdown, onSelectWorkerType,
@@ -48,7 +48,7 @@ export function V2TaskActions({
   onShowDeleteConfirm, onCancelDeleteConfirm, onConfirmDelete,
   isArchivable, archiving, archiveError, onArchive,
   prUrl, linearIssueUrl, linksInNextSteps,
-}: V2TaskActionsProps): React.JSX.Element | null {
+}: TaskActionsProps): React.JSX.Element | null {
   if (!isActive && !isRetryable && !isArchivable && cancelError === null && retryError === null && deleteError === null && archiveError === null && (linksInNextSteps || (prUrl === undefined && linearIssueUrl === undefined))) return null;
 
   const deleteConfirmBlock = (

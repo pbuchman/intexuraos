@@ -3,6 +3,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Timestamp, createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
+import type FirebaseFirestore from '@google-cloud/firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import type { Logger } from '@intexuraos/common-core';
 import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
@@ -1789,6 +1790,59 @@ describe('firestoreCodeTaskRepository', () => {
       expect(clearResult.value.fanOutChildTaskIds).toBeUndefined();
     });
 
+    it('does not read-back after writing when called with an external transaction', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a task first
+      const createResult = await repo.create(createTaskInput());
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Setup failed');
+      const taskId = createResult.value.id;
+
+      // Run update inside a transaction — track get calls after update
+      const getCallsAfterUpdate: string[] = [];
+      let updateCalled = false;
+
+      await fakeFirestore.runTransaction(async (tx) => {
+        // Wrap transaction to spy on get/update ordering
+        const originalGet = tx.get.bind(tx);
+        const originalUpdate = tx.update.bind(tx);
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- FakeTransaction lacks proper interface; safe spy target
+        const txAny = tx as any;
+        type GetFn = typeof originalGet;
+        type UpdateFn = typeof originalUpdate;
+        txAny.get = async (...args: Parameters<GetFn>): Promise<unknown> => {
+          if (updateCalled) {
+            getCallsAfterUpdate.push('get-after-update');
+          }
+          return originalGet(...args);
+        };
+
+        txAny.update = (...args: Parameters<UpdateFn>): void => {
+          updateCalled = true;
+          return originalUpdate(...args);
+        };
+
+        const updateResult = await repo.update(
+          taskId,
+          { status: 'running' },
+          { transaction: tx as unknown as FirebaseFirestore.Transaction },
+        );
+        expect(updateResult.ok).toBe(true);
+        if (!updateResult.ok) throw new Error('Update failed');
+
+        // Verify the returned task has the updated status
+        expect(updateResult.value.status).toBe('running');
+      });
+
+      // The key assertion: no get() calls happened after update()
+      expect(getCallsAfterUpdate).toEqual([]);
+    });
+
     it('accepts external transaction via options parameter for update', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -1814,6 +1868,45 @@ describe('firestoreCodeTaskRepository', () => {
       if (!result.ok) return;
       expect(result.value.implementationTaskId).toBe('task-child-1');
       expect(result.value.fanOutChildTaskIds).toEqual(['task-child-1']);
+    });
+
+    it('strips FieldValue.delete() sentinels from in-memory merge when updating nullable fields in a transaction', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a task with implementationTaskId and fanOutChildTaskIds set
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      // First set the fields so we can clear them
+      const setResult = await repo.update(created.value.id, {
+        implementationTaskId: 'task-phase2',
+        fanOutChildTaskIds: ['task-child-1', 'task-child-2'],
+      });
+      expect(setResult.ok).toBe(true);
+
+      // Now clear them inside a transaction (null → FieldValue.delete())
+      const result = await (fakeFirestore as unknown as Firestore).runTransaction(async (tx) => {
+        return repo.update(
+          created.value.id,
+          {
+            implementationTaskId: null,
+            fanOutChildTaskIds: null,
+          },
+          { transaction: tx },
+        );
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      // The returned task must NOT contain FieldValue sentinel objects —
+      // the in-memory merge must strip them so the result has clean fields.
+      expect(result.value.implementationTaskId).toBeUndefined();
+      expect(result.value.fanOutChildTaskIds).toBeUndefined();
     });
 
     it('updates workerLocation when provided in update input', async () => {
