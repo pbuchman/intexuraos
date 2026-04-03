@@ -48,7 +48,7 @@ export function DefaultWorkerTypeCard({
         </p>
       </div>
       {saveSuccess ? (
-        <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/30">
+        <div className="mb-3 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/30">
           <p className="text-sm font-medium text-green-800 dark:text-green-300">✓ {successMessage}</p>
         </div>
       ) : null}
