@@ -135,4 +135,30 @@ describe('CodeTaskViewPageV2 execution memory card', () => {
     expect(screen.getByText('mem-new')).toBeInTheDocument();
     expect(screen.getByText('The prior verification memory helped.')).toBeInTheDocument();
   });
+
+  it('renders emerald badge for matched status', () => {
+    render(<CodeTaskViewPageV2 />);
+
+    const badges = screen.getAllByText('matched');
+    expect(badges.length).toBeGreaterThanOrEqual(1);
+    expect(badges[0]?.className).toContain('bg-emerald-100');
+  });
+
+  it('renders red badge for error status', () => {
+    const original = task.executionMemoryContext;
+    task.executionMemoryContext = {
+      status: 'error',
+      errorCode: 'vector_search_failed',
+      errorMessage: 'Missing vector index',
+    };
+
+    try {
+      render(<CodeTaskViewPageV2 />);
+
+      const badge = screen.getByText('error');
+      expect(badge.className).toContain('bg-red-100');
+    } finally {
+      task.executionMemoryContext = original;
+    }
+  });
 });
