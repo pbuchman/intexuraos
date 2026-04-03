@@ -246,7 +246,7 @@ export function HeroShowcase(): React.JSX.Element {
               />
               <TaskRow
                 issueId="INT-936"
-                title="Remove legacy V1 CodeTaskViewPage"
+                title="Remove legacy CodeTaskViewPage"
                 pipeline={<><Dot state="done" /><PipeConn /><Dot state="done" /><PipeConn /><Dot state="done" /><span className="ml-0.5 text-slate-500">#1260</span></>}
                 time={<><span className="text-slate-500">Created</span> 2h ago<br /><span className="text-slate-500">Started</span> 2h ago</>}
                 output={<span className="inline-flex items-center gap-0.5 rounded-full border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[8px] font-semibold text-blue-600"><ExternalLink className="h-2 w-2" />#1260</span>}
