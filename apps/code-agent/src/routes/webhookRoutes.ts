@@ -52,8 +52,8 @@ function recordTaskFailed(params: {
 }
 
 function shouldQueueExecutionMemoryPostRun(params: {
-  agentType: string | undefined;
-  existingStatus: string | undefined;
+  agentType: string | undefined; // @allow-undefined-type -- required parameter, not optional property
+  existingStatus: string | undefined; // @allow-undefined-type -- required parameter, not optional property
 }): boolean {
   return (
     loadConfig().executionMemoryEnabled
@@ -1311,6 +1311,48 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               }
               }
             } else {
+              // Best-effort: remove stale review-outcome label from the associated Linear issue.
+              // A prior passing review may have set ready-to-merge / ready-to-implement;
+              // now that remediation is needed, clear it so the UI no longer shows merge-ready.
+              try {
+                const originResult = await codeTaskRepo.findOriginTaskByPR(task.repository, prNumber);
+                let targetLinearIssueId: string | undefined; // @allow-undefined-type -- let binding requires union, not optional property
+                let targetUserId: string;
+                let labelToRemove: string;
+
+                if (originResult.ok && originResult.value !== null && originResult.value.linearIssueId !== undefined) {
+                  targetLinearIssueId = originResult.value.linearIssueId;
+                  targetUserId = originResult.value.userId;
+                  labelToRemove = originResult.value.agentType === 'planning' ? 'ready-to-implement' : 'ready-to-merge';
+                } else {
+                  targetLinearIssueId = task.linearIssueId;
+                  targetUserId = task.userId;
+                  labelToRemove = 'ready-to-merge';
+                }
+
+                if (targetLinearIssueId !== undefined) {
+                  await linearIssueService.removeLabel(targetUserId, targetLinearIssueId, labelToRemove);
+                  request.log.info({ taskId, prNumber, label: labelToRemove, linearIssueId: targetLinearIssueId },
+                    'Removed stale review-outcome label after negative review');
+
+                  // Passing [] clears all label flags in the summary (same pattern as handlePrClose).
+                  // Safe because latestReviewNeedsRemediation is already true, which independently
+                  // blocks the merge-readiness check in deriveAggregateStatusFromSummary.
+                  const { groupSummaryRepo: summaryRepoForRemoval } = getServices();
+                  if (summaryRepoForRemoval !== undefined) {
+                    void summaryRepoForRemoval.recomputeWithLabels(
+                      targetUserId, targetLinearIssueId, [], completedAt.toISOString(),
+                    ).catch((recomputeErr: unknown) => {
+                      request.log.warn({ linearIssueId: targetLinearIssueId, error: recomputeErr },
+                        'Failed to recompute group summary after label removal (best-effort)');
+                    });
+                  }
+                }
+              } catch (labelRemovalError: unknown) {
+                request.log.warn({ error: labelRemovalError, taskId, prNumber },
+                  'Failed to remove stale review-outcome label (best-effort)');
+              }
+
               const { createRemediationTaskFn, logger: remediationLogger } = getServices();
               if (createRemediationTaskFn !== undefined) {
                 const remediationResult = await createRemediationTaskFn(

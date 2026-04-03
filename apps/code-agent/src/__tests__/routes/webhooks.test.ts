@@ -4869,6 +4869,28 @@ describe('POST /internal/webhooks/task-complete', () => {
       };
     }
 
+    function makeNegativeReviewPayload(taskId: string): {
+      taskId: string;
+      status: 'completed';
+      result: {
+        summary: string;
+        review_comments_posted: string;
+        review_types: string;
+        needs_remediation: string;
+      };
+    } {
+      return {
+        taskId,
+        status: 'completed' as const,
+        result: {
+          summary: 'Found issues',
+          review_comments_posted: '2',
+          review_types: 'code_quality',
+          needs_remediation: '1',
+        },
+      };
+    }
+
     type LabelRemediationFn = (logger: import('pino').Logger, request: CreateRemediationTaskRequest) => Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>>;
 
     async function sendLabelPayload(payload: object): Promise<import('fastify').LightMyRequestResponse> {
@@ -5267,6 +5289,91 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       // Should complete successfully — recompute is fire-and-forget
       expect(response.statusCode).toBe(200);
+    });
+
+    it('removes ready-to-merge label when needs_remediation is 1 and origin is execution task', async () => {
+      await createOriginTask({ traceId: 'trace_remove_label_exec', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_remove_label_exec_review' });
+      const payload = makeNegativeReviewPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      const removeCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].removeLabels !== undefined &&
+          call[0].removeLabels.includes('ready-to-merge')
+      );
+      expect(removeCalls).toHaveLength(1);
+      expect(removeCalls[0]?.[0]).toEqual({
+        userId: 'user-123',
+        issueId: 'INT-500',
+        removeLabels: ['ready-to-merge'],
+      });
+    });
+
+    it('removes ready-to-implement label when needs_remediation is 1 and origin is planning task', async () => {
+      await createOriginTask({ traceId: 'trace_remove_label_plan', agentType: 'planning' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_remove_label_plan_review' });
+      const payload = makeNegativeReviewPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      const removeCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].removeLabels !== undefined &&
+          call[0].removeLabels.includes('ready-to-implement')
+      );
+      expect(removeCalls).toHaveLength(1);
+      expect(removeCalls[0]?.[0]).toEqual({
+        userId: 'user-123',
+        issueId: 'INT-500',
+        removeLabels: ['ready-to-implement'],
+      });
+    });
+
+    it('skips label removal when no target Linear issue available for needs_remediation 1', async () => {
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_remove_label_no_issue' });
+      vi.spyOn(codeTaskRepo, 'findOriginTaskByPR').mockResolvedValueOnce(ok(null));
+
+      const payload = makeNegativeReviewPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      const removeCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].removeLabels !== undefined
+      );
+      expect(removeCalls).toHaveLength(0);
+    });
+
+    it('recomputes group summary with empty labels after removing review-outcome label', async () => {
+      await createOriginTask({ traceId: 'trace_remove_label_recompute', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_remove_label_recompute_review' });
+
+      const mockRecomputeWithLabels = vi.fn().mockResolvedValue(ok(undefined));
+      setServices({
+        ...getServices(),
+        groupSummaryRepo: {
+          recomputeWithLabels: mockRecomputeWithLabels,
+        } as never,
+      });
+
+      const payload = makeNegativeReviewPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockRecomputeWithLabels).toHaveBeenCalledWith(
+        'user-123',
+        'INT-500',
+        [],
+        expect.any(String),
+      );
     });
   });
 
