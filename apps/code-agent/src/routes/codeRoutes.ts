@@ -29,6 +29,7 @@ import { generateWebhookSecret } from '../domain/utils/secrets.js';
 import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
 import { loadConfig } from '../config.js';
 import { backLinkPlanningTask } from '../domain/usecases/backLinkPlanningTask.js';
+import type { CodeTask } from '../domain/models/codeTask.js';
 
 const logger = createAppLogger({ name: 'code-routes' });
 
@@ -96,6 +97,55 @@ const workerTypeSchema = {
   enum: CODE_TASK_WORKER_TYPES,
 } as const;
 
+const executionMemoryContextSchema = {
+  type: 'object',
+  nullable: true,
+  properties: {
+    status: { type: 'string', enum: ['none', 'matched', 'error'] },
+    applicationId: { type: 'string', nullable: true },
+    retrievalVersion: { type: 'string', nullable: true },
+    querySummary: { type: 'string', nullable: true },
+    matchedAt: { type: 'string', format: 'date-time', nullable: true },
+    matchedMemories: {
+      type: 'array',
+      nullable: true,
+      items: {
+        type: 'object',
+        properties: {
+          memoryId: { type: 'string' },
+          title: { type: 'string' },
+          memoryType: { type: 'string', enum: ['implementation_pattern', 'verification_pattern', 'pitfall_pattern'] },
+          score: { type: 'number' },
+          appliesWhen: { type: 'string' },
+          action: { type: 'string' },
+          avoid: { type: 'string' },
+          verification: { type: 'string' },
+        },
+        required: ['memoryId', 'title', 'memoryType', 'score', 'appliesWhen', 'action', 'avoid', 'verification'],
+      },
+    },
+    errorCode: { type: 'string', nullable: true },
+    errorMessage: { type: 'string', nullable: true },
+  },
+  required: ['status'],
+} as const;
+
+const executionMemoryPostRunSchema = {
+  type: 'object',
+  nullable: true,
+  properties: {
+    status: { type: 'string', enum: ['pending', 'processing', 'completed', 'skipped', 'error'] },
+    attempts: { type: 'number' },
+    lastAttemptAt: { type: 'string', format: 'date-time', nullable: true },
+    generatedMemoryIds: { type: 'array', items: { type: 'string' } },
+    evaluationSummary: { type: 'string', nullable: true },
+    skipReason: { type: 'string', enum: ['infra_only', 'insufficient_signal', 'already_completed', 'no_reusable_lesson'], nullable: true },
+    errorMessage: { type: 'string', nullable: true },
+    completedAt: { type: 'string', format: 'date-time', nullable: true },
+  },
+  required: ['status', 'attempts', 'generatedMemoryIds'],
+} as const;
+
 // Response schema for created task
 const codeTaskSchema = {
   type: 'object',
@@ -129,6 +179,7 @@ const codeTaskSchema = {
     agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request', 'review'] },
     prNumber: { type: 'number', nullable: true },
     implementationTaskId: { type: 'string' },
+    fanOutChildTaskIds: { type: 'array', items: { type: 'string' } },
     parentTaskId: { type: 'string' },
     followUpReason: { type: 'string' },
     result: {
@@ -145,6 +196,7 @@ const codeTaskSchema = {
         review_comments_posted: { type: 'string', nullable: true },
         review_types: { type: 'string', nullable: true },
         requirements_tracker_updated: { type: 'string', nullable: true },
+        needs_remediation: { type: 'string', nullable: true },
       },
     },
     error: {
@@ -164,6 +216,8 @@ const codeTaskSchema = {
         },
       },
     },
+    executionMemoryContext: executionMemoryContextSchema,
+    executionMemoryPostRun: executionMemoryPostRunSchema,
   },
   required: [
     'id',
@@ -229,6 +283,7 @@ function taskToApiResponse(task: {
   prNumber?: number;
   agentType?: AgentType;
   implementationTaskId?: string;
+  fanOutChildTaskIds?: string[];
   parentTaskId?: string;
   followUpReason?: string;
   result?: {
@@ -242,6 +297,7 @@ function taskToApiResponse(task: {
     review_comments_posted?: string;
     review_types?: string;
     requirements_tracker_updated?: string;
+    needs_remediation?: string;
   };
   error?: {
     code: string;
@@ -252,6 +308,8 @@ function taskToApiResponse(task: {
       supportLink?: string;
     };
   };
+  executionMemoryContext?: CodeTask['executionMemoryContext'];
+  executionMemoryPostRun?: CodeTask['executionMemoryPostRun'];
   completedAt?: unknown;
   logChunksDropped?: number;
   statusSummary?: unknown;
@@ -279,6 +337,7 @@ function taskToApiResponse(task: {
   prNumber?: number;
   agentType?: AgentType;
   implementationTaskId?: string;
+  fanOutChildTaskIds?: string[];
   parentTaskId?: string;
   followUpReason?: string;
   result?: {
@@ -292,6 +351,7 @@ function taskToApiResponse(task: {
     review_comments_posted?: string;
     review_types?: string;
     requirements_tracker_updated?: string;
+    needs_remediation?: string;
   };
   error?: {
     code: string;
@@ -302,8 +362,74 @@ function taskToApiResponse(task: {
       supportLink?: string;
     };
   };
+  executionMemoryContext?: {
+    status: 'none' | 'matched' | 'error';
+    applicationId?: string;
+    retrievalVersion?: string;
+    querySummary?: string;
+    matchedAt?: string;
+    matchedMemories?: {
+      memoryId: string;
+      title: string;
+      memoryType: 'implementation_pattern' | 'verification_pattern' | 'pitfall_pattern';
+      score: number;
+      appliesWhen: string;
+      action: string;
+      avoid: string;
+      verification: string;
+    }[];
+    errorCode?: string;
+    errorMessage?: string;
+  };
+  executionMemoryPostRun?: {
+    status: 'pending' | 'processing' | 'completed' | 'skipped' | 'error';
+    attempts: number;
+    lastAttemptAt?: string;
+    generatedMemoryIds: string[];
+    evaluationSummary?: string;
+    skipReason?: 'infra_only' | 'insufficient_signal' | 'already_completed' | 'no_reusable_lesson';
+    errorMessage?: string;
+    completedAt?: string;
+  };
 }
 {
+  const executionMemoryMatchedAt = task.executionMemoryContext?.matchedAt !== undefined
+    ? timestampToIso(task.executionMemoryContext.matchedAt)
+    : undefined;
+  const executionMemoryContext = task.executionMemoryContext !== undefined
+    ? (() => {
+        const { matchedAt: _matchedAt, ...rest } = task.executionMemoryContext;
+        return {
+          ...rest,
+          ...(executionMemoryMatchedAt !== undefined && { matchedAt: executionMemoryMatchedAt }),
+        };
+      })()
+    : undefined;
+  const executionMemoryLastAttemptAt = task.executionMemoryPostRun?.lastAttemptAt !== undefined
+    ? timestampToIso(task.executionMemoryPostRun.lastAttemptAt)
+    : undefined;
+  const executionMemoryCompletedAt = task.executionMemoryPostRun?.completedAt !== undefined
+    ? timestampToIso(task.executionMemoryPostRun.completedAt)
+    : undefined;
+  const executionMemoryPostRun = task.executionMemoryPostRun !== undefined
+    ? (() => {
+        const {
+          lastAttemptAt: _lastAttemptAt,
+          completedAt: _completedAt,
+          ...rest
+        } = task.executionMemoryPostRun;
+        return {
+          ...rest,
+          ...(executionMemoryLastAttemptAt !== undefined && {
+            lastAttemptAt: executionMemoryLastAttemptAt,
+          }),
+          ...(executionMemoryCompletedAt !== undefined && {
+            completedAt: executionMemoryCompletedAt,
+          }),
+        };
+      })()
+    : undefined;
+
   return {
     id: task.id,
     userId: task.userId,
@@ -327,10 +453,13 @@ function taskToApiResponse(task: {
     ...(task.prNumber !== undefined && { prNumber: task.prNumber }),
     ...(task.agentType !== undefined && { agentType: task.agentType }),
     ...(task.implementationTaskId !== undefined && { implementationTaskId: task.implementationTaskId }),
+    ...(task.fanOutChildTaskIds !== undefined && { fanOutChildTaskIds: task.fanOutChildTaskIds }),
     ...(task.parentTaskId !== undefined && { parentTaskId: task.parentTaskId }),
     ...(task.followUpReason !== undefined && { followUpReason: task.followUpReason }),
     ...(task.result !== undefined && { result: task.result }),
     ...(task.error !== undefined && { error: task.error }),
+    ...(executionMemoryContext !== undefined && { executionMemoryContext }),
+    ...(executionMemoryPostRun !== undefined && { executionMemoryPostRun }),
   };
 }
 
@@ -612,6 +741,149 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         codeTaskId: result.value.codeTaskId, // @allow-result-access -- .ok checked at line 461
         resourceUrl: result.value.resourceUrl, // @allow-result-access -- .ok checked at line 461
       });
+    }
+  );
+
+  // POST /internal/code/group-summary/recompute - Called by linear-agent after label changes
+  fastify.post<{
+    Body: {
+      userId: string;
+      linearIssueId: string;
+      labels: { id: string; name: string }[];
+      sourceTimestamp: string;
+    };
+  }>(
+    '/internal/code/group-summary/recompute',
+    {
+      schema: {
+        operationId: 'recomputeGroupSummary',
+        summary: 'Recompute group summary aggregateStatus using Linear labels',
+        description: 'Internal endpoint called by linear-agent after label changes to recompute needs-action status accurately.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          properties: {
+            userId: { type: 'string' },
+            linearIssueId: { type: 'string' },
+            labels: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  name: { type: 'string' },
+                },
+                required: ['id', 'name'],
+              },
+            },
+            sourceTimestamp: { type: 'string', format: 'date-time' },
+          },
+          required: ['userId', 'linearIssueId', 'labels', 'sourceTimestamp'],
+        },
+        response: {
+          200: {
+            description: 'Recomputed successfully',
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  status: { type: 'string', enum: ['recomputed'] },
+                },
+                required: ['status'],
+              },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          404: {
+            description: 'No group summary found for the given userId/linearIssueId',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['NOT_FOUND'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          500: {
+            description: 'Server error',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: { userId: string; linearIssueId: string; labels: { id: string; name: string }[]; sourceTimestamp: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/code/group-summary/recompute',
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for group-summary recompute');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      const services = getServices();
+      const body = request.body;
+
+      /* v8 ignore start -- test-infra: groupSummaryRepo is always set in production services.ts; FakeFirestore test setup cannot produce undefined here @preserve */
+      if (services.groupSummaryRepo === undefined) {
+        request.log.warn({ userId: body.userId, linearIssueId: body.linearIssueId }, 'groupSummaryRepo not available');
+        return await reply.fail('INTERNAL_ERROR', 'Group summary repository not configured');
+      }
+      /* v8 ignore stop @preserve */
+
+      const result = await services.groupSummaryRepo.recomputeWithLabels(
+        body.userId,
+        body.linearIssueId,
+        body.labels,
+        body.sourceTimestamp,
+      );
+
+      if (!result.ok) {
+        if (result.error.code === 'NOT_FOUND') {
+          return await reply.fail('NOT_FOUND', result.error.message);
+        }
+        request.log.warn({ error: result.error.message }, 'Failed to recompute group summary');
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      return await reply.ok({ status: 'recomputed' });
     }
   );
 
@@ -1036,7 +1308,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     Body: {
       prompt: string;
       workerType?: WorkerType;
-      workerLocation?: string;
       linearIssueId?: string;
     };
   }>(
@@ -1053,7 +1324,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           properties: {
             prompt: { type: 'string', minLength: 1, maxLength: 100000 },
             workerType: workerTypeSchema,
-            workerLocation: { type: 'string', minLength: 1, maxLength: 32 },
             linearIssueId: { type: 'string' },
           },
           required: ['prompt'],
@@ -1090,22 +1360,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               },
             },
             required: ['success', 'error'],
-          },
-          400: {
-            description: 'Invalid worker specified',
-            type: 'object',
-            required: ['success', 'error'],
-            properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: {
-                type: 'object',
-                required: ['code', 'message'],
-                properties: {
-                  code: { type: 'string', enum: ['INVALID_WORKER', 'WORKER_UNHEALTHY'] },
-                  message: { type: 'string' },
-                },
-              },
-            },
           },
           409: {
             description: 'Duplicate task (similar prompt within 5 minutes)',
@@ -1188,7 +1442,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const body = request.body as {
         prompt: string;
         workerType?: WorkerType;
-        workerLocation?: string;
         linearIssueId?: string;
       };
 
@@ -1302,16 +1555,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       if (enabledWorkers.length === 0) {
         request.log.warn({ userId }, 'User has no workers configured');
         return await reply.fail('WORKER_NOT_CONFIGURED', 'Please configure your workers in Settings before submitting code tasks');
-      }
-
-      // Validate workerLocation if provided
-      if (body.workerLocation !== undefined) {
-        const requestedWorker = enabledWorkers.find((w) => w.name === body.workerLocation);
-
-        if (requestedWorker === undefined) {
-          request.log.warn({ userId, workerLocation: body.workerLocation }, 'Requested worker not found');
-          return await reply.fail('INVALID_WORKER', `Worker '${body.workerLocation}' is not configured or enabled`);
-        }
       }
 
       // Enqueue task for dispatch (INT-949)
@@ -1700,6 +1943,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                       review_comments_posted: { type: 'string', nullable: true },
                       review_types: { type: 'string', nullable: true },
                       requirements_tracker_updated: { type: 'string', nullable: true },
+                      needs_remediation: { type: 'string', nullable: true },
                     },
                   },
                   error: {
@@ -1719,6 +1963,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                       },
                     },
                   },
+                  executionMemoryContext: executionMemoryContextSchema,
+                  executionMemoryPostRun: executionMemoryPostRunSchema,
                   statusSummary: { type: 'object', nullable: true },
                 },
               },
@@ -2898,6 +3144,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                   resourceUrl: { type: 'string' },
                   workerLocation: { type: 'string' },
                   implementationOf: { type: 'string' },
+                  childTaskIds: { type: 'array', items: { type: 'string' } },
                 },
               },
             },
@@ -2958,6 +3205,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           case 'no_linear_issue':
           case 'label_not_ready':
             return await reply.fail('INVALID_REQUEST', error.message, undefined, { serverCode: error.code });
+          case 'complex_task_no_qualifying_children':
+            return await reply.fail('CONFLICT', error.message, undefined, { serverCode: error.code });
           case 'worker_not_configured':
             return await reply.fail('WORKER_NOT_CONFIGURED', error.message);
           case 'already_implemented':
@@ -3596,6 +3845,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                   resourceUrl: { type: 'string' },
                   workerLocation: { type: 'string' },
                   implementationOf: { type: 'string' },
+                  childTaskIds: { type: 'array', items: { type: 'string' } },
                 },
               },
             },
@@ -3736,6 +3986,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           case 'no_linear_issue':
           case 'label_not_ready':
             return reply.fail('INVALID_REQUEST', error.message, undefined, { serverCode: error.code });
+          case 'complex_task_no_qualifying_children':
+            return reply.fail('CONFLICT', error.message, undefined, { serverCode: error.code });
           case 'worker_not_configured':
             return reply.fail('WORKER_NOT_CONFIGURED', error.message);
           case 'already_implemented':
@@ -3950,6 +4202,22 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         workerSettingsRepo: services.workerSettingsRepo,
         logLineRepo: services.logLineRepo,
         statusMirrorService: services.statusMirrorService,
+        executionMemory: {
+          /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes is not tracked after service override tests @preserve */
+          ...(services.executionMemoryQueryClient !== undefined && {
+            queryClient: services.executionMemoryQueryClient,
+          }),
+          ...(services.executionMemoryEmbeddingClient !== undefined && {
+            embeddingClient: services.executionMemoryEmbeddingClient,
+          }),
+          ...(services.executionMemoryRepo !== undefined && {
+            executionMemoryRepo: services.executionMemoryRepo,
+          }),
+          ...(services.executionMemoryApplicationRepo !== undefined && {
+            executionMemoryApplicationRepo: services.executionMemoryApplicationRepo,
+          }),
+          /* v8 ignore stop @preserve */
+        },
       });
 
       if (retryResult.ok && retryResult.value.action !== 'empty' && retryResult.value.action !== 'failed') {
@@ -3969,6 +4237,22 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         workerSettingsRepo: services.workerSettingsRepo,
         taskEnqueueService: services.taskEnqueueService,
         orchestratorSecret: loadConfig().orchestratorSecret,
+        executionMemory: {
+          /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes is not tracked after service override tests @preserve */
+          ...(services.executionMemoryQueryClient !== undefined && {
+            queryClient: services.executionMemoryQueryClient,
+          }),
+          ...(services.executionMemoryEmbeddingClient !== undefined && {
+            embeddingClient: services.executionMemoryEmbeddingClient,
+          }),
+          ...(services.executionMemoryRepo !== undefined && {
+            executionMemoryRepo: services.executionMemoryRepo,
+          }),
+          ...(services.executionMemoryApplicationRepo !== undefined && {
+            executionMemoryApplicationRepo: services.executionMemoryApplicationRepo,
+          }),
+          /* v8 ignore stop @preserve */
+        },
       });
 
       if (!result.ok) {

@@ -11,6 +11,20 @@ vi.mock('jose', () => ({
   jwtVerify: vi.fn(),
 }));
 
+vi.mock('@intexuraos/infra-gpt', () => ({
+  EmbeddingClient: vi.fn().mockImplementation(() => ({
+    createEmbedding: vi.fn(),
+  })),
+}));
+
+vi.mock('openai', () => ({
+  default: vi.fn().mockImplementation(() => ({
+    embeddings: {
+      create: vi.fn(),
+    },
+  })),
+}));
+
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 
 import { buildServer } from '../../server.js';
@@ -45,6 +59,7 @@ import type { StatusMirrorService } from '../../infra/services/statusMirrorServi
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
+import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
@@ -60,6 +75,13 @@ import type { Result } from '@intexuraos/common-core';
 vi.mock('@intexuraos/internal-clients', async () => ({
   fetchWithAuth: vi.fn(),
 }));
+
+// Mock drainTaskQueue so tests can assert it is (or is not) called
+vi.mock('../../domain/usecases/drainTaskQueue.js', () => ({
+  drainTaskQueue: vi.fn().mockResolvedValue({ ok: true, value: { action: 'dispatched' } }),
+  _resetDrainGuard: vi.fn(),
+}));
+import * as drainTaskQueueModule from '../../domain/usecases/drainTaskQueue.js';
 
 describe('POST /internal/webhooks/task-complete', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -153,6 +175,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         descendants: [],
       })
     );
+    vi.spyOn(linearAgentClient, 'fetchDirectChildrenLive').mockResolvedValue(ok([]));
     vi.spyOn(linearAgentClient, 'updateIssueMetadata').mockResolvedValue(ok({ droppedLabels: [] }));
     vi.spyOn(linearAgentClient, 'addComment').mockResolvedValue(ok({ commentId: 'comment-1' }));
     vi.spyOn(linearAgentClient, 'updateIssueState').mockResolvedValue(ok(undefined));
@@ -207,6 +230,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
@@ -257,6 +281,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
@@ -279,6 +304,7 @@ describe('POST /internal/webhooks/task-complete', () => {
   });
 
   afterEach(() => {
+    delete process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'];
     resetServices();
     resetFirestore();
     vi.clearAllMocks();
@@ -1084,7 +1110,7 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       const linearAgentClient = getServices().linearAgentClient;
       const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
-      const fetchIssueTreeSpy = vi.mocked(linearAgentClient.fetchIssueTree);
+      const fetchDirectChildrenLiveSpy = vi.mocked(linearAgentClient.fetchDirectChildrenLive);
       const addCommentSpy = vi.mocked(linearAgentClient.addComment);
       const updateIssueStateSpy = vi.mocked(linearAgentClient.updateIssueState);
       const updateIssueMetadataSpy = vi.mocked(linearAgentClient.updateIssueMetadata);
@@ -1101,38 +1127,27 @@ describe('POST /internal/webhooks/task-complete', () => {
           parentId: null,
         })
       );
-      fetchIssueTreeSpy.mockResolvedValue(
-        ok({
-          root: {
-            id: 'original-uuid',
-            identifier: 'INT-123',
-            url: 'https://linear.app/pbuchman/issue/INT-123',
-            parentId: null,
-            labels: [],
+      fetchDirectChildrenLiveSpy.mockResolvedValue(
+        ok([
+          {
+            id: 'child-1-uuid',
+            identifier: 'INT-200',
+            url: 'https://linear.app/pbuchman/issue/INT-200',
+            parentId: 'original-uuid',
+            labels: ['code-task'],
             assigneeId: null,
-            state: 'In Progress',
+            state: 'Todo',
           },
-          descendants: [
-            {
-              id: 'child-1-uuid',
-              identifier: 'INT-200',
-              url: 'https://linear.app/pbuchman/issue/INT-200',
-              parentId: 'original-uuid',
-              labels: ['code-task'],
-              assigneeId: null,
-              state: 'Todo',
-            },
-            {
-              id: 'child-2-uuid',
-              identifier: 'INT-201',
-              url: 'https://linear.app/pbuchman/issue/INT-201',
-              parentId: 'original-uuid',
-              labels: ['code-task'],
-              assigneeId: null,
-              state: 'Todo',
-            },
-          ],
-        })
+          {
+            id: 'child-2-uuid',
+            identifier: 'INT-201',
+            url: 'https://linear.app/pbuchman/issue/INT-201',
+            parentId: 'original-uuid',
+            labels: ['code-task'],
+            assigneeId: null,
+            state: 'Todo',
+          },
+        ])
       );
       addCommentSpy.mockClear();
       updateIssueStateSpy.mockClear();
@@ -1214,7 +1229,7 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       const linearAgentClient = getServices().linearAgentClient;
       const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
-      const fetchIssueTreeSpy = vi.mocked(linearAgentClient.fetchIssueTree);
+      const fetchDirectChildrenLiveSpy = vi.mocked(linearAgentClient.fetchDirectChildrenLive);
 
       validateIssueSpy.mockReset();
       validateIssueSpy.mockResolvedValueOnce(
@@ -1228,29 +1243,18 @@ describe('POST /internal/webhooks/task-complete', () => {
           parentId: null,
         })
       );
-      fetchIssueTreeSpy.mockResolvedValue(
-        ok({
-          root: {
-            id: 'original-uuid',
-            identifier: 'INT-123',
-            url: 'https://linear.app/pbuchman/issue/INT-123',
-            parentId: null,
+      fetchDirectChildrenLiveSpy.mockResolvedValue(
+        ok([
+          {
+            id: 'child-uuid',
+            identifier: 'INT-200',
+            url: 'https://linear.app/pbuchman/issue/INT-200',
+            parentId: 'original-uuid',
             labels: [],
-            assigneeId: null,
-            state: 'In Progress',
+            assigneeId: 'some-user',
+            state: 'Backlog',
           },
-          descendants: [
-            {
-              id: 'child-uuid',
-              identifier: 'INT-200',
-              url: 'https://linear.app/pbuchman/issue/INT-200',
-              parentId: 'original-uuid',
-              labels: [],
-              assigneeId: 'some-user',
-              state: 'Backlog',
-            },
-          ],
-        })
+        ])
       );
 
       const payload = {
@@ -1306,7 +1310,7 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       const linearAgentClient = getServices().linearAgentClient;
       const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
-      const fetchIssueTreeSpy = vi.mocked(linearAgentClient.fetchIssueTree);
+      const fetchDirectChildrenLiveSpy = vi.mocked(linearAgentClient.fetchDirectChildrenLive);
 
       validateIssueSpy.mockReset();
       validateIssueSpy.mockResolvedValueOnce(
@@ -1320,29 +1324,18 @@ describe('POST /internal/webhooks/task-complete', () => {
           parentId: null,
         })
       );
-      fetchIssueTreeSpy.mockResolvedValue(
-        ok({
-          root: {
-            id: 'original-uuid',
-            identifier: 'INT-123',
-            url: 'https://linear.app/pbuchman/issue/INT-123',
-            parentId: null,
+      fetchDirectChildrenLiveSpy.mockResolvedValue(
+        ok([
+          {
+            id: 'grandchild-uuid',
+            identifier: 'INT-300',
+            url: 'https://linear.app/pbuchman/issue/INT-300',
+            parentId: 'some-other-parent',
             labels: [],
             assigneeId: null,
-            state: 'In Progress',
+            state: 'Backlog',
           },
-          descendants: [
-            {
-              id: 'grandchild-uuid',
-              identifier: 'INT-300',
-              url: 'https://linear.app/pbuchman/issue/INT-300',
-              parentId: 'some-other-parent',
-              labels: [],
-              assigneeId: null,
-              state: 'Backlog',
-            },
-          ],
-        })
+        ])
       );
 
       const payload = {
@@ -1403,7 +1396,7 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       const linearAgentClient = getServices().linearAgentClient;
       const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
-      const fetchIssueTreeSpy = vi.mocked(linearAgentClient.fetchIssueTree);
+      const fetchDirectChildrenLiveSpy = vi.mocked(linearAgentClient.fetchDirectChildrenLive);
       const addCommentSpy = vi.mocked(linearAgentClient.addComment);
 
       validateIssueSpy.mockReset();
@@ -1418,29 +1411,18 @@ describe('POST /internal/webhooks/task-complete', () => {
           parentId: null,
         })
       );
-      fetchIssueTreeSpy.mockResolvedValue(
-        ok({
-          root: {
-            id: 'original-uuid',
-            identifier: 'INT-123',
-            url: 'https://linear.app/pbuchman/issue/INT-123',
-            parentId: null,
-            labels: [],
+      fetchDirectChildrenLiveSpy.mockResolvedValue(
+        ok([
+          {
+            id: 'child-uuid',
+            identifier: 'INT-200',
+            url: 'https://linear.app/pbuchman/issue/INT-200',
+            parentId: 'original-uuid',
+            labels: ['code-task'],
             assigneeId: null,
-            state: 'In Progress',
+            state: 'Todo',
           },
-          descendants: [
-            {
-              id: 'child-uuid',
-              identifier: 'INT-200',
-              url: 'https://linear.app/pbuchman/issue/INT-200',
-              parentId: 'original-uuid',
-              labels: ['code-task'],
-              assigneeId: null,
-              state: 'Todo',
-            },
-          ],
-        })
+        ])
       );
       addCommentSpy.mockClear();
 
@@ -1499,7 +1481,7 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       const linearAgentClient = getServices().linearAgentClient;
       const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
-      const fetchIssueTreeSpy = vi.mocked(linearAgentClient.fetchIssueTree);
+      const fetchDirectChildrenLiveSpy = vi.mocked(linearAgentClient.fetchDirectChildrenLive);
       const updateIssueStateSpy = vi.mocked(linearAgentClient.updateIssueState);
       const updateIssueMetadataSpy = vi.mocked(linearAgentClient.updateIssueMetadata);
 
@@ -1538,7 +1520,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             parentId: 'original-uuid',
           })
         );
-      fetchIssueTreeSpy.mockClear();
+      fetchDirectChildrenLiveSpy.mockClear();
       updateIssueStateSpy.mockClear();
       updateIssueMetadataSpy.mockClear();
 
@@ -1571,8 +1553,8 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // fetchIssueTree must NOT be called — URL-based path was used
-      expect(fetchIssueTreeSpy).not.toHaveBeenCalled();
+      // fetchDirectChildrenLive must NOT be called — URL-based path was used
+      expect(fetchDirectChildrenLiveSpy).not.toHaveBeenCalled();
 
       // validateIssue called: 1 for original + 2 for subtasks = 3 total (single pass)
       expect(validateIssueSpy).toHaveBeenCalledTimes(3);
@@ -1671,7 +1653,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.error?.message).toContain('Invalid subtask URL');
     });
 
-    it('complex planned: falls back to fetchIssueTree when subtask URLs empty', async () => {
+    it('complex planned: falls back to fetchDirectChildrenLive when subtask URLs empty', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
         prompt: 'Plan complex task tree fallback',
@@ -1693,7 +1675,7 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       const linearAgentClient = getServices().linearAgentClient;
       const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
-      const fetchIssueTreeSpy = vi.mocked(linearAgentClient.fetchIssueTree);
+      const fetchDirectChildrenLiveSpy = vi.mocked(linearAgentClient.fetchDirectChildrenLive);
 
       validateIssueSpy.mockReset();
       validateIssueSpy.mockResolvedValueOnce(
@@ -1707,21 +1689,8 @@ describe('POST /internal/webhooks/task-complete', () => {
           parentId: null,
         })
       );
-      fetchIssueTreeSpy.mockResolvedValue(
-        ok({
-          root: {
-            id: 'original-uuid',
-            identifier: 'INT-123',
-            url: 'https://linear.app/pbuchman/issue/INT-123',
-            parentId: null,
-            labels: [],
-            assigneeId: null,
-            state: 'In Progress',
-          },
-          descendants: [],
-        })
-      );
-      fetchIssueTreeSpy.mockClear();
+      fetchDirectChildrenLiveSpy.mockResolvedValue(ok([]));
+      fetchDirectChildrenLiveSpy.mockClear();
 
       const payload = {
         taskId: task.id,
@@ -1752,9 +1721,9 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // fetchIssueTree must be called — fallback path
-      expect(fetchIssueTreeSpy).toHaveBeenCalledTimes(1);
-      expect(fetchIssueTreeSpy).toHaveBeenCalledWith(
+      // fetchDirectChildrenLive must be called — fallback path
+      expect(fetchDirectChildrenLiveSpy).toHaveBeenCalledTimes(1);
+      expect(fetchDirectChildrenLiveSpy).toHaveBeenCalledWith(
         expect.objectContaining({ issueId: 'original-uuid' })
       );
 
@@ -1764,7 +1733,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.status).toBe('planned');
     });
 
-    it('complex planned: falls back to fetchIssueTree when URL extraction is partial', async () => {
+    it('complex planned: falls back to fetchDirectChildrenLive when URL extraction is partial', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
         prompt: 'Plan complex task partial URLs',
@@ -1786,7 +1755,7 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       const linearAgentClient = getServices().linearAgentClient;
       const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
-      const fetchIssueTreeSpy = vi.mocked(linearAgentClient.fetchIssueTree);
+      const fetchDirectChildrenLiveSpy = vi.mocked(linearAgentClient.fetchDirectChildrenLive);
       const updateIssueStateSpy = vi.mocked(linearAgentClient.updateIssueState);
       const updateIssueMetadataSpy = vi.mocked(linearAgentClient.updateIssueMetadata);
 
@@ -1803,49 +1772,38 @@ describe('POST /internal/webhooks/task-complete', () => {
           parentId: null,
         })
       );
-      fetchIssueTreeSpy.mockResolvedValue(
-        ok({
-          root: {
-            id: 'original-uuid',
-            identifier: 'INT-123',
-            url: 'https://linear.app/pbuchman/issue/INT-123',
-            parentId: null,
+      fetchDirectChildrenLiveSpy.mockResolvedValue(
+        ok([
+          {
+            id: 'child-1-uuid',
+            identifier: 'INT-200',
+            url: 'https://linear.app/pbuchman/issue/INT-200',
+            parentId: 'original-uuid',
             labels: [],
             assigneeId: null,
             state: 'In Progress',
           },
-          descendants: [
-            {
-              id: 'child-1-uuid',
-              identifier: 'INT-200',
-              url: 'https://linear.app/pbuchman/issue/INT-200',
-              parentId: 'original-uuid',
-              labels: [],
-              assigneeId: null,
-              state: 'In Progress',
-            },
-            {
-              id: 'child-2-uuid',
-              identifier: 'INT-201',
-              url: 'https://linear.app/pbuchman/issue/INT-201',
-              parentId: 'original-uuid',
-              labels: [],
-              assigneeId: null,
-              state: 'In Progress',
-            },
-            {
-              id: 'child-3-uuid',
-              identifier: 'INT-202',
-              url: 'https://linear.app/pbuchman/issue/INT-202',
-              parentId: 'original-uuid',
-              labels: [],
-              assigneeId: null,
-              state: 'In Progress',
-            },
-          ],
-        })
+          {
+            id: 'child-2-uuid',
+            identifier: 'INT-201',
+            url: 'https://linear.app/pbuchman/issue/INT-201',
+            parentId: 'original-uuid',
+            labels: [],
+            assigneeId: null,
+            state: 'In Progress',
+          },
+          {
+            id: 'child-3-uuid',
+            identifier: 'INT-202',
+            url: 'https://linear.app/pbuchman/issue/INT-202',
+            parentId: 'original-uuid',
+            labels: [],
+            assigneeId: null,
+            state: 'In Progress',
+          },
+        ])
       );
-      fetchIssueTreeSpy.mockClear();
+      fetchDirectChildrenLiveSpy.mockClear();
       updateIssueStateSpy.mockClear();
       updateIssueMetadataSpy.mockClear();
 
@@ -1879,9 +1837,9 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // fetchIssueTree must be called — partial extraction triggers fallback
-      expect(fetchIssueTreeSpy).toHaveBeenCalledTimes(1);
-      expect(fetchIssueTreeSpy).toHaveBeenCalledWith(
+      // fetchDirectChildrenLive must be called — partial extraction triggers fallback
+      expect(fetchDirectChildrenLiveSpy).toHaveBeenCalledTimes(1);
+      expect(fetchDirectChildrenLiveSpy).toHaveBeenCalledWith(
         expect.objectContaining({ issueId: 'original-uuid' })
       );
 
@@ -1929,7 +1887,7 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       const linearAgentClient = getServices().linearAgentClient;
       const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
-      const fetchIssueTreeSpy = vi.mocked(linearAgentClient.fetchIssueTree);
+      const fetchDirectChildrenLiveSpy = vi.mocked(linearAgentClient.fetchDirectChildrenLive);
       const addCommentSpy = vi.mocked(linearAgentClient.addComment);
       const updateIssueStateSpy = vi.mocked(linearAgentClient.updateIssueState);
       const updateIssueMetadataSpy = vi.mocked(linearAgentClient.updateIssueMetadata);
@@ -1946,7 +1904,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           parentId: null,
         })
       );
-      fetchIssueTreeSpy.mockClear();
+      fetchDirectChildrenLiveSpy.mockClear();
       addCommentSpy.mockClear();
       updateIssueStateSpy.mockClear();
       updateIssueMetadataSpy.mockClear();
@@ -1980,7 +1938,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(response.statusCode).toBe(200);
 
       // Should NOT fetch issue tree (simple task)
-      expect(fetchIssueTreeSpy).not.toHaveBeenCalled();
+      expect(fetchDirectChildrenLiveSpy).not.toHaveBeenCalled();
 
       // Should only validate the original issue (1 call)
       expect(validateIssueSpy).toHaveBeenCalledTimes(1);
@@ -2241,7 +2199,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           commits: 2,
           summary: 'Implemented execution task',
           execution_outcome_label: 'implemented' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2280,6 +2238,102 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.status).toBe('implemented');
       expect(getResult.value.result?.execution_outcome_label).toBe('implemented');
       expect(getResult.value.result?.execution_linear_issue_url).toContain('/INT-123');
+    });
+
+    it('marks execution memory post-run pending and stores memory usage fields when feature flag is enabled', async () => {
+      process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] = 'true';
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Implement the task',
+        sanitizedPrompt: 'Implement the task',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 't-exec-memory-pending',
+        linearIssueId: 'INT-123',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'execution',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const validateIssueSpy = vi.spyOn(getServices().linearAgentClient, 'validateIssue');
+      validateIssueSpy.mockReset();
+      validateIssueSpy
+        .mockResolvedValueOnce(
+          ok({
+            id: 'routed-uuid',
+            identifier: 'INT-123',
+            title: 'Routed issue',
+            url: 'https://linear.app/pbuchman/issue/INT-123',
+            labels: ['code-task'],
+            childCount: 0,
+            parentId: null,
+          })
+        )
+        .mockResolvedValueOnce(
+          ok({
+            id: 'routed-uuid',
+            identifier: 'INT-123',
+            title: 'Routed issue',
+            url: 'https://linear.app/pbuchman/issue/INT-123',
+            labels: ['code-task'],
+            childCount: 0,
+            parentId: null,
+          })
+        );
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/901',
+          branch: 'feat/execution-agent',
+          commits: 2,
+          summary: 'Implemented execution task',
+          execution_outcome_label: 'implemented' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
+          execution_superpowers_requesting_code_review_used: '1' as const,
+          execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
+          execution_memory_ids_used: 'mem_142,mem_155',
+          execution_memory_ids_rejected: 'mem_188',
+          execution_memory_usage_summary: 'Used route logging and coverage lessons.',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.executionMemoryPostRun).toEqual(
+        expect.objectContaining({
+          status: 'pending',
+          attempts: 0,
+          generatedMemoryIds: [],
+        })
+      );
+      expect(getResult.value.result?.execution_memory_ids_used).toBe('mem_142,mem_155');
+      expect(getResult.value.result?.execution_memory_ids_rejected).toBe('mem_188');
+      expect(getResult.value.result?.execution_memory_usage_summary).toBe(
+        'Used route logging and coverage lessons.'
+      );
     });
 
     it('does not post implementation completion comment when the final update fails', async () => {
@@ -2344,7 +2398,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           commits: 2,
           summary: 'Implemented execution task',
           execution_outcome_label: 'implemented' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2366,6 +2420,54 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(gitHubPRClient.postPRComment).not.toHaveBeenCalled();
 
       updateSpy.mockRestore();
+    });
+
+    it('does not queue execution-memory post-run work for non-execution agents', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Implement the task',
+        sanitizedPrompt: 'Implement the task',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_non_execution',
+        linearIssueId: 'INT-123',
+        agentType: 'planning',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Planned the task',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.executionMemoryPostRun).toBeUndefined();
     });
 
     it('handles markdown-wrapped execution_linear_issue_url in execution completion', async () => {
@@ -2410,7 +2512,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           commits: 2,
           summary: 'Implemented execution task',
           execution_outcome_label: 'implemented' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
           execution_linear_issue_url: '[INT-123](https://linear.app/pbuchman/issue/INT-123)',
         },
@@ -2495,7 +2597,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           prUrl: 'https://github.com/pbuchman/intexuraos/pull/902',
           execution_outcome_label: 'implemented' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-999',
         },
@@ -2558,7 +2660,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         status: 'completed' as const,
         result: {
           execution_outcome_label: 'implemented' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2636,7 +2738,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'Work was already merged into development',
           execution_outcome_label: 'already_completed' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2719,7 +2821,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'The feature was already implemented and merged in PR #850',
           execution_outcome_label: 'already_completed' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2791,7 +2893,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'Work already done',
           execution_outcome_label: 'already_completed' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2865,7 +2967,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'Work already done',
           execution_outcome_label: 'already_completed' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2940,7 +3042,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'Work already done',
           execution_outcome_label: 'already_completed' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -4714,6 +4816,28 @@ describe('POST /internal/webhooks/task-complete', () => {
       };
     }
 
+    function makeNegativeReviewPayload(taskId: string): {
+      taskId: string;
+      status: 'completed';
+      result: {
+        summary: string;
+        review_comments_posted: string;
+        review_types: string;
+        needs_remediation: string;
+      };
+    } {
+      return {
+        taskId,
+        status: 'completed' as const,
+        result: {
+          summary: 'Found issues',
+          review_comments_posted: '2',
+          review_types: 'code_quality',
+          needs_remediation: '1',
+        },
+      };
+    }
+
     type LabelRemediationFn = (logger: import('pino').Logger, request: CreateRemediationTaskRequest) => Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>>;
 
     async function sendLabelPayload(payload: object): Promise<import('fastify').LightMyRequestResponse> {
@@ -5014,6 +5138,35 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(labelMetaCalls).toHaveLength(0);
     });
 
+    it('skips review-outcome label when PR is already merged', async () => {
+      await createOriginTask({ traceId: 'trace_label_merged', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_merged_review' });
+
+      // Simulate PR already merged by providing a gitHubPRSummaryRepo with mergedAt set
+      const mockFindByPullRequest = vi.fn().mockResolvedValue(
+        ok({ mergedAt: new Date('2026-04-01T09:35:00Z') })
+      );
+      setServices({
+        ...getServices(),
+        gitHubPRSummaryRepo: {
+          ...getServices().gitHubPRSummaryRepo,
+          findByPullRequest: mockFindByPullRequest,
+        },
+      });
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      // updateIssueMetadata should NOT have been called for label addition
+      const labelCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].addLabels !== undefined
+      );
+      expect(labelCalls).toHaveLength(0);
+    });
+
     it('does NOT set labels when needs_remediation is not "0"', async () => {
       await createOriginTask({ traceId: 'trace_label_remediation', agentType: 'execution' });
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_remediation_review' });
@@ -5038,6 +5191,136 @@ describe('POST /internal/webhooks/task-complete', () => {
           (call[0].addLabels.includes('ready-to-merge') || call[0].addLabels.includes('ready-to-implement'))
       );
       expect(labelCalls).toHaveLength(0);
+    });
+
+    it('recomputes group summary after setting review-outcome label', async () => {
+      await createOriginTask({ traceId: 'trace_label_summary', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_summary_review' });
+
+      const mockRecomputeWithLabels = vi.fn().mockResolvedValue(ok(undefined));
+      setServices({
+        ...getServices(),
+        groupSummaryRepo: {
+          recomputeWithLabels: mockRecomputeWithLabels,
+        } as never,
+      });
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockRecomputeWithLabels).toHaveBeenCalledWith(
+        'user-123',
+        'INT-500',
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'ready-to-merge' }),
+        ]),
+        expect.any(String),
+      );
+    });
+
+    it('does not throw when recomputeWithLabels fails after label set', async () => {
+      await createOriginTask({ traceId: 'trace_label_summary_fail', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_summary_fail_review' });
+
+      const mockRecomputeWithLabels = vi.fn().mockRejectedValue(new Error('firestore down'));
+      setServices({
+        ...getServices(),
+        groupSummaryRepo: {
+          recomputeWithLabels: mockRecomputeWithLabels,
+        } as never,
+      });
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      // Should complete successfully — recompute is fire-and-forget
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('removes ready-to-merge label when needs_remediation is 1 and origin is execution task', async () => {
+      await createOriginTask({ traceId: 'trace_remove_label_exec', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_remove_label_exec_review' });
+      const payload = makeNegativeReviewPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      const removeCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].removeLabels !== undefined &&
+          call[0].removeLabels.includes('ready-to-merge')
+      );
+      expect(removeCalls).toHaveLength(1);
+      expect(removeCalls[0]?.[0]).toEqual({
+        userId: 'user-123',
+        issueId: 'INT-500',
+        removeLabels: ['ready-to-merge'],
+      });
+    });
+
+    it('removes ready-to-implement label when needs_remediation is 1 and origin is planning task', async () => {
+      await createOriginTask({ traceId: 'trace_remove_label_plan', agentType: 'planning' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_remove_label_plan_review' });
+      const payload = makeNegativeReviewPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      const removeCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].removeLabels !== undefined &&
+          call[0].removeLabels.includes('ready-to-implement')
+      );
+      expect(removeCalls).toHaveLength(1);
+      expect(removeCalls[0]?.[0]).toEqual({
+        userId: 'user-123',
+        issueId: 'INT-500',
+        removeLabels: ['ready-to-implement'],
+      });
+    });
+
+    it('skips label removal when no target Linear issue available for needs_remediation 1', async () => {
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_remove_label_no_issue' });
+      vi.spyOn(codeTaskRepo, 'findOriginTaskByPR').mockResolvedValueOnce(ok(null));
+
+      const payload = makeNegativeReviewPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      const removeCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].removeLabels !== undefined
+      );
+      expect(removeCalls).toHaveLength(0);
+    });
+
+    it('recomputes group summary with empty labels after removing review-outcome label', async () => {
+      await createOriginTask({ traceId: 'trace_remove_label_recompute', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_remove_label_recompute_review' });
+
+      const mockRecomputeWithLabels = vi.fn().mockResolvedValue(ok(undefined));
+      setServices({
+        ...getServices(),
+        groupSummaryRepo: {
+          recomputeWithLabels: mockRecomputeWithLabels,
+        } as never,
+      });
+
+      const payload = makeNegativeReviewPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockRecomputeWithLabels).toHaveBeenCalledWith(
+        'user-123',
+        'INT-500',
+        [],
+        expect.any(String),
+      );
     });
   });
 
@@ -6060,6 +6343,164 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(markInReviewSpy).not.toHaveBeenCalled();
     });
   });
+
+  describe('triggers drain on task completion (INT-1098)', () => {
+    it('calls drainTaskQueue when completed task has prNumber', async () => {
+      const mockDrain = vi.mocked(drainTaskQueueModule.drainTaskQueue);
+      mockDrain.mockClear();
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_drain_1',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          branch: 'fix/drain-test',
+          commits: 1,
+          summary: 'Test drain trigger',
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.received).toBe(true);
+      expect(mockDrain).toHaveBeenCalledOnce();
+    });
+
+    it('does not call drainTaskQueue when completed task has no prNumber', async () => {
+      const mockDrain = vi.mocked(drainTaskQueueModule.drainTaskQueue);
+      mockDrain.mockClear();
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug no pr',
+        sanitizedPrompt: 'Fix the bug no pr',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_drain_2',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          branch: 'fix/no-pr-drain',
+          commits: 1,
+          summary: 'No PR, no drain',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.received).toBe(true);
+      expect(mockDrain).not.toHaveBeenCalled();
+    });
+
+    it('returns { received: true } even when drainTaskQueue throws', async () => {
+      const mockDrain = vi.mocked(drainTaskQueueModule.drainTaskQueue);
+      mockDrain.mockClear();
+      mockDrain.mockRejectedValueOnce(new Error('drain exploded'));
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug drain throws',
+        sanitizedPrompt: 'Fix the bug drain throws',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_drain_3',
+        prNumber: 99,
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          branch: 'fix/drain-throws',
+          commits: 1,
+          summary: 'Drain will throw',
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/99',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.received).toBe(true);
+      // Verify drain WAS called (so the rejection was actually exercised, not bypassed)
+      expect(mockDrain).toHaveBeenCalledOnce();
+    });
+  });
 });
 
 describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
@@ -6180,6 +6621,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
@@ -6230,6 +6672,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
@@ -6553,6 +6996,7 @@ describe('POST /internal/logs', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
@@ -6603,6 +7047,7 @@ describe('POST /internal/logs', () => {
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
@@ -7438,6 +7883,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
@@ -7488,6 +7934,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
@@ -8187,6 +8634,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
         descendants: [],
       })
     );
+    vi.spyOn(linearAgentClient, 'fetchDirectChildrenLive').mockResolvedValue(ok([]));
     vi.spyOn(linearAgentClient, 'updateIssueMetadata').mockResolvedValue(ok({ droppedLabels: [] }));
     vi.spyOn(linearAgentClient, 'addComment').mockResolvedValue(ok({ commentId: 'comment-1' }));
     vi.spyOn(linearAgentClient, 'updateIssueState').mockResolvedValue(ok(undefined));
@@ -8222,6 +8670,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
       gitHubPRSummaryRepo: {} as never,
@@ -8267,6 +8716,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
@@ -8457,7 +8907,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     expect(g.value.error?.message).toContain('Failed to comment planning PR');
   });
 
-  it('fails planning when fetchIssueTree fails in fallback', async () => {
+  it('fails planning when fetchDirectChildrenLive fails in fallback', async () => {
     const createResult = await codeTaskRepo.create({
       userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
       repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't6', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
@@ -8468,8 +8918,8 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     const lac = getServices().linearAgentClient;
     vi.mocked(lac.validateIssue).mockReset();
     vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'original-uuid', identifier: 'INT-123', title: 'O', url: 'u', labels: [], childCount: 1, parentId: null }));
-    vi.mocked(lac.fetchIssueTree).mockReset();
-    vi.mocked(lac.fetchIssueTree).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'tree fail' }));
+    vi.mocked(lac.fetchDirectChildrenLive).mockReset();
+    vi.mocked(lac.fetchDirectChildrenLive).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'children fail' }));
     const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: '', planning_pr_url: '' } };
     const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
     const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
@@ -8477,7 +8927,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     const g = await codeTaskRepo.findById(task.id);
     expect(g.ok).toBe(true);
     if (!g.ok) throw new Error('Failed');
-    expect(g.value.error?.message).toContain('Failed to fetch issue tree');
+    expect(g.value.error?.message).toContain('Failed to fetch live direct children');
   });
 
   it('fails planning when subtask state normalization fails in fallback path', async () => {
@@ -8491,8 +8941,8 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     const lac = getServices().linearAgentClient;
     vi.mocked(lac.validateIssue).mockReset();
     vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'original-uuid', identifier: 'INT-123', title: 'O', url: 'u', labels: [], childCount: 1, parentId: null }));
-    vi.mocked(lac.fetchIssueTree).mockReset();
-    vi.mocked(lac.fetchIssueTree).mockResolvedValueOnce(ok({ root: { id: 'original-uuid', identifier: 'INT-123', url: 'u', parentId: null, labels: [], assigneeId: null, state: 'IP' }, descendants: [{ id: 'c', identifier: 'INT-200', url: 'u', parentId: 'original-uuid', labels: [], assigneeId: null, state: 'IP' }] }));
+    vi.mocked(lac.fetchDirectChildrenLive).mockReset();
+    vi.mocked(lac.fetchDirectChildrenLive).mockResolvedValueOnce(ok([{ id: 'c', identifier: 'INT-200', url: 'u', parentId: 'original-uuid', labels: [], assigneeId: null, state: 'IP' }]));
     vi.mocked(lac.updateIssueState).mockReset();
     vi.mocked(lac.updateIssueState).mockResolvedValueOnce(ok(undefined)).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'state fail' }));
     const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: '', planning_pr_url: '' } };
@@ -8516,8 +8966,8 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     const lac = getServices().linearAgentClient;
     vi.mocked(lac.validateIssue).mockReset();
     vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'original-uuid', identifier: 'INT-123', title: 'O', url: 'u', labels: [], childCount: 1, parentId: null }));
-    vi.mocked(lac.fetchIssueTree).mockReset();
-    vi.mocked(lac.fetchIssueTree).mockResolvedValueOnce(ok({ root: { id: 'original-uuid', identifier: 'INT-123', url: 'u', parentId: null, labels: [], assigneeId: null, state: 'IP' }, descendants: [{ id: 'c', identifier: 'INT-200', url: 'u', parentId: 'original-uuid', labels: [], assigneeId: null, state: 'IP' }] }));
+    vi.mocked(lac.fetchDirectChildrenLive).mockReset();
+    vi.mocked(lac.fetchDirectChildrenLive).mockResolvedValueOnce(ok([{ id: 'c', identifier: 'INT-200', url: 'u', parentId: 'original-uuid', labels: [], assigneeId: null, state: 'IP' }]));
     vi.mocked(lac.updateIssueState).mockReset();
     vi.mocked(lac.updateIssueState).mockResolvedValue(ok(undefined));
     vi.mocked(lac.updateIssueMetadata).mockReset();
@@ -8543,8 +8993,8 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     const lac = getServices().linearAgentClient;
     vi.mocked(lac.validateIssue).mockReset();
     vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'original-uuid', identifier: 'INT-123', title: 'O', url: 'u', labels: [], childCount: 1, parentId: null }));
-    vi.mocked(lac.fetchIssueTree).mockReset();
-    vi.mocked(lac.fetchIssueTree).mockResolvedValueOnce(ok({ root: { id: 'original-uuid', identifier: 'INT-123', url: 'u', parentId: null, labels: [], assigneeId: null, state: 'IP' }, descendants: [{ id: 'c', identifier: 'INT-200', url: 'u', parentId: 'original-uuid', labels: [], assigneeId: null, state: 'IP' }] }));
+    vi.mocked(lac.fetchDirectChildrenLive).mockReset();
+    vi.mocked(lac.fetchDirectChildrenLive).mockResolvedValueOnce(ok([{ id: 'c', identifier: 'INT-200', url: 'u', parentId: 'original-uuid', labels: [], assigneeId: null, state: 'IP' }]));
     vi.mocked(lac.updateIssueState).mockReset();
     vi.mocked(lac.updateIssueState).mockResolvedValue(ok(undefined));
     vi.mocked(lac.updateIssueMetadata).mockReset();
@@ -9473,6 +9923,7 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
       gitHubPRSummaryRepo: {} as never,
@@ -9492,6 +9943,7 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;

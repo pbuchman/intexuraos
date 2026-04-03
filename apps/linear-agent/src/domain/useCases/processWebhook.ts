@@ -8,7 +8,7 @@
 import type { Result } from '@intexuraos/common-core';
 // @allow-pino-import -- type-only import for Logger interface @preserve
 import type { Logger } from 'pino';
-import type { LinearConnectionRepository, LinearIssueRepository, LinearCommentRepository, CodeAgentClient } from '../ports.js';
+import type { LinearConnectionRepository, LinearIssueRepository, LinearCommentRepository, CodeAgentClient, LinearApiClient } from '../ports.js';
 import type { LinearWebhookUpdatedFrom } from '../webhookTypes.js';
 import { WEBHOOK_TYPES } from '../webhookTypes.js';
 import type { WebhookAction } from '../webhookTypes.js';
@@ -18,6 +18,7 @@ import { syncCommentFromWebhook } from './syncCommentFromWebhook.js';
 
 export interface ProcessWebhookDeps {
   connectionRepository: LinearConnectionRepository;
+  linearApiClient: LinearApiClient;
   issueRepository: LinearIssueRepository;
   commentRepository: LinearCommentRepository;
   codeAgentClient: CodeAgentClient;
@@ -153,6 +154,8 @@ export async function processWebhook(
       userIds.map((uid) =>
         syncSingleIssue(event, uid, {
           issueRepo: issueRepository,
+          connectionRepo: connectionRepository,
+          linearApiClient: deps.linearApiClient,
           logger,
         })
       )
@@ -177,6 +180,15 @@ export async function processWebhook(
           firstSuccessAction = result.value.value.action; // @allow-result-access -- guarded by result.value.ok
           firstSuccessIssueId = result.value.value.issueId; // @allow-result-access -- guarded by result.value.ok
         }
+
+        void deps.codeAgentClient.notifyGroupSummaryRecompute({
+          userId: uid,
+          linearIssueId: event.data.identifier,
+          labels: event.data.labels.map((l) => ({ id: l.id, name: l.name })),
+          sourceTimestamp: event.data.updatedAt,
+        }).catch((e: unknown) => {
+          deps.logger.warn({ error: e, linearIssueId: event.data.identifier }, 'Failed to notify code-agent of label change');
+        });
       } else {
         /* v8 ignore start -- upstream: FakeLinearIssueRepository's syncSingleIssue always returns a resolved Result, so Promise.allSettled never produces a 'rejected' entry; the inner ok===true ternary branch is also unreachable because the else branch only executes when result.value.ok is false @preserve */
         const error = result.status === 'rejected' ? String(result.reason) : (result.value.ok ? '' : result.value.error);

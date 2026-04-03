@@ -186,6 +186,7 @@ const createTestConfig = (overrides: Partial<WorkerConfig> = {}): WorkerConfig =
     SENTRY_AUTH_TOKEN: 'test-sentry-token',
     MINIMAX_API_KEY: 'test-minimax-key',
     DASHSCOPE_API_KEY: 'test-dashscope-key',
+    OPENROUTER_API_KEY: 'test-openrouter-key',
   },
   gcpSaKeyPath: '/test/gcp-sa.json',
   githubAppKeyPath: '/test/github-key.pem',
@@ -1039,6 +1040,115 @@ describe('DockerProvider', () => {
     });
   });
 
+  describe('isResumeAvailable', () => {
+    it('returns true when preserved worker container is running', async () => {
+      const config = createTestConfig({ taskId: 'resume-task-1' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('resume-task-1');
+
+      const result = await provider.isResumeAvailable('resume-task-1');
+
+      expect(result).toBe(true);
+    });
+
+    it('returns false and cleans up preserved entry when container is stopped', async () => {
+      const config = createTestConfig({ taskId: 'resume-task-2' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('resume-task-2');
+
+      mocks.mockContainer.inspect.mockResolvedValueOnce({ State: { Running: false } });
+
+      const result = await provider.isResumeAvailable('resume-task-2');
+
+      expect(result).toBe(false);
+      expect(await provider.listPreservedWorkers()).toHaveLength(0);
+    });
+
+    it('returns false and cleans up preserved entry when container no longer exists', async () => {
+      const config = createTestConfig({ taskId: 'resume-task-3' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('resume-task-3');
+
+      mocks.mockContainer.inspect.mockRejectedValueOnce(new Error('No such container'));
+
+      const result = await provider.isResumeAvailable('resume-task-3');
+
+      expect(result).toBe(false);
+      expect(await provider.listPreservedWorkers()).toHaveLength(0);
+    });
+
+    it('returns false when no container entry exists and orphan lookup fails', async () => {
+      mocks.mockContainer.inspect.mockRejectedValueOnce(new Error('No such container'));
+
+      const result = await provider.isResumeAvailable('nonexistent-task');
+
+      expect(result).toBe(false);
+    });
+
+    it('returns true for running orphaned container when no map entry exists', async () => {
+      mocks.mockContainer.inspect.mockResolvedValueOnce({ State: { Running: true } });
+
+      const result = await provider.isResumeAvailable('orphan-task');
+
+      expect(result).toBe(true);
+    });
+
+    it('returns false for stopped orphaned container when no map entry exists', async () => {
+      mocks.mockContainer.inspect.mockResolvedValueOnce({ State: { Running: false } });
+
+      const result = await provider.isResumeAvailable('orphan-task-stopped');
+
+      expect(result).toBe(false);
+    });
+
+    it('returns false for stopped active worker container (not preserved)', async () => {
+      // Container in workers map (not preservedWorkers) — preserved is undefined
+      const config = createTestConfig({ taskId: 'active-stopped-task' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      mocks.mockContainer.inspect.mockResolvedValueOnce({ State: { Running: false } });
+
+      const result = await provider.isResumeAvailable('active-stopped-task');
+
+      expect(result).toBe(false);
+      // preservedWorkers should not be touched since task was never preserved
+      expect(await provider.listPreservedWorkers()).toHaveLength(0);
+    });
+  });
+
+  describe('preserved container restore with stopped container', () => {
+    it('falls through to new container creation when preserved container is stopped', async () => {
+      const config = createTestConfig({ taskId: 'stale-preserved-task' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('stale-preserved-task');
+
+      expect(await provider.listPreservedWorkers()).toHaveLength(1);
+
+      // Preserved container is stopped, and no orphan container exists either
+      mocks.mockContainer.inspect.mockResolvedValueOnce({ State: { Running: false } });
+      mocks.mockContainer.inspect.mockRejectedValueOnce(new Error('No such container'));
+      mocks.mockDocker.createContainer.mockClear();
+
+      await provider.createWorker(
+        createTestConfig({
+          taskId: 'stale-preserved-task',
+          continueSession: true,
+          prompt: 'Resume prompt',
+        })
+      );
+
+      // Should have fallen through to create new container
+      expect(mocks.mockDocker.createContainer).toHaveBeenCalled();
+      // Stale preserved entry should be cleaned up
+      expect(await provider.listPreservedWorkers()).toHaveLength(0);
+    });
+  });
+
   describe('startup failure cleanup', () => {
     it('cleans up secrets and session dirs on image pull failure', async () => {
       const fs = await import('node:fs');
@@ -1260,6 +1370,20 @@ describe('DockerProvider', () => {
       const envArr = createCall?.Env as string[];
       const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
       expect(modelEntry).toBe('ANTHROPIC_MODEL=MiniMax-M2.7');
+    });
+
+    it('sets OpenRouter env vars for openrouter-free worker', async () => {
+      const config = createTestConfig({ workerType: 'openrouter-free' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const baseUrlEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='));
+      expect(baseUrlEntry).toBe('ANTHROPIC_BASE_URL=https://openrouter.ai/api');
+      const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
+      expect(modelEntry).toBe('ANTHROPIC_MODEL=qwen/qwen3.6-plus:free');
+      const effortEntry = envArr.find((e: string) => e.startsWith('CLAUDE_CODE_EFFORT_LEVEL='));
+      expect(effortEntry).toBe('CLAUDE_CODE_EFFORT_LEVEL=high');
     });
 
     it('sets CLAUDE_CODE_EFFORT_LEVEL for opus worker', async () => {
@@ -2685,6 +2809,7 @@ describe('DockerProvider', () => {
               SENTRY_AUTH_TOKEN: 'test',
               MINIMAX_API_KEY: 'test',
               DASHSCOPE_API_KEY: 'test',
+              OPENROUTER_API_KEY: 'test',
             },
           })
         )
@@ -2762,6 +2887,7 @@ describe('DockerProvider', () => {
             SENTRY_AUTH_TOKEN: 'test',
             MINIMAX_API_KEY: 'test',
             DASHSCOPE_API_KEY: 'test',
+            OPENROUTER_API_KEY: 'test',
           },
         })
       );

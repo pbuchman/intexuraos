@@ -670,7 +670,7 @@ describe('mergeQueueTick', () => {
     );
   });
 
-  it('returns skipped_all when all eligible PRs are excluded', async () => {
+  it('drains when all selected PRs are gone and only excluded PRs remain', async () => {
     const watch = makeWatch({ excludedPrNumbers: [1, 2] });
     mockWatchRepo.findAllActive.mockResolvedValue(ok([watch]));
     mockUserServiceClient.getOAuthToken.mockResolvedValue(ok({ accessToken: 'tok-123', email: 'test@test.com' }));
@@ -690,10 +690,62 @@ describe('mergeQueueTick', () => {
     const tickResult = result.value[0];
     expect(tickResult).toBeDefined();
     if (tickResult === undefined) return;
-    expect(tickResult.action).toBe('skipped_all');
+    expect(tickResult.action).toBe('drained');
     expect(tickResult.skipped).toStrictEqual([]);
-    expect(tickResult.remainingPrs).toBe(2);
+    expect(tickResult.remainingPrs).toBe(0);
     expect(mockGitHubPRClient.getPullRequestDetails).not.toHaveBeenCalled();
+
+    expect(mockWatchRepo.update).toHaveBeenCalledWith('watch_abc', expect.objectContaining({
+      status: 'drained',
+    }));
+  });
+
+  it('drains when selected PRs are all already merged (405) and excluded PRs remain open', async () => {
+    const watch = makeWatch({ excludedPrNumbers: [3, 4] });
+    mockWatchRepo.findAllActive.mockResolvedValue(ok([watch]));
+    mockUserServiceClient.getOAuthToken.mockResolvedValue(ok({ accessToken: 'tok-123', email: 'test@test.com' }));
+
+    // PRs 1, 2 are selected; PRs 3, 4 are excluded
+    const prs = [
+      makePrSummary({ pullRequestNumber: 1, authorLogin: 'testuser' }),
+      makePrSummary({ pullRequestNumber: 2, authorLogin: 'testuser' }),
+      makePrSummary({ pullRequestNumber: 3, authorLogin: 'testuser' }),
+      makePrSummary({ pullRequestNumber: 4, authorLogin: 'testuser' }),
+    ];
+    mockGitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok(prs));
+
+    // Both selected PRs are already merged (405 → empty sha)
+    mockGitHubPRClient.getPullRequestDetails
+      .mockResolvedValueOnce(ok(makePrDetails({ number: 1, headSha: 'sha-1' })))
+      .mockResolvedValueOnce(ok(makePrDetails({ number: 2, headSha: 'sha-2' })));
+    mockGitHubPRClient.getCombinedCheckStatus.mockResolvedValue(ok({ state: 'success' }));
+    mockGitHubPRClient.mergePullRequest
+      .mockResolvedValueOnce(ok({ sha: '', merged: true }))
+      .mockResolvedValueOnce(ok({ sha: '', merged: true }));
+
+    const tick = createMergeQueueTick(deps);
+    const result = await tick();
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const tickResult = result.value[0];
+    expect(tickResult).toBeDefined();
+    if (tickResult === undefined) return;
+    expect(tickResult.action).toBe('drained');
+    expect(tickResult.remainingPrs).toBe(0);
+
+    expect(mockWatchRepo.update).toHaveBeenCalledWith('watch_abc', expect.objectContaining({
+      status: 'drained',
+    }));
+
+    // Excluded PRs should NOT have been fetched
+    expect(mockGitHubPRClient.getPullRequestDetails).not.toHaveBeenCalledWith(
+      expect.anything(), expect.anything(), expect.anything(), 3
+    );
+    expect(mockGitHubPRClient.getPullRequestDetails).not.toHaveBeenCalledWith(
+      expect.anything(), expect.anything(), expect.anything(), 4
+    );
   });
 
   it('handles summaries with null title, authorLogin, baseBranch, and headBranch', async () => {

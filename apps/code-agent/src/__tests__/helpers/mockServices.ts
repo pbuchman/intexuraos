@@ -21,6 +21,7 @@ import { createStatusMirrorService } from '../../infra/services/statusMirrorServ
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
+import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { createNoOpMetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
@@ -240,6 +241,13 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       logger,
     }),
     cleanupTaskLogs: createCleanupTaskLogsUseCase({
+      codeTaskRepository: createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore,
+        logger,
+      }),
+      logger,
+    }),
+    archiveStaleGroups: createArchiveStaleGroupsUseCase({
       codeTaskRepository: createFirestoreCodeTaskRepository({
         firestore: fakeFirestore,
         logger,

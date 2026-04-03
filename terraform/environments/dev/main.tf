@@ -277,6 +277,7 @@ locals {
   # Uses computed URLs to avoid circular dependencies
   common_service_env_vars = {
     INTEXURAOS_ENVIRONMENT                      = var.environment
+    INTEXURAOS_RUNTIME                          = "prod"
     INTEXURAOS_GCP_PROJECT_ID                   = var.project_id
     INTEXURAOS_USER_SERVICE_URL                 = "https://${local.services.user_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_NOTION_SERVICE_URL               = "https://${local.services.notion_service.name}-${local.cloud_run_url_suffix}"
@@ -505,13 +506,15 @@ module "secret_manager" {
     # Sentry error monitoring
     "INTEXURAOS_SENTRY_DSN"     = "Sentry Data Source Name for error tracking (backend services)"
     "INTEXURAOS_SENTRY_DSN_WEB" = "Sentry Data Source Name for error tracking (web app)"
-    # Crawl4AI Cloud API
-    "INTEXURAOS_CRAWL4AI_APP_API_KEY" = "Crawl4AI Cloud API key for web-agent"
+    # Cloudflare Browser Rendering API
+    "INTEXURAOS_CLOUDFLARE_ACCOUNT_ID" = "Cloudflare account ID for Browser Rendering API"
+    "INTEXURAOS_CLOUDFLARE_API_TOKEN"  = "Cloudflare API token with Browser Rendering Edit permission"
     # LLM API keys
-    "INTEXURAOS_OPENAI_APP_API_KEY"    = "OpenAI API key for chat-agent"
-    "INTEXURAOS_MINIMAX_APP_API_KEY"   = "MiniMax API key for orchestrator worker containers"
-    "INTEXURAOS_GEMINI_APP_API_KEY"    = "Gemini API key for orchestrator completion verifier"
-    "INTEXURAOS_DASHSCOPE_APP_API_KEY" = "Dashscope API key for orchestrator glm and qwen worker containers"
+    "INTEXURAOS_OPENAI_APP_API_KEY"     = "OpenAI API key for chat-agent"
+    "INTEXURAOS_MINIMAX_APP_API_KEY"    = "MiniMax API key for orchestrator worker containers"
+    "INTEXURAOS_GEMINI_APP_API_KEY"     = "Gemini API key for orchestrator completion verifier"
+    "INTEXURAOS_DASHSCOPE_APP_API_KEY"  = "Dashscope API key for orchestrator glm and qwen worker containers"
+    "INTEXURAOS_OPENROUTER_APP_API_KEY" = "OpenRouter API key for agent compliance validator"
     # External service API keys for worker containers
     "INTEXURAOS_LINEAR_API_KEY"    = "Linear API key passed to code worker containers"
     "INTEXURAOS_SENTRY_AUTH_TOKEN" = "Sentry auth token passed to code worker containers"
@@ -1459,11 +1462,13 @@ module "code_agent" {
     INTEXURAOS_ORCHESTRATOR_SECRET   = module.secret_manager.secret_ids["INTEXURAOS_ORCHESTRATOR_SECRET"]
     INTEXURAOS_TOKEN_ENCRYPTION_KEY  = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
     INTEXURAOS_GITHUB_WEBHOOK_SECRET = module.secret_manager.secret_ids["INTEXURAOS_GITHUB_WEBHOOK_SECRET"]
+    INTEXURAOS_OPENAI_APP_API_KEY    = module.secret_manager.secret_ids["INTEXURAOS_OPENAI_APP_API_KEY"]
   })
 
   env_vars = merge(local.common_service_env_vars, {
     INTEXURAOS_SERVICE_URL                = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
+    INTEXURAOS_EXECUTION_MEMORY_ENABLED   = "true"
     INTEXURAOS_QUEUE_MAX_SIZE             = "50"
     INTEXURAOS_QUEUE_TTL_MINUTES          = "1440"
     INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS   = "3"
@@ -1575,6 +1580,37 @@ resource "google_cloud_scheduler_job" "linear_sync_hourly" {
   ]
 }
 
+resource "google_cloud_scheduler_job" "linear_issues_prune_hourly" {
+  name        = "intexuraos-linear-issues-prune-hourly-${var.environment}"
+  description = "Prune redundant Linear issues when count exceeds threshold"
+  schedule    = "30 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}/internal/linear/prune-issues"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}"
+    }
+  }
+
+  retry_config {
+    retry_count          = 1
+    max_retry_duration   = "120s"
+    min_backoff_duration = "10s"
+    max_backoff_duration = "60s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_linear_agent,
+    module.linear_agent,
+  ]
+}
+
 # Chat Agent - In-app AI assistant with RAG
 module "chat_agent" {
   source = "../../modules/cloud-run-service"
@@ -1620,7 +1656,8 @@ module "web_agent" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/web-agent:latest"
 
   secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_CRAWL4AI_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_CRAWL4AI_APP_API_KEY"]
+    INTEXURAOS_CLOUDFLARE_ACCOUNT_ID = module.secret_manager.secret_ids["INTEXURAOS_CLOUDFLARE_ACCOUNT_ID"]
+    INTEXURAOS_CLOUDFLARE_API_TOKEN  = module.secret_manager.secret_ids["INTEXURAOS_CLOUDFLARE_API_TOKEN"]
   })
   env_vars = local.common_service_env_vars
 
@@ -1979,6 +2016,76 @@ resource "google_cloud_scheduler_job" "merge_queue_tick" {
 
   retry_config {
     retry_count = 0
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
+    module.code_agent,
+  ]
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Scheduler - Archive Stale Issue Groups (Hourly)
+# -----------------------------------------------------------------------------
+
+resource "google_cloud_scheduler_job" "archive_stale_groups" {
+  name        = "intexuraos-archive-stale-groups-${var.environment}"
+  description = "Archive issue groups with no activity for 7+ days"
+  schedule    = "0 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.code_agent.service_url}/internal/archive-stale-groups"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.code_agent.service_url
+    }
+  }
+
+  retry_config {
+    retry_count          = 1
+    max_retry_duration   = "60s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "30s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
+    module.code_agent,
+  ]
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Scheduler - Execution Memory Post-Run Processing (INT-1098)
+# -----------------------------------------------------------------------------
+
+resource "google_cloud_scheduler_job" "execution_memory_process" {
+  name        = "intexuraos-execution-memory-process-${var.environment}"
+  description = "Process pending execution memory post-run evaluations and distillations"
+  schedule    = "*/5 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.code_agent.service_url}/internal/execution-memory/process"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.code_agent.service_url
+    }
+  }
+
+  retry_config {
+    retry_count          = 1
+    max_retry_duration   = "60s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "30s"
   }
 
   depends_on = [

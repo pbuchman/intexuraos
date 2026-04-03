@@ -2,7 +2,8 @@
  * Tests for CodeTask Firestore repository with deduplication.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
+import { Timestamp, createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
+import type FirebaseFirestore from '@google-cloud/firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import type { Logger } from '@intexuraos/common-core';
 import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
@@ -659,6 +660,42 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.agentType).toBe('execution');
     });
 
+    it('stores executionMemoryContext when provided in create input', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput({
+        agentType: 'execution',
+        executionMemoryContext: {
+          status: 'matched',
+          applicationId: 'app_123',
+          retrievalVersion: 'execution-memory-retrieval@1.0.0',
+          querySummary: 'Callback logging, route verification, and env propagation.',
+          matchedMemories: [
+            {
+              memoryId: 'mem_142',
+              title: 'Log incoming requests on callback routes',
+              memoryType: 'pitfall_pattern',
+              score: 0.94,
+              appliesWhen: 'A callback route changes request handling.',
+              action: 'Update request logging with the route change.',
+              avoid: 'Do not copy stale branch names from memories.',
+              verification: 'Add app.inject coverage for the route.',
+            },
+          ],
+        },
+      });
+
+      const result = await repo.create(input);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.executionMemoryContext).toEqual(input.executionMemoryContext);
+    });
+
     it('stores agentType as remediation when provided (INT-1087)', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -919,6 +956,110 @@ describe('firestoreCodeTaskRepository', () => {
       if (result.value.queuedAt !== undefined) {
         expect(result.value.queuedAt.toDate()).toEqual(queuedAt);
       }
+    });
+
+    it('updates executionMemoryPostRun fields', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({ agentType: 'execution' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const completedAt = Timestamp.fromDate(new Date());
+      const result = await repo.update(created.value.id, {
+        executionMemoryPostRun: {
+          status: 'pending',
+          attempts: 0,
+          generatedMemoryIds: [],
+          completedAt,
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.executionMemoryPostRun).toEqual(
+        expect.objectContaining({
+          status: 'pending',
+          attempts: 0,
+          generatedMemoryIds: [],
+        })
+      );
+      if (result.value.executionMemoryPostRun?.completedAt !== undefined) {
+        expect(result.value.executionMemoryPostRun.completedAt.toDate()).toEqual(completedAt.toDate());
+      }
+    });
+
+    it('updates executionMemoryContext and converts Date timestamps to Firestore Timestamp', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({ agentType: 'execution' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const matchedAt = new Date();
+      const result = await repo.update(created.value.id, {
+        executionMemoryContext: {
+          status: 'matched',
+          applicationId: 'app-123',
+          retrievalVersion: 'execution-memory-retrieval@1.0.0',
+          querySummary: 'Callback route verification work',
+          matchedAt: matchedAt as unknown as Timestamp,
+          matchedMemories: [
+            {
+              memoryId: 'mem-1',
+              title: 'Verify route serialization',
+              memoryType: 'verification_pattern',
+              score: 0.9,
+              appliesWhen: 'Route handlers change',
+              action: 'Add app.inject coverage',
+              avoid: 'Do not skip response contract verification',
+              verification: 'Assert route payload shape',
+            },
+          ],
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.executionMemoryContext).toEqual(expect.objectContaining({
+        status: 'matched',
+        applicationId: 'app-123',
+      }));
+      expect(result.value.executionMemoryContext?.matchedAt).toBeInstanceOf(Timestamp);
+    });
+
+    it('drops invalid execution memory timestamps during update serialization', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({ agentType: 'execution' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const result = await repo.update(created.value.id, {
+        executionMemoryContext: {
+          status: 'matched',
+          applicationId: 'app-123',
+          retrievalVersion: 'execution-memory-retrieval@1.0.0',
+          querySummary: 'Callback route verification work',
+          matchedAt: 123 as unknown as Timestamp,
+          matchedMemories: [],
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.executionMemoryContext?.matchedAt).toBeUndefined();
     });
   });
 
@@ -1622,6 +1763,150 @@ describe('firestoreCodeTaskRepository', () => {
       if (!result.ok) return;
 
       expect(result.value.implementationTaskId).toBeUndefined();
+    });
+
+    it('sets and clears fanOutChildTaskIds', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const setResult = await repo.update(created.value.id, {
+        fanOutChildTaskIds: ['task-child-1', 'task-child-2'],
+      });
+      expect(setResult.ok).toBe(true);
+      if (!setResult.ok) return;
+      expect(setResult.value.fanOutChildTaskIds).toEqual(['task-child-1', 'task-child-2']);
+
+      const clearResult = await repo.update(created.value.id, {
+        fanOutChildTaskIds: null,
+      });
+      expect(clearResult.ok).toBe(true);
+      if (!clearResult.ok) return;
+      expect(clearResult.value.fanOutChildTaskIds).toBeUndefined();
+    });
+
+    it('does not read-back after writing when called with an external transaction', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a task first
+      const createResult = await repo.create(createTaskInput());
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Setup failed');
+      const taskId = createResult.value.id;
+
+      // Run update inside a transaction — track get calls after update
+      const getCallsAfterUpdate: string[] = [];
+      let updateCalled = false;
+
+      await fakeFirestore.runTransaction(async (tx) => {
+        // Wrap transaction to spy on get/update ordering
+        const originalGet = tx.get.bind(tx);
+        const originalUpdate = tx.update.bind(tx);
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- FakeTransaction lacks proper interface; safe spy target
+        const txAny = tx as any;
+        type GetFn = typeof originalGet;
+        type UpdateFn = typeof originalUpdate;
+        txAny.get = async (...args: Parameters<GetFn>): Promise<unknown> => {
+          if (updateCalled) {
+            getCallsAfterUpdate.push('get-after-update');
+          }
+          return originalGet(...args);
+        };
+
+        txAny.update = (...args: Parameters<UpdateFn>): void => {
+          updateCalled = true;
+          return originalUpdate(...args);
+        };
+
+        const updateResult = await repo.update(
+          taskId,
+          { status: 'running' },
+          { transaction: tx as unknown as FirebaseFirestore.Transaction },
+        );
+        expect(updateResult.ok).toBe(true);
+        if (!updateResult.ok) throw new Error('Update failed');
+
+        // Verify the returned task has the updated status
+        expect(updateResult.value.status).toBe('running');
+      });
+
+      // The key assertion: no get() calls happened after update()
+      expect(getCallsAfterUpdate).toEqual([]);
+    });
+
+    it('accepts external transaction via options parameter for update', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const result = await (fakeFirestore as unknown as Firestore).runTransaction(async (tx) => {
+        return repo.update(
+          created.value.id,
+          {
+            implementationTaskId: 'task-child-1',
+            fanOutChildTaskIds: ['task-child-1'],
+          },
+          { transaction: tx },
+        );
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.implementationTaskId).toBe('task-child-1');
+      expect(result.value.fanOutChildTaskIds).toEqual(['task-child-1']);
+    });
+
+    it('strips FieldValue.delete() sentinels from in-memory merge when updating nullable fields in a transaction', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a task with implementationTaskId and fanOutChildTaskIds set
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      // First set the fields so we can clear them
+      const setResult = await repo.update(created.value.id, {
+        implementationTaskId: 'task-phase2',
+        fanOutChildTaskIds: ['task-child-1', 'task-child-2'],
+      });
+      expect(setResult.ok).toBe(true);
+
+      // Now clear them inside a transaction (null → FieldValue.delete())
+      const result = await (fakeFirestore as unknown as Firestore).runTransaction(async (tx) => {
+        return repo.update(
+          created.value.id,
+          {
+            implementationTaskId: null,
+            fanOutChildTaskIds: null,
+          },
+          { transaction: tx },
+        );
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      // The returned task must NOT contain FieldValue sentinel objects —
+      // the in-memory merge must strip them so the result has clean fields.
+      expect(result.value.implementationTaskId).toBeUndefined();
+      expect(result.value.fanOutChildTaskIds).toBeUndefined();
     });
 
     it('updates workerLocation when provided in update input', async () => {
@@ -3025,6 +3310,30 @@ describe('firestoreCodeTaskRepository', () => {
       await repo.update(created.value.id, { status: 'planned' });
 
       const result = await repo.findPlannedTaskByLinearIssue('INT-503');
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toBeNull();
+    });
+
+    it('returns null when planned task already has fanOutChildTaskIds', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({
+        linearIssueId: 'INT-504',
+        agentType: 'planning',
+      }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, {
+        status: 'planned',
+        fanOutChildTaskIds: ['task-child-1'],
+      });
+
+      const result = await repo.findPlannedTaskByLinearIssue('INT-504');
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.value).toBeNull();

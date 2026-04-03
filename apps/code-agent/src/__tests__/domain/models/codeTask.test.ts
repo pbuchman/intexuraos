@@ -32,6 +32,7 @@ describe('CodeTask model', () => {
       'kimi',
       'codex',
       'codex-xhigh',
+      'openrouter-free',
     ];
     validTypes.forEach((type) => {
       expect(typeof type).toBe('string');

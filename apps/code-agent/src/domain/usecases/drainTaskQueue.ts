@@ -22,6 +22,11 @@ import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../utils
 import { archiveRetriedTaskAfterDispatch } from '../utils/archiveRetriedTaskAfterDispatch.js';
 import { shouldFanOut, fanOutChildTasks } from './fanOutChildTasks.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
+import {
+  prepareExecutionMemoryContext,
+  toDispatchExecutionMemoryContext,
+  type PrepareExecutionMemoryResources,
+} from './prepareExecutionMemoryContext.js';
 
 /** Max candidates fetched per drain cycle for the per-resource concurrency guard. */
 const DRAIN_CANDIDATE_BATCH_SIZE = 10;
@@ -65,6 +70,7 @@ export interface DrainTaskQueueDeps {
   workerSettingsRepo: WorkerSettingsRepository;
   taskEnqueueService: TaskEnqueueService;
   orchestratorSecret: string;
+  executionMemory?: PrepareExecutionMemoryResources;
 }
 
 export async function drainTaskQueue(
@@ -171,10 +177,34 @@ export async function drainTaskQueue(
       (a, b) => a.createdAt.toMillis() - b.createdAt.toMillis()
     );
 
-    // Find first dispatchable candidate with TTL-first + per-PR guard
+    // Find first dispatchable candidate with per-PR guard + TTL check
     let task: CodeTask | null = null;
     for (const candidate of roundRobinCandidates) {
-      // TTL check FIRST — expire deadlocked tasks before they block forever
+      // Per-PR concurrency guard FIRST — don't expire tasks that are merely PR-locked
+      if (candidate.prNumber !== undefined) {
+        const prActiveResult = await codeTaskRepo.hasDispatchedOrRunningForPR(candidate.repository, candidate.prNumber);
+        if (prActiveResult.ok && prActiveResult.value.hasActive) {
+          logger.info({
+            taskId: candidate.id,
+            repository: candidate.repository,
+            prNumber: candidate.prNumber,
+            activeTaskId: prActiveResult.value.taskId,
+          }, 'Skipping queued task — dispatched/running task exists for same PR');
+
+          // Reset TTL so PR-lock-blocked time does not count toward expiry
+          const resetResult = await codeTaskRepo.update(candidate.id, { queuedAt: new Date() });
+          if (!resetResult.ok) {
+            logger.warn(
+              { taskId: candidate.id, error: resetResult.error },
+              'Failed to reset queuedAt for PR-locked task — TTL clock continues from original queuedAt',
+            );
+          }
+
+          continue;
+        }
+      }
+
+      // TTL check — only for tasks that are actually dispatchable (not PR-locked)
       const queuedAt = candidate.queuedAt?.toDate() ?? candidate.createdAt.toDate();
       const ttlMs = config.queue.ttlMinutes * 60 * 1000;
       const now = Date.now();
@@ -208,20 +238,6 @@ export async function drainTaskQueue(
         }
 
         return ok({ action: 'expired', taskId: candidate.id, locksToCleanup });
-      }
-
-      // Per-PR concurrency guard: only dispatched/running tasks block (NOT queued)
-      if (candidate.prNumber !== undefined) {
-        const prActiveResult = await codeTaskRepo.hasDispatchedOrRunningForPR(candidate.repository, candidate.prNumber);
-        if (prActiveResult.ok && prActiveResult.value.hasActive) {
-          logger.info({
-            taskId: candidate.id,
-            repository: candidate.repository,
-            prNumber: candidate.prNumber,
-            activeTaskId: prActiveResult.value.taskId,
-          }, 'Skipping queued task — dispatched/running task exists for same PR');
-          continue;
-        }
       }
 
       task = candidate;
@@ -287,39 +303,101 @@ export async function drainTaskQueue(
     if (shouldFanOut(hasChildren, linearIssueLabels) && task.linearIssueId !== undefined) {
       logger.info({ taskId: task.id, linearIssueId: task.linearIssueId }, 'Drain fan-out triggered: parent issue has code-task children');
 
-      const fanOutResult = await fanOutChildTasks(
-        {
-          logger,
-          codeTaskRepo,
-          linearAgentClient,
-          taskEnqueueService: deps.taskEnqueueService,
-          orchestratorSecret: deps.orchestratorSecret,
-        },
-        {
-          parentTask: task,
+      if (linearIssueUuid === undefined) {
+        logger.warn({ taskId: task.id, linearIssueId: task.linearIssueId }, 'Drain fan-out skipped: live parent UUID unavailable');
+      } else {
+        const directChildrenResult = await linearAgentClient.fetchDirectChildrenLive({
           userId: task.userId,
-          linearIssueId: task.linearIssueId,
-          ...(linearIssueUuid !== undefined && { parentIssueUuid: linearIssueUuid }),
-        },
-      );
+          issueId: linearIssueUuid,
+        });
 
-      if (fanOutResult.ok) {
-        logger.info(
-          { taskId: task.id, childTaskIds: fanOutResult.value.childTaskIds },
-          'Drain fan-out completed, parent task marked as implemented',
-        );
-        return ok({ action: 'dispatched', taskId: task.id });
+        if (directChildrenResult.ok) {
+          const directChildren = directChildrenResult.value.filter((child) => child.parentId === linearIssueUuid);
+          const fanOutResult = await fanOutChildTasks(
+            {
+              logger,
+              codeTaskRepo,
+              taskEnqueueService: deps.taskEnqueueService,
+              orchestratorSecret: deps.orchestratorSecret,
+            },
+            {
+              planningTask: task,
+              userId: task.userId,
+              childIssues: directChildren,
+              workerType: task.workerType,
+            },
+          );
+
+          if (fanOutResult.ok) {
+            const cancelParentResult = await codeTaskRepo.update(task.id, {
+              status: 'cancelled',
+              completedAt: new Date(),
+              error: {
+                code: 'fan_out_parent_cancelled',
+                message: 'Parent complex task replaced by direct child execution tasks',
+              },
+            });
+            if (!cancelParentResult.ok) {
+              logger.warn(
+                { taskId: task.id, error: cancelParentResult.error },
+                'Drain fan-out succeeded but failed to cancel parent task',
+              );
+            }
+
+            logger.info(
+              { taskId: task.id, childTaskIds: fanOutResult.value.childTaskIds },
+              'Drain fan-out completed, parent task cancelled in favor of child execution tasks',
+            );
+            return ok({ action: 'dispatched', taskId: fanOutResult.value.primaryChildTaskId });
+          }
+
+          // Fan-out failed — fall through to normal dispatch
+          logger.warn(
+            { taskId: task.id, error: fanOutResult.error },
+            'Drain fan-out failed, falling back to normal dispatch',
+          );
+        } else {
+          logger.warn(
+            { taskId: task.id, linearIssueId: task.linearIssueId, error: directChildrenResult.error },
+            'Drain fan-out could not fetch live direct children, falling back to normal dispatch',
+          );
+        }
       }
-
-      // Fan-out failed — fall through to normal dispatch
-      logger.warn(
-        { taskId: task.id, error: fanOutResult.error },
-        'Drain fan-out failed, falling back to normal dispatch',
-      );
     }
 
     const agentType = resolveTaskAgentType(task, linearIssueLabels);
     const dispatchLabels = ensureDispatchLabelsForAgentType(linearIssueLabels, agentType);
+    let taskExecutionMemoryContext = task.executionMemoryContext;
+
+    if (
+      config.executionMemoryEnabled
+      && agentType === 'execution'
+      && taskExecutionMemoryContext === undefined
+    ) {
+      taskExecutionMemoryContext = await prepareExecutionMemoryContext({
+        task,
+        linearIssueLabels: dispatchLabels,
+        logger,
+        linearAgentClient,
+        queryClient: deps.executionMemory?.queryClient,
+        embeddingClient: deps.executionMemory?.embeddingClient,
+        executionMemoryRepo: deps.executionMemory?.executionMemoryRepo,
+        executionMemoryApplicationRepo: deps.executionMemory?.executionMemoryApplicationRepo,
+      });
+
+      const memoryUpdateResult = await codeTaskRepo.update(task.id, {
+        executionMemoryContext: taskExecutionMemoryContext,
+      });
+
+      if (!memoryUpdateResult.ok) {
+        logger.warn(
+          { taskId: task.id, error: memoryUpdateResult.error },
+          'Failed to persist execution memory context before dispatch'
+        );
+      }
+    }
+
+    const dispatchExecutionMemoryContext = toDispatchExecutionMemoryContext(taskExecutionMemoryContext);
 
     // Step 5: Attempt dispatch
     const webhookUrl = `${config.serviceUrl}/internal/webhooks/task-complete`;
@@ -347,6 +425,9 @@ export async function drainTaskQueue(
       ...(task.trackingCommentId !== undefined && { trackingCommentId: task.trackingCommentId }),
       ...(task.retriedFrom !== undefined && { retriedFrom: task.retriedFrom }),
       ...(task.reviewTypes !== undefined && { reviewTypes: task.reviewTypes }),
+      ...(dispatchExecutionMemoryContext !== undefined && {
+        executionMemoryContext: dispatchExecutionMemoryContext,
+      }),
       ...(task.prNumber !== undefined && { prNumber: task.prNumber }),
     });
 

@@ -17,6 +17,7 @@ import { buildServer } from '../../server.js';
 import { resetServices, setServices } from '../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
+import { Timestamp } from '@google-cloud/firestore';
 import pino from 'pino';
 import type { Logger } from 'pino';
 import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
@@ -46,6 +47,7 @@ import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZomb
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
 import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
+import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
@@ -162,6 +164,7 @@ describe('GET /code/tasks endpoints', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
@@ -212,6 +215,7 @@ describe('GET /code/tasks endpoints', () => {
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
@@ -721,6 +725,90 @@ describe('GET /code/tasks endpoints', () => {
         expect(body.data.id).toBe(testTaskId);
         expect(body.data.userId).toBe('test-user-id');
         expect(body.data.prompt).toBe('Test task');
+      });
+
+      it('returns execution memory context and post-run state when present', async () => {
+        const task = await codeTaskRepo.create({
+          userId: 'test-user-id',
+          prompt: 'Execution memory task',
+          sanitizedPrompt: 'Execution memory task',
+          systemPromptHash: 'default',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace_execution_memory',
+          executionMemoryContext: {
+            status: 'matched',
+            applicationId: 'app-123',
+            retrievalVersion: 'execution-memory-retrieval@1.0.0',
+            querySummary: 'Route logging and verification work',
+            matchedAt: Timestamp.now(),
+            matchedMemories: [
+              {
+                memoryId: 'mem-1',
+                title: 'Verify route serialization',
+                memoryType: 'verification_pattern',
+                score: 0.91,
+                appliesWhen: 'Route schema changes',
+                action: 'Add app.inject coverage',
+                avoid: 'Do not skip serialization',
+                verification: 'Check task detail response shape',
+              },
+            ],
+          },
+          executionMemoryPostRun: {
+            status: 'completed',
+            attempts: 1,
+            lastAttemptAt: Timestamp.now(),
+            generatedMemoryIds: ['mem-new'],
+            evaluationSummary: 'The prior verification memory helped.',
+            completedAt: Timestamp.now(),
+          },
+        });
+
+        if (!task.ok) {
+          throw new Error(`Failed to create execution memory task: ${task.error.message}`);
+        }
+
+        const response = await app.inject({
+          method: 'GET',
+          url: `/code/tasks/${task.value.id}`,
+          headers: {
+            authorization: 'Bearer test-token',
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(true);
+        expect(body.data.executionMemoryContext).toEqual({
+          status: 'matched',
+          applicationId: 'app-123',
+          retrievalVersion: 'execution-memory-retrieval@1.0.0',
+          querySummary: 'Route logging and verification work',
+          matchedAt: expect.any(String),
+          matchedMemories: [
+            {
+              memoryId: 'mem-1',
+              title: 'Verify route serialization',
+              memoryType: 'verification_pattern',
+              score: 0.91,
+              appliesWhen: 'Route schema changes',
+              action: 'Add app.inject coverage',
+              avoid: 'Do not skip serialization',
+              verification: 'Check task detail response shape',
+            },
+          ],
+        });
+        expect(body.data.executionMemoryPostRun).toEqual({
+          status: 'completed',
+          attempts: 1,
+          lastAttemptAt: expect.any(String),
+          generatedMemoryIds: ['mem-new'],
+          evaluationSummary: 'The prior verification memory helped.',
+          completedAt: expect.any(String),
+        });
       });
 
       it('returns 404 for non-existent task', async () => {

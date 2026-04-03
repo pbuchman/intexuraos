@@ -1,26 +1,21 @@
+/**
+ * Code tasks list page with server-side grouping via /code/issue-groups endpoint.
+ */
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUpDown, Clock, Plus } from 'lucide-react';
-import { Button, CodeTaskLogsModal, Layout } from '@/components';
+import { Archive, ArrowUpDown, Clock, Plus } from 'lucide-react';
+import { Button, CodeTaskLogsModal, Layout, TaskErrorModal } from '@/components';
 import { IssueGroupRow } from '@/components/code-tasks/IssueGroupRow';
 import { useAuth } from '@/context';
-import { useCodeTasks, useTimeTick } from '@/hooks';
-import { startImplementation, retryCodeTask } from '@/services/codeAgentApi';
-import { ACTIVE_STATUSES, groupByLinearIssue, sortIssueGroups } from '@/utils/issueGroups';
-import type { IssueGroup, GroupStatus, SortOption } from '@/utils/issueGroups';
-import type { CodeTaskStatus } from '@/types';
+import { useIssueGroups, useRapidPoll } from '@/hooks/useIssueGroups';
+import { useTimeTick } from '@/hooks';
+import { ApiError } from '@/services/apiClient';
+import { startImplementation, retryCodeTask, archiveCodeTask, deleteCodeTask } from '@/services/codeAgentApi';
+import type { ActioningType, GroupStatus, IssueGroup, SortOption } from '@/types/issueGroups';
 
-// Statuses shown by default (all except archived — INT-711)
-export const DEFAULT_VISIBLE_STATUSES: CodeTaskStatus[] = [
-  'queued', 'dispatched', 'running', 'planned', 'implemented', 'reviewed', 'failed', 'interrupted', 'cancelled',
-];
-
-// All statuses including archived — used when the user enables the Archived filter
-const ALL_STATUSES_INCLUDING_ARCHIVED: CodeTaskStatus[] = [
-  ...DEFAULT_VISIBLE_STATUSES, 'archived',
-];
-
-const ALL_GROUP_STATUSES: GroupStatus[] = ['active', 'needs-action', 'done', 'failed', 'archived'];
+// V3 does not include 'archived' — backend excludes archived tasks
+const ALL_GROUP_STATUSES: GroupStatus[] = ['active', 'needs-action', 'done', 'failed'];
 
 const GROUP_STATUS_CONFIG: Record<GroupStatus, { label: string; dotClass: string; activeClass: string }> = {
   active: {
@@ -43,11 +38,6 @@ const GROUP_STATUS_CONFIG: Record<GroupStatus, { label: string; dotClass: string
     dotClass: 'bg-red-500',
     activeClass: 'border-red-500 bg-red-50 text-red-700 dark:border-red-400 dark:bg-red-900/30 dark:text-red-400',
   },
-  archived: {
-    label: 'Archived',
-    dotClass: 'bg-slate-400',
-    activeClass: 'border-slate-400 bg-slate-50 text-slate-600 dark:border-slate-500 dark:bg-slate-800 dark:text-slate-400',
-  },
 };
 
 const INACTIVE_SEGMENT_CLASS =
@@ -56,7 +46,7 @@ const INACTIVE_SEGMENT_CLASS =
 const STORAGE_KEY = 'code-tasks-group-filter';
 const SORT_STORAGE_KEY = 'code-tasks-sort';
 
-const DEFAULT_NON_ARCHIVED: GroupStatus[] = ['active', 'needs-action', 'done', 'failed'];
+const DEFAULT_FILTERS = ALL_GROUP_STATUSES;
 
 const SORT_OPTIONS: { key: SortOption; label: string }[] = [
   { key: 'linear-id', label: 'Linear' },
@@ -73,43 +63,48 @@ function loadSortFromStorage(): SortOption {
   return 'linear-id';
 }
 
-function loadFiltersFromStorage(): Set<GroupStatus> {
+function loadFiltersFromStorage(): GroupStatus[] {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored !== null) {
     try {
       const parsed = JSON.parse(stored) as unknown;
       if (Array.isArray(parsed)) {
-        return new Set(
-          parsed.filter((s): s is GroupStatus =>
-            ALL_GROUP_STATUSES.includes(s as GroupStatus),
-          ),
+        const valid = parsed.filter((s): s is GroupStatus =>
+          ALL_GROUP_STATUSES.includes(s as GroupStatus),
         );
+        if (valid.length > 0) {
+          return valid;
+        }
       }
     } catch {
       // Invalid JSON, use default
     }
   }
-  // Default: show all except archived
-  return new Set<GroupStatus>(DEFAULT_NON_ARCHIVED);
+  return DEFAULT_FILTERS;
+}
+
+function getGroupKey(group: IssueGroup): string {
+  return group.linearIssueId ?? group.latestTask.id;
+}
+
+function isArchiveEligible(group: IssueGroup): boolean {
+  return group.aggregateStatus === 'done' || group.aggregateStatus === 'failed';
 }
 
 // --- PageHeader ---
 
 interface PageHeaderProps {
-  issueGroups: IssueGroup[];
+  counts: Record<GroupStatus, number>;
+  totalGroups: number;
 }
 
-function PageHeader({ issueGroups }: PageHeaderProps): React.JSX.Element {
-  const totalIssues = issueGroups.length;
-  const needsAttention = issueGroups.filter((g) => g.aggregateStatus === 'needs-action').length;
-  const failedCount = issueGroups.filter((g) => g.aggregateStatus === 'failed').length;
-
-  const parts: string[] = [`${String(totalIssues)} issue${totalIssues !== 1 ? 's' : ''}`];
-  if (needsAttention > 0) {
-    parts.push(`${String(needsAttention)} needs attention`);
+function PageHeader({ counts, totalGroups }: PageHeaderProps): React.JSX.Element {
+  const parts: string[] = [`${String(totalGroups)} issue${totalGroups !== 1 ? 's' : ''}`];
+  if (counts['needs-action'] > 0) {
+    parts.push(`${String(counts['needs-action'])} needs attention`);
   }
-  if (failedCount > 0) {
-    parts.push(`${String(failedCount)} failed`);
+  if (counts.failed > 0) {
+    parts.push(`${String(counts.failed)} failed`);
   }
 
   return (
@@ -143,28 +138,30 @@ function PageHeader({ issueGroups }: PageHeaderProps): React.JSX.Element {
 
 interface StatusPipelineProps {
   counts: Record<GroupStatus, number>;
-  activeFilters: Set<GroupStatus>;
+  activeFilters: GroupStatus[];
   onToggle: (status: GroupStatus) => void;
 }
 
 function StatusPipeline({ counts, activeFilters, onToggle }: StatusPipelineProps): React.JSX.Element {
+  const activeSet = useMemo(() => new Set(activeFilters), [activeFilters]);
+
   return (
     <div className="mb-4 flex flex-wrap gap-2">
       {ALL_GROUP_STATUSES.map((status) => {
-        const config = GROUP_STATUS_CONFIG[status];
+        const cfg = GROUP_STATUS_CONFIG[status];
         const count = counts[status];
-        const isActive = activeFilters.has(status);
+        const isActive = activeSet.has(status);
 
         return (
           <button
             key={status}
             onClick={(): void => { onToggle(status); }}
             className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors ${
-              isActive ? config.activeClass : INACTIVE_SEGMENT_CLASS
+              isActive ? cfg.activeClass : INACTIVE_SEGMENT_CLASS
             }`}
           >
-            <span className={`inline-block h-2 w-2 rounded-full ${config.dotClass}`} />
-            {config.label}
+            <span className={`inline-block h-2 w-2 rounded-full ${cfg.dotClass}`} />
+            {cfg.label}
             <span className="font-medium">{String(count)}</span>
           </button>
         );
@@ -210,11 +207,13 @@ function SortSelector({ activeSort, onChangeSort }: SortSelectorProps): React.JS
 
 function ColumnHeader(): React.JSX.Element {
   return (
-    <div className="mb-1 hidden grid-cols-[1fr_1fr_140px_120px] px-4 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500 lg:grid">
+    <div className="mb-1 hidden grid-cols-[28px_1fr_1fr_140px_120px_36px] px-4 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500 lg:grid">
+      <div></div>
       <div>Issue</div>
       <div>Pipeline</div>
       <div>Time</div>
-      <div>Actions</div>
+      <div>Output</div>
+      <div>Logs</div>
     </div>
   );
 }
@@ -224,87 +223,93 @@ function ColumnHeader(): React.JSX.Element {
 export function CodeTasksPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
 
-  const [activeFilters, setActiveFilters] = useState<Set<GroupStatus>>(loadFiltersFromStorage);
+  const [activeFilters, setActiveFilters] = useState<GroupStatus[]>(loadFiltersFromStorage);
   const [activeSort, setActiveSort] = useState<SortOption>(loadSortFromStorage);
   const [previewTaskId, setPreviewTaskId] = useState<string | null>(null);
-  const [actioningTaskId, setActioningTaskId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<ApiError | null>(null);
+  const actionInFlightRef = useRef(false);
+  const lastActionRef = useRef<{ taskId: string; action: 'retry' | 'implement' | 'archive' } | null>(null);
+  const [actioningType, setActioningType] = useState<ActioningType>(null);
 
-  // When the Archived filter is active, include 'archived' in the API status filter
-  // so the backend returns archived tasks. Otherwise use default (non-archived) statuses.
-  const apiStatuses = useMemo(
-    () => activeFilters.has('archived') ? ALL_STATUSES_INCLUDING_ARCHIVED : DEFAULT_VISIBLE_STATUSES,
-    [activeFilters],
-  );
+  // Batch selection state
+  const [selectedGroupKeys, setSelectedGroupKeys] = useState<Set<string>>(new Set());
+  const [batchActionGroupKeys, setBatchActionGroupKeys] = useState<Set<string>>(new Set());
 
-  const { tasks, loading, loadingMore, error, hasMore, loadMore, deleteTask, refresh } = useCodeTasks({
-    status: apiStatuses,
+  // Server-side grouping, filtering, sorting, pagination
+  const {
+    groups,
+    counts,
+    totalGroups,
+    loading,
+    loadingMore,
+    refreshing,
+    error,
+    hasMore,
+    loadMore,
+    refresh,
+  } = useIssueGroups({
+    groupStatus: activeFilters,
+    sortBy: activeSort,
   });
 
-  const hasActiveTasks = useMemo(
-    () => tasks.some((t) => ACTIVE_STATUSES.has(t.status)),
-    [tasks],
+  // Rapid polling after user actions
+  const { actioningTaskId, setActioningTaskId } = useRapidPoll(null, groups, refresh, actioningType);
+
+  // Sync actioningType when rapid poll clears actioningTaskId
+  useEffect(() => {
+    if (actioningTaskId === null) {
+      setActioningType(null);
+    }
+  }, [actioningTaskId]);
+
+  const timeTick = useTimeTick(30000, counts.active > 0);
+
+  // Eligible groups for batch archive (done + failed only)
+  const eligibleGroups = useMemo(
+    () => groups.filter(isArchiveEligible),
+    [groups],
   );
-  const timeTick = useTimeTick(30000, hasActiveTasks);
 
-  const allGroups = useMemo(() => groupByLinearIssue(tasks), [tasks]);
-
-  // --- Rapid poll + transition detection while an action is in flight ---
-  const rapidPollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  // Prune selection when groups change (e.g. after refresh removes archived items)
   useEffect(() => {
-    if (actioningTaskId === null) return;
-    const pollId = setInterval(() => { refresh(false).catch(() => undefined); }, 3000);
-    rapidPollTimeoutRef.current = setTimeout(() => { rapidPollTimeoutRef.current = null; setActioningTaskId(null); }, 30000);
-    return (): void => {
-      clearInterval(pollId);
-      if (rapidPollTimeoutRef.current !== null) {
-        clearTimeout(rapidPollTimeoutRef.current);
-        rapidPollTimeoutRef.current = null;
+    const validKeys = new Set(eligibleGroups.map(getGroupKey));
+    setSelectedGroupKeys((prev) => {
+      const pruned = new Set([...prev].filter((k) => validKeys.has(k)));
+      if (pruned.size === prev.size) return prev;
+      return pruned;
+    });
+  }, [eligibleGroups]);
+
+  const handleToggleSelection = useCallback((groupKey: string): void => {
+    setSelectedGroupKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) {
+        next.delete(groupKey);
+      } else {
+        next.add(groupKey);
       }
-    };
-  }, [actioningTaskId, refresh]);
+      return next;
+    });
+  }, []);
 
-  useEffect(() => {
-    if (actioningTaskId === null) return;
-    const group = allGroups.find(
-      (g) => g.latestTask.id === actioningTaskId || g.tasks.some((t) => t.id === actioningTaskId),
-    );
-    if (group === undefined || (group.aggregateStatus !== 'failed' && group.aggregateStatus !== 'needs-action')) {
-      setActioningTaskId(null);
-    }
-  }, [actioningTaskId, allGroups]);
+  const handleSelectAllEligible = useCallback((): void => {
+    setSelectedGroupKeys(new Set(eligibleGroups.map(getGroupKey)));
+  }, [eligibleGroups]);
 
-  const filteredGroups = useMemo(() => {
-    const filtered =
-      activeFilters.size === 0
-        ? allGroups
-        : allGroups.filter((g) => activeFilters.has(g.aggregateStatus));
-    return sortIssueGroups(filtered, activeSort);
-  }, [allGroups, activeFilters, activeSort]);
-
-  const counts = useMemo(() => {
-    const c: Record<GroupStatus, number> = {
-      active: 0,
-      'needs-action': 0,
-      done: 0,
-      failed: 0,
-      archived: 0,
-    };
-    for (const g of allGroups) {
-      c[g.aggregateStatus]++;
-    }
-    return c;
-  }, [allGroups]);
+  const handleDeselectAll = useCallback((): void => {
+    setSelectedGroupKeys(new Set());
+  }, []);
 
   const handleToggleFilter = useCallback((status: GroupStatus): void => {
     setActiveFilters((prev) => {
-      const next = new Set(prev);
-      if (next.has(status)) {
-        next.delete(status);
+      const set = new Set(prev);
+      if (set.has(status)) {
+        set.delete(status);
       } else {
-        next.add(status);
+        set.add(status);
       }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify([...next]));
+      const next = [...set];
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       return next;
     });
   }, []);
@@ -315,36 +320,133 @@ export function CodeTasksPage(): React.JSX.Element {
   }, []);
 
   const handleAction = useCallback(
-    async (taskId: string, action: 'delete' | 'retry' | 'implement') => {
+    async (taskId: string, action: 'delete' | 'retry' | 'implement' | 'archive') => {
       if (action === 'delete') {
-        void deleteTask(taskId);
         return;
       }
+      if (actionInFlightRef.current) return;
+      actionInFlightRef.current = true;
+      lastActionRef.current = { taskId, action };
       setActioningTaskId(taskId);
+      setActioningType(action);
       try {
         const token = await getAccessToken();
         if (action === 'implement') {
           await startImplementation(token, taskId);
-        }
-        if (action === 'retry') {
+        } else if (action === 'archive') {
+          await archiveCodeTask(token, taskId);
+        } else {
           await retryCodeTask(token, { taskId });
         }
         await refresh(false);
-      } catch {
+        lastActionRef.current = null;
+      } catch (err: unknown) {
         setActioningTaskId(null);
+        setActioningType(null);
+        setActionError(
+          err instanceof ApiError
+            ? err
+            : new ApiError('UNKNOWN', err instanceof Error ? err.message : 'An unexpected error occurred', 0),
+        );
+      } finally {
+        actionInFlightRef.current = false;
       }
     },
-    [deleteTask, getAccessToken, refresh],
+    [getAccessToken, refresh, setActioningTaskId],
   );
 
   const fireAction = useCallback(
-    (taskId: string, action: 'delete' | 'retry' | 'implement'): void => {
+    (taskId: string, action: 'delete' | 'retry' | 'implement' | 'archive'): void => {
       void handleAction(taskId, action);
     },
     [handleAction],
   );
 
-  if (loading && tasks.length === 0) {
+  const handleGroupAction = useCallback(
+    (
+      taskIds: string[],
+      actionType: 'archive' | 'delete',
+      apiFn: (token: string, taskId: string) => Promise<void>,
+      opts?: { onSuccess?: () => void; onFinally?: () => void },
+    ): void => {
+      void (async (): Promise<void> => {
+        if (actionInFlightRef.current) return;
+        actionInFlightRef.current = true;
+        const actionStart = Date.now();
+        const firstId = taskIds[0];
+        if (firstId !== undefined) {
+          setActioningTaskId(firstId);
+          setActioningType(actionType);
+        }
+        try {
+          const token = await getAccessToken();
+          // NOTE: If apiFn throws partway through the loop, previously-completed
+          // tasks remain changed while the rest are skipped. The user sees a generic
+          // error with no indication of partial success.
+          for (const taskId of taskIds) {
+            await apiFn(token, taskId);
+          }
+          // Ensure the row shimmer animation is visible before refresh removes the row
+          const MIN_ANIMATION_MS = 1200;
+          const elapsed = Date.now() - actionStart;
+          if (elapsed < MIN_ANIMATION_MS) {
+            await new Promise<void>((resolve) => { setTimeout(resolve, MIN_ANIMATION_MS - elapsed); });
+          }
+          await refresh(false);
+          opts?.onSuccess?.();
+        } catch (err: unknown) {
+          setActioningTaskId(null);
+          setActioningType(null);
+          setActionError(
+            err instanceof ApiError
+              ? err
+              : new ApiError('UNKNOWN', err instanceof Error ? err.message : 'An unexpected error occurred', 0),
+          );
+        } finally {
+          actionInFlightRef.current = false;
+          opts?.onFinally?.();
+        }
+      })();
+    },
+    [getAccessToken, refresh, setActioningTaskId],
+  );
+
+  const handleBatchArchive = useCallback((): void => {
+    const selectedGroups = groups.filter((g) => selectedGroupKeys.has(getGroupKey(g)));
+    const allTaskIds = selectedGroups.flatMap((g) => g.tasks.map((t) => t.id));
+    if (allTaskIds.length === 0) return;
+
+    setBatchActionGroupKeys(new Set(selectedGroupKeys));
+    handleGroupAction(allTaskIds, 'archive', archiveCodeTask, {
+      onSuccess: () => { setSelectedGroupKeys(new Set()); },
+      onFinally: () => { setBatchActionGroupKeys(new Set()); },
+    });
+  }, [groups, selectedGroupKeys, handleGroupAction]);
+
+  const handleArchiveGroup = useCallback(
+    (taskIds: string[]): void => { handleGroupAction(taskIds, 'archive', archiveCodeTask); },
+    [handleGroupAction],
+  );
+
+  const handleDeleteGroup = useCallback(
+    (taskIds: string[]): void => { handleGroupAction(taskIds, 'delete', deleteCodeTask); },
+    [handleGroupAction],
+  );
+
+  const handleCloseErrorModal = useCallback((): void => {
+    setActionError(null);
+    lastActionRef.current = null;
+  }, []);
+
+  const handleRetryFromModal = useCallback((): void => {
+    setActionError(null);
+    const last = lastActionRef.current;
+    if (last !== null) {
+      void handleAction(last.taskId, last.action);
+    }
+  }, [handleAction]);
+
+  if (loading && groups.length === 0) {
     return (
       <Layout>
         <div className="flex items-center justify-center py-12">
@@ -356,7 +458,7 @@ export function CodeTasksPage(): React.JSX.Element {
 
   return (
     <Layout>
-      <PageHeader issueGroups={allGroups} />
+      <PageHeader counts={counts} totalGroups={totalGroups} />
 
       <StatusPipeline
         counts={counts}
@@ -372,27 +474,26 @@ export function CodeTasksPage(): React.JSX.Element {
         </div>
       ) : null}
 
-      {filteredGroups.length === 0 ? (
+      {groups.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <div className="py-12 text-center">
             <p className="mb-4 text-slate-600 dark:text-slate-300">
-              {activeFilters.size > 0 && tasks.length > 0
+              {activeFilters.length > 0 && totalGroups > 0
                 ? 'No issues match the selected filters'
                 : 'No code tasks yet'}
             </p>
-            {activeFilters.size > 0 && tasks.length > 0 ? (
+            {activeFilters.length > 0 && totalGroups > 0 ? (
               <button
                 onClick={(): void => {
-                  const defaults = new Set<GroupStatus>(DEFAULT_NON_ARCHIVED);
-                  setActiveFilters(defaults);
-                  localStorage.setItem(STORAGE_KEY, JSON.stringify([...defaults]));
+                  setActiveFilters(DEFAULT_FILTERS);
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_FILTERS));
                 }}
                 className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-700"
               >
                 Clear filters
               </button>
             ) : null}
-            {tasks.length === 0 ? (
+            {totalGroups === 0 ? (
               <Link to="/code-tasks/new" className="text-blue-600 underline dark:text-blue-400">
                 Create your first code task
               </Link>
@@ -401,19 +502,66 @@ export function CodeTasksPage(): React.JSX.Element {
         </div>
       ) : (
         <div>
+          {/* Batch selection summary */}
+          {eligibleGroups.length > 0 ? (
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs text-slate-600 dark:text-slate-400">
+                {String(selectedGroupKeys.size)} of {String(eligibleGroups.length)} eligible issue{eligibleGroups.length !== 1 ? 's' : ''} selected
+              </span>
+              {eligibleGroups.length >= 2 ? (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSelectAllEligible}
+                    disabled={selectedGroupKeys.size === eligibleGroups.length}
+                    className="text-xs text-blue-600 hover:underline disabled:text-slate-400 disabled:no-underline dark:text-blue-400"
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeselectAll}
+                    disabled={selectedGroupKeys.size === 0}
+                    className="text-xs text-blue-600 hover:underline disabled:text-slate-400 disabled:no-underline dark:text-blue-400"
+                  >
+                    Deselect all
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           <ColumnHeader />
 
-          <div className="space-y-1">
-            {filteredGroups.map((group) => (
-              <IssueGroupRow
-                key={group.linearIssueId ?? group.latestTask.id}
-                group={group}
-                timeTick={timeTick}
-                onAction={fireAction}
-                onOpenLogs={setPreviewTaskId}
-                actioningTaskId={actioningTaskId}
-              />
-            ))}
+          <div className={`mb-2 h-0.5 w-full overflow-hidden rounded-full ${refreshing ? 'bg-slate-700' : ''}`}>
+            {refreshing ? (
+              <div className="animate-progress-slide h-full w-2/5 rounded-full bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
+            ) : null}
+          </div>
+
+          <div className={`space-y-1 ${refreshing && actioningType === null ? 'opacity-50 pointer-events-none' : ''}`}>
+            {groups.map((group) => {
+              const key = getGroupKey(group);
+              const selectable = isArchiveEligible(group);
+              return (
+                <IssueGroupRow
+                  key={key}
+                  group={group}
+                  timeTick={timeTick}
+                  onAction={fireAction}
+                  onArchiveGroup={handleArchiveGroup}
+                  onDeleteGroup={handleDeleteGroup}
+                  onOpenLogs={setPreviewTaskId}
+                  actioningTaskId={actioningTaskId}
+                  actioningType={actioningType}
+                  groupKey={key}
+                  isSelectable={selectable}
+                  isSelected={selectedGroupKeys.has(key)}
+                  isBatchActioning={batchActionGroupKeys.has(key)}
+                  onToggleSelection={selectable ? handleToggleSelection : undefined}
+                />
+              );
+            })}
           </div>
 
           {hasMore ? (
@@ -439,12 +587,41 @@ export function CodeTasksPage(): React.JSX.Element {
         </div>
       )}
 
+      {/* Floating batch action bar */}
+      {selectedGroupKeys.size > 0 && batchActionGroupKeys.size === 0 ? (
+        <div className="fixed bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-slate-200 bg-white/95 px-5 py-3 shadow-lg backdrop-blur-sm dark:border-slate-700 dark:bg-slate-800/95">
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+            {String(selectedGroupKeys.size)} selected
+          </span>
+          <button
+            onClick={handleBatchArchive}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-500"
+          >
+            <Archive className="h-4 w-4" />
+            Archive
+          </button>
+          <button
+            onClick={handleDeselectAll}
+            className="rounded-lg px-3 py-2 text-sm font-medium text-slate-500 transition-colors hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : null}
+
       {previewTaskId !== null ? (
         <CodeTaskLogsModal
           taskId={previewTaskId}
           onClose={(): void => { setPreviewTaskId(null); }}
         />
       ) : null}
+
+      <TaskErrorModal
+        isOpen={actionError !== null}
+        error={actionError}
+        onClose={handleCloseErrorModal}
+        onRetry={handleRetryFromModal}
+      />
     </Layout>
   );
 }

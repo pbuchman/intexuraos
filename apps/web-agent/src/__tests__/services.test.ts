@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { getServices, initServices, resetServices, setServices } from '../services.js';
 import {
   FakeLinkPreviewFetcher,
@@ -11,19 +11,15 @@ import { FakePricingContext } from '@intexuraos/llm-pricing';
 describe('services', () => {
   const mockPricingContext = new FakePricingContext();
 
-  beforeEach(() => {
-    vi.stubEnv('INTEXURAOS_CRAWL4AI_APP_API_KEY', 'test-key');
-  });
-
   afterEach(() => {
     resetServices();
-    vi.unstubAllEnvs();
   });
 
   describe('initServices', () => {
     it('initializes services with real implementations', () => {
       initServices({
-        crawl4aiApiKey: 'test-key',
+        cloudflareAccountId: 'test-account-id',
+        cloudflareApiToken: 'test-api-token',
         userServiceUrl: 'http://localhost:8110',
         internalAuthToken: 'test-token',
         pricingContext: mockPricingContext,
@@ -53,7 +49,8 @@ describe('services', () => {
 
     it('returns services after initialization', () => {
       initServices({
-        crawl4aiApiKey: 'test-key',
+        cloudflareAccountId: 'test-account-id',
+        cloudflareApiToken: 'test-api-token',
         userServiceUrl: 'http://localhost:8110',
         internalAuthToken: 'test-token',
         pricingContext: mockPricingContext,
@@ -89,7 +86,8 @@ describe('services', () => {
   describe('resetServices', () => {
     it('clears services making getServices throw', () => {
       initServices({
-        crawl4aiApiKey: 'test-key',
+        cloudflareAccountId: 'test-account-id',
+        cloudflareApiToken: 'test-api-token',
         userServiceUrl: 'http://localhost:8110',
         internalAuthToken: 'test-token',
         pricingContext: mockPricingContext,

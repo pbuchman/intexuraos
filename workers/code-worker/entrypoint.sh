@@ -5,6 +5,16 @@ set -euo pipefail
 # Code Worker Container Entrypoint
 # ==============================================================================
 
+BOOTSTRAP_GCP_AUTH="skipped"
+BOOTSTRAP_SECRET_SYNC="skipped"
+BOOTSTRAP_ENVRC="missing"
+BOOTSTRAP_GITHUB_TOKEN="missing"
+BOOTSTRAP_CODEX_SKILLS="missing"
+
+emit_bootstrap_evidence() {
+    echo "[entrypoint] Bootstrap evidence: codex_skills=${BOOTSTRAP_CODEX_SKILLS} github_token=${BOOTSTRAP_GITHUB_TOKEN} gcp_auth=${BOOTSTRAP_GCP_AUTH} secret_sync=${BOOTSTRAP_SECRET_SYNC} envrc=${BOOTSTRAP_ENVRC}"
+}
+
 setup_git_identity() {
     # Set identity at BOTH repo and global level.
     # Repo-level is critical because worktrees inherit the parent repo's
@@ -25,6 +35,7 @@ setup_git_identity() {
 
 setup_github_token() {
     if [ -f "/secrets/github-token" ]; then
+        BOOTSTRAP_GITHUB_TOKEN="loaded"
         # Point-in-time snapshot for convenience scripts; may go stale within
         # long-running attempts. The git credential helper and gh wrapper
         # (see Dockerfile) are the authoritative token sources — they re-read
@@ -36,6 +47,7 @@ setup_github_token() {
         git config --global credential.helper '!f() { echo "username=x-access-token"; echo "password=$(cat /secrets/github-token 2>/dev/null)"; }; f'
         echo "[entrypoint] GitHub token loaded and git credential configured"
     else
+        BOOTSTRAP_GITHUB_TOKEN="missing"
         echo "[entrypoint] WARNING: GitHub token not found at /secrets/github-token"
     fi
 }
@@ -201,6 +213,25 @@ run_claude_attempt() {
     return "$exit_code"
 }
 
+read_linear_mcp_timeout_ms() {
+    local mcp_json="/repo/.mcp.json"
+    if [ ! -f "$mcp_json" ]; then
+        echo "60000"
+        return
+    fi
+    local timeout_ms
+    timeout_ms=$(jq -r '.mcpServers.linear.timeoutMs // empty' "$mcp_json" 2>/dev/null || true)
+    if [ -z "$timeout_ms" ] || ! [[ "$timeout_ms" =~ ^[0-9]+$ ]]; then
+        echo "60000"
+        return
+    fi
+    # Cap at 1 hour to prevent arithmetic overflow in timeout_s conversion
+    if [ "$timeout_ms" -gt 3600000 ]; then
+        timeout_ms=3600000
+    fi
+    echo "$timeout_ms"
+}
+
 run_codex_attempt() {
     if [ ! -d "/repo" ]; then
         echo "[entrypoint] ERROR: /repo directory not mounted" >&2
@@ -249,6 +280,25 @@ run_codex_attempt() {
         return 1
     fi
 
+    local runtime_mode="fresh"
+    if [ "$continue_flag" = "1" ]; then
+        runtime_mode="resume"
+    fi
+    local thread_id_state="absent"
+    if [ -n "${CODEX_THREAD_ID:-}" ]; then
+        thread_id_state="present"
+    fi
+    local reasoning_effort_state="default"
+    if [ -n "${CODEX_REASONING_EFFORT:-}" ]; then
+        reasoning_effort_state="${CODEX_REASONING_EFFORT}"
+    fi
+
+    local linear_timeout_ms
+    linear_timeout_ms=$(read_linear_mcp_timeout_ms)
+    local timeout_s=$(( (linear_timeout_ms + 999) / 1000 ))
+
+    echo "[entrypoint] Codex runtime evidence: mode=${runtime_mode} thread_id=${thread_id_state} reasoning_effort=${reasoning_effort_state} linear_mcp_timeout_ms=${linear_timeout_ms}"
+
     local prompt_file
     prompt_file="$(mktemp /tmp/codex-prompt.XXXXXX)"
     {
@@ -264,40 +314,60 @@ run_codex_attempt() {
         echo "[entrypoint] Codex reasoning effort: ${CODEX_REASONING_EFFORT}"
     fi
 
+    local raw_exit=0
+    local log_file
+    log_file="$(mktemp /tmp/codex-output.XXXXXX)"
     set +e
+
     if [ -n "$attempt_forensics_dir" ]; then
         if [ "$continue_flag" = "1" ]; then
-            codex exec resume --json \
+            timeout --signal=TERM --kill-after=10 "${timeout_s}s" \
+                codex exec resume --json \
                 --skip-git-repo-check \
                 --dangerously-bypass-approvals-and-sandbox \
                 "${effort_args[@]}" \
                 "${CODEX_THREAD_ID}" \
-                - < "$prompt_file" 2>&1 | tee -a "${attempt_forensics_dir}/codex-stream.log"
+                - < "$prompt_file" > "$log_file" 2>&1 || raw_exit=$?
         else
-            codex exec --json \
+            timeout --signal=TERM --kill-after=10 "${timeout_s}s" \
+                codex exec --json \
                 --skip-git-repo-check \
                 --dangerously-bypass-approvals-and-sandbox \
                 "${effort_args[@]}" \
-                - < "$prompt_file" 2>&1 | tee -a "${attempt_forensics_dir}/codex-stream.log"
+                - < "$prompt_file" > "$log_file" 2>&1 || raw_exit=$?
         fi
     else
         if [ "$continue_flag" = "1" ]; then
-            codex exec resume --json \
+            timeout --signal=TERM --kill-after=10 "${timeout_s}s" \
+                codex exec resume --json \
                 --skip-git-repo-check \
                 --dangerously-bypass-approvals-and-sandbox \
                 "${effort_args[@]}" \
                 "${CODEX_THREAD_ID}" \
-                - < "$prompt_file"
+                - < "$prompt_file" > "$log_file" 2>&1 || raw_exit=$?
         else
-            codex exec --json \
+            timeout --signal=TERM --kill-after=10 "${timeout_s}s" \
+                codex exec --json \
                 --skip-git-repo-check \
                 --dangerously-bypass-approvals-and-sandbox \
                 "${effort_args[@]}" \
-                - < "$prompt_file"
+                - < "$prompt_file" > "$log_file" 2>&1 || raw_exit=$?
         fi
     fi
-    local exit_code=$?
     set -e
+
+    if [ -n "$attempt_forensics_dir" ]; then
+        tee -a "${attempt_forensics_dir}/codex-stream.log" < "$log_file"
+    else
+        cat "$log_file"
+    fi
+    rm -f "$log_file"
+
+    local exit_code="$raw_exit"
+    if [ "$exit_code" -eq 124 ]; then
+        echo "[entrypoint] MCP timeout server=linear timeout_ms=${linear_timeout_ms}"
+        exit_code=1
+    fi
 
     rm -f "$prompt_file"
 
@@ -401,6 +471,7 @@ fi
 # ------------------------------------------------------------------------------
 if [ -d "/opt/codex-home/.agents/skills" ]; then
     cp -a /opt/codex-home/.agents/. /home/claude/.agents/
+    BOOTSTRAP_CODEX_SKILLS="restored"
     echo "[entrypoint] Codex skill discovery restored"
 fi
 
@@ -429,8 +500,10 @@ fi
 if [ -f "/secrets/gcp-sa.json" ]; then
     echo "[entrypoint] Activating GCP service account..."
     if gcloud auth activate-service-account --key-file=/secrets/gcp-sa.json 2>&1; then
+        BOOTSTRAP_GCP_AUTH="active"
         echo "[entrypoint] GCP auth successful"
     else
+        BOOTSTRAP_GCP_AUTH="failed"
         echo "[entrypoint] GCP auth failed (non-fatal)"
     fi
 fi
@@ -442,8 +515,10 @@ if [ -f "/secrets/gcp-sa.json" ] && [ -f "/repo/scripts/sync-secrets.sh" ]; then
     SYNC_PROJECT_ID="$(jq -r .project_id /secrets/gcp-sa.json)"
     echo "[entrypoint] Syncing secrets from GCP Secret Manager (project: ${SYNC_PROJECT_ID})..."
     if bash /repo/scripts/sync-secrets.sh dev --project-id "${SYNC_PROJECT_ID}"; then
+        BOOTSTRAP_SECRET_SYNC="synced"
         echo "[entrypoint] Secret sync complete"
     else
+        BOOTSTRAP_SECRET_SYNC="failed"
         echo "[entrypoint] Secret sync failed (non-fatal, will use existing .envrc if available)"
     fi
 fi
@@ -454,6 +529,7 @@ fi
 if [ -f "/repo/.envrc" ]; then
     source /repo/.envrc
     direnv allow /repo
+    BOOTSTRAP_ENVRC="loaded"
     echo "[entrypoint] Loaded environment from /repo/.envrc ($(grep -c '^export ' /repo/.envrc) vars)"
 fi
 
@@ -462,6 +538,8 @@ fi
 # ------------------------------------------------------------------------------
 setup_git_identity
 setup_github_token
+
+emit_bootstrap_evidence
 
 # Token freshness: The orchestrator's TokenRefresher updates /secrets/github-token
 # every 30 minutes via bind mount. The git credential helper reads this file directly

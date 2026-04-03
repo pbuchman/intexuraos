@@ -11,6 +11,7 @@ import { getTaskMergeUrl } from '@/utils/issueGroups.js';
 import type { CodeTask, WorkerStatusTag } from '@/types';
 import {
   DEFAULT_STATE_STYLE,
+  EXECUTION_MEMORY_STATUS_STYLES,
   LINEAR_STATE_STYLES,
   STATUS_MAP,
   WORKER_STATUS_STYLES,
@@ -36,6 +37,13 @@ export function V2TaskHeader({ task, workerStatusTag }: V2TaskHeaderProps): Reac
   // Runtime guard: Firestore data may contain status values outside the CodeTaskStatus union
   const status = (STATUS_MAP[task.status] as StatusConfig | undefined) ?? { ...FALLBACK_STATUS, label: task.status };
   const StatusIcon = ICON_MAP[status.icon];
+  const executionMemoryChip = task.executionMemoryContext === undefined
+    ? null
+    : task.executionMemoryContext.status === 'matched'
+      ? `Memory: ${String(task.executionMemoryContext.matchedMemories?.length ?? 0)} matches`
+      : task.executionMemoryContext.status === 'none'
+        ? 'Memory: none'
+        : 'Memory: error';
   const prUrl = getTaskMergeUrl(task);
 
   return (
@@ -64,6 +72,11 @@ export function V2TaskHeader({ task, workerStatusTag }: V2TaskHeaderProps): Reac
           <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium ${status.bg} ${status.text}`}>
             <StatusIcon className={`h-4 w-4 ${task.status === 'running' ? 'animate-spin' : ''}`} />
             {status.label}
+          </span>
+        ) : null}
+        {executionMemoryChip !== null && task.executionMemoryContext !== undefined ? (
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium ${EXECUTION_MEMORY_STATUS_STYLES[task.executionMemoryContext.status]}`}>
+            {executionMemoryChip}
           </span>
         ) : null}
       </div>

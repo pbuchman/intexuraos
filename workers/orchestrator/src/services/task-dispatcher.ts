@@ -32,15 +32,14 @@ import {
 } from './completion-verifier.js';
 import { getRuntime, type RuntimeEvent, type WorkerRuntime } from './runtime/index.js';
 import type { TurnMetricsCollector } from './turn-metrics-collector.js';
-import type { ExecutionDeepValidator, DeepValidationInput } from './execution-deep-validator.js';
+import type {
+  AgentComplianceValidator,
+  ComplianceValidationInput,
+} from './agent-compliance-validator.js';
 import type { ExecutionAgentData } from './completion-verifier.js';
 import { readSessionTranscript } from './transcript-reader.js';
 import { formatTranscript } from './transcript-formatter.js';
-import {
-  extractPrNumber,
-  fetchLinearIssueContextViaCodeAgent,
-  readPlanFile,
-} from './deep-validator-helpers.js';
+import { extractPrNumber } from './deep-validator-helpers.js';
 
 const execAsync = promisify(exec);
 
@@ -91,6 +90,7 @@ export interface IsolationConfig {
     SENTRY_AUTH_TOKEN: string;
     MINIMAX_API_KEY: string;
     DASHSCOPE_API_KEY: string;
+    OPENROUTER_API_KEY: string;
   };
   gcpSaKeyPath: string;
   githubAppKeyPath: string;
@@ -127,7 +127,7 @@ export class TaskDispatcher {
     private readonly isolation: IsolationConfig,
     completionControl: CompletionControlConfig,
     private readonly turnMetricsCollector?: TurnMetricsCollector,
-    private readonly executionDeepValidator?: ExecutionDeepValidator
+    private readonly agentComplianceValidator?: AgentComplianceValidator
   ) {
     this.completionMaxAttempts = completionControl.maxAttempts;
     this.completionVerifier = completionControl.verifier;
@@ -345,6 +345,9 @@ export class TaskDispatcher {
         ...(request.actionId !== undefined && { actionId: request.actionId }),
         ...(request.retriedFrom !== undefined && { retriedFrom: request.retriedFrom }),
         ...(request.agentType !== undefined && { agentType: request.agentType }),
+        ...(request.executionMemoryContext !== undefined && {
+          executionMemoryContext: request.executionMemoryContext,
+        }),
         ...(request.trackingCommentId !== undefined && {
           trackingCommentId: request.trackingCommentId,
         }),
@@ -600,6 +603,17 @@ export class TaskDispatcher {
     }
 
     if (task.status === 'completed' || task.status === 'failed' || task.status === 'interrupted') {
+      // Verify the container is still available before accepting the resume.
+      // isResumeAvailable performs a synchronous Docker inspect so the caller gets a
+      // synchronous 'not_found' error instead of a silent async RESUME_ATTEMPT_FAILED.
+      const isAvailable = (await this.isolation.provider.isResumeAvailable?.(taskId)) ?? false;
+      if (!isAvailable) {
+        return {
+          ok: false,
+          error: { type: 'not_found', message: 'Worker container no longer available for resume' },
+        };
+      }
+
       const wasCompleted = task.status === 'completed';
       await this.teardownAttempt(taskId, true);
 
@@ -1090,17 +1104,21 @@ export class TaskDispatcher {
       await this.collectTurnMetrics(task, attempt);
       const finalResult = this.buildResultFromVerification(task, result, verification);
 
-      // Deep validation for execution tasks: pre-read data before cleanup, then fire-and-forget
-      let deepValInput: DeepValidationInput | undefined;
-      if (completionAgentType === 'execution' && this.executionDeepValidator !== undefined) {
-        deepValInput = await this.prepareDeepValidationInput(task, finalResult, verification);
+      // Compliance validation for execution tasks: pre-read data before cleanup, then fire-and-forget
+      let complianceInput: ComplianceValidationInput | undefined;
+      if (completionAgentType === 'execution' && this.agentComplianceValidator !== undefined) {
+        complianceInput = await this.prepareComplianceValidationInput(
+          task,
+          finalResult,
+          verification
+        );
       }
 
-      const keepLogOpen = deepValInput !== undefined;
+      const keepLogOpen = complianceInput !== undefined;
       await this.finalizeTaskWithResult(task, completionAgentType, finalResult, keepLogOpen);
 
-      if (deepValInput !== undefined) {
-        void this.executeDeepValidation(task.taskId, deepValInput).finally(() => {
+      if (complianceInput !== undefined) {
+        void this.executeComplianceValidation(task, complianceInput).finally(() => {
           void this.flushAndCloseLogForwarder(task.taskId);
         });
       }
@@ -1263,10 +1281,13 @@ export class TaskDispatcher {
       base.planning_unclear_clarification = agentData.unclear_clarification;
     } else if (agentData.agentType === 'execution') {
       base.execution_outcome_label = agentData.outcome;
-      base.execution_superpowers_executing_plans_used =
-        agentData.superpowers_executing_plans === 'used' ? '1' : '0';
+      base.execution_superpowers_subagent_driven_dev_used =
+        agentData.superpowers_subagent_driven_dev === 'used' ? '1' : '0';
       base.execution_superpowers_requesting_code_review_used =
         agentData.superpowers_requesting_code_review === 'used' ? '1' : '0';
+      base.execution_memory_ids_used = agentData.memory_ids_used;
+      base.execution_memory_ids_rejected = agentData.memory_ids_rejected;
+      base.execution_memory_usage_summary = agentData.memory_usage_summary;
       if (agentData.gh_pr_url !== '') {
         base.prUrl = agentData.gh_pr_url;
       }
@@ -1676,6 +1697,9 @@ export class TaskDispatcher {
           }),
           ...(task.continuationPrBranch !== undefined && {
             continuationPrBranch: task.continuationPrBranch,
+          }),
+          ...(task.executionMemoryContext !== undefined && {
+            executionMemoryContext: task.executionMemoryContext,
           }),
           ...(task.reviewTypes !== undefined && { reviewTypes: task.reviewTypes }),
         }) +
@@ -2237,12 +2261,12 @@ export class TaskDispatcher {
     }
   }
 
-  private async prepareDeepValidationInput(
+  private async prepareComplianceValidationInput(
     task: Task,
     finalResult: TaskResult,
     verification: CompletionVerifierVerdict
-  ): Promise<DeepValidationInput | undefined> {
-    if (this.executionDeepValidator === undefined) return undefined;
+  ): Promise<ComplianceValidationInput | undefined> {
+    if (this.agentComplianceValidator === undefined) return undefined;
     if (verification.agentData?.agentType !== 'execution') return undefined;
 
     try {
@@ -2250,49 +2274,27 @@ export class TaskDispatcher {
 
       const prNumber = extractPrNumber(finalResult.prUrl);
       if (prNumber === undefined) {
-        this.logger.warn({ taskId: task.taskId }, 'Deep validation skipped: no PR number');
+        this.logger.warn({ taskId: task.taskId }, 'Compliance validation skipped: no PR number');
         return undefined;
       }
 
-      this.appendOrchestratorTaskLog(task.taskId, 'Starting deep validation');
+      this.appendOrchestratorTaskLog(task.taskId, 'Starting compliance validation');
 
-      // Parallelize independent I/O: transcript reading and code-agent context fetch
-      const [entries, codeAgentContext] = await Promise.all([
-        readSessionTranscript(this.config.secretsBasePath, task.taskId, this.logger),
-        task.linearIssueId !== undefined
-          ? fetchLinearIssueContextViaCodeAgent(
-              task.linearIssueId,
-              {
-                codeAgentUrl: this.config.codeAgentUrl,
-                internalAuthToken: this.config.internalAuthToken,
-              },
-              this.logger
-            )
-          : Promise.resolve(undefined),
-      ]);
+      const entries = await readSessionTranscript(
+        this.config.secretsBasePath,
+        task.taskId,
+        this.logger
+      );
 
       if (entries.length === 0) {
-        this.logger.warn({ taskId: task.taskId }, 'Deep validation skipped: no transcript entries');
+        this.logger.warn(
+          { taskId: task.taskId },
+          'Compliance validation skipped: no transcript entries'
+        );
         return undefined;
       }
 
       const formattedTranscript = formatTranscript(entries);
-
-      let linearIssueBody = this.buildLinearIssueSummary(task);
-      let planContent: string | undefined;
-      if (codeAgentContext !== undefined) {
-        if (codeAgentContext.description !== null) {
-          linearIssueBody = `${linearIssueBody}\n\nDescription:\n${codeAgentContext.description}`;
-        }
-
-        if (codeAgentContext.planDocumentPath !== null) {
-          planContent = await readPlanFile(
-            task.worktreePath,
-            codeAgentContext.planDocumentPath,
-            this.logger
-          );
-        }
-      }
 
       return {
         taskId: task.taskId,
@@ -2301,44 +2303,98 @@ export class TaskDispatcher {
         formattedTranscript,
         agentClaims: {
           outcome: agentData.outcome,
-          superpowers_executing_plans: agentData.superpowers_executing_plans,
+          superpowers_subagent_driven_dev: agentData.superpowers_subagent_driven_dev,
           superpowers_requesting_code_review: agentData.superpowers_requesting_code_review,
           gh_pr_url: agentData.gh_pr_url,
+          memory_ids_used: agentData.memory_ids_used,
+          memory_ids_rejected: agentData.memory_ids_rejected,
+          memory_usage_summary: agentData.memory_usage_summary,
           summary: agentData.summary,
         },
-        linearIssueBody,
-        planContent,
+        workerType: task.workerType,
       };
     } catch (error) {
       this.logger.warn(
         { taskId: task.taskId, error: getErrorMessage(error) },
-        'Deep validation preparation failed (non-fatal, skipping deep validation)'
+        'Compliance validation preparation failed (non-fatal, skipping compliance validation)'
       );
       return undefined;
     }
   }
 
-  private async executeDeepValidation(taskId: string, input: DeepValidationInput): Promise<void> {
+  private async executeComplianceValidation(
+    task: Task,
+    input: ComplianceValidationInput
+  ): Promise<void> {
+    const { taskId } = task;
     this.appendOrchestratorTaskLog(
       taskId,
-      `Deep validation starting (transcript: ${String(input.formattedTranscript.length)} chars)`
+      `Compliance validation starting (transcript: ${String(input.formattedTranscript.length)} chars)`
     );
     try {
-      const result = await this.executionDeepValidator?.validate(input, (message: string) => {
-        this.appendOrchestratorTaskLog(taskId, `Deep validation: ${message}`);
+      const result = await this.agentComplianceValidator?.validate(input, (message: string) => {
+        this.appendOrchestratorTaskLog(taskId, `Compliance validation: ${message}`);
       });
-      if (result) {
-        this.appendOrchestratorTaskLog(taskId, 'Deep validation comment posted');
-        this.logger.info({ taskId }, 'Deep validation completed with comment posted');
+      if (result !== undefined && result !== null) {
+        this.appendOrchestratorTaskLog(taskId, 'Compliance validation completed');
+        this.logger.info({ taskId }, 'Compliance validation completed');
+
+        // Fire-and-forget: send structured report to code-agent
+        const complianceReportUrl = task.webhookUrl.replace(
+          '/internal/webhooks/task-complete',
+          '/internal/webhooks/compliance-report'
+        );
+        if (!task.webhookUrl.includes('/internal/webhooks/task-complete')) {
+          this.logger.warn(
+            { taskId, webhookUrl: task.webhookUrl },
+            'Compliance report webhook URL does not contain expected path — skipping delivery'
+          );
+        } else {
+          void this.webhookClient
+            .send({
+              url: complianceReportUrl,
+              secret: task.webhookSecret,
+              payload: {
+                taskId: input.taskId,
+                prNumber: input.prNumber,
+                report: result.report,
+                model: result.model,
+                promptVersion: result.promptVersion,
+                costUsd: result.costUsd,
+                workerType: input.workerType,
+                transcriptTooLong: result.transcriptTooLong,
+              },
+              taskId,
+            })
+            .then((webhookResult) => {
+              if (webhookResult.ok) {
+                this.logger.info({ taskId }, 'Compliance report webhook delivered');
+              } else {
+                this.logger.warn(
+                  { taskId, error: webhookResult.error.message },
+                  'Compliance report webhook delivery failed'
+                );
+              }
+            })
+            .catch((error: unknown) => {
+              this.logger.warn(
+                { taskId, error: getErrorMessage(error) },
+                'Compliance report webhook send error'
+              );
+            });
+        }
       } else {
-        this.appendOrchestratorTaskLog(taskId, 'Deep validation completed without comment');
-        this.logger.warn({ taskId }, 'Deep validation completed without comment');
+        this.appendOrchestratorTaskLog(taskId, 'Compliance validation completed without result');
+        this.logger.warn({ taskId }, 'Compliance validation completed without result');
       }
     } catch (error) {
-      this.appendOrchestratorTaskLog(taskId, `Deep validation error: ${getErrorMessage(error)}`);
+      this.appendOrchestratorTaskLog(
+        taskId,
+        `Compliance validation error: ${getErrorMessage(error)}`
+      );
       this.logger.error(
         { taskId, error: getErrorMessage(error) },
-        'Deep validation failed (non-fatal, task finalization continues)'
+        'Compliance validation failed (non-fatal, task finalization continues)'
       );
     }
   }
@@ -2348,18 +2404,11 @@ export class TaskDispatcher {
     try {
       this.logForwarder.close(taskId);
     } catch (error) {
-      this.logger.warn({ taskId, error }, 'Failed to close log forwarder after deep validation');
+      this.logger.warn(
+        { taskId, error },
+        'Failed to close log forwarder after compliance validation'
+      );
     }
-  }
-
-  private buildLinearIssueSummary(task: Task): string {
-    const parts: string[] = [];
-    if (task.linearIssueId !== undefined) parts.push(`Linear Issue: ${task.linearIssueId}`);
-    if (task.linearIssueTitle !== undefined) parts.push(`Title: ${task.linearIssueTitle}`);
-    if (task.linearIssueLabels.length > 0)
-      parts.push(`Labels: ${task.linearIssueLabels.join(', ')}`);
-    if (parts.length === 0) return 'No Linear issue linked';
-    return parts.join('\n');
   }
 
   private clearTaskTimers(taskId: string): void {

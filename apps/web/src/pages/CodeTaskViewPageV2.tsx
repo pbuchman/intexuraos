@@ -17,7 +17,7 @@ import { V2TaskHeader } from '@/components/code-tasks/v2/V2TaskHeader.js';
 import { V2LogStream } from '@/components/code-tasks/v2/V2LogStream.js';
 import { V2TaskActions } from '@/components/code-tasks/v2/V2TaskActions.js';
 import { V2NextSteps } from '@/components/code-tasks/v2/V2NextSteps.js';
-import { isActiveStatus } from '@/components/code-tasks/v2/shared.js';
+import { EXECUTION_MEMORY_STATUS_STYLES, isActiveStatus } from '@/components/code-tasks/v2/shared.js';
 import type { WorkerType } from '@/components/code-tasks/v2/shared.js';
 import { hasImplementationReadyLabel, isTaskMergeable, getTaskMergeUrl } from '@/utils/issueGroups.js';
 
@@ -121,8 +121,14 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
     : undefined;
   const isTaskWorkerOnline = taskWorkerStatus === undefined || taskWorkerStatus.healthy;
   const workerStatusTag: WorkerStatusTag | null = taskWorkerStatus?.status ?? null;
+  const implementationTaskIds =
+    task.fanOutChildTaskIds !== undefined && task.fanOutChildTaskIds.length > 0
+      ? task.fanOutChildTaskIds
+      : task.implementationTaskId !== undefined
+        ? [task.implementationTaskId]
+        : [];
   const isImplementable = task.status === 'planned' &&
-    task.implementationTaskId === undefined &&
+    implementationTaskIds.length === 0 &&
     task.linearIssueId !== undefined &&
     hasImplementationReadyLabel(task.linearIssue?.labels);
   const isMergeable = isTaskMergeable(task);
@@ -139,13 +145,16 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
       {task.parentTaskId !== undefined && task.followUpReason === 'execution_implement' ? (
         <DesignTaskBanner parentTaskId={task.parentTaskId} />
       ) : null}
-      {task.agentType === 'planning' && task.implementationTaskId !== undefined ? (
-        <ImplementationLinkBanner implementationTaskId={task.implementationTaskId} />
+      {task.agentType === 'planning' && implementationTaskIds.length > 0 ? (
+        <ImplementationLinkBanner implementationTaskIds={implementationTaskIds} />
       ) : null}
 
       <MemoTaskPromptCard prompt={task.prompt} sanitizedPrompt={task.sanitizedPrompt} />
 
       {task.result?.summary !== undefined && task.result.summary !== '' ? <MemoRunSummaryCard summary={task.result.summary} /> : null}
+      {task.executionMemoryContext !== undefined || task.executionMemoryPostRun !== undefined
+        ? <MemoExecutionMemoryCard task={task} />
+        : null}
 
       <MemoTaskResultSection task={task} />
       {task.error !== undefined ? <MemoTaskErrorCard task={task} /> : null}
@@ -169,6 +178,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
         implementing={implementing}
         implementError={implementError}
         {...(task.implementationTaskId !== undefined ? { implementationTaskId: task.implementationTaskId } : {})}
+        {...(implementationTaskIds.length > 0 ? { implementationTaskIds } : {})}
         selectedWorkerType={selectedWorkerType}
         originalWorkerType={task.workerType}
         showDropdown={showImplementDropdown}
@@ -207,7 +217,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
         onArchive={(): void => { void handleArchive(); }}
         {...(prUrl !== undefined ? { prUrl } : {})}
         {...(task.linearIssue?.url !== undefined ? { linearIssueUrl: task.linearIssue.url } : {})}
-        linksInNextSteps={isImplementable || task.implementationTaskId !== undefined || isMergeable}
+        linksInNextSteps={isImplementable || implementationTaskIds.length > 0 || isMergeable}
       />
     </Layout>
   );
@@ -219,6 +229,83 @@ const MemoV2TaskHeader = memo(V2TaskHeader);
 const MemoV2LogStream = memo(V2LogStream);
 const MemoV2NextSteps = memo(V2NextSteps);
 const MemoV2TaskActions = memo(V2TaskActions);
+const MemoExecutionMemoryCard = memo(function ExecutionMemoryCard({ task }: { task: CodeTask }): React.JSX.Element | null {
+  const context = task.executionMemoryContext;
+  const postRun = task.executionMemoryPostRun;
+
+  if (context === undefined && postRun === undefined) {
+    return null;
+  }
+
+  return (
+    <Card className="mb-6">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Execution Memory</h3>
+        {context?.status !== undefined ? (
+          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${EXECUTION_MEMORY_STATUS_STYLES[context.status]}`}>
+            {context.status}
+          </span>
+        ) : null}
+      </div>
+
+      {context?.querySummary !== undefined ? (
+        <div className="mb-3 text-sm text-slate-600 dark:text-slate-300">
+          <MarkdownContent content={context.querySummary} />
+        </div>
+      ) : null}
+
+      {context?.matchedMemories !== undefined && context.matchedMemories.length > 0 ? (
+        <div className="mb-4 space-y-3">
+          {context.matchedMemories.map((memory) => (
+            <div
+              key={memory.memoryId}
+              className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/60"
+            >
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <h4 className="font-medium text-slate-900 dark:text-slate-100">{memory.title}</h4>
+                <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                  {memory.memoryType}
+                </span>
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  {memory.score.toFixed(2)}
+                </span>
+              </div>
+              <div className="text-sm text-slate-600 dark:text-slate-300"><MarkdownContent content={memory.appliesWhen} /></div>
+              <div className="mt-1 text-sm text-slate-700 dark:text-slate-200"><MarkdownContent content={memory.action} /></div>
+              <div className="mt-1 text-sm text-slate-500 dark:text-slate-400"><MarkdownContent content={memory.avoid} /></div>
+              <div className="mt-1 text-sm text-slate-500 dark:text-slate-400"><MarkdownContent content={memory.verification} /></div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {postRun !== undefined ? (
+        <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium text-slate-900 dark:text-slate-100">Post-run status</span>
+            <span>{postRun.status}</span>
+          </div>
+          {postRun.evaluationSummary !== undefined ? (
+            <MarkdownContent content={postRun.evaluationSummary} />
+          ) : null}
+          {postRun.generatedMemoryIds.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium text-slate-900 dark:text-slate-100">Generated memories</span>
+              {postRun.generatedMemoryIds.map((memoryId) => (
+                <span
+                  key={memoryId}
+                  className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300"
+                >
+                  {memoryId}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </Card>
+  );
+});
 
 // --- Inline sub-components ---
 
@@ -278,16 +365,21 @@ function DesignTaskBanner({ parentTaskId }: { parentTaskId: string }): React.JSX
   );
 }
 
-function ImplementationLinkBanner({ implementationTaskId }: { implementationTaskId: string }): React.JSX.Element {
+function ImplementationLinkBanner({ implementationTaskIds }: { implementationTaskIds: string[] }): React.JSX.Element {
   return (
     <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
       {'This task is the planning step of the IntexuraOS Agent-Based Code Task Execution Flow. '}
-      <a
-        href={`/#/code-tasks/${implementationTaskId}`}
-        className="font-medium underline hover:no-underline"
-      >
-        {'IMPLEMENTATION'}
-      </a>
+      {implementationTaskIds.map((taskId, index) => (
+        <span key={taskId}>
+          {index > 0 ? ', ' : null}
+          <a
+            href={`/#/code-tasks/${taskId}`}
+            className="font-medium underline hover:no-underline"
+          >
+            {implementationTaskIds.length > 1 ? `IMPLEMENTATION ${String(index + 1)}` : 'IMPLEMENTATION'}
+          </a>
+        </span>
+      ))}
     </div>
   );
 }

@@ -166,9 +166,12 @@ describe('EXECUTION_SCHEMA', () => {
   it('accepts valid execution data', () => {
     const result = EXECUTION_SCHEMA.safeParse({
       outcome: 'implemented',
-      superpowers_executing_plans: 'used',
+      superpowers_subagent_driven_dev: 'used',
       superpowers_requesting_code_review: 'not used',
       gh_pr_url: 'https://github.com/org/repo/pull/1',
+      memory_ids_used: 'MEM-142,MEM-155',
+      memory_ids_rejected: 'MEM-188',
+      memory_usage_summary: 'Used route logging and route coverage lessons.',
       summary: 'Implemented the feature.',
     });
     expect(result.success).toBe(true);
@@ -176,9 +179,12 @@ describe('EXECUTION_SCHEMA', () => {
 
   it('rejects invalid enum value', () => {
     const result = EXECUTION_SCHEMA.safeParse({
-      superpowers_executing_plans: 'maybe',
+      superpowers_subagent_driven_dev: 'maybe',
       superpowers_requesting_code_review: 'used',
       gh_pr_url: '',
+      memory_ids_used: '',
+      memory_ids_rejected: '',
+      memory_usage_summary: '',
       summary: 'x',
     });
     expect(result.success).toBe(false);
@@ -431,9 +437,12 @@ describe('buildExecutionPrompt', () => {
   it('includes transcript and execution-specific fields', () => {
     const prompt = buildExecutionPrompt('exec-log');
     expect(prompt).toContain('Execution Agent');
-    expect(prompt).toContain('superpowers_executing_plans');
+    expect(prompt).toContain('superpowers_subagent_driven_dev');
     expect(prompt).toContain('superpowers_requesting_code_review');
     expect(prompt).toContain('gh_pr_url');
+    expect(prompt).toContain('memory_ids_used');
+    expect(prompt).toContain('memory_ids_rejected');
+    expect(prompt).toContain('memory_usage_summary');
     expect(prompt).toContain('exec-log');
   });
 
@@ -641,9 +650,12 @@ describe('OrchestratorCompletionVerifier', () => {
   describe('verify — execution agent', () => {
     const validExecutionResponse = JSON.stringify({
       outcome: 'implemented',
-      superpowers_executing_plans: 'used',
+      superpowers_subagent_driven_dev: 'used',
       superpowers_requesting_code_review: 'used',
       gh_pr_url: 'https://github.com/org/repo/pull/901',
+      memory_ids_used: 'mem_142,mem_155',
+      memory_ids_rejected: 'mem_188',
+      memory_usage_summary: 'Used route logging and coverage lessons.',
       summary: 'Implemented the feature.',
     });
 
@@ -667,9 +679,12 @@ describe('OrchestratorCompletionVerifier', () => {
       expect(result.agentData).toEqual({
         agentType: 'execution',
         outcome: 'implemented',
-        superpowers_executing_plans: 'used',
+        superpowers_subagent_driven_dev: 'used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: 'https://github.com/org/repo/pull/901',
+        memory_ids_used: 'mem_142,mem_155',
+        memory_ids_rejected: 'mem_188',
+        memory_usage_summary: 'Used route logging and coverage lessons.',
         summary: 'Implemented the feature.',
       });
       expect(result.trace).toEqual({
@@ -1157,9 +1172,12 @@ describe('verify — fatal exit code pre-check', () => {
       value: {
         content: JSON.stringify({
           outcome: 'implemented',
-          superpowers_executing_plans: 'used',
+          superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'not used',
           gh_pr_url: '',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
           summary: 'Failed normally.',
         }),
         usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },

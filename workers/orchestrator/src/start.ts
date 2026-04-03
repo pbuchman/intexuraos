@@ -42,12 +42,12 @@ import type { CompletionControlConfig, IsolationConfig } from './services/task-d
 import { LlmModels } from '@intexuraos/llm-contract';
 import { OrchestratorCompletionVerifier } from './services/completion-verifier.js';
 import { TurnMetricsCollector } from './services/turn-metrics-collector.js';
-import { OrchestratorExecutionDeepValidator } from './services/execution-deep-validator.js';
+import { OrchestratorAgentComplianceValidator } from './services/agent-compliance-validator.js';
 
 const DEFAULT_PORT = 8199;
 const DEFAULT_CAPACITY = 2;
 const DEFAULT_TASK_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour
-const EXEC_TIMEOUT_MS = 30 * 1000; // 30 seconds for external commands
+const EXEC_TIMEOUT_MS = 60 * 1000; // 60 seconds for external commands (gcloud is slow under systemd sandboxing)
 const DEFAULT_COMPLETION_MAX_ATTEMPTS = 3;
 const DEFAULT_WORKER_IMAGE =
   'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest';
@@ -195,13 +195,22 @@ async function validateThirdPartyApiKey(
     return;
   }
 
-  const url =
-    config.model !== undefined
+  // OpenRouter uses a lightweight key introspection endpoint instead of a real inference request,
+  // because free-tier models are frequently rate-limited upstream regardless of key validity.
+  const isOpenRouter = config.apiBaseUrl.includes('openrouter.ai');
+
+  const url = isOpenRouter
+    ? `${config.apiBaseUrl}/v1/key`
+    : config.model !== undefined
       ? `${config.apiBaseUrl}/v1/messages`
       : `${config.apiBaseUrl}/v1/models`;
 
-  const fetchOptions =
-    config.model !== undefined
+  const fetchOptions = isOpenRouter
+    ? {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${apiKey}` },
+      }
+    : config.model !== undefined
       ? {
           method: 'POST',
           headers: {
@@ -298,6 +307,7 @@ async function validateWorkerApiKeys(
   workerAuthRegistry: WorkerAuthRegistry,
   minimaxKey: string,
   dashscopeKey: string,
+  openRouterKey: string,
   logger: pino.Logger
 ): Promise<void> {
   const suffix = (key: string): string => (key.length > 4 ? '...' + key.slice(-4) : '****');
@@ -330,16 +340,16 @@ async function validateWorkerApiKeys(
   }
 
   // Validate all third-party API keys in parallel.
-  // GLM, Qwen, and Kimi all use the same DashScope API key.
+  // GLM, Qwen, and Kimi all use the same DashScope API key — validate once via qwen.
   await Promise.all([
     minimaxKey !== ''
       ? validateThirdPartyApiKey('minimax', minimaxKey, suffix, logger)
       : Promise.resolve(),
     dashscopeKey !== ''
-      ? Promise.all([
-          validateThirdPartyApiKey('qwen', dashscopeKey, suffix, logger),
-          validateThirdPartyApiKey('kimi', dashscopeKey, suffix, logger),
-        ])
+      ? validateThirdPartyApiKey('qwen', dashscopeKey, suffix, logger)
+      : Promise.resolve(),
+    openRouterKey !== ''
+      ? validateThirdPartyApiKey('openrouter-free', openRouterKey, suffix, logger)
       : Promise.resolve(),
   ]);
 }
@@ -672,6 +682,7 @@ async function bootstrap(): Promise<void> {
     SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
     MINIMAX_API_KEY: getRequiredEnv('INTEXURAOS_MINIMAX_APP_API_KEY'),
     DASHSCOPE_API_KEY: getRequiredEnv('INTEXURAOS_DASHSCOPE_APP_API_KEY'),
+    OPENROUTER_API_KEY: process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '',
   };
 
   const apiKeyValidator = new ApiKeyValidator(apiKeySecrets, logger);
@@ -696,6 +707,7 @@ async function bootstrap(): Promise<void> {
     workerAuthRegistry,
     secrets.MINIMAX_API_KEY,
     secrets.DASHSCOPE_API_KEY,
+    secrets.OPENROUTER_API_KEY,
     logger
   );
 
@@ -745,11 +757,30 @@ async function bootstrap(): Promise<void> {
     logger
   );
 
-  const executionDeepValidator = new OrchestratorExecutionDeepValidator(logger, {
-    model: LlmModels.Gemini25Flash,
-    geminiApiKey: geminiVerifierKey,
-    auditLogPath: llmAuditLogPath,
-  });
+  const openRouterApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '';
+  const complianceValidatorModel =
+    process.env['INTEXURAOS_COMPLIANCE_MODEL'] ?? 'xiaomi/mimo-v2-pro';
+
+  logger.info(
+    {
+      complianceValidatorModel,
+      hasOpenRouterApiKey: openRouterApiKey.length > 0,
+    },
+    'Agent compliance validator configuration'
+  );
+
+  const agentComplianceValidator =
+    openRouterApiKey !== ''
+      ? new OrchestratorAgentComplianceValidator(logger, {
+          openRouterApiKey,
+          model: complianceValidatorModel,
+          pricing: {
+            inputPricePerMillion: 1.0,
+            outputPricePerMillion: 3.0,
+          },
+          auditLogPath: llmAuditLogPath,
+        })
+      : undefined;
 
   const dispatcher = new TaskDispatcher(
     config,
@@ -762,7 +793,7 @@ async function bootstrap(): Promise<void> {
     isolationConfig,
     completionControl,
     turnMetricsCollector,
-    executionDeepValidator
+    agentComplianceValidator
   );
 
   // Credential monitoring loop — trigger Docker-based refresh when near expiry

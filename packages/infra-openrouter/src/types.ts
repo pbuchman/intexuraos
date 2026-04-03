@@ -5,6 +5,7 @@
  */
 
 import type { Logger } from '@intexuraos/common-core';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 
 export type {
   LLMError as OpenRouterError,
@@ -12,6 +13,14 @@ export type {
   GenerateResult,
   ModelPricing,
 } from '@intexuraos/llm-contract';
+
+/**
+ * Options for the generate method.
+ */
+export interface GenerateOptions {
+  /** Request a specific response format from the model (e.g., JSON mode). */
+  responseFormat?: { type: 'json_object' | 'text' };
+}
 
 /**
  * Configuration for creating an OpenRouter client.
@@ -51,6 +60,8 @@ export interface OpenRouterConfig {
   timeoutMs?: number;
   /** Pino logger for structured LLM usage logging */
   logger: Logger;
+  /** Optional usage sink override. Defaults to FirestoreUsageSink. */
+  usageSink?: UsageSink;
 }
 
 /**

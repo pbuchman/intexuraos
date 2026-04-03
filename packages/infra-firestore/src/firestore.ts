@@ -2,10 +2,10 @@
  * Firestore client singleton.
  * Provides initialized Firestore instance for all services.
  */
-import { FieldValue, Firestore } from '@google-cloud/firestore';
+import { FieldValue, Firestore, Timestamp } from '@google-cloud/firestore';
 
-// Re-export FieldValue for use in repositories (e.g., FieldValue.delete())
-export { FieldValue };
+// Re-export Firestore primitives for use in repositories.
+export { FieldValue, Timestamp };
 
 // Re-export Firestore type for type annotations
 export type { Firestore };

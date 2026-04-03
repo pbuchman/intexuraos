@@ -6,11 +6,11 @@ import MDEditor from '@uiw/react-md-editor';
 import rehypeSanitize from 'rehype-sanitize';
 import { Button, Card, Layout, ConfirmSubmitModal, TaskConflictModal, TaskErrorModal, LinearIssueSelectorModal } from '@/components';
 import type { ConflictReason } from '@/components';
-import { useCodeTasks, useLinearIssueOptions, useWorkersStatus, findRecentTask } from '@/hooks';
+import { useLinearIssueOptions, useWorkersStatus, findRecentTask } from '@/hooks';
 import type { CodeTaskWorkerType } from '@/types';
 import type { LinearIssueOption } from '@/hooks/useLinearIssueOptions';
 import { ApiError, parseConflictError } from '@/services/apiClient';
-import { listCodeTasks } from '@/services/codeAgentApi';
+import { listCodeTasks, submitCodeTask } from '@/services/codeAgentApi';
 import { useAuth } from '@/context';
 import { WORKER_TYPE_METADATA } from '@/components/workers/shared.js';
 
@@ -37,7 +37,6 @@ const LONG_SUBMIT_DELAY_MS = 10000;
 
 export function CodeTaskNewPage(): React.JSX.Element {
   const navigate = useNavigate();
-  const { submitTask } = useCodeTasks();
   const { getAccessToken } = useAuth();
   const { groupedOptions, loading: linearLoading, error: linearError } = useLinearIssueOptions();
 
@@ -79,7 +78,6 @@ export function CodeTaskNewPage(): React.JSX.Element {
 
   const { status: workersStatus, loading: workersLoading } = useWorkersStatus();
 
-  const [selectedWorker, setSelectedWorker] = useState<string | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   // Compute all workers (sorted by priority, priority > 0 means enabled)
@@ -88,21 +86,8 @@ export function CodeTaskNewPage(): React.JSX.Element {
     return workersStatus.workers.filter((w) => w.priority > 0).sort((a, b) => a.priority - b.priority);
   }, [workersStatus]);
 
-  // Compute healthy workers (can be selected)
-  const healthyWorkers = useMemo(() => {
-    return allWorkers.filter((w) => w.healthy);
-  }, [allWorkers]);
-
   // Worker section states
   const hasNoWorkers = workersStatus !== null && allWorkers.length === 0;
-  const hasNoHealthyWorkers = allWorkers.length > 0 && healthyWorkers.length === 0;
-
-  // Pre-select first healthy worker when workers load
-  useEffect(() => {
-    if (healthyWorkers.length > 0 && selectedWorker === null) {
-      setSelectedWorker(healthyWorkers[0]?.name ?? null);
-    }
-  }, [healthyWorkers, selectedWorker]);
 
   // Sync default prompt when linearMode changes (only if user hasn't manually edited)
   useEffect(() => {
@@ -118,11 +103,10 @@ export function CodeTaskNewPage(): React.JSX.Element {
     ? PLANNING_PLACEHOLDER
     : 'Describe what you want the selected worker to build or fix...';
 
-  // Form is valid when: has prompt AND has a healthy worker selected (or only 1 healthy worker auto-selected)
+  // Form is valid when: has prompt AND workers are configured
   const isValid =
     prompt.trim().length > 0 &&
-    healthyWorkers.length > 0 &&
-    (healthyWorkers.length === 1 || selectedWorker !== null);
+    !hasNoWorkers;
 
   // Get task title for confirmation modal
   const getTaskTitle = (): string => {
@@ -151,25 +135,19 @@ export function CodeTaskNewPage(): React.JSX.Element {
       const requestData: {
         prompt: string;
         workerType?: CodeTaskWorkerType;
-        workerLocation?: string;
         linearIssueId?: string;
       } = {
         prompt: prompt.trim(),
         workerType,
       };
 
-      // Add worker location (use selected or first healthy)
-      const workerToUse = selectedWorker ?? healthyWorkers[0]?.name;
-      if (workerToUse !== undefined) {
-        requestData.workerLocation = workerToUse;
-      }
-
       // Only send linearIssueId if linking to existing issue
       if (linearMode === 'link' && selectedIssue !== null) {
         requestData.linearIssueId = selectedIssue.identifier;
       }
 
-      const taskId = await submitTask(requestData);
+      const token = await getAccessToken();
+      const { codeTaskId: taskId } = await submitCodeTask(token, requestData);
       clearLongSubmitTimer();
       void navigate(`/code-tasks/${taskId}`);
     } catch (err) {
@@ -323,93 +301,20 @@ export function CodeTaskNewPage(): React.JSX.Element {
             </p>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2 dark:text-slate-200">
-              Worker
-            </label>
-            {workersLoading ? (
-              <div className="text-sm text-slate-500 dark:text-slate-400">Loading workers...</div>
-            ) : hasNoWorkers ? (
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
-                <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-                  <span className="text-lg">⚪</span>
-                  <span>No workers configured</span>
-                </div>
-                <Link
-                  to="/settings/workers"
-                  className="mt-2 block text-sm text-blue-600 hover:underline dark:text-blue-400"
-                >
-                  Configure in Settings →
-                </Link>
+          {hasNoWorkers && !workersLoading ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
+              <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                <span className="text-lg">⚪</span>
+                <span>No workers configured</span>
               </div>
-            ) : hasNoHealthyWorkers ? (
-              <div>
-                <div className="flex flex-wrap gap-3">
-                  {allWorkers.map((worker) => (
-                    <div
-                      key={worker.name}
-                      className="px-4 py-2 rounded-lg border border-slate-200 bg-slate-100 text-sm font-medium text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500"
-                    >
-                      <span className="flex items-center gap-2">
-                        <span className="h-2 w-2 rounded-full bg-red-500" />
-                        {worker.name}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <p className="mt-2 text-sm text-amber-600 dark:text-amber-400">
-                  All workers are currently unavailable. Please wait or check worker status in the header.
-                </p>
-              </div>
-            ) : (
-              <>
-                <div className="flex flex-wrap gap-3">
-                  {allWorkers.map((worker) => {
-                    const isHealthy = worker.healthy;
-                    const isSelected = selectedWorker === worker.name || (healthyWorkers.length === 1 && isHealthy);
-                    return (
-                      <button
-                        key={worker.name}
-                        type="button"
-                        onClick={(): void => {
-                          if (isHealthy) {
-                            setSelectedWorker(worker.name);
-                          }
-                        }}
-                        disabled={submitting || !isHealthy}
-                        className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                          isSelected
-                            ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
-                            : isHealthy
-                              ? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
-                              : 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500'
-                        } disabled:opacity-50`}
-                        title={
-                          isHealthy
-                            ? `Worker: ${worker.name}`
-                            : `${worker.name} is unhealthy and cannot be selected`
-                        }
-                      >
-                        <span className="flex items-center gap-2">
-                          <span
-                            className={`h-2 w-2 rounded-full ${isHealthy ? 'bg-green-500' : 'bg-red-500'}`}
-                          />
-                          {worker.name}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  {healthyWorkers.length === 1
-                    ? `Task will be sent to ${healthyWorkers[0]?.name ?? 'worker'}`
-                    : selectedWorker !== null
-                      ? `Task will be sent to ${selectedWorker}`
-                      : 'Select a healthy worker to run this task'}
-                </p>
-              </>
-            )}
-          </div>
+              <Link
+                to="/settings/workers"
+                className="mt-2 block text-sm text-blue-600 hover:underline dark:text-blue-400"
+              >
+                Configure in Settings →
+              </Link>
+            </div>
+          ) : null}
 
           <div className="border-t border-slate-200 pt-6 dark:border-slate-700">
             <h3 className="text-sm font-medium text-slate-700 mb-4 dark:text-slate-200">
@@ -529,7 +434,6 @@ export function CodeTaskNewPage(): React.JSX.Element {
       <ConfirmSubmitModal
         isOpen={showConfirmModal}
         taskTitle={getTaskTitle()}
-        workerName={selectedWorker ?? healthyWorkers[0]?.name ?? 'default'}
         workerType={workerType}
         onConfirm={handleConfirmSubmit}
         onCancel={handleCancelModal}
