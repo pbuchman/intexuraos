@@ -47,7 +47,7 @@ import { OrchestratorAgentComplianceValidator } from './services/agent-complianc
 const DEFAULT_PORT = 8199;
 const DEFAULT_CAPACITY = 2;
 const DEFAULT_TASK_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour
-const EXEC_TIMEOUT_MS = 30 * 1000; // 30 seconds for external commands
+const EXEC_TIMEOUT_MS = 60 * 1000; // 60 seconds for external commands (gcloud is slow under systemd sandboxing)
 const DEFAULT_COMPLETION_MAX_ATTEMPTS = 3;
 const DEFAULT_WORKER_IMAGE =
   'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest';
