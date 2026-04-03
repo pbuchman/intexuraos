@@ -298,6 +298,7 @@ async function validateWorkerApiKeys(
   workerAuthRegistry: WorkerAuthRegistry,
   minimaxKey: string,
   dashscopeKey: string,
+  openRouterKey: string,
   logger: pino.Logger
 ): Promise<void> {
   const suffix = (key: string): string => (key.length > 4 ? '...' + key.slice(-4) : '****');
@@ -340,6 +341,9 @@ async function validateWorkerApiKeys(
           validateThirdPartyApiKey('qwen', dashscopeKey, suffix, logger),
           validateThirdPartyApiKey('kimi', dashscopeKey, suffix, logger),
         ])
+      : Promise.resolve(),
+    openRouterKey !== ''
+      ? validateThirdPartyApiKey('openrouter-free', openRouterKey, suffix, logger)
       : Promise.resolve(),
   ]);
 }
@@ -672,6 +676,7 @@ async function bootstrap(): Promise<void> {
     SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
     MINIMAX_API_KEY: getRequiredEnv('INTEXURAOS_MINIMAX_APP_API_KEY'),
     DASHSCOPE_API_KEY: getRequiredEnv('INTEXURAOS_DASHSCOPE_APP_API_KEY'),
+    OPENROUTER_API_KEY: process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '',
   };
 
   const apiKeyValidator = new ApiKeyValidator(apiKeySecrets, logger);
@@ -696,6 +701,7 @@ async function bootstrap(): Promise<void> {
     workerAuthRegistry,
     secrets.MINIMAX_API_KEY,
     secrets.DASHSCOPE_API_KEY,
+    secrets.OPENROUTER_API_KEY,
     logger
   );
 

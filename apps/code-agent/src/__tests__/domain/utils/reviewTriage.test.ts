@@ -56,6 +56,11 @@ describe('extractReviewWorkerType', () => {
     expect(workerType).toBe('codex-xhigh');
   });
 
+  it('extracts openrouter-free worker type', () => {
+    const workerType = extractReviewWorkerType('@review with openrouter-free');
+    expect(workerType).toBe('openrouter-free');
+  });
+
   it('is case-insensitive', () => {
     const workerType = extractReviewWorkerType('@review with MINIMAX');
     expect(workerType).toBe('minimax');
@@ -129,5 +134,9 @@ describe('normalizeReviewWorkerType', () => {
 
   it('normalizes codex-xhigh', () => {
     expect(normalizeReviewWorkerType('codex-xhigh')).toBe('codex-xhigh');
+  });
+
+  it('normalizes openrouter-free', () => {
+    expect(normalizeReviewWorkerType('openrouter-free')).toBe('openrouter-free');
   });
 });

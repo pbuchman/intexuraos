@@ -263,6 +263,7 @@ describe('TaskDispatcher', () => {
       SENTRY_AUTH_TOKEN: 'test-sentry-token',
       MINIMAX_API_KEY: 'test-minimax-key',
       DASHSCOPE_API_KEY: 'test-dashscope-key',
+      OPENROUTER_API_KEY: 'test-openrouter-key',
     }),
     gcpSaKeyPath: '/tmp/gcp-sa.json',
     githubAppKeyPath: '/tmp/github-app.pem',
