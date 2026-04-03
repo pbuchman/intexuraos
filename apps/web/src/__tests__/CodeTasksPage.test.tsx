@@ -88,6 +88,7 @@ vi.mock('@/components', () => ({
       <button type="button" onClick={onClose}>Close logs</button>
     </div>
   ),
+  TaskErrorModal: (): null => null,
 }));
 
 vi.mock('lucide-react', async () => {
@@ -209,7 +210,7 @@ describe('CodeTasksPage', () => {
 
     render(<CodeTasksPage />);
 
-    expect(screen.getAllByText('Prompt only task')).toHaveLength(2);
+    expect(screen.getAllByText('Prompt only task')).toHaveLength(3);
   });
 
   it('includes all non-archived CodeTaskStatus values in DEFAULT_VISIBLE_STATUSES', () => {
