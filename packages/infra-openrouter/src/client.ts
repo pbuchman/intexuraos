@@ -149,9 +149,13 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     pricing,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     logger,
+    usageSink,
   } = config;
 
-  const usageLogger = createUsageLogger({ logger });
+  const usageLogger = createUsageLogger({
+    logger,
+    ...(usageSink !== undefined && { sink: usageSink }),
+  });
 
   function trackUsage(
     callType: CallType,

@@ -867,6 +867,43 @@ describe('createOpenRouterClient', () => {
     });
   });
 
+  describe('usageSink', () => {
+    it('passes custom usageSink to createUsageLogger', async () => {
+      const { createUsageLogger } = await import('@intexuraos/llm-pricing');
+
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'ok', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        });
+
+      const fakeSink = { log: vi.fn().mockResolvedValue(undefined) };
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+        usageSink: fakeSink,
+      });
+
+      await client.generate('ping');
+
+      expect(createUsageLogger).toHaveBeenCalledWith(expect.objectContaining({ sink: fakeSink }));
+    });
+  });
+
   describe('validateKey', () => {
     it('returns key info on success', async () => {
       nock(API_BASE_URL).get('/key').reply(200, {
