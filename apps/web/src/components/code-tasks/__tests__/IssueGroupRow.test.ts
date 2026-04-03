@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 import type { CodeTask } from '@/types';
 import type { IssueGroup } from '@/types/issueGroups';
 import { IssueGroupRow } from '../IssueGroupRow.js';
-import type { IssueGroupRowProps } from '../IssueGroupRow.js';
 
 function createTask(overrides: Partial<CodeTask> & { id: string }): CodeTask {
   const { id, ...rest } = overrides;
@@ -57,15 +56,13 @@ describe('IssueGroupRow', () => {
       aggregateStatus: 'active',
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
-    const noop = (): void => {};
     const html = renderToStaticMarkup(createElement(IssueGroupRow, {
       group,
       timeTick: 0,
-      onAction: noop as IssueGroupRowProps['onAction'],
-      onArchiveGroup: noop as IssueGroupRowProps['onArchiveGroup'],
-      onDeleteGroup: noop as IssueGroupRowProps['onDeleteGroup'],
-      onOpenLogs: noop as IssueGroupRowProps['onOpenLogs'],
+      onAction: (_taskId: string, _action: 'delete' | 'retry' | 'implement' | 'archive'): void => { /* stub */ },
+      onArchiveGroup: (_taskIds: string[]): void => { /* stub */ },
+      onDeleteGroup: (_taskIds: string[]): void => { /* stub */ },
+      onOpenLogs: (_taskId: string): void => { /* stub */ },
       actioningTaskId: null,
     }));
 

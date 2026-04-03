@@ -300,42 +300,6 @@ export function CodeTasksPage(): React.JSX.Element {
     setSelectedGroupKeys(new Set());
   }, []);
 
-  const handleBatchArchive = useCallback((): void => {
-    const selectedGroups = groups.filter((g) => selectedGroupKeys.has(getGroupKey(g)));
-    const allTaskIds = selectedGroups.flatMap((g) => g.tasks.map((t) => t.id));
-    if (allTaskIds.length === 0) return;
-
-    setBatchActionGroupKeys(new Set(selectedGroupKeys));
-
-    void (async (): Promise<void> => {
-      if (actionInFlightRef.current) return;
-      actionInFlightRef.current = true;
-      const actionStart = Date.now();
-      try {
-        const token = await getAccessToken();
-        for (const taskId of allTaskIds) {
-          await archiveCodeTask(token, taskId);
-        }
-        const MIN_ANIMATION_MS = 1200;
-        const elapsed = Date.now() - actionStart;
-        if (elapsed < MIN_ANIMATION_MS) {
-          await new Promise<void>((resolve) => { setTimeout(resolve, MIN_ANIMATION_MS - elapsed); });
-        }
-        await refresh(false);
-        setSelectedGroupKeys(new Set());
-      } catch (err: unknown) {
-        setActionError(
-          err instanceof ApiError
-            ? err
-            : new ApiError('UNKNOWN', err instanceof Error ? err.message : 'An unexpected error occurred', 0),
-        );
-      } finally {
-        actionInFlightRef.current = false;
-        setBatchActionGroupKeys(new Set());
-      }
-    })();
-  }, [groups, selectedGroupKeys, getAccessToken, refresh]);
-
   const handleToggleFilter = useCallback((status: GroupStatus): void => {
     setActiveFilters((prev) => {
       const set = new Set(prev);
@@ -399,7 +363,12 @@ export function CodeTasksPage(): React.JSX.Element {
   );
 
   const handleGroupAction = useCallback(
-    (taskIds: string[], actionType: 'archive' | 'delete', apiFn: (token: string, taskId: string) => Promise<void>): void => {
+    (
+      taskIds: string[],
+      actionType: 'archive' | 'delete',
+      apiFn: (token: string, taskId: string) => Promise<void>,
+      opts?: { onSuccess?: () => void; onFinally?: () => void },
+    ): void => {
       void (async (): Promise<void> => {
         if (actionInFlightRef.current) return;
         actionInFlightRef.current = true;
@@ -411,6 +380,9 @@ export function CodeTasksPage(): React.JSX.Element {
         }
         try {
           const token = await getAccessToken();
+          // NOTE: If apiFn throws partway through the loop, previously-completed
+          // tasks remain changed while the rest are skipped. The user sees a generic
+          // error with no indication of partial success.
           for (const taskId of taskIds) {
             await apiFn(token, taskId);
           }
@@ -421,6 +393,7 @@ export function CodeTasksPage(): React.JSX.Element {
             await new Promise<void>((resolve) => { setTimeout(resolve, MIN_ANIMATION_MS - elapsed); });
           }
           await refresh(false);
+          opts?.onSuccess?.();
         } catch (err: unknown) {
           setActioningTaskId(null);
           setActioningType(null);
@@ -431,11 +404,24 @@ export function CodeTasksPage(): React.JSX.Element {
           );
         } finally {
           actionInFlightRef.current = false;
+          opts?.onFinally?.();
         }
       })();
     },
     [getAccessToken, refresh, setActioningTaskId],
   );
+
+  const handleBatchArchive = useCallback((): void => {
+    const selectedGroups = groups.filter((g) => selectedGroupKeys.has(getGroupKey(g)));
+    const allTaskIds = selectedGroups.flatMap((g) => g.tasks.map((t) => t.id));
+    if (allTaskIds.length === 0) return;
+
+    setBatchActionGroupKeys(new Set(selectedGroupKeys));
+    handleGroupAction(allTaskIds, 'archive', archiveCodeTask, {
+      onSuccess: () => { setSelectedGroupKeys(new Set()); },
+      onFinally: () => { setBatchActionGroupKeys(new Set()); },
+    });
+  }, [groups, selectedGroupKeys, handleGroupAction]);
 
   const handleArchiveGroup = useCallback(
     (taskIds: string[]): void => { handleGroupAction(taskIds, 'archive', archiveCodeTask); },
