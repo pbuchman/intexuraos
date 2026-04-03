@@ -318,6 +318,40 @@ describe('drainRetryQueue', () => {
     expect(result.value.action).toBe('dispatched');
   });
 
+  it('logs warning when execution memory retrieval returns error status and still dispatches', async () => {
+    mockExecutionMemoryEnabled = true;
+    mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+    mockCodeTaskRepo.findById.mockResolvedValue(ok({
+      ...sampleTask,
+      linearIssueId: 'INT-1098',
+      agentType: 'execution',
+    }));
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'error',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'Some query',
+      errorCode: 'embedding_failed',
+      errorMessage: 'API timeout',
+    });
+    mockCodeTaskRepo.update.mockResolvedValue(ok(sampleTask));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+
+    const result = await drainRetryQueue(buildDeps());
+
+    expect(result.ok).toBe(true);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task_xyz',
+        errorCode: 'embedding_failed',
+        errorMessage: 'API timeout',
+      }),
+      'Execution memory retrieval returned error status'
+    );
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalled();
+    if (!result.ok) return;
+    expect(result.value.action).toBe('dispatched');
+  });
+
   afterEach(() => {
     _resetRetryDrainGuard();
   });

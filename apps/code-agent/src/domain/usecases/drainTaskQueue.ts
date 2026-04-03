@@ -385,6 +385,17 @@ export async function drainTaskQueue(
         executionMemoryApplicationRepo: deps.executionMemory?.executionMemoryApplicationRepo,
       });
 
+      if (taskExecutionMemoryContext?.status === 'error') {
+        logger.warn(
+          {
+            taskId: task.id,
+            errorCode: taskExecutionMemoryContext.errorCode,
+            errorMessage: taskExecutionMemoryContext.errorMessage,
+          },
+          'Execution memory retrieval returned error status'
+        );
+      }
+
       const memoryUpdateResult = await codeTaskRepo.update(task.id, {
         executionMemoryContext: taskExecutionMemoryContext,
       });

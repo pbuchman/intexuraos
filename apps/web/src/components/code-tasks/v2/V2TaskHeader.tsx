@@ -45,7 +45,7 @@ export function V2TaskHeader({ task, workerStatusTag }: V2TaskHeaderProps): Reac
         ? 'Memory: none'
         : 'Memory: error';
 
-  const executionMemoryTooltip = (() => {
+  const executionMemoryTooltip = ((): string | undefined => {
     if (task.executionMemoryContext?.status !== 'error') {
       return undefined;
     }
