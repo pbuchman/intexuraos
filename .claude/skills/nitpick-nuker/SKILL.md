@@ -34,12 +34,13 @@ Execute the workflow at: `.claude/skills/nitpick-nuker/workflows/triage-pr-comme
 
 All scripts are in `.claude/skills/nitpick-nuker/scripts/`:
 
-| Script                          | Purpose                              |
-| ------------------------------- | ------------------------------------ |
-| `fetch-unprocessed-comments.sh` | Fetch comments without 😄 from bot   |
-| `add-reaction.sh`               | Add 😄 reaction to processed comment |
-| `post-summary.sh`               | Post summary comment to PR           |
-| `watch-ci.sh`                   | Watch CI with workflow filtering     |
+| Script                          | Purpose                                |
+| ------------------------------- | -------------------------------------- |
+| `fetch-unprocessed-comments.sh` | Fetch comments without 😄 from bot     |
+| `add-reaction.sh`               | Add 😄 reaction to processed comment   |
+| `reply-to-comment.sh`           | Post per-comment reply with reasoning  |
+| `post-summary.sh`               | Post summary comment to PR             |
+| `watch-ci.sh`                   | Watch CI with workflow filtering       |
 
 ## Comment Types
 
