@@ -155,7 +155,7 @@ export function OpenRouterModelSelector({
                   checked={isSelected}
                   onChange={(): void => { toggleModel(model.id); }}
                   disabled={isCheckDisabled}
-                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  className="h-4 w-4"
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">

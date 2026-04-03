@@ -226,7 +226,7 @@ export function EnhanceModal({
                         toggleRemoveContext(ctx.id);
                       }}
                       disabled={enhancing}
-                      className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-500 dark:bg-slate-600"
+                      className="h-4 w-4"
                     />
                     <span
                       className={`flex-1 text-sm truncate ${

@@ -38,7 +38,7 @@ export function PrRow({ pr, isNextToMerge, isExcluded, onToggleExclusion }: PrRo
       type="checkbox"
       checked={!isExcluded}
       onChange={(): void => { onToggleExclusion(pr.number); }}
-      className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700"
+      className="h-4 w-4"
       aria-label={isExcluded ? `Include PR #${String(pr.number)} in merge queue` : `Exclude PR #${String(pr.number)} from merge queue`}
     />
   ) : null;
