@@ -1549,7 +1549,7 @@ describe('processExecutionMemoryBacklog', () => {
   });
 
   describe('DISTILLATION_VERSION', () => {
-    it('is at major version 2 for schema-guided prompt', () => {
+    it('is at major version 2 for schema-guided prompt', async () => {
       // Access via distillTask prompt — we verify the version string is exported
       // by checking it appears in the distiller prompt passed to the client
       const capturedPrompt: string[] = [];
@@ -1565,7 +1565,7 @@ describe('processExecutionMemoryBacklog', () => {
         }));
       });
 
-      return processExecutionMemoryBacklogTestables.distillTask(
+      await processExecutionMemoryBacklogTestables.distillTask(
         createTask(),
         [{ text: 'log line' }],
         [],
@@ -1581,9 +1581,9 @@ describe('processExecutionMemoryBacklog', () => {
           distillerClient: distillerClient as never,
           limit: 10,
         }
-      ).then(() => {
-        expect(capturedPrompt[0]).toContain('execution-memory-distiller@2.0.0');
-      });
+      );
+      const version = capturedPrompt[0] ?? '';
+      expect(version).toContain('execution-memory-distiller@2.0.0');
     });
   });
 
@@ -1630,6 +1630,152 @@ describe('processExecutionMemoryBacklog', () => {
       expect(prompt).toContain('pitfall_pattern');
       expect(prompt).toContain('"create"');
       expect(prompt).toContain('"skip"');
+    });
+  });
+
+  describe('distiller retry on Zod parse failure', () => {
+    it('retries with refinement prompt when first attempt fails Zod parse', async () => {
+      const validResponse = JSON.stringify({
+        decision: 'skip',
+        skipReason: 'no_reusable_lesson',
+        evidenceSummary: 'Nothing reusable.',
+        memories: [],
+      });
+
+      let callCount = 0;
+      distillerClient.generate.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve(ok({ content: '{"invalid": true}' }));
+        }
+        return Promise.resolve(ok({ content: validResponse }));
+      });
+
+      const result = await processExecutionMemoryBacklogTestables.distillTask(
+        createTask(),
+        [{ text: 'log line' }],
+        [],
+        { description: null, comments: [] },
+        {
+          logger,
+          codeTaskRepo: codeTaskRepo as never,
+          logLineRepo: logLineRepo as never,
+          turnMetricsRepo: turnMetricsRepo as never,
+          linearAgentClient: linearAgentClient as never,
+          executionMemoryRepo: executionMemoryRepo as never,
+          executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+          distillerClient: distillerClient as never,
+          limit: 10,
+        }
+      );
+
+      expect(callCount).toBe(2);
+      expect(result.decision).toBe('skip');
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ err: expect.any(Error) }),
+        'Distiller response failed Zod parse, retrying with refinement prompt'
+      );
+    });
+
+    it('throws when both first attempt and retry fail Zod parse', async () => {
+      distillerClient.generate.mockResolvedValue(ok({ content: '{"invalid": true}' }));
+
+      await expect(
+        processExecutionMemoryBacklogTestables.distillTask(
+          createTask(),
+          [{ text: 'log line' }],
+          [],
+          { description: null, comments: [] },
+          {
+            logger,
+            codeTaskRepo: codeTaskRepo as never,
+            logLineRepo: logLineRepo as never,
+            turnMetricsRepo: turnMetricsRepo as never,
+            linearAgentClient: linearAgentClient as never,
+            executionMemoryRepo: executionMemoryRepo as never,
+            executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+            distillerClient: distillerClient as never,
+            limit: 10,
+          }
+        )
+      ).rejects.toThrow();
+
+      expect(distillerClient.generate).toHaveBeenCalledTimes(2);
+    });
+
+    it('throws when retry generate call returns error result', async () => {
+      let callCount = 0;
+      distillerClient.generate.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve(ok({ content: '{"invalid": true}' }));
+        }
+        return Promise.resolve(err({ message: 'LLM quota exceeded', code: 'RATE_LIMIT' }));
+      });
+
+      await expect(
+        processExecutionMemoryBacklogTestables.distillTask(
+          createTask(),
+          [{ text: 'log line' }],
+          [],
+          { description: null, comments: [] },
+          {
+            logger,
+            codeTaskRepo: codeTaskRepo as never,
+            logLineRepo: logLineRepo as never,
+            turnMetricsRepo: turnMetricsRepo as never,
+            linearAgentClient: linearAgentClient as never,
+            executionMemoryRepo: executionMemoryRepo as never,
+            executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+            distillerClient: distillerClient as never,
+            limit: 10,
+          }
+        )
+      ).rejects.toThrow('LLM quota exceeded');
+
+      expect(callCount).toBe(2);
+    });
+
+    it('includes refinement instructions in retry prompt', async () => {
+      const capturedPrompts: string[] = [];
+      const validResponse = JSON.stringify({
+        decision: 'skip',
+        skipReason: 'no_reusable_lesson',
+        evidenceSummary: 'Nothing reusable.',
+        memories: [],
+      });
+
+      let callCount = 0;
+      distillerClient.generate.mockImplementation((prompt: string) => {
+        capturedPrompts.push(prompt);
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve(ok({ content: '{"invalid": true}' }));
+        }
+        return Promise.resolve(ok({ content: validResponse }));
+      });
+
+      await processExecutionMemoryBacklogTestables.distillTask(
+        createTask(),
+        [{ text: 'log line' }],
+        [],
+        { description: null, comments: [] },
+        {
+          logger,
+          codeTaskRepo: codeTaskRepo as never,
+          logLineRepo: logLineRepo as never,
+          turnMetricsRepo: turnMetricsRepo as never,
+          linearAgentClient: linearAgentClient as never,
+          executionMemoryRepo: executionMemoryRepo as never,
+          executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+          distillerClient: distillerClient as never,
+          limit: 10,
+        }
+      );
+
+      const retryPrompt = capturedPrompts[1] ?? '';
+      expect(retryPrompt).toContain('Fix the JSON schema violation and return valid JSON');
+      expect(retryPrompt).toContain('Your previous response was invalid JSON');
     });
   });
 });
