@@ -45,15 +45,12 @@ export function V2TaskHeader({ task, workerStatusTag }: V2TaskHeaderProps): Reac
         ? 'Memory: none'
         : 'Memory: error';
 
-  const executionMemoryTooltip = ((): string | undefined => {
-    if (task.executionMemoryContext?.status !== 'error') {
-      return undefined;
-    }
-    const code = task.executionMemoryContext.errorCode ?? '';
-    const msg = task.executionMemoryContext.errorMessage ?? '';
-    const detail = code !== '' && msg !== '' ? `${code} — ${msg}` : code !== '' ? code : msg;
-    return detail !== '' ? detail : undefined;
-  })();
+  const executionMemoryTooltip =
+    task.executionMemoryContext?.status === 'error'
+      ? [task.executionMemoryContext.errorCode, task.executionMemoryContext.errorMessage]
+          .filter(Boolean)
+          .join(' — ') || undefined
+      : undefined;
 
   const prUrl = getTaskMergeUrl(task);
 
