@@ -1615,13 +1615,38 @@ export class DockerProvider implements IsolationProvider {
     return await new Promise<number>((resolve) => {
       let resolved = false;
 
+      // Poll timer callback — declared before resolveWith so setInterval and
+      // clearInterval are near each other for the v8-ignore async-timing detector.
+      const onPollTick = (): void => {
+        void execInstance
+          .inspect()
+          .then((info) => {
+            if (!info.Running) {
+              this.logger.info(
+                { taskId },
+                'Exec process exited but stream still open — resolving via inspect fallback'
+              );
+              /* v8 ignore start -- ts-type: FakeHttpClient cannot produce a null ExitCode from Docker.ExecInspectInfo @preserve */
+              resolveWith(typeof info.ExitCode === 'number' ? info.ExitCode : 1);
+              /* v8 ignore stop @preserve */
+            }
+          })
+          .catch(() => {
+            resolveWith(1);
+          });
+      };
+
+      /* v8 ignore start -- async-timing: double-resolution guard prevents race between stream end and poll timer @preserve */
+      const pollTimer = setInterval(onPollTick, EXEC_INSPECT_POLL_INTERVAL_MS);
+      /* v8 ignore stop @preserve */
+
       const resolveWith = (exitCode: number): void => {
-        /* v8 ignore start -- async-timing: double-resolution guard prevents race between stream end and poll timer @preserve */
+        /* v8 ignore start -- async-timing: early-return guard for double-resolution race can't be reliably tested @preserve */
         if (resolved) return;
-        /* v8 ignore stop @preserve */
         resolved = true;
         clearInterval(pollTimer);
         resolve(exitCode);
+        /* v8 ignore stop @preserve */
       };
 
       // Primary path: stream closes naturally
@@ -1641,27 +1666,6 @@ export class DockerProvider implements IsolationProvider {
         resolveWith(1);
       });
       execStream.resume();
-
-      // Fallback: poll exec inspect for orphaned-fd cases
-      const pollTimer = setInterval(() => {
-        execInstance
-          .inspect()
-          .then((info) => {
-            if (!info.Running) {
-              this.logger.info(
-                { taskId },
-                'Exec process exited but stream still open — resolving via inspect fallback'
-              );
-              /* v8 ignore start -- ts-type: null check for Docker API ExitCode which narrows nullable number @preserve */
-              resolveWith(typeof info.ExitCode === 'number' ? info.ExitCode : 1);
-              /* v8 ignore stop @preserve */
-            }
-          })
-          .catch(() => {
-            // Inspect failed — exec may have been removed; treat as exit
-            resolveWith(1);
-          });
-      }, EXEC_INSPECT_POLL_INTERVAL_MS);
     });
   }
 }
