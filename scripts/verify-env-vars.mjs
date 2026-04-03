@@ -65,7 +65,7 @@ const COMMON_OPTIONAL_ENV = new Set([
   // Dash0 OpenTelemetry (optional — no-op when not configured)
   'INTEXURAOS_DASH0_OTLP_ENDPOINT',
   'INTEXURAOS_DASH0_AUTH_TOKEN',
-  // Queue config (optional — have sensible defaults: maxSize=10, ttlMinutes=30)
+  // Queue config (optional — have sensible defaults: maxSize=50, ttlMinutes=1440)
   'INTEXURAOS_QUEUE_MAX_SIZE',
   'INTEXURAOS_QUEUE_TTL_MINUTES',
   // Retry queue config (optional — have sensible defaults: maxAttempts=3, ttlMinutes=10)

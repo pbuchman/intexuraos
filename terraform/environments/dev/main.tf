@@ -1465,7 +1465,7 @@ module "code_agent" {
     INTEXURAOS_SERVICE_URL                = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
     INTEXURAOS_QUEUE_MAX_SIZE             = "50"
-    INTEXURAOS_QUEUE_TTL_MINUTES          = "30"
+    INTEXURAOS_QUEUE_TTL_MINUTES          = "1440"
     INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS   = "3"
     INTEXURAOS_RETRY_QUEUE_TTL_MINUTES    = "10"
     INTEXURAOS_ENABLE_METRICS             = "true"
