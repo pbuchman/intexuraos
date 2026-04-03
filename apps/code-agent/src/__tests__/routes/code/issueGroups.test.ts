@@ -618,10 +618,9 @@ describe('GET /code/issue-groups', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body) as { data: { groups: { linearIssueId: string | null }[] } };
     const issueIds = body.data.groups.map((g) => g.linearIssueId);
-    // groupByLinearIssue re-sorts by linear-id desc after fetching tasks for the page
-    // (sortBy=pr-number affects which page listGroupSummaries returns, but the in-memory
-    //  re-grouping always applies linear-id ordering within the page)
-    expect(issueIds).toEqual(['INT-702', 'INT-701', 'INT-700']);
+    // sortIssueGroups is now called on the grouped result, so pr-number sort desc applies
+    // PR #50 (INT-701), PR #30 (INT-702), PR #10 (INT-700)
+    expect(issueIds).toEqual(['INT-701', 'INT-702', 'INT-700']);
   });
 
   it('sorts by created-time when requested', async () => {
@@ -651,8 +650,8 @@ describe('GET /code/issue-groups', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body) as { data: { groups: { linearIssueId: string | null }[] } };
     const issueIds = body.data.groups.map((g) => g.linearIssueId);
-    // groupByLinearIssue re-sorts by linear-id desc; INT-801 > INT-800 numerically
-    // so the result matches the expected newest-first order coincidentally
+    // sortIssueGroups applies createdAt desc; INT-801 created after INT-800
+    // so INT-801 correctly appears first (coincides with linear-id desc: 801 > 800)
     expect(issueIds).toEqual(['INT-801', 'INT-800']);
   });
 
