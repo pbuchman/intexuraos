@@ -5193,6 +5193,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         expect.arrayContaining([
           expect.objectContaining({ name: 'ready-to-merge' }),
         ]),
+        expect.any(String),
       );
     });
 

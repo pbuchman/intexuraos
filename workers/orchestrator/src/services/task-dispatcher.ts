@@ -90,6 +90,7 @@ export interface IsolationConfig {
     SENTRY_AUTH_TOKEN: string;
     MINIMAX_API_KEY: string;
     DASHSCOPE_API_KEY: string;
+    OPENROUTER_API_KEY: string;
   };
   gcpSaKeyPath: string;
   githubAppKeyPath: string;

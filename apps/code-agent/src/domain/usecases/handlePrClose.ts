@@ -49,11 +49,12 @@ export interface HandlePrCloseInput {
   prAuthorLogin: string | null;
   senderLogin: string;
   isMerged: boolean;
+  sourceTimestamp: string;
 }
 
 export async function handlePrClose(deps: HandlePrCloseDeps, input: HandlePrCloseInput): Promise<void> {
   const { codeTaskRepo, linearIssueService, userServiceClient, taskDispatcher, workerSettingsRepo, groupSummaryRepo, logger } = deps;
-  const { repository, prNumber, prBody, prTitle, prAuthorLogin, senderLogin, isMerged } = input;
+  const { repository, prNumber, prBody, prTitle, prAuthorLogin, senderLogin, isMerged, sourceTimestamp } = input;
 
   // Map of linearIssueId → userId (deduplicates)
   const issueMap = new Map<string, string>();
@@ -160,7 +161,7 @@ export async function handlePrClose(deps: HandlePrCloseDeps, input: HandlePrClos
     // Best-effort: recompute group summary now that ready-to-merge label is removed.
     // Passing [] ensures hasMergeReadyLabel becomes false in the cached summary.
     for (const [linearIssueId, userId] of issueMap) {
-      void groupSummaryRepo.recomputeWithLabels(userId, linearIssueId, []).catch((recomputeErr: unknown) => {
+      void groupSummaryRepo.recomputeWithLabels(userId, linearIssueId, [], sourceTimestamp).catch((recomputeErr: unknown) => {
         logger.warn({ linearIssueId, error: recomputeErr },
           'handlePrClose: failed to recompute group summary (best-effort)');
       });

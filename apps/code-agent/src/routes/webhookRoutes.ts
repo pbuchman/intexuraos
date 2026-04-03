@@ -1290,7 +1290,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                             { id: '', name: label },
                           ];
                           void summaryRepoForLabel.recomputeWithLabels(
-                            targetUserId, targetLinearIssueId, updatedLabels,
+                            targetUserId, targetLinearIssueId, updatedLabels, completedAt.toISOString(),
                           ).catch((recomputeErr: unknown) => {
                             request.log.warn({ linearIssueId: targetLinearIssueId, error: recomputeErr },
                               'Failed to recompute group summary after review-outcome label (best-effort)');

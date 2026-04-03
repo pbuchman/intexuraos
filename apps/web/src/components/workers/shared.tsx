@@ -10,6 +10,7 @@ export const WORKER_TYPE_METADATA: Record<CodeTaskWorkerType, { name: string; de
   kimi: { name: 'Kimi', description: 'Moonshot\'s latest recommended model with image understanding' },
   codex: { name: 'Codex', description: 'OpenAI Codex runtime for code-task execution with persisted thread resume' },
   'codex-xhigh': { name: 'Codex XHigh', description: 'High-effort Codex preset for deeper reviews, investigations, and complex implementation tasks' },
+  'openrouter-free': { name: 'OpenRouter Free', description: 'Free-tier model via OpenRouter (Qwen 3.6 Plus) with zero API cost' },
 };
 
 export const WORKER_TYPE_LABELS: Record<CodeTaskWorkerType, string> = Object.fromEntries(

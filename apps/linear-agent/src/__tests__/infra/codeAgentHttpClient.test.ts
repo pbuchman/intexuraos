@@ -1,7 +1,8 @@
 /**
  * Tests for codeAgentHttpClient.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { type Logger } from '@intexuraos/common-core';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import nock from 'nock';
 import pino from 'pino';
 import { createCodeAgentHttpClient, type CodeAgentClient } from '../../infra/http/codeAgentHttpClient.js';
@@ -9,12 +10,20 @@ import { createCodeAgentHttpClient, type CodeAgentClient } from '../../infra/htt
 const BASE_URL = 'http://code-agent-test';
 const INTERNAL_AUTH_TOKEN = 'test-auth-token';
 
-function createTestClient(timeoutMs = 5000): CodeAgentClient {
-  const logger = pino({ level: 'silent' });
+function createTestClient(timeoutMs = 5000, logger: Logger = pino({ level: 'silent' })): CodeAgentClient {
   return createCodeAgentHttpClient(
     { baseUrl: BASE_URL, internalAuthToken: INTERNAL_AUTH_TOKEN, timeoutMs },
     logger
   );
+}
+
+function createMockLogger(): Logger {
+  return {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  };
 }
 
 const validRequest = {
@@ -168,6 +177,7 @@ describe('notifyGroupSummaryRecompute', () => {
       { id: 'label-1', name: 'ready-to-implement' },
       { id: 'label-2', name: 'feature' },
     ],
+    sourceTimestamp: '2026-04-02T12:34:56.000Z',
   };
 
   beforeEach(() => {
@@ -191,14 +201,15 @@ describe('notifyGroupSummaryRecompute', () => {
     const result = await client.notifyGroupSummaryRecompute(validRecomputeRequest);
 
     expect(result.ok).toBe(true);
-    expect(capturedBody).toEqual({
-      userId: 'user-123',
-      linearIssueId: 'INT-456',
-      labels: [
-        { id: 'label-1', name: 'ready-to-implement' },
-        { id: 'label-2', name: 'feature' },
-      ],
-    });
+      expect(capturedBody).toEqual({
+        userId: 'user-123',
+        linearIssueId: 'INT-456',
+        labels: [
+          { id: 'label-1', name: 'ready-to-implement' },
+          { id: 'label-2', name: 'feature' },
+        ],
+        sourceTimestamp: '2026-04-02T12:34:56.000Z',
+      });
   });
 
   it('sends X-Internal-Auth header', async () => {
@@ -243,6 +254,37 @@ describe('notifyGroupSummaryRecompute', () => {
     if (!result.ok) {
       expect(result.error.code).toBe('INVALID_REQUEST');
     }
+  });
+
+  it('logs 404 response at info level', async () => {
+    const logger = createMockLogger();
+    nock(BASE_URL)
+      .post('/internal/code/group-summary/recompute')
+      .reply(404, 'Not found');
+
+    const client = createTestClient(5000, logger);
+    await client.notifyGroupSummaryRecompute(validRecomputeRequest);
+
+    expect(logger.info).toHaveBeenCalledWith(
+      { status: 404, error: 'Not found', linearIssueId: 'INT-456' },
+      'code-agent notifyGroupSummaryRecompute failed'
+    );
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('logs non-404 4xx response at warn level', async () => {
+    const logger = createMockLogger();
+    nock(BASE_URL)
+      .post('/internal/code/group-summary/recompute')
+      .reply(400, 'Bad request body');
+
+    const client = createTestClient(5000, logger);
+    await client.notifyGroupSummaryRecompute(validRecomputeRequest);
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      { status: 400, error: 'Bad request body', linearIssueId: 'INT-456' },
+      'code-agent notifyGroupSummaryRecompute failed'
+    );
   });
 
   it('returns UNAVAILABLE on 5xx response', async () => {

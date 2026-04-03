@@ -1,6 +1,7 @@
 import { getErrorMessage, type Logger } from '@intexuraos/common-core';
 import { createOpenRouterClient, type OpenRouterClient } from '@intexuraos/infra-openrouter';
 import type { ModelPricing } from '@intexuraos/llm-contract';
+import { StructuredLogUsageSink } from '@intexuraos/llm-pricing';
 import { createLlmParseError, formatZodErrors, logLlmParseError } from '@intexuraos/llm-utils';
 import { execFile } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -293,6 +294,7 @@ export class OrchestratorAgentComplianceValidator implements AgentComplianceVali
       userId: 'orchestrator-compliance-validator',
       pricing: config.pricing,
       logger,
+      usageSink: new StructuredLogUsageSink({ logger }),
     });
   }
   async validate(
