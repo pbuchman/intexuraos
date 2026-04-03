@@ -46,22 +46,13 @@ export function V2TaskHeader({ task, workerStatusTag }: V2TaskHeaderProps): Reac
         : 'Memory: error';
 
   const executionMemoryTooltip = (() => {
-    const parts: string[] = [];
-    if (task.executionMemoryContext?.status === 'error') {
-      const code = task.executionMemoryContext.errorCode ?? '';
-      const msg = task.executionMemoryContext.errorMessage ?? '';
-      const detail = code !== '' && msg !== '' ? `${code} — ${msg}` : code !== '' ? code : msg;
-      if (detail !== '') {
-        parts.push(`Retrieval: ${detail}`);
-      }
+    if (task.executionMemoryContext?.status !== 'error') {
+      return undefined;
     }
-    if (task.executionMemoryPostRun?.status === 'error') {
-      const msg = task.executionMemoryPostRun.errorMessage ?? '';
-      if (msg !== '') {
-        parts.push(`Post-run: ${msg}`);
-      }
-    }
-    return parts.length > 0 ? parts.join('\n') : undefined;
+    const code = task.executionMemoryContext.errorCode ?? '';
+    const msg = task.executionMemoryContext.errorMessage ?? '';
+    const detail = code !== '' && msg !== '' ? `${code} — ${msg}` : code !== '' ? code : msg;
+    return detail !== '' ? detail : undefined;
   })();
 
   const prUrl = getTaskMergeUrl(task);
