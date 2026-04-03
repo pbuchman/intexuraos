@@ -499,7 +499,26 @@ async function distillTask(
     throw new Error(result.error.message);
   }
 
-  return DistillationSchema.parse(parseJsonObject(result.value.content));
+  try {
+    return DistillationSchema.parse(parseJsonObject(result.value.content));
+  } catch (firstError) {
+    deps.logger.warn({ err: firstError }, 'Distiller response failed Zod parse, retrying with refinement prompt');
+
+    const refinementPrompt = [
+      prompt,
+      '',
+      'Your previous response was invalid JSON or did not match the required schema.',
+      `Error: ${getErrorMessage(firstError, 'Unknown parse error')}`,
+      'Fix the JSON schema violation and return valid JSON matching the exact schema above.',
+    ].join('\n');
+
+    const retryResult = await deps.distillerClient.generate(refinementPrompt);
+    if (!retryResult.ok) {
+      throw new Error(retryResult.error.message);
+    }
+
+    return DistillationSchema.parse(parseJsonObject(retryResult.value.content));
+  }
 }
 
 async function updateExistingMemory(
