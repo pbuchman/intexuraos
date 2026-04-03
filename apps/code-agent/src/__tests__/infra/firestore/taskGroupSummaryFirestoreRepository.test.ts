@@ -1722,7 +1722,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(result.value.summaries).toHaveLength(1);
     });
 
-    it('sorts by started-time', async () => {
+    it('sorts by dispatched', async () => {
       const repo = createTaskGroupSummaryFirestoreRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
