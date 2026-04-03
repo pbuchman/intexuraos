@@ -84,6 +84,7 @@ function computeSummaryFromTasks(
   const agentTypesSet = new Set<string>();
   let hasCompletedPlanning = false;
   let hasCompletedExecution = false;
+  let hasCompletedExecutionAgent = false;
   let hasImplementationTaskId = false;
   let hasPrUrl = false;
   let prNumber: number | null = null;
@@ -113,6 +114,10 @@ function computeSummaryFromTasks(
       (task.agentType === 'pull_request' && task.status === 'implemented')
     ) {
       hasCompletedExecution = true;
+    }
+
+    if (task.agentType === 'execution' && (task.status === 'implemented' || task.status === 'reviewed')) {
+      hasCompletedExecutionAgent = true;
     }
 
     if (
@@ -168,6 +173,7 @@ function computeSummaryFromTasks(
     activeTaskCount,
     hasCompletedPlanning,
     hasCompletedExecution,
+    hasCompletedExecutionAgent,
     hasImplementationTaskId,
     hasPrUrl,
     latestTaskStatus,
@@ -187,6 +193,7 @@ function computeSummaryFromTasks(
     agentTypesPresent: Array.from(agentTypesSet),
     hasCompletedPlanning,
     hasCompletedExecution,
+    hasCompletedExecutionAgent,
     hasImplementationTaskId,
     hasPrUrl,
     prNumber,

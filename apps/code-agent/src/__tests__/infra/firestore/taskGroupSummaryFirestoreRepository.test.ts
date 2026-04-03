@@ -2362,7 +2362,8 @@ describe('taskGroupSummaryFirestoreRepository', () => {
 
       const countsDoc = await fakeFirestore.collection('user_group_counts').doc('user-4').get();
       expect(countsDoc.get('needsAction')).toBe(0);
-      expect(countsDoc.get('done')).toBe(1);
+      // Execution agent completed with no review yet → 'active' (rule 1b keeps group active until review clears)
+      expect(countsDoc.get('active')).toBe(1);
     });
 
     it('does not update mostRecentDispatchedAt with earlier timestamp', async () => {
