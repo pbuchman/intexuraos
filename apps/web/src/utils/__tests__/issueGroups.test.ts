@@ -1480,6 +1480,69 @@ describe('pipeline merge step', () => {
     expect(mergeSteps).toHaveLength(1);
   });
 
+  it('does NOT show merge step when execution completed with PR and merge label but review task is running', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-03-07T10:00:00Z',
+        updatedAt: '2026-03-07T10:05:00Z',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+        linearIssue: {
+          ...linearIssueSkeleton,
+          labels: [{ id: 'l1', name: 'ready-to-merge' }],
+        },
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+        status: 'running',
+        createdAt: '2026-03-07T11:00:00Z',
+        updatedAt: '2026-03-07T11:05:00Z',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(findStep(groups[0]?.pipeline, 'merge')).toBeUndefined();
+  });
+
+  it('does NOT show merge step via review fallback when another task is queued', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+        status: 'reviewed',
+        prNumber: 42,
+        createdAt: '2026-03-07T10:00:00Z',
+        updatedAt: '2026-03-07T10:05:00Z',
+        result: { needs_remediation: '0' },
+        linearIssue: {
+          ...linearIssueSkeleton,
+          labels: [{ id: 'l1', name: 'ready-to-merge' }],
+        },
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'remediation',
+        status: 'queued',
+        createdAt: '2026-03-07T11:00:00Z',
+        updatedAt: '2026-03-07T11:05:00Z',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(findStep(groups[0]?.pipeline, 'merge')).toBeUndefined();
+  });
+
   it('aggregate status is needs-action when merge step is actionable', () => {
     const tasks = [
       createMockTask({
