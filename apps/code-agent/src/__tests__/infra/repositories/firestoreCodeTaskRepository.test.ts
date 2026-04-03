@@ -1789,6 +1789,59 @@ describe('firestoreCodeTaskRepository', () => {
       expect(clearResult.value.fanOutChildTaskIds).toBeUndefined();
     });
 
+    it('does not read-back after writing when called with an external transaction', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a task first
+      const createResult = await repo.create(createTaskInput());
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Setup failed');
+      const taskId = createResult.value.id;
+
+      // Run update inside a transaction — track get calls after update
+      const getCallsAfterUpdate: string[] = [];
+      let updateCalled = false;
+
+      await fakeFirestore.runTransaction(async (tx) => {
+        // Wrap transaction to spy on get/update ordering
+        const originalGet = tx.get.bind(tx);
+        const originalUpdate = tx.update.bind(tx);
+
+        (tx as Record<string, unknown>).get = async (
+          ...args: Parameters<typeof originalGet>
+        ) => {
+          if (updateCalled) {
+            getCallsAfterUpdate.push('get-after-update');
+          }
+          return originalGet(...args);
+        };
+
+        (tx as Record<string, unknown>).update = (
+          ...args: Parameters<typeof originalUpdate>
+        ) => {
+          updateCalled = true;
+          return originalUpdate(...args);
+        };
+
+        const updateResult = await repo.update(
+          taskId,
+          { status: 'running' },
+          { transaction: tx },
+        );
+        expect(updateResult.ok).toBe(true);
+        if (!updateResult.ok) throw new Error('Update failed');
+
+        // Verify the returned task has the updated status
+        expect(updateResult.value.status).toBe('running');
+      });
+
+      // The key assertion: no get() calls happened after update()
+      expect(getCallsAfterUpdate).toEqual([]);
+    });
+
     it('accepts external transaction via options parameter for update', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
