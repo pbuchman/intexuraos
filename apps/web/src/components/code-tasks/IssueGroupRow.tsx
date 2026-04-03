@@ -191,12 +191,13 @@ function PipelineVisualization({ group, compact }: { group: IssueGroup; compact?
   }
 
   const elements: React.JSX.Element[] = [];
+  const hideConnectors = compact === true && visibleSteps.length > 4;
 
   for (let i = 0; i < visibleSteps.length; i++) {
     const step = visibleSteps[i];
     if (step === undefined) continue;
 
-    if (i > 0) {
+    if (i > 0 && !hideConnectors) {
       elements.push(
         <PipelineConnector key={`conn-${String(i)}`} />,
       );
@@ -217,7 +218,7 @@ function PipelineVisualization({ group, compact }: { group: IssueGroup; compact?
   }
 
   return (
-    <span className="flex items-center">
+    <span className={`flex items-center${hideConnectors ? ' gap-1' : ''}`}>
       {elements}
     </span>
   );
