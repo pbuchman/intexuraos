@@ -1881,6 +1881,225 @@ describe('TaskDispatcher', () => {
       const task = await agentDispatcher.getTask('labels-stored');
       expect(task?.linearIssueLabels).toEqual(['bug', 'code-task', 'high-priority']);
     });
+
+    it('T1: verification passed + exit code 0 → task finalized as completed', async () => {
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: true,
+        missingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+        agentData: {
+          agentType: 'planning' as const,
+          outcome: 'planned',
+          superpowers_writing_plans: 'used',
+          linear_url: '',
+          is_complex: '0',
+          subtask_urls: '',
+          pr_url: '',
+          summary: 'Task completed',
+          unclear_clarification: '',
+          has_plan_doc: '0',
+        },
+      });
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        planningFinalAssistantLog('planned')
+      );
+      const request: CreateTaskRequest = {
+        taskId: 'exit-code-zero-test',
+        workerType: 'auto',
+        prompt: 'Test exit code 0',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const internalExitCodes = agentDispatcher as unknown as {
+        taskExitCodes: Map<string, number>;
+      };
+      internalExitCodes.taskExitCodes.set('exit-code-zero-test', 0);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('exit-code-zero-test');
+      expect(task?.status).toBe('completed');
+    });
+
+    it('T2: verification passed + exit code 1 → task finalized as failed with TASK_EXIT_CODE_OVERRIDE', async () => {
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: true,
+        missingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+        agentData: {
+          agentType: 'planning' as const,
+          outcome: 'planned',
+          superpowers_writing_plans: 'used',
+          linear_url: '',
+          is_complex: '0',
+          subtask_urls: '',
+          pr_url: '',
+          summary: 'Task completed',
+          unclear_clarification: '',
+          has_plan_doc: '0',
+        },
+      });
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        planningFinalAssistantLog('planned')
+      );
+      const request: CreateTaskRequest = {
+        taskId: 'exit-code-one-test',
+        workerType: 'auto',
+        prompt: 'Test exit code 1',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const internalExitCodes = agentDispatcher as unknown as {
+        taskExitCodes: Map<string, number>;
+      };
+      internalExitCodes.taskExitCodes.set('exit-code-one-test', 1);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('exit-code-one-test');
+      expect(task?.status).toBe('failed');
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'TASK_EXIT_CODE_OVERRIDE',
+              remediation: expect.objectContaining({ action: 'retry' }),
+            }),
+          }),
+        })
+      );
+    });
+
+    it('T3: verification passed + exit code undefined → task finalized as completed', async () => {
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: true,
+        missingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+        agentData: {
+          agentType: 'planning' as const,
+          outcome: 'planned',
+          superpowers_writing_plans: 'used',
+          linear_url: '',
+          is_complex: '0',
+          subtask_urls: '',
+          pr_url: '',
+          summary: 'Task completed',
+          unclear_clarification: '',
+          has_plan_doc: '0',
+        },
+      });
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        planningFinalAssistantLog('planned')
+      );
+      const request: CreateTaskRequest = {
+        taskId: 'exit-code-undefined-test',
+        workerType: 'auto',
+        prompt: 'Test exit code undefined',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Do NOT set any exit code — taskExitCodes has no entry for this task
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('exit-code-undefined-test');
+      expect(task?.status).toBe('completed');
+    });
+
+    it('T4: verification passed + non-zero exit code + pending messages → failed, messages NOT delivered', async () => {
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: true,
+        missingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+        agentData: {
+          agentType: 'planning' as const,
+          outcome: 'planned',
+          superpowers_writing_plans: 'used',
+          linear_url: '',
+          is_complex: '0',
+          subtask_urls: '',
+          pr_url: '',
+          summary: 'Task completed',
+          unclear_clarification: '',
+          has_plan_doc: '0',
+        },
+      });
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        planningFinalAssistantLog('planned')
+      );
+      const request: CreateTaskRequest = {
+        taskId: 'exit-code-pending-test',
+        workerType: 'auto',
+        prompt: 'Test exit code with pending messages',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const internalState = agentDispatcher as unknown as {
+        taskExitCodes: Map<string, number>;
+        pendingMessages: Map<string, string[]>;
+      };
+      internalState.taskExitCodes.set('exit-code-pending-test', 1);
+      internalState.pendingMessages.set('exit-code-pending-test', ['queued message']);
+
+      const createWorkerCallsBefore = vi.mocked(mockIsolationProvider.createWorker).mock.calls
+        .length;
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('exit-code-pending-test');
+      expect(task?.status).toBe('failed');
+
+      // Pending messages should NOT have triggered a new worker (no new createWorker call)
+      const createWorkerCallsAfter = vi.mocked(mockIsolationProvider.createWorker).mock.calls
+        .length;
+      expect(createWorkerCallsAfter).toBe(createWorkerCallsBefore);
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'TASK_EXIT_CODE_OVERRIDE',
+              remediation: expect.objectContaining({ action: 'retry' }),
+            }),
+          }),
+        })
+      );
+    });
   });
 
   describe('agentType priority', () => {

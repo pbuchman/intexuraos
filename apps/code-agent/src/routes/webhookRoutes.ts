@@ -578,6 +578,14 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
 
         if (executionResult.execution_outcome_label === 'already_completed') {
+          if (executionResult.prUrl == null || executionResult.prUrl === '') {
+            return {
+              ok: false,
+              code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
+              message: 'already_completed outcome requires a PR URL as evidence',
+            };
+          }
+
           const routedIssueValidation = await linearAgentClient.validateIssue({
             userId: task.userId,
             identifier: task.linearIssueId,
