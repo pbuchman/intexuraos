@@ -38,8 +38,9 @@ function aggregateIndexes(migrations) {
   for (const migration of migrations) {
     for (const index of migration.indexes ?? []) {
       // Skip single-field indexes - Firestore creates them automatically
-      // Composite indexes require 2+ fields
-      if ((index.fields?.length ?? 0) < 2) {
+      // UNLESS the index has a vectorConfig field (Firestore does NOT auto-create vector indexes)
+      const hasVectorField = index.fields?.some((f) => f.vectorConfig != null) === true;
+      if ((index.fields?.length ?? 0) < 2 && !hasVectorField) {
         continue;
       }
       const key = JSON.stringify(index);
@@ -417,7 +418,12 @@ async function main() {
   console.log('All migrations completed successfully');
 }
 
-main().catch((error) => {
-  console.error('Migration runner failed:', error.message);
-  process.exit(1);
-});
+const isMain = import.meta.url === `file://${process.argv[1]}`;
+if (isMain) {
+  main().catch((error) => {
+    console.error('Migration runner failed:', error.message);
+    process.exit(1);
+  });
+}
+
+export { aggregateIndexes };
