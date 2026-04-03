@@ -64,7 +64,7 @@ vi.mock('../../../config.js', () => ({
     serviceUrl: string;
     executionMemoryEnabled: boolean;
   } => ({
-    queue: { maxSize: 50, ttlMinutes: 30 },
+    queue: { maxSize: 50, ttlMinutes: 1440 },
     serviceUrl: 'https://code-agent.test',
     executionMemoryEnabled: mockExecutionMemoryEnabled,
   }),
@@ -245,8 +245,8 @@ describe('drainTaskQueue', () => {
   });
 
   it('expires task when TTL exceeded, marks failed, and notifies', async () => {
-    // Create a task queued 31 minutes ago (TTL is 30 minutes)
-    const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+    // Create a task queued 1441 minutes ago (TTL is 1440 minutes)
+    const beyondTtl = new Date(Date.now() - 1441 * 60 * 1000);
     const task = createMockTask({
       queuedAt: Timestamp.fromDate(beyondTtl),
     });
@@ -265,7 +265,7 @@ describe('drainTaskQueue', () => {
       status: 'failed',
       error: {
         code: 'queue_timeout',
-        message: 'Task expired in queue after 30 minutes. Workers were still busy.',
+        message: 'Task expired in queue after 1440 minutes. Workers were still busy.',
       },
     });
 
@@ -386,7 +386,7 @@ describe('drainTaskQueue', () => {
   });
 
   it('clears parent implementationTaskId when expired task has parentTaskId', async () => {
-    const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+    const beyondTtl = new Date(Date.now() - 1441 * 60 * 1000);
     const task = createMockTask({
       queuedAt: Timestamp.fromDate(beyondTtl),
       parentTaskId: 'parent-task-1',
@@ -416,7 +416,7 @@ describe('drainTaskQueue', () => {
   });
 
   it('does not clear parent implementationTaskId when it points to a different task', async () => {
-    const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+    const beyondTtl = new Date(Date.now() - 1441 * 60 * 1000);
     const task = createMockTask({
       queuedAt: Timestamp.fromDate(beyondTtl),
       parentTaskId: 'parent-task-1',
@@ -443,7 +443,7 @@ describe('drainTaskQueue', () => {
   });
 
   it('logs warning when clearing parent implementationTaskId fails', async () => {
-    const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+    const beyondTtl = new Date(Date.now() - 1441 * 60 * 1000);
     const task = createMockTask({
       queuedAt: Timestamp.fromDate(beyondTtl),
       parentTaskId: 'parent-task-1',
@@ -476,7 +476,7 @@ describe('drainTaskQueue', () => {
   });
 
   it('logs warning when notifyTaskQueueExpired fails', async () => {
-    const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+    const beyondTtl = new Date(Date.now() - 1441 * 60 * 1000);
     const task = createMockTask({
       queuedAt: Timestamp.fromDate(beyondTtl),
     });
@@ -503,7 +503,7 @@ describe('drainTaskQueue', () => {
 
   it('uses createdAt when queuedAt is not set for TTL check', async () => {
     // Create a task with createdAt 31 minutes ago and no queuedAt
-    const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+    const beyondTtl = new Date(Date.now() - 1441 * 60 * 1000);
     const task = createMockTask();
     // Remove queuedAt to test fallback to createdAt
     delete (task as unknown as Record<string, unknown>)['queuedAt'];
@@ -1035,7 +1035,7 @@ describe('drainTaskQueue', () => {
 
   describe('PR task lock cleanup', () => {
     it('returns locksToCleanup on TTL expiry (PR task)', async () => {
-      const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+      const beyondTtl = new Date(Date.now() - 1441 * 60 * 1000);
       const task = createMockTask({
         queuedAt: Timestamp.fromDate(beyondTtl),
         prNumber: 42,
@@ -1077,7 +1077,7 @@ describe('drainTaskQueue', () => {
     });
 
     it('returns empty locksToCleanup on TTL expiry (non-PR task)', async () => {
-      const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+      const beyondTtl = new Date(Date.now() - 1441 * 60 * 1000);
       const task = createMockTask({
         queuedAt: Timestamp.fromDate(beyondTtl),
       });
@@ -1094,7 +1094,7 @@ describe('drainTaskQueue', () => {
     });
 
     it('returns empty locksToCleanup on TTL expiry when task is a follow-up (has parentTaskId)', async () => {
-      const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+      const beyondTtl = new Date(Date.now() - 1441 * 60 * 1000);
       const task = createMockTask({
         queuedAt: Timestamp.fromDate(beyondTtl),
         prNumber: 42,
@@ -1383,7 +1383,7 @@ describe('drainTaskQueue', () => {
       // Regression test: an expired PR task that is NOT PR-locked should be TTL-expired.
       // Under the new ordering, PR-lock check runs first (returns hasActive: false),
       // then the TTL check fires and expires the task.
-      const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+      const beyondTtl = new Date(Date.now() - 1441 * 60 * 1000);
       const expiredTask = createMockTask({
         id: 'task-expired',
         prNumber: 42,
@@ -1418,7 +1418,7 @@ describe('drainTaskQueue', () => {
         status: 'failed',
         error: {
           code: 'queue_timeout',
-          message: 'Task expired in queue after 30 minutes. Workers were still busy.',
+          message: 'Task expired in queue after 1440 minutes. Workers were still busy.',
         },
       });
 
