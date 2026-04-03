@@ -1644,7 +1644,7 @@
 - Why: Developers need a way to dispatch AI coding tasks to dedicated worker machines without managing infrastructure directly. Code Agent bridges the gap between a user prompt and a fully managed coding session -- handling dispatch, security, lifecycle, and notifications.
 - Killer feature: Four-layer task deduplication (approvalEventId, actionId, dedupKey, linearIssueId) combined with two-layer prompt sanitization (secret redaction + injection prevention) -- no other service in the monorepo has this depth of input safety.
 - Future plans: Actual system prompt versioning (replace static hash placeholders with computed SHA-256), route splitting for codeRoutes.ts (continue extracting domain-specific route files).
-- Limitations: Queue TTL is 30 minutes (tasks expire if no worker becomes available), single-instance drain guard (module-level boolean would break with horizontal scaling), ESLint disabled on largest route files.
+- Limitations: Queue TTL is 24 hours (tasks expire if no worker becomes available), single-instance drain guard (module-level boolean would break with horizontal scaling), ESLint disabled on largest route files.
 
 **Documentation Coverage:** 100%
 
