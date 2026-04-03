@@ -63,7 +63,9 @@ describe('V2TaskHeader execution memory chip', () => {
       />
     );
 
-    expect(screen.getByText('Memory: 2 matches')).toBeInTheDocument();
+    const matchedChip = screen.getByText('Memory: 2 matches');
+    expect(matchedChip).toBeInTheDocument();
+    expect(matchedChip.className).toContain('bg-emerald-100');
 
     rerender(
       <V2TaskHeader
@@ -76,7 +78,9 @@ describe('V2TaskHeader execution memory chip', () => {
       />
     );
 
-    expect(screen.getByText('Memory: none')).toBeInTheDocument();
+    const noneChip = screen.getByText('Memory: none');
+    expect(noneChip).toBeInTheDocument();
+    expect(noneChip.className).toContain('bg-slate-100');
 
     rerender(
       <V2TaskHeader
@@ -91,6 +95,8 @@ describe('V2TaskHeader execution memory chip', () => {
       />
     );
 
-    expect(screen.getByText('Memory: error')).toBeInTheDocument();
+    const errorChip = screen.getByText('Memory: error');
+    expect(errorChip).toBeInTheDocument();
+    expect(errorChip.className).toContain('bg-red-100');
   });
 });

@@ -11,6 +11,7 @@ import { getTaskMergeUrl } from '@/utils/issueGroups.js';
 import type { CodeTask, WorkerStatusTag } from '@/types';
 import {
   DEFAULT_STATE_STYLE,
+  EXECUTION_MEMORY_STATUS_STYLES,
   LINEAR_STATE_STYLES,
   STATUS_MAP,
   WORKER_STATUS_STYLES,
@@ -73,8 +74,8 @@ export function V2TaskHeader({ task, workerStatusTag }: V2TaskHeaderProps): Reac
             {status.label}
           </span>
         ) : null}
-        {executionMemoryChip !== null ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 px-2.5 py-1 text-sm font-medium text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300">
+        {executionMemoryChip !== null && task.executionMemoryContext !== undefined ? (
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium ${EXECUTION_MEMORY_STATUS_STYLES[task.executionMemoryContext.status]}`}>
             {executionMemoryChip}
           </span>
         ) : null}

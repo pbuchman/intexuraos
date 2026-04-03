@@ -17,7 +17,7 @@ import { V2TaskHeader } from '@/components/code-tasks/v2/V2TaskHeader.js';
 import { V2LogStream } from '@/components/code-tasks/v2/V2LogStream.js';
 import { V2TaskActions } from '@/components/code-tasks/v2/V2TaskActions.js';
 import { V2NextSteps } from '@/components/code-tasks/v2/V2NextSteps.js';
-import { isActiveStatus } from '@/components/code-tasks/v2/shared.js';
+import { EXECUTION_MEMORY_STATUS_STYLES, isActiveStatus } from '@/components/code-tasks/v2/shared.js';
 import type { WorkerType } from '@/components/code-tasks/v2/shared.js';
 import { hasImplementationReadyLabel, isTaskMergeable, getTaskMergeUrl } from '@/utils/issueGroups.js';
 
@@ -235,14 +235,16 @@ const MemoExecutionMemoryCard = memo(function ExecutionMemoryCard({ task }: { ta
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Execution Memory</h3>
         {context?.status !== undefined ? (
-          <span className="rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-medium text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300">
+          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${EXECUTION_MEMORY_STATUS_STYLES[context.status]}`}>
             {context.status}
           </span>
         ) : null}
       </div>
 
       {context?.querySummary !== undefined ? (
-        <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">{context.querySummary}</p>
+        <div className="mb-3 text-sm text-slate-600 dark:text-slate-300">
+          <MarkdownContent content={context.querySummary} />
+        </div>
       ) : null}
 
       {context?.matchedMemories !== undefined && context.matchedMemories.length > 0 ? (
@@ -261,10 +263,10 @@ const MemoExecutionMemoryCard = memo(function ExecutionMemoryCard({ task }: { ta
                   {memory.score.toFixed(2)}
                 </span>
               </div>
-              <p className="text-sm text-slate-600 dark:text-slate-300">{memory.appliesWhen}</p>
-              <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">{memory.action}</p>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{memory.avoid}</p>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{memory.verification}</p>
+              <div className="text-sm text-slate-600 dark:text-slate-300"><MarkdownContent content={memory.appliesWhen} /></div>
+              <div className="mt-1 text-sm text-slate-700 dark:text-slate-200"><MarkdownContent content={memory.action} /></div>
+              <div className="mt-1 text-sm text-slate-500 dark:text-slate-400"><MarkdownContent content={memory.avoid} /></div>
+              <div className="mt-1 text-sm text-slate-500 dark:text-slate-400"><MarkdownContent content={memory.verification} /></div>
             </div>
           ))}
         </div>
@@ -277,7 +279,7 @@ const MemoExecutionMemoryCard = memo(function ExecutionMemoryCard({ task }: { ta
             <span>{postRun.status}</span>
           </div>
           {postRun.evaluationSummary !== undefined ? (
-            <p>{postRun.evaluationSummary}</p>
+            <MarkdownContent content={postRun.evaluationSummary} />
           ) : null}
           {postRun.generatedMemoryIds.length > 0 ? (
             <div className="flex flex-wrap items-center gap-2">
