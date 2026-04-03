@@ -31,10 +31,10 @@ export function deriveAggregateStatusFromSummary(fields: GroupSummaryFields): Gr
     return 'needs-action';
   }
 
-  // 3. Needs-action: execution completed with PR and ready-to-merge label is set
+  // 3. Needs-action: PR exists with positive review and ready-to-merge label
+  // Covers both execution-based and review-only workflows
   // Conservative when label unknown (undefined → false)
   if (
-    fields.hasCompletedExecution &&
     fields.hasPrUrl &&
     fields.latestReviewNeedsRemediation === false &&
     (fields.hasMergeReadyLabel ?? false)
