@@ -159,3 +159,9 @@ Or if execution keywords present:
 3. Use present tense, imperative mood
 4. Be specific about location/context
 5. Avoid technical jargon in first 50 chars
+
+## Forbidden Actions
+
+| Action                    | Why Forbidden                             |
+| ------------------------- | ----------------------------------------- |
+| Setting assignee/delegate | User-only responsibility. Blocked by hook |

@@ -154,10 +154,14 @@
       "owner": "linear-agent",
       "description": "Synced Linear issue comments from webhook events"
     },
+    "linear_prune_candidates": {
+      "owner": "linear-agent",
+      "description": "Prune candidates classified by Gemini for user review before deletion"
+    },
     "code_tasks": {
       "owner": "code-agent",
       "description": "Code execution tasks",
-      "subcollections": ["logs", "log_lines", "turn_metrics"]
+      "subcollections": ["logs", "log_lines", "turn_metrics", "compliance_reports"]
     },
     "user_spend": {
       "owner": "code-agent",
@@ -210,6 +214,22 @@
     "merge_queue_watches": {
       "owner": "code-agent",
       "description": "Merge queue watch state for automated PR merging"
+    },
+    "execution_memories": {
+      "owner": "code-agent",
+      "description": "Execution memory lessons distilled from completed code tasks with vector embeddings for similarity retrieval"
+    },
+    "execution_memory_applications": {
+      "owner": "code-agent",
+      "description": "Tracks how execution memories were applied to tasks and their post-run evaluation results"
+    },
+    "task_group_summaries": {
+      "owner": "code-agent",
+      "description": "Precomputed group-level aggregates for code task issue groups (one doc per userId+linearIssueId)"
+    },
+    "user_group_counts": {
+      "owner": "code-agent",
+      "description": "Per-user group status counts for code task filter badges (active, needs-action, done, failed)"
     },
     "cron_schedules": {
       "owner": "cron-agent",

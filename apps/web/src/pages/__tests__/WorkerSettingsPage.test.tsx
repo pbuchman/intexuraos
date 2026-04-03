@@ -8,6 +8,17 @@ const { mockUseWorkerSettings, mockDefaultWorkerTypeCard } = vi.hoisted(() => ({
 
 vi.mock('@/hooks', () => ({
   useWorkerSettings: (): ReturnType<typeof mockUseWorkerSettings> => mockUseWorkerSettings(),
+  useTimezone: (): {
+    timezone: string;
+    loading: boolean;
+    error: null;
+    updateTimezone: ReturnType<typeof vi.fn>;
+  } => ({
+    timezone: 'Europe/Berlin',
+    loading: false,
+    error: null,
+    updateTimezone: vi.fn(),
+  }),
 }));
 
 vi.mock('@/components', () => ({

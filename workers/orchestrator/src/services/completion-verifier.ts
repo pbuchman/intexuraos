@@ -47,6 +47,7 @@ export interface PlanningAgentData {
   superpowers_writing_plans: 'used' | 'not used';
   linear_url: string;
   is_complex: '0' | '1';
+  has_plan_doc: '0' | '1';
   subtask_urls: string;
   pr_url: string;
   summary: string;
@@ -56,9 +57,12 @@ export interface PlanningAgentData {
 export interface ExecutionAgentData {
   agentType: 'execution';
   outcome: 'implemented' | 'already_completed';
-  superpowers_executing_plans: 'used' | 'not used';
+  superpowers_subagent_driven_dev: 'used' | 'not used';
   superpowers_requesting_code_review: 'used' | 'not used';
   gh_pr_url: string;
+  memory_ids_used: string;
+  memory_ids_rejected: string;
+  memory_usage_summary: string;
   summary: string;
 }
 
@@ -107,6 +111,7 @@ export const PLANNING_SCHEMA = z.object({
   superpowers_writing_plans: z.enum(['used', 'not used']),
   linear_url: z.string(),
   is_complex: z.enum(['0', '1']),
+  has_plan_doc: z.enum(['0', '1']),
   subtask_urls: z.string(),
   pr_url: z.string(),
   summary: z.string(),
@@ -115,9 +120,12 @@ export const PLANNING_SCHEMA = z.object({
 
 export const EXECUTION_SCHEMA = z.object({
   outcome: z.enum(['implemented', 'already_completed']),
-  superpowers_executing_plans: z.enum(['used', 'not used']),
+  superpowers_subagent_driven_dev: z.enum(['used', 'not used']),
   superpowers_requesting_code_review: z.enum(['used', 'not used']),
   gh_pr_url: z.string(),
+  memory_ids_used: z.string(),
+  memory_ids_rejected: z.string(),
+  memory_usage_summary: z.string(),
   summary: z.string(),
 });
 
@@ -210,13 +218,14 @@ export function buildPlanningPrompt(transcript: string): string {
     '- superpowers_writing_plans: "used" if the agent invoked the writing-plans skill, "not used" otherwise',
     '- linear_url: the Linear issue URL — the single issue the agent received as input and edited in-place (string, empty string if not found)',
     '- is_complex: "1" if the agent created subtasks for parallel execution, "0" otherwise',
+    '- has_plan_doc: "1" if the agent created a plan document in docs/plans/, "0" otherwise',
     '- subtask_urls: comma-separated Linear issue URLs for all subtasks created (string, empty string if none)',
     '- pr_url: the GitHub Pull Request URL if the agent created one (string, empty string if not found)',
     '- summary: concise bullet-point summary (markdown *, max 5-6 points) of what happened — the LLM agent typically states this clearly as a summary block in its final output',
     '- unclear_clarification: required when outcome is "unclear" — the message explaining why; empty string if outcome is "planned"',
     '',
     'Example valid response:',
-    '{"outcome":"planned","superpowers_writing_plans":"used","linear_url":"https://linear.app/pbuchman/issue/INT-631/feature-introduce-github-webhook-agent-ownership-orchestration","is_complex":"1","subtask_urls":"https://linear.app/pbuchman/issue/INT-632/subtask-one,https://linear.app/pbuchman/issue/INT-633/subtask-two","pr_url":"https://github.com/pbuchman/intexuraos/pull/944","summary":"* Analyzed task requirements for the GitHub webhook agent ownership feature\\n* Decided on a complex implementation requiring parallel subtasks\\n* Created 5 child issues covering API endpoints, database schema, and test strategy\\n* Produced a plan PR with the full implementation design","unclear_clarification":""}',
+    '{"outcome":"planned","superpowers_writing_plans":"used","linear_url":"https://linear.app/pbuchman/issue/INT-631/feature-introduce-github-webhook-agent-ownership-orchestration","is_complex":"1","has_plan_doc":"1","subtask_urls":"https://linear.app/pbuchman/issue/INT-632/subtask-one,https://linear.app/pbuchman/issue/INT-633/subtask-two","pr_url":"https://github.com/pbuchman/intexuraos/pull/944","summary":"* Analyzed task requirements for the GitHub webhook agent ownership feature\\n* Decided on a complex implementation requiring parallel subtasks\\n* Created 5 child issues covering API endpoints, database schema, and test strategy\\n* Produced a plan PR with the full implementation design","unclear_clarification":""}',
     '',
     'Transcript (last 50 lines):',
     transcript,
@@ -232,14 +241,17 @@ export function buildExecutionPrompt(transcript: string): string {
     ...sharedPreamble(),
     'Fields:',
     '- outcome: "implemented" if the agent created a PR with new code, "already_completed" if the agent determined the work was already done/merged',
-    '- superpowers_executing_plans: "used" if the agent invoked the executing-plans skill, "not used" otherwise',
+    '- superpowers_subagent_driven_dev: "used" if the agent invoked the subagent-driven-development skill, "not used" otherwise',
     '- superpowers_requesting_code_review: "used" if the agent invoked the requesting-code-review skill, "not used" otherwise',
     '- gh_pr_url: the GitHub Pull Request URL (string, empty string if not found)',
+    '- memory_ids_used: comma-separated memory IDs the agent reported using (string, empty string if none)',
+    '- memory_ids_rejected: comma-separated memory IDs the agent reported rejecting as stale or not applicable (string, empty string if none)',
+    '- memory_usage_summary: one-sentence summary of how the memories helped or why they were rejected (string, empty string if not found)',
     '- summary: concise bullet-point summary (markdown *, max 5-6 points) of what was implemented — the LLM agent typically states this clearly as a summary block in its final output',
     '',
     'Example valid responses:',
-    '{"outcome":"implemented","superpowers_executing_plans":"used","superpowers_requesting_code_review":"used","gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","summary":"* Implemented the feature with 3 new API endpoints and updated database schema\\n* CI passed on the first attempt\\n* Created PR targeting the development branch"}',
-    '{"outcome":"already_completed","superpowers_executing_plans":"used","superpowers_requesting_code_review":"not used","gh_pr_url":"","summary":"* Discovered the requested work was already implemented and merged into development\\n* Verified all tests pass and the feature is present in the codebase\\n* No PR was needed"}',
+    '{"outcome":"implemented","superpowers_subagent_driven_dev":"used","superpowers_requesting_code_review":"used","gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","memory_ids_used":"mem_142,mem_155","memory_ids_rejected":"mem_188","memory_usage_summary":"Used the route logging and coverage memories to keep the callback fix aligned with existing verification patterns.","summary":"* Implemented the feature with 3 new API endpoints and updated database schema\\n* CI passed on the first attempt\\n* Created PR targeting the development branch"}',
+    '{"outcome":"already_completed","superpowers_subagent_driven_dev":"used","superpowers_requesting_code_review":"not used","gh_pr_url":"","memory_ids_used":"","memory_ids_rejected":"mem_188","memory_usage_summary":"Rejected the supplied memory because the codebase already matched the current repo state.","summary":"* Discovered the requested work was already implemented and merged into development\\n* Verified all tests pass and the feature is present in the codebase\\n* No PR was needed"}',
     '',
     'Transcript (last 50 lines):',
     transcript,

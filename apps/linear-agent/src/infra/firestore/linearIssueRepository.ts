@@ -171,14 +171,21 @@ export async function findLinearIssuesByIdentifiers(
     const db = getFirestore();
     const allIssues: SyncedLinearIssue[] = [];
 
+    const chunks: string[][] = [];
     for (let i = 0; i < identifiers.length; i += FIRESTORE_IN_LIMIT) {
-      const chunk = identifiers.slice(i, i + FIRESTORE_IN_LIMIT);
-      const snapshot = await db
-        .collection(COLLECTION_NAME)
-        .where('identifier', 'in', chunk)
-        .where('userId', '==', userId)
-        .get();
+      chunks.push(identifiers.slice(i, i + FIRESTORE_IN_LIMIT));
+    }
 
+    const snapshots = await Promise.all(
+      chunks.map((chunk) =>
+        db.collection(COLLECTION_NAME)
+          .where('identifier', 'in', chunk)
+          .where('userId', '==', userId)
+          .get()
+      )
+    );
+
+    for (const snapshot of snapshots) {
       for (const doc of snapshot.docs) {
         allIssues.push(docToIssue(doc.data() as SyncedLinearIssueDoc));
       }

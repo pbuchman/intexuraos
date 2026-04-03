@@ -7,7 +7,7 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import type { Logger } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
-import type { LinearError } from '../domain/errors.js';
+import { handleLinearError } from './routeUtils.js';
 import {
   STATE_NAME_MAP,
   findStateId,
@@ -49,18 +49,6 @@ interface IssueResponse {
   identifier: string;
   title: string;
   url: string;
-}
-
-async function handleLinearError(
-  error: LinearError,
-  reply: FastifyReply
-): Promise<unknown> {
-  if (error.code === 'NOT_CONNECTED') {
-    reply.status(403);
-    return await reply.fail('FORBIDDEN', error.message);
-  }
-  reply.status(500);
-  return await reply.fail('DOWNSTREAM_ERROR', error.message);
 }
 
 export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -1020,6 +1008,59 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
         })),
       });
     }
+  );
+
+  // GET /internal/linear/issues/:issueId/direct-children - Return live direct children from Linear
+  fastify.get<{ Params: IssueIdParams }>(
+    '/internal/linear/issues/:issueId/direct-children',
+    async (request, reply) => {
+      logIncomingRequest(request);
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      const userId = request.headers['x-user-id'];
+      if (typeof userId !== 'string') {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Missing X-User-Id header');
+      }
+
+      const { issueId } = request.params;
+      const services = getServices();
+      const apiKeyResult = await services.connectionRepository.getApiKey(userId);
+      if (!apiKeyResult.ok) {
+        return await handleLinearError(apiKeyResult.error, reply);
+      }
+      if (apiKeyResult.value === null) {
+        return await handleLinearError(
+          { code: 'NOT_CONNECTED', message: 'User not connected to Linear' },
+          reply,
+        );
+      }
+
+      const childrenResult = await services.linearApiClient.getDirectChildren(apiKeyResult.value, issueId);
+      if (!childrenResult.ok) {
+        return await handleLinearError(childrenResult.error, reply);
+      }
+      if (childrenResult.value === null) {
+        reply.status(404);
+        return await reply.fail('NOT_FOUND', `Issue ${issueId} not found`);
+      }
+
+      return await reply.ok(
+        childrenResult.value.map((issue) => ({
+          id: issue.id,
+          identifier: issue.identifier,
+          url: issue.url,
+          parentId: issue.parentId ?? null,
+          labels: issue.labels.map((label) => label.name),
+          assigneeId: issue.assignee?.id ?? null,
+          state: issue.state.name,
+        })),
+      );
+    },
   );
 
   done();

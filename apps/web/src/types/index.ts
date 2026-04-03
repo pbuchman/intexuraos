@@ -1161,6 +1161,39 @@ export interface CodeTaskError {
   };
 }
 
+export interface CodeTaskExecutionMemoryMatch {
+  memoryId: string;
+  title: string;
+  memoryType: 'implementation_pattern' | 'verification_pattern' | 'pitfall_pattern';
+  score: number;
+  appliesWhen: string;
+  action: string;
+  avoid: string;
+  verification: string;
+}
+
+export interface CodeTaskExecutionMemoryContext {
+  status: 'none' | 'matched' | 'error';
+  applicationId?: string;
+  retrievalVersion?: string;
+  querySummary?: string;
+  matchedAt?: string;
+  matchedMemories?: CodeTaskExecutionMemoryMatch[];
+  errorCode?: string;
+  errorMessage?: string;
+}
+
+export interface CodeTaskExecutionMemoryPostRun {
+  status: 'pending' | 'processing' | 'completed' | 'skipped' | 'error';
+  attempts: number;
+  lastAttemptAt?: string;
+  generatedMemoryIds: string[];
+  evaluationSummary?: string;
+  skipReason?: 'infra_only' | 'insufficient_signal' | 'already_completed' | 'no_reusable_lesson';
+  errorMessage?: string;
+  completedAt?: string;
+}
+
 /**
  * Code task from code-agent
  */
@@ -1199,10 +1232,13 @@ export interface CodeTask {
   prNumber?: number;
   agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
   implementationTaskId?: string;
+  fanOutChildTaskIds?: string[];
   parentTaskId?: string;
   followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement' | 'merge_conflict';
   result?: CodeTaskResult;
   error?: CodeTaskError;
+  executionMemoryContext?: CodeTaskExecutionMemoryContext;
+  executionMemoryPostRun?: CodeTaskExecutionMemoryPostRun;
 }
 
 /**
@@ -1215,7 +1251,6 @@ export interface CodeTask {
 export interface SubmitCodeTaskRequest {
   prompt: string;
   workerType?: CodeTaskWorkerType;
-  workerLocation?: string;
   linearIssueId?: string;
 }
 
@@ -1254,6 +1289,7 @@ export interface StartImplementationResponse {
   resourceUrl: string;
   workerLocation: string;
   implementationOf: string;
+  childTaskIds?: string[];
 }
 
 /**

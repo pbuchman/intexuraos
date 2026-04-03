@@ -2,7 +2,7 @@
 
 ## Overview
 
-Web Agent extracts web content and generates AI summaries. It uses Crawl4AI for headless browser crawling, Cheerio for OpenGraph parsing, and the user's configured LLM (with a platform Gemini 2.5 Flash fallback) for summarization with automatic response repair.
+Web Agent extracts web content and generates AI summaries. It uses Cloudflare Browser Rendering for headless browser content extraction, Cheerio for OpenGraph parsing, and the user's configured LLM (with a platform Gemini 2.5 Flash fallback) for summarization with automatic response repair.
 
 Runs on Cloud Run with auto-scaling (0–1 instances). Port 8127 on local/dev. Distributed tracing via Dash0 OpenTelemetry (transparent preload).
 
@@ -25,7 +25,7 @@ graph TB
     end
 
     subgraph "External"
-        C4AI[Crawl4AI API]
+        CF[Cloudflare Browser Rendering]
         UserLLM[User's LLM Provider]
         PlatformLLM[Platform Gemini]
         Target[Target URLs]
@@ -42,8 +42,8 @@ graph TB
     Routes --> PCF
     Routes --> OGF
 
-    PCF -->|crawl| C4AI
-    C4AI -->|fetch| Target
+    PCF -->|crawl| CF
+    CF -->|fetch| Target
 
     Routes --> LLM
     LLM -->|get user keys + fallback| US
@@ -63,7 +63,7 @@ graph TB
     classDef internal fill:#fff4e6
 
     class Routes,PCF,LLM,OGF,Parser,Repair service
-    class C4AI,UserLLM,PlatformLLM,Target external
+    class CF,UserLLM,PlatformLLM,Target external
     class US,AS internal
 ```
 
@@ -74,13 +74,13 @@ sequenceDiagram
     autonumber
     participant Caller
     participant WebAgent as web-agent
-    participant Crawl4AI
+    participant Cloudflare as Cloudflare Browser Rendering
     participant UserService as user-service
     participant LLM as LLM (user's or platform)
 
     Caller->>+WebAgent: POST /internal/page-summaries<br/>{url, userId}
-    WebAgent->>Crawl4AI: Crawl URL (browser strategy)
-    Crawl4AI-->>WebAgent: markdown content
+    WebAgent->>Cloudflare: Crawl URL (browser strategy)
+    Cloudflare-->>WebAgent: markdown content
     WebAgent->>UserService: getLlmClient(userId)
     UserService-->>WebAgent: LLM client (user key → Gemini fallback)
     WebAgent->>LLM: Generate summary
@@ -206,31 +206,32 @@ interface PageSummary {
 
 ### PageSummaryError
 
-| Code           | Meaning                               |
-| -------------- | ------------------------------------- |
-| `FETCH_FAILED` | Crawl4AI failed to fetch page         |
-| `TIMEOUT`      | Crawl exceeded 60s timeout            |
-| `NO_CONTENT`   | No markdown extracted from page       |
-| `API_ERROR`    | LLM API error or user service error   |
-| `INVALID_URL`  | Malformed URL or unsupported protocol |
-| `TOO_LARGE`    | Response exceeds size limit           |
-| `RATE_LIMITED` | Crawl4AI returned HTTP 429            |
+| Code           | Meaning                                           |
+| -------------- | ------------------------------------------------- |
+| `FETCH_FAILED` | Cloudflare Browser Rendering failed to fetch page |
+| `TIMEOUT`      | Browser rendering exceeded 60s timeout            |
+| `NO_CONTENT`   | No markdown extracted from page                   |
+| `API_ERROR`    | LLM API error or user service error               |
+| `INVALID_URL`  | Malformed URL or unsupported protocol             |
+| `TOO_LARGE`    | Response exceeds size limit                       |
+| `RATE_LIMITED` | Cloudflare returned HTTP 429                      |
 
 ## Key Components
 
 ### PageContentFetcher
 
-Crawls pages via Crawl4AI Cloud API without LLM extraction.
+Extracts page content via Cloudflare Browser Rendering `/markdown` endpoint without LLM extraction.
 
 **Configuration:**
 
-| Setting     | Default                    | Description             |
-| ----------- | -------------------------- | ----------------------- |
-| `baseUrl`   | `https://api.crawl4ai.com` | Crawl4AI Cloud endpoint |
-| `timeoutMs` | 60000                      | Crawl timeout           |
-| `apiKey`    | (required)                 | Crawl4AI API key        |
+| Setting      | Default                      | Description             |
+| ------------ | ---------------------------- | ----------------------- |
+| `baseUrl`    | `https://api.cloudflare.com` | Cloudflare API endpoint |
+| `accountId`  | (required)                   | Cloudflare account ID   |
+| `apiToken`   | (required)                   | Cloudflare API token    |
+| `timeoutMs`  | 60000                        | Request timeout         |
 
-**Strategy:** Uses `browser` strategy for JavaScript rendering.
+**Strategy:** Uses Cloudflare headless browser for JavaScript rendering.
 
 ### LlmSummarizer
 
@@ -296,11 +297,11 @@ Fetches and parses OpenGraph metadata.
 
 ### External Services
 
-| Service    | Purpose            | Failure Mode        |
-| ---------- | ------------------ | ------------------- |
-| Crawl4AI   | Web page crawling  | Return FETCH_FAILED |
-| User's LLM | Summary generation | Return API_ERROR    |
-| Dash0      | OpenTelemetry sink | Silent (optional)   |
+| Service                      | Purpose                                          | Failure Mode        |
+| ---------------------------- | ------------------------------------------------ | ------------------- |
+| Cloudflare Browser Rendering | Web page content extraction (/markdown endpoint) | Return FETCH_FAILED |
+| User's LLM                   | Summary generation                               | Return API_ERROR    |
+| Dash0                        | OpenTelemetry sink                               | Silent (optional)   |
 
 ### Internal Services
 
@@ -318,21 +319,22 @@ Fetches and parses OpenGraph metadata.
 
 ## Configuration
 
-| Variable                              | Purpose                            | Required |
-| ------------------------------------- | ---------------------------------- | -------- |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Internal service auth              | Yes      |
-| `INTEXURAOS_CRAWL4AI_APP_API_KEY`     | Crawl4AI Cloud API key             | Yes      |
-| `INTEXURAOS_USER_SERVICE_URL`         | User service base URL              | Yes      |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Pricing lookup                     | Yes      |
-| `INTEXURAOS_SENTRY_DSN`               | Error tracking                     | Yes      |
-| `INTEXURAOS_GEMINI_APP_API_KEY`       | Platform Gemini 2.5 Flash fallback | Optional |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | Dash0 OpenTelemetry endpoint       | Optional |
+| Variable                              | Purpose                                       | Required |
+| ------------------------------------- | --------------------------------------------- | -------- |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Internal service auth                         | Yes      |
+| `INTEXURAOS_CLOUDFLARE_ACCOUNT_ID`    | Cloudflare account ID                         | Yes      |
+| `INTEXURAOS_CLOUDFLARE_API_TOKEN`     | Cloudflare API token (Browser Rendering Edit) | Yes      |
+| `INTEXURAOS_USER_SERVICE_URL`         | User service base URL                         | Yes      |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Pricing lookup                                | Yes      |
+| `INTEXURAOS_SENTRY_DSN`               | Error tracking                                | Yes      |
+| `INTEXURAOS_GEMINI_APP_API_KEY`       | Platform Gemini 2.5 Flash fallback            | Optional |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | Dash0 OpenTelemetry endpoint                  | Optional |
 
-All five required vars are validated at startup via `validateRequiredEnv()`. `INTEXURAOS_SENTRY_DSN` is validated separately with a direct check. Optional keys are passed to `createUserServiceClient()` and are no-ops when unset.
+All required vars are validated at startup via `validateRequiredEnv()`. `INTEXURAOS_SENTRY_DSN` is validated separately with a direct check. Optional keys are passed to `createUserServiceClient()` and are no-ops when unset.
 
 ## Gotchas
 
-**Crawl vs Summary separation** — PageContentFetcher only crawls; LlmSummarizer handles AI. This allows using the user's LLM keys rather than shared infrastructure.
+**Fetch vs Summary separation** — PageContentFetcher only fetches content via Cloudflare; LlmSummarizer handles AI. This allows using the user's LLM keys rather than shared infrastructure.
 
 **Platform fallback chain** — When a user has no API key for their chosen provider, `getLlmClient()` falls back to Gemini 2.5 Flash (platform key). `API_ERROR` with "No API key" only surfaces if the platform key is also unset.
 
@@ -350,7 +352,7 @@ All five required vars are validated at startup via `validateRequiredEnv()`. `IN
 
 **Concurrent link previews** — All URLs fetched in parallel via Promise.all. One timeout does not affect others.
 
-**Rate limiting (429)** — Crawl4AI 429 responses return `RATE_LIMITED` error code, distinct from general `API_ERROR`.
+**Rate limiting (429)** — Cloudflare 429 responses return `RATE_LIMITED` error code, distinct from general `API_ERROR`.
 
 **Content focus prompting** — Summary prompts include a CONTENT FOCUS section that prevents the LLM from describing the platform instead of the actual content (e.g., avoids "LinkedIn is a professional network" preambles).
 
@@ -385,7 +387,7 @@ apps/web-agent/src/
     linkpreview/
       openGraphFetcher.ts        # Cheerio-based OG extraction
     pagesummary/
-      pageContentFetcher.ts      # Crawl4AI client (crawl only, with RATE_LIMITED handling)
+      pageContentFetcher.ts      # Cloudflare Browser Rendering client (with RATE_LIMITED handling)
       llmSummarizer.ts           # User's LLM summarization (with platform fallback)
       crawl4aiClient.ts          # Legacy combined client (deprecated)
       parseSummaryResponse.ts    # Response validation
@@ -409,3 +411,7 @@ apps/web-agent/src/
 - `@intexuraos/llm-prompts` — PromptBuilder interface with semver versioning
 - `@intexuraos/llm-utils` — `createDetailedParseErrorMessage()` for structured LLM parse error context
 - `cheerio` — HTML parsing for OpenGraph metadata extraction
+
+## Setup Guide
+
+See [Cloudflare Browser Rendering Setup Guide](../../guides/cloudflare-browser-rendering-setup.md) for account creation, API token configuration, and troubleshooting.

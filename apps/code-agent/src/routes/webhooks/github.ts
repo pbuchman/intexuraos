@@ -28,7 +28,7 @@ import type {
   GitHubWebhookAuditEvent,
   GitHubWebhookNormalizationStatus,
 } from '../../domain/models/gitHubWebhookAuditEvent.js';
-import { handlePrMerge } from '../../domain/usecases/handlePrMerge.js';
+import { handlePrClose } from '../../domain/usecases/handlePrClose.js';
 import type { GitHubEventLogEntry } from '../../domain/models/gitHubEventLogEntry.js';
 
 export const ALLOWED_BOTS = new Set([
@@ -63,6 +63,7 @@ export interface GitHubWebhookBody {
     title?: string;
     body?: string | null;
     state?: string;
+    closed_at?: string | null;
     merged_at?: string | null;
   };
   sender?: {
@@ -70,6 +71,19 @@ export interface GitHubWebhookBody {
     id: number;
     type?: string;
   };
+}
+
+export function resolvePrCloseSourceTimestamp(params: {
+  closedAt: string | null | undefined;
+  mergedAt: Date | null;
+}): string {
+  if (typeof params.closedAt === 'string') {
+    return params.closedAt;
+  }
+  if (params.mergedAt instanceof Date) {
+    return params.mergedAt.toISOString();
+  }
+  return new Date().toISOString();
 }
 
 function extractRepositoryDetails(body: GitHubWebhookBody): {
@@ -632,11 +646,12 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         });
       });
 
-      // Transition Linear issues to QA when PR is merged
-      if (parsedEvent.eventType === 'pull_request' && parsedEvent.action === 'closed' && parsedEvent.mergedAt !== null) {
-        const { codeTaskRepo, linearIssueService, userServiceClient, taskDispatcher, workerSettingsRepo } = getServices();
-        void handlePrMerge(
-          { codeTaskRepo, linearIssueService, userServiceClient, taskDispatcher, workerSettingsRepo, logger },
+      // Transition Linear issues on PR close (merge → QA + remove label; close → remove label only)
+      if (parsedEvent.eventType === 'pull_request' && parsedEvent.action === 'closed') {
+        const { codeTaskRepo, linearIssueService, userServiceClient, taskDispatcher, workerSettingsRepo, groupSummaryRepo } = getServices();
+        const closedAt = request.body.pull_request?.closed_at;
+        void handlePrClose(
+          { codeTaskRepo, linearIssueService, userServiceClient, taskDispatcher, workerSettingsRepo, groupSummaryRepo: groupSummaryRepo as NonNullable<typeof groupSummaryRepo>, logger },
           {
             repository: parsedEvent.repository,
             prNumber: parsedEvent.pullRequestNumber,
@@ -644,9 +659,11 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
             prTitle: parsedEvent.title,
             prAuthorLogin: parsedEvent.prAuthorLogin,
             senderLogin: parsedEvent.senderLogin,
+            isMerged: parsedEvent.mergedAt !== null,
+            sourceTimestamp: resolvePrCloseSourceTimestamp({ closedAt, mergedAt: parsedEvent.mergedAt }),
           },
-        ).catch((mergeErr: unknown) => {
-          logger.error({ mergeErr }, 'Unhandled error in handlePrMerge');
+        ).catch((closeErr: unknown) => {
+          logger.error({ closeErr }, 'Unhandled error in handlePrClose');
         });
       }
 

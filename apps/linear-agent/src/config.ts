@@ -2,12 +2,20 @@
  * Configuration loader for linear-agent service.
  */
 
+import type { PruneConfig } from './domain/index.js';
+
 export interface Config {
   port: number;
   gcpProjectId: string;
   userServiceUrl: string;
   internalAuthToken: string;
 }
+
+/** Configuration for the issue pruning system */
+export const PRUNE_CONFIG: PruneConfig = {
+  activationThreshold: 200,
+  targetDeletionCount: 30,
+} as const;
 
 export function loadConfig(): Config {
   const port = Number(process.env['PORT'] ?? 8080);

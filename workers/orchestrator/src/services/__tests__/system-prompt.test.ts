@@ -87,7 +87,7 @@ describe('system-prompt', () => {
   it('enforces Plan PR rules in PLANNING_AGENT_FINAL', () => {
     const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
 
-    expect(result).toContain('NEVER for simple tasks, ALWAYS when subtasks are defined');
+    expect(result).toContain('NEVER for SIMPLE tasks, ALWAYS for PLAN-DOC and COMPLEX tasks');
   });
 
   it('enforces Clarification message rules in PLANNING_AGENT_FINAL', () => {
@@ -111,7 +111,7 @@ describe('system-prompt', () => {
       '### Complexity Judgment (MANDATORY — NON-NEGOTIABLE, after Reading section above)'
     );
     expect(result).toContain('COMPLEXITY_JUDGMENT:');
-    expect(result).toContain('- Decision: <SIMPLE|COMPLEX>');
+    expect(result).toContain('- Decision: <SIMPLE|PLAN-DOC|COMPLEX>');
     expect(result).toContain(
       'Do NOT edit the issue, create subtasks, write docs, or open PRs until this block is output'
     );
@@ -120,6 +120,40 @@ describe('system-prompt', () => {
     const judgmentIdx = result.indexOf('### Complexity Judgment');
     const simpleComplexIdx = result.indexOf('### Simple vs Complex');
     expect(judgmentIdx).toBeLessThan(simpleComplexIdx);
+  });
+
+  it('includes the PLAN-DOC tier section in the planning prompt', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('PLAN-DOC task (no subtasks, but needs a plan document)');
+  });
+
+  it('includes the Self-Verification section in the planning prompt', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('### Self-Verification (MANDATORY before completion)');
+  });
+
+  it('includes the strengthened SIMPLE guardrail text in the planning prompt', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('3+ implementation steps');
+  });
+
+  it('places PLAN-DOC section between SIMPLE and COMPLEX sections', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    const simpleIdx = result.indexOf('**SIMPLE task:**');
+    const planDocIdx = result.indexOf('**PLAN-DOC task');
+    const complexIdx = result.indexOf('**COMPLEX task');
+    expect(simpleIdx).toBeLessThan(planDocIdx);
+    expect(planDocIdx).toBeLessThan(complexIdx);
+  });
+
+  it('includes the updated COMPLEX header with descriptive text', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('subtasks + plan doc + PR, all together');
   });
 
   it('includes PR Description Format in planning prompt with Linear link, task URL, worker type, and model', () => {
@@ -173,6 +207,31 @@ describe('system-prompt', () => {
     expect(result).toContain('[AGENT:EXECUTION]');
   });
 
+  it('execution prompt documents the retained Codex parity evidence', () => {
+    const result = executionPrompt.build({
+      ...baseParams,
+      linearIssueLabels: ['code-task'],
+      workerType: 'codex',
+    });
+
+    expect(result).toContain('### Codex Session Automation Parity');
+    expect(result).toContain('does NOT reproduce Claude hooks one-for-one');
+    expect(result).toContain('[entrypoint] Bootstrap evidence:');
+    expect(result).toContain('[entrypoint] Codex runtime evidence:');
+    expect(result).toContain('completion verifier + deep validator');
+  });
+
+  it('execution prompt omits Codex parity section for non-codex workers', () => {
+    const result = executionPrompt.build({
+      ...baseParams,
+      linearIssueLabels: ['code-task'],
+      workerType: 'sonnet',
+    });
+
+    expect(result).not.toContain('### Codex Session Automation Parity');
+    expect(result).not.toContain('does NOT reproduce Claude hooks one-for-one');
+  });
+
   it('pull request prompt omits Linear Issue line when linearIssueId is undefined', () => {
     const { linearIssueId: _, ...paramsWithoutLinear } = baseParams;
     const result = pullRequestPrompt.build({
@@ -211,14 +270,14 @@ describe('system-prompt', () => {
     expect(result).not.toContain('superpowers:requesting-code-review');
   });
 
-  it('does not include executing-plans or receiving-code-review in remediation prompt', () => {
+  it('does not include subagent-driven-development or receiving-code-review in remediation prompt', () => {
     const result = remediationPrompt.build({
       ...baseParams,
       agentType: 'remediation',
       continuationPrNumber: 901,
       continuationPrBranch: 'fix/remediation-901',
     });
-    expect(result).not.toContain('superpowers:executing-plans');
+    expect(result).not.toContain('superpowers:subagent-driven-development');
     expect(result).not.toContain('superpowers:receiving-code-review');
   });
 
@@ -414,7 +473,7 @@ describe('system-prompt', () => {
     expect(result).toContain('source of truth');
     expect(result).toContain('Linear MCP tools');
     expect(result).toContain('Do NOT use the `/linear` skill');
-    expect(result).toContain('superpowers:executing-plans');
+    expect(result).toContain('superpowers:subagent-driven-development');
     expect(result).toContain('superpowers:requesting-code-review');
     expect(result).toContain('gh pr create');
     expect(result).toContain('EXECUTION_AGENT_FINAL:');
@@ -422,6 +481,17 @@ describe('system-prompt', () => {
     expect(result).toContain('- Review iterations: <number>');
     expect(result).toContain('- Skill sequence proof:');
     expect(result).not.toContain('- Turn summary:');
+  });
+
+  it('pins execution final block memory self-report fields', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+    const finalBlockStart = result.indexOf('EXECUTION_AGENT_FINAL:');
+    const finalBlockEnd = result.indexOf('```', finalBlockStart);
+    const finalBlock = result.slice(finalBlockStart, finalBlockEnd);
+
+    expect(finalBlock).toContain('- memory_ids_used: <comma-separated list or "none">');
+    expect(finalBlock).toContain('- memory_ids_rejected: <comma-separated list or "none">');
+    expect(finalBlock).toContain('- memory_usage_summary: <brief note, or "none">');
   });
 
   it('builds execution continuation instructions when an open PR is inherited', () => {
@@ -1167,16 +1237,60 @@ describe('system-prompt', () => {
     }
   });
 
-  it('planning prompt version is 3.2.0', () => {
-    expect(planningPrompt.version).toBe('3.2.0');
+  it('planning prompt version is 4.0.0', () => {
+    expect(planningPrompt.version).toBe('4.0.0');
   });
 
-  it('execution prompt version is 5.2.0', () => {
-    expect(executionPrompt.version).toBe('5.2.0');
+  it('execution prompt version is 8.0.0', () => {
+    expect(executionPrompt.version).toBe('8.0.0');
   });
 
   it('remediation prompt version is 3.1.0', () => {
     expect(remediationPrompt.version).toBe('3.1.0');
+  });
+
+  it('injects execution memory section only for execution tasks', () => {
+    const executionResult = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task'],
+      executionMemoryContext: {
+        applicationId: 'app_123',
+        retrievalVersion: 'execution-memory-retrieval@1.0.0',
+        querySummary: 'Callback logging, route verification, and env propagation.',
+        matchedMemories: [
+          {
+            memoryId: 'mem_142',
+            title: 'Log incoming requests on callback routes',
+            memoryType: 'pitfall_pattern',
+            score: 0.94,
+            appliesWhen: 'A callback route changes request handling.',
+            action: 'Update request logging with the route change.',
+            avoid: 'Do not copy stale branch names from memories.',
+            verification: 'Add app.inject coverage for the route.',
+          },
+        ],
+      },
+    });
+
+    const planningResult = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['bug'],
+      executionMemoryContext: {
+        applicationId: 'app_ignored',
+        retrievalVersion: 'execution-memory-retrieval@1.0.0',
+        querySummary: 'ignored',
+        matchedMemories: [],
+      },
+    });
+
+    expect(executionResult).toContain('### Execution Memory');
+    expect(executionResult).toContain('Memories are advisory, not authoritative');
+    expect(executionResult).toContain('mem_142');
+    expect(executionResult).toContain('Do not copy stale branch names from memories.');
+    expect(executionResult).toContain('memory_ids_used');
+    expect(executionResult).toContain('memory_ids_rejected');
+    expect(executionResult).toContain('memory_usage_summary');
+    expect(planningResult).not.toContain('### Execution Memory');
   });
 
   it('review agent prompt includes Linear section when linearIssueId is provided', () => {

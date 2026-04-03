@@ -9,6 +9,7 @@ import type {
   LinearConnectionRepository,
   LinearApiClient,
   LinearError,
+  CodeAgentClient,
 } from '../index.js';
 import { mapApiIssueToSyncedIssue } from '../issueMapper.js';
 
@@ -16,6 +17,7 @@ export interface FullSyncDeps {
   issueRepo: LinearIssueRepository;
   connectionRepo: LinearConnectionRepository;
   linearClient: LinearApiClient;
+  codeAgentClient: CodeAgentClient;
   logger: Logger;
 }
 
@@ -38,7 +40,7 @@ export async function fullSync(
   userId: string,
   deps: FullSyncDeps
 ): Promise<Result<SyncStats, LinearError>> {
-  const { issueRepo, connectionRepo, linearClient, logger } = deps;
+  const { issueRepo, connectionRepo, linearClient, codeAgentClient, logger } = deps;
   const startTime = Date.now();
 
   logger.info({ userId }, 'Starting full sync');
@@ -91,6 +93,15 @@ export async function fullSync(
     } else {
       created++;
     }
+
+    void codeAgentClient.notifyGroupSummaryRecompute({
+      userId,
+      linearIssueId: syncedIssue.identifier,
+      labels: syncedIssue.labels.map((l) => ({ id: l.id, name: l.name })),
+      sourceTimestamp: syncedIssue.updatedAt,
+    }).catch((e: unknown) => {
+      logger.warn({ error: e, linearIssueId: syncedIssue.identifier }, 'Failed to notify code-agent of label change');
+    });
   }
 
   // Delete issues that no longer exist in Linear (scoped to this user)

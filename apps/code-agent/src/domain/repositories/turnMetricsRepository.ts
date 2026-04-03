@@ -12,4 +12,5 @@ export interface TurnMetricsRepository {
     attempt: number,
     metrics: TurnMetrics
   ): Promise<Result<void, RepositoryError>>;
+  listByTask(taskId: string): Promise<Result<TurnMetrics[], RepositoryError>>;
 }

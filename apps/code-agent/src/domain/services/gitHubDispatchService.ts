@@ -92,7 +92,7 @@ export interface WebhookDispatchServiceDeps {
 /**
  * Resolve worker credentials for a preserved task by looking up the user's
  * worker settings and matching on workerLocation. Shared by handleNewTask
- * (@worker destruction) and handlePrMerge (merge cleanup).
+ * (@worker destruction) and handlePrClose (merge cleanup).
  */
 export async function resolveWorkerCredentials(
   workerSettingsRepo: WorkerSettingsRepository,

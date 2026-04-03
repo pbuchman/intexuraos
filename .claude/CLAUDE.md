@@ -25,7 +25,7 @@ All rules verified by `pnpm run ci:tracked`. If CI passes, rules are satisfied. 
 
 **Code Auditing:** When fixing a pattern in one service, audit ALL other services for the same issue before committing.
 
-**Linear MCP Safety:** Never broad text searches with high limits. Use `query: 'INT-445', limit: 10`. Children: `parentId`, not `includeRelations`. Context overflow → `/clear` and retry targeted.
+**Linear MCP Safety:** Never broad text searches with high limits. Use `query: 'INT-445', limit: 10`. Children: `parentId`, not `includeRelations`. Context overflow → `/clear` and retry targeted. NEVER set `assignee`, `assigneeId`, or `delegate` on any issue — assignment is exclusively the user's responsibility. Enforced by PreToolUse hook.
 
 # Architecture
 

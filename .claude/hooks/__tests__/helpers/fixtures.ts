@@ -44,6 +44,17 @@ export interface LinearUpdateIssueInput extends HookInput {
   };
 }
 
+export interface LinearSaveIssueInput extends HookInput {
+  tool_name: 'mcp__linear__save_issue' | 'mcp__linear-server__save_issue';
+  tool_input: {
+    id?: string;
+    state?: string;
+    assignee?: string;
+    delegate?: string;
+    [key: string]: unknown;
+  };
+}
+
 /**
  * Builder for creating hook input fixtures
  */
@@ -117,6 +128,42 @@ export const HookFixtureBuilder = {
     return {
       tool_name: 'mcp__linear-server__update_issue',
       tool_input: { id, ...updates },
+    };
+  },
+
+  /**
+   * Creates a Linear save_issue MCP tool input fixture
+   */
+  linearSaveIssue(
+    fields: {
+      id?: string;
+      state?: string;
+      assignee?: string;
+      delegate?: string;
+      [key: string]: unknown;
+    } = {}
+  ): LinearSaveIssueInput {
+    return {
+      tool_name: 'mcp__linear__save_issue',
+      tool_input: { ...fields },
+    };
+  },
+
+  /**
+   * Creates a Linear save_issue MCP tool input fixture (alternate server)
+   */
+  linearServerSaveIssue(
+    fields: {
+      id?: string;
+      state?: string;
+      assignee?: string;
+      delegate?: string;
+      [key: string]: unknown;
+    } = {}
+  ): LinearSaveIssueInput {
+    return {
+      tool_name: 'mcp__linear-server__save_issue',
+      tool_input: { ...fields },
     };
   },
 

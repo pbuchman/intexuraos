@@ -84,9 +84,9 @@ During active incidents, the bias is toward action. Rebuild images, restart serv
 
 ### Additional Forbidden Language (Infrastructure)
 
-| Forbidden                           | Why                                       |
-| ----------------------------------- | ----------------------------------------- |
-| "upstream bug/issue/defect"         | Investigate deeper — check your env first |
-| "outside my scope"                  | Nothing is outside scope during incidents |
-| "the tool has a defect"             | Check your environment first              |
-| "beyond the scope of this task"     | If it blocks success, it's in scope       |
+| Forbidden                       | Why                                       |
+| ------------------------------- | ----------------------------------------- |
+| "upstream bug/issue/defect"     | Investigate deeper — check your env first |
+| "outside my scope"              | Nothing is outside scope during incidents |
+| "the tool has a defect"         | Check your environment first              |
+| "beyond the scope of this task" | If it blocks success, it's in scope       |

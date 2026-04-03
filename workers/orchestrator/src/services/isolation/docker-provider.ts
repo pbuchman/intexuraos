@@ -329,9 +329,7 @@ export class DockerProvider implements IsolationProvider {
       } catch (error) {
         await fs.promises.writeFile(
           path.join(hostAttemptForensicsPath, 'exec-inspect.error.txt'),
-          /* v8 ignore start -- ts-type: error type narrowing for non-Error throwables in catch block @preserve */
           error instanceof Error ? (error.stack ?? error.message) : String(error),
-          /* v8 ignore stop @preserve */
           'utf-8'
         );
       }
@@ -457,50 +455,66 @@ export class DockerProvider implements IsolationProvider {
     if (config.continueSession === true) {
       const preserved = this.preservedWorkers.get(taskId);
       if (preserved !== undefined) {
-        this.preservedWorkers.delete(taskId);
+        // Defense-in-depth: container may have been OOM-killed or GC'd between
+        // isResumeAvailable check and here.
+        if (await this.isContainerRunning(preserved.containerId)) {
+          this.preservedWorkers.delete(taskId);
 
-        const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
-        const taskRuntimeHomePath = this.getTaskRuntimeHomePath(taskId, runtime);
+          const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
+          const taskRuntimeHomePath = this.getTaskRuntimeHomePath(taskId, runtime);
 
-        // Recreate secrets dir (deleted during preservation) and write new prompt files
-        this.assertResumeRuntimeStateAvailable(runtime, true, taskRuntimeHomePath);
-        await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
-        await fs.promises.mkdir(taskRuntimeHomePath, { recursive: true, mode: 0o700 });
-        await this.writePromptFiles(taskSecretsPath, systemPrompt, prompt);
+          // Recreate secrets dir (deleted during preservation) and write new prompt files
+          this.assertResumeRuntimeStateAvailable(runtime, true, taskRuntimeHomePath);
+          await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
+          await fs.promises.mkdir(taskRuntimeHomePath, { recursive: true, mode: 0o700 });
+          await this.writePromptFiles(taskSecretsPath, systemPrompt, prompt);
 
-        if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
-          await fs.promises.copyFile(
-            config.gcpSaKeyPath,
-            path.join(taskSecretsPath, 'gcp-sa.json')
+          if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
+            await fs.promises.copyFile(
+              config.gcpSaKeyPath,
+              path.join(taskSecretsPath, 'gcp-sa.json')
+            );
+          }
+
+          const handle: WorkerHandle = {
+            taskId,
+            containerId: preserved.containerId,
+            status: 'running',
+            startedAt: new Date(),
+          };
+          const taskForensicsPath = this.ensureTaskForensicsPath(taskId);
+
+          this.workers.set(taskId, {
+            containerId: preserved.containerId,
+            handle,
+            runtime,
+            taskSecretsPath,
+            taskRuntimeHomePath,
+            attemptRunning: false,
+            attemptLogBuffer: '',
+            ...(taskForensicsPath !== null ? { taskForensicsPath } : {}),
+          });
+
+          this.logger.info(
+            { taskId, containerId: preserved.containerId },
+            'Restored preserved container for resume'
           );
+
+          void this.runAttemptInContainer(taskId, config);
+          return handle;
         }
 
-        const handle: WorkerHandle = {
-          taskId,
-          containerId: preserved.containerId,
-          status: 'running',
-          startedAt: new Date(),
-        };
-        const taskForensicsPath = this.ensureTaskForensicsPath(taskId);
-
-        this.workers.set(taskId, {
-          containerId: preserved.containerId,
-          handle,
-          runtime,
-          taskSecretsPath,
-          taskRuntimeHomePath,
-          attemptRunning: false,
-          attemptLogBuffer: '',
-          ...(taskForensicsPath !== null ? { taskForensicsPath } : {}),
-        });
-
-        this.logger.info(
+        // Container is stopped or gone — clean up stale entry and fall through
+        this.preservedWorkers.delete(taskId);
+        try {
+          await this.docker.getContainer(preserved.containerId).remove({ force: true });
+        } catch {
+          // Best-effort removal — container may already be cleaned up by GC
+        }
+        this.logger.warn(
           { taskId, containerId: preserved.containerId },
-          'Restored preserved container for resume'
+          'Preserved container is stopped or gone, falling through to new container creation'
         );
-
-        void this.runAttemptInContainer(taskId, config);
-        return handle;
       }
     }
 
@@ -522,14 +536,12 @@ export class DockerProvider implements IsolationProvider {
           await fs.promises.mkdir(taskRuntimeHomePath, { recursive: true, mode: 0o700 });
           await this.writePromptFiles(taskSecretsPath, systemPrompt, prompt);
 
-          /* v8 ignore start -- test-infra: FakeFs cannot simulate gcpSaKeyPath existence conditionally per-resume path @preserve */
           if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
             await fs.promises.copyFile(
               config.gcpSaKeyPath,
               path.join(taskSecretsPath, 'gcp-sa.json')
             );
           }
-          /* v8 ignore stop @preserve */
 
           const handle: WorkerHandle = {
             taskId,
@@ -901,19 +913,35 @@ export class DockerProvider implements IsolationProvider {
     this.logger.info({ taskId }, 'Worker container stopped');
   }
 
+  private async isContainerRunning(containerId: string): Promise<boolean> {
+    try {
+      const info = await this.docker.getContainer(containerId).inspect();
+      return info.State.Running;
+    } catch {
+      return false;
+    }
+  }
+
   async isWorkerRunning(taskId: string): Promise<boolean> {
     const worker = this.workers.get(taskId);
     if (worker === undefined) {
       return false;
     }
+    return await this.isContainerRunning(worker.containerId);
+  }
 
-    try {
-      const container = this.docker.getContainer(worker.containerId);
-      const info = await container.inspect();
-      return info.State.Running;
-    } catch {
+  async isResumeAvailable(taskId: string): Promise<boolean> {
+    const preserved = this.preservedWorkers.get(taskId);
+    const containerId = preserved?.containerId ?? this.workers.get(taskId)?.containerId;
+
+    if (containerId !== undefined) {
+      if (await this.isContainerRunning(containerId)) return true;
+      if (preserved !== undefined) this.preservedWorkers.delete(taskId);
       return false;
     }
+
+    // Check for orphaned Docker container (e.g. after orchestrator restart)
+    return await this.isContainerRunning(`code-worker-${taskId}`);
   }
 
   async getWorkerLogs(taskId: string): Promise<string> {
@@ -1210,11 +1238,10 @@ export class DockerProvider implements IsolationProvider {
       return;
     }
 
-    /* v8 ignore start -- ts-type: null check guard for idempotent interval start @preserve */
+    // Guard against duplicate intervals (idempotent start)
     if (this.cleanupIntervalId !== null) {
       return;
     }
-    /* v8 ignore stop @preserve */
 
     this.logger.info(
       { intervalMs: PERIODIC_CLEANUP_INTERVAL_MS, maxAgeMs: PRESERVED_MAX_AGE_MS },
@@ -1226,11 +1253,10 @@ export class DockerProvider implements IsolationProvider {
   }
 
   stopPeriodicCleanup(): void {
-    /* v8 ignore start -- ts-type: null check guard for idempotent interval stop @preserve */
+    // Guard against stopping when no interval was started (idempotent stop)
     if (this.cleanupIntervalId === null) {
       return;
     }
-    /* v8 ignore stop @preserve */
 
     clearInterval(this.cleanupIntervalId);
     this.cleanupIntervalId = null;
@@ -1282,11 +1308,10 @@ export class DockerProvider implements IsolationProvider {
   }
 
   startHealthMonitor(): void {
-    /* v8 ignore start -- ts-type: null check guard for idempotent interval start @preserve */
+    // Guard against duplicate intervals (idempotent start)
     if (this.healthMonitorIntervalId !== null) {
       return;
     }
-    /* v8 ignore stop @preserve */
 
     this.healthMonitorIntervalId = setInterval(() => {
       void this.checkHealth();
@@ -1294,11 +1319,10 @@ export class DockerProvider implements IsolationProvider {
   }
 
   stopHealthMonitor(): void {
-    /* v8 ignore start -- ts-type: null check guard for idempotent interval stop @preserve */
+    // Guard against stopping when no interval was started (idempotent stop)
     if (this.healthMonitorIntervalId === null) {
       return;
     }
-    /* v8 ignore stop @preserve */
 
     clearInterval(this.healthMonitorIntervalId);
     this.healthMonitorIntervalId = null;
@@ -1591,8 +1615,33 @@ export class DockerProvider implements IsolationProvider {
     return await new Promise<number>((resolve) => {
       let resolved = false;
 
+      // Poll timer callback — declared before resolveWith so setInterval and
+      // clearInterval are near each other for the v8-ignore async-timing detector.
+      const onPollTick = (): void => {
+        void execInstance
+          .inspect()
+          .then((info) => {
+            if (!info.Running) {
+              this.logger.info(
+                { taskId },
+                'Exec process exited but stream still open — resolving via inspect fallback'
+              );
+              /* v8 ignore start -- ts-type: FakeHttpClient cannot produce a null ExitCode from Docker.ExecInspectInfo @preserve */
+              resolveWith(typeof info.ExitCode === 'number' ? info.ExitCode : 1);
+              /* v8 ignore stop @preserve */
+            }
+          })
+          .catch(() => {
+            resolveWith(1);
+          });
+      };
+
+      /* v8 ignore start -- async-timing: vi.useFakeTimers cannot deterministically capture the setInterval handle before resolveWith is declared in the same scope @preserve */
+      const pollTimer = setInterval(onPollTick, EXEC_INSPECT_POLL_INTERVAL_MS);
+      /* v8 ignore stop @preserve */
+
       const resolveWith = (exitCode: number): void => {
-        /* v8 ignore start -- async-timing: double-resolution guard prevents race between stream end and poll timer @preserve */
+        /* v8 ignore start -- async-timing: double-resolution race guard cannot be triggered deterministically because stream end and poll timer fire in the same microtask queue @preserve */
         if (resolved) return;
         /* v8 ignore stop @preserve */
         resolved = true;
@@ -1617,27 +1666,6 @@ export class DockerProvider implements IsolationProvider {
         resolveWith(1);
       });
       execStream.resume();
-
-      // Fallback: poll exec inspect for orphaned-fd cases
-      const pollTimer = setInterval(() => {
-        execInstance
-          .inspect()
-          .then((info) => {
-            if (!info.Running) {
-              this.logger.info(
-                { taskId },
-                'Exec process exited but stream still open — resolving via inspect fallback'
-              );
-              /* v8 ignore start -- ts-type: null check for Docker API ExitCode which narrows nullable number @preserve */
-              resolveWith(typeof info.ExitCode === 'number' ? info.ExitCode : 1);
-              /* v8 ignore stop @preserve */
-            }
-          })
-          .catch(() => {
-            // Inspect failed — exec may have been removed; treat as exit
-            resolveWith(1);
-          });
-      }, EXEC_INSPECT_POLL_INTERVAL_MS);
     });
   }
 }
