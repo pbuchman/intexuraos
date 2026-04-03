@@ -8,12 +8,16 @@ const { mockUseWorkerSettings, mockDefaultWorkerTypeCard } = vi.hoisted(() => ({
 
 vi.mock('@/hooks', () => ({
   useWorkerSettings: (): ReturnType<typeof mockUseWorkerSettings> => mockUseWorkerSettings(),
-  useTimezone: (): { timezone: string | null; saving: boolean; error: string | null; updateTimezone: () => void } => ({
-    timezone: 'Europe/Warsaw',
-    saving: false,
+  useTimezone: (): {
+    timezone: string;
+    loading: boolean;
+    error: null;
+    updateTimezone: ReturnType<typeof vi.fn>;
+  } => ({
+    timezone: 'Europe/Berlin',
+    loading: false,
     error: null,
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
-    updateTimezone: (): void => {},
+    updateTimezone: vi.fn(),
   }),
 }));
 
