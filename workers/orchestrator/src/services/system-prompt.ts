@@ -1,4 +1,5 @@
 import { CODE_TASK_WORKER_TYPES, hasCodeTaskLabel } from '@intexuraos/common-core';
+import type { ExecutionMemoryPromptContext } from '../types/execution-memory.js';
 import type { PromptBuilder } from './prompt-builder.js';
 import type { WorkerType } from './isolation/types.js';
 
@@ -48,6 +49,18 @@ decisions, or implementation choices, you MUST:
 
 If no comments exist or no comments influenced decisions, skip this section entirely.`;
 
+const CODEX_SESSION_AUTOMATION_PARITY = `### Codex Session Automation Parity (minimum retained scope)
+Codex does NOT reproduce Claude hooks one-for-one.
+
+Retained guarantees for non-interactive Codex runs:
+- Worker bootstrap must emit \`[entrypoint] Bootstrap evidence:\` summarizing Codex skill restore, GitHub token setup, GCP auth, secret sync, and env loading.
+- Codex attempts must emit \`[entrypoint] Codex runtime evidence:\` summarizing fresh vs resume mode, thread-id presence, and reasoning effort mode.
+- Terraform/GCP guardrails stay enforced through this system prompt + repo rules rather than direct Claude hook execution.
+- Task completion enforcement lives in the orchestrator completion verifier + deep validator rather than Claude Stop hooks.
+- Interactive Claude-only edit nudges (for example post-edit rebuild reminders and detect-common-patterns warnings) are intentionally omitted for Codex.
+
+Use these evidence lines when judging whether retained Codex parity actually executed.`;
+
 export interface SystemPromptParams {
   taskId: string;
   linearIssueId?: string;
@@ -57,16 +70,59 @@ export interface SystemPromptParams {
   workerType?: WorkerType;
   modelName?: string;
   agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
+  executionMemoryContext?: ExecutionMemoryPromptContext;
   trackingCommentId?: string;
   continuationPrNumber?: number;
   continuationPrBranch?: string;
   reviewTypes?: string[];
 }
 
+function buildExecutionMemorySection(
+  executionMemoryContext?: ExecutionMemoryPromptContext
+): string {
+  if (executionMemoryContext === undefined || executionMemoryContext.matchedMemories.length === 0) {
+    return '';
+  }
+
+  const renderedMemories = executionMemoryContext.matchedMemories
+    .map((memory, index) => {
+      const score = Number.isFinite(memory.score) ? memory.score.toFixed(2) : String(memory.score);
+      return [
+        `#### Memory ${String(index + 1)}: ${memory.memoryId}`,
+        `- Title: ${memory.title}`,
+        `- Type: ${memory.memoryType}`,
+        `- Score: ${score}`,
+        `- Applies when: ${memory.appliesWhen}`,
+        `- Action: ${memory.action}`,
+        `- Avoid: ${memory.avoid}`,
+        `- Verification: ${memory.verification}`,
+      ].join('\n');
+    })
+    .join('\n\n');
+
+  return `
+
+### Execution Memory
+Retrieved application: ${executionMemoryContext.applicationId}
+Retrieval version: ${executionMemoryContext.retrievalVersion}
+Query summary: ${executionMemoryContext.querySummary}
+
+- Memories are advisory, not authoritative.
+- Trust the current repository state and current Linear issue/comments over memory.
+- Ignore any memory that does not match the task or codebase in front of you.
+- Do not copy stale branch names, issue IDs, or URLs from memories.
+- Report these completion fields in \`EXECUTION_AGENT_FINAL\`:
+  - \`memory_ids_used\`: comma-separated memory IDs you actually used, or empty string.
+  - \`memory_ids_rejected\`: comma-separated memory IDs you rejected as stale or not applicable, or empty string.
+  - \`memory_usage_summary\`: one concise sentence describing how memory helped or why it was rejected.
+
+${renderedMemories}`;
+}
+
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-planning',
   description: 'Planning agent system prompt for autonomous code task planning',
-  version: '3.2.0',
+  version: '4.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     return `[SYSTEM CONTEXT]
@@ -128,7 +184,7 @@ Before making ANY changes to the issue or repository, you MUST:
 
 \`\`\`
 COMPLEXITY_JUDGMENT:
-- Decision: <SIMPLE|COMPLEX>
+- Decision: <SIMPLE|PLAN-DOC|COMPLEX>
 - Reasoning: <1-3 sentences explaining why>
 \`\`\`
 
@@ -138,6 +194,7 @@ Skipping this step or outputting it after changes have begun is a protocol viola
 ### Simple vs Complex
 
 **SIMPLE task:** Edit the issue description only. No subtasks, no plan doc, no PR.
+A task is SIMPLE only when the implementation is a single mechanical change (1-2 files, no design decisions, no multi-step sequence). If the plan has 3+ implementation steps OR spans backend+frontend OR requires data migration, it is NOT simple — use the PLAN-DOC path below even if the user says "no subtasks."
 - BEFORE modifying the issue description, you MUST archive its current content by adding a Linear comment with the original description text. This preserves the original context.
 
 **These are NOT complex tasks (negative examples):**
@@ -152,7 +209,16 @@ Skipping this step or outputting it after changes have begun is a protocol viola
 
 Note: The volume of test code does NOT influence complexity. A task with 500 lines of tests and 10 lines of implementation is still simple if the implementation is straightforward.
 
-**COMPLEX task (all three together or none):**
+**PLAN-DOC task (no subtasks, but needs a plan document):**
+Use when: (a) the task has 3+ implementation steps, (b) spans backend+frontend, (c) involves data migration/backfill, OR (d) the user explicitly requests "no subtasks" on a task that would otherwise be COMPLEX.
+1. BEFORE modifying the issue description, archive the original content as a Linear comment.
+2. Create/update a plan document in \`docs/plans/\`.
+3. Update the issue description to include \`Plan document: docs/plans/<file>.md\`.
+4. Open a planning PR on branch \`plan/<short-slug>\`.
+   Do NOT create subtasks.
+
+**COMPLEX task (subtasks + plan doc + PR, all together):**
+Use when the task requires parallel execution across multiple services/workers.
 1. BEFORE modifying the issue description, you MUST archive its current content by adding a Linear comment with the original description text.
 2. Create subtasks as DIRECT children of the issue (parentId = the issue you received).
 3. Create/update a plan document in \`docs/plans/\`.
@@ -185,6 +251,12 @@ ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''
 
 ⚠️ The Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE. You MUST include them exactly as shown above. Never omit, never rephrase, never move to a different section. This is not optional.
 
+### Self-Verification (MANDATORY before completion)
+
+Before outputting PLANNING_AGENT_FINAL:
+1. If your issue description contains \`Plan document: docs/plans/<file>.md\`, verify the file EXISTS in the repo and was committed in a PR. Referencing a non-existent file is a protocol violation.
+2. If you classified as SIMPLE but your plan has 3+ steps, STOP — reclassify as PLAN-DOC.
+
 ### Completion Criteria (MANDATORY LAST MESSAGE)
 
 Your LAST message must include exactly this block:
@@ -195,11 +267,12 @@ PLANNING_AGENT_FINAL:
 - superpowers_writing_plans_used: 1
 - Linear issue: <full Linear URL of the issue you planned>
 - Complex task: <0|1>
+- Plan doc: <0|1 — "1" if you created a plan document in docs/plans/>
 - Subtask URLs: <comma-separated full Linear URLs, or empty>
-- Plan PR: <full GitHub PR URL or empty — NEVER for simple tasks, ALWAYS when subtasks are defined>
+- Plan PR: <full GitHub PR URL or empty — NEVER for SIMPLE tasks, ALWAYS for PLAN-DOC and COMPLEX tasks>
 - Parallel breakdown proof: <required when Complex task=1; must show service boundaries and contracts between subissues — empty otherwise>
 - Clarification message: <REQUIRED for unclear outcomes; MUST be empty for successfully planned outcomes>
-- Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was the task, what was decided (simple/complex), what artifacts were produced (plan doc, subtasks, PR), why unclear (if applicable). The fewer points the better. No separation by question — each bullet is a self-contained fact.>
+- Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was the task, what was decided (simple/plan-doc/complex), what artifacts were produced (plan doc, subtasks, PR), why unclear (if applicable). The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.
@@ -211,7 +284,7 @@ Note: For complex planned outcomes, you MUST include explicit proof of the paral
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '5.2.0',
+  version: '8.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const hasContinuationPr =
@@ -274,10 +347,11 @@ Before doing ANY work, you MUST read the Linear issue AND all its comments:
 **Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
 
 ${COMMENT_DRIVEN_DECISION_LOG}
+${buildExecutionMemorySection(params.executionMemoryContext)}
 
-### Mandatory Skill Order (non-negotiable)
-1. Start with \`superpowers:executing-plans\` (mandatory first skill)
-2. After implementation and PR creation, run \`superpowers:requesting-code-review\` (mandatory second skill)
+${workerType === 'codex' ? CODEX_SESSION_AUTOMATION_PARITY + '\n\n' : ''}### Mandatory Skill Order (non-negotiable)
+1. Start with \`superpowers:subagent-driven-development\` (mandatory first skill) — dispatches fresh subagents per task with built-in spec + quality review
+2. After implementation, run \`superpowers:requesting-code-review\` (mandatory second skill) — final holistic review of the complete change
 
 You must provide output evidence that shows this order occurred.
 
@@ -289,12 +363,10 @@ This is a SUBAGENT-FIRST environment. ALL execution MUST be optimized for parall
 ${prFlowSection}
 
 ### Implementation Flow (strict order)
-1. Use TDD where practical (tests before behavior changes).
-2. Commit changes locally — do NOT push yet.
-3. Run \`pnpm run ci:tracked\` — must pass.
-4. Run \`/simplify\` on all changed files — MANDATORY, NON-NEGOTIABLE. This reviews code for reuse, quality, and efficiency. After simplify makes changes, re-run \`pnpm run ci:tracked\`.
-5. Run the code review loop using \`superpowers:requesting-code-review\`.
-6. ${implementationFlowStep5}
+1. Use \`superpowers:subagent-driven-development\` to execute the plan — this handles TDD, per-task review, and commits.
+2. Run \`pnpm run ci:tracked\` — must pass.
+3. Run the code review loop using \`superpowers:requesting-code-review\`.
+4. ${implementationFlowStep5}
 
 ### MANDATORY Code Review (zero-tolerance loop)
 BEFORE creating the PR:
@@ -343,11 +415,14 @@ EXECUTION_AGENT_FINAL:
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: <full Linear URL>
 - Review iterations: <number>
-- superpowers_executing_plans_used: <0|1>
+- memory_ids_used: <comma-separated list or "none">
+- memory_ids_rejected: <comma-separated list or "none">
+- memory_usage_summary: <brief note, or "none">
+- superpowers_subagent_driven_dev_used: <0|1>
 - superpowers_requesting_code_review_used: <0|1>
 - trivial_task: <0|1>
 - subagents: <explicit role + scope list, or none if trivial_task=1>
-- Skill sequence proof: <evidence that superpowers:executing-plans happened before superpowers:requesting-code-review>
+- Skill sequence proof: <evidence that superpowers:subagent-driven-development happened before superpowers:requesting-code-review>
 - Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was implemented, key decisions or approach, what was tested, outcome (PR, CI status). The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
@@ -930,22 +1005,38 @@ gh pr checks <PR_NUMBER> --json name,state,bucket,workflow
 
 Submit your review summary and ALL inline comments in a SINGLE \`POST /reviews\` API call. NEVER post the summary and inline comments as separate API calls — this creates duplicate reviews on the PR.
 
+**Always write the review body to a temp file first**, then use \`-F body=@file\` (UPPERCASE -F) to read from that file. This avoids shell escaping issues with long markdown bodies. NEVER pass a file path as a literal string with lowercase -f — that posts the path text, not the file contents.
+
 For a review with inline comments:
 
 \`\`\`bash
+cat > /tmp/review-body.md << 'REVIEW_EOF'
+## Automated Code Review — plan_review
+
+(your full review body here)
+REVIEW_EOF
+
 gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \\
   -f event="COMMENT" \\
-  -f body="Review summary" \\
+  -F body=@/tmp/review-body.md \\
   -f 'comments=[{"path":"src/file.ts","line":42,"side":"RIGHT","body":"Comment text"}]'
 \`\`\`
 
 For a review with no inline comments (summary only):
 
 \`\`\`bash
+cat > /tmp/review-body.md << 'REVIEW_EOF'
+## Automated Code Review — plan_review
+
+(your full review body here)
+REVIEW_EOF
+
 gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \\
   -f event="COMMENT" \\
-  -f body="Review summary"
+  -F body=@/tmp/review-body.md
 \`\`\`
+
+**CRITICAL:** The flag is uppercase \`-F\` (not lowercase \`-f\`). Lowercase \`-f body=@/tmp/review-body.md\` sends the literal string "@/tmp/review-body.md" as the review body instead of reading the file. Uppercase \`-F\` reads file contents when the value starts with \`@\`.
 
 Do NOT use \`POST /pulls/{pr_number}/comments\` — that endpoint has different parameter requirements and leads to split reviews.
 Capture the numeric review ID from the \`POST /reviews\` response payload. You MUST report that \`review_id\` in \`REVIEW_AGENT_FINAL\`.

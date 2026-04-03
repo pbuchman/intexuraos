@@ -433,24 +433,6 @@
       ]
     },
     {
-      "collectionGroup": "researches",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "favourite",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "startedAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "actions",
       "queryScope": "COLLECTION",
       "fields": [
@@ -497,50 +479,6 @@
         {
           "fieldPath": "updatedAt",
           "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "code_tasks",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "repository",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "prNumber",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "agentType",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "code_tasks",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "repository",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "prNumber",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "agentType",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
         }
       ]
     },
@@ -620,20 +558,6 @@
       "fields": [
         {
           "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "code_tasks",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "linearIssueId",
           "order": "ASCENDING"
         },
         {
@@ -777,6 +701,152 @@
       ]
     },
     {
+      "collectionGroup": "linear_issue_comments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "issueId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "visualizations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "visualizations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "feedId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "code_tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "repository",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "prNumber",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "code_tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "github-pr-events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "repository",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "pullRequestNumber",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "eventType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "linear_issues",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "identifier",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "code_tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "linearIssueId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "code_tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "repository",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "prNumber",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "agentType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "github-pr-summaries",
       "queryScope": "COLLECTION",
       "fields": [
@@ -791,6 +861,476 @@
         {
           "fieldPath": "baseBranch",
           "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "code_tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "queuedAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "cron_schedules",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nextExecutionAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "cron_schedules",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "cron_executions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "cron_executions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "scheduleId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "cron_executions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "cron_executions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "scheduleId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "hellscript_buffers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "merge_queue_watches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "owner",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "repo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "baseBranch",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "github-event-log-entries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "eventType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "authPassedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "writing_samples",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "merge_queue_watches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "owner",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "repo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "code_tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "repository",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "prNumber",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "agentType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "code_tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "repository",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "prNumber",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "agentType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "completedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "researches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "favourite",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "startedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "task_group_summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "aggregateStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "task_group_summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "aggregateStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "oldestTaskCreatedAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "task_group_summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "aggregateStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mostRecentDispatchedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "task_group_summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "aggregateStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "linearIssueId",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "task_group_summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "aggregateStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "prNumber",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "execution_memories",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "embedding",
+          "order": "ASCENDING",
+          "vectorConfig": {
+            "dimension": 1536,
+            "flatIndexEnabled": true
+          }
+        }
+      ]
+    },
+    {
+      "collectionGroup": "execution_memories",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "repository",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "embedding",
+          "order": "ASCENDING",
+          "vectorConfig": {
+            "dimension": 1536,
+            "flatIndexEnabled": true
+          }
+        }
+      ]
+    },
+    {
+      "collectionGroup": "code_tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "agentType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "executionMemoryPostRun.status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "completedAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "task_group_summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "linearIssueId",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "task_group_summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "prNumber",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "task_group_summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "oldestTaskCreatedAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "task_group_summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mostRecentDispatchedAt",
+          "order": "DESCENDING"
         }
       ]
     }

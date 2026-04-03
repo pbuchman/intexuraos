@@ -1048,6 +1048,104 @@ describe('linearAgentHttpClient', () => {
     });
   });
 
+  describe('fetchDirectChildrenLive', () => {
+    it('should fetch live direct children successfully', async () => {
+      const mockResponse = {
+        success: true,
+        data: [
+          {
+            id: 'child-123',
+            identifier: 'INT-200',
+            url: 'https://linear.app/pbuchman/issue/INT-200',
+            parentId: 'issue-123',
+            labels: ['code-task'],
+            assigneeId: null,
+            state: 'todo',
+          },
+        ],
+      };
+
+      nock(baseUrl)
+        .get('/internal/linear/issues/issue-123/direct-children')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(200, mockResponse);
+
+      const result = await client.fetchDirectChildrenLive({
+        userId: 'test-user-123',
+        issueId: 'issue-123',
+      });
+
+      if (result.ok) {
+        expect(result.value).toEqual(mockResponse.data);
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
+
+    it('should return NOT_FOUND on 404 error', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/issue-999/direct-children')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(404, 'Issue not found');
+
+      const result = await client.fetchDirectChildrenLive({
+        userId: 'test-user-123',
+        issueId: 'issue-999',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('NOT_FOUND');
+        expect(result.error.message).toBe('Issue not found');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('should return UNAVAILABLE on non-404 HTTP errors', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/issue-123/direct-children')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(503, 'service unavailable');
+
+      const result = await client.fetchDirectChildrenLive({
+        userId: 'test-user-123',
+        issueId: 'issue-123',
+      });
+
+      if (!result.ok) {
+        expect(result.error).toEqual({
+          code: 'UNAVAILABLE',
+          message: 'service unavailable',
+        });
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('should return UNKNOWN on invalid response with success false', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/issue-123/direct-children')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(200, { success: false });
+
+      const result = await client.fetchDirectChildrenLive({
+        userId: 'test-user-123',
+        issueId: 'issue-123',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toBe('Invalid response from linear-agent');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+  });
+
   describe('updateIssueMetadata', () => {
     it('should update metadata successfully and parse droppedLabels', async () => {
       nock(baseUrl)

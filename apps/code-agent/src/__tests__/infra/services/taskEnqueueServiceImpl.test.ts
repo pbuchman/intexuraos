@@ -25,7 +25,7 @@ import { TaskEnqueueServiceImpl } from '../../../infra/services/taskEnqueueServi
 // Mock config
 vi.mock('../../../config.js', () => ({
   loadConfig: (): { queue: { maxSize: number; ttlMinutes: number } } => ({
-    queue: { maxSize: 50, ttlMinutes: 30 },
+    queue: { maxSize: 50, ttlMinutes: 1440 },
   }),
 }));
 
@@ -253,5 +253,116 @@ describe('TaskEnqueueServiceImpl', () => {
       expect(result.value.queuePosition).toBe(9); // countQueued already includes self (INT-977)
       expect(result.value).not.toHaveProperty('estimatedWaitMinutes');
     }
+  });
+
+  describe('enqueueMany', () => {
+    it('returns empty result for an empty batch', async () => {
+      const service = createService();
+      const result = await service.enqueueMany({ taskIds: [], userId: 'user-456' });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual([]);
+      }
+      expect(mockCodeTaskRepo.findById).not.toHaveBeenCalled();
+    });
+
+    it('returns task_not_found when a batch task lookup fails', async () => {
+      mockCodeTaskRepo.findById.mockResolvedValueOnce(
+        err({ code: 'NOT_FOUND', message: 'missing task' } satisfies RepositoryError),
+      );
+
+      const service = createService();
+      const result = await service.enqueueMany({ taskIds: ['missing-task'], userId: 'user-456' });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('task_not_found');
+      }
+    });
+
+    it('returns internal_error when queue count fails for batch enqueue', async () => {
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(createMockTask()));
+      mockCodeTaskRepo.countQueued.mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR', message: 'count failed' } satisfies RepositoryError),
+      );
+
+      const service = createService();
+      const result = await service.enqueueMany({ taskIds: ['task-123'], userId: 'user-456' });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+      }
+    });
+
+    it('marks all batch tasks failed when the queue is already full', async () => {
+      mockCodeTaskRepo.findById
+        .mockResolvedValueOnce(ok(createMockTask({ id: 'task-1' })))
+        .mockResolvedValueOnce(ok(createMockTask({ id: 'task-2' })));
+      mockCodeTaskRepo.countQueued.mockResolvedValue(ok(50));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'failed' })));
+
+      const service = createService();
+      const result = await service.enqueueMany({ taskIds: ['task-1', 'task-2'], userId: 'user-456' });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('queue_full');
+      }
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledTimes(2);
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
+        'task-1',
+        expect.objectContaining({
+          status: 'failed',
+          error: expect.objectContaining({ code: 'queue_full' }),
+        }),
+      );
+    });
+
+    it('logs a warning and keeps original task when queuedAt update fails during batch enqueue', async () => {
+      const task = createMockTask({ id: 'task-1' });
+      mockCodeTaskRepo.findById.mockResolvedValueOnce(ok(task));
+      mockCodeTaskRepo.countQueued.mockResolvedValue(ok(1));
+      mockCodeTaskRepo.update.mockResolvedValueOnce(
+        err({ code: 'FIRESTORE_ERROR', message: 'update failed' } satisfies RepositoryError),
+      );
+
+      const service = createService();
+      const result = await service.enqueueMany({ taskIds: ['task-1'], userId: 'user-456' });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual([{ taskId: 'task-1', queuePosition: 1 }]);
+      }
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-1', error: { code: 'FIRESTORE_ERROR', message: 'update failed' } }),
+        'Failed to update task with queuedAt during batch enqueue',
+      );
+      expect(mockWhatsappNotifier.notifyTaskQueued).toHaveBeenCalledWith('user-456', task, 1);
+    });
+
+    it('logs a warning and still succeeds when batch queue notification fails', async () => {
+      const task = createMockTask({ id: 'task-1' });
+      const updatedTask = createMockTask({ id: 'task-1', queuedAt: Timestamp.now() });
+      mockCodeTaskRepo.findById.mockResolvedValueOnce(ok(task));
+      mockCodeTaskRepo.countQueued.mockResolvedValue(ok(1));
+      mockCodeTaskRepo.update.mockResolvedValueOnce(ok(updatedTask));
+      mockWhatsappNotifier.notifyTaskQueued.mockResolvedValueOnce(
+        err({ code: 'notification_failed', message: 'whatsapp down' }),
+      );
+
+      const service = createService();
+      const result = await service.enqueueMany({ taskIds: ['task-1'], userId: 'user-456' });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual([{ taskId: 'task-1', queuePosition: 1 }]);
+      }
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-1', error: { code: 'notification_failed', message: 'whatsapp down' } }),
+        'Failed to send queue notification during batch enqueue',
+      );
+    });
   });
 });

@@ -65,7 +65,7 @@ const COMMON_OPTIONAL_ENV = new Set([
   // Dash0 OpenTelemetry (optional — no-op when not configured)
   'INTEXURAOS_DASH0_OTLP_ENDPOINT',
   'INTEXURAOS_DASH0_AUTH_TOKEN',
-  // Queue config (optional — have sensible defaults: maxSize=10, ttlMinutes=30)
+  // Queue config (optional — have sensible defaults: maxSize=50, ttlMinutes=1440)
   'INTEXURAOS_QUEUE_MAX_SIZE',
   'INTEXURAOS_QUEUE_TTL_MINUTES',
   // Retry queue config (optional — have sensible defaults: maxAttempts=3, ttlMinutes=10)
@@ -106,20 +106,28 @@ function findTsFiles(dir, files = []) {
  * Extract REQUIRED_ENV array from a service's index.ts file.
  */
 function extractRequiredEnv(indexContent) {
-  const requiredEnvPattern = /const\s+REQUIRED_ENV\s*=\s*\[([\s\S]*?)\];/;
-  const match = indexContent.match(requiredEnvPattern);
+  const vars = [];
 
-  if (!match) {
-    return [];
+  // Extract from REQUIRED_ENV
+  const requiredEnvPattern = /const\s+REQUIRED_ENV\s*=\s*\[([\s\S]*?)\];/;
+  const requiredMatch = indexContent.match(requiredEnvPattern);
+  if (requiredMatch) {
+    const stringPattern = /'([^']+)'/g;
+    let stringMatch;
+    while ((stringMatch = stringPattern.exec(requiredMatch[1])) !== null) {
+      vars.push(stringMatch[1]);
+    }
   }
 
-  // Extract string literals from the array
-  const vars = [];
-  const stringPattern = /'([^']+)'/g;
-  let stringMatch;
-
-  while ((stringMatch = stringPattern.exec(match[1])) !== null) {
-    vars.push(stringMatch[1]);
+  // Also extract from PRODUCTION_ONLY_ENV (validated in production, optional in E2E)
+  const productionEnvPattern = /const\s+PRODUCTION_ONLY_ENV\s*=\s*\[([\s\S]*?)\];/;
+  const productionMatch = indexContent.match(productionEnvPattern);
+  if (productionMatch) {
+    const stringPattern = /'([^']+)'/g;
+    let stringMatch;
+    while ((stringMatch = stringPattern.exec(productionMatch[1])) !== null) {
+      vars.push(stringMatch[1]);
+    }
   }
 
   return vars;

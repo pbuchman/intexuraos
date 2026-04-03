@@ -69,6 +69,7 @@ describe('PLANNING_SCHEMA', () => {
       superpowers_writing_plans: 'used',
       linear_url: 'https://linear.app/pbuchman/issue/INT-100',
       is_complex: '0',
+      has_plan_doc: '0',
       subtask_urls: '',
       pr_url: '',
       summary: 'Planned the task.',
@@ -83,6 +84,7 @@ describe('PLANNING_SCHEMA', () => {
       superpowers_writing_plans: 'not used',
       linear_url: '',
       is_complex: '0',
+      has_plan_doc: '0',
       subtask_urls: '',
       pr_url: '',
       summary: 'Could not plan.',
@@ -97,6 +99,7 @@ describe('PLANNING_SCHEMA', () => {
       superpowers_writing_plans: 'used',
       linear_url: 'https://linear.app/pbuchman/issue/INT-631',
       is_complex: '1',
+      has_plan_doc: '1',
       subtask_urls: '',
       pr_url: 'https://github.com/pbuchman/intexuraos/pull/950',
       summary: 'Planned and created PR.',
@@ -111,6 +114,7 @@ describe('PLANNING_SCHEMA', () => {
       superpowers_writing_plans: 'used',
       linear_url: 'https://linear.app/pbuchman/issue/INT-631',
       is_complex: '1',
+      has_plan_doc: '1',
       subtask_urls:
         'https://linear.app/pbuchman/issue/INT-632/subtask-one,https://linear.app/pbuchman/issue/INT-633/subtask-two',
       pr_url: '',
@@ -125,12 +129,32 @@ describe('PLANNING_SCHEMA', () => {
     }
   });
 
+  it('accepts plan-doc task with has_plan_doc=1 and is_complex=0', () => {
+    const result = PLANNING_SCHEMA.safeParse({
+      outcome: 'planned',
+      superpowers_writing_plans: 'used',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-700',
+      is_complex: '0',
+      has_plan_doc: '1',
+      subtask_urls: '',
+      pr_url: 'https://github.com/pbuchman/intexuraos/pull/960',
+      summary: 'Plan-doc task planned.',
+      unclear_clarification: '',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.has_plan_doc).toBe('1');
+      expect(result.data.is_complex).toBe('0');
+    }
+  });
+
   it('accepts simple task with empty subtask_urls', () => {
     const result = PLANNING_SCHEMA.safeParse({
       outcome: 'planned',
       superpowers_writing_plans: 'not used',
       linear_url: 'https://linear.app/pbuchman/issue/INT-640',
       is_complex: '0',
+      has_plan_doc: '0',
       subtask_urls: '',
       pr_url: '',
       summary: 'Simple task planned.',
@@ -148,6 +172,7 @@ describe('PLANNING_SCHEMA', () => {
       superpowers_writing_plans: 'used',
       linear_url: '',
       is_complex: '0',
+      has_plan_doc: '0',
       subtask_urls: '',
       pr_url: '',
       summary: 'x',
@@ -166,9 +191,12 @@ describe('EXECUTION_SCHEMA', () => {
   it('accepts valid execution data', () => {
     const result = EXECUTION_SCHEMA.safeParse({
       outcome: 'implemented',
-      superpowers_executing_plans: 'used',
+      superpowers_subagent_driven_dev: 'used',
       superpowers_requesting_code_review: 'not used',
       gh_pr_url: 'https://github.com/org/repo/pull/1',
+      memory_ids_used: 'MEM-142,MEM-155',
+      memory_ids_rejected: 'MEM-188',
+      memory_usage_summary: 'Used route logging and route coverage lessons.',
       summary: 'Implemented the feature.',
     });
     expect(result.success).toBe(true);
@@ -176,9 +204,12 @@ describe('EXECUTION_SCHEMA', () => {
 
   it('rejects invalid enum value', () => {
     const result = EXECUTION_SCHEMA.safeParse({
-      superpowers_executing_plans: 'maybe',
+      superpowers_subagent_driven_dev: 'maybe',
       superpowers_requesting_code_review: 'used',
       gh_pr_url: '',
+      memory_ids_used: '',
+      memory_ids_rejected: '',
+      memory_usage_summary: '',
       summary: 'x',
     });
     expect(result.success).toBe(false);
@@ -409,6 +440,7 @@ describe('buildPlanningPrompt', () => {
     expect(prompt).toContain('superpowers_writing_plans');
     expect(prompt).toContain('linear_url');
     expect(prompt).toContain('is_complex');
+    expect(prompt).toContain('has_plan_doc');
     expect(prompt).toContain('subtask_urls');
     expect(prompt).toContain('pr_url');
     expect(prompt).toContain('unclear_clarification');
@@ -431,9 +463,12 @@ describe('buildExecutionPrompt', () => {
   it('includes transcript and execution-specific fields', () => {
     const prompt = buildExecutionPrompt('exec-log');
     expect(prompt).toContain('Execution Agent');
-    expect(prompt).toContain('superpowers_executing_plans');
+    expect(prompt).toContain('superpowers_subagent_driven_dev');
     expect(prompt).toContain('superpowers_requesting_code_review');
     expect(prompt).toContain('gh_pr_url');
+    expect(prompt).toContain('memory_ids_used');
+    expect(prompt).toContain('memory_ids_rejected');
+    expect(prompt).toContain('memory_usage_summary');
     expect(prompt).toContain('exec-log');
   });
 
@@ -556,6 +591,7 @@ describe('OrchestratorCompletionVerifier', () => {
       superpowers_writing_plans: 'used',
       linear_url: 'https://linear.app/pbuchman/issue/INT-100',
       is_complex: '0',
+      has_plan_doc: '0',
       subtask_urls: '',
       pr_url: '',
       summary: 'The agent planned successfully.',
@@ -587,6 +623,7 @@ describe('OrchestratorCompletionVerifier', () => {
         superpowers_writing_plans: 'used',
         linear_url: 'https://linear.app/pbuchman/issue/INT-100',
         is_complex: '0',
+        has_plan_doc: '0',
         subtask_urls: '',
         pr_url: '',
         summary: 'The agent planned successfully.',
@@ -608,6 +645,7 @@ describe('OrchestratorCompletionVerifier', () => {
             superpowers_writing_plans: 'not used',
             linear_url: '',
             is_complex: '0',
+            has_plan_doc: '0',
             subtask_urls: '',
             pr_url: '',
             summary: 'Could not plan.',
@@ -641,9 +679,12 @@ describe('OrchestratorCompletionVerifier', () => {
   describe('verify — execution agent', () => {
     const validExecutionResponse = JSON.stringify({
       outcome: 'implemented',
-      superpowers_executing_plans: 'used',
+      superpowers_subagent_driven_dev: 'used',
       superpowers_requesting_code_review: 'used',
       gh_pr_url: 'https://github.com/org/repo/pull/901',
+      memory_ids_used: 'mem_142,mem_155',
+      memory_ids_rejected: 'mem_188',
+      memory_usage_summary: 'Used route logging and coverage lessons.',
       summary: 'Implemented the feature.',
     });
 
@@ -667,9 +708,12 @@ describe('OrchestratorCompletionVerifier', () => {
       expect(result.agentData).toEqual({
         agentType: 'execution',
         outcome: 'implemented',
-        superpowers_executing_plans: 'used',
+        superpowers_subagent_driven_dev: 'used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: 'https://github.com/org/repo/pull/901',
+        memory_ids_used: 'mem_142,mem_155',
+        memory_ids_rejected: 'mem_188',
+        memory_usage_summary: 'Used route logging and coverage lessons.',
         summary: 'Implemented the feature.',
       });
       expect(result.trace).toEqual({
@@ -936,6 +980,7 @@ describe('OrchestratorCompletionVerifier', () => {
       superpowers_writing_plans: 'used',
       linear_url: 'https://linear.app/pbuchman/issue/INT-100',
       is_complex: '0',
+      has_plan_doc: '0',
       subtask_urls: '',
       pr_url: '',
       summary: 'Planned.',
@@ -1025,6 +1070,7 @@ describe('OrchestratorCompletionVerifier', () => {
         superpowers_writing_plans: 'used',
         linear_url: 'https://linear.app/pbuchman/issue/INT-50',
         is_complex: '0',
+        has_plan_doc: '0',
         subtask_urls: '',
         pr_url: '',
         summary: 'Planned.',
@@ -1131,6 +1177,7 @@ describe('verify — fatal exit code pre-check', () => {
           superpowers_writing_plans: 'used',
           linear_url: 'https://linear.app/pbuchman/issue/INT-100',
           is_complex: '0',
+          has_plan_doc: '0',
           subtask_urls: '',
           pr_url: '',
           summary: 'Planned.',
@@ -1157,9 +1204,12 @@ describe('verify — fatal exit code pre-check', () => {
       value: {
         content: JSON.stringify({
           outcome: 'implemented',
-          superpowers_executing_plans: 'used',
+          superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'not used',
           gh_pr_url: '',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
           summary: 'Failed normally.',
         }),
         usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },

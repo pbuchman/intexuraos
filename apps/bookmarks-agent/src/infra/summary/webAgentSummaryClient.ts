@@ -38,6 +38,11 @@ interface WebAgentSummaryResponse {
   error?: string;
 }
 
+function normalizeHint(value: string | null): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed === undefined || trimmed.length === 0 ? undefined : trimmed;
+}
+
 // Transient HTTP errors that should trigger retry:
 // 429: Rate limiting - retry after backoff
 // 503: Service unavailable - retry after backoff
@@ -81,6 +86,9 @@ export function createWebAgentSummaryClient(
 
       let response: Response;
       try {
+        const title = normalizeHint(content.title);
+        const description = normalizeHint(content.description);
+
         response = await fetch(endpoint, {
           method: 'POST',
           headers: {
@@ -90,6 +98,8 @@ export function createWebAgentSummaryClient(
           body: JSON.stringify({
             url: content.url,
             userId: _userId,
+            ...(title !== undefined && { title }),
+            ...(description !== undefined && { description }),
             maxSentences: 20,
             maxReadingMinutes: 3,
           }),

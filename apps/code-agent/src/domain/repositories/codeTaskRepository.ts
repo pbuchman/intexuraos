@@ -47,6 +47,8 @@ export interface CreateTaskInput {
 
   // Review task metadata
   reviewTypes?: string[];
+  executionMemoryContext?: CodeTask['executionMemoryContext'];
+  executionMemoryPostRun?: CodeTask['executionMemoryPostRun'];
 }
 
 export interface UpdateTaskInput {
@@ -69,9 +71,12 @@ export interface UpdateTaskInput {
   cancelNonceExpiresAt?: string | null;
   pendingUserMessages?: string[];
   implementationTaskId?: string | null;
+  fanOutChildTaskIds?: string[] | null;
   // PR correlation (INT-465): populated on task completion from result.prUrl
   prNumber?: number;
   prBranch?: string;
+  executionMemoryContext?: CodeTask['executionMemoryContext'];
+  executionMemoryPostRun?: CodeTask['executionMemoryPostRun'];
 
   // Remediation task metadata
   requiresReReview?: boolean;
@@ -122,8 +127,13 @@ export interface CodeTaskRepository {
 
   update(
     taskId: string,
-    input: UpdateTaskInput
+    input: UpdateTaskInput,
+    options?: { transaction?: FirebaseFirestore.Transaction }
   ): Promise<Result<CodeTask, RepositoryError>>;
+
+  runInTransaction?<T>(
+    operation: (transaction: FirebaseFirestore.Transaction) => Promise<Result<T, RepositoryError>>
+  ): Promise<Result<T, RepositoryError>>;
 
   list(input: ListTasksInput): Promise<Result<ListTasksOutput, RepositoryError>>;
 
@@ -284,4 +294,23 @@ export interface CodeTaskRepository {
   findPlannedTaskByLinearIssue(
     linearIssueId: string
   ): Promise<Result<CodeTask | null, RepositoryError>>;
+
+  /**
+   * List execution tasks waiting for scheduler-backed execution-memory post-run processing.
+   */
+  listPendingExecutionMemoryPostRun(limit: number): Promise<Result<CodeTask[], RepositoryError>>;
+
+  /**
+   * List all non-archived tasks for a user.
+   * Returns all tasks with non-archived statuses, ordered by createdAt desc.
+   * Used by the issue-groups endpoint for server-side grouping.
+   */
+  listAllNonArchived(userId: string): Promise<Result<CodeTask[], RepositoryError>>;
+
+  /**
+   * List all non-archived tasks across all users.
+   * Used by the stale-group archiver scheduler to find archivable issue groups.
+   * Returns all tasks with non-archived statuses, ordered by updatedAt asc.
+   */
+  listAllNonArchivedGlobal(): Promise<Result<CodeTask[], RepositoryError>>;
 }

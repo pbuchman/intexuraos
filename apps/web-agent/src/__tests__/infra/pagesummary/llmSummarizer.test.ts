@@ -7,13 +7,16 @@ import { createLlmSummarizer } from '../../../infra/pagesummary/llmSummarizer.js
 class MockLlmGenerateClient implements LlmGenerateClient {
   private responses: { ok: boolean; content?: string; error?: string }[] = [];
   private callCount = 0;
+  private prompts: string[] = [];
 
   setResponses(responses: { ok: boolean; content?: string; error?: string }[]): void {
     this.responses = responses;
     this.callCount = 0;
   }
 
-  async generate(_prompt: string): Promise<Result<GenerateResult, LLMError>> {
+  async generate(prompt: string): Promise<Result<GenerateResult, LLMError>> {
+    this.prompts.push(prompt);
+
     const response = this.responses[this.callCount] ?? this.responses[0];
     this.callCount++;
 
@@ -39,6 +42,10 @@ class MockLlmGenerateClient implements LlmGenerateClient {
 
   getCallCount(): number {
     return this.callCount;
+  }
+
+  getPrompts(): string[] {
+    return this.prompts;
   }
 }
 
@@ -92,6 +99,32 @@ describe('LlmSummarizer', () => {
       );
 
       expect(llmClient.getCallCount()).toBe(1);
+    });
+
+    it('includes metadata hints and main-content selection rules in the prompt', async () => {
+      llmClient.setResponses([{ ok: true, content: 'Summary.' }]);
+
+      await summarizer.summarize(
+        'content',
+        {
+          url: 'https://www.linkedin.com/jobs/view/123',
+          title: 'SEEKR hiring AI Engineer in London Area, United Kingdom',
+          description: 'AI Engineer role focused on applied AI systems in London.',
+        },
+        llmClient
+      );
+
+      const prompt = llmClient.getPrompts()[0];
+
+      expect(prompt).toContain('## MAIN CONTENT SELECTION');
+      expect(prompt).toContain('Do NOT assume the first paragraphs are the main content');
+      expect(prompt).toContain('URL: https://www.linkedin.com/jobs/view/123');
+      expect(prompt).toContain(
+        'Title hint: SEEKR hiring AI Engineer in London Area, United Kingdom'
+      );
+      expect(prompt).toContain(
+        'Description hint: AI Engineer role focused on applied AI systems in London.'
+      );
     });
 
     it('calculates reading minutes correctly for longer content', async () => {
@@ -151,6 +184,46 @@ describe('LlmSummarizer', () => {
         expect(result.value.summary).toBe('Fixed summary.');
       }
       expect(llmClient.getCallCount()).toBe(2);
+    });
+
+    it('omits optional metadata hints from the repair prompt when they are not provided', async () => {
+      llmClient.setResponses([
+        { ok: true, content: '   ' },
+        { ok: true, content: 'Fixed summary.' },
+      ]);
+
+      const result = await summarizer.summarize('content', { url: 'https://example.com' }, llmClient);
+
+      expect(result.ok).toBe(true);
+
+      const repairPrompt = llmClient.getPrompts()[1];
+      expect(repairPrompt).toContain('URL: https://example.com');
+      expect(repairPrompt).not.toContain('Title hint:');
+      expect(repairPrompt).not.toContain('Description hint:');
+    });
+
+    it('includes optional metadata hints in the repair prompt when they are provided', async () => {
+      llmClient.setResponses([
+        { ok: true, content: '   ' },
+        { ok: true, content: 'Fixed summary.' },
+      ]);
+
+      const result = await summarizer.summarize(
+        'content',
+        {
+          url: 'https://example.com',
+          title: 'Example title',
+          description: 'Example description',
+        },
+        llmClient
+      );
+
+      expect(result.ok).toBe(true);
+
+      const repairPrompt = llmClient.getPrompts()[1];
+      expect(repairPrompt).toContain('URL: https://example.com');
+      expect(repairPrompt).toContain('Title hint: Example title');
+      expect(repairPrompt).toContain('Description hint: Example description');
     });
 
     it('returns REPAIR_FAILED when LLM fails during repair', async () => {

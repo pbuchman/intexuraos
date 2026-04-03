@@ -49,6 +49,16 @@ Use `query-hooks.sh` to search and filter hook logs:
 
 ## Available Hooks
 
+## Codex Parity Ownership
+
+Codex does not execute this hook layer directly. For orchestrated Codex runs, the equivalent guarantees are intentionally split across bootstrap and orchestrator-owned validation surfaces:
+
+| Bucket                 | Owner                                         | Examples                                                                                                     | Evidence                                                           |
+| ---------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| `Codex bootstrap`      | `workers/code-worker/entrypoint.sh`           | session-start readiness, skill restore, env loading, auth setup                                              | `[entrypoint] Bootstrap evidence: ...`                             |
+| `orchestrator/runtime` | prompt + completion verifier + deep validator | completion contract, CI/PR evidence, ownership/evidence checks                                               | transcript evidence, deep-validation report, final execution block |
+| `Claude-only drop`     | none                                          | edit-time hook blockers/reminders like `detect-common-patterns`, `rebuild-after-git`, `typecheck-after-edit` | explicitly omitted for Codex                                       |
+
 ### PostToolUse (File Content Checks)
 
 | Hook                     | Purpose                                                       |
@@ -135,6 +145,8 @@ Common patterns logged by hooks:
 | `gh-pr-checks-polling`       | BLOCKED | validate-polling           | Using sleep + gh pr checks               |
 | `ownership-violation`        | BLOCKED | ownership-check            | Using forbidden ownership language       |
 | `forbidden-state-transition` | BLOCKED | validate-linear-state      | Agent trying to set QA/Done status       |
+| `forbidden-assignment`       | BLOCKED | validate-linear-state      | Agent trying to assign issue             |
+| `forbidden-delegation`       | BLOCKED | validate-linear-state      | Agent trying to delegate issue           |
 | `phase1-incomplete`          | BLOCKED | completion-validator       | Phase 1 missing code-task/unclear label  |
 | `phase2-incomplete`          | BLOCKED | completion-validator       | Phase 2 missing PR/CI/Linear artifacts   |
 

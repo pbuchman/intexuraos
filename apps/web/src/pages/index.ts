@@ -9,6 +9,7 @@ export { GoogleCalendarConnectionPage } from './GoogleCalendarConnectionPage.js'
 export { GitHubConnectionPage } from './GitHubConnectionPage.js';
 export { LinearConnectionPage } from './LinearConnectionPage.js';
 export { LinearIssuesPage } from './LinearIssuesPage.js';
+export { LinearPruneCandidatesPage } from './LinearPruneCandidatesPage.js';
 export { WhatsAppConnectionPage } from './WhatsAppConnectionPage.js';
 export { WhatsAppNotesPage } from './WhatsAppNotesPage.js';
 export { MobileNotificationsConnectionPage } from './MobileNotificationsConnectionPage.js';
@@ -31,7 +32,7 @@ export { LlmCostsPage } from './LlmCostsPage.js';
 export { CodeTasksPage } from './CodeTasksPage.js';
 export { DispatchQueuePage } from './DispatchQueuePage.js';
 export { MergeQueuePage } from './MergeQueuePage.js';
-export { CodeTaskViewPageV2 } from './CodeTaskViewPageV2.js';
+export { CodeTaskViewPage } from './CodeTaskViewPage.js';
 export { CodeTaskNewPage } from './CodeTaskNewPage.js';
 export { VisualizationsListPage } from './VisualizationsListPage.js';
 export { WorkerSettingsPage } from './WorkerSettingsPage.js';

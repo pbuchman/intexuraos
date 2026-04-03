@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { err } from '@intexuraos/common-core';
+
+vi.mock('@intexuraos/infra-gemini', () => ({
+  createGeminiClient: vi.fn(),
+  TOOL_CALLING_PRICING: {},
+}));
+
 import { buildServer } from '../../server.js';
 import { setServices, resetServices } from '../../services.js';
 import type { FastifyInstance } from 'fastify';
@@ -55,6 +61,14 @@ describe('internalIssuesRoutes', () => {
       userServiceClient: new FakeUserServiceClient(),
       commentRepository: fakeCommentRepo,
       codeAgentClient: new FakeCodeAgentClient(),
+      issuePruningClassifier: {
+        classifyCandidates: async () => ({ ok: true, value: [] }),
+      },
+      pruneCandidateRepository: {
+        clearAll: async () => ({ ok: true as const, value: undefined }),
+        storeAll: async () => ({ ok: true as const, value: undefined }),
+        listAll: async () => ({ ok: true as const, value: [] }),
+      },
     });
 
     app = await buildServer();
@@ -496,7 +510,7 @@ describe('internalIssuesRoutes', () => {
       expect(body.data.parentIdentifier).toBeNull();
     });
 
-    it('should return 502 when parent issue lookup fails', async () => {
+    it('should return 500 when parent issue lookup fails', async () => {
       fakeIssueRepo.seedIssue({
         ...testIssue,
         id: 'linear-subtask-parent-error',
@@ -514,14 +528,14 @@ describe('internalIssuesRoutes', () => {
         headers: { ...internalAuthHeader, 'x-user-id': testUserId },
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
 
       const body = JSON.parse(response.body) as {
         success: boolean;
         error: { code: string };
       };
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
 
       findByIdSpy.mockRestore();
     });
@@ -565,11 +579,11 @@ describe('internalIssuesRoutes', () => {
         headers: { ...internalAuthHeader, 'x-user-id': testUserId },
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
 
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
     it('should include comment count and last comment timestamp when comments exist', async () => {
@@ -783,11 +797,11 @@ describe('internalIssuesRoutes', () => {
         },
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
 
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
       expect(body.error.message).toBe('Issue repo unavailable');
     });
 
@@ -825,11 +839,11 @@ describe('internalIssuesRoutes', () => {
         },
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
 
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
       expect(body.error.message).toBe('Comment repo unavailable');
     });
 
@@ -975,7 +989,7 @@ describe('internalIssuesRoutes', () => {
       expect(body.data.issues[0]?.parentIdentifier).toBe('ENG-100');
     });
 
-    it('returns 502 when parent identifier lookup fails', async () => {
+    it('returns 500 when parent identifier lookup fails', async () => {
       fakeIssueRepo.seedIssue({
         id: 'issue-parent',
         identifier: 'ENG-100',
@@ -1027,14 +1041,14 @@ describe('internalIssuesRoutes', () => {
         },
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as {
         success: boolean;
         error: { code: string; message: string };
       };
 
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
       expect(body.error.message).toBe('Parent lookup unavailable');
     });
 
@@ -1177,7 +1191,7 @@ describe('internalIssuesRoutes', () => {
       expect(body.data.labels).toStrictEqual([]);
     });
 
-    it('should return 502 when findByIdentifier fails after findById returns null', async () => {
+    it('should return 500 when findByIdentifier fails after findById returns null', async () => {
       fakeIssueRepo.setFindByIdentifierFailure(true, { code: 'INTERNAL_ERROR', message: 'DB error' });
 
       const response = await app.inject({
@@ -1187,10 +1201,10 @@ describe('internalIssuesRoutes', () => {
         payload: { removeLabels: ['ready-to-merge'] },
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
     it('should return 404 when both findById and findByIdentifier return null', async () => {
@@ -1210,7 +1224,7 @@ describe('internalIssuesRoutes', () => {
   });
 
   describe('POST /internal/issues - error paths', () => {
-    it('returns 502 when getApiKey fails', async () => {
+    it('returns 500 when getApiKey fails', async () => {
       fakeConnectionRepo.setApiKeyFailure(true, { code: 'INTERNAL_ERROR', message: 'DB error' });
 
       const response = await app.inject({
@@ -1220,13 +1234,13 @@ describe('internalIssuesRoutes', () => {
         payload: { title: 'Test', description: 'Test' },
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
-    it('returns 502 when getFullConnection fails', async () => {
+    it('returns 500 when getFullConnection fails', async () => {
       fakeConnectionRepo.setGetFullConnectionFailure(true, { code: 'INTERNAL_ERROR', message: 'DB error' });
 
       const response = await app.inject({
@@ -1236,10 +1250,10 @@ describe('internalIssuesRoutes', () => {
         payload: { title: 'Test', description: 'Test' },
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
     it('returns 502 when linearApiClient.createIssue fails', async () => {
@@ -1302,7 +1316,7 @@ describe('internalIssuesRoutes', () => {
       expect(body.error.code).toBe('FORBIDDEN');
     });
 
-    it('returns 502 when getApiKey fails', async () => {
+    it('returns 500 when getApiKey fails', async () => {
       fakeConnectionRepo.setApiKeyFailure(true, { code: 'INTERNAL_ERROR', message: 'DB error' });
 
       const response = await app.inject({
@@ -1312,10 +1326,10 @@ describe('internalIssuesRoutes', () => {
         payload: { body: 'A comment' },
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
     it('returns 502 when createComment fails', async () => {
@@ -1378,7 +1392,7 @@ describe('internalIssuesRoutes', () => {
       expect(body.error.code).toBe('UNAUTHORIZED');
     });
 
-    it('returns 502 when issueRepository.findById fails', async () => {
+    it('returns 500 when issueRepository.findById fails', async () => {
       fakeIssueRepo.setFailure(true, { code: 'INTERNAL_ERROR', message: 'DB error' });
 
       const response = await app.inject({
@@ -1388,10 +1402,10 @@ describe('internalIssuesRoutes', () => {
         payload: { addLabels: ['bug'] },
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
     it('returns 404 when issue not found', async () => {
@@ -1408,7 +1422,7 @@ describe('internalIssuesRoutes', () => {
       expect(body.error.code).toBe('NOT_FOUND');
     });
 
-    it('returns 502 when getApiKey fails', async () => {
+    it('returns 500 when getApiKey fails', async () => {
       fakeIssueRepo.seedIssue({
         id: 'issue-meta-1',
         identifier: 'ENG-200',
@@ -1437,10 +1451,10 @@ describe('internalIssuesRoutes', () => {
         payload: { addLabels: ['bug'] },
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
     it('returns 502 when listIssueLabels fails', async () => {
@@ -1746,7 +1760,7 @@ describe('internalIssuesRoutes', () => {
       testIssueId = body.data.id;
     });
 
-    it('returns 502 when getApiKey fails', async () => {
+    it('returns 500 when getApiKey fails', async () => {
       fakeConnectionRepo.setApiKeyFailure(true, { code: 'INTERNAL_ERROR', message: 'DB error' });
 
       const response = await app.inject({
@@ -1756,13 +1770,13 @@ describe('internalIssuesRoutes', () => {
         payload: { state: 'in_progress' },
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
-    it('returns 502 when getFullConnection fails', async () => {
+    it('returns 500 when getFullConnection fails', async () => {
       fakeConnectionRepo.setGetFullConnectionFailure(true, { code: 'INTERNAL_ERROR', message: 'DB error' });
 
       const response = await app.inject({
@@ -1772,10 +1786,10 @@ describe('internalIssuesRoutes', () => {
         payload: { state: 'in_progress' },
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
     it('returns 502 when getWorkflowStates fails', async () => {
@@ -1826,7 +1840,7 @@ describe('internalIssuesRoutes', () => {
   });
 
   describe('GET /internal/linear/issues/:identifier - comment repository failure', () => {
-    it('returns 502 when commentRepository.listByIssueId fails', async () => {
+    it('returns 500 when commentRepository.listByIssueId fails', async () => {
       fakeIssueRepo.seedIssue({
         id: 'issue-comment-err',
         identifier: 'ENG-999',
@@ -1854,10 +1868,10 @@ describe('internalIssuesRoutes', () => {
         headers: { ...internalAuthHeader, 'x-user-id': testUserId },
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -1981,7 +1995,7 @@ describe('internalIssuesRoutes', () => {
       expect(body.error.code).toBe('UNAUTHORIZED');
     });
 
-    it('returns 502 when issueRepository fails', async () => {
+    it('returns 500 when issueRepository fails', async () => {
       fakeIssueRepo.setFailure(true, { code: 'INTERNAL_ERROR', message: 'DB error' });
 
       const response = await app.inject({
@@ -1990,13 +2004,13 @@ describe('internalIssuesRoutes', () => {
         headers: internalAuthHeader,
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
-    it('returns 502 when commentRepository fails', async () => {
+    it('returns 500 when commentRepository fails', async () => {
       fakeIssueRepo.seedIssue(testIssue);
       fakeCommentRepo.setListByIssueIdFailure(true, { code: 'INTERNAL_ERROR', message: 'Comment DB error' });
 
@@ -2006,10 +2020,10 @@ describe('internalIssuesRoutes', () => {
         headers: internalAuthHeader,
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
     it('returns null description when issue has empty-string description', async () => {
@@ -2058,7 +2072,7 @@ describe('internalIssuesRoutes', () => {
       expect(body.error.code).toBe('UNAUTHORIZED');
     });
 
-    it('returns 502 when issueRepository.listByUserId fails', async () => {
+    it('returns 500 when issueRepository.listByUserId fails', async () => {
       fakeIssueRepo.setListByUserIdFailure(true, { code: 'INTERNAL_ERROR', message: 'DB error' });
 
       const response = await app.inject({
@@ -2067,10 +2081,10 @@ describe('internalIssuesRoutes', () => {
         headers: { ...internalAuthHeader, 'x-user-id': testUserId },
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
     it('returns 404 when issue not found', async () => {
@@ -2336,6 +2350,239 @@ describe('internalIssuesRoutes', () => {
       expect(body.data.descendants[0]?.labels).toEqual(['frontend']);
       expect(body.data.descendants[0]?.assigneeId).toBe('user-B');
       expect(body.data.descendants[0]?.state).toBe('Backlog');
+    });
+  });
+
+  describe('GET /internal/linear/issues/:issueId/direct-children', () => {
+    it('returns 401 when internal auth is missing', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/root-live-1/direct-children',
+        headers: { 'x-user-id': testUserId },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 401 when X-User-Id header is missing', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/root-live-1/direct-children',
+        headers: internalAuthHeader,
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns live direct children from Linear API', async () => {
+      const child1: LinearIssue = {
+        id: 'child-1',
+        identifier: 'ENG-501',
+        title: 'Child One',
+        description: null,
+        priority: 2,
+        state: { id: 'state-1', name: 'Backlog', type: 'backlog' },
+        url: 'https://linear.app/test/ENG-501',
+        createdAt: '2024-01-02T00:00:00.000Z',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+        completedAt: null,
+        parentId: 'root-live-1',
+        childCount: 0,
+        children: [],
+        labels: [{ id: 'label-1', name: 'code-task', color: '#000000' }],
+        assignee: { id: 'user-1', name: 'Ada' },
+      };
+      const child2: LinearIssue = {
+        id: 'child-2',
+        identifier: 'ENG-502',
+        title: 'Child Two',
+        description: null,
+        priority: 1,
+        state: { id: 'state-2', name: 'In Progress', type: 'started' },
+        url: 'https://linear.app/test/ENG-502',
+        createdAt: '2024-01-03T00:00:00.000Z',
+        updatedAt: '2024-01-03T00:00:00.000Z',
+        completedAt: null,
+        parentId: 'root-live-1',
+        childCount: 0,
+        children: [],
+        labels: [{ id: 'label-2', name: 'backend', color: '#ffffff' }],
+        assignee: null,
+      };
+      fakeLinearClient.seedIssue({
+        id: 'root-live-1',
+        identifier: 'ENG-500',
+        title: 'Root Live',
+        description: null,
+        priority: 0,
+        state: { id: 'state-0', name: 'Backlog', type: 'backlog' },
+        url: 'https://linear.app/test/ENG-500',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        completedAt: null,
+        parentId: null,
+        childCount: 2,
+        children: [child1, child2],
+        labels: [],
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/root-live-1/direct-children',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          id: string;
+          identifier: string;
+          parentId: string | null;
+          labels: string[];
+          assigneeId: string | null;
+          state: string;
+        }[];
+      };
+      expect(body.success).toBe(true);
+      expect(body.data).toEqual([
+        expect.objectContaining({
+          id: 'child-1',
+          identifier: 'ENG-501',
+          parentId: 'root-live-1',
+          labels: ['code-task'],
+          assigneeId: 'user-1',
+          state: 'Backlog',
+        }),
+        expect.objectContaining({
+          id: 'child-2',
+          identifier: 'ENG-502',
+          parentId: 'root-live-1',
+          labels: ['backend'],
+          assigneeId: null,
+          state: 'In Progress',
+        }),
+      ]);
+    });
+
+    it('normalizes missing child parentId to null in the response', async () => {
+      const { parentId: _unusedParentId, ...childWithoutParentId }: LinearIssue = {
+        id: 'child-1',
+        identifier: 'ENG-501',
+        title: 'Child One',
+        description: null,
+        priority: 0,
+        state: { id: 'state-0', name: 'Backlog', type: 'backlog' as const },
+        url: 'https://linear.app/test/ENG-501',
+        createdAt: '2024-01-02T00:00:00.000Z',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+        completedAt: null,
+        parentId: 'root-live-1',
+        childCount: 0,
+        children: [],
+        labels: [{ id: 'label-1', name: 'code-task', color: '#000000' }],
+        assignee: { id: 'user-1', name: 'Pat' },
+      };
+
+      fakeLinearClient.seedIssue({
+        id: 'root-live-1',
+        identifier: 'ENG-500',
+        title: 'Root Live',
+        description: null,
+        priority: 0,
+        state: { id: 'state-0', name: 'Backlog', type: 'backlog' },
+        url: 'https://linear.app/test/ENG-500',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        completedAt: null,
+        parentId: null,
+        childCount: 1,
+        children: [childWithoutParentId],
+        labels: [],
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/root-live-1/direct-children',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { id: string; parentId: string | null }[];
+      };
+      expect(body.success).toBe(true);
+      expect(body.data).toEqual([
+        expect.objectContaining({
+          id: 'child-1',
+          parentId: null,
+        }),
+      ]);
+    });
+
+    it('returns 404 when live parent issue is not found', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/missing-parent/direct-children',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns Linear client errors when API key lookup fails', async () => {
+      fakeConnectionRepo.setApiKeyFailure(true, { code: 'INTERNAL_ERROR', message: 'lookup failed' });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/root-live-1/direct-children',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns FORBIDDEN when user has no Linear API key', async () => {
+      await fakeConnectionRepo.disconnect(testUserId);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/root-live-1/direct-children',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('returns downstream errors from getDirectChildren', async () => {
+      fakeLinearClient.setFailure(true, { code: 'API_ERROR', message: 'linear down' });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/root-live-1/direct-children',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
     });
   });
 });

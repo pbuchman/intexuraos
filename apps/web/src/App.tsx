@@ -21,7 +21,7 @@ import {
   ApiKeysSettingsPage,
   BookmarksListPage,
   CalendarPage,
-  CodeTaskViewPageV2,
+  CodeTaskViewPage,
   CodeTaskNewPage,
   CodeTasksPage,
   CronExecutionsPage,
@@ -46,6 +46,7 @@ import {
   LlmCostsPage,
   LinearConnectionPage,
   LinearIssuesPage,
+  LinearPruneCandidatesPage,
   ResearchAgentPage,
   LlmPricingPage,
   LoginPage,
@@ -139,9 +140,9 @@ function BookmarkDetailRedirect(): React.JSX.Element {
   return <Navigate to={`/my-bookmarks?id=${id ?? ''}`} replace />;
 }
 
-function CodeTaskViewPageV2Keyed(): React.JSX.Element {
+function CodeTaskViewPageKeyed(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
-  return <CodeTaskViewPageV2 key={id} />;
+  return <CodeTaskViewPage key={id} />;
 }
 
 function CodeTaskViewRedirect(): React.JSX.Element {
@@ -328,7 +329,7 @@ function AppRoutes(): React.JSX.Element {
         path="/code-tasks/:id"
         element={
           <ProtectedRoute>
-            <CodeTaskViewPageV2Keyed />
+            <CodeTaskViewPageKeyed />
           </ProtectedRoute>
         }
       />
@@ -541,6 +542,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <CalendarPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/linear/prune-candidates"
+        element={
+          <ProtectedRoute>
+            <LinearPruneCandidatesPage />
           </ProtectedRoute>
         }
       />

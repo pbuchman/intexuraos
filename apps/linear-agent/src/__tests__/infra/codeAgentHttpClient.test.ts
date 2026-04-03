@@ -1,7 +1,8 @@
 /**
  * Tests for codeAgentHttpClient.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { type Logger } from '@intexuraos/common-core';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import nock from 'nock';
 import pino from 'pino';
 import { createCodeAgentHttpClient, type CodeAgentClient } from '../../infra/http/codeAgentHttpClient.js';
@@ -9,12 +10,20 @@ import { createCodeAgentHttpClient, type CodeAgentClient } from '../../infra/htt
 const BASE_URL = 'http://code-agent-test';
 const INTERNAL_AUTH_TOKEN = 'test-auth-token';
 
-function createTestClient(timeoutMs = 5000): CodeAgentClient {
-  const logger = pino({ level: 'silent' });
+function createTestClient(timeoutMs = 5000, logger: Logger = pino({ level: 'silent' })): CodeAgentClient {
   return createCodeAgentHttpClient(
     { baseUrl: BASE_URL, internalAuthToken: INTERNAL_AUTH_TOKEN, timeoutMs },
     logger
   );
+}
+
+function createMockLogger(): Logger {
+  return {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  };
 }
 
 const validRequest = {
@@ -157,5 +166,153 @@ describe('createCodeAgentHttpClient', () => {
         expect(result.error.code).toBe('UNKNOWN');
       }
     });
+  });
+});
+
+describe('notifyGroupSummaryRecompute', () => {
+  const validRecomputeRequest = {
+    userId: 'user-123',
+    linearIssueId: 'INT-456',
+    labels: [
+      { id: 'label-1', name: 'ready-to-implement' },
+      { id: 'label-2', name: 'feature' },
+    ],
+    sourceTimestamp: '2026-04-02T12:34:56.000Z',
+  };
+
+  beforeEach(() => {
+    nock.cleanAll();
+  });
+
+  afterEach(() => {
+    nock.cleanAll();
+  });
+
+  it('sends correct POST and returns ok(undefined) on 200', async () => {
+    let capturedBody: unknown;
+    nock(BASE_URL)
+      .post('/internal/code/group-summary/recompute', (body) => {
+        capturedBody = body;
+        return true;
+      })
+      .reply(200, { success: true });
+
+    const client = createTestClient();
+    const result = await client.notifyGroupSummaryRecompute(validRecomputeRequest);
+
+    expect(result.ok).toBe(true);
+      expect(capturedBody).toEqual({
+        userId: 'user-123',
+        linearIssueId: 'INT-456',
+        labels: [
+          { id: 'label-1', name: 'ready-to-implement' },
+          { id: 'label-2', name: 'feature' },
+        ],
+        sourceTimestamp: '2026-04-02T12:34:56.000Z',
+      });
+  });
+
+  it('sends X-Internal-Auth header', async () => {
+    let capturedHeaders: Record<string, string> = {};
+    nock(BASE_URL)
+      .post('/internal/code/group-summary/recompute')
+      .reply(function () {
+        capturedHeaders = this.req.headers as Record<string, string>;
+        return [200, { success: true }];
+      });
+
+    const client = createTestClient();
+    await client.notifyGroupSummaryRecompute(validRecomputeRequest);
+
+    expect(capturedHeaders['x-internal-auth']).toBe(INTERNAL_AUTH_TOKEN);
+  });
+
+  it('returns INVALID_REQUEST on 4xx response', async () => {
+    nock(BASE_URL)
+      .post('/internal/code/group-summary/recompute')
+      .reply(400, 'Bad request body');
+
+    const client = createTestClient();
+    const result = await client.notifyGroupSummaryRecompute(validRecomputeRequest);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INVALID_REQUEST');
+      expect(result.error.message).toContain('Bad request body');
+    }
+  });
+
+  it('returns INVALID_REQUEST on 404 response', async () => {
+    nock(BASE_URL)
+      .post('/internal/code/group-summary/recompute')
+      .reply(404, 'Not found');
+
+    const client = createTestClient();
+    const result = await client.notifyGroupSummaryRecompute(validRecomputeRequest);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INVALID_REQUEST');
+    }
+  });
+
+  it('logs 404 response at info level', async () => {
+    const logger = createMockLogger();
+    nock(BASE_URL)
+      .post('/internal/code/group-summary/recompute')
+      .reply(404, 'Not found');
+
+    const client = createTestClient(5000, logger);
+    await client.notifyGroupSummaryRecompute(validRecomputeRequest);
+
+    expect(logger.info).toHaveBeenCalledWith(
+      { status: 404, error: 'Not found', linearIssueId: 'INT-456' },
+      'code-agent notifyGroupSummaryRecompute failed'
+    );
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('logs non-404 4xx response at warn level', async () => {
+    const logger = createMockLogger();
+    nock(BASE_URL)
+      .post('/internal/code/group-summary/recompute')
+      .reply(400, 'Bad request body');
+
+    const client = createTestClient(5000, logger);
+    await client.notifyGroupSummaryRecompute(validRecomputeRequest);
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      { status: 400, error: 'Bad request body', linearIssueId: 'INT-456' },
+      'code-agent notifyGroupSummaryRecompute failed'
+    );
+  });
+
+  it('returns UNAVAILABLE on 5xx response', async () => {
+    nock(BASE_URL)
+      .post('/internal/code/group-summary/recompute')
+      .reply(500, 'Internal server error');
+
+    const client = createTestClient();
+    const result = await client.notifyGroupSummaryRecompute(validRecomputeRequest);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('UNAVAILABLE');
+      expect(result.error.message).toBe('code-agent unavailable');
+    }
+  });
+
+  it('returns UNKNOWN on network error', async () => {
+    nock(BASE_URL)
+      .post('/internal/code/group-summary/recompute')
+      .replyWithError('Connection refused');
+
+    const client = createTestClient();
+    const result = await client.notifyGroupSummaryRecompute(validRecomputeRequest);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('UNKNOWN');
+    }
   });
 });

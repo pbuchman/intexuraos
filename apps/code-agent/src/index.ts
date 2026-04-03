@@ -42,6 +42,8 @@ const PRODUCTION_ONLY_ENV = [
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_USER_SERVICE_URL',
   'INTEXURAOS_GEMINI_APP_API_KEY',
+  'INTEXURAOS_EXECUTION_MEMORY_ENABLED', // Feature flag for execution memory retrieval/distillation
+  'INTEXURAOS_OPENAI_APP_API_KEY', // OpenAI embeddings for execution memory retrieval/distillation
 ];
 
 // In E2E mode, only validate core env vars; others have sensible defaults
@@ -75,6 +77,7 @@ async function main(): Promise<void> {
     serviceUrl: config.serviceUrl,
     userServiceUrl: config.userServiceUrl,
     geminiAppApiKey: config.geminiAppApiKey,
+    openaiAppApiKey: config.openaiAppApiKey,
   });
 
   const { firestore, logger } = getServices();

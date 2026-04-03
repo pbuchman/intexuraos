@@ -11,6 +11,10 @@ import { getFirestore } from '@intexuraos/infra-firestore';
 import { TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
 import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { LlmModels, type ToolCallingClient } from '@intexuraos/llm-contract';
+import { createLlmClient, createToolCallingClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
+import { EmbeddingClient } from '@intexuraos/infra-gpt';
+import OpenAI from 'openai';
+import type { CreateEmbeddingResponse } from 'openai/resources';
 import type { CodeTaskRepository } from './domain/repositories/codeTaskRepository.js';
 import type { LogChunkRepository } from './domain/repositories/logChunkRepository.js';
 import type { LogLineRepository } from './domain/repositories/logLineRepository.js';
@@ -36,6 +40,7 @@ import { createStatusMirrorService, type StatusMirrorService } from './infra/ser
 import { createProcessHeartbeatUseCase, type ProcessHeartbeatUseCase } from './domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase, type DetectZombieTasksUseCase } from './domain/usecases/detectZombieTasks.js';
 import { createCleanupTaskLogsUseCase, type CleanupTaskLogsUseCase } from './domain/usecases/cleanupTaskLogs.js';
+import { createArchiveStaleGroupsUseCase, type ArchiveStaleGroupsUseCase } from './domain/usecases/archiveStaleGroups.js';
 import { createMetricsClient, createNoOpMetricsClient, type MetricsClient } from './infra/metrics.js';
 import { createWorkerSettingsRepository } from './infra/firestore/workerSettingsRepository.js';
 import { createWorkerHealthProbe } from './infra/services/workerHealthProbe.js';
@@ -44,6 +49,10 @@ import type { GitHubPREventRepository } from './domain/repositories/gitHubPREven
 import { createFirestoreGitHubPREventsRepository } from './infra/firestore/gitHubPREventsRepository.js';
 import type { TurnMetricsRepository } from './domain/repositories/turnMetricsRepository.js';
 import { createFirestoreTurnMetricsRepository } from './infra/repositories/firestoreTurnMetricsRepository.js';
+import type { ExecutionMemoryRepository } from './domain/repositories/executionMemoryRepository.js';
+import type { ExecutionMemoryApplicationRepository } from './domain/repositories/executionMemoryApplicationRepository.js';
+import { createFirestoreExecutionMemoryRepository } from './infra/repositories/firestoreExecutionMemoryRepository.js';
+import { createFirestoreExecutionMemoryApplicationRepository } from './infra/repositories/firestoreExecutionMemoryApplicationRepository.js';
 import type { GitHubPRSummaryRepository } from './domain/repositories/gitHubPRSummaryRepository.js';
 import { createFirestoreGitHubPRSummariesRepository } from './infra/firestore/gitHubPRSummariesRepository.js';
 import type { GitHubPRClient } from './domain/ports/gitHubPRClient.js';
@@ -55,7 +64,6 @@ import { CodeWorkerOutputRule, ActionableEventRule, ProtectedBaseBranchRule, Sen
 import { createWebhookDispatchService, type WebhookDispatchService, type CIFailureDispatchService } from './domain/services/gitHubDispatchService.js';
 import { createWebhookMessageBuilder } from './domain/services/gitHubMessageBuilder.js';
 import { ALLOWED_BOTS, CODE_WORKER_BOTS } from './routes/webhooks/github.js';
-import { createToolCallingClient } from '@intexuraos/llm-factory';
 import type { EventDecisionRepository } from './domain/repositories/eventDecisionRepository.js';
 import { createFirestoreEventDecisionRepository } from './infra/firestore/eventDecisionRepository.js';
 import type { DispatchRetryRepository } from './domain/repositories/dispatchRetryRepository.js';
@@ -80,9 +88,14 @@ import { createTaskEnqueueService } from './infra/services/taskEnqueueServiceImp
 import type { MergeQueueWatchRepository } from './domain/repositories/mergeQueueWatchRepository.js';
 import { createFirestoreMergeQueueWatchRepository } from './infra/firestore/mergeQueueWatchRepository.js';
 import { createUnauthorizedSenderCommentHandler } from './domain/services/unauthorizedSenderCommentHandler.js';
+import type { TaskGroupSummaryRepository } from './domain/ports/taskGroupSummaryRepository.js';
+import { createTaskGroupSummaryFirestoreRepository } from './infra/firestore/taskGroupSummaryFirestoreRepository.js';
+import { withGroupUpdates } from './infra/repositories/codeTaskRepositoryWithGroupUpdates.js';
 
 const GEMINI_TOOL_CALLING_MODEL = LlmModels.Gemini25Flash;
 const GEMINI_TOOL_CALLING_PRICING = TOOL_CALLING_PRICING[LlmModels.Gemini25Flash];
+const EXECUTION_MEMORY_MODEL = LlmModels.Gemini25Flash;
+const EXECUTION_MEMORY_USER_ID = 'system:execution-memory';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -100,6 +113,7 @@ export interface ServiceContainer {
   processHeartbeat: ProcessHeartbeatUseCase;
   detectZombieTasks: DetectZombieTasksUseCase;
   cleanupTaskLogs: CleanupTaskLogsUseCase;
+  archiveStaleGroups: ArchiveStaleGroupsUseCase;
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
   workerHealthProbe: WorkerHealthProbe;
@@ -123,7 +137,14 @@ export interface ServiceContainer {
   automationLog: AutomationLog;
   taskEnqueueService: TaskEnqueueService;
   mergeQueueWatchRepo: MergeQueueWatchRepository;
+  executionMemoryRepo?: ExecutionMemoryRepository;
+  executionMemoryApplicationRepo?: ExecutionMemoryApplicationRepository;
+  executionMemoryQueryClient?: LlmGenerateClient;
+  executionMemoryDistillerClient?: LlmGenerateClient;
+  executionMemoryEvaluatorClient?: LlmGenerateClient;
+  executionMemoryEmbeddingClient?: EmbeddingClient;
   // Optional so existing setServices() call sites in tests don't need updating
+  groupSummaryRepo?: TaskGroupSummaryRepository;
   createRemediationTaskFn?: (logger: Logger, request: CreateRemediationTaskRequest) => Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>>;
 }
 
@@ -142,6 +163,7 @@ export interface ServiceConfig {
   userServiceUrl: string;
   // GitHub Agent (INT-743)
   geminiAppApiKey: string;
+  openaiAppApiKey: string;
 }
 
 let container: ServiceContainer | null = null;
@@ -217,6 +239,10 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
         },
         descendants: [],
       }));
+    },
+    fetchDirectChildrenLive(request): ReturnType<LinearAgentClient['fetchDirectChildrenLive']> {
+      logger.info({ issueId: request.issueId }, '[E2E] Mock live direct children fetch');
+      return Promise.resolve(ok([]));
     },
     updateIssueMetadata(request): ReturnType<LinearAgentClient['updateIssueMetadata']> {
       logger.info(
@@ -296,7 +322,7 @@ export function initServices(config: ServiceConfig): void {
     : createLinearAgentHttpClient({
         baseUrl: config.linearAgentUrl,
         internalAuthToken: config.internalAuthToken,
-        timeoutMs: 30000,
+        timeoutMs: 60000,
       }, logger);
 
   const linearIssueService = createLinearIssueService({
@@ -336,7 +362,9 @@ export function initServices(config: ServiceConfig): void {
     },
   });
 
-  const codeTaskRepo = createFirestoreCodeTaskRepository({ firestore, logger });
+  const rawCodeTaskRepo = createFirestoreCodeTaskRepository({ firestore, logger });
+  const groupSummaryRepo = createTaskGroupSummaryFirestoreRepository({ firestore, logger });
+  const codeTaskRepo = withGroupUpdates(rawCodeTaskRepo, groupSummaryRepo, logger);
   const logLineRepo = createFirestoreLogLineRepository({ firestore, logger });
   const workerSettingsRepo = createWorkerSettingsRepository({ firestore, logger });
   const workerHealthProbe = createWorkerHealthProbe();
@@ -391,6 +419,42 @@ export function initServices(config: ServiceConfig): void {
         userId: 'system:github-agent',
         pricing: GEMINI_TOOL_CALLING_PRICING,
         logger,
+      })
+    : undefined;
+  const executionMemoryOpenAI = config.openaiAppApiKey !== ''
+    ? new OpenAI({ apiKey: config.openaiAppApiKey })
+    : undefined;
+  const executionMemoryQueryClient = config.geminiAppApiKey !== ''
+    ? createLlmClient({
+        apiKey: config.geminiAppApiKey,
+        model: EXECUTION_MEMORY_MODEL,
+        userId: EXECUTION_MEMORY_USER_ID,
+        pricing: GEMINI_TOOL_CALLING_PRICING,
+        logger,
+      })
+    : undefined;
+  const executionMemoryDistillerClient = config.geminiAppApiKey !== ''
+    ? createLlmClient({
+        apiKey: config.geminiAppApiKey,
+        model: EXECUTION_MEMORY_MODEL,
+        userId: EXECUTION_MEMORY_USER_ID,
+        pricing: GEMINI_TOOL_CALLING_PRICING,
+        logger,
+      })
+    : undefined;
+  const executionMemoryEvaluatorClient = config.geminiAppApiKey !== ''
+    ? createLlmClient({
+        apiKey: config.geminiAppApiKey,
+        model: EXECUTION_MEMORY_MODEL,
+        userId: EXECUTION_MEMORY_USER_ID,
+        pricing: GEMINI_TOOL_CALLING_PRICING,
+        logger,
+      })
+    : undefined;
+  const executionMemoryEmbeddingClient = executionMemoryOpenAI !== undefined
+    ? new EmbeddingClient({
+        embedFn: (text: string, model: string): Promise<CreateEmbeddingResponse> =>
+          executionMemoryOpenAI.embeddings.create({ model, input: text }),
       })
     : undefined;
 
@@ -450,6 +514,11 @@ export function initServices(config: ServiceConfig): void {
 
   const mergeQueueWatchRepo = createFirestoreMergeQueueWatchRepository({ logger });
   const eventDecisionRepo = createFirestoreEventDecisionRepository({ logger });
+  const executionMemoryRepo = createFirestoreExecutionMemoryRepository({ firestore, logger });
+  const executionMemoryApplicationRepo = createFirestoreExecutionMemoryApplicationRepository({
+    firestore,
+    logger,
+  });
 
   const unifiedEvaluator = createUnifiedEvaluator({
     webhookRules,
@@ -522,6 +591,10 @@ export function initServices(config: ServiceConfig): void {
       codeTaskRepository: codeTaskRepo,
       logger,
     }),
+    archiveStaleGroups: createArchiveStaleGroupsUseCase({
+      codeTaskRepository: codeTaskRepo,
+      logger,
+    }),
     metricsClient,
     workerSettingsRepo,
     workerHealthProbe,
@@ -543,6 +616,13 @@ export function initServices(config: ServiceConfig): void {
     automationLog,
     taskEnqueueService,
     mergeQueueWatchRepo,
+    executionMemoryRepo,
+    executionMemoryApplicationRepo,
+    ...(executionMemoryQueryClient !== undefined && { executionMemoryQueryClient }),
+    ...(executionMemoryDistillerClient !== undefined && { executionMemoryDistillerClient }),
+    ...(executionMemoryEvaluatorClient !== undefined && { executionMemoryEvaluatorClient }),
+    ...(executionMemoryEmbeddingClient !== undefined && { executionMemoryEmbeddingClient }),
+    groupSummaryRepo,
     createRemediationTaskFn: (taskLogger: Logger, request: CreateRemediationTaskRequest): Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>> => createRemediationTask(
       {
         logger: taskLogger,

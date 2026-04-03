@@ -20,6 +20,7 @@ import type {
   GeneratedTitle,
   AddCommentRequest,
   AddCommentResponse,
+  IssueTreeNode,
   IssueTreeResponse,
   LinearAgentError,
   LinearIssueForDisplay,
@@ -382,6 +383,37 @@ export function createLinearAgentHttpClient(
           return err({ code: response.status === 404 ? 'NOT_FOUND' : 'UNAVAILABLE', message: errorText });
         }
         const body = await response.json() as { success: boolean; data?: IssueTreeResponse };
+        if (!body.success || body.data === undefined) {
+          return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
+        }
+        return ok(body.data);
+      } catch (error) {
+        return err({ code: 'UNKNOWN', message: String(error) });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    },
+
+    async fetchDirectChildrenLive(request): Promise<Result<IssueTreeNode[], LinearAgentError>> {
+      const url = `${baseUrl}/internal/linear/issues/${encodeURIComponent(request.issueId)}/direct-children`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'X-Internal-Auth': internalAuthToken,
+            'X-User-Id': request.userId,
+          },
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          return err({ code: response.status === 404 ? 'NOT_FOUND' : 'UNAVAILABLE', message: errorText });
+        }
+        const body = await response.json() as { success: boolean; data?: IssueTreeNode[] };
         if (!body.success || body.data === undefined) {
           return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
         }

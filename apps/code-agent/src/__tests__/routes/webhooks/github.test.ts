@@ -24,13 +24,38 @@ import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import type { GitHubPRSummaryRepository } from '../../../domain/repositories/gitHubPRSummaryRepository.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
 import { ActionableEventRule, SenderWhitelistRule, SkipPrefixRule, createWebhookRulesService } from '../../../domain/services/gitHubWebhookRules.js';
-import { ALLOWED_BOTS, type GitHubWebhookBody } from '../../../routes/webhooks/github.js';
+import { ALLOWED_BOTS, resolvePrCloseSourceTimestamp, type GitHubWebhookBody } from '../../../routes/webhooks/github.js';
 import type { GitHubWebhookAuditEventRepository } from '../../../domain/repositories/gitHubWebhookAuditEventRepository.js';
 import type { GitHubEventLogEntryRepository } from '../../../domain/repositories/gitHubEventLogEntryRepository.js';
 import type { EventDecisionRepository } from '../../../domain/repositories/eventDecisionRepository.js';
 import { waitForDetachedAsync, waitForSettlement } from '../../helpers/waitForDetachedAsync.js';
 
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
+
+describe('resolvePrCloseSourceTimestamp', () => {
+  it('prefers closed_at when present', () => {
+    expect(resolvePrCloseSourceTimestamp({
+      closedAt: '2026-03-21T02:00:00Z',
+      mergedAt: new Date('2026-03-21T01:00:00Z'),
+    })).toBe('2026-03-21T02:00:00Z');
+  });
+
+  it('falls back to mergedAt when closed_at is absent', () => {
+    expect(resolvePrCloseSourceTimestamp({
+      closedAt: null,
+      mergedAt: new Date('2026-03-21T01:00:00Z'),
+    })).toBe('2026-03-21T01:00:00.000Z');
+  });
+
+  it('falls back to current time when neither closed_at nor mergedAt is available', () => {
+    const result = resolvePrCloseSourceTimestamp({
+      closedAt: undefined,
+      mergedAt: null,
+    });
+
+    expect(Number.isNaN(Date.parse(result))).toBe(false);
+  });
+});
 
 describe('POST /webhooks/github', () => {
   let app: FastifyInstance;
@@ -112,6 +137,7 @@ describe('POST /webhooks/github', () => {
       deleteTask: vi.fn().mockResolvedValue(ok(undefined)),
       listQueuedByAge: vi.fn().mockResolvedValue(ok([])),
       listQueued: vi.fn().mockResolvedValue(ok([])),
+      listPendingExecutionMemoryPostRun: vi.fn().mockResolvedValue(ok([])),
       countQueued: vi.fn().mockResolvedValue(ok(0)),
       findRecentTasksByLinearIssue: vi.fn().mockResolvedValue(ok([])),
       findPlannedTaskByLinearIssue: vi.fn().mockResolvedValue(ok(null)),
@@ -119,6 +145,8 @@ describe('POST /webhooks/github', () => {
       findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
       findRecentRemediationForPR: vi.fn().mockResolvedValue(ok(null)),
       findPreservedPullRequestTask: vi.fn().mockResolvedValue(ok(null)),
+      listAllNonArchived: vi.fn().mockResolvedValue(ok([])),
+      listAllNonArchivedGlobal: vi.fn().mockResolvedValue(ok([])),
     };
 
     // Create mock PR summary repo
@@ -206,6 +234,7 @@ describe('POST /webhooks/github', () => {
       processHeartbeat: {} as never,
       detectZombieTasks: {} as never,
       cleanupTaskLogs: {} as never,
+      archiveStaleGroups: {} as never,
       metricsClient: {} as never,
       workerSettingsRepo: {} as never,
       workerHealthProbe: {} as never,
@@ -3325,15 +3354,17 @@ describe('POST /webhooks/github', () => {
     });
   });
 
-  describe('PR merge → QA transition', () => {
+  describe('PR close → handlePrClose (merge transitions + label cleanup)', () => {
     let mockMarkQa: ReturnType<typeof vi.fn>;
+    let mockRemoveLabel: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
       mockMarkQa = vi.fn().mockResolvedValue(undefined);
-      Object.assign(mockServices, { linearIssueService: { markQa: mockMarkQa, markTodo: vi.fn().mockResolvedValue(undefined) } });
+      mockRemoveLabel = vi.fn().mockResolvedValue(undefined);
+      Object.assign(mockServices, { linearIssueService: { markQa: mockMarkQa, markTodo: vi.fn().mockResolvedValue(undefined), removeLabel: mockRemoveLabel } });
     });
 
-    it('should call handlePrMerge when PR is closed with merge', async () => {
+    it('should transition to QA and remove label when PR is closed with merge', async () => {
       vi.mocked(mockServices.codeTaskRepo.findByPR).mockResolvedValue(
         ok({
           id: 'task_merge-1',
@@ -3371,15 +3402,24 @@ describe('POST /webhooks/github', () => {
       expect(mockMarkQa).toHaveBeenCalledWith('merge-user', 'INT-999');
     });
 
-    it('should NOT call handlePrMerge when PR is closed without merge', async () => {
+    it('should remove label but NOT transition state when PR closed without merge', async () => {
+      vi.mocked(mockServices.codeTaskRepo.findByPR).mockResolvedValue(
+        ok({
+          id: 'task_close-1',
+          userId: 'close-user',
+          linearIssueId: 'INT-888',
+        } as never)
+      );
+
       const closedPayload = createPullRequestPayload({
         action: 'closed',
         pull_request: {
           id: 101,
           number: 123,
-          title: 'Test PR',
+          title: '[INT-888] Test PR',
           body: 'Test description',
           state: 'closed',
+          closed_at: '2026-03-21T02:00:00Z',
           merged_at: null,
         },
       });
@@ -3397,11 +3437,12 @@ describe('POST /webhooks/github', () => {
         body: payload,
       });
 
-      await waitForDetachedAsync(() => vi.mocked(mockServices.unifiedEvaluator.evaluate).mock.calls.length >= 1);
+      await waitForDetachedAsync(() => mockRemoveLabel.mock.calls.length >= 1);
+      expect(mockRemoveLabel).toHaveBeenCalledWith('close-user', 'INT-888', 'ready-to-merge');
       expect(mockMarkQa).not.toHaveBeenCalled();
     });
 
-    it('should NOT call handlePrMerge when PR is opened', async () => {
+    it('should NOT call handlePrClose when PR is opened', async () => {
       const openedPayload = createPullRequestPayload({ action: 'opened' });
 
       const { payload, signature } = signPayload(openedPayload);
@@ -3419,6 +3460,7 @@ describe('POST /webhooks/github', () => {
 
       await waitForDetachedAsync(() => vi.mocked(mockServices.unifiedEvaluator.evaluate).mock.calls.length >= 1);
       expect(mockMarkQa).not.toHaveBeenCalled();
+      expect(mockRemoveLabel).not.toHaveBeenCalled();
     });
   });
 });

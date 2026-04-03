@@ -186,6 +186,7 @@ const createTestConfig = (overrides: Partial<WorkerConfig> = {}): WorkerConfig =
     SENTRY_AUTH_TOKEN: 'test-sentry-token',
     MINIMAX_API_KEY: 'test-minimax-key',
     DASHSCOPE_API_KEY: 'test-dashscope-key',
+    OPENROUTER_API_KEY: 'test-openrouter-key',
   },
   gcpSaKeyPath: '/test/gcp-sa.json',
   githubAppKeyPath: '/test/github-key.pem',
@@ -1039,6 +1040,115 @@ describe('DockerProvider', () => {
     });
   });
 
+  describe('isResumeAvailable', () => {
+    it('returns true when preserved worker container is running', async () => {
+      const config = createTestConfig({ taskId: 'resume-task-1' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('resume-task-1');
+
+      const result = await provider.isResumeAvailable('resume-task-1');
+
+      expect(result).toBe(true);
+    });
+
+    it('returns false and cleans up preserved entry when container is stopped', async () => {
+      const config = createTestConfig({ taskId: 'resume-task-2' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('resume-task-2');
+
+      mocks.mockContainer.inspect.mockResolvedValueOnce({ State: { Running: false } });
+
+      const result = await provider.isResumeAvailable('resume-task-2');
+
+      expect(result).toBe(false);
+      expect(await provider.listPreservedWorkers()).toHaveLength(0);
+    });
+
+    it('returns false and cleans up preserved entry when container no longer exists', async () => {
+      const config = createTestConfig({ taskId: 'resume-task-3' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('resume-task-3');
+
+      mocks.mockContainer.inspect.mockRejectedValueOnce(new Error('No such container'));
+
+      const result = await provider.isResumeAvailable('resume-task-3');
+
+      expect(result).toBe(false);
+      expect(await provider.listPreservedWorkers()).toHaveLength(0);
+    });
+
+    it('returns false when no container entry exists and orphan lookup fails', async () => {
+      mocks.mockContainer.inspect.mockRejectedValueOnce(new Error('No such container'));
+
+      const result = await provider.isResumeAvailable('nonexistent-task');
+
+      expect(result).toBe(false);
+    });
+
+    it('returns true for running orphaned container when no map entry exists', async () => {
+      mocks.mockContainer.inspect.mockResolvedValueOnce({ State: { Running: true } });
+
+      const result = await provider.isResumeAvailable('orphan-task');
+
+      expect(result).toBe(true);
+    });
+
+    it('returns false for stopped orphaned container when no map entry exists', async () => {
+      mocks.mockContainer.inspect.mockResolvedValueOnce({ State: { Running: false } });
+
+      const result = await provider.isResumeAvailable('orphan-task-stopped');
+
+      expect(result).toBe(false);
+    });
+
+    it('returns false for stopped active worker container (not preserved)', async () => {
+      // Container in workers map (not preservedWorkers) — preserved is undefined
+      const config = createTestConfig({ taskId: 'active-stopped-task' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      mocks.mockContainer.inspect.mockResolvedValueOnce({ State: { Running: false } });
+
+      const result = await provider.isResumeAvailable('active-stopped-task');
+
+      expect(result).toBe(false);
+      // preservedWorkers should not be touched since task was never preserved
+      expect(await provider.listPreservedWorkers()).toHaveLength(0);
+    });
+  });
+
+  describe('preserved container restore with stopped container', () => {
+    it('falls through to new container creation when preserved container is stopped', async () => {
+      const config = createTestConfig({ taskId: 'stale-preserved-task' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('stale-preserved-task');
+
+      expect(await provider.listPreservedWorkers()).toHaveLength(1);
+
+      // Preserved container is stopped, and no orphan container exists either
+      mocks.mockContainer.inspect.mockResolvedValueOnce({ State: { Running: false } });
+      mocks.mockContainer.inspect.mockRejectedValueOnce(new Error('No such container'));
+      mocks.mockDocker.createContainer.mockClear();
+
+      await provider.createWorker(
+        createTestConfig({
+          taskId: 'stale-preserved-task',
+          continueSession: true,
+          prompt: 'Resume prompt',
+        })
+      );
+
+      // Should have fallen through to create new container
+      expect(mocks.mockDocker.createContainer).toHaveBeenCalled();
+      // Stale preserved entry should be cleaned up
+      expect(await provider.listPreservedWorkers()).toHaveLength(0);
+    });
+  });
+
   describe('startup failure cleanup', () => {
     it('cleans up secrets and session dirs on image pull failure', async () => {
       const fs = await import('node:fs');
@@ -1260,6 +1370,20 @@ describe('DockerProvider', () => {
       const envArr = createCall?.Env as string[];
       const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
       expect(modelEntry).toBe('ANTHROPIC_MODEL=MiniMax-M2.7');
+    });
+
+    it('sets OpenRouter env vars for openrouter-free worker', async () => {
+      const config = createTestConfig({ workerType: 'openrouter-free' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const baseUrlEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='));
+      expect(baseUrlEntry).toBe('ANTHROPIC_BASE_URL=https://openrouter.ai/api');
+      const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
+      expect(modelEntry).toBe('ANTHROPIC_MODEL=qwen/qwen3.6-plus:free');
+      const effortEntry = envArr.find((e: string) => e.startsWith('CLAUDE_CODE_EFFORT_LEVEL='));
+      expect(effortEntry).toBe('CLAUDE_CODE_EFFORT_LEVEL=high');
     });
 
     it('sets CLAUDE_CODE_EFFORT_LEVEL for opus worker', async () => {
@@ -2685,6 +2809,7 @@ describe('DockerProvider', () => {
               SENTRY_AUTH_TOKEN: 'test',
               MINIMAX_API_KEY: 'test',
               DASHSCOPE_API_KEY: 'test',
+              OPENROUTER_API_KEY: 'test',
             },
           })
         )
@@ -2762,6 +2887,7 @@ describe('DockerProvider', () => {
             SENTRY_AUTH_TOKEN: 'test',
             MINIMAX_API_KEY: 'test',
             DASHSCOPE_API_KEY: 'test',
+            OPENROUTER_API_KEY: 'test',
           },
         })
       );
@@ -4139,6 +4265,142 @@ describe('DockerProvider', () => {
       const binds = createCall?.HostConfig?.Binds as string[];
       const gitBinds = binds.filter((b: string) => b.includes('.git:') && !b.includes('/repo:'));
       expect(gitBinds).toHaveLength(0);
+    });
+  });
+
+  describe('captureSegfaultForensics error handling', () => {
+    it('writes String(error) when execInstance.inspect throws a non-Error', async () => {
+      const fsModule = await import('node:fs');
+
+      const mockExecInstance = {
+        inspect: vi.fn().mockRejectedValue('connection lost' as unknown as Error),
+      };
+
+      const mockContainer = {
+        inspect: vi.fn().mockResolvedValue({ State: { Running: false } }),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (provider as any).captureSegfaultForensics(
+        'segfault-task',
+        mockContainer,
+        mockExecInstance,
+        '/tmp/forensics/segfault-1',
+        '/var/crash/segfault-1'
+      );
+
+      const writeFileCalls = (fsModule.promises.writeFile as ReturnType<typeof vi.fn>).mock.calls;
+      const errorTxtCall = writeFileCalls.find(
+        (c: unknown[]) =>
+          typeof c[0] === 'string' && (c[0] as string).includes('exec-inspect.error.txt')
+      );
+      expect(errorTxtCall).toBeDefined();
+      expect(errorTxtCall?.[1]).toBe('connection lost');
+    });
+  });
+
+  describe('orphan resume gcpSaKeyPath handling', () => {
+    it('skips gcp-sa.json copy when gcpSaKeyPath does not exist', async () => {
+      const fsModule = await import('node:fs');
+
+      (fsModule.existsSync as Mock).mockImplementation((filePath: unknown) => {
+        if (typeof filePath === 'string' && filePath.includes('gcp-sa.json')) {
+          return false;
+        }
+        return true;
+      });
+
+      mocks.mockContainer.inspect.mockResolvedValueOnce({
+        State: { Running: true },
+        Id: 'orphan-gcp-sa-test',
+      });
+      mocks.mockDocker.createContainer.mockClear();
+
+      const handle = await provider.createWorker(
+        createTestConfig({
+          taskId: 'orphan-gcp-sa-task',
+          continueSession: true,
+        })
+      );
+
+      expect(handle.containerId).toBe('orphan-gcp-sa-test');
+
+      const copyFileCalls = (fsModule.promises.copyFile as ReturnType<typeof vi.fn>).mock.calls;
+      const gcpSaCopyCalls = copyFileCalls.filter(
+        (c: unknown[]) => typeof c[1] === 'string' && (c[1] as string).includes('gcp-sa.json')
+      );
+      expect(gcpSaCopyCalls).toHaveLength(0);
+    });
+
+    it('copies gcp-sa.json when gcpSaKeyPath exists', async () => {
+      const fsModule = await import('node:fs');
+
+      (fsModule.existsSync as Mock).mockImplementation(() => true);
+
+      mocks.mockContainer.inspect.mockResolvedValueOnce({
+        State: { Running: true },
+        Id: 'orphan-gcp-sa-copy',
+      });
+      mocks.mockDocker.createContainer.mockClear();
+
+      await provider.createWorker(
+        createTestConfig({
+          taskId: 'orphan-gcp-sa-copy-task',
+          continueSession: true,
+        })
+      );
+
+      const copyFileCalls = (fsModule.promises.copyFile as ReturnType<typeof vi.fn>).mock.calls;
+      const gcpSaCopyCalls = copyFileCalls.filter(
+        (c: unknown[]) => typeof c[1] === 'string' && (c[1] as string).includes('gcp-sa.json')
+      );
+      expect(gcpSaCopyCalls).toHaveLength(1);
+      expect(gcpSaCopyCalls?.[0]?.[0]).toBe('/test/gcp-sa.json');
+    });
+  });
+
+  describe('periodic cleanup idempotency', () => {
+    afterEach(() => {
+      provider.stopPeriodicCleanup();
+    });
+
+    it('startPeriodicCleanup is idempotent - second call does not log again', () => {
+      provider.startPeriodicCleanup();
+      const firstCallCount = (mockLogger.info as ReturnType<typeof vi.fn>).mock.calls.length;
+
+      provider.startPeriodicCleanup();
+      const secondCallCount = (mockLogger.info as ReturnType<typeof vi.fn>).mock.calls.length;
+
+      expect(secondCallCount).toBe(firstCallCount);
+    });
+
+    it('stopPeriodicCleanup does not throw when interval was never started', () => {
+      expect(() => provider.stopPeriodicCleanup()).not.toThrow();
+      expect(mockLogger.info).not.toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'Stopped periodic container cleanup' })
+      );
+    });
+  });
+
+  describe('health monitor idempotency', () => {
+    afterEach(() => {
+      provider.stopHealthMonitor();
+    });
+
+    it('startHealthMonitor is idempotent - second call is a no-op', () => {
+      provider.startHealthMonitor();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const intervalId = (provider as any).healthMonitorIntervalId;
+
+      provider.startHealthMonitor();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const intervalIdAfterSecond = (provider as any).healthMonitorIntervalId;
+
+      expect(intervalIdAfterSecond).toBe(intervalId);
+    });
+
+    it('stopHealthMonitor does not throw when interval was never started', () => {
+      expect(() => provider.stopHealthMonitor()).not.toThrow();
     });
   });
 });
