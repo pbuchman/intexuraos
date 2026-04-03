@@ -474,7 +474,8 @@ function clampField(value: string): string {
 }
 
 function parseJsonObject(response: string): unknown {
-  const match = /\{[\s\S]*\}/.exec(response);
+  const stripped = response.replace(/```(?:json)?\s*\n?([\s\S]*?)```/g, '$1');
+  const match = /\{[\s\S]*\}/.exec(stripped);
   if (match === null) {
     throw new Error('Response did not contain a JSON object');
   }
