@@ -13,18 +13,15 @@ import { PREventsGroup } from '@/components/PREventsGroup.js';
 import { useTaskView, useWorkersStatus } from '@/hooks';
 import { formatElapsedTime } from '@/utils/dateFormat';
 import type { CodeTask, WorkerStatusTag } from '@/types';
-import { V2TaskHeader } from '@/components/code-tasks/v2/V2TaskHeader.js';
-import { V2LogStream } from '@/components/code-tasks/v2/V2LogStream.js';
-import { V2TaskActions } from '@/components/code-tasks/v2/V2TaskActions.js';
-import { V2NextSteps } from '@/components/code-tasks/v2/V2NextSteps.js';
-import { EXECUTION_MEMORY_STATUS_STYLES, isActiveStatus } from '@/components/code-tasks/v2/shared.js';
-import type { WorkerType } from '@/components/code-tasks/v2/shared.js';
+import { TaskHeader } from '@/components/code-tasks/TaskHeader.js';
+import { LogStream } from '@/components/code-tasks/LogStream.js';
+import { TaskActions } from '@/components/code-tasks/TaskActions.js';
+import { NextSteps } from '@/components/code-tasks/NextSteps.js';
+import { ARCHIVABLE_STATUSES, EXECUTION_MEMORY_STATUS_STYLES, isActiveStatus } from '@/components/code-tasks/shared.js';
+import type { WorkerType } from '@/components/code-tasks/shared.js';
 import { hasImplementationReadyLabel, isTaskMergeable, getTaskMergeUrl } from '@/utils/issueGroups.js';
 
-/** Terminal statuses eligible for archive/delete actions. */
-const ARCHIVABLE_STATUSES: ReadonlySet<string> = new Set(['failed', 'cancelled', 'interrupted', 'planned', 'implemented', 'reviewed']);
-
-export function CodeTaskViewPageV2(): React.JSX.Element {
+export function CodeTaskViewPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const {
@@ -138,7 +135,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
 
   return (
     <Layout>
-      <MemoV2TaskHeader task={task} workerStatusTag={workerStatusTag} />
+      <MemoTaskHeader task={task} workerStatusTag={workerStatusTag} />
 
       <MemoActiveProgressCard task={task} />
 
@@ -159,7 +156,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
       <MemoTaskResultSection task={task} />
       {task.error !== undefined ? <MemoTaskErrorCard task={task} /> : null}
 
-      <MemoV2LogStream
+      <MemoLogStream
         logs={logs}
         isActive={isActive}
         listenerHealthy={listenerHealthy}
@@ -173,7 +170,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
         workerName={task.workerLocation}
       />
 
-      <MemoV2NextSteps
+      <MemoNextSteps
         isImplementable={isImplementable}
         implementing={implementing}
         implementError={implementError}
@@ -191,7 +188,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
         {...(mergeUrl !== undefined ? { mergeUrl } : {})}
       />
 
-      <MemoV2TaskActions
+      <MemoTaskActions
         isActive={isActive}
         cancelling={cancelling}
         cancelError={cancelError}
@@ -225,10 +222,10 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
 
 // --- Memo wrappers ---
 
-const MemoV2TaskHeader = memo(V2TaskHeader);
-const MemoV2LogStream = memo(V2LogStream);
-const MemoV2NextSteps = memo(V2NextSteps);
-const MemoV2TaskActions = memo(V2TaskActions);
+const MemoTaskHeader = memo(TaskHeader);
+const MemoLogStream = memo(LogStream);
+const MemoNextSteps = memo(NextSteps);
+const MemoTaskActions = memo(TaskActions);
 const MemoExecutionMemoryCard = memo(function ExecutionMemoryCard({ task }: { task: CodeTask }): React.JSX.Element | null {
   const context = task.executionMemoryContext;
   const postRun = task.executionMemoryPostRun;

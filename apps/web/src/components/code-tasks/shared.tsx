@@ -72,6 +72,9 @@ export function isActiveStatus(status: CodeTaskStatus): boolean {
   return status === 'queued' || status === 'dispatched' || status === 'running';
 }
 
+/** Terminal statuses eligible for archive/delete actions. */
+export const ARCHIVABLE_STATUSES: ReadonlySet<string> = new Set(['failed', 'cancelled', 'interrupted', 'planned', 'implemented', 'reviewed']);
+
 // --- Shared link buttons (used by TaskActions + NextSteps) ---
 
 export function GitHubButton({ href }: { href: string }): React.JSX.Element {

@@ -14,7 +14,7 @@ import { ApiError } from '@/services/apiClient';
 import { startImplementation, retryCodeTask, archiveCodeTask, deleteCodeTask } from '@/services/codeAgentApi';
 import type { ActioningType, GroupStatus, IssueGroup, SortOption } from '@/types/issueGroups';
 
-// V3 does not include 'archived' — backend excludes archived tasks
+// Backend excludes archived tasks
 const ALL_GROUP_STATUSES: GroupStatus[] = ['active', 'needs-action', 'done', 'failed'];
 
 const GROUP_STATUS_CONFIG: Record<GroupStatus, { label: string; dotClass: string; activeClass: string }> = {

@@ -4,7 +4,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { CodeTaskViewPageV2 } from '../pages/CodeTaskViewPageV2.js';
+import { CodeTaskViewPage } from '../pages/CodeTaskViewPage.js';
 import type { CodeTask } from '@/types';
 
 vi.mock('react-router-dom', () => ({
@@ -106,25 +106,25 @@ vi.mock('@/components/PREventsGroup.js', () => ({
   PREventsGroup: (): null => null,
 }));
 
-vi.mock('@/components/code-tasks/v2/V2TaskHeader.js', () => ({
-  V2TaskHeader: (): React.JSX.Element => <div>header</div>,
+vi.mock('@/components/code-tasks/TaskHeader.js', () => ({
+  TaskHeader: (): React.JSX.Element => <div>header</div>,
 }));
 
-vi.mock('@/components/code-tasks/v2/V2LogStream.js', () => ({
-  V2LogStream: (): React.JSX.Element => <div>logs</div>,
+vi.mock('@/components/code-tasks/LogStream.js', () => ({
+  LogStream: (): React.JSX.Element => <div>logs</div>,
 }));
 
-vi.mock('@/components/code-tasks/v2/V2TaskActions.js', () => ({
-  V2TaskActions: (): React.JSX.Element => <div>actions</div>,
+vi.mock('@/components/code-tasks/TaskActions.js', () => ({
+  TaskActions: (): React.JSX.Element => <div>actions</div>,
 }));
 
-vi.mock('@/components/code-tasks/v2/V2NextSteps.js', () => ({
-  V2NextSteps: (): React.JSX.Element => <div>next steps</div>,
+vi.mock('@/components/code-tasks/NextSteps.js', () => ({
+  NextSteps: (): React.JSX.Element => <div>next steps</div>,
 }));
 
-describe('CodeTaskViewPageV2 execution memory card', () => {
+describe('CodeTaskViewPage execution memory card', () => {
   it('renders matched memories, post-run status, and generated memory ids', () => {
-    render(<CodeTaskViewPageV2 />);
+    render(<CodeTaskViewPage />);
 
     expect(screen.getByText('Execution Memory')).toBeInTheDocument();
     expect(screen.getByText('Verify route serialization')).toBeInTheDocument();
@@ -137,7 +137,7 @@ describe('CodeTaskViewPageV2 execution memory card', () => {
   });
 
   it('renders emerald badge for matched status', () => {
-    render(<CodeTaskViewPageV2 />);
+    render(<CodeTaskViewPage />);
 
     const badges = screen.getAllByText('matched');
     expect(badges.length).toBeGreaterThanOrEqual(1);
@@ -153,7 +153,7 @@ describe('CodeTaskViewPageV2 execution memory card', () => {
     };
 
     try {
-      render(<CodeTaskViewPageV2 />);
+      render(<CodeTaskViewPage />);
 
       const badge = screen.getByText('error');
       expect(badge.className).toContain('bg-red-100');

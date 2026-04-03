@@ -9,7 +9,7 @@ import {
 import type { MessageStatus } from '@/hooks';
 import type { LogLine } from '@/hooks/useCodeTaskLogs.js';
 import type { CodeTaskStatus } from '@/types';
-import { V2MessageInput } from './v2/V2MessageInput.js';
+import { MessageInput } from './MessageInput.js';
 
 const TAG_RE = /^(?:\d{2}:\d{2}:\d{2}\.\d{3} )?\[(\w+)\]/;
 const TIMESTAMP_PREFIX_RE = /^\d{2}:\d{2}:\d{2}\.\d{3} /;
@@ -376,7 +376,7 @@ export function CodeTaskLogViewer({
 
         {showMessageInput ? (
           <div className="border-t border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
-            <V2MessageInput
+            <MessageInput
               onSendMessage={onSendMessage}
               sending={sending}
               sendError={sendError}
