@@ -4334,7 +4334,6 @@ describe('DockerProvider', () => {
 
     it('copies gcp-sa.json when gcpSaKeyPath exists', async () => {
       const fsModule = await import('node:fs');
-      vi.clearAllMocks();
 
       (fsModule.existsSync as Mock).mockImplementation(() => true);
 
@@ -4361,6 +4360,10 @@ describe('DockerProvider', () => {
   });
 
   describe('periodic cleanup idempotency', () => {
+    afterEach(() => {
+      provider.stopPeriodicCleanup();
+    });
+
     it('startPeriodicCleanup is idempotent - second call does not log again', () => {
       provider.startPeriodicCleanup();
       const firstCallCount = (mockLogger.info as ReturnType<typeof vi.fn>).mock.calls.length;
@@ -4380,6 +4383,10 @@ describe('DockerProvider', () => {
   });
 
   describe('health monitor idempotency', () => {
+    afterEach(() => {
+      provider.stopHealthMonitor();
+    });
+
     it('startHealthMonitor is idempotent - second call is a no-op', () => {
       provider.startHealthMonitor();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
