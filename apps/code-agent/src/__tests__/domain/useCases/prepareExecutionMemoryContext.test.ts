@@ -572,4 +572,21 @@ describe('prepareExecutionMemoryContext', () => {
     expect(prepareExecutionMemoryContextTestables.truncate('short', 10)).toBe('short');
     expect(prepareExecutionMemoryContextTestables.truncate('truncate-me', 5)).toBe('trunc');
   });
+
+  describe('parseJsonObject', () => {
+    it('strips markdown code fences before extracting JSON', () => {
+      const fenced = '```json\n{"key": "value"}\n```';
+      expect(prepareExecutionMemoryContextTestables.parseJsonObject(fenced)).toEqual({ key: 'value' });
+    });
+
+    it('strips plain code fences before extracting JSON', () => {
+      const fenced = '```\n{"key": "value"}\n```';
+      expect(prepareExecutionMemoryContextTestables.parseJsonObject(fenced)).toEqual({ key: 'value' });
+    });
+
+    it('extracts JSON from raw string without fences', () => {
+      const raw = '{"key": "value"}';
+      expect(prepareExecutionMemoryContextTestables.parseJsonObject(raw)).toEqual({ key: 'value' });
+    });
+  });
 });
