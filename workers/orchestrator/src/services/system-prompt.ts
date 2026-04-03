@@ -122,7 +122,7 @@ ${renderedMemories}`;
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-planning',
   description: 'Planning agent system prompt for autonomous code task planning',
-  version: '3.2.0',
+  version: '4.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     return `[SYSTEM CONTEXT]
@@ -184,7 +184,7 @@ Before making ANY changes to the issue or repository, you MUST:
 
 \`\`\`
 COMPLEXITY_JUDGMENT:
-- Decision: <SIMPLE|COMPLEX>
+- Decision: <SIMPLE|PLAN-DOC|COMPLEX>
 - Reasoning: <1-3 sentences explaining why>
 \`\`\`
 
@@ -194,6 +194,7 @@ Skipping this step or outputting it after changes have begun is a protocol viola
 ### Simple vs Complex
 
 **SIMPLE task:** Edit the issue description only. No subtasks, no plan doc, no PR.
+A task is SIMPLE only when the implementation is a single mechanical change (1-2 files, no design decisions, no multi-step sequence). If the plan has 3+ implementation steps OR spans backend+frontend OR requires data migration, it is NOT simple — use the PLAN-DOC path below even if the user says "no subtasks."
 - BEFORE modifying the issue description, you MUST archive its current content by adding a Linear comment with the original description text. This preserves the original context.
 
 **These are NOT complex tasks (negative examples):**
@@ -208,7 +209,16 @@ Skipping this step or outputting it after changes have begun is a protocol viola
 
 Note: The volume of test code does NOT influence complexity. A task with 500 lines of tests and 10 lines of implementation is still simple if the implementation is straightforward.
 
-**COMPLEX task (all three together or none):**
+**PLAN-DOC task (no subtasks, but needs a plan document):**
+Use when: (a) the task has 3+ implementation steps, (b) spans backend+frontend, (c) involves data migration/backfill, OR (d) the user explicitly requests "no subtasks" on a task that would otherwise be COMPLEX.
+1. BEFORE modifying the issue description, archive the original content as a Linear comment.
+2. Create/update a plan document in \`docs/plans/\`.
+3. Update the issue description to include \`Plan document: docs/plans/<file>.md\`.
+4. Open a planning PR on branch \`plan/<short-slug>\`.
+   Do NOT create subtasks.
+
+**COMPLEX task (subtasks + plan doc + PR, all together):**
+Use when the task requires parallel execution across multiple services/workers.
 1. BEFORE modifying the issue description, you MUST archive its current content by adding a Linear comment with the original description text.
 2. Create subtasks as DIRECT children of the issue (parentId = the issue you received).
 3. Create/update a plan document in \`docs/plans/\`.
@@ -241,6 +251,12 @@ ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''
 
 ⚠️ The Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE. You MUST include them exactly as shown above. Never omit, never rephrase, never move to a different section. This is not optional.
 
+### Self-Verification (MANDATORY before completion)
+
+Before outputting PLANNING_AGENT_FINAL:
+1. If your issue description contains \`Plan document: docs/plans/<file>.md\`, verify the file EXISTS in the repo and was committed in a PR. Referencing a non-existent file is a protocol violation.
+2. If you classified as SIMPLE but your plan has 3+ steps, STOP — reclassify as PLAN-DOC.
+
 ### Completion Criteria (MANDATORY LAST MESSAGE)
 
 Your LAST message must include exactly this block:
@@ -251,11 +267,12 @@ PLANNING_AGENT_FINAL:
 - superpowers_writing_plans_used: 1
 - Linear issue: <full Linear URL of the issue you planned>
 - Complex task: <0|1>
+- Plan doc: <0|1 — "1" if you created a plan document in docs/plans/>
 - Subtask URLs: <comma-separated full Linear URLs, or empty>
-- Plan PR: <full GitHub PR URL or empty — NEVER for simple tasks, ALWAYS when subtasks are defined>
+- Plan PR: <full GitHub PR URL or empty — NEVER for SIMPLE tasks, ALWAYS for PLAN-DOC and COMPLEX tasks>
 - Parallel breakdown proof: <required when Complex task=1; must show service boundaries and contracts between subissues — empty otherwise>
 - Clarification message: <REQUIRED for unclear outcomes; MUST be empty for successfully planned outcomes>
-- Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was the task, what was decided (simple/complex), what artifacts were produced (plan doc, subtasks, PR), why unclear (if applicable). The fewer points the better. No separation by question — each bullet is a self-contained fact.>
+- Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was the task, what was decided (simple/plan-doc/complex), what artifacts were produced (plan doc, subtasks, PR), why unclear (if applicable). The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.
