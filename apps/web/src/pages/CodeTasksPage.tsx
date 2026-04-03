@@ -51,15 +51,18 @@ const DEFAULT_FILTERS = ALL_GROUP_STATUSES;
 const SORT_OPTIONS: { key: SortOption; label: string }[] = [
   { key: 'linear-id', label: 'Linear' },
   { key: 'pr-number', label: 'PR#' },
-  { key: 'created-time', label: 'Created' },
-  { key: 'started-time', label: 'Dispatched' },
+  { key: 'last-updated', label: 'Updated' },
+  { key: 'dispatched', label: 'Dispatched' },
 ];
 
 function loadSortFromStorage(): SortOption {
   const stored = localStorage.getItem(SORT_STORAGE_KEY);
-  if (stored === 'linear-id' || stored === 'pr-number' || stored === 'started-time' || stored === 'created-time') {
+  if (stored === 'linear-id' || stored === 'pr-number' || stored === 'dispatched' || stored === 'last-updated') {
     return stored;
   }
+  // Backward compatibility: map legacy sort keys
+  if (stored === 'created-time') return 'last-updated';
+  if (stored === 'started-time') return 'dispatched';
   return 'linear-id';
 }
 

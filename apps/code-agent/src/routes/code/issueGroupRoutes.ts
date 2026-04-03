@@ -25,7 +25,7 @@ export interface CodeRoutesOptions {
 }
 
 const VALID_GROUP_STATUSES: ReadonlySet<string> = new Set(['active', 'needs-action', 'done', 'failed']);
-const VALID_SORT_OPTIONS: ReadonlySet<string> = new Set(['linear-id', 'pr-number', 'created-time', 'started-time']);
+const VALID_SORT_OPTIONS: ReadonlySet<string> = new Set(['linear-id', 'pr-number', 'dispatched', 'last-updated']);
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
@@ -152,7 +152,7 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
             type: 'object',
             properties: {
               groupStatus: { type: 'string', description: 'Comma-separated group statuses to filter by (active, needs-action, done, failed)' },
-              sortBy: { type: 'string', enum: ['linear-id', 'pr-number', 'created-time', 'started-time'], default: 'linear-id', description: 'Sort order for groups' },
+              sortBy: { type: 'string', enum: ['linear-id', 'pr-number', 'dispatched', 'last-updated'], default: 'linear-id', description: 'Sort order for groups' },
               limit: { type: 'number', minimum: 1, maximum: 100, default: 20, description: 'Maximum number of groups to return' },
               cursor: { type: 'string', description: 'Pagination cursor from previous response' },
             },
