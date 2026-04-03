@@ -14,10 +14,11 @@ Autonomous PR comment triage that processes GitHub review comments, fixes action
 ## Core Mandates
 
 1. **NEVER** process comments that already have 😄 from bot
-2. **ALWAYS** post summary comment after each run
-3. **ALWAYS** loop on CI failure until success
-4. **NEVER** watch `zai-claude-code-review.yml` workflow
-5. Process entire comment thread as one unit
+2. **ALWAYS** reply to each processed comment with fix/skip reasoning
+3. **ALWAYS** post summary comment after each run
+4. **ALWAYS** loop on CI failure until success
+5. **NEVER** watch `zai-claude-code-review.yml` workflow
+6. Process entire comment thread as one unit
 
 ## Invocation
 
