@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { V2TaskHeader } from '../V2TaskHeader.js';
+import { TaskHeader } from '../TaskHeader.js';
 import type { CodeTask } from '@/types';
 
 function createTask(overrides: Partial<CodeTask> = {}): CodeTask {
@@ -28,10 +28,10 @@ function createTask(overrides: Partial<CodeTask> = {}): CodeTask {
   };
 }
 
-describe('V2TaskHeader execution memory chip', () => {
+describe('TaskHeader execution memory chip', () => {
   it('renders matched, none, and error execution memory states', () => {
     const { rerender } = render(
-      <V2TaskHeader
+      <TaskHeader
         task={createTask({
           executionMemoryContext: {
             status: 'matched',
@@ -68,7 +68,7 @@ describe('V2TaskHeader execution memory chip', () => {
     expect(matchedChip.className).toContain('bg-emerald-100');
 
     rerender(
-      <V2TaskHeader
+      <TaskHeader
         task={createTask({
           executionMemoryContext: {
             status: 'none',
@@ -83,7 +83,7 @@ describe('V2TaskHeader execution memory chip', () => {
     expect(noneChip.className).toContain('bg-slate-100');
 
     rerender(
-      <V2TaskHeader
+      <TaskHeader
         task={createTask({
           executionMemoryContext: {
             status: 'error',

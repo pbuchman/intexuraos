@@ -8,7 +8,7 @@ import {
 import { GitHubButton, LinearButton, WORKER_TYPES, WORKER_TYPE_LABELS } from './shared.js';
 import type { WorkerType } from './shared.js';
 
-interface V2NextStepsProps {
+interface NextStepsProps {
   isImplementable: boolean;
   implementing: boolean;
   implementError: string | null;
@@ -26,7 +26,7 @@ interface V2NextStepsProps {
   mergeUrl?: string;
 }
 
-export function V2NextSteps({
+export function NextSteps({
   isImplementable,
   implementing,
   implementError,
@@ -42,7 +42,7 @@ export function V2NextSteps({
   linearIssueUrl,
   isMergeable,
   mergeUrl,
-}: V2NextStepsProps): React.JSX.Element | null {
+}: NextStepsProps): React.JSX.Element | null {
   const effectiveImplementationTaskIds =
     implementationTaskIds !== undefined && implementationTaskIds.length > 0
       ? implementationTaskIds
