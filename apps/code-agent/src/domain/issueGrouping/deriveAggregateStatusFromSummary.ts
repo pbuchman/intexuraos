@@ -4,6 +4,7 @@ export interface GroupSummaryFields {
   activeTaskCount: number;
   hasCompletedPlanning: boolean;
   hasCompletedExecution: boolean;
+  hasCompletedExecutionAgent: boolean;
   hasImplementationTaskId: boolean;
   hasPrUrl: boolean;
   latestTaskStatus: string;
@@ -17,6 +18,11 @@ export interface GroupSummaryFields {
 export function deriveAggregateStatusFromSummary(fields: GroupSummaryFields): GroupStatus {
   // 1. Active: any task is running/dispatched/queued
   if (fields.activeTaskCount > 0) {
+    return 'active';
+  }
+
+  // 1b. Active: execution agent completed but review hasn't cleared it
+  if (fields.hasCompletedExecutionAgent && fields.latestReviewNeedsRemediation !== false) {
     return 'active';
   }
 

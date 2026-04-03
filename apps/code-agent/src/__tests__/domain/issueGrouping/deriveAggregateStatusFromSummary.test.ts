@@ -6,6 +6,7 @@ const base = {
   activeTaskCount: 0,
   hasCompletedPlanning: false,
   hasCompletedExecution: false,
+  hasCompletedExecutionAgent: false,
   hasImplementationTaskId: false,
   hasPrUrl: false,
   latestTaskStatus: 'done',
@@ -27,6 +28,58 @@ describe('deriveAggregateStatusFromSummary', () => {
         hasImplementationTaskId: false,
       }),
     ).toBe('active');
+  });
+
+  it('returns active when execution agent completed but no review yet (latestReviewNeedsRemediation is null)', () => {
+    expect(
+      deriveAggregateStatusFromSummary({
+        ...base,
+        hasCompletedExecutionAgent: true,
+        latestReviewNeedsRemediation: null,
+      }),
+    ).toBe('active');
+  });
+
+  it('returns active when execution agent completed and review needs remediation (latestReviewNeedsRemediation is true)', () => {
+    expect(
+      deriveAggregateStatusFromSummary({
+        ...base,
+        hasCompletedExecutionAgent: true,
+        latestReviewNeedsRemediation: true,
+      }),
+    ).toBe('active');
+  });
+
+  it('does not return active for execution-agent-completed when review passed (latestReviewNeedsRemediation is false)', () => {
+    expect(
+      deriveAggregateStatusFromSummary({
+        ...base,
+        hasCompletedExecutionAgent: true,
+        latestReviewNeedsRemediation: false,
+      }),
+    ).not.toBe('active');
+  });
+
+  it('does not return active for hasCompletedExecutionAgent when activeTaskCount also > 0 (still active via rule 1)', () => {
+    expect(
+      deriveAggregateStatusFromSummary({
+        ...base,
+        activeTaskCount: 1,
+        hasCompletedExecutionAgent: true,
+        latestReviewNeedsRemediation: null,
+      }),
+    ).toBe('active');
+  });
+
+  it('does not trigger rule 1b when hasCompletedExecution is true but hasCompletedExecutionAgent is false (pull_request workflow)', () => {
+    expect(
+      deriveAggregateStatusFromSummary({
+        ...base,
+        hasCompletedExecution: true,
+        hasCompletedExecutionAgent: false,
+        latestReviewNeedsRemediation: null,
+      }),
+    ).not.toBe('active');
   });
 
   it('returns needs-action when planning completed, no execution, no implementationTaskId', () => {

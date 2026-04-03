@@ -72,6 +72,7 @@ function computeSummaryFromTasks(
 
   const hasCompletedPlanning = tasks.some((t) => t.agentType === 'planning' && t.status === 'planned');
   const hasCompletedExecution = tasks.some((t) => hasCompletedExecutionTask(t));
+  const hasCompletedExecutionAgent = tasks.some((t) => t.agentType === 'execution' && (t.status === 'implemented' || t.status === 'reviewed'));
   const hasImplementationTaskId = tasks.some(
     (t) => t.implementationTaskId !== undefined || (t.fanOutChildTaskIds !== undefined && t.fanOutChildTaskIds.length > 0),
   );
@@ -93,6 +94,7 @@ function computeSummaryFromTasks(
     activeTaskCount: tasks.filter((t) => ACTIVE_STATUSES.has(t.status)).length,
     hasCompletedPlanning,
     hasCompletedExecution,
+    hasCompletedExecutionAgent,
     hasImplementationTaskId,
     hasPrUrl,
     latestTaskStatus: latestTask.status,
@@ -112,6 +114,7 @@ function computeSummaryFromTasks(
     agentTypesPresent,
     hasCompletedPlanning,
     hasCompletedExecution,
+    hasCompletedExecutionAgent,
     hasImplementationTaskId,
     hasPrUrl,
     prNumber,
