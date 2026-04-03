@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { Loader2, Send, WifiOff } from 'lucide-react';
 import type { MessageStatus } from '@/hooks';
 
-interface V2MessageInputProps {
+interface MessageInputProps {
   onSendMessage: (message: string) => Promise<void>;
   sending: boolean;
   sendError: { code: string; message: string } | null;
@@ -11,7 +11,7 @@ interface V2MessageInputProps {
   workerName: string;
 }
 
-export function V2MessageInput({ onSendMessage, sending, sendError, messageStatus, workerOnline, workerName }: V2MessageInputProps): React.JSX.Element {
+export function MessageInput({ onSendMessage, sending, sendError, messageStatus, workerOnline, workerName }: MessageInputProps): React.JSX.Element {
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 

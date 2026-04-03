@@ -25,7 +25,7 @@ import { TaskEnqueueServiceImpl } from '../../../infra/services/taskEnqueueServi
 // Mock config
 vi.mock('../../../config.js', () => ({
   loadConfig: (): { queue: { maxSize: number; ttlMinutes: number } } => ({
-    queue: { maxSize: 50, ttlMinutes: 30 },
+    queue: { maxSize: 50, ttlMinutes: 1440 },
   }),
 }));
 

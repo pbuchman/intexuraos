@@ -1470,7 +1470,7 @@ module "code_agent" {
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
     INTEXURAOS_EXECUTION_MEMORY_ENABLED   = "true"
     INTEXURAOS_QUEUE_MAX_SIZE             = "50"
-    INTEXURAOS_QUEUE_TTL_MINUTES          = "30"
+    INTEXURAOS_QUEUE_TTL_MINUTES          = "1440"
     INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS   = "3"
     INTEXURAOS_RETRY_QUEUE_TTL_MINUTES    = "10"
     INTEXURAOS_ENABLE_METRICS             = "true"
