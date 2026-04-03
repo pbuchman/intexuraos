@@ -1,6 +1,6 @@
 import { memo, useState } from 'react';
 import { ChevronDown, ChevronRight, Play, RotateCcw, ExternalLink, Check, X, Loader2, Clock, ScrollText, Trash2, GitMerge, Archive } from 'lucide-react';
-import type { ActioningType, IssueGroup, StepState } from '@/utils/issueGroups';
+import type { ActioningType, IssueGroup, StepState } from '@/types/issueGroups';
 import { formatRelative } from '@/utils/dateFormat';
 import { IssueTimeline } from '@/components/code-tasks/IssueTimeline';
 
