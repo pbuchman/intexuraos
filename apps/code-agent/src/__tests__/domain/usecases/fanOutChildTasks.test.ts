@@ -151,7 +151,6 @@ describe('fanOutChildTasks', () => {
         implementationTaskId: expect.any(String),
         fanOutChildTaskIds: expect.arrayContaining(createdTaskIds),
       }),
-      expect.anything(),
     );
     expect(mockCodeTaskRepo.create).toHaveBeenCalledTimes(2);
     expect(mockCodeTaskRepo.create).toHaveBeenNthCalledWith(
@@ -163,7 +162,6 @@ describe('fanOutChildTasks', () => {
         parentTaskId: planningTask.id,
         followUpReason: 'execution_implement',
       }),
-      expect.anything(),
     );
     expect(mockTaskEnqueueService.enqueueMany).toHaveBeenCalledWith({
       taskIds: createdTaskIds,
@@ -173,7 +171,7 @@ describe('fanOutChildTasks', () => {
 
   it('creates child tasks with independent create calls, not inside a shared transaction', async () => {
     const planningTask = createPlanningTask();
-    const createCallOptions: Array<{ transaction?: unknown } | undefined> = [];
+    const createCallOptions: ({ transaction?: unknown } | undefined)[] = [];
 
     mockCodeTaskRepo.create.mockImplementation(async (input: { id: string }, options?: { transaction?: unknown }) => {
       createCallOptions.push(options);
@@ -184,7 +182,7 @@ describe('fanOutChildTasks', () => {
       planningTask,
       userId: 'user-123',
       childIssues: [qualifyingChild1, qualifyingChild2],
-      workerType: 'claude-code',
+      workerType: 'auto',
     });
 
     expect(result.ok).toBe(true);
@@ -210,7 +208,6 @@ describe('fanOutChildTasks', () => {
       expect.objectContaining({
         prompt: `[Fan-out from ${planningTask.id}] ${qualifyingChild1.identifier}`,
       }),
-      expect.anything(),
     );
   });
 
