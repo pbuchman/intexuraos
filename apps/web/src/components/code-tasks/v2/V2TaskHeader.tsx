@@ -44,6 +44,26 @@ export function V2TaskHeader({ task, workerStatusTag }: V2TaskHeaderProps): Reac
       : task.executionMemoryContext.status === 'none'
         ? 'Memory: none'
         : 'Memory: error';
+
+  const executionMemoryTooltip = (() => {
+    const parts: string[] = [];
+    if (task.executionMemoryContext?.status === 'error') {
+      const code = task.executionMemoryContext.errorCode ?? '';
+      const msg = task.executionMemoryContext.errorMessage ?? '';
+      const detail = code !== '' && msg !== '' ? `${code} — ${msg}` : code !== '' ? code : msg;
+      if (detail !== '') {
+        parts.push(`Retrieval: ${detail}`);
+      }
+    }
+    if (task.executionMemoryPostRun?.status === 'error') {
+      const msg = task.executionMemoryPostRun.errorMessage ?? '';
+      if (msg !== '') {
+        parts.push(`Post-run: ${msg}`);
+      }
+    }
+    return parts.length > 0 ? parts.join('\n') : undefined;
+  })();
+
   const prUrl = getTaskMergeUrl(task);
 
   return (
@@ -75,8 +95,19 @@ export function V2TaskHeader({ task, workerStatusTag }: V2TaskHeaderProps): Reac
           </span>
         ) : null}
         {executionMemoryChip !== null && task.executionMemoryContext !== undefined ? (
-          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium ${EXECUTION_MEMORY_STATUS_STYLES[task.executionMemoryContext.status]}`}>
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium ${EXECUTION_MEMORY_STATUS_STYLES[task.executionMemoryContext.status]}`}
+            title={executionMemoryTooltip}
+          >
             {executionMemoryChip}
+          </span>
+        ) : null}
+        {task.executionMemoryPostRun?.status === 'error' ? (
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium ${EXECUTION_MEMORY_STATUS_STYLES.error}`}
+            title={task.executionMemoryPostRun.errorMessage}
+          >
+            Post-run: error
           </span>
         ) : null}
       </div>
