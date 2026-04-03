@@ -186,7 +186,7 @@ describe('groupByLinearIssue', () => {
     expect(groups[1]?.linearIssueId).toBe('INT-100');
   });
 
-  it('does not add an actionable execution step when planning task already faned out to child tasks', () => {
+  it('does not add an actionable execution step when planning task already fanned out to child tasks', () => {
     const tasks = [
       makeTask({
         id: 'task-1',
