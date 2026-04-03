@@ -64,6 +64,7 @@ describe('buildIssueCommentTriageSection', () => {
     expect(result).toContain('@review architecture, security with qwen');
     expect(result).toContain('qwen');
     expect(result).toContain('@review with minimax');
+    expect(result).toContain('@review with openrouter-free');
   });
 
   it('shows bot sender and edited action in the @review branch', () => {

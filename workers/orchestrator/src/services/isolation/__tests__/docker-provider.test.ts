@@ -186,6 +186,7 @@ const createTestConfig = (overrides: Partial<WorkerConfig> = {}): WorkerConfig =
     SENTRY_AUTH_TOKEN: 'test-sentry-token',
     MINIMAX_API_KEY: 'test-minimax-key',
     DASHSCOPE_API_KEY: 'test-dashscope-key',
+    OPENROUTER_API_KEY: 'test-openrouter-key',
   },
   gcpSaKeyPath: '/test/gcp-sa.json',
   githubAppKeyPath: '/test/github-key.pem',
@@ -1369,6 +1370,20 @@ describe('DockerProvider', () => {
       const envArr = createCall?.Env as string[];
       const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
       expect(modelEntry).toBe('ANTHROPIC_MODEL=MiniMax-M2.7');
+    });
+
+    it('sets OpenRouter env vars for openrouter-free worker', async () => {
+      const config = createTestConfig({ workerType: 'openrouter-free' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const baseUrlEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='));
+      expect(baseUrlEntry).toBe('ANTHROPIC_BASE_URL=https://openrouter.ai/api');
+      const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
+      expect(modelEntry).toBe('ANTHROPIC_MODEL=qwen/qwen3.6-plus:free');
+      const effortEntry = envArr.find((e: string) => e.startsWith('CLAUDE_CODE_EFFORT_LEVEL='));
+      expect(effortEntry).toBe('CLAUDE_CODE_EFFORT_LEVEL=high');
     });
 
     it('sets CLAUDE_CODE_EFFORT_LEVEL for opus worker', async () => {
@@ -2794,6 +2809,7 @@ describe('DockerProvider', () => {
               SENTRY_AUTH_TOKEN: 'test',
               MINIMAX_API_KEY: 'test',
               DASHSCOPE_API_KEY: 'test',
+              OPENROUTER_API_KEY: 'test',
             },
           })
         )
@@ -2871,6 +2887,7 @@ describe('DockerProvider', () => {
             SENTRY_AUTH_TOKEN: 'test',
             MINIMAX_API_KEY: 'test',
             DASHSCOPE_API_KEY: 'test',
+            OPENROUTER_API_KEY: 'test',
           },
         })
       );

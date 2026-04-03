@@ -48,6 +48,7 @@ export function buildIssueCommentTriageSection(input: IssueCommentTriagePromptIn
       'Examples:',
       '- `@review architecture, security with qwen` → request `architecture` + `security`, worker `qwen`',
       '- `@review with minimax` → request `code_quality`, worker `minimax`',
+      '- `@review with openrouter-free` → request `code_quality`, worker `openrouter-free`',
       '- `@review opus` → request `code_quality`, worker `opus`',
       '- `@review architecture` → request `architecture`, worker `qwen`',
       '',
