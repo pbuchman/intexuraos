@@ -59,13 +59,10 @@ describe('IssueGroupRow', () => {
     const html = renderToStaticMarkup(createElement(IssueGroupRow, {
       group,
       timeTick: 0,
-      onAction: (taskId: string, action: 'delete' | 'retry' | 'implement'): void => {
-        void taskId;
-        void action;
-      },
-      onOpenLogs: (taskId: string): void => {
-        void taskId;
-      },
+      onAction: (_taskId: string, _action: 'delete' | 'retry' | 'implement' | 'archive'): void => { /* stub */ },
+      onArchiveGroup: (_taskIds: string[]): void => { /* stub */ },
+      onDeleteGroup: (_taskIds: string[]): void => { /* stub */ },
+      onOpenLogs: (_taskId: string): void => { /* stub */ },
       actioningTaskId: null,
     }));
 
