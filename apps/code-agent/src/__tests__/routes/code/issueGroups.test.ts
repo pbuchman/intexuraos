@@ -650,8 +650,8 @@ describe('GET /code/issue-groups', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body) as { data: { groups: { linearIssueId: string | null }[] } };
     const issueIds = body.data.groups.map((g) => g.linearIssueId);
-    // groupByLinearIssue re-sorts by linear-id desc; INT-801 > INT-800 numerically
-    // so the result matches the expected newest-first order coincidentally
+    // sortIssueGroups applies createdAt desc; INT-801 created after INT-800
+    // so INT-801 correctly appears first (coincides with linear-id desc: 801 > 800)
     expect(issueIds).toEqual(['INT-801', 'INT-800']);
   });
 
