@@ -1870,6 +1870,45 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.fanOutChildTaskIds).toEqual(['task-child-1']);
     });
 
+    it('strips FieldValue.delete() sentinels from in-memory merge when updating nullable fields in a transaction', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a task with implementationTaskId and fanOutChildTaskIds set
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      // First set the fields so we can clear them
+      const setResult = await repo.update(created.value.id, {
+        implementationTaskId: 'task-phase2',
+        fanOutChildTaskIds: ['task-child-1', 'task-child-2'],
+      });
+      expect(setResult.ok).toBe(true);
+
+      // Now clear them inside a transaction (null → FieldValue.delete())
+      const result = await (fakeFirestore as unknown as Firestore).runTransaction(async (tx) => {
+        return repo.update(
+          created.value.id,
+          {
+            implementationTaskId: null,
+            fanOutChildTaskIds: null,
+          },
+          { transaction: tx },
+        );
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      // The returned task must NOT contain FieldValue sentinel objects —
+      // the in-memory merge must strip them so the result has clean fields.
+      expect(result.value.implementationTaskId).toBeUndefined();
+      expect(result.value.fanOutChildTaskIds).toBeUndefined();
+    });
+
     it('updates workerLocation when provided in update input', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,

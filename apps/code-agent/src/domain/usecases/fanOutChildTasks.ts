@@ -78,7 +78,7 @@ function getFanOutParentDescriptor(planningTask: CodeTask): string {
   return planningTask.linearIssueId ?? planningTask.id;
 }
 
-async function persistBatchTransactional(
+async function persistBatch(
   deps: FanOutChildTasksDeps,
   request: FanOutChildTasksRequest,
   preparedChildren: PreparedChildTask[],
@@ -161,7 +161,7 @@ export async function fanOutChildTasks(
     return err({ code: 'internal_error', message: 'No child execution tasks were created' });
   }
   /* v8 ignore stop @preserve */
-  const persistResult = await persistBatchTransactional(deps, request, preparedChildren, primaryChild.taskId);
+  const persistResult = await persistBatch(deps, request, preparedChildren, primaryChild.taskId);
   if (!persistResult.ok) {
     return persistResult;
   }
