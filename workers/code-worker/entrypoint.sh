@@ -357,7 +357,7 @@ run_codex_attempt() {
     set -e
 
     if [ -n "$attempt_forensics_dir" ]; then
-        cat "$log_file" | tee -a "${attempt_forensics_dir}/codex-stream.log"
+        tee -a "${attempt_forensics_dir}/codex-stream.log" < "$log_file"
     else
         cat "$log_file"
     fi

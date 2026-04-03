@@ -96,6 +96,24 @@ describe('Orchestrator HTTP-Only Integration', () => {
     return { timestamp, signature };
   }
 
+  function verifyWebhookSignature(
+    _url: string,
+    body: string,
+    headers: Record<string, string>
+  ): boolean {
+    const timestamp = headers['x-request-timestamp'];
+    const signature = headers['x-request-signature'];
+
+    if (!timestamp || !signature) {
+      return false;
+    }
+
+    const message = `${String(timestamp)}.${body}`;
+    const expected = crypto.createHmac('sha256', webhookSecret).update(message).digest('hex');
+
+    return signature === expected;
+  }
+
   function verifyOrchestratorSignature(
     _url: string,
     body: string,
@@ -425,7 +443,7 @@ describe('Orchestrator HTTP-Only Integration', () => {
   });
 
   describe('Timeout Completion and Cleanup', () => {
-    it('forwards MCP timeout marker through log pipeline with valid signature', async () => {
+    it('MCP timeout marker flows through log pipeline to code-agent', async () => {
       const taskId = 'timeout-task-123';
 
       // The entrypoint emits this stable marker when `timeout` kills the Codex process
@@ -456,17 +474,26 @@ describe('Orchestrator HTTP-Only Integration', () => {
 
       // Verify the log request was signed and contains the timeout marker
       const logRequest = httpRequests.find((req) => req.url.includes('/internal/logs'));
-      expect(logRequest).toBeDefined();
-      if (logRequest) {
-        expect(verifyOrchestratorSignature(logRequest.url, logRequest.body, logRequest.headers)).toBe(
-          true
-        );
-        const body = JSON.parse(logRequest.body) as {
-          taskId: string;
-          chunks: { content: string }[];
-        };
-        expect(body.chunks.some((c) => c.content.includes('MCP timeout'))).toBe(true);
+      if (logRequest === undefined) {
+        throw new Error('Expected log request to be captured but none was found');
       }
+      const verifiedLogRequest = logRequest;
+      expect(
+        verifyOrchestratorSignature(
+          verifiedLogRequest.url,
+          verifiedLogRequest.body,
+          verifiedLogRequest.headers
+        )
+      ).toBe(true);
+      const body = JSON.parse(verifiedLogRequest.body) as {
+        taskId: string;
+        chunks: { content: string }[];
+      };
+      expect(body.chunks.some((c) => c.content.includes('MCP timeout'))).toBe(true);
+    });
+
+    it('completion webhook accepts failure status with valid HMAC after timeout', async () => {
+      const taskId = 'timeout-task-456';
 
       // After timeout, task completion webhook fires with failure status
       const webhookPayload = {
@@ -491,12 +518,16 @@ describe('Orchestrator HTTP-Only Integration', () => {
 
       expect(webhookResponse.ok).toBe(true);
 
-      // Verify both requests were made (log forwarding + completion webhook)
-      const allRequests = httpRequests.filter(
-        (req) =>
-          req.url.includes('/internal/logs') || req.url.includes('/internal/webhooks/task-complete')
+      const webhookRequest = httpRequests.find((req) =>
+        req.url.includes('/internal/webhooks/task-complete')
       );
-      expect(allRequests).toHaveLength(2);
+      if (webhookRequest === undefined) {
+        throw new Error('Expected webhook request to be captured but none was found');
+      }
+      const verifiedRequest = webhookRequest;
+      expect(
+        verifyWebhookSignature(verifiedRequest.url, verifiedRequest.body, verifiedRequest.headers)
+      ).toBe(true);
     });
   });
 
