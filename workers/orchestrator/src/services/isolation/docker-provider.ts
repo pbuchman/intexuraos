@@ -329,9 +329,7 @@ export class DockerProvider implements IsolationProvider {
       } catch (error) {
         await fs.promises.writeFile(
           path.join(hostAttemptForensicsPath, 'exec-inspect.error.txt'),
-          /* v8 ignore start -- ts-type: error type narrowing for non-Error throwables in catch block @preserve */
           error instanceof Error ? (error.stack ?? error.message) : String(error),
-          /* v8 ignore stop @preserve */
           'utf-8'
         );
       }
@@ -538,14 +536,12 @@ export class DockerProvider implements IsolationProvider {
           await fs.promises.mkdir(taskRuntimeHomePath, { recursive: true, mode: 0o700 });
           await this.writePromptFiles(taskSecretsPath, systemPrompt, prompt);
 
-          /* v8 ignore start -- test-infra: FakeFs cannot simulate gcpSaKeyPath existence conditionally per-resume path @preserve */
           if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
             await fs.promises.copyFile(
               config.gcpSaKeyPath,
               path.join(taskSecretsPath, 'gcp-sa.json')
             );
           }
-          /* v8 ignore stop @preserve */
 
           const handle: WorkerHandle = {
             taskId,
@@ -1242,11 +1238,10 @@ export class DockerProvider implements IsolationProvider {
       return;
     }
 
-    /* v8 ignore start -- ts-type: null check guard for idempotent interval start @preserve */
+    // Guard against duplicate intervals (idempotent start)
     if (this.cleanupIntervalId !== null) {
       return;
     }
-    /* v8 ignore stop @preserve */
 
     this.logger.info(
       { intervalMs: PERIODIC_CLEANUP_INTERVAL_MS, maxAgeMs: PRESERVED_MAX_AGE_MS },
@@ -1258,11 +1253,10 @@ export class DockerProvider implements IsolationProvider {
   }
 
   stopPeriodicCleanup(): void {
-    /* v8 ignore start -- ts-type: null check guard for idempotent interval stop @preserve */
+    // Guard against stopping when no interval was started (idempotent stop)
     if (this.cleanupIntervalId === null) {
       return;
     }
-    /* v8 ignore stop @preserve */
 
     clearInterval(this.cleanupIntervalId);
     this.cleanupIntervalId = null;
@@ -1314,11 +1308,10 @@ export class DockerProvider implements IsolationProvider {
   }
 
   startHealthMonitor(): void {
-    /* v8 ignore start -- ts-type: null check guard for idempotent interval start @preserve */
+    // Guard against duplicate intervals (idempotent start)
     if (this.healthMonitorIntervalId !== null) {
       return;
     }
-    /* v8 ignore stop @preserve */
 
     this.healthMonitorIntervalId = setInterval(() => {
       void this.checkHealth();
@@ -1326,11 +1319,10 @@ export class DockerProvider implements IsolationProvider {
   }
 
   stopHealthMonitor(): void {
-    /* v8 ignore start -- ts-type: null check guard for idempotent interval stop @preserve */
+    // Guard against stopping when no interval was started (idempotent stop)
     if (this.healthMonitorIntervalId === null) {
       return;
     }
-    /* v8 ignore stop @preserve */
 
     clearInterval(this.healthMonitorIntervalId);
     this.healthMonitorIntervalId = null;
