@@ -86,8 +86,12 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
     });
   }
 
+  // Guard: do not show merge button while any task is actively processing
+  const hasActiveTask = tasks.some((t) => ACTIVE_STATUSES.has(t.status));
+
   // Merge-ready logic: if execution step is completed, PR exists, and ready-to-merge label present
   if (
+    !hasActiveTask &&
     executionEntry?.step.state === 'completed' &&
     executionEntry.task.result?.prUrl !== undefined &&
     hasMergeReadyLabel(executionEntry.task.linearIssue?.labels)
@@ -105,6 +109,7 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
   // a PR is closed (merged or not), preventing a stale merge button.
   const reviewEntry = stepMap.get('review');
   if (
+    !hasActiveTask &&
     reviewEntry?.step.state === 'completed' &&
     reviewEntry.task.prNumber !== undefined &&
     reviewEntry.task.result?.needs_remediation === REMEDIATION_NOT_NEEDED &&

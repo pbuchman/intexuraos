@@ -153,10 +153,20 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('UNAUTHORIZED', 'Internal auth failed for page summary');
       }
 
-      const { url, userId, maxSentences, maxReadingMinutes } = request.body;
+      const { url, userId, title, description, maxSentences, maxReadingMinutes } = request.body;
       const startTime = Date.now();
 
-      request.log.info({ url, userId, maxSentences, maxReadingMinutes }, 'Processing page summary request');
+      request.log.info(
+        {
+          url,
+          userId,
+          hasTitle: title !== undefined,
+          hasDescription: description !== undefined,
+          maxSentences,
+          maxReadingMinutes,
+        },
+        'Processing page summary request'
+      );
 
       if (!isValidUrl(url)) {
         const durationMs = Date.now() - startTime;
@@ -209,6 +219,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         contentResult.value,
         {
           url,
+          ...(title !== undefined && { title }),
+          ...(description !== undefined && { description }),
           ...(maxSentences !== undefined && { maxSentences }),
           ...(maxReadingMinutes !== undefined && { maxReadingMinutes }),
         },

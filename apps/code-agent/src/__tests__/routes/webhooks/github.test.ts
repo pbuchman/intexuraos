@@ -24,13 +24,38 @@ import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import type { GitHubPRSummaryRepository } from '../../../domain/repositories/gitHubPRSummaryRepository.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
 import { ActionableEventRule, SenderWhitelistRule, SkipPrefixRule, createWebhookRulesService } from '../../../domain/services/gitHubWebhookRules.js';
-import { ALLOWED_BOTS, type GitHubWebhookBody } from '../../../routes/webhooks/github.js';
+import { ALLOWED_BOTS, resolvePrCloseSourceTimestamp, type GitHubWebhookBody } from '../../../routes/webhooks/github.js';
 import type { GitHubWebhookAuditEventRepository } from '../../../domain/repositories/gitHubWebhookAuditEventRepository.js';
 import type { GitHubEventLogEntryRepository } from '../../../domain/repositories/gitHubEventLogEntryRepository.js';
 import type { EventDecisionRepository } from '../../../domain/repositories/eventDecisionRepository.js';
 import { waitForDetachedAsync, waitForSettlement } from '../../helpers/waitForDetachedAsync.js';
 
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
+
+describe('resolvePrCloseSourceTimestamp', () => {
+  it('prefers closed_at when present', () => {
+    expect(resolvePrCloseSourceTimestamp({
+      closedAt: '2026-03-21T02:00:00Z',
+      mergedAt: new Date('2026-03-21T01:00:00Z'),
+    })).toBe('2026-03-21T02:00:00Z');
+  });
+
+  it('falls back to mergedAt when closed_at is absent', () => {
+    expect(resolvePrCloseSourceTimestamp({
+      closedAt: null,
+      mergedAt: new Date('2026-03-21T01:00:00Z'),
+    })).toBe('2026-03-21T01:00:00.000Z');
+  });
+
+  it('falls back to current time when neither closed_at nor mergedAt is available', () => {
+    const result = resolvePrCloseSourceTimestamp({
+      closedAt: undefined,
+      mergedAt: null,
+    });
+
+    expect(Number.isNaN(Date.parse(result))).toBe(false);
+  });
+});
 
 describe('POST /webhooks/github', () => {
   let app: FastifyInstance;
@@ -3394,6 +3419,7 @@ describe('POST /webhooks/github', () => {
           title: '[INT-888] Test PR',
           body: 'Test description',
           state: 'closed',
+          closed_at: '2026-03-21T02:00:00Z',
           merged_at: null,
         },
       });

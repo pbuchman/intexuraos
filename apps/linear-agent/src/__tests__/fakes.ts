@@ -1054,6 +1054,7 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     userId: string;
     linearIssueId: string;
     labels: { id: string; name: string }[];
+    sourceTimestamp: string;
   }): Promise<Result<void, CodeAgentError>> {
     return ok(undefined);
   }

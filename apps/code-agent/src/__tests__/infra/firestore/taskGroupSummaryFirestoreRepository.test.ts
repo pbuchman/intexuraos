@@ -326,7 +326,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(doc.get('latestReviewNeedsRemediation')).toBeNull();
     });
 
-    it('sets hasCompletedExecution for review agent with reviewed status', async () => {
+    it('does not set hasCompletedExecution for review agent with reviewed status', async () => {
       const repo = createTaskGroupSummaryFirestoreRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -344,7 +344,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       await repo.updateAfterCreate(task);
 
       const doc = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-REVEXEC').get();
-      expect(doc.get('hasCompletedExecution')).toBe(true);
+      expect(doc.get('hasCompletedExecution')).toBe(false);
     });
 
     it('does not increment taskCount when archived task added to existing group', async () => {
@@ -890,7 +890,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(doc.get('hasCompletedPlanning')).toBe(true);
     });
 
-    it('sets hasCompletedExecution when review task reviewed', async () => {
+    it('does not set hasCompletedExecution when review task reviewed', async () => {
       const repo = createTaskGroupSummaryFirestoreRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -912,7 +912,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       await repo.updateAfterStatusChange(oldTask, newTask);
 
       const doc = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-REV2').get();
-      expect(doc.get('hasCompletedExecution')).toBe(true);
+      expect(doc.get('hasCompletedExecution')).toBe(false);
     });
 
     it('sets hasImplementationTaskId on status change', async () => {
@@ -1141,7 +1141,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(doc.get('hasCompletedExecution')).toBe(true);
     });
 
-    it('sets hasCompletedExecution when review agent transitions to reviewed', async () => {
+    it('does not set hasCompletedExecution when review agent transitions to reviewed', async () => {
       const repo = createTaskGroupSummaryFirestoreRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -1163,7 +1163,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       await repo.updateAfterStatusChange(oldTask, newTask);
 
       const doc = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-REVEXEC2').get();
-      expect(doc.get('hasCompletedExecution')).toBe(true);
+      expect(doc.get('hasCompletedExecution')).toBe(false);
     });
 
     it('sets hasPrUrl without prNumber when prUrl present but prNumber absent', async () => {
@@ -2085,6 +2085,55 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(doc.get('hasCompletedExecution')).toBe(true);
     });
 
+    it('does not set hasCompletedExecution for review-only reviewed tasks', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.now();
+
+      const task = makeTask({
+        id: 'task-review-only',
+        userId: 'user-4',
+        linearIssueId: 'INT-REVONLY',
+        agentType: 'review',
+        status: 'reviewed',
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await repo.recomputeGroupFromTasks('user-4', 'INT-REVONLY', [task]);
+
+      const doc = await fakeFirestore.collection('task_group_summaries').doc('user-4_INT-REVONLY').get();
+      expect(doc.get('hasCompletedExecution')).toBe(false);
+      expect(doc.get('aggregateStatus')).toBe('done');
+    });
+
+    it('sets hasCompletedExecution for pull_request tasks with implemented status', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.now();
+
+      const task = makeTask({
+        id: 'task-pr-impl',
+        userId: 'user-4',
+        linearIssueId: 'INT-PREXEC',
+        agentType: 'pull_request',
+        status: 'implemented',
+        result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/900' },
+        prNumber: 900,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await repo.recomputeGroupFromTasks('user-4', 'INT-PREXEC', [task]);
+
+      const doc = await fakeFirestore.collection('task_group_summaries').doc('user-4_INT-PREXEC').get();
+      expect(doc.get('hasCompletedExecution')).toBe(true);
+    });
+
     it('sets latestReviewNeedsRemediation from review task result (no-remediation)', async () => {
       const repo = createTaskGroupSummaryFirestoreRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -2191,6 +2240,129 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       const doc = await fakeFirestore.collection('task_group_summaries').doc('user-4_INT-REVMULTI').get();
       // The later review (task2) should win
       expect(doc.get('latestReviewNeedsRemediation')).toBe(false);
+    });
+
+    it('preserves label flags and labelsUpdatedAt when recomputing from tasks', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const labelsUpdatedAtIso = '2026-02-01T00:00:00.000Z';
+      const task = makeTask({
+        id: 'task-lbl-preserve',
+        userId: 'user-4',
+        linearIssueId: 'INT-LBLPRESERVE',
+        agentType: 'planning',
+        status: 'planned',
+        createdAt: Timestamp.fromDate(new Date('2026-02-02T00:00:00Z')),
+        updatedAt: Timestamp.fromDate(new Date('2026-02-02T00:00:00Z')),
+      });
+      await repo.updateAfterCreate(task);
+      await repo.recomputeWithLabels(
+        'user-4',
+        'INT-LBLPRESERVE',
+        [
+          { id: 'label-1', name: 'ready-to-implement' },
+          { id: 'label-2', name: 'ready-to-merge' },
+        ],
+        labelsUpdatedAtIso,
+      );
+
+      const summaryRef = fakeFirestore.collection('task_group_summaries').doc('user-4_INT-LBLPRESERVE');
+      await repo.recomputeGroupFromTasks('user-4', 'INT-LBLPRESERVE', [task]);
+      await repo.recomputeWithLabels(
+        'user-4',
+        'INT-LBLPRESERVE',
+        [{ id: 'label-3', name: 'bug' }],
+        '2026-01-01T00:00:00.000Z',
+      );
+
+      const doc = await summaryRef.get();
+      expect(doc.get('hasImplementationReadyLabel')).toBe(true);
+      expect(doc.get('hasMergeReadyLabel')).toBe(true);
+      expect(doc.get('aggregateStatus')).toBe('needs-action');
+    });
+
+    it('does not invent label fields when recomputing a summary that has never been label-hydrated', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const task = makeTask({
+        id: 'task-no-labels',
+        userId: 'user-4',
+        linearIssueId: 'INT-NOLABELS',
+        agentType: 'planning',
+        status: 'planned',
+        createdAt: Timestamp.fromDate(new Date('2026-02-03T00:00:00Z')),
+        updatedAt: Timestamp.fromDate(new Date('2026-02-03T00:00:00Z')),
+      });
+
+      await repo.updateAfterCreate(task);
+      await repo.recomputeGroupFromTasks('user-4', 'INT-NOLABELS', [task]);
+
+      const doc = await fakeFirestore.collection('task_group_summaries').doc('user-4_INT-NOLABELS').get();
+      expect(doc.get('hasImplementationReadyLabel')).toBeUndefined();
+      expect(doc.get('hasMergeReadyLabel')).toBeUndefined();
+      expect(doc.get('labelsUpdatedAt')).toBeUndefined();
+    });
+
+    it('does not update counts when recomputeGroupFromTasks keeps the same aggregateStatus', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const task = makeTask({
+        id: 'task-count-stable',
+        userId: 'user-4',
+        linearIssueId: 'INT-COUNTSTABLE',
+        agentType: 'planning',
+        status: 'planned',
+        createdAt: Timestamp.fromDate(new Date('2026-02-04T00:00:00Z')),
+        updatedAt: Timestamp.fromDate(new Date('2026-02-04T00:00:00Z')),
+      });
+
+      await repo.updateAfterCreate(task);
+      const beforeCounts = await fakeFirestore.collection('user_group_counts').doc('user-4').get();
+      await repo.recomputeGroupFromTasks('user-4', 'INT-COUNTSTABLE', [task]);
+      const afterCounts = await fakeFirestore.collection('user_group_counts').doc('user-4').get();
+
+      expect(afterCounts.get('needsAction')).toBe(beforeCounts.get('needsAction'));
+      expect(afterCounts.get('done')).toBe(beforeCounts.get('done'));
+    });
+
+    it('updates counts when recomputeGroupFromTasks changes aggregateStatus on an existing summary', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const planningTask = makeTask({
+        id: 'task-count-change-plan',
+        userId: 'user-4',
+        linearIssueId: 'INT-COUNTCHANGE',
+        agentType: 'planning',
+        status: 'planned',
+        createdAt: Timestamp.fromDate(new Date('2026-02-05T00:00:00Z')),
+        updatedAt: Timestamp.fromDate(new Date('2026-02-05T00:00:00Z')),
+      });
+
+      await repo.updateAfterCreate(planningTask);
+
+      const executionTask = makeTask({
+        id: 'task-count-change-exec',
+        userId: 'user-4',
+        linearIssueId: 'INT-COUNTCHANGE',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: Timestamp.fromDate(new Date('2026-02-06T00:00:00Z')),
+        updatedAt: Timestamp.fromDate(new Date('2026-02-06T00:00:00Z')),
+      });
+
+      await repo.recomputeGroupFromTasks('user-4', 'INT-COUNTCHANGE', [executionTask]);
+
+      const countsDoc = await fakeFirestore.collection('user_group_counts').doc('user-4').get();
+      expect(countsDoc.get('needsAction')).toBe(0);
+      expect(countsDoc.get('done')).toBe(1);
     });
 
     it('does not update mostRecentDispatchedAt with earlier timestamp', async () => {
@@ -2360,7 +2532,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
         logger,
       });
 
-      const result = await repo.recomputeWithLabels('user-1', 'INT-999', []);
+      const result = await repo.recomputeWithLabels('user-1', 'INT-999', [], '2026-03-01T00:00:00.000Z');
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('NOT_FOUND');
@@ -2386,12 +2558,128 @@ describe('taskGroupSummaryFirestoreRepository', () => {
 
       const result = await repo.recomputeWithLabels('user-lbl', 'INT-LBL', [
         { id: 'label-1', name: 'ready-to-implement' },
-      ]);
+      ], '2026-03-01T00:00:00.000Z');
       expect(result.ok).toBe(true);
 
       const doc = await fakeFirestore.collection('task_group_summaries').doc('user-lbl_INT-LBL').get();
       expect(doc.get('hasImplementationReadyLabel')).toBe(true);
       expect(doc.get('hasMergeReadyLabel')).toBe(false);
+      expect(doc.get('labelsUpdatedAt')).toBeDefined();
+    });
+
+    it('rejects stale label writes and preserves existing label state', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const initialTs = Timestamp.fromDate(new Date('2026-03-01T00:00:00Z'));
+      const staleTs = '2026-02-01T00:00:00.000Z';
+      const freshTs = '2026-03-02T00:00:00.000Z';
+      const task = makeTask({
+        id: 'task-label-stale',
+        userId: 'user-stale',
+        linearIssueId: 'INT-STALE',
+        agentType: 'planning',
+        status: 'planned',
+        createdAt: initialTs,
+        updatedAt: initialTs,
+      });
+      await repo.updateAfterCreate(task);
+
+      const first = await repo.recomputeWithLabels('user-stale', 'INT-STALE', [
+        { id: 'label-1', name: 'ready-to-implement' },
+      ], freshTs);
+      expect(first.ok).toBe(true);
+
+      const beforeDoc = await fakeFirestore.collection('task_group_summaries').doc('user-stale_INT-STALE').get();
+      const beforeLabelsUpdatedAt = beforeDoc.get('labelsUpdatedAt');
+
+      const stale = await repo.recomputeWithLabels('user-stale', 'INT-STALE', [
+        { id: 'label-2', name: 'ready-to-merge' },
+      ], staleTs);
+      expect(stale.ok).toBe(true);
+
+      const afterDoc = await fakeFirestore.collection('task_group_summaries').doc('user-stale_INT-STALE').get();
+      expect(afterDoc.get('hasImplementationReadyLabel')).toBe(true);
+      expect(afterDoc.get('hasMergeReadyLabel')).toBe(false);
+      expect(afterDoc.get('labelsUpdatedAt')).toEqual(beforeLabelsUpdatedAt);
+    });
+
+    it('accepts newer label writes and updates labelsUpdatedAt', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const initialTs = Timestamp.fromDate(new Date('2026-03-01T00:00:00Z'));
+      const task = makeTask({
+        id: 'task-label-fresh',
+        userId: 'user-fresh',
+        linearIssueId: 'INT-FRESH',
+        agentType: 'planning',
+        status: 'planned',
+        createdAt: initialTs,
+        updatedAt: initialTs,
+      });
+      await repo.updateAfterCreate(task);
+
+      const first = await repo.recomputeWithLabels('user-fresh', 'INT-FRESH', [
+        { id: 'label-1', name: 'some-other-label' },
+      ], '2026-03-01T01:00:00.000Z');
+      expect(first.ok).toBe(true);
+
+      const second = await repo.recomputeWithLabels('user-fresh', 'INT-FRESH', [
+        { id: 'label-2', name: 'ready-to-merge' },
+      ], '2026-03-01T02:00:00.000Z');
+      expect(second.ok).toBe(true);
+
+      const doc = await fakeFirestore.collection('task_group_summaries').doc('user-fresh_INT-FRESH').get();
+      expect(doc.get('hasImplementationReadyLabel')).toBe(false);
+      expect(doc.get('hasMergeReadyLabel')).toBe(true);
+      expect(doc.get('labelsUpdatedAt')).toBeDefined();
+    });
+
+    it('initializes labelsUpdatedAt for legacy docs that already have label flags', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const summaryRef = fakeFirestore.collection('task_group_summaries').doc('user-legacy_INT-LEGACY');
+      const updatedAt = Timestamp.fromDate(new Date('2026-03-03T00:00:00Z'));
+      await summaryRef.set({
+        userId: 'user-legacy',
+        linearIssueId: 'INT-LEGACY',
+        groupKey: 'INT-LEGACY',
+        taskCount: 1,
+        activeTaskCount: 0,
+        latestTaskStatus: 'planned',
+        latestTaskUpdatedAt: updatedAt,
+        agentTypesPresent: ['planning'],
+        hasCompletedPlanning: true,
+        hasCompletedExecution: false,
+        hasImplementationTaskId: false,
+        hasPrUrl: false,
+        prNumber: null,
+        latestReviewNeedsRemediation: null,
+        oldestTaskCreatedAt: updatedAt,
+        mostRecentDispatchedAt: null,
+        hasImplementationReadyLabel: true,
+        hasMergeReadyLabel: false,
+        aggregateStatus: 'needs-action',
+        updatedAt,
+      });
+
+      const result = await repo.recomputeWithLabels(
+        'user-legacy',
+        'INT-LEGACY',
+        [{ id: 'label-2', name: 'ready-to-merge' }],
+        '2026-03-02T00:00:00.000Z',
+      );
+
+      expect(result.ok).toBe(true);
+      const doc = await summaryRef.get();
+      expect(doc.get('hasImplementationReadyLabel')).toBe(false);
+      expect(doc.get('hasMergeReadyLabel')).toBe(true);
+      expect(doc.get('labelsUpdatedAt')).toBeDefined();
     });
 
     it('updates aggregateStatus when label changes status from needs-action to done', async () => {
@@ -2419,7 +2707,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       // Now recompute with empty labels (no ready-to-implement) → should become done
       const result = await repo.recomputeWithLabels('user-lbl2', 'INT-LBL2', [
         { id: 'label-x', name: 'some-other-label' },
-      ]);
+      ], '2026-03-01T00:00:00.000Z');
       expect(result.ok).toBe(true);
 
       const afterDoc = await fakeFirestore.collection('task_group_summaries').doc('user-lbl2_INT-LBL2').get();
@@ -2452,7 +2740,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       // Recompute with a non-implementation label present → hasImplementationReadyLabel returns false → status becomes done
       await repo.recomputeWithLabels('user-lbl3', 'INT-LBL3', [
         { id: 'label-bug', name: 'bug' },
-      ]);
+      ], '2026-03-01T00:00:00.000Z');
 
       const afterCounts = await fakeFirestore.collection('user_group_counts').doc('user-lbl3').get();
       expect(afterCounts.get('needsAction')).toBe(0);
@@ -2479,7 +2767,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       // Recompute with ready-to-implement label → status stays needs-action
       await repo.recomputeWithLabels('user-lbl4', 'INT-LBL4', [
         { id: 'label-rti', name: 'ready-to-implement' },
-      ]);
+      ], '2026-03-01T00:00:00.000Z');
 
       const countsDoc = await fakeFirestore.collection('user_group_counts').doc('user-lbl4').get();
       expect(countsDoc.get('needsAction')).toBe(1);

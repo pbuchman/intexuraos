@@ -697,6 +697,107 @@ describe('derivePipeline', () => {
     expect(pipeline.steps[1]?.state).toBe('actionable');
   });
 
+  it('does not create merge step when execution completed with PR and merge label but review task is running', () => {
+    const tasks = [
+      makeTask({
+        id: 'task-1',
+        status: 'implemented',
+        agentType: 'execution',
+        createdAt: '2026-03-01T10:00:00.000Z',
+        result: { prUrl: 'https://github.com/owner/repo/pull/42' },
+        linearIssue: {
+          identifier: 'INT-100',
+          title: 'Test',
+          state: { name: 'In Progress', type: 'started' },
+          priority: 1,
+          assignee: null,
+          labels: [{ name: 'ready-to-merge' }],
+          url: 'https://linear.app/INT-100',
+          commentCount: 0,
+          lastCommentAt: null,
+        },
+      }),
+      makeTask({
+        id: 'task-2',
+        status: 'running',
+        agentType: 'review',
+        createdAt: '2026-03-02T10:00:00.000Z',
+      }),
+    ];
+
+    const pipeline = derivePipeline(tasks);
+    const mergeStep = pipeline.steps.find((s) => s.agentType === 'merge');
+    expect(mergeStep).toBeUndefined();
+  });
+
+  it('does not create merge step via review fallback when another task is queued', () => {
+    const tasks = [
+      makeTask({
+        id: 'task-1',
+        status: 'reviewed',
+        agentType: 'review',
+        createdAt: '2026-03-01T10:00:00.000Z',
+        prNumber: 42,
+        result: { needs_remediation: '0' },
+        linearIssue: {
+          identifier: 'INT-100',
+          title: 'Test',
+          state: { name: 'In Progress', type: 'started' },
+          priority: 1,
+          assignee: null,
+          labels: [{ name: 'ready-to-merge' }],
+          url: 'https://linear.app/INT-100',
+          commentCount: 0,
+          lastCommentAt: null,
+        },
+      }),
+      makeTask({
+        id: 'task-2',
+        status: 'queued',
+        agentType: 'remediation',
+        createdAt: '2026-03-02T10:00:00.000Z',
+      }),
+    ];
+
+    const pipeline = derivePipeline(tasks);
+    const mergeStep = pipeline.steps.find((s) => s.agentType === 'merge');
+    expect(mergeStep).toBeUndefined();
+  });
+
+  it('creates merge step when execution completed and no task is active', () => {
+    const tasks = [
+      makeTask({
+        id: 'task-1',
+        status: 'implemented',
+        agentType: 'execution',
+        createdAt: '2026-03-01T10:00:00.000Z',
+        result: { prUrl: 'https://github.com/owner/repo/pull/42' },
+        linearIssue: {
+          identifier: 'INT-100',
+          title: 'Test',
+          state: { name: 'In Progress', type: 'started' },
+          priority: 1,
+          assignee: null,
+          labels: [{ name: 'ready-to-merge' }],
+          url: 'https://linear.app/INT-100',
+          commentCount: 0,
+          lastCommentAt: null,
+        },
+      }),
+      makeTask({
+        id: 'task-2',
+        status: 'reviewed',
+        agentType: 'review',
+        createdAt: '2026-03-02T10:00:00.000Z',
+      }),
+    ];
+
+    const pipeline = derivePipeline(tasks);
+    const mergeStep = pipeline.steps.find((s) => s.agentType === 'merge');
+    expect(mergeStep).toBeDefined();
+    expect(mergeStep?.state).toBe('actionable');
+  });
+
   it('creates actionable execution step when labels are empty (fallback)', () => {
     const tasks = [
       makeTask({

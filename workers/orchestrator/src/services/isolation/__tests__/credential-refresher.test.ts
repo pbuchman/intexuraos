@@ -140,13 +140,15 @@ describe('CredentialRefresher', () => {
     expect(result).toBe(false);
   });
 
-  it('logs container output', async () => {
+  it('logs container output at error level on failure', async () => {
+    mockContainer.wait.mockResolvedValue({ StatusCode: 1 });
+
     await refresher.refresh();
 
     expect(mockContainer.logs).toHaveBeenCalled();
-    expect(mockLogger.debug).toHaveBeenCalledWith(
+    expect(mockLogger.error).toHaveBeenCalledWith(
       expect.objectContaining({ output: expect.stringContaining('Claude replied') }),
-      expect.stringContaining('output')
+      expect.stringContaining('refresh failed')
     );
   });
 
@@ -172,12 +174,12 @@ describe('CredentialRefresher', () => {
     expect(result).toBe(true);
   });
 
-  it('handles container.logs() failure gracefully', async () => {
+  it('handles container.logs() failure gracefully on success', async () => {
     mockContainer.logs.mockRejectedValue(new Error('logs not available'));
 
     const result = await refresher.refresh();
 
-    // Should still succeed because log failure is silently caught
+    // Should still succeed because log capture failure is silently caught
     expect(result).toBe(true);
     expect(mockLogger.info).toHaveBeenCalledWith(
       expect.objectContaining({ containerId: 'refresh-container-id' }),

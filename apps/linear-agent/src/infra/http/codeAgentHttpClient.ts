@@ -101,6 +101,7 @@ export function createCodeAgentHttpClient(
       userId: string;
       linearIssueId: string;
       labels: { id: string; name: string }[];
+      sourceTimestamp: string;
     }): Promise<Result<void, CodeAgentError>> {
       const url = `${baseUrl}/internal/code/group-summary/recompute`;
 
@@ -120,16 +121,19 @@ export function createCodeAgentHttpClient(
             userId: request.userId,
             linearIssueId: request.linearIssueId,
             labels: request.labels,
+            sourceTimestamp: request.sourceTimestamp,
           }),
           signal: controller.signal,
         });
 
         if (!response.ok) {
           const errorText = await response.text();
-          logger.warn(
-            { status: response.status, error: errorText, linearIssueId: request.linearIssueId },
-            'code-agent notifyGroupSummaryRecompute failed'
-          );
+          const logPayload = { status: response.status, error: errorText, linearIssueId: request.linearIssueId };
+          if (response.status === 404) {
+            logger.info(logPayload, 'code-agent notifyGroupSummaryRecompute failed');
+          } else {
+            logger.warn(logPayload, 'code-agent notifyGroupSummaryRecompute failed');
+          }
 
           if (response.status >= 500) {
             return err({ code: 'UNAVAILABLE', message: 'code-agent unavailable' });
