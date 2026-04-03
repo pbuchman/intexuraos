@@ -424,6 +424,82 @@ describe('Orchestrator HTTP-Only Integration', () => {
     });
   });
 
+  describe('Timeout Completion and Cleanup', () => {
+    it('forwards MCP timeout marker through log pipeline with valid signature', async () => {
+      const taskId = 'timeout-task-123';
+
+      // The entrypoint emits this stable marker when `timeout` kills the Codex process
+      // (exit code 124 → 1). The orchestrator must forward it through the log pipeline
+      // so operators can scan for "MCP timeout" + "server=linear" in production logs.
+      const timeoutMarker = '[entrypoint] MCP timeout server=linear timeout_ms=60000';
+
+      const logChunks = [
+        { sequence: 1, content: 'Starting codex...', timestamp: '2024-01-01T00:00:00.000Z' },
+        { sequence: 2, content: timeoutMarker, timestamp: '2024-01-01T00:01:00.000Z' },
+      ];
+
+      const logPayload = { taskId, chunks: logChunks };
+      const { timestamp, signature } = generateOrchestratorSignature(logPayload);
+
+      const logResponse = await fetch(`${codeAgentUrl}/internal/logs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Request-Timestamp': timestamp,
+          'X-Request-Signature': signature,
+        },
+        body: JSON.stringify(logPayload),
+        signal: AbortSignal.timeout(5000),
+      });
+
+      expect(logResponse.ok).toBe(true);
+
+      // Verify the log request was signed and contains the timeout marker
+      const logRequest = httpRequests.find((req) => req.url.includes('/internal/logs'));
+      expect(logRequest).toBeDefined();
+      if (logRequest) {
+        expect(verifyOrchestratorSignature(logRequest.url, logRequest.body, logRequest.headers)).toBe(
+          true
+        );
+        const body = JSON.parse(logRequest.body) as {
+          taskId: string;
+          chunks: { content: string }[];
+        };
+        expect(body.chunks.some((c) => c.content.includes('MCP timeout'))).toBe(true);
+      }
+
+      // After timeout, task completion webhook fires with failure status
+      const webhookPayload = {
+        taskId,
+        status: 'failed',
+        result: { error: 'MCP timeout (Linear server, 60000ms)' },
+      };
+
+      const { timestamp: whTimestamp, signature: whSignature } =
+        generateWebhookSignature(webhookPayload);
+
+      const webhookResponse = await fetch(`${codeAgentUrl}/internal/webhooks/task-complete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Request-Timestamp': whTimestamp,
+          'X-Request-Signature': whSignature,
+        },
+        body: JSON.stringify(webhookPayload),
+        signal: AbortSignal.timeout(5000),
+      });
+
+      expect(webhookResponse.ok).toBe(true);
+
+      // Verify both requests were made (log forwarding + completion webhook)
+      const allRequests = httpRequests.filter(
+        (req) =>
+          req.url.includes('/internal/logs') || req.url.includes('/internal/webhooks/task-complete')
+      );
+      expect(allRequests).toHaveLength(2);
+    });
+  });
+
   describe('Signature Security', () => {
     it('validates timing attack protection with timestamp window', async () => {
       // Test expired timestamp (> 15 minutes old)
