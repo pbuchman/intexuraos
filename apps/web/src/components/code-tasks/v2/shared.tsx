@@ -1,5 +1,5 @@
 import { CODE_TASK_WORKER_TYPES, type CodeTaskWorkerType } from '@intexuraos/common-core/code-task-worker-types';
-import type { CodeTaskStatus, WorkerStatusTag } from '@/types';
+import type { CodeTaskExecutionMemoryContext, CodeTaskStatus, WorkerStatusTag } from '@/types';
 
 // --- Worker types (shared by V2TaskActions + V2NextSteps) ---
 
@@ -17,6 +17,7 @@ export const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
   kimi: 'Kimi',
   codex: 'Codex',
   'codex-xhigh': 'Codex XHigh',
+  'openrouter-free': 'OpenRouter Free',
 };
 
 // --- Status badge config ---
@@ -60,6 +61,12 @@ export const LINEAR_STATE_STYLES: Record<string, string> = {
 };
 
 export const DEFAULT_STATE_STYLE = 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300';
+
+export const EXECUTION_MEMORY_STATUS_STYLES: Record<CodeTaskExecutionMemoryContext['status'], string> = {
+  matched: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',
+  none:    'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
+  error:   'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
+};
 
 export function isActiveStatus(status: CodeTaskStatus): boolean {
   return status === 'queued' || status === 'dispatched' || status === 'running';

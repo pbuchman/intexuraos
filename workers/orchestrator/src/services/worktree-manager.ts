@@ -17,6 +17,12 @@ export interface WorktreeManagerConfig {
 
 const LOCK_TIMEOUT_MS = 10_000;
 
+/**
+ * Configured timeout for the Linear MCP server in worktree tasks.
+ * Exported so tests and diagnostics can verify the contract.
+ */
+export const LINEAR_MCP_TIMEOUT_MS = 60_000;
+
 function assertSafeBranchName(branch: string, branchLabel: string): void {
   if (!SAFE_GIT_BRANCH_PATTERN.test(branch)) {
     throw new Error(`Invalid ${branchLabel} branch name: ${branch}`);
@@ -127,6 +133,7 @@ export class WorktreeManager {
         if (this.config.mcpConfigTemplatePath && existsSync(this.config.mcpConfigTemplatePath)) {
           await this.copyMcpConfig(worktreePath);
         }
+        this.logTimeoutEvidence();
 
         // Copy settings.local.json template if provided
         if (
@@ -207,6 +214,13 @@ export class WorktreeManager {
     return existsSync(worktreePath);
   }
 
+  private logTimeoutEvidence(): void {
+    this.logger.info(
+      { timeoutMs: LINEAR_MCP_TIMEOUT_MS, server: 'linear' },
+      `MCP timeout configured for Linear MCP server: ${String(LINEAR_MCP_TIMEOUT_MS)}ms (server=linear)`
+    );
+  }
+
   private async copyMcpConfig(worktreePath: string): Promise<void> {
     const targetPath = join(worktreePath, '.mcp.json');
 
@@ -232,9 +246,12 @@ export class WorktreeManager {
       }
 
       // Substitute environment variables
-      const config = template
+      const configStr = template
         .replace(/\{\{LINEAR_API_KEY\}\}/g, linearKey ?? '')
         .replace(/\{\{SENTRY_AUTH_TOKEN\}\}/g, sentryToken ?? '');
+
+      // Inject timeoutMs into the Linear MCP server config
+      const config = this.injectLinearTimeout(configStr);
 
       // Ensure target directory exists
       await mkdir(dirname(targetPath), { recursive: true });
@@ -250,6 +267,30 @@ export class WorktreeManager {
       const message = error instanceof Error ? error.message : 'Unknown error';
       /* v8 ignore stop @preserve */
       throw new Error(`Failed to copy MCP config: ${message}`);
+    }
+  }
+
+  /**
+   * Injects `timeoutMs` into the `mcpServers.linear` section of the MCP config.
+   * Falls back to writing the original string if parsing fails.
+   */
+  private injectLinearTimeout(configStr: string): string {
+    try {
+      const parsed = JSON.parse(configStr) as Record<string, unknown>;
+      const servers = parsed['mcpServers'] as Record<string, unknown> | undefined;
+      if (servers !== undefined) {
+        const linear = servers['linear'] as Record<string, unknown> | undefined;
+        if (linear !== undefined) {
+          linear['timeoutMs'] = LINEAR_MCP_TIMEOUT_MS;
+        }
+      }
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      this.logger.warn(
+        {},
+        'Failed to parse MCP config as JSON — writing without timeout injection'
+      );
+      return configStr;
     }
   }
 

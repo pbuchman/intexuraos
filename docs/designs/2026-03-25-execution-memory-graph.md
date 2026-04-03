@@ -194,7 +194,7 @@ Document shape:
 
 ## Migrations
 
-### `069_create_execution_memories.mjs`
+### `071_create_execution_memories.mjs`
 
 Create:
 
@@ -204,7 +204,7 @@ Create:
 - composite vector index on `(repository, status, embedding)` for pre-filtered vector search
 - security rule denying direct client access
 
-### `070_execution-memory-pipeline-indexes.mjs`
+### `072_execution-memory-pipeline-indexes.mjs`
 
 Create:
 

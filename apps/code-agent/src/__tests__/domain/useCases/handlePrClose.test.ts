@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import pino from 'pino';
 import { ok, err } from '@intexuraos/common-core';
-import { handlePrMerge, type HandlePrMergeDeps, type HandlePrMergeInput } from '../../../domain/usecases/handlePrMerge.js';
+import { handlePrClose, type HandlePrCloseDeps, type HandlePrCloseInput } from '../../../domain/usecases/handlePrClose.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
 import type { LinearIssueService } from '../../../domain/services/linearIssueService.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
 import type { TaskDispatcherService } from '../../../domain/services/taskDispatcher.js';
 import type { WorkerSettingsRepository } from '../../../domain/ports/workerSettingsRepository.js';
+import type { TaskGroupSummaryRepository } from '../../../domain/ports/taskGroupSummaryRepository.js';
 import { createMockLogger } from '../../helpers/mockLogger.js';
 
 function createBaseTask(overrides: Partial<CodeTask> = {}): CodeTask {
@@ -32,7 +33,7 @@ function createBaseTask(overrides: Partial<CodeTask> = {}): CodeTask {
   } as CodeTask;
 }
 
-function createDefaultInput(overrides: Partial<HandlePrMergeInput> = {}): HandlePrMergeInput {
+function createInput(overrides: Partial<HandlePrCloseInput> = {}): HandlePrCloseInput {
   return {
     repository: 'pbuchman/intexuraos',
     prNumber: 42,
@@ -40,11 +41,21 @@ function createDefaultInput(overrides: Partial<HandlePrMergeInput> = {}): Handle
     prTitle: null,
     prAuthorLogin: null,
     senderLogin: 'pbuchman',
+    isMerged: false,
+    sourceTimestamp: '2026-04-02T00:00:00.000Z',
     ...overrides,
   };
 }
 
-describe('handlePrMerge', () => {
+function createMergedInput(overrides: Partial<HandlePrCloseInput> = {}): HandlePrCloseInput {
+  return createInput({ isMerged: true, ...overrides });
+}
+
+function createClosedInput(overrides: Partial<HandlePrCloseInput> = {}): HandlePrCloseInput {
+  return createInput(overrides);
+}
+
+describe('handlePrClose (merged and closed-without-merge)', () => {
   let mockLogger: pino.Logger;
   let mockCodeTaskRepo: {
     findByPR: ReturnType<typeof vi.fn>;
@@ -65,6 +76,9 @@ describe('handlePrMerge', () => {
   };
   let mockWorkerSettingsRepo: {
     getSettings: ReturnType<typeof vi.fn>;
+  };
+  let mockGroupSummaryRepo: {
+    recomputeWithLabels: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -89,15 +103,19 @@ describe('handlePrMerge', () => {
     mockWorkerSettingsRepo = {
       getSettings: vi.fn().mockResolvedValue(ok(null)),
     };
+    mockGroupSummaryRepo = {
+      recomputeWithLabels: vi.fn().mockResolvedValue(ok(undefined)),
+    };
   });
 
-  function buildDeps(): HandlePrMergeDeps {
+  function buildDeps(): HandlePrCloseDeps {
     return {
       codeTaskRepo: mockCodeTaskRepo as unknown as CodeTaskRepository,
       linearIssueService: mockLinearIssueService as unknown as LinearIssueService,
       userServiceClient: mockUserServiceClient as unknown as UserServiceClient,
       taskDispatcher: mockTaskDispatcher as unknown as TaskDispatcherService,
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as WorkerSettingsRepository,
+      groupSummaryRepo: mockGroupSummaryRepo as unknown as TaskGroupSummaryRepository,
       logger: mockLogger,
     };
   }
@@ -107,7 +125,7 @@ describe('handlePrMerge', () => {
       ok(createBaseTask({ linearIssueId: 'INT-100', userId: 'user-from-task' }))
     );
 
-    await handlePrMerge(buildDeps(), createDefaultInput());
+    await handlePrClose(buildDeps(), createMergedInput());
 
     expect(mockLinearIssueService.markQa).toHaveBeenCalledWith('user-from-task', 'INT-100');
     expect(mockLinearIssueService.markQa).toHaveBeenCalledTimes(1);
@@ -118,7 +136,7 @@ describe('handlePrMerge', () => {
     mockCodeTaskRepo.findByPR.mockResolvedValue(ok(task));
     mockCodeTaskRepo.findLatestExecutionTaskByPR.mockResolvedValue(ok(task));
 
-    await handlePrMerge(buildDeps(), createDefaultInput());
+    await handlePrClose(buildDeps(), createMergedInput());
 
     expect(mockLinearIssueService.markQa).toHaveBeenCalledTimes(1);
     expect(mockLinearIssueService.markQa).toHaveBeenCalledWith('user-1', 'INT-200');
@@ -132,7 +150,7 @@ describe('handlePrMerge', () => {
       ok(createBaseTask({ id: 'task_def', linearIssueId: 'INT-400', userId: 'user-b' }))
     );
 
-    await handlePrMerge(buildDeps(), createDefaultInput());
+    await handlePrClose(buildDeps(), createMergedInput());
 
     expect(mockLinearIssueService.markQa).toHaveBeenCalledTimes(2);
     expect(mockLinearIssueService.markQa).toHaveBeenCalledWith('user-a', 'INT-300');
@@ -140,9 +158,9 @@ describe('handlePrMerge', () => {
   });
 
   it('should resolve userId and transition when INT-XXX found in PR body', async () => {
-    await handlePrMerge(
+    await handlePrClose(
       buildDeps(),
-      createDefaultInput({ prBody: 'Fixes INT-500', prAuthorLogin: 'author-login' }),
+      createMergedInput({ prBody: 'Fixes INT-500', prAuthorLogin: 'author-login' }),
     );
 
     expect(mockUserServiceClient.resolveGitHubUsername).toHaveBeenCalledWith('author-login');
@@ -150,18 +168,18 @@ describe('handlePrMerge', () => {
   });
 
   it('should resolve userId and transition when INT-XXX found in PR title', async () => {
-    await handlePrMerge(
+    await handlePrClose(
       buildDeps(),
-      createDefaultInput({ prTitle: '[INT-600] fix something' }),
+      createMergedInput({ prTitle: '[INT-600] fix something' }),
     );
 
     expect(mockLinearIssueService.markQa).toHaveBeenCalledWith('resolved-user', 'INT-600');
   });
 
   it('should deduplicate when same INT-XXX found in body and title', async () => {
-    await handlePrMerge(
+    await handlePrClose(
       buildDeps(),
-      createDefaultInput({ prBody: 'Fixes INT-700', prTitle: '[INT-700] fix' }),
+      createMergedInput({ prBody: 'Fixes INT-700', prTitle: '[INT-700] fix' }),
     );
 
     expect(mockLinearIssueService.markQa).toHaveBeenCalledTimes(1);
@@ -173,9 +191,9 @@ describe('handlePrMerge', () => {
       ok(createBaseTask({ linearIssueId: 'INT-800', userId: 'task-user' }))
     );
 
-    await handlePrMerge(
+    await handlePrClose(
       buildDeps(),
-      createDefaultInput({ prBody: 'Fixes INT-900', prAuthorLogin: 'author' }),
+      createMergedInput({ prBody: 'Fixes INT-900', prAuthorLogin: 'author' }),
     );
 
     expect(mockLinearIssueService.markQa).toHaveBeenCalledTimes(2);
@@ -184,12 +202,12 @@ describe('handlePrMerge', () => {
   });
 
   it('should not call markQa when no task and no INT-XXX found', async () => {
-    await handlePrMerge(buildDeps(), createDefaultInput());
+    await handlePrClose(buildDeps(), createMergedInput());
 
     expect(mockLinearIssueService.markQa).not.toHaveBeenCalled();
     expect(vi.mocked(mockLogger.debug)).toHaveBeenCalledWith(
-      expect.objectContaining({ repository: 'pbuchman/intexuraos', prNumber: 42 }),
-      'No Linear issues found for merged PR'
+      expect.objectContaining({ repository: 'pbuchman/intexuraos', prNumber: 42, isMerged: true }),
+      'No Linear issues found for closed PR'
     );
   });
 
@@ -198,9 +216,9 @@ describe('handlePrMerge', () => {
       err({ code: 'API_ERROR', message: 'HTTP 500' })
     );
 
-    await handlePrMerge(
+    await handlePrClose(
       buildDeps(),
-      createDefaultInput({ prBody: 'Fixes INT-1000', prAuthorLogin: 'author' }),
+      createMergedInput({ prBody: 'Fixes INT-1000', prAuthorLogin: 'author' }),
     );
 
     expect(mockLinearIssueService.markQa).not.toHaveBeenCalled();
@@ -215,9 +233,9 @@ describe('handlePrMerge', () => {
       err({ code: 'FIRESTORE_ERROR', message: 'connection failed' })
     );
 
-    await handlePrMerge(
+    await handlePrClose(
       buildDeps(),
-      createDefaultInput({ prBody: 'Fixes INT-1100', prAuthorLogin: 'author' }),
+      createMergedInput({ prBody: 'Fixes INT-1100', prAuthorLogin: 'author' }),
     );
 
     expect(vi.mocked(mockLogger.warn)).toHaveBeenCalledWith(
@@ -232,9 +250,9 @@ describe('handlePrMerge', () => {
       err({ code: 'FIRESTORE_ERROR', message: 'timeout' })
     );
 
-    await handlePrMerge(
+    await handlePrClose(
       buildDeps(),
-      createDefaultInput({ prBody: 'Fixes INT-1500', prAuthorLogin: 'author' }),
+      createMergedInput({ prBody: 'Fixes INT-1500', prAuthorLogin: 'author' }),
     );
 
     expect(vi.mocked(mockLogger.warn)).toHaveBeenCalledWith(
@@ -249,15 +267,15 @@ describe('handlePrMerge', () => {
     delete (taskWithoutIssue as unknown as Record<string, unknown>)['linearIssueId'];
     mockCodeTaskRepo.findByPR.mockResolvedValue(ok(taskWithoutIssue));
 
-    await handlePrMerge(buildDeps(), createDefaultInput());
+    await handlePrClose(buildDeps(), createMergedInput());
 
     expect(mockLinearIssueService.markQa).not.toHaveBeenCalled();
   });
 
   it('should fall back to senderLogin when prAuthorLogin is null', async () => {
-    await handlePrMerge(
+    await handlePrClose(
       buildDeps(),
-      createDefaultInput({ prBody: 'Fixes INT-1200', prAuthorLogin: null, senderLogin: 'merger-login' }),
+      createMergedInput({ prBody: 'Fixes INT-1200', prAuthorLogin: null, senderLogin: 'merger-login' }),
     );
 
     expect(mockUserServiceClient.resolveGitHubUsername).toHaveBeenCalledWith('merger-login');
@@ -267,9 +285,9 @@ describe('handlePrMerge', () => {
   it('should skip issue when resolveGitHubUsername returns ok(null)', async () => {
     mockUserServiceClient.resolveGitHubUsername.mockResolvedValue(ok(null));
 
-    await handlePrMerge(
+    await handlePrClose(
       buildDeps(),
-      createDefaultInput({ prBody: 'Fixes INT-1300', prAuthorLogin: 'unknown' }),
+      createMergedInput({ prBody: 'Fixes INT-1300', prAuthorLogin: 'unknown' }),
     );
 
     expect(mockLinearIssueService.markQa).not.toHaveBeenCalled();
@@ -284,9 +302,9 @@ describe('handlePrMerge', () => {
       ok(createBaseTask({ linearIssueId: 'INT-1400', userId: 'task-user' }))
     );
 
-    await handlePrMerge(
+    await handlePrClose(
       buildDeps(),
-      createDefaultInput({ prBody: 'Fixes INT-1400', prAuthorLogin: 'author' }),
+      createMergedInput({ prBody: 'Fixes INT-1400', prAuthorLogin: 'author' }),
     );
 
     expect(mockUserServiceClient.resolveGitHubUsername).not.toHaveBeenCalled();
@@ -313,7 +331,7 @@ describe('handlePrMerge', () => {
         })
       );
 
-      await handlePrMerge(buildDeps(), createDefaultInput());
+      await handlePrClose(buildDeps(), createMergedInput());
 
       expect(mockCodeTaskRepo.findPreservedPullRequestTask).toHaveBeenCalledWith('pbuchman/intexuraos', 42);
       expect(mockWorkerSettingsRepo.getSettings).toHaveBeenCalledWith('user-preserved');
@@ -327,7 +345,7 @@ describe('handlePrMerge', () => {
     it('does not fail if no preserved container exists', async () => {
       mockCodeTaskRepo.findPreservedPullRequestTask.mockResolvedValue(ok(null));
 
-      await expect(handlePrMerge(buildDeps(), createDefaultInput())).resolves.toBeUndefined();
+      await expect(handlePrClose(buildDeps(), createMergedInput())).resolves.toBeUndefined();
       expect(mockTaskDispatcher.cancelOnWorker).not.toHaveBeenCalled();
     });
 
@@ -336,7 +354,7 @@ describe('handlePrMerge', () => {
         err({ code: 'FIRESTORE_ERROR', message: 'connection failed' })
       );
 
-      await expect(handlePrMerge(buildDeps(), createDefaultInput())).resolves.toBeUndefined();
+      await expect(handlePrClose(buildDeps(), createMergedInput())).resolves.toBeUndefined();
       expect(mockTaskDispatcher.cancelOnWorker).not.toHaveBeenCalled();
     });
 
@@ -347,7 +365,7 @@ describe('handlePrMerge', () => {
       mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok(null));
       mockTaskDispatcher.cancelOnWorker.mockRejectedValue(new Error('network error'));
 
-      await expect(handlePrMerge(buildDeps(), createDefaultInput())).resolves.toBeUndefined();
+      await expect(handlePrClose(buildDeps(), createMergedInput())).resolves.toBeUndefined();
     });
 
     it('calls cancelOnWorker with undefined credentials when worker config not found', async () => {
@@ -368,7 +386,7 @@ describe('handlePrMerge', () => {
         })
       );
 
-      await handlePrMerge(buildDeps(), createDefaultInput());
+      await handlePrClose(buildDeps(), createMergedInput());
 
       expect(mockTaskDispatcher.cancelOnWorker).toHaveBeenCalledWith(
         'task_preserved',
@@ -384,7 +402,7 @@ describe('handlePrMerge', () => {
         ok(createBaseTask({ linearIssueId: 'INT-100', userId: 'user-from-task' }))
       );
 
-      await handlePrMerge(buildDeps(), createDefaultInput());
+      await handlePrClose(buildDeps(), createMergedInput());
 
       expect(mockLinearIssueService.removeLabel).toHaveBeenCalledWith('user-from-task', 'INT-100', 'ready-to-merge');
       expect(mockLinearIssueService.removeLabel).toHaveBeenCalledTimes(1);
@@ -395,9 +413,9 @@ describe('handlePrMerge', () => {
         ok(createBaseTask({ linearIssueId: 'INT-800', userId: 'task-user' }))
       );
 
-      await handlePrMerge(
+      await handlePrClose(
         buildDeps(),
-        createDefaultInput({ prBody: 'Fixes INT-900', prAuthorLogin: 'author' }),
+        createMergedInput({ prBody: 'Fixes INT-900', prAuthorLogin: 'author' }),
       );
 
       expect(mockLinearIssueService.removeLabel).toHaveBeenCalledWith('task-user', 'INT-800', 'ready-to-merge');
@@ -406,7 +424,7 @@ describe('handlePrMerge', () => {
     });
 
     it('should not call removeLabel when no issues found', async () => {
-      await handlePrMerge(buildDeps(), createDefaultInput());
+      await handlePrClose(buildDeps(), createMergedInput());
 
       expect(mockLinearIssueService.removeLabel).not.toHaveBeenCalled();
     });
@@ -416,14 +434,105 @@ describe('handlePrMerge', () => {
         ok(createBaseTask({ linearIssueId: 'INT-100', userId: 'user-from-task' }))
       );
 
-      await handlePrMerge(
+      await handlePrClose(
         buildDeps(),
-        createDefaultInput({ prTitle: '[INT-100] [plan] Add feature' }),
+        createMergedInput({ prTitle: '[INT-100] [plan] Add feature' }),
       );
 
       expect(mockLinearIssueService.removeLabel).toHaveBeenCalledWith('user-from-task', 'INT-100', 'ready-to-merge');
     });
 
+  });
+
+  describe('close without merge (label cleanup only)', () => {
+    it('should remove ready-to-merge label but NOT transition state when PR closed without merge', async () => {
+      mockCodeTaskRepo.findByPR.mockResolvedValue(
+        ok(createBaseTask({ linearIssueId: 'INT-100', userId: 'user-from-task' }))
+      );
+
+      await handlePrClose(buildDeps(), createClosedInput());
+
+      expect(mockLinearIssueService.removeLabel).toHaveBeenCalledWith('user-from-task', 'INT-100', 'ready-to-merge');
+      expect(mockLinearIssueService.removeLabel).toHaveBeenCalledTimes(1);
+      expect(mockLinearIssueService.markQa).not.toHaveBeenCalled();
+      expect(mockLinearIssueService.markTodo).not.toHaveBeenCalled();
+    });
+
+    it('should remove label from issues discovered via title extraction', async () => {
+      await handlePrClose(
+        buildDeps(),
+        createClosedInput({ prTitle: '[INT-500] fix something', prAuthorLogin: 'author' }),
+      );
+
+      expect(mockLinearIssueService.removeLabel).toHaveBeenCalledWith('resolved-user', 'INT-500', 'ready-to-merge');
+      expect(mockLinearIssueService.markQa).not.toHaveBeenCalled();
+    });
+
+    it('should not call removeLabel when no issues found on close', async () => {
+      await handlePrClose(buildDeps(), createClosedInput());
+
+      expect(mockLinearIssueService.removeLabel).not.toHaveBeenCalled();
+      expect(vi.mocked(mockLogger.debug)).toHaveBeenCalledWith(
+        expect.objectContaining({ repository: 'pbuchman/intexuraos', prNumber: 42, isMerged: false }),
+        'No Linear issues found for closed PR'
+      );
+    });
+
+    it('should not destroy preserved container when PR closed without merge', async () => {
+      mockCodeTaskRepo.findByPR.mockResolvedValue(
+        ok(createBaseTask({ linearIssueId: 'INT-100', userId: 'user-from-task' }))
+      );
+      mockCodeTaskRepo.findPreservedPullRequestTask.mockResolvedValue(
+        ok({ id: 'task_preserved', workerLocation: 'worker-home', userId: 'user-preserved' })
+      );
+
+      await handlePrClose(buildDeps(), createClosedInput());
+
+      expect(mockCodeTaskRepo.findPreservedPullRequestTask).not.toHaveBeenCalled();
+      expect(mockTaskDispatcher.cancelOnWorker).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('group summary recompute after label removal', () => {
+    it('calls recomputeWithLabels for each discovered Linear issue after merge', async () => {
+      mockCodeTaskRepo.findByPR.mockResolvedValue(
+        ok(createBaseTask({ linearIssueId: 'INT-100', userId: 'user-from-task' }))
+      );
+
+      await handlePrClose(buildDeps(), createMergedInput());
+
+      expect(mockGroupSummaryRepo.recomputeWithLabels).toHaveBeenCalledWith(
+        'user-from-task',
+        'INT-100',
+        [],
+        '2026-04-02T00:00:00.000Z',
+      );
+    });
+
+    it('calls recomputeWithLabels on close without merge (label is removed either way)', async () => {
+      mockCodeTaskRepo.findByPR.mockResolvedValue(
+        ok(createBaseTask({ linearIssueId: 'INT-200', userId: 'user-x' }))
+      );
+
+      await handlePrClose(buildDeps(), createClosedInput());
+
+      expect(mockGroupSummaryRepo.recomputeWithLabels).toHaveBeenCalledWith(
+        'user-x',
+        'INT-200',
+        [],
+        '2026-04-02T00:00:00.000Z',
+      );
+    });
+
+    it('does not throw when recomputeWithLabels rejects', async () => {
+      mockCodeTaskRepo.findByPR.mockResolvedValue(
+        ok(createBaseTask({ linearIssueId: 'INT-300', userId: 'user-y' }))
+      );
+      mockGroupSummaryRepo.recomputeWithLabels.mockRejectedValue(new Error('firestore down'));
+
+      // Should not throw — fire-and-forget
+      await expect(handlePrClose(buildDeps(), createMergedInput())).resolves.toBeUndefined();
+    });
   });
 
   describe('plan PR detection', () => {
@@ -432,9 +541,9 @@ describe('handlePrMerge', () => {
         ok(createBaseTask({ linearIssueId: 'INT-100', userId: 'user-from-task' }))
       );
 
-      await handlePrMerge(
+      await handlePrClose(
         buildDeps(),
-        createDefaultInput({ prTitle: '[INT-100] [plan] Add remediation agent' }),
+        createMergedInput({ prTitle: '[INT-100] [plan] Add remediation agent' }),
       );
 
       expect(mockLinearIssueService.markTodo).toHaveBeenCalledWith('user-from-task', 'INT-100');
@@ -447,9 +556,9 @@ describe('handlePrMerge', () => {
         ok(createBaseTask({ linearIssueId: 'INT-200', userId: 'user-from-task' }))
       );
 
-      await handlePrMerge(
+      await handlePrClose(
         buildDeps(),
-        createDefaultInput({ prTitle: '[INT-200] Fix auth bug' }),
+        createMergedInput({ prTitle: '[INT-200] Fix auth bug' }),
       );
 
       expect(mockLinearIssueService.markQa).toHaveBeenCalledWith('user-from-task', 'INT-200');
@@ -462,9 +571,9 @@ describe('handlePrMerge', () => {
         ok(createBaseTask({ linearIssueId: 'INT-150', userId: 'user-from-task' }))
       );
 
-      await handlePrMerge(
+      await handlePrClose(
         buildDeps(),
-        createDefaultInput({ prTitle: '[INT-150] [PLAN] Uppercase plan tag' }),
+        createMergedInput({ prTitle: '[INT-150] [PLAN] Uppercase plan tag' }),
       );
 
       expect(mockLinearIssueService.markTodo).toHaveBeenCalledWith('user-from-task', 'INT-150');
@@ -473,9 +582,9 @@ describe('handlePrMerge', () => {
     });
 
     it('should transition to Todo when plan PR has INT-XXX in body (not task)', async () => {
-      await handlePrMerge(
+      await handlePrClose(
         buildDeps(),
-        createDefaultInput({
+        createMergedInput({
           prTitle: '[INT-300] [plan] New feature',
           prBody: 'Fixes INT-300',
           prAuthorLogin: 'author-login',

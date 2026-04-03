@@ -91,7 +91,8 @@ Located at project root, defines MCP server connections:
       "url": "https://mcp.linear.app/mcp",
       "headers": {
         "Authorization": "Bearer ${LINEAR_API_KEY}"
-      }
+      },
+      "timeoutMs": 60000
     },
     "sentry": {
       "command": "npx",
@@ -100,6 +101,18 @@ Located at project root, defines MCP server connections:
   }
 }
 ```
+
+#### Linear MCP Timeout
+
+The Linear MCP server includes an enforced `timeoutMs` of `60000` (60 seconds). The code-worker entrypoint reads this value from the worktree `.mcp.json` and wraps Codex execution with a `timeout` command, ensuring a stalled Linear MCP call fails the attempt cleanly instead of hanging indefinitely.
+
+**Timeout marker:** When the timeout fires, the entrypoint emits a stable log line:
+
+```
+[entrypoint] MCP timeout server=linear timeout_ms=60000
+```
+
+Operators can scan task logs for the substring `MCP timeout` and `server=linear` to identify timeout events.
 
 **Transport types:**
 

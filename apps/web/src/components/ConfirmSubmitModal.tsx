@@ -7,7 +7,6 @@ import { WORKER_TYPE_LABELS } from './workers/shared.js';
 interface ConfirmSubmitModalProps {
   isOpen: boolean;
   taskTitle: string;
-  workerName: string;
   workerType: CodeTaskWorkerType;
   onConfirm: () => Promise<void>;
   onCancel: () => void;
@@ -16,7 +15,6 @@ interface ConfirmSubmitModalProps {
 export function ConfirmSubmitModal({
   isOpen,
   taskTitle,
-  workerName,
   workerType,
   onConfirm,
   onCancel,
@@ -77,16 +75,13 @@ export function ConfirmSubmitModal({
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
               <p className="text-slate-700 dark:text-slate-200">
-                Do you want to send{' '}
+                Do you want to submit{' '}
                 <span className="font-semibold text-slate-900 dark:text-white">
                   &quot;{taskTitle}&quot;
                 </span>{' '}
-                to{' '}
+                as{' '}
                 <span className="font-semibold text-blue-600 dark:text-blue-400">
-                  {workerName}
-                </span>{' '}
-                <span className="text-slate-500 dark:text-slate-400">
-                  ({workerTypeLabel})
+                  {workerTypeLabel}
                 </span>
                 ?
               </p>

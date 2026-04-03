@@ -114,6 +114,7 @@ describe('POST /internal/webhooks/task-event', () => {
       processHeartbeat: {} as never,
       detectZombieTasks: {} as never,
       cleanupTaskLogs: {} as never,
+      archiveStaleGroups: {} as never,
       metricsClient: {} as never,
       workerSettingsRepo: {} as never,
       workerHealthProbe: {} as never,

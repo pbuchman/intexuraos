@@ -18,6 +18,7 @@ describe('linearIssueService', () => {
   let mockGenerateTitle = vi.fn();
   let mockAddComment = vi.fn();
   let mockFetchIssueTree = vi.fn();
+  let mockFetchDirectChildrenLive = vi.fn();
   let mockUpdateIssueMetadata = vi.fn();
 
   beforeEach(() => {
@@ -28,6 +29,7 @@ describe('linearIssueService', () => {
     mockGenerateTitle = vi.fn();
     mockAddComment = vi.fn();
     mockFetchIssueTree = vi.fn();
+    mockFetchDirectChildrenLive = vi.fn();
     mockUpdateIssueMetadata = vi.fn();
   });
 
@@ -38,6 +40,7 @@ describe('linearIssueService', () => {
     generateTitle: (...args: Parameters<LinearAgentClient['generateTitle']>) => mockGenerateTitle(...args),
     addComment: (...args: Parameters<LinearAgentClient['addComment']>) => mockAddComment(...args),
     fetchIssueTree: (...args: Parameters<LinearAgentClient['fetchIssueTree']>) => mockFetchIssueTree(...args),
+    fetchDirectChildrenLive: (...args: Parameters<LinearAgentClient['fetchDirectChildrenLive']>) => mockFetchDirectChildrenLive(...args),
     updateIssueMetadata: (...args: Parameters<LinearAgentClient['updateIssueMetadata']>) => mockUpdateIssueMetadata(...args),
     fetchIssueForDisplay: vi.fn(),
     fetchIssuesForDisplay: vi.fn(),

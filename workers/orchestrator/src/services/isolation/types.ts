@@ -27,7 +27,11 @@ export type WorkerType = CodeTaskWorkerType;
 export interface WorkerTypeConfig {
   runtime: WorkerRuntime;
   apiBaseUrl: string;
-  apiKeyEnvVar?: 'ANTHROPIC_API_KEY' | 'MINIMAX_API_KEY' | 'DASHSCOPE_API_KEY';
+  apiKeyEnvVar?:
+    | 'ANTHROPIC_API_KEY'
+    | 'MINIMAX_API_KEY'
+    | 'DASHSCOPE_API_KEY'
+    | 'OPENROUTER_API_KEY';
   model?: string;
   effort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh';
 }
@@ -84,6 +88,13 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     apiBaseUrl: 'https://api.openai.com',
     effort: 'xhigh',
   },
+  'openrouter-free': {
+    runtime: 'claude',
+    apiBaseUrl: 'https://openrouter.ai/api',
+    apiKeyEnvVar: 'OPENROUTER_API_KEY',
+    model: 'qwen/qwen3.6-plus:free',
+    effort: 'high',
+  },
 };
 
 export interface WorkerSecrets {
@@ -92,6 +103,7 @@ export interface WorkerSecrets {
   SENTRY_AUTH_TOKEN: string;
   MINIMAX_API_KEY: string;
   DASHSCOPE_API_KEY: string;
+  OPENROUTER_API_KEY: string;
 }
 
 export interface WorkerConfig {
@@ -189,6 +201,12 @@ export interface IsolationProvider {
   preserveWorker?(taskId: string): Promise<void>;
 
   listPreservedWorkers?(): Promise<{ containerId: string; taskId: string; preservedAt: string }[]>;
+
+  /**
+   * Check if a running worker environment is available for task resume.
+   * May clean up stale references as a side effect.
+   */
+  isResumeAvailable?(taskId: string): Promise<boolean>;
 
   listWorkerContainers?(): Promise<DiscoveredContainer[]>;
 

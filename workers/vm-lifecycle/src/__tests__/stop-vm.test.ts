@@ -251,6 +251,77 @@ describe('stopVm', () => {
     expect(mockStop).toHaveBeenCalledOnce();
   });
 
+  it('should proceed when health endpoint throws during wait for tasks', async () => {
+    mockGet.mockResolvedValue([{ status: 'RUNNING' }]);
+    mockStop.mockResolvedValue([{ name: 'stop-op-catch' }]);
+
+    globalThis.fetch = vi
+      .fn()
+      .mockImplementation(
+        async (url: string): Promise<{ ok: boolean; json: () => Promise<unknown> }> => {
+          const urlStr = String(url);
+
+          if (urlStr.includes('shutdown')) {
+            return {
+              ok: true,
+              json: (): Promise<unknown> =>
+                Promise.resolve({ status: 'acknowledged', runningTasks: 1 }),
+            };
+          }
+
+          if (urlStr.includes('health')) {
+            throw new Error('Connection refused');
+          }
+
+          throw new Error(`Unexpected URL: ${urlStr}`);
+        }
+      );
+
+    const resultPromise = stopVm();
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(result.success).toBe(true);
+    expect(mockStop).toHaveBeenCalledOnce();
+  });
+
+  it('should warn and proceed when grace period expires with tasks still running', async () => {
+    mockGet.mockResolvedValue([{ status: 'RUNNING' }]);
+    mockStop.mockResolvedValue([{ name: 'stop-op-grace' }]);
+
+    globalThis.fetch = vi
+      .fn()
+      .mockImplementation(
+        async (url: string): Promise<{ ok: boolean; json: () => Promise<unknown> }> => {
+          const urlStr = String(url);
+
+          if (urlStr.includes('shutdown')) {
+            return {
+              ok: true,
+              json: (): Promise<unknown> =>
+                Promise.resolve({ status: 'acknowledged', runningTasks: 3 }),
+            };
+          }
+
+          if (urlStr.includes('health')) {
+            return {
+              ok: true,
+              json: (): Promise<unknown> => Promise.resolve({ running: 3, status: 'running' }),
+            };
+          }
+
+          throw new Error(`Unexpected URL: ${urlStr}`);
+        }
+      );
+
+    const resultPromise = stopVm();
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(result.success).toBe(true);
+    expect(mockStop).toHaveBeenCalledOnce();
+  });
+
   it('should handle graceful shutdown with running tasks that finish via running=0', async () => {
     mockGet.mockResolvedValue([{ status: 'RUNNING' }]);
     mockStop.mockResolvedValue([{ name: 'stop-op-111' }]);

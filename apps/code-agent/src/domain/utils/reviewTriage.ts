@@ -17,6 +17,7 @@ const REVIEW_WORKER_TYPE_ALIASES: Record<string, WorkerType> = {
   kimi: 'kimi',
   codex: 'codex',
   'codex-xhigh': 'codex-xhigh',
+  'openrouter-free': 'openrouter-free',
 };
 
 export function isReviewCommandComment(commentBody: string): boolean {

@@ -1,5 +1,6 @@
 import type { WorkerRuntime } from '../services/runtime/types.js';
 import type { WorkerType } from '../services/isolation/types.js';
+import type { ExecutionMemoryPromptContext } from './execution-memory.js';
 
 export type TaskStatus =
   | 'queued'
@@ -50,6 +51,8 @@ export interface Task {
   retriedFrom?: string;
   /** Agent type from code-agent. When set, used instead of recalculating from labels. */
   agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
+  /** Prompt-ready execution memory context prepared by code-agent retrieval. */
+  executionMemoryContext?: ExecutionMemoryPromptContext;
   /** Existing PR tracking comment to reuse instead of creating a new one. */
   trackingCommentId?: string;
   /** PR number this task is operating on. Used to enforce one-per-PR container preservation. */
@@ -113,8 +116,11 @@ export interface TaskResult {
   planning_pr_url?: string;
   planning_unclear_clarification?: string;
   execution_outcome_label?: 'implemented' | 'already_completed';
-  execution_superpowers_executing_plans_used?: '0' | '1';
+  execution_superpowers_subagent_driven_dev_used?: '0' | '1';
   execution_superpowers_requesting_code_review_used?: '0' | '1';
+  execution_memory_ids_used?: string;
+  execution_memory_ids_rejected?: string;
+  execution_memory_usage_summary?: string;
   execution_linear_issue_url?: string;
   review_comments_posted?: string;
   review_id?: string;

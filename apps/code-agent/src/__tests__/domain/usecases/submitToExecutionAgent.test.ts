@@ -38,15 +38,18 @@ describe('submitToExecutionAgent', () => {
     hasActiveTaskForLinearIssue: ReturnType<typeof vi.fn>;
     hasDispatchedOrRunningForPR: ReturnType<typeof vi.fn>;
     countQueued: ReturnType<typeof vi.fn>;
+    findPlannedTaskByLinearIssue: ReturnType<typeof vi.fn>;
   };
   let mockLinearAgentClient: {
     validateIssue: ReturnType<typeof vi.fn>;
     updateIssueState: ReturnType<typeof vi.fn>;
     addComment: ReturnType<typeof vi.fn>;
     fetchIssueTree: ReturnType<typeof vi.fn>;
+    fetchDirectChildrenLive: ReturnType<typeof vi.fn>;
   };
   let mockTaskEnqueueService: {
     enqueue: ReturnType<typeof vi.fn>;
+    enqueueMany: ReturnType<typeof vi.fn>;
   };
   let mockMetricsClient: {
     incrementTasksSubmitted: ReturnType<typeof vi.fn>;
@@ -214,6 +217,7 @@ describe('submitToExecutionAgent', () => {
       hasActiveTaskForLinearIssue: vi.fn(),
       hasDispatchedOrRunningForPR: vi.fn(),
       countQueued: vi.fn(),
+      findPlannedTaskByLinearIssue: vi.fn(),
     };
 
     mockLinearAgentClient = {
@@ -221,10 +225,12 @@ describe('submitToExecutionAgent', () => {
       updateIssueState: vi.fn(),
       addComment: vi.fn(),
       fetchIssueTree: vi.fn(),
+      fetchDirectChildrenLive: vi.fn(),
     };
 
     mockTaskEnqueueService = {
       enqueue: vi.fn(),
+      enqueueMany: vi.fn(),
     };
 
     mockMetricsClient = {
@@ -266,6 +272,7 @@ describe('submitToExecutionAgent', () => {
     it('returns invalid_status when task status is not completed', async () => {
       const mockTask = createMockTask({ status: 'running' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockCodeTaskRepo.findPlannedTaskByLinearIssue.mockResolvedValue(ok(null));
 
       const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
@@ -281,6 +288,7 @@ describe('submitToExecutionAgent', () => {
     it('returns invalid_status when agentType is not planning', async () => {
       const mockTask = createMockTask({ agentType: 'execution' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockCodeTaskRepo.findPlannedTaskByLinearIssue.mockResolvedValue(ok(null));
 
       const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
@@ -324,6 +332,22 @@ describe('submitToExecutionAgent', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('already_implemented');
         expect(result.error.existingTaskId).toBe(existingExecutionTaskId);
+      }
+    });
+
+    it('returns already_implemented when fanOutChildTaskIds are already linked', async () => {
+      const mockTask = createMockTask({ fanOutChildTaskIds: ['task_child_1', 'task_child_2'] });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId,
+        userId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('already_implemented');
+        expect(result.error.existingTaskId).toBe('task_child_1');
       }
     });
 
@@ -1009,8 +1033,21 @@ describe('submitToExecutionAgent', () => {
           parentId: null,
         })
       );
+      mockLinearAgentClient.fetchDirectChildrenLive.mockResolvedValue(
+        ok([
+          {
+            id: 'child-uuid-1',
+            identifier: 'INT-101',
+            url: 'https://linear.app/pbuchman/issue/INT-101',
+            parentId: 'uuid-parent-123',
+            labels: ['code-task'],
+            assigneeId: null,
+            state: 'Backlog',
+          },
+        ]),
+      );
       mockFanOutChildTasks.mockResolvedValue(
-        ok({ childTaskIds: ['child_1', 'child_2'], parentTaskId: 'task_parent_exec' })
+        ok({ childTaskIds: ['child_1', 'child_2'], primaryChildTaskId: 'child_1', primaryChildIssueId: 'INT-101' })
       );
 
       const result = await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
@@ -1036,13 +1073,39 @@ describe('submitToExecutionAgent', () => {
           parentId: null,
         })
       );
+      mockLinearAgentClient.fetchDirectChildrenLive.mockResolvedValue(
+        ok([
+          {
+            id: 'child-uuid-1',
+            identifier: 'INT-101',
+            url: 'https://linear.app/pbuchman/issue/INT-101',
+            parentId: 'uuid-parent-123',
+            labels: ['code-task'],
+            assigneeId: null,
+            state: 'Backlog',
+          },
+          {
+            id: 'child-uuid-2',
+            identifier: 'INT-102',
+            url: 'https://linear.app/pbuchman/issue/INT-102',
+            parentId: 'uuid-parent-123',
+            labels: ['code-task'],
+            assigneeId: null,
+            state: 'Backlog',
+          },
+        ])
+      );
       return mockTask;
     }
 
-    it('triggers fan-out and returns child task IDs when complex-task label is present', async () => {
+    it('uses live direct children and does not create a parent execution task for complex issues', async () => {
       setupComplexTaskMocks();
       mockFanOutChildTasks.mockResolvedValue(
-        ok({ childTaskIds: ['task_child_1', 'task_child_2'], parentTaskId: 'task_parent_exec' })
+        ok({
+          childTaskIds: ['task_child_1', 'task_child_2'],
+          primaryChildTaskId: 'task_child_1',
+          primaryChildIssueId: 'INT-101',
+        })
       );
 
       const result = await submitToExecutionAgent(createDeps(), {
@@ -1053,29 +1116,56 @@ describe('submitToExecutionAgent', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.childTaskIds).toEqual(['task_child_1', 'task_child_2']);
-        expect(result.value.codeTaskId).toMatch(/^task_/);
+        expect(result.value.codeTaskId).toBe('task_child_1');
         expect(result.value.implementationOf).toBe(originalTaskId);
       }
+      expect(mockCodeTaskRepo.create).not.toHaveBeenCalled();
+      expect(mockLinearAgentClient.fetchDirectChildrenLive).toHaveBeenCalledWith({
+        userId,
+        issueId: 'uuid-parent-123',
+      });
       expect(mockFanOutChildTasks).toHaveBeenCalledWith(
         expect.objectContaining({
           logger: expect.anything(),
           codeTaskRepo: expect.anything(),
-          linearAgentClient: expect.anything(),
           taskEnqueueService: expect.anything(),
           orchestratorSecret: 'test-orchestrator-secret',
         }),
         expect.objectContaining({
-          userId,
-          linearIssueId,
-          parentIssueUuid: 'uuid-parent-123',
+          planningTask: expect.objectContaining({ id: originalTaskId }),
+          childIssues: expect.arrayContaining([
+            expect.objectContaining({ identifier: 'INT-101' }),
+            expect.objectContaining({ identifier: 'INT-102' }),
+          ]),
         })
       );
     });
 
-    it('returns internal_error and rolls back when fan-out fails', async () => {
+    it('returns complex_task_no_qualifying_children and keeps parent unlocked when no live code-task children exist', async () => {
       setupComplexTaskMocks();
-      mockFanOutChildTasks.mockResolvedValue(
-        err({ code: 'no_qualifying_children', message: 'No direct children with code-task label found' })
+      mockLinearAgentClient.fetchDirectChildrenLive.mockResolvedValue(ok([]));
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId,
+        userId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('complex_task_no_qualifying_children');
+      }
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith(
+        originalTaskId,
+        expect.objectContaining({ implementationTaskId: expect.any(String) })
+      );
+      expect(mockCodeTaskRepo.create).not.toHaveBeenCalled();
+      expect(mockFanOutChildTasks).not.toHaveBeenCalled();
+    });
+
+    it('returns internal_error when live direct-child lookup fails', async () => {
+      setupComplexTaskMocks();
+      mockLinearAgentClient.fetchDirectChildrenLive.mockResolvedValue(
+        err({ code: 'UNAVAILABLE', message: 'children unavailable' }),
       );
 
       const result = await submitToExecutionAgent(createDeps(), {
@@ -1085,20 +1175,81 @@ describe('submitToExecutionAgent', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('internal_error');
-        expect(result.error.message).toContain('Fan-out failed');
+        expect(result.error).toEqual({
+          code: 'internal_error',
+          message: 'Failed to fetch child issues for complex implementation',
+        });
       }
-      // Should roll back optimistic lock
-      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
-        originalTaskId,
-        expect.objectContaining({ implementationTaskId: null })
-      );
     });
 
-    it('does not call enqueue directly for complex tasks (fan-out handles child enqueue)', async () => {
+    it('maps fanOutChildTasks no_qualifying_children to complex_task_no_qualifying_children', async () => {
       setupComplexTaskMocks();
       mockFanOutChildTasks.mockResolvedValue(
-        ok({ childTaskIds: ['task_child_1'], parentTaskId: 'task_parent_exec' })
+        err({ code: 'no_qualifying_children', message: 'No direct children with code-task label found' }),
+      );
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId,
+        userId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toEqual({
+          code: 'complex_task_no_qualifying_children',
+          message: 'No direct children with code-task label found',
+        });
+      }
+    });
+
+    it('maps fanOutChildTasks queue_full to queue_full', async () => {
+      setupComplexTaskMocks();
+      mockFanOutChildTasks.mockResolvedValue(
+        err({ code: 'queue_full', message: 'Queue is full' }),
+      );
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId,
+        userId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toEqual({
+          code: 'queue_full',
+          message: 'Queue is full',
+        });
+      }
+    });
+
+    it('returns internal_error when fanOutChildTasks fails unexpectedly', async () => {
+      setupComplexTaskMocks();
+      mockFanOutChildTasks.mockResolvedValue(
+        err({ code: 'internal_error', message: 'fan-out exploded' }),
+      );
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId,
+        userId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toEqual({
+          code: 'internal_error',
+          message: 'Fan-out failed: fan-out exploded',
+        });
+      }
+    });
+
+    it('does not call single enqueue directly for complex tasks (fan-out handles batch enqueue)', async () => {
+      setupComplexTaskMocks();
+      mockFanOutChildTasks.mockResolvedValue(
+        ok({
+          childTaskIds: ['task_child_1'],
+          primaryChildTaskId: 'task_child_1',
+          primaryChildIssueId: 'INT-101',
+        })
       );
 
       await submitToExecutionAgent(createDeps(), {
@@ -1113,7 +1264,11 @@ describe('submitToExecutionAgent', () => {
     it('still updates Linear issue state and adds comment for complex tasks', async () => {
       setupComplexTaskMocks();
       mockFanOutChildTasks.mockResolvedValue(
-        ok({ childTaskIds: ['task_child_1'], parentTaskId: 'task_parent_exec' })
+        ok({
+          childTaskIds: ['task_child_1'],
+          primaryChildTaskId: 'task_child_1',
+          primaryChildIssueId: 'INT-101',
+        })
       );
 
       await submitToExecutionAgent(createDeps(), {
@@ -1129,11 +1284,20 @@ describe('submitToExecutionAgent', () => {
       expect(mockLinearAgentClient.addComment).toHaveBeenCalled();
     });
 
-    it('returns internal_error when parent task creation fails for complex task', async () => {
+    it('logs warnings when parent Linear updates fail after successful fan-out', async () => {
       setupComplexTaskMocks();
-      // Override create to fail
-      mockCodeTaskRepo.create.mockResolvedValue(
-        err({ code: 'FIRESTORE_ERROR', message: 'Create failed' })
+      mockFanOutChildTasks.mockResolvedValue(
+        ok({
+          childTaskIds: ['task_child_1'],
+          primaryChildTaskId: 'task_child_1',
+          primaryChildIssueId: 'INT-101',
+        }),
+      );
+      mockLinearAgentClient.updateIssueState.mockResolvedValueOnce(
+        err({ code: 'UNAVAILABLE', message: 'state failed' }),
+      );
+      mockLinearAgentClient.addComment.mockResolvedValueOnce(
+        err({ code: 'UNAVAILABLE', message: 'comment failed' }),
       );
 
       const result = await submitToExecutionAgent(createDeps(), {
@@ -1141,12 +1305,15 @@ describe('submitToExecutionAgent', () => {
         userId,
       });
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('internal_error');
-      }
-      // fan-out should NOT be called
-      expect(mockFanOutChildTasks).not.toHaveBeenCalled();
+      expect(result.ok).toBe(true);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ linearIssueId, error: { code: 'UNAVAILABLE', message: 'state failed' } }),
+        'Failed to update parent Linear issue to In Progress for complex execution',
+      );
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ linearIssueId, error: { code: 'UNAVAILABLE', message: 'comment failed' } }),
+        'Failed to add complex Execution Agent start comment to parent Linear issue',
+      );
     });
   });
 
@@ -1425,6 +1592,234 @@ describe('submitToExecutionAgent', () => {
         expect.objectContaining({ linearIssueId }),
         expect.stringContaining('Failed to check for active tasks')
       );
+    });
+  });
+
+  describe('planning task resolver', () => {
+    it('resolves review task to planning task via linearIssueId', async () => {
+      // The user calls /implement on a review task
+      const reviewTask = createMockTask({
+        id: 'task_review',
+        agentType: 'review',
+        status: 'reviewed',
+        linearIssueId: 'INT-100',
+      });
+      // The planning task exists for the same Linear issue
+      const planningTask = createMockTask({
+        id: 'task_planning',
+        agentType: 'planning',
+        status: 'planned',
+        linearIssueId: 'INT-100',
+      });
+
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(reviewTask));
+      mockCodeTaskRepo.findPlannedTaskByLinearIssue.mockResolvedValue(ok(planningTask));
+
+      // Set up remaining happy-path mocks using the PLANNING task
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(ok({ hasActive: false }));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [enabledWorker] }));
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'INT-100',
+          identifier: 'INT-100',
+          title: 'My Feature',
+          url: 'https://linear.app/pbuchman/issue/INT-100',
+          labels: ['code-task'],
+          childCount: 0,
+          parentId: null,
+        })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok({ ...planningTask, implementationTaskId: 'task_exec' }));
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok({
+          ...planningTask,
+          id: 'task_exec',
+          agentType: 'execution' as const,
+          followUpReason: 'execution_implement' as const,
+          parentTaskId: 'task_planning',
+          traceId: 'execution-trace-abc',
+          workerType: 'auto' as const,
+          webhookSecret: 'webhook-secret',
+        })
+      );
+      mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
+      mockLinearAgentClient.addComment.mockResolvedValue(ok({}));
+      mockTaskEnqueueService.enqueue.mockResolvedValue(ok({ taskId: 'task_exec', queuePosition: 1 }));
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId: 'task_review',
+        userId,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.implementationOf).toBe('task_planning');
+      }
+      // Verify resolver was called with the review task's linearIssueId
+      expect(mockCodeTaskRepo.findPlannedTaskByLinearIssue).toHaveBeenCalledWith('INT-100');
+    });
+
+    it('returns invalid_status when resolver finds no planning task', async () => {
+      const reviewTask = createMockTask({
+        id: 'task_review',
+        agentType: 'review',
+        status: 'reviewed',
+        linearIssueId: 'INT-100',
+      });
+
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(reviewTask));
+      mockCodeTaskRepo.findPlannedTaskByLinearIssue.mockResolvedValue(ok(null));
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId: 'task_review',
+        userId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('invalid_status');
+      }
+    });
+
+    it('returns invalid_status when non-planning task has no linearIssueId', async () => {
+      const taskWithoutLinear = createMockTask({
+        id: 'task_no_linear',
+        agentType: 'review',
+        status: 'reviewed',
+      });
+      delete (taskWithoutLinear as { linearIssueId?: string }).linearIssueId;
+
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(taskWithoutLinear));
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId: 'task_no_linear',
+        userId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('invalid_status');
+      }
+      // Should NOT attempt resolver without linearIssueId
+      expect(mockCodeTaskRepo.findPlannedTaskByLinearIssue).not.toHaveBeenCalled();
+    });
+
+    it('resolves remediation task to planning task', async () => {
+      const remediationTask = createMockTask({
+        id: 'task_remediation',
+        agentType: 'remediation',
+        status: 'implemented',
+        linearIssueId: 'INT-100',
+      });
+      const planningTask = createMockTask({
+        id: 'task_planning',
+        agentType: 'planning',
+        status: 'planned',
+        linearIssueId: 'INT-100',
+      });
+
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(remediationTask));
+      mockCodeTaskRepo.findPlannedTaskByLinearIssue.mockResolvedValue(ok(planningTask));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(ok({ hasActive: false }));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [enabledWorker] }));
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'INT-100',
+          identifier: 'INT-100',
+          title: 'My Feature',
+          url: 'https://linear.app/pbuchman/issue/INT-100',
+          labels: ['code-task'],
+          childCount: 0,
+          parentId: null,
+        })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok({ ...planningTask, implementationTaskId: 'task_exec' }));
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok({
+          ...planningTask,
+          id: 'task_exec',
+          agentType: 'execution' as const,
+          followUpReason: 'execution_implement' as const,
+          parentTaskId: 'task_planning',
+          traceId: 'execution-trace-abc',
+          workerType: 'auto' as const,
+          webhookSecret: 'webhook-secret',
+        })
+      );
+      mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
+      mockLinearAgentClient.addComment.mockResolvedValue(ok({}));
+      mockTaskEnqueueService.enqueue.mockResolvedValue(ok({ taskId: 'task_exec', queuePosition: 1 }));
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId: 'task_remediation',
+        userId,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.implementationOf).toBe('task_planning');
+      }
+    });
+
+    it('returns invalid_status when resolved planning task belongs to different user', async () => {
+      const reviewTask = createMockTask({
+        id: 'task_review',
+        agentType: 'review',
+        status: 'reviewed',
+        linearIssueId: 'INT-100',
+      });
+      const otherUsersPlanningTask = createMockTask({
+        id: 'task_planning',
+        agentType: 'planning',
+        status: 'planned',
+        linearIssueId: 'INT-100',
+        userId: 'other-user-id',
+      });
+
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(reviewTask));
+      mockCodeTaskRepo.findPlannedTaskByLinearIssue.mockResolvedValue(ok(otherUsersPlanningTask));
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId: 'task_review',
+        userId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('invalid_status');
+      }
+      // Verify security event is logged with both user IDs
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestedByUserId: userId,
+          taskOwnedByUserId: 'other-user-id',
+        }),
+        'Security: resolved planning task belongs to different user'
+      );
+    });
+
+    it('returns invalid_status when resolver errors', async () => {
+      const reviewTask = createMockTask({
+        id: 'task_review',
+        agentType: 'review',
+        status: 'reviewed',
+        linearIssueId: 'INT-100',
+      });
+
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(reviewTask));
+      mockCodeTaskRepo.findPlannedTaskByLinearIssue.mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR' as const, message: 'Firestore error' })
+      );
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId: 'task_review',
+        userId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('invalid_status');
+      }
     });
   });
 });

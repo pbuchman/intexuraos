@@ -18,6 +18,7 @@ import { formatMetricsLogLines } from '../domain/formatters/metricsLogFormatter.
 import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
 import { parseLinearIdentifierFromUrl } from '../domain/utils/linearIdentifierParser.js';
 import { parseOwnerRepo } from '../domain/utils/parseOwnerRepo.js';
+import { drainTaskQueue } from '../domain/usecases/drainTaskQueue.js';
 
 /**
  * Best-effort: record a task_failed automation log event for PR-linked tasks.
@@ -48,6 +49,17 @@ function recordTaskFailed(params: {
   ).catch((e: unknown) => {
     getServices().logger.warn({ error: e, taskId: params.taskId }, 'Failed to record automation log for task failure');
   });
+}
+
+function shouldQueueExecutionMemoryPostRun(params: {
+  agentType: string | undefined; // @allow-undefined-type -- required parameter, not optional property
+  existingStatus: string | undefined; // @allow-undefined-type -- required parameter, not optional property
+}): boolean {
+  return (
+    loadConfig().executionMemoryEnabled
+    && params.agentType === 'execution'
+    && params.existingStatus === undefined
+  );
 }
 
 function recordRemediationDecision(params: {
@@ -142,8 +154,11 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       planning_pr_url?: string;
       planning_unclear_clarification?: string;
       execution_outcome_label?: 'implemented' | 'already_completed';
-      execution_superpowers_executing_plans_used?: '0' | '1';
+      execution_superpowers_subagent_driven_dev_used?: '0' | '1';
       execution_superpowers_requesting_code_review_used?: '0' | '1';
+      execution_memory_ids_used?: string;
+      execution_memory_ids_rejected?: string;
+      execution_memory_usage_summary?: string;
       execution_linear_issue_url?: string;
       review_id?: string;
       review_comments_posted?: string;
@@ -195,8 +210,11 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 planning_superpowers_writing_plans_used: { type: 'string' },
                 planning_linear_url: { type: 'string' },
                 execution_outcome_label: { type: 'string' },
-                execution_superpowers_executing_plans_used: { type: 'string' },
+                execution_superpowers_subagent_driven_dev_used: { type: 'string' },
                 execution_superpowers_requesting_code_review_used: { type: 'string' },
+                execution_memory_ids_used: { type: 'string' },
+                execution_memory_ids_rejected: { type: 'string' },
+                execution_memory_usage_summary: { type: 'string' },
                 review_id: { type: 'string' },
                 review_comments_posted: { type: 'string' },
                 review_types: { type: 'string' },
@@ -451,19 +469,19 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   : `partial URL extraction (${String(subtaskUrls.length)} URLs < ${String(originalIssue.childCount)} children)`;
               request.log.warn(
                 { taskId, linearIssueId: task.linearIssueId, subtaskUrlCount: subtaskUrls.length, childCount: originalIssue.childCount },
-                `Complex planning: ${reason} — falling back to fetchIssueTree`
+                `Complex planning: ${reason} — falling back to fetchDirectChildrenLive`
               );
 
-              const treeResult = await linearAgentClient.fetchIssueTree({
+              const directChildrenResult = await linearAgentClient.fetchDirectChildrenLive({
                 userId: task.userId,
                 issueId: originalIssueUuid,
               });
-              if (!treeResult.ok) {
-                return { ok: false, message: `Failed to fetch issue tree: ${treeResult.error.message}` };
+              if (!directChildrenResult.ok) {
+                return { ok: false, message: `Failed to fetch live direct children: ${directChildrenResult.error.message}` };
               }
 
-              const directChildren = treeResult.value.descendants.filter(
-                (d) => d.parentId === originalIssueUuid
+              const directChildren = directChildrenResult.value.filter(
+                (child) => child.parentId === originalIssueUuid
               );
 
               for (const child of directChildren) {
@@ -825,6 +843,27 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           await deletePRTaskLock(firestore, task.repository, task.prNumber, request.log);
         }
       };
+
+      const triggerDrainForPR = async (): Promise<void> => {
+        if (task.prNumber === undefined) return;
+        logger.info({ taskId, prNumber: task.prNumber }, 'Triggering post-completion drain for same-PR queued tasks');
+        try {
+          const services = getServices();
+          await drainTaskQueue({
+            logger,
+            codeTaskRepo: services.codeTaskRepo,
+            taskDispatcher: services.taskDispatcher,
+            linearAgentClient: services.linearAgentClient,
+            whatsappNotifier: services.whatsappNotifier,
+            workerSettingsRepo: services.workerSettingsRepo,
+            taskEnqueueService: services.taskEnqueueService,
+            orchestratorSecret: loadConfig().orchestratorSecret,
+          });
+        } catch (drainErr) {
+          logger.warn({ taskId, prNumber: task.prNumber, error: drainErr }, 'Post-completion drain failed (non-blocking)');
+        }
+      };
+
       // Step 3: Update task based on status
       if (status === 'completed') {
         // Trace which agent type is being handled for debugging
@@ -1100,6 +1139,16 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const resolvedStatus =
           task.agentType === 'planning' ? 'planned' :
           task.agentType === 'review' ? 'reviewed' : 'implemented';
+        const executionMemoryPostRun = shouldQueueExecutionMemoryPostRun({
+          agentType: task.agentType,
+          existingStatus: task.executionMemoryPostRun?.status,
+        })
+          ? {
+              status: 'pending' as const,
+              attempts: 0,
+              generatedMemoryIds: [],
+            }
+          : undefined;
         const remediationRequiresReReview =
           task.agentType === 'remediation' && result?.requires_re_review !== undefined
             ? result.requires_re_review === '1'
@@ -1111,6 +1160,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           error: null,
           ...(prNumber !== undefined && { prNumber }),
           ...(result?.branch !== undefined && { prBranch: result.branch }),
+          ...(executionMemoryPostRun !== undefined && { executionMemoryPostRun }),
           ...(remediationRequiresReReview !== undefined && {
               requiresReReview: remediationRequiresReReview,
             }),
@@ -1167,6 +1217,18 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               });
 
               // Best-effort: set review-outcome label on the associated Linear issue
+              // Skip if PR is already merged — handlePrClose already cleaned up labels.
+              let prAlreadyMerged = false;
+              try {
+                const prMergeSummary = await gitHubPRSummaryRepo.findByPullRequest(task.repository, prNumber);
+                prAlreadyMerged = prMergeSummary.ok && prMergeSummary.value !== null && prMergeSummary.value.mergedAt !== null;
+              } catch {
+                // gitHubPRSummaryRepo may not be fully initialized — assume not merged
+              }
+
+              if (prAlreadyMerged) {
+                request.log.debug({ taskId, prNumber }, 'Skipping review-outcome label — PR already merged');
+              } else {
               try {
                 const originResult = await codeTaskRepo.findOriginTaskByPR(task.repository, prNumber);
                 let targetLinearIssueId: string | undefined;
@@ -1218,6 +1280,22 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                       } else {
                         request.log.info({ taskId, prNumber, label, linearIssueId: targetLinearIssueId, source },
                           'Set review-outcome label');
+
+                        // Best-effort: recompute group summary with the new label so
+                        // cached aggregateStatus reflects the actionable state.
+                        const { groupSummaryRepo: summaryRepoForLabel } = getServices();
+                        if (summaryRepoForLabel !== undefined && targetLinearIssueId !== undefined) {
+                          const updatedLabels: { id: string; name: string }[] = [
+                            ...issueValidation.value.labels.map((l) => ({ id: '', name: l })),
+                            { id: '', name: label },
+                          ];
+                          void summaryRepoForLabel.recomputeWithLabels(
+                            targetUserId, targetLinearIssueId, updatedLabels, completedAt.toISOString(),
+                          ).catch((recomputeErr: unknown) => {
+                            request.log.warn({ linearIssueId: targetLinearIssueId, error: recomputeErr },
+                              'Failed to recompute group summary after review-outcome label (best-effort)');
+                          });
+                        }
                       }
                     } else {
                       request.log.warn({ taskId, prNumber, label, error: labelResult.error },
@@ -1231,7 +1309,50 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               } catch (labelError: unknown) {
                 request.log.warn({ error: labelError, taskId, prNumber }, 'Failed to set review-outcome label (best-effort)');
               }
+              }
             } else {
+              // Best-effort: remove stale review-outcome label from the associated Linear issue.
+              // A prior passing review may have set ready-to-merge / ready-to-implement;
+              // now that remediation is needed, clear it so the UI no longer shows merge-ready.
+              try {
+                const originResult = await codeTaskRepo.findOriginTaskByPR(task.repository, prNumber);
+                let targetLinearIssueId: string | undefined; // @allow-undefined-type -- let binding requires union, not optional property
+                let targetUserId: string;
+                let labelToRemove: string;
+
+                if (originResult.ok && originResult.value !== null && originResult.value.linearIssueId !== undefined) {
+                  targetLinearIssueId = originResult.value.linearIssueId;
+                  targetUserId = originResult.value.userId;
+                  labelToRemove = originResult.value.agentType === 'planning' ? 'ready-to-implement' : 'ready-to-merge';
+                } else {
+                  targetLinearIssueId = task.linearIssueId;
+                  targetUserId = task.userId;
+                  labelToRemove = 'ready-to-merge';
+                }
+
+                if (targetLinearIssueId !== undefined) {
+                  await linearIssueService.removeLabel(targetUserId, targetLinearIssueId, labelToRemove);
+                  request.log.info({ taskId, prNumber, label: labelToRemove, linearIssueId: targetLinearIssueId },
+                    'Removed stale review-outcome label after negative review');
+
+                  // Passing [] clears all label flags in the summary (same pattern as handlePrClose).
+                  // Safe because latestReviewNeedsRemediation is already true, which independently
+                  // blocks the merge-readiness check in deriveAggregateStatusFromSummary.
+                  const { groupSummaryRepo: summaryRepoForRemoval } = getServices();
+                  if (summaryRepoForRemoval !== undefined) {
+                    void summaryRepoForRemoval.recomputeWithLabels(
+                      targetUserId, targetLinearIssueId, [], completedAt.toISOString(),
+                    ).catch((recomputeErr: unknown) => {
+                      request.log.warn({ linearIssueId: targetLinearIssueId, error: recomputeErr },
+                        'Failed to recompute group summary after label removal (best-effort)');
+                    });
+                  }
+                }
+              } catch (labelRemovalError: unknown) {
+                request.log.warn({ error: labelRemovalError, taskId, prNumber },
+                  'Failed to remove stale review-outcome label (best-effort)');
+              }
+
               const { createRemediationTaskFn, logger: remediationLogger } = getServices();
               if (createRemediationTaskFn !== undefined) {
                 const remediationResult = await createRemediationTaskFn(
@@ -1369,6 +1490,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           'Task marked as completed'
         );
         await flushPendingTaskLogLines(taskId);
+        await triggerDrainForPR();
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
@@ -1394,6 +1516,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             }
             await cleanupLockIfPR();
             await flushPendingTaskLogLines(taskId);
+            await triggerDrainForPR();
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
           }
@@ -1406,6 +1529,20 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             code: taskError.code,
             message: taskError.message,
           },
+          ...(shouldQueueExecutionMemoryPostRun({
+            agentType: task.agentType,
+            existingStatus: task.executionMemoryPostRun?.status,
+          })
+            /* v8 ignore start -- source-map: multiline ternary is misattributed despite execution and planning webhook tests covering both branches @preserve */
+            ? {
+                executionMemoryPostRun: {
+                  status: 'pending' as const,
+                  attempts: 0,
+                  generatedMemoryIds: [],
+                },
+              }
+            : {}),
+          /* v8 ignore stop @preserve */
           callbackReceived: true,
         });
 
@@ -1442,6 +1579,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         request.log.info({ taskId, error: taskError }, 'Task marked as failed');
         await flushPendingTaskLogLines(taskId);
+        await triggerDrainForPR();
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
@@ -1494,6 +1632,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         request.log.info({ taskId }, 'Task marked as interrupted');
         await flushPendingTaskLogLines(taskId);
+        await triggerDrainForPR();
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }

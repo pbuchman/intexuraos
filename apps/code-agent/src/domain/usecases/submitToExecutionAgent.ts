@@ -28,10 +28,10 @@ export const EXECUTION_AGENT_PROMPT =
   'Implement the requirements defined in the linked Linear issue and its comments (newest first). Follow the test plan, write code, run CI, and create a PR.';
 
 /**
- * Request to start Execution Agent implementation from a completed planning design task.
+ * Request to start Execution Agent implementation.
  */
 export interface SubmitToExecutionAgentRequest {
-  /** The ID of the completed planning design task */
+  /** The ID of any task in the issue group. If not a planning task, the planning task is resolved automatically via linearIssueId. */
   originalTaskId: string;
   /** User ID submitting the request */
   userId: string;
@@ -60,6 +60,7 @@ export type SubmitToExecutionAgentErrorCode =
   | 'no_linear_issue'
   | 'already_implemented'
   | 'active_task_exists'
+  | 'complex_task_no_qualifying_children'
   | 'label_not_ready'
   | 'worker_not_configured'
   | 'queue_full'
@@ -92,8 +93,8 @@ export interface SubmitToExecutionAgentDeps {
  * Submit to Execution Agent use case.
  *
  * Workflow:
- * 1. Fetch original task and validate it belongs to user
- * 2. Validate status is 'planned' and agentType is 'planning'
+ * 1. Fetch requested task and validate it belongs to user
+ * 2. Resolve to planning task (pass-through if already planning, otherwise look up via linearIssueId)
  * 3. Validate task has a linked Linear issue
  * 4. Guard against duplicate implementation
  * 5. Check for active tasks on same Linear issue
@@ -124,41 +125,115 @@ export async function submitToExecutionAgent(
     });
   }
 
-  const originalTask = originalTaskResult.value;
+  const requestedTask = originalTaskResult.value;
 
-  // Step 2: Validate status is 'planned' and agentType is 'planning'
-  if (originalTask.status !== 'planned' || originalTask.agentType !== 'planning') {
-    logger.warn(
-      { taskId: originalTask.id, status: originalTask.status, agentType: originalTask.agentType },
-      'Attempted to start Execution Agent on non-planning task'
+  // Step 2: Resolve to planning task if needed.
+  // Users often click /implement from whichever task they're viewing (review, remediation),
+  // not necessarily the planning task. Resolve via linearIssueId so any group member works.
+  let planningTask = requestedTask;
+  if (requestedTask.status !== 'planned' || requestedTask.agentType !== 'planning') {
+    if (requestedTask.linearIssueId === undefined) {
+      logger.warn(
+        { taskId: requestedTask.id, status: requestedTask.status, agentType: requestedTask.agentType },
+        'Attempted to start Execution Agent on non-planning task without linearIssueId'
+      );
+      return err({
+        code: 'invalid_status',
+        message: 'Task must be a completed planning task to start implementation',
+      });
+    }
+
+    const resolveResult = await codeTaskRepo.findPlannedTaskByLinearIssue(requestedTask.linearIssueId);
+    if (!resolveResult.ok) {
+      logger.error(
+        { taskId: requestedTask.id, linearIssueId: requestedTask.linearIssueId },
+        'Failed to resolve planning task via linearIssueId'
+      );
+      return err({
+        code: 'invalid_status',
+        message: 'Task must be a completed planning task to start implementation',
+      });
+    }
+    if (resolveResult.value === null) {
+      logger.warn(
+        { taskId: requestedTask.id, linearIssueId: requestedTask.linearIssueId },
+        'No planning task found for linearIssueId'
+      );
+      return err({
+        code: 'invalid_status',
+        message: 'Task must be a completed planning task to start implementation',
+      });
+    }
+    if (resolveResult.value.userId !== userId) {
+      logger.warn(
+        { taskId: requestedTask.id, linearIssueId: requestedTask.linearIssueId, requestedByUserId: userId, taskOwnedByUserId: resolveResult.value.userId },
+        'Security: resolved planning task belongs to different user'
+      );
+      return err({
+        code: 'invalid_status',
+        message: 'Task must be a completed planning task to start implementation',
+      });
+    }
+
+    logger.info(
+      { requestedTaskId: requestedTask.id, resolvedTaskId: resolveResult.value.id, linearIssueId: requestedTask.linearIssueId },
+      'Resolved non-planning task to planning task for implementation'
     );
-    return err({
-      code: 'invalid_status',
-      message: 'Task must be a completed planning task to start implementation',
-    });
+    planningTask = resolveResult.value;
   }
 
   // Step 3: Validate task has a linked Linear issue
-  if (originalTask.linearIssueId === undefined) {
-    logger.warn({ taskId: originalTask.id }, 'Cannot start Execution Agent: task has no linked Linear issue');
+  if (planningTask.linearIssueId === undefined) {
+    logger.warn({ taskId: planningTask.id }, 'Cannot start Execution Agent: task has no linked Linear issue');
     return err({
       code: 'no_linear_issue',
       message: 'Cannot implement — this task has no linked Linear issue',
     });
   }
 
-  const linearIssueId = originalTask.linearIssueId;
+  const linearIssueId = planningTask.linearIssueId;
 
   // Step 4: Guard against duplicate implementation
-  if (originalTask.implementationTaskId !== undefined) {
+  if (planningTask.implementationTaskId !== undefined) {
+    const existingTaskId = planningTask.implementationTaskId;
     logger.warn(
-      { taskId: originalTask.id, existingImplementationTaskId: originalTask.implementationTaskId },
+      {
+        taskId: planningTask.id,
+        existingImplementationTaskId: planningTask.implementationTaskId,
+        fanOutChildTaskIds: planningTask.fanOutChildTaskIds,
+      },
       'Implementation already started for this task'
     );
     return err({
       code: 'already_implemented',
       message: 'Implementation already started',
-      existingTaskId: originalTask.implementationTaskId,
+      existingTaskId,
+    });
+  }
+
+  if (planningTask.fanOutChildTaskIds !== undefined && planningTask.fanOutChildTaskIds.length > 0) {
+    const existingTaskId = planningTask.fanOutChildTaskIds[0];
+    /* v8 ignore start -- upstream: fanOutChildTaskIds.length > 0 guard above guarantees the first child task id exists here @preserve */
+    if (existingTaskId === undefined) {
+      return err({
+        code: 'already_implemented',
+        message: 'Implementation already started',
+        existingTaskId: '',
+      });
+    }
+    /* v8 ignore stop @preserve */
+    logger.warn(
+      {
+        taskId: planningTask.id,
+        existingImplementationTaskId: planningTask.implementationTaskId,
+        fanOutChildTaskIds: planningTask.fanOutChildTaskIds,
+      },
+      'Implementation already started for this task'
+    );
+    return err({
+      code: 'already_implemented',
+      message: 'Implementation already started',
+      existingTaskId,
     });
   }
 
@@ -241,7 +316,7 @@ export async function submitToExecutionAgent(
   }
 
   // Step 8b: Merge plan PR if planning task produced one
-  const planningPrUrl = originalTask.result?.planning_pr_url;
+  const planningPrUrl = planningTask.result?.planning_pr_url;
   if (planningPrUrl !== undefined) {
     const gitHubToken = await fetchGitHubToken(userServiceClient, userId, logger);
     if (gitHubToken === null) {
@@ -254,7 +329,7 @@ export async function submitToExecutionAgent(
 
     const mergeResult = await mergePlanPr(
       { logger, gitHubPRClient },
-      { planningPrUrl, repository: originalTask.repository, token: gitHubToken },
+      { planningPrUrl, repository: planningTask.repository, token: gitHubToken },
     );
 
     if (!mergeResult.ok) {
@@ -265,22 +340,6 @@ export async function submitToExecutionAgent(
     logger.info({ planningPrUrl }, 'Plan PR merged into development — proceeding with execution task creation');
   }
 
-  // Step 9: SET implementationTaskId on planning task BEFORE dispatch (optimistic lock)
-  const executionTaskId = `task_${randomUUID()}`;
-
-  const lockResult = await codeTaskRepo.update(originalTask.id, {
-    implementationTaskId: executionTaskId,
-  });
-
-  if (!lockResult.ok) {
-    logger.error({ taskId: originalTask.id, error: lockResult.error }, 'Failed to set optimistic lock for Execution Agent implementation');
-    return err({
-      code: 'internal_error',
-      message: 'Failed to start implementation',
-    });
-  }
-
-  // Step 10: Create the Execution Agent task
   // Resolution chain: Linear label > explicit request > user setting > 'auto'
   const labelWorkerType = getWorkerTypeFromLabels(freshLabels);
   let effectiveWorkerType: WorkerType = labelWorkerType ?? workerType ?? 'auto';
@@ -290,20 +349,166 @@ export async function submitToExecutionAgent(
       logger.info({ userId, defaultExecutionWorkerType: effectiveWorkerType }, 'Using user default execution worker type');
     }
   }
+
+  if (isComplexTask) {
+    const directChildrenResult = await linearAgentClient.fetchDirectChildrenLive({
+      userId,
+      issueId: validateResult.value.id,
+    });
+
+    if (!directChildrenResult.ok) {
+      logger.error(
+        { linearIssueId, issueId: validateResult.value.id, error: directChildrenResult.error },
+        'Failed to fetch live direct children for complex task',
+      );
+      return err({
+        code: 'internal_error',
+        message: 'Failed to fetch child issues for complex implementation',
+      });
+    }
+
+    const directChildren = directChildrenResult.value.filter((child) => child.parentId === validateResult.value.id);
+    if (directChildren.length === 0) {
+      logger.warn({ linearIssueId, issueId: validateResult.value.id }, 'Complex task has no live direct children');
+      return err({
+        code: 'complex_task_no_qualifying_children',
+        message: 'Complex task has no direct child issues with code-task label',
+      });
+    }
+
+    logger.info(
+      { linearIssueId, issueId: validateResult.value.id, childIdentifiers: directChildren.map((child) => child.identifier) },
+      'Complex task detected, triggering live child fan-out',
+    );
+
+    const fanOutResult = await fanOutChildTasks(
+      { logger, codeTaskRepo, taskEnqueueService, orchestratorSecret: deps.orchestratorSecret },
+      {
+        planningTask,
+        userId,
+        childIssues: directChildren,
+        workerType: effectiveWorkerType,
+      },
+    );
+
+    if (!fanOutResult.ok) {
+      if (fanOutResult.error.code === 'no_qualifying_children') {
+        return err({
+          code: 'complex_task_no_qualifying_children',
+          message: fanOutResult.error.message,
+        });
+      }
+      if (fanOutResult.error.code === 'queue_full') {
+        return err({
+          code: 'queue_full',
+          message: fanOutResult.error.message,
+        });
+      }
+      logger.error({ linearIssueId, error: fanOutResult.error }, 'Complex task fan-out failed');
+      return err({ code: 'internal_error', message: `Fan-out failed: ${fanOutResult.error.message}` });
+    }
+
+    const webUrl = process.env['INTEXURAOS_WEB_URL'] ?? 'https://intexuraos.cloud';
+    const qualifyingChildren = directChildren
+      .filter((child) => hasCodeTaskLabel(child.labels))
+      .sort((a, b) => a.identifier.localeCompare(b.identifier));
+
+    const updateParentIssueResult = await linearAgentClient.updateIssueState({
+      userId,
+      issueId: linearIssueId,
+      state: 'in_progress',
+    });
+    if (!updateParentIssueResult.ok) {
+      logger.warn(
+        { linearIssueId, error: updateParentIssueResult.error },
+        'Failed to update parent Linear issue to In Progress for complex execution',
+      );
+    }
+
+    const childTaskLines = qualifyingChildren.map((child, index) => {
+      const taskId = fanOutResult.value.childTaskIds[index];
+      return taskId !== undefined
+        ? `- ${child.identifier}: [${taskId}](${webUrl}/#/code-tasks/${taskId})`
+        : `- ${child.identifier}`;
+    }).join('\n');
+
+    const parentCommentResult = await linearAgentClient.addComment({
+      userId,
+      issueId: linearIssueId,
+      body: `🚀 **Execution Agent implementation started for child tasks**
+
+**Design task:** [${planningTask.id}](${webUrl}/#/code-tasks/${planningTask.id})
+**Child implementation tasks:**
+${childTaskLines}`,
+    });
+    if (!parentCommentResult.ok) {
+      logger.warn(
+        { linearIssueId, error: parentCommentResult.error },
+        'Failed to add complex Execution Agent start comment to parent Linear issue',
+      );
+    }
+
+    await Promise.all(
+      qualifyingChildren.map(async (child, index) => {
+        await linearAgentClient.updateIssueState({
+          userId,
+          issueId: child.identifier,
+          state: 'in_progress',
+        }).catch(() => undefined);
+        const childTaskId = fanOutResult.value.childTaskIds[index];
+        if (childTaskId === undefined) {
+          return;
+        }
+        await linearAgentClient.addComment({
+          userId,
+          issueId: child.identifier,
+          body: `🚀 **Execution Agent implementation started**
+
+**Design task:** [${planningTask.id}](${webUrl}/#/code-tasks/${planningTask.id})
+**Implementation task:** [${childTaskId}](${webUrl}/#/code-tasks/${childTaskId})`,
+        }).catch(() => undefined);
+      }),
+    );
+
+    return ok({
+      codeTaskId: fanOutResult.value.primaryChildTaskId,
+      resourceUrl: `/#/code-tasks/${fanOutResult.value.primaryChildTaskId}`,
+      workerLocation: 'queued' as WorkerLocation,
+      implementationOf: planningTask.id,
+      childTaskIds: fanOutResult.value.childTaskIds,
+    });
+  }
+
+  // Step 9: SET implementationTaskId on planning task BEFORE dispatch (optimistic lock)
+  const executionTaskId = `task_${randomUUID()}`;
+
+  const lockResult = await codeTaskRepo.update(planningTask.id, {
+    implementationTaskId: executionTaskId,
+  });
+
+  if (!lockResult.ok) {
+    logger.error({ taskId: planningTask.id, error: lockResult.error }, 'Failed to set optimistic lock for Execution Agent implementation');
+    return err({
+      code: 'internal_error',
+      message: 'Failed to start implementation',
+    });
+  }
+
+  // Step 10: Create the Execution Agent task
   const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, executionTaskId);
   const createInput = {
     id: executionTaskId,
     userId,
     prompt: EXECUTION_AGENT_PROMPT,
     sanitizedPrompt: EXECUTION_AGENT_PROMPT,
-    systemPromptHash: originalTask.systemPromptHash,
+    systemPromptHash: planningTask.systemPromptHash,
     workerType: effectiveWorkerType,
     workerLocation: 'queued' as const,
-    repository: originalTask.repository,
-    baseBranch: originalTask.baseBranch,
-    traceId: `execution-${originalTask.traceId}`,
+    repository: planningTask.repository,
+    baseBranch: planningTask.baseBranch,
+    traceId: `execution-${planningTask.traceId}`,
     webhookSecret,
-    parentTaskId: originalTask.id,
+    parentTaskId: planningTask.id,
     followUpReason: 'execution_implement' as const,
     agentType: 'execution' as const,
     linearIssueId,
@@ -314,10 +519,10 @@ export async function submitToExecutionAgent(
   if (!createResult.ok) {
     // Rollback the optimistic lock
     logger.error({ error: createResult.error }, 'Failed to create Execution Agent task, rolling back optimistic lock');
-    const lockRollbackResult = await codeTaskRepo.update(originalTask.id, { implementationTaskId: null });
+    const lockRollbackResult = await codeTaskRepo.update(planningTask.id, { implementationTaskId: null });
     if (!lockRollbackResult.ok) {
       logger.error(
-        { taskId: originalTask.id, error: lockRollbackResult.error },
+        { taskId: planningTask.id, error: lockRollbackResult.error },
         'Failed to rollback implementationTaskId after create failure'
       );
     }
@@ -330,7 +535,7 @@ export async function submitToExecutionAgent(
   const executionTask = createResult.value;
 
   logger.info(
-    { originalTaskId: originalTask.id, executionTaskId: executionTask.id },
+    { originalTaskId: planningTask.id, executionTaskId: executionTask.id },
     'Execution Agent task created'
   );
 
@@ -351,7 +556,7 @@ export async function submitToExecutionAgent(
   const webUrl = process.env['INTEXURAOS_WEB_URL'] ?? 'https://intexuraos.cloud';
   const commentBody = `🚀 **Execution Agent implementation started**
 
-**Design task:** [${originalTask.id}](${webUrl}/#/code-tasks/${originalTask.id})
+**Design task:** [${planningTask.id}](${webUrl}/#/code-tasks/${planningTask.id})
 **Implementation task:** [${executionTaskId}](${webUrl}/#/code-tasks/${executionTaskId})`;
 
   const commentResult = await linearAgentClient.addComment({
@@ -367,44 +572,7 @@ export async function submitToExecutionAgent(
     );
   }
 
-  // Step 12: Complex-task fan-out or normal enqueue
-  if (isComplexTask) {
-    logger.info({ linearIssueId, executionTaskId }, 'Complex task detected, triggering fan-out of child tasks');
-
-    const fanOutResult = await fanOutChildTasks(
-      { logger, codeTaskRepo, linearAgentClient, taskEnqueueService, orchestratorSecret: deps.orchestratorSecret },
-      {
-        parentTask: executionTask,
-        userId,
-        linearIssueId,
-        parentIssueUuid: validateResult.value.id,
-      },
-    );
-
-    if (!fanOutResult.ok) {
-      logger.error(
-        { linearIssueId, error: fanOutResult.error },
-        'Fan-out failed for complex task, rolling back'
-      );
-      await codeTaskRepo.update(originalTask.id, { implementationTaskId: null });
-      return err({ code: 'internal_error', message: `Fan-out failed: ${fanOutResult.error.message}` });
-    }
-
-    logger.info(
-      { executionTaskId, childTaskIds: fanOutResult.value.childTaskIds },
-      'Complex task fan-out completed'
-    );
-
-    return ok({
-      codeTaskId: executionTaskId,
-      resourceUrl: `/#/code-tasks/${executionTaskId}`,
-      workerLocation: 'queued' as WorkerLocation,
-      implementationOf: originalTask.id,
-      childTaskIds: fanOutResult.value.childTaskIds,
-    });
-  }
-
-  // Step 12b: Normal enqueue for single tasks
+  // Step 12: Normal enqueue for single tasks
   const enqueueResult = await taskEnqueueService.enqueue({
     taskId: executionTaskId,
     userId,
@@ -412,7 +580,7 @@ export async function submitToExecutionAgent(
 
   if (!enqueueResult.ok) {
     // Rollback implementationTaskId on planning task
-    await codeTaskRepo.update(originalTask.id, { implementationTaskId: null });
+    await codeTaskRepo.update(planningTask.id, { implementationTaskId: null });
     if (enqueueResult.error.code === 'queue_full') {
       return err({ code: 'queue_full', message: enqueueResult.error.message });
     }
@@ -429,6 +597,6 @@ export async function submitToExecutionAgent(
     codeTaskId: executionTaskId,
     resourceUrl: `/#/code-tasks/${executionTaskId}`,
     workerLocation: 'queued' as WorkerLocation,
-    implementationOf: originalTask.id,
+    implementationOf: planningTask.id,
   });
 }

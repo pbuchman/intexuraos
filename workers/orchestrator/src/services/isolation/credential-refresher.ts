@@ -57,11 +57,11 @@ export class CredentialRefresher {
         condition: 'not-running',
       } as Docker.ContainerWaitOptions & { signal?: AbortSignal });
 
-      // Capture logs for debugging
+      // Capture logs for debugging — log at error level on failure so output is visible
+      let containerOutput: string | undefined;
       try {
         const logs = await container.logs({ stdout: true, stderr: true });
-        const output = logs.toString('utf-8').slice(0, 500);
-        this.logger.debug({ output }, 'Credential refresh container output');
+        containerOutput = logs.toString('utf-8').slice(0, 500);
       } catch {
         // intentional no-op
       }
@@ -69,20 +69,20 @@ export class CredentialRefresher {
       if (waitResult.StatusCode === 0) {
         this.logger.info(
           { containerId: container.id },
-          'Credential refresh completed successfully'
+          'Claude credential refresh completed successfully'
         );
         return true;
       }
 
       this.logger.error(
-        { exitCode: waitResult.StatusCode, containerId: container.id },
-        'Credential refresh failed with non-zero exit code'
+        { exitCode: waitResult.StatusCode, containerId: container.id, output: containerOutput },
+        'Claude credential refresh failed with non-zero exit code'
       );
       return false;
     } catch (error) {
       this.logger.error(
         { error: error instanceof Error ? error : new Error(String(error)) },
-        'Credential refresh container failed'
+        'Claude credential refresh container failed'
       );
       return false;
     } finally {
