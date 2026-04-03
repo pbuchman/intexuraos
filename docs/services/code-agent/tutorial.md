@@ -374,7 +374,7 @@ curl -X POST http://localhost:8128/internal/code/process \
 | Logs not appearing in UI              | Log chunks failing HMAC validation                | Check `INTEXURAOS_WEBHOOK_VERIFY_SECRET` matches on worker and server            |
 | `too_soon` error on retry             | Cool-off period not elapsed                       | Wait the specified number of minutes before retrying                             |
 | GitHub webhook returning 401          | GitHub webhook secret mismatch                    | Verify `INTEXURAOS_GITHUB_WEBHOOK_SECRET` matches GitHub app settings            |
-| Task queued but never dispatched      | Workers remain busy past queue TTL                | Check worker status; task expires after 30 min in queue                          |
+| Task queued but never dispatched      | Workers remain busy past queue TTL                | Check worker status; task expires after 24 hours in queue                        |
 | Review task not dispatching           | Workers at capacity                               | Review tasks now queue like regular tasks — they dispatch when a worker frees up |
 | Merge queue watch not merging PRs     | CI checks pending or PRs have conflicts           | Check PR status on GitHub; the queue merges one PR per tick when checks pass     |
 | Cannot create watch for `main`        | Main branch is blocked as merge queue target      | Use `development` or another non-blocked branch as the base branch               |

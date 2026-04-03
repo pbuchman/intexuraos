@@ -126,7 +126,7 @@ Connect a worker machine, link your Linear and GitHub accounts through the dashb
 
 - **Design phase adds a deliberate pause** — The approval checkpoint means tasks take longer to start than fully autonomous tools, because the system prioritizes building the right thing over building fast
 - **Prompt length capped at 10,000 characters** — Very long task descriptions need to be broken into smaller, focused requests
-- **Queued tasks expire after 30 minutes** — If all workers remain busy beyond the TTL, the task expires and you are notified
+- **Queued tasks expire after 24 hours** — If all workers remain busy beyond the TTL, the task expires and you are notified
 - **Mid-task messages arrive at safe pause points** — Instructions sent to a running task are delivered at the next pause, not mid-operation
 - **Retry cooling period** — After a task fails, a mandatory wait prevents runaway retry loops
 - **Planning requires explicit labeling** — Autonomous planning only runs on Linear issues tagged with the designated label
