@@ -1636,17 +1636,17 @@ export class DockerProvider implements IsolationProvider {
           });
       };
 
-      /* v8 ignore start -- async-timing: double-resolution guard prevents race between stream end and poll timer @preserve */
+      /* v8 ignore start -- async-timing: vi.useFakeTimers cannot deterministically capture the setInterval handle before resolveWith is declared in the same scope @preserve */
       const pollTimer = setInterval(onPollTick, EXEC_INSPECT_POLL_INTERVAL_MS);
       /* v8 ignore stop @preserve */
 
       const resolveWith = (exitCode: number): void => {
-        /* v8 ignore start -- async-timing: early-return guard for double-resolution race can't be reliably tested @preserve */
+        /* v8 ignore start -- async-timing: double-resolution race guard cannot be triggered deterministically because stream end and poll timer fire in the same microtask queue @preserve */
         if (resolved) return;
+        /* v8 ignore stop @preserve */
         resolved = true;
         clearInterval(pollTimer);
         resolve(exitCode);
-        /* v8 ignore stop @preserve */
       };
 
       // Primary path: stream closes naturally
