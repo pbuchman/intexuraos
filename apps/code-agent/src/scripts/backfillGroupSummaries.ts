@@ -68,6 +68,10 @@ function toTimestamp(value: unknown): Timestamp {
   return Timestamp.now();
 }
 
+function hasCompletedExecutionAgentOnly(task: CodeTask): boolean {
+  return task.agentType === 'execution' && (task.status === 'implemented' || task.status === 'reviewed');
+}
+
 function computeSummaryFromTasks(
   userId: string,
   groupKey: string,
@@ -110,13 +114,13 @@ function computeSummaryFromTasks(
     }
 
     if (
-      (task.agentType === 'execution' && (task.status === 'implemented' || task.status === 'reviewed')) ||
+      hasCompletedExecutionAgentOnly(task) ||
       (task.agentType === 'pull_request' && task.status === 'implemented')
     ) {
       hasCompletedExecution = true;
     }
 
-    if (task.agentType === 'execution' && (task.status === 'implemented' || task.status === 'reviewed')) {
+    if (hasCompletedExecutionAgentOnly(task)) {
       hasCompletedExecutionAgent = true;
     }
 
