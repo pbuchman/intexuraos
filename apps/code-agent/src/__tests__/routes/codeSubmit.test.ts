@@ -855,7 +855,7 @@ describe('POST /code/submit', () => {
     });
 
     it('accepts valid worker types', async () => {
-      const workerTypes = ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen', 'kimi', 'codex', 'codex-xhigh'] as const;
+      const workerTypes = ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen', 'kimi', 'codex', 'codex-xhigh', 'openrouter-free'] as const;
 
       const linearService = getServices().linearIssueService;
       // Use fallback mode (no linearIssueId) to avoid ACTIVE_TASK_EXISTS conflicts across iterations

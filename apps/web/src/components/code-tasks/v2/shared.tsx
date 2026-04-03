@@ -17,6 +17,7 @@ export const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
   kimi: 'Kimi',
   codex: 'Codex',
   'codex-xhigh': 'Codex XHigh',
+  'openrouter-free': 'OpenRouter Free',
 };
 
 // --- Status badge config ---
