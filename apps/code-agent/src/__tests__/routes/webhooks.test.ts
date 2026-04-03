@@ -2636,6 +2636,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'Work was already merged into development',
           execution_outcome_label: 'already_completed' as const,
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/850',
           execution_superpowers_executing_plans_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
@@ -2719,6 +2720,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'The feature was already implemented and merged in PR #850',
           execution_outcome_label: 'already_completed' as const,
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/850',
           execution_superpowers_executing_plans_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
@@ -2791,6 +2793,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'Work already done',
           execution_outcome_label: 'already_completed' as const,
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/850',
           execution_superpowers_executing_plans_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
@@ -2865,6 +2868,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'Work already done',
           execution_outcome_label: 'already_completed' as const,
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/850',
           execution_superpowers_executing_plans_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
@@ -2940,6 +2944,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'Work already done',
           execution_outcome_label: 'already_completed' as const,
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/850',
           execution_superpowers_executing_plans_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
@@ -8684,7 +8689,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     const task = createResult.value;
     vi.mocked(getServices().linearAgentClient.validateIssue).mockReset();
     vi.mocked(getServices().linearAgentClient.validateIssue).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'down' }));
-    const payload = { taskId: task.id, status: 'completed' as const, result: { execution_outcome_label: 'already_completed' as const, summary: 'done' } };
+    const payload = { taskId: task.id, status: 'completed' as const, result: { execution_outcome_label: 'already_completed' as const, prUrl: 'https://github.com/pbuchman/intexuraos/pull/1', summary: 'done' } };
     const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
     const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
     expect(response.statusCode).toBe(200);
@@ -9393,11 +9398,11 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     vi.mocked(lac.updateIssueMetadata).mockReset();
     vi.mocked(lac.updateIssueMetadata).mockResolvedValue(ok({ droppedLabels: [] }));
 
-    // Send already_completed WITHOUT summary
+    // Send already_completed WITHOUT summary but WITH prUrl
     const payload = {
       taskId: task.id,
       status: 'completed' as const,
-      result: { execution_outcome_label: 'already_completed' as const },
+      result: { execution_outcome_label: 'already_completed' as const, prUrl: 'https://github.com/pbuchman/intexuraos/pull/850' },
     };
     const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
     const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
@@ -9426,6 +9431,105 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     expect(g.ok).toBe(true);
     if (!g.ok) throw new Error('Failed');
     expect(g.value.prNumber).toBeUndefined();
+  });
+
+  // T5: already_completed with valid prUrl — enforcement should succeed
+  it('already_completed with valid prUrl succeeds — issue moved to Done', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_t5', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'routed-uuid', identifier: 'INT-123', title: 'T', url: 'u', labels: ['code-task'], childCount: 0, parentId: null }));
+    vi.mocked(lac.addComment).mockReset();
+    vi.mocked(lac.addComment).mockResolvedValue(ok({ commentId: 'c1' }));
+    vi.mocked(lac.updateIssueState).mockReset();
+    vi.mocked(lac.updateIssueState).mockResolvedValue(ok(undefined));
+    vi.mocked(lac.updateIssueMetadata).mockReset();
+    vi.mocked(lac.updateIssueMetadata).mockResolvedValue(ok({ droppedLabels: [] }));
+
+    const payload = {
+      taskId: task.id,
+      status: 'completed' as const,
+      result: {
+        execution_outcome_label: 'already_completed' as const,
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/850',
+        summary: 'The feature was already implemented',
+      },
+    };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.status).toBe('implemented');
+    expect(lac.updateIssueState).toHaveBeenCalledWith(expect.objectContaining({ state: 'done' }));
+  });
+
+  // T6: already_completed without prUrl — enforcement must fail
+  it('already_completed without prUrl fails with EXECUTION_AGENT_ENFORCEMENT_FAILED', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_t6', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    const payload = {
+      taskId: task.id,
+      status: 'completed' as const,
+      result: {
+        execution_outcome_label: 'already_completed' as const,
+        summary: 'The feature was already implemented',
+      },
+    };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.code).toBe('EXECUTION_AGENT_ENFORCEMENT_FAILED');
+    expect(g.value.error?.message).toContain('already_completed outcome requires a PR URL');
+  });
+
+  // T7: already_completed with empty prUrl — enforcement must fail
+  it('already_completed with empty prUrl fails with EXECUTION_AGENT_ENFORCEMENT_FAILED', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_t7', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    const payload = {
+      taskId: task.id,
+      status: 'completed' as const,
+      result: {
+        execution_outcome_label: 'already_completed' as const,
+        prUrl: '',
+        summary: 'The feature was already implemented',
+      },
+    };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.code).toBe('EXECUTION_AGENT_ENFORCEMENT_FAILED');
+    expect(g.value.error?.message).toContain('already_completed outcome requires a PR URL');
   });
 });
 
