@@ -109,6 +109,7 @@ export function CodeTaskLogViewer({
   const [copied, setCopied] = useState(false);
   const [compactMode, setCompactMode] = useState(true);
   const [blockOverrides, setBlockOverrides] = useState<Set<number>>(() => new Set());
+  const [claudeFilter, setClaudeFilter] = useState(false);
   const followRef = useRef(true);
   const prevLogCountRef = useRef(0);
   const isAutoScrollingRef = useRef(false);
@@ -225,6 +226,10 @@ export function CodeTaskLogViewer({
     setBlockOverrides(new Set());
   }, []);
 
+  const toggleClaudeFilter = useCallback((): void => {
+    setClaudeFilter((prev) => !prev);
+  }, []);
+
   const toggleBlock = useCallback((headerIdx: number): void => {
     setBlockOverrides((prev) => {
       const next = new Set(prev);
@@ -249,7 +254,7 @@ export function CodeTaskLogViewer({
             <span className="hidden md:inline">Execution Logs</span>
           </span>
           {isActive && listenerHealthy ? (
-            <span className="flex items-center gap-1.5 rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700 dark:bg-green-900/50 dark:text-green-300">
+            <span className="hidden items-center gap-1.5 rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700 md:flex dark:bg-green-900/50 dark:text-green-300">
               <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
               Live
             </span>
@@ -271,6 +276,17 @@ export function CodeTaskLogViewer({
                 }`}
               >
                 {followLogs ? 'Following' : 'Follow'}
+              </button>
+              <button
+                type="button"
+                onClick={toggleClaudeFilter}
+                className={`rounded-md px-2 py-1 text-xs transition-colors ${
+                  claudeFilter
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200'
+                }`}
+              >
+                Claude
               </button>
               <button
                 type="button"
@@ -310,6 +326,10 @@ export function CodeTaskLogViewer({
             </div>
           ) : (
             logs.map((line, index) => {
+              if (claudeFilter) {
+                const tag = extractTag(line.text);
+                if (tag !== 'claude') return null;
+              }
               const block = bodyLineMap.get(index);
               if (block !== undefined && index > block.headerIdx) {
                 return null;
@@ -341,7 +361,7 @@ export function CodeTaskLogViewer({
                     ) : (
                       <span className="w-4 shrink-0" />
                     )}
-                    <pre className={`min-w-0 whitespace-pre ${getLogLineClass(line.text)}`}>
+                    <pre className={`min-w-0 ${claudeFilter ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'} ${getLogLineClass(line.text)}`}>
                       {line.text}
                     </pre>
                   </div>
