@@ -17,8 +17,7 @@ Autonomous PR comment triage that processes GitHub review comments, fixes action
 2. **ALWAYS** reply to each processed comment with fix/skip reasoning
 3. **ALWAYS** post summary comment after each run
 4. **ALWAYS** loop on CI failure until success
-5. **NEVER** watch `zai-claude-code-review.yml` workflow
-6. Process entire comment thread as one unit
+5. Process entire comment thread as one unit
 
 ## Invocation
 
@@ -35,13 +34,13 @@ Execute the workflow at: `.claude/skills/nitpick-nuker/workflows/triage-pr-comme
 
 All scripts are in `.claude/skills/nitpick-nuker/scripts/`:
 
-| Script                          | Purpose                                |
-| ------------------------------- | -------------------------------------- |
-| `fetch-unprocessed-comments.sh` | Fetch comments without 😄 from bot     |
-| `add-reaction.sh`               | Add 😄 reaction to processed comment   |
-| `reply-to-comment.sh`           | Post per-comment reply with reasoning  |
-| `post-summary.sh`               | Post summary comment to PR             |
-| `watch-ci.sh`                   | Watch CI with workflow filtering       |
+| Script                          | Purpose                               |
+| ------------------------------- | ------------------------------------- |
+| `fetch-unprocessed-comments.sh` | Fetch comments without 😄 from bot    |
+| `add-reaction.sh`               | Add 😄 reaction to processed comment  |
+| `reply-to-comment.sh`           | Post per-comment reply with reasoning |
+| `post-summary.sh`               | Post summary comment to PR            |
+| `watch-ci.sh`                   | Watch CI with workflow filtering      |
 
 ## Comment Types
 
