@@ -855,8 +855,12 @@ describe('WorktreeManager - git stderr error handling', () => {
 
 describe('LINEAR_MCP_TIMEOUT_MS constant', () => {
   it('should export 60000ms timeout for Linear MCP server', async () => {
-    const { LINEAR_MCP_TIMEOUT_MS } = await import('../services/worktree-manager.js');
-    expect(LINEAR_MCP_TIMEOUT_MS).toBe(60_000);
+    const WM = await loadWorktreeManager();
+    // Import the constant from the same cached module
+    const mod = await import('../services/worktree-manager.js');
+    expect(mod.LINEAR_MCP_TIMEOUT_MS).toBe(60_000);
+    // Ensure WM is still accessible (avoids unused import lint)
+    expect(WM).toBeDefined();
   });
 });
 
@@ -881,8 +885,17 @@ describe('WorktreeManager - timeout evidence logging', () => {
 
     // Create MCP config template with {{PLACEHOLDER}} syntax
     const template = JSON.stringify({
-      linear: { apiKey: '{{LINEAR_API_KEY}}', timeoutMs: 60_000 },
-      sentry: { authToken: '{{SENTRY_AUTH_TOKEN}}' },
+      mcpServers: {
+        linear: {
+          type: 'sse',
+          url: 'https://mcp.linear.app/sse',
+          headers: { Authorization: 'Bearer {{LINEAR_API_KEY}}' },
+        },
+        sentry: {
+          command: 'npx',
+          args: ['@sentry/mcp-server@latest', '--access-token', '{{SENTRY_AUTH_TOKEN}}'],
+        },
+      },
     });
     writeFileSync(mcpConfigTemplatePath, template, 'utf-8');
 
@@ -899,7 +912,7 @@ describe('WorktreeManager - timeout evidence logging', () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('should log MCP timeout evidence after MCP config copy', async () => {
+  it('should log MCP timeout evidence with correct structured fields after worktree creation', async () => {
     process.env['INTEXURAOS_LINEAR_API_KEY'] = 'test-linear-key';
     process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'] = 'test-sentry-token';
 
@@ -910,12 +923,13 @@ describe('WorktreeManager - timeout evidence logging', () => {
     await manager.createWorktree('task-timeout-log', 'feature-branch');
 
     const infoSpy = vi.mocked(mockLoggerWithSpies.info);
+    // Verify structured fields and message markers in a single assertion
     expect(infoSpy).toHaveBeenCalledWith(
       { timeoutMs: 60_000, server: 'linear' },
       expect.stringContaining('MCP timeout')
     );
     expect(infoSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ server: 'linear' }),
+      { timeoutMs: 60_000, server: 'linear' },
       expect.stringContaining('server=linear')
     );
 
@@ -940,38 +954,88 @@ describe('WorktreeManager - timeout evidence logging', () => {
     );
   });
 
-  it('should include server=linear in log message', async () => {
+  it('should inject timeoutMs into generated .mcp.json for the Linear server', async () => {
+    process.env['INTEXURAOS_LINEAR_API_KEY'] = 'test-linear-key';
+    process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'] = 'test-sentry-token';
+
+    // Create a template matching the real .mcp.json structure
+    const template = JSON.stringify({
+      mcpServers: {
+        linear: {
+          type: 'sse',
+          url: 'https://mcp.linear.app/sse',
+          headers: { Authorization: 'Bearer {{LINEAR_API_KEY}}' },
+        },
+        sentry: {
+          command: 'npx',
+          args: ['@sentry/mcp-server@latest', '--access-token', '{{SENTRY_AUTH_TOKEN}}'],
+        },
+      },
+    });
+    writeFileSync(mcpConfigTemplatePath, template, 'utf-8');
+
     vi.resetModules();
     const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
     const manager = new WM(mockConfig, mockLoggerWithSpies);
 
-    await manager.createWorktree('task-server-check', 'feature-branch');
+    const worktreePath = await manager.createWorktree('task-config-inject', 'feature-branch');
 
-    const infoSpy = vi.mocked(mockLoggerWithSpies.info);
-    const timeoutLogCall = infoSpy.mock.calls.find(
-      (call) => typeof call[1] === 'string' && call[1].includes('server=linear')
-    );
-    expect(timeoutLogCall).toBeDefined();
-    expect(timeoutLogCall?.[0]).toEqual(
-      expect.objectContaining({ server: 'linear', timeoutMs: 60_000 })
-    );
+    // Read the generated .mcp.json from the worktree
+    const generatedPath = join(worktreePath, '.mcp.json');
+    expect(existsSync(generatedPath)).toBe(true);
+
+    const generated = JSON.parse(readFileSync(generatedPath, 'utf-8')) as {
+      mcpServers: {
+        linear: { timeoutMs?: number; type: string; headers: { Authorization: string } };
+        sentry: { args: string[] };
+      };
+    };
+
+    // Core contract: timeoutMs injected
+    expect(generated.mcpServers.linear.timeoutMs).toBe(60_000);
+    // Auth substitution still works
+    expect(generated.mcpServers.linear.headers.Authorization).toBe('Bearer test-linear-key');
+    // Other servers untouched
+    expect(generated.mcpServers.sentry.args).toContain('test-sentry-token');
+
+    delete process.env['INTEXURAOS_LINEAR_API_KEY'];
+    delete process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
   });
 
-  it('should use the correct timeout value in logging', async () => {
+  it('should not inject timeoutMs when mcpServers.linear is absent', async () => {
+    process.env['INTEXURAOS_LINEAR_API_KEY'] = 'test-linear-key';
+    process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'] = 'test-sentry-token';
+
+    // Template with mcpServers but no linear entry
+    const template = JSON.stringify({
+      mcpServers: {
+        sentry: {
+          command: 'npx',
+          args: ['@sentry/mcp-server@latest', '--access-token', '{{SENTRY_AUTH_TOKEN}}'],
+        },
+      },
+    });
+    writeFileSync(mcpConfigTemplatePath, template, 'utf-8');
+
     vi.resetModules();
     const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
     const manager = new WM(mockConfig, mockLoggerWithSpies);
 
-    await manager.createWorktree('task-value-check', 'feature-branch');
+    const worktreePath = await manager.createWorktree('task-no-linear', 'feature-branch');
 
-    const infoSpy = vi.mocked(mockLoggerWithSpies.info);
-    const timeoutLogCall = infoSpy.mock.calls.find(
-      (call) =>
-        typeof call[0] === 'object' &&
-        call[0] !== null &&
-        (call[0] as Record<string, unknown>)['server'] === 'linear'
-    );
-    expect(timeoutLogCall).toBeDefined();
-    expect(timeoutLogCall?.[0]).toEqual(expect.objectContaining({ timeoutMs: 60_000 }));
+    const generatedPath = join(worktreePath, '.mcp.json');
+    expect(existsSync(generatedPath)).toBe(true);
+
+    const generated = JSON.parse(readFileSync(generatedPath, 'utf-8')) as {
+      mcpServers: { linear?: unknown; sentry: { args: string[] } };
+    };
+
+    // linear key should not be added when absent from template
+    expect(generated.mcpServers.linear).toBeUndefined();
+    // Other servers still work
+    expect(generated.mcpServers.sentry.args).toContain('test-sentry-token');
+
+    delete process.env['INTEXURAOS_LINEAR_API_KEY'];
+    delete process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
   });
 });
