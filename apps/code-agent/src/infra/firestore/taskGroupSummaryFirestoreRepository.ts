@@ -71,6 +71,10 @@ function hasCompletedExecutionTask(task: CodeTask): boolean {
   );
 }
 
+function hasCompletedExecutionAgentOnly(task: CodeTask): boolean {
+  return task.agentType === 'execution' && (task.status === 'implemented' || task.status === 'reviewed');
+}
+
 /**
  * Helper to ensure a value is a Timestamp.
  */
@@ -117,6 +121,7 @@ function docToSummary(data: Record<string, unknown>): TaskGroupSummary {
       : [],
     hasCompletedPlanning: data['hasCompletedPlanning'] === true,
     hasCompletedExecution: data['hasCompletedExecution'] === true,
+    hasCompletedExecutionAgent: data['hasCompletedExecutionAgent'] === true,
     hasImplementationTaskId: data['hasImplementationTaskId'] === true,
     hasPrUrl: data['hasPrUrl'] === true,
     prNumber: data['prNumber'] !== undefined && data['prNumber'] !== null
@@ -188,6 +193,7 @@ function buildInitialSummary(task: CodeTask, now: Timestamp): Omit<TaskGroupSumm
   const hasPrUrl = task.result?.prUrl !== undefined;
   const hasCompletedPlanning = task.agentType === 'planning' && task.status === 'planned';
   const hasCompletedExecution = hasCompletedExecutionTask(task);
+  const hasCompletedExecutionAgent = hasCompletedExecutionAgentOnly(task);
   const hasImplementationTaskId = hasImplementationLink(task);
   const latestReviewNeedsRemediation = computeReviewNeedsRemediation(task);
   const prNumber = hasPrUrl && task.prNumber !== undefined ? task.prNumber : null;
@@ -204,6 +210,7 @@ function buildInitialSummary(task: CodeTask, now: Timestamp): Omit<TaskGroupSumm
     agentTypesPresent,
     hasCompletedPlanning,
     hasCompletedExecution,
+    hasCompletedExecutionAgent,
     hasImplementationTaskId,
     hasPrUrl,
     prNumber,
@@ -332,6 +339,9 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
             if (hasCompletedExecutionTask(task)) {
               updated.hasCompletedExecution = true;
             }
+            if (hasCompletedExecutionAgentOnly(task)) {
+              updated.hasCompletedExecutionAgent = true;
+            }
             /* v8 ignore start -- ts-type: FakeFirestore cannot produce a task where implementationTaskId/fanOutChildTaskIds are absent when the branch is already covered; v8 undercounts false-branch due to optional-chaining transpilation in ESM @preserve */
             if (hasImplementationLink(task)) {
               updated.hasImplementationTaskId = true;
@@ -440,6 +450,9 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
           }
           if (hasCompletedExecutionTask(newTask)) {
             updated.hasCompletedExecution = true;
+          }
+          if (hasCompletedExecutionAgentOnly(newTask)) {
+            updated.hasCompletedExecutionAgent = true;
           }
           if (hasImplementationLink(newTask)) {
             updated.hasImplementationTaskId = true;
@@ -691,6 +704,7 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
         const agentTypesSet = new Set<string>();
         let hasCompletedPlanning = false;
         let hasCompletedExecution = false;
+        let hasCompletedExecutionAgent = false;
         let hasImplementationTaskId = false;
         let hasPrUrl = false;
         let prNumber: number | null = null;
@@ -714,6 +728,9 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
           }
           if (hasCompletedExecutionTask(task)) {
             hasCompletedExecution = true;
+          }
+          if (hasCompletedExecutionAgentOnly(task)) {
+            hasCompletedExecutionAgent = true;
           }
           if (hasImplementationLink(task)) {
             hasImplementationTaskId = true;
@@ -775,6 +792,7 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
           agentTypesPresent: Array.from(agentTypesSet),
           hasCompletedPlanning,
           hasCompletedExecution,
+          hasCompletedExecutionAgent,
           hasImplementationTaskId,
           hasPrUrl,
           prNumber,

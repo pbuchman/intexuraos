@@ -68,6 +68,10 @@ function toTimestamp(value: unknown): Timestamp {
   return Timestamp.now();
 }
 
+function hasCompletedExecutionAgentOnly(task: CodeTask): boolean {
+  return task.agentType === 'execution' && (task.status === 'implemented' || task.status === 'reviewed');
+}
+
 function computeSummaryFromTasks(
   userId: string,
   groupKey: string,
@@ -84,6 +88,7 @@ function computeSummaryFromTasks(
   const agentTypesSet = new Set<string>();
   let hasCompletedPlanning = false;
   let hasCompletedExecution = false;
+  let hasCompletedExecutionAgent = false;
   let hasImplementationTaskId = false;
   let hasPrUrl = false;
   let prNumber: number | null = null;
@@ -109,10 +114,14 @@ function computeSummaryFromTasks(
     }
 
     if (
-      (task.agentType === 'execution' && (task.status === 'implemented' || task.status === 'reviewed')) ||
+      hasCompletedExecutionAgentOnly(task) ||
       (task.agentType === 'pull_request' && task.status === 'implemented')
     ) {
       hasCompletedExecution = true;
+    }
+
+    if (hasCompletedExecutionAgentOnly(task)) {
+      hasCompletedExecutionAgent = true;
     }
 
     if (
@@ -168,6 +177,7 @@ function computeSummaryFromTasks(
     activeTaskCount,
     hasCompletedPlanning,
     hasCompletedExecution,
+    hasCompletedExecutionAgent,
     hasImplementationTaskId,
     hasPrUrl,
     latestTaskStatus,
@@ -187,6 +197,7 @@ function computeSummaryFromTasks(
     agentTypesPresent: Array.from(agentTypesSet),
     hasCompletedPlanning,
     hasCompletedExecution,
+    hasCompletedExecutionAgent,
     hasImplementationTaskId,
     hasPrUrl,
     prNumber,

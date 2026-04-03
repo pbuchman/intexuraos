@@ -29,6 +29,10 @@ function hasCompletedExecutionTask(task: CodeTask): boolean {
   );
 }
 
+function hasCompletedExecutionAgentOnly(task: CodeTask): boolean {
+  return task.agentType === 'execution' && (task.status === 'implemented' || task.status === 'reviewed');
+}
+
 function now(): Timestamp {
   return Timestamp.now();
 }
@@ -72,6 +76,7 @@ function computeSummaryFromTasks(
 
   const hasCompletedPlanning = tasks.some((t) => t.agentType === 'planning' && t.status === 'planned');
   const hasCompletedExecution = tasks.some((t) => hasCompletedExecutionTask(t));
+  const hasCompletedExecutionAgent = tasks.some((t) => hasCompletedExecutionAgentOnly(t));
   const hasImplementationTaskId = tasks.some(
     (t) => t.implementationTaskId !== undefined || (t.fanOutChildTaskIds !== undefined && t.fanOutChildTaskIds.length > 0),
   );
@@ -93,6 +98,7 @@ function computeSummaryFromTasks(
     activeTaskCount: tasks.filter((t) => ACTIVE_STATUSES.has(t.status)).length,
     hasCompletedPlanning,
     hasCompletedExecution,
+    hasCompletedExecutionAgent,
     hasImplementationTaskId,
     hasPrUrl,
     latestTaskStatus: latestTask.status,
@@ -112,6 +118,7 @@ function computeSummaryFromTasks(
     agentTypesPresent,
     hasCompletedPlanning,
     hasCompletedExecution,
+    hasCompletedExecutionAgent,
     hasImplementationTaskId,
     hasPrUrl,
     prNumber,
