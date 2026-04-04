@@ -450,7 +450,7 @@ describe('derivePipeline', () => {
     expect(pipeline.steps[1]?.state).toBe('actionable');
   });
 
-  it('does not create actionable execution step without ready-to-implement label', () => {
+  it('creates actionable execution step even without ready-to-implement label', () => {
     const tasks = [
       makeTask({
         id: 'task-1',
@@ -472,8 +472,9 @@ describe('derivePipeline', () => {
 
     const pipeline = derivePipeline(tasks);
 
-    expect(pipeline.steps).toHaveLength(1);
-    expect(pipeline.steps[0]?.agentType).toBe('planning');
+    expect(pipeline.steps).toHaveLength(2);
+    expect(pipeline.steps[1]?.agentType).toBe('execution');
+    expect(pipeline.steps[1]?.state).toBe('actionable');
   });
 
   it('does not create actionable execution step when implementationTaskId exists', () => {
@@ -910,6 +911,138 @@ describe('derivePipeline', () => {
     expect(pipeline.steps).toHaveLength(2);
     expect(pipeline.steps[1]?.agentType).toBe('execution');
     expect(pipeline.steps[1]?.state).toBe('actionable');
+  });
+
+  it('shows actionable execution step (not merge) when planning→review pipeline has completed review', () => {
+    const tasks = [
+      makeTask({
+        id: 'task-review',
+        agentType: 'review',
+        status: 'reviewed',
+        prNumber: 42,
+        result: { needs_remediation: '0' },
+        createdAt: '2026-03-02T10:00:00Z',
+        updatedAt: '2026-03-02T10:05:00Z',
+        linearIssue: {
+          identifier: 'INT-100',
+          title: 'Test',
+          state: { name: 'In Progress', type: 'started' },
+          priority: 1,
+          assignee: null,
+          labels: [{ name: 'code-task' }],
+          url: 'https://linear.app/INT-100',
+          commentCount: 0,
+          lastCommentAt: null,
+        },
+      }),
+      makeTask({
+        id: 'task-planning',
+        agentType: 'planning',
+        status: 'planned',
+        createdAt: '2026-03-01T10:00:00Z',
+        updatedAt: '2026-03-01T10:05:00Z',
+      }),
+    ];
+
+    const pipeline = derivePipeline(tasks);
+
+    // Should have exactly 3 steps: planning (completed), review (completed), execution (actionable)
+    expect(pipeline.steps).toHaveLength(3);
+
+    const executionStep = pipeline.steps.find((s) => s.agentType === 'execution');
+    expect(executionStep).toBeDefined();
+    expect(executionStep?.state).toBe('actionable');
+
+    const mergeStep = pipeline.steps.find((s) => s.agentType === 'merge');
+    expect(mergeStep).toBeUndefined();
+  });
+
+  it('still shows merge step for execution→review pipeline (regression guard)', () => {
+    const tasks = [
+      makeTask({
+        id: 'task-review',
+        agentType: 'review',
+        status: 'reviewed',
+        prNumber: 42,
+        result: { needs_remediation: '0' },
+        createdAt: '2026-03-02T10:00:00Z',
+        updatedAt: '2026-03-02T10:05:00Z',
+        linearIssue: {
+          identifier: 'INT-100',
+          title: 'Test',
+          state: { name: 'In Progress', type: 'started' },
+          priority: 1,
+          assignee: null,
+          labels: [{ name: 'ready-to-merge' }],
+          url: 'https://linear.app/INT-100',
+          commentCount: 0,
+          lastCommentAt: null,
+        },
+      }),
+      makeTask({
+        id: 'task-execution',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-03-01T10:00:00Z',
+        updatedAt: '2026-03-01T10:05:00Z',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+      }),
+    ];
+
+    const pipeline = derivePipeline(tasks);
+
+    // execution→review pipeline: merge IS the terminal action
+    const mergeStep = pipeline.steps.find((s) => s.agentType === 'merge');
+    expect(mergeStep).toBeDefined();
+    expect(mergeStep?.state).toBe('actionable');
+  });
+
+  it('shows merge step when execution task is archived but implementationTaskId is set (edge case)', () => {
+    const tasks = [
+      makeTask({
+        id: 'task-review',
+        agentType: 'review',
+        status: 'reviewed',
+        prNumber: 42,
+        result: { needs_remediation: '0' },
+        createdAt: '2026-03-03T10:00:00Z',
+        updatedAt: '2026-03-03T10:05:00Z',
+        linearIssue: {
+          identifier: 'INT-100',
+          title: 'Test',
+          state: { name: 'In Progress', type: 'started' },
+          priority: 1,
+          assignee: null,
+          labels: [{ name: 'ready-to-merge' }],
+          url: 'https://linear.app/INT-100',
+          commentCount: 0,
+          lastCommentAt: null,
+        },
+      }),
+      makeTask({
+        id: 'task-execution-archived',
+        agentType: 'execution',
+        status: 'archived',
+        createdAt: '2026-03-02T10:00:00Z',
+        updatedAt: '2026-03-02T10:05:00Z',
+      }),
+      makeTask({
+        id: 'task-planning',
+        agentType: 'planning',
+        status: 'planned',
+        implementationTaskId: 'task-execution-archived',
+        createdAt: '2026-03-01T10:00:00Z',
+        updatedAt: '2026-03-01T10:05:00Z',
+      }),
+    ];
+
+    const pipeline = derivePipeline(tasks);
+
+    // Execution was started (implementationTaskId set) but task archived —
+    // merge IS correct because execution already happened
+    const mergeStep = pipeline.steps.find((s) => s.agentType === 'merge');
+    expect(mergeStep).toBeDefined();
+    expect(mergeStep?.state).toBe('actionable');
   });
 });
 

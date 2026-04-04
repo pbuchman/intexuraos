@@ -1,5 +1,5 @@
 /**
- * Tests for CodeTaskViewPage PR link fallback behavior.
+ * Tests for CodeTaskViewPage behavioral rendering.
  * @vitest-environment jsdom
  */
 
@@ -65,8 +65,16 @@ vi.mock('@/components/PREventsGroup.js', () => ({
   ),
 }));
 
+vi.mock('@/components/code-tasks/TaskHeader.js', () => ({
+  TaskHeader: (): React.JSX.Element => <div>header</div>,
+}));
+
 vi.mock('@/components/code-tasks/LogStream.js', () => ({
   LogStream: (): React.JSX.Element => <div>Log stream</div>,
+}));
+
+vi.mock('@/components/code-tasks/TaskActions.js', () => ({
+  TaskActions: (): React.JSX.Element => <div>actions</div>,
 }));
 
 function createTask(overrides?: Partial<CodeTask>): CodeTask {
@@ -132,43 +140,115 @@ describe('CodeTaskViewPage', () => {
     vi.clearAllMocks();
   });
 
-  it('shows the GitHub action button for a running review task when prNumber exists but result.prUrl is missing', () => {
-    mockUseTaskView.mockReturnValue(createTaskViewState(
-      createTask({ prNumber: 1504 })
-    ));
+  describe('PR link fallback', () => {
+    it('shows the GitHub action button for a running review task when prNumber exists but result.prUrl is missing', () => {
+      mockUseTaskView.mockReturnValue(createTaskViewState(
+        createTask({ prNumber: 1504 })
+      ));
 
-    render(<CodeTaskViewPage />);
+      render(<CodeTaskViewPage />);
 
-    expect(screen.getByRole('link', { name: 'GitHub' })).toHaveAttribute(
-      'href',
-      'https://github.com/pbuchman/intexuraos/pull/1504'
-    );
+      expect(screen.getByRole('link', { name: 'GitHub' })).toHaveAttribute(
+        'href',
+        'https://github.com/pbuchman/intexuraos/pull/1504'
+      );
+    });
+
+    it('still prefers result.prUrl when it is available', () => {
+      mockUseTaskView.mockReturnValue(createTaskViewState(
+        createTask({
+          status: 'implemented',
+          prNumber: 1504,
+          result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/1600' },
+        })
+      ));
+
+      render(<CodeTaskViewPage />);
+
+      expect(screen.getByRole('link', { name: 'GitHub' })).toHaveAttribute(
+        'href',
+        'https://github.com/pbuchman/intexuraos/pull/1600'
+      );
+    });
+
+    it('does not show the GitHub action button when neither prNumber nor result.prUrl exists', () => {
+      mockUseTaskView.mockReturnValue(createTaskViewState(
+        createTask()
+      ));
+
+      render(<CodeTaskViewPage />);
+
+      expect(screen.queryByRole('link', { name: 'GitHub' })).not.toBeInTheDocument();
+    });
   });
 
-  it('still prefers result.prUrl when it is available', () => {
-    mockUseTaskView.mockReturnValue(createTaskViewState(
-      createTask({
-        status: 'implemented',
-        prNumber: 1504,
-        result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/1600' },
-      })
-    ));
+  describe('Implement button (isImplementable)', () => {
+    it('shows Implement button for a planned task with linearIssueId and no implementation yet', () => {
+      mockUseTaskView.mockReturnValue(createTaskViewState(
+        createTask({
+          status: 'planned',
+          agentType: 'planning',
+          linearIssueId: 'INT-100',
+        })
+      ));
 
-    render(<CodeTaskViewPage />);
+      render(<CodeTaskViewPage />);
 
-    expect(screen.getByRole('link', { name: 'GitHub' })).toHaveAttribute(
-      'href',
-      'https://github.com/pbuchman/intexuraos/pull/1600'
-    );
+      expect(screen.getByRole('button', { name: /Implement/ })).toBeInTheDocument();
+    });
   });
 
-  it('does not show the GitHub action button when neither prNumber nor result.prUrl exists', () => {
-    mockUseTaskView.mockReturnValue(createTaskViewState(
-      createTask()
-    ));
+  describe('Merge button (isMergeable)', () => {
+    it('does NOT show Merge button for a planning-origin reviewed task without ready-to-merge label', () => {
+      mockUseTaskView.mockReturnValue(createTaskViewState(
+        createTask({
+          status: 'reviewed',
+          agentType: 'review',
+          prNumber: 42,
+          result: { needs_remediation: '0' },
+          linearIssue: {
+            identifier: 'INT-100',
+            title: 'Test',
+            state: { name: 'In Progress', type: 'started' },
+            priority: 1,
+            assignee: null,
+            labels: [{ name: 'code-task' }],
+            url: 'https://linear.app/INT-100',
+            commentCount: 0,
+            lastCommentAt: null,
+          },
+        })
+      ));
 
-    render(<CodeTaskViewPage />);
+      render(<CodeTaskViewPage />);
 
-    expect(screen.queryByRole('link', { name: 'GitHub' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /Merge/ })).not.toBeInTheDocument();
+    });
+
+    it('shows Merge button for an execution-origin reviewed task with ready-to-merge label', () => {
+      mockUseTaskView.mockReturnValue(createTaskViewState(
+        createTask({
+          status: 'reviewed',
+          agentType: 'review',
+          prNumber: 42,
+          result: { needs_remediation: '0', prUrl: 'https://github.com/pbuchman/intexuraos/pull/42' },
+          linearIssue: {
+            identifier: 'INT-100',
+            title: 'Test',
+            state: { name: 'In Progress', type: 'started' },
+            priority: 1,
+            assignee: null,
+            labels: [{ name: 'code-task' }, { name: 'ready-to-merge' }],
+            url: 'https://linear.app/INT-100',
+            commentCount: 0,
+            lastCommentAt: null,
+          },
+        })
+      ));
+
+      render(<CodeTaskViewPage />);
+
+      expect(screen.getByRole('link', { name: /Merge/ })).toBeInTheDocument();
+    });
   });
 });
