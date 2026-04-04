@@ -135,7 +135,16 @@ In `apps/code-agent/src/routes/webhookRoutes.ts`, at lines 1177-1181, the curren
                   source = 'origin';
 ```
 
-Replace lines 1177-1181 with:
+First, update the variable declarations (lines 1172-1175) to avoid TS2454 definite-assignment errors — the planning branch intentionally leaves all four variables unassigned:
+
+```typescript
+                let targetLinearIssueId: string | undefined;
+                let targetUserId: string | undefined;
+                let label: string | undefined;
+                let source: string | undefined;
+```
+
+Then replace lines 1177-1181 with:
 
 ```typescript
                 if (originResult.ok && originResult.value !== null && originResult.value.linearIssueId !== undefined) {
@@ -152,7 +161,27 @@ Replace lines 1177-1181 with:
                   }
 ```
 
-Note: When origin is `planning`, `targetLinearIssueId` stays `undefined`, so the rest of the label-setting block (line 1200: `if (targetLinearIssueId === undefined) { ... skipping }`) is naturally skipped.
+And update the downstream `else` block at line 1203 to narrow the types before use:
+
+```typescript
+                } else {
+                  // targetUserId, label, and source are guaranteed defined when
+                  // targetLinearIssueId is defined (both branches assign all four or none)
+                  const issueValidation = await linearAgentClient.validateIssue({
+                    userId: targetUserId!,
+                    identifier: targetLinearIssueId,
+                  });
+                  if (issueValidation.ok) {
+                    const labelResult = await linearAgentClient.updateIssueMetadata({
+                      userId: targetUserId!,
+                      issueId: issueValidation.value.id,
+                      addLabels: [label!],
+                    });
+```
+
+Note: The non-null assertions (`!`) are safe here because when `targetLinearIssueId` is defined (we're in the else branch), all four variables were assigned in the same code path. Alternatively, the implementer may use a structured `target` object pattern to avoid assertions entirely — either approach is acceptable.
+
+When origin is `planning`, `targetLinearIssueId` stays `undefined`, so the rest of the label-setting block (line 1200: `if (targetLinearIssueId === undefined) { ... skipping }`) is naturally skipped.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
@@ -300,6 +329,47 @@ Add right after the previous test:
     expect(mergeStep).toBeDefined();
     expect(mergeStep?.state).toBe('actionable');
   });
+
+  it('shows merge step when execution task is archived but implementationTaskId is set (edge case)', () => {
+    const tasks = [
+      createMockTask({
+        id: 'task-planning',
+        linearIssueId: 'INT-100',
+        agentType: 'planning',
+        status: 'planned',
+        implementationTaskId: 'task-execution-archived',
+        createdAt: '2026-03-01T10:00:00Z',
+        updatedAt: '2026-03-01T10:05:00Z',
+      }),
+      createMockTask({
+        id: 'task-execution-archived',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'archived',
+        createdAt: '2026-03-02T10:00:00Z',
+        updatedAt: '2026-03-02T10:05:00Z',
+      }),
+      createMockTask({
+        id: 'task-review',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+        status: 'reviewed',
+        prNumber: 42,
+        createdAt: '2026-03-03T10:00:00Z',
+        updatedAt: '2026-03-03T10:05:00Z',
+        result: { needs_remediation: '0' },
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    // Execution was started (implementationTaskId set) but task archived —
+    // merge IS correct because execution already happened
+    const mergeStep = findStep(groups[0]?.pipeline, 'merge');
+    expect(mergeStep).toBeDefined();
+    expect(mergeStep?.state).toBe('actionable');
+  });
 ```
 
 - [ ] **Step 5: Run tests to verify they fail**
@@ -384,7 +454,7 @@ With:
   // Merge-ready fallback for review tasks: if the review step completed with
   // needs_remediation === '0', the PR is mergeable even without the ready-to-merge
   // label (which may have been set on the origin task's Linear issue instead).
-  // GUARD: skip for planning→review pipelines — the next step is execution, not merge.
+  // GUARD: skip for planning→review pipelines where execution hasn't started yet.
   // The backend (submitToExecutionAgent) merges the plan PR under the hood.
   const reviewEntry = stepMap.get('review');
   if (
@@ -392,7 +462,7 @@ With:
     reviewEntry.task.prNumber !== undefined &&
     reviewEntry.task.result?.needs_remediation === REMEDIATION_NOT_NEEDED &&
     !steps.some((s) => s.agentType === 'merge') &&
-    !(planningEntry !== undefined && executionEntry === undefined)
+    !(planningEntry !== undefined && planningEntry.task.implementationTaskId === undefined)
   ) {
     steps.push({
       agentType: 'merge',
@@ -402,7 +472,7 @@ With:
   }
 ```
 
-The added condition `!(planningEntry !== undefined && executionEntry === undefined)` prevents the merge step when we're in a planning→review pipeline (planning exists, no execution yet). The `planningEntry` and `executionEntry` variables are already declared above (line 213-214).
+The guard `!(planningEntry !== undefined && planningEntry.task.implementationTaskId === undefined)` checks whether execution has ever been started, rather than relying on whether an execution task exists in `stepMap`. This handles the edge case where an execution task has been archived (excluded from `stepMap` at line 189) — `implementationTaskId` on the planning task would still be set, so the merge fallback would correctly fire. The `planningEntry` variable is already declared above (line 213).
 
 - [ ] **Step 8: Run tests to verify they pass**
 
