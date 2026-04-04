@@ -80,14 +80,14 @@ describe('isTaskMergeable', () => {
     ).toBe(true);
   });
 
-  it('returns true for reviewed task with prNumber and needs_remediation=0', () => {
+  it('returns false for reviewed task with prNumber and needs_remediation=0 but no label (planning-origin)', () => {
     expect(
       isTaskMergeable({
         status: 'reviewed',
         prNumber: 42,
         result: { needs_remediation: '0' },
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('returns false when no label and no passed review', () => {
@@ -135,6 +135,28 @@ describe('isTaskMergeable', () => {
         result: { needs_remediation: '1' },
       }),
     ).toBe(false);
+  });
+
+  it('returns false for reviewed task with needs_remediation=0 but no merge-ready label (planning-origin)', () => {
+    expect(
+      isTaskMergeable({
+        status: 'reviewed',
+        prNumber: 42,
+        result: { needs_remediation: '0' },
+        linearIssue: { labels: [{ name: 'code-task' }] },
+      }),
+    ).toBe(false);
+  });
+
+  it('returns true for reviewed task with needs_remediation=0 AND merge-ready label (execution-origin)', () => {
+    expect(
+      isTaskMergeable({
+        status: 'reviewed',
+        prNumber: 42,
+        result: { needs_remediation: '0' },
+        linearIssue: { labels: [{ name: 'ready-to-merge' }] },
+      }),
+    ).toBe(true);
   });
 });
 

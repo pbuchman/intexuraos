@@ -3,8 +3,6 @@
  * Ported from apps/web/src/utils/issueGroups.ts lines 70-155.
  */
 
-import { REMEDIATION_NOT_NEEDED } from './constants.js';
-
 /**
  * Normalize a label string for comparison.
  * Mirrors packages/common-core/src/labels.ts normalizeLabel — local copy avoids
@@ -55,10 +53,16 @@ export function hasMergeReadyLabel(labels: { name: string }[] | undefined): bool
 /**
  * Determines if a single task is merge-ready for the detail view.
  *
- * Covers three cases:
+ * Requires the `ready-to-merge` label on the task's Linear issue. This
+ * naturally distinguishes execution-origin reviews (label set by webhook)
+ * from planning-origin reviews (no label set after INT-1255).
+ *
+ * Covers two cases:
  * 1. An `implemented` task with its own `result.prUrl` and `ready-to-merge` label
  * 2. A `reviewed` task with a `prNumber` and `ready-to-merge` label
- * 3. A `reviewed` task with a `prNumber` and `result.needs_remediation === '0'`
+ *
+ * Note: if the review task's Linear issue differs from the origin's (rare),
+ * merge won't show on the detail page — the list view pipeline is authoritative.
  */
 export function isTaskMergeable(task: {
   status: string;
@@ -66,10 +70,11 @@ export function isTaskMergeable(task: {
   result?: { prUrl?: string; needs_remediation?: string };
   linearIssue?: { labels: { name: string }[] };
 }): boolean {
-  const hasLabel = hasMergeReadyLabel(task.linearIssue?.labels);
-  const passedReview = task.status === 'reviewed' && task.result?.needs_remediation === REMEDIATION_NOT_NEEDED;
-
-  if (!hasLabel && !passedReview) {
+  // Merge eligibility requires the ready-to-merge label on the Linear issue.
+  // After the planning-origin review fix (INT-1255), only execution-origin
+  // reviews get this label — planning-origin reviews intentionally do not,
+  // so merge does not appear on their detail page.
+  if (!hasMergeReadyLabel(task.linearIssue?.labels)) {
     return false;
   }
   return (
