@@ -893,6 +893,11 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
           /* v8 ignore stop @preserve */
 
           const current = docToSummary(summaryDoc.data() as Record<string, unknown>);
+          // Fully-archived groups don't need label updates — skip to avoid
+          // unnecessary writes and redundant status recomputation
+          if (current.aggregateStatus === 'archived') {
+            return 'stale' as const;
+          }
           if (current.labelsUpdatedAt !== undefined && sourceTs.toMillis() < current.labelsUpdatedAt.toMillis()) {
             return 'stale' as const;
           }
