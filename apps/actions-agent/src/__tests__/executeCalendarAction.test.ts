@@ -247,7 +247,7 @@ describe('executeCalendarAction usecase', () => {
     expect(messages[0]?.message).toContain('Calendar event created');
     // URL is now passed as a CTA button, not embedded in message text
     expect(messages[0]?.ctaUrl?.url).toBe('https://calendar.google.com/calendar/event?eid=fake123');
-    expect(messages[0]?.ctaUrl?.displayText).toBe('📅 View in Calendar');
+    expect(messages[0]?.ctaUrl?.displayText).toBe('View in Calendar');
     // Absolute URL should NOT be prepended with webAppUrl
     expect(messages[0]?.message).not.toContain('https://app.test.com/https://');
   });
@@ -475,7 +475,7 @@ describe('executeCalendarAction usecase', () => {
     expect(messages[0]?.message).toContain('Office');
     // URL is now passed as a CTA button, not embedded in message text
     expect(messages[0]?.ctaUrl?.url).toBe('https://calendar.google.com/calendar/event?eid=fake123');
-    expect(messages[0]?.ctaUrl?.displayText).toBe('📅 View in Calendar');
+    expect(messages[0]?.ctaUrl?.displayText).toBe('View in Calendar');
   });
 
   it('sends basic completion message when getPreview returns error (graceful fallback)', async () => {
