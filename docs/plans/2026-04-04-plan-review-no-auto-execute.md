@@ -1,10 +1,10 @@
-# Plan Review: Stop Auto-Advancing to Execution
+# Plan Review: Stop Auto-Advancing to Execution + Fix Planning→Review Pipeline
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** When a review passes on a plan PR (`needs_remediation: '0'`), the system should NOT auto-set the `ready-to-implement` label or auto-advance to the execution pipeline step. Execution must only happen when the user explicitly triggers it from the UI.
+**Goal:** (1) When a review passes on a plan PR, the system must NOT auto-advance to execution — the user must explicitly trigger it. (2) When a planning→review pipeline completes, show the Code button (execution), not a Merge button.
 
-**Architecture:** Currently, a passing plan review auto-sets `ready-to-implement` on the Linear issue, which gates the "Implement" button via `hasImplementationReadyLabel()` in both the backend pipeline derivation and the web app detail view. This plan removes the auto-label behavior for plan-origin reviews AND removes the label gate from the Implement button. The button appears whenever planning is completed. The user's explicit click of "Implement" is the sole trigger for execution. The `ready-to-implement` label and `hasImplementationReadyLabel()` function remain in the codebase for the `recomputeWithLabels` infrastructure but no longer gate the UI.
+**Architecture:** Three coordinated changes: (a) the webhook stops auto-setting `ready-to-implement` for plan-origin reviews, (b) the `derivePipeline()` function removes the label gate from the synthetic execution step AND guards the review merge-fallback to not fire for planning→review pipelines, (c) the detail view removes the label gate from the Implement button.
 
 **Tech Stack:** TypeScript, Fastify, React, Vitest
 
@@ -12,32 +12,44 @@
 
 ## Background
 
-### Problem
+### Problem 1: Auto-advancing to execution (INT-1255)
 
-When a review task completes with `needs_remediation: '0'` (review passed) and the origin task is a planning agent:
+When a review task completes with `needs_remediation: '0'` and the origin task is a planning agent:
 1. The webhook handler auto-sets `ready-to-implement` label on the Linear issue
 2. `derivePipeline()` sees this label and inserts a synthetic "Execution: actionable" step
-3. The UI shows the "Implement" button
-4. `deriveAggregateStatusFromSummary()` reports `needs-action`
+3. The UI shows the "Implement" button and `deriveAggregateStatus()` reports `needs-action`
 
-Per user feedback (Piotr Buchman, 2026-04-04): execution should ONLY happen when the user explicitly decides to start coding. A passing plan review should leave the system in plan phase. If the user later posts another review (disagreeing with the automated assessment), it should trigger remediation again through the normal flow.
+Per user feedback (Piotr Buchman, 2026-04-04): execution should ONLY happen when the user explicitly decides to start coding. A passing plan review should leave the system in plan phase.
 
-### Design Decision: Remove the label gate entirely
+### Problem 2: Merge button instead of Code button (INT-1256)
 
-The `ready-to-implement` label was designed to gate the Implement button. However, the `code-task` label (always present on planned tasks) is also in `IMPLEMENTATION_READY_LABELS`, so removing just the auto-set would NOT change button visibility. Two options were considered:
+When a planning task's review completes (plan PR approved), the code tasks list shows a **Merge** button instead of a **Code** button.
+
+Root cause in `derivePipeline()` (`apps/web/src/utils/issueGroups.ts`):
+1. **Lines 215-228 — Synthetic execution step:** Only added when `hasImplementationReadyLabel()` returns true. When the issue only has `ready-to-merge` (set by review outcome), this check fails → no execution step.
+2. **Lines 247-258 — Review merge-fallback:** Fires when review completed with `needs_remediation === '0'` and `prNumber` exists. This fallback was designed for execution→review pipelines (where merge IS the terminal action), but it also fires for planning→review pipelines (where execution hasn't happened yet).
+3. **Result:** Only a merge step is added → frontend renders Merge button.
+
+The backend handler `submitToExecutionAgent` already merges the plan PR via `mergePlanPr()` before starting execution — no backend changes needed.
+
+### Consolidated Design Decision: Remove label gate entirely
+
+The `ready-to-implement` label was designed to gate the Implement button. However, the `code-task` label (always present on planned tasks) is also in `IMPLEMENTATION_READY_LABELS`, so removing just the auto-set of `ready-to-implement` would NOT change button visibility (the label check would still pass via `code-task`). Two options were considered:
 
 1. **Remove `code-task` from the label set** — Forces manual `ready-to-implement` label addition on Linear (poor UX)
 2. **Remove the label gate entirely** — Button appears when planning completes; user's click IS the explicit trigger
 
-**Chosen: Option 2.** The Implement button already requires a user click. Removing the label gate makes the button always available after planning, and the user decides when to start execution. No auto-advancement, no auto-labeling.
+**Chosen: Option 2.** The Implement button already requires a user click. Removing the label gate makes the button always available after planning, and the user decides when to start execution.
+
+Additionally, the review merge-fallback must be guarded so it does NOT fire for planning→review pipelines. Without this guard, removing the label gate would cause BOTH Code and Merge buttons to appear.
 
 ### What stays unchanged
 
-- `ready-to-merge` label: still auto-set for execution-origin reviews (review passes on implementation PR)
-- `hasImplementationReadyLabel()` function: kept for `recomputeWithLabels` infrastructure and backward compat
+- `ready-to-merge` label: still auto-set for execution-origin reviews
+- `hasImplementationReadyLabel()` function: kept for backward compat (still exported, still tested)
 - `submitToExecutionAgent` validation: still requires `code-task` or `complex-task` label on the Linear issue
 - Remediation flow: `needs_remediation === '1'` still creates remediation tasks and removes stale labels
-- The `ready-to-implement` label removal on negative reviews: still happens (cleanup of stale labels)
+- `ready-to-implement` label removal on negative reviews: still happens (cleanup of stale labels)
 
 ### Endpoint Changes
 
@@ -47,103 +59,107 @@ No HTTP endpoints are modified, created, or removed.
 
 ## File Map
 
-| Action   | File                                                                                          | Responsibility                                                       |
-| -------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Modify   | `apps/code-agent/src/routes/webhookRoutes.ts:1247-1250`                                       | Skip `ready-to-implement` label for plan-origin reviews              |
-| Modify   | `apps/code-agent/src/domain/issueGrouping/groupByLinearIssue.ts:73-78`                        | Remove `hasImplementationReadyLabel` from execution actionable check |
-| Modify   | `apps/code-agent/src/domain/issueGrouping/deriveAggregateStatusFromSummary.ts:31-37`          | Remove `hasImplementationReadyLabel` from needs-action check         |
-| Modify   | `apps/web/src/pages/CodeTaskViewPage.tsx:127-130`                                             | Remove `hasImplementationReadyLabel` from `isImplementable`          |
-| Modify   | `apps/code-agent/src/__tests__/routes/webhooks.test.ts`                                       | Update review-outcome label tests                                    |
-| Modify   | `apps/code-agent/src/__tests__/domain/issueGrouping/groupByLinearIssue.test.ts`               | Remove label-gated execution tests                                   |
-| Modify   | `apps/code-agent/src/__tests__/domain/issueGrouping/deriveAggregateStatusFromSummary.test.ts` | Remove label-gated needs-action tests                                |
+| Action | File                                                              | Responsibility                                               |
+| ------ | ----------------------------------------------------------------- | ------------------------------------------------------------ |
+| Modify | `apps/code-agent/src/routes/webhookRoutes.ts:1177-1181`           | Skip `ready-to-implement` label for plan-origin reviews      |
+| Test   | `apps/code-agent/src/__tests__/routes/webhooks.test.ts:4738-4801` | Update review-outcome label tests                            |
+| Modify | `apps/web/src/utils/issueGroups.ts:213-258`                       | Remove label gate from execution step + guard merge-fallback |
+| Test   | `apps/web/src/utils/__tests__/issueGroups.test.ts:1085-1181`      | Update label-gated tests + add planning→review tests         |
+| Modify | `apps/web/src/pages/CodeTaskViewPageV2.tsx:124-127`               | Remove `hasImplementationReadyLabel` from `isImplementable`  |
 
 ---
 
 ### Task 1: Stop auto-setting `ready-to-implement` for plan-origin reviews
 
 **Files:**
-- Modify: `apps/code-agent/src/routes/webhookRoutes.ts:1247-1250`
-- Test: `apps/code-agent/src/__tests__/routes/webhooks.test.ts`
+- Modify: `apps/code-agent/src/routes/webhookRoutes.ts:1177-1181`
+- Test: `apps/code-agent/src/__tests__/routes/webhooks.test.ts:4738-4801`
 
-- [ ] **Step 1: Update the failing test — plan-origin review should NOT set `ready-to-implement`**
+- [ ] **Step 1: Update the test — plan-origin review should NOT set `ready-to-implement`**
 
-In `apps/code-agent/src/__tests__/routes/webhooks.test.ts`, find the test `'adds ready-to-implement label when origin task is a planning task'` (around line 4867). Change the assertion to verify that NO `ready-to-implement` label is added:
-
-```typescript
-it('does not set ready-to-implement label when origin task is a planning task', async () => {
-  await createOriginTask({ traceId: 'trace_label_planning', agentType: 'planning' });
-  const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_planning_review' });
-
-  await completeReviewWithLabel(reviewTask.id, { needs_remediation: '0' });
-
-  const labelCalls = metadataSpy.mock.calls.filter(
-    (call) => call[0].addLabels !== undefined &&
-      call[0].addLabels.includes('ready-to-implement')
-  );
-  expect(labelCalls).toHaveLength(0);
-});
-```
-
-Also find and update `'walks past pull_request task to find planning origin and sets ready-to-implement'` (around line 4906) — same pattern: assert that no `ready-to-implement` label is added.
+In `apps/code-agent/src/__tests__/routes/webhooks.test.ts`, find the test at line 4738 (`'adds ready-to-implement label when origin task is a planning task'`). Change the test name and assertion to verify NO label is set:
 
 ```typescript
-it('walks past pull_request task to find planning origin and does NOT set ready-to-implement', async () => {
-  await createOriginTask({ traceId: 'trace_label_pr_walk', agentType: 'planning' });
-  await createOriginTask({ traceId: 'trace_label_pr_walk_pr', agentType: 'pull_request' });
-  const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_pr_walk_review' });
+    it('does NOT set ready-to-implement label when origin task is a planning task', async () => {
+      await createOriginTask({ traceId: 'trace_label_planning', agentType: 'planning' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_planning_review' });
+      const payload = makeLabelPayload(reviewTask.id);
 
-  await completeReviewWithLabel(reviewTask.id, { needs_remediation: '0' });
+      const response = await sendLabelPayload(payload);
 
-  const labelCalls = metadataSpy.mock.calls.filter(
-    (call) => call[0].addLabels !== undefined &&
-      call[0].addLabels.includes('ready-to-implement')
-  );
-  expect(labelCalls).toHaveLength(0);
-});
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      // Plan-origin reviews skip labeling entirely — no ready-to-implement set
+      expect(metadataSpy).not.toHaveBeenCalled();
+    });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 2: Update the walk-past test — PR walk should also NOT set label**
+
+Find the test at line 4777 (`'walks past pull_request task to find planning origin and sets ready-to-implement'`). Change the test name and assertion:
+
+```typescript
+    it('walks past pull_request task to find planning origin and does NOT set ready-to-implement', async () => {
+      const planningTask = await createOriginTask({ traceId: 'trace_label_pr_task_planning', agentType: 'planning' });
+      await codeTaskRepo.update(planningTask.id, { status: 'planned' });
+      await createOriginTask({ traceId: 'trace_label_pr_task_newer', agentType: 'pull_request' });
+
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_pr_task_review' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      // Plan-origin reviews skip labeling entirely
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      expect(metadataSpy).not.toHaveBeenCalled();
+    });
+```
+
+- [ ] **Step 3: Run tests to verify they fail**
 
 Run: `cd /repo && pnpm run verify:workspace:tracked -- code-agent 2>&1 | tail -30`
 Expected: FAIL — the webhook still sets `ready-to-implement` for planning-origin reviews.
 
-- [ ] **Step 3: Modify the webhook handler to skip label for plan-origin reviews**
+- [ ] **Step 4: Modify the webhook handler to skip label for plan-origin reviews**
 
-In `apps/code-agent/src/routes/webhookRoutes.ts`, around line 1247-1251, the current code is:
-
-```typescript
-if (originResult.ok && originResult.value !== null && originResult.value.linearIssueId !== undefined) {
-  targetLinearIssueId = originResult.value.linearIssueId;
-  targetUserId = originResult.value.userId;
-  label = originResult.value.agentType === 'planning' ? 'ready-to-implement' : 'ready-to-merge';
-  source = 'origin';
-```
-
-Change it to skip the label entirely when origin is a planning task. The execution-origin path (`ready-to-merge`) is preserved:
+In `apps/code-agent/src/routes/webhookRoutes.ts`, at lines 1177-1181, the current code is:
 
 ```typescript
-if (originResult.ok && originResult.value !== null && originResult.value.linearIssueId !== undefined) {
-  if (originResult.value.agentType === 'planning') {
-    // Plan-phase reviews do not auto-advance to execution.
-    // The user must explicitly trigger execution from the UI.
-    request.log.info({ taskId, prNumber, linearIssueId: originResult.value.linearIssueId },
-      'Plan review passed — skipping ready-to-implement label (user must explicitly trigger execution)');
-  } else {
-    targetLinearIssueId = originResult.value.linearIssueId;
-    targetUserId = originResult.value.userId;
-    label = 'ready-to-merge';
-    source = 'origin';
-  }
+                if (originResult.ok && originResult.value !== null && originResult.value.linearIssueId !== undefined) {
+                  targetLinearIssueId = originResult.value.linearIssueId;
+                  targetUserId = originResult.value.userId;
+                  label = originResult.value.agentType === 'planning' ? 'ready-to-implement' : 'ready-to-merge';
+                  source = 'origin';
 ```
 
-Note: `targetLinearIssueId` remains `undefined` for planning-origin, so the rest of the label-setting block (lines 1270-1316) is skipped due to the existing guard: `if (targetLinearIssueId === undefined) { ... skipping }`.
+Replace lines 1177-1181 with:
 
-- [ ] **Step 4: Run tests to verify they pass**
+```typescript
+                if (originResult.ok && originResult.value !== null && originResult.value.linearIssueId !== undefined) {
+                  if (originResult.value.agentType === 'planning') {
+                    // Plan-phase reviews do not auto-advance to execution.
+                    // The user must explicitly trigger execution from the UI.
+                    request.log.info({ taskId, prNumber, linearIssueId: originResult.value.linearIssueId },
+                      'Plan review passed — skipping ready-to-implement label (user must explicitly trigger execution)');
+                  } else {
+                    targetLinearIssueId = originResult.value.linearIssueId;
+                    targetUserId = originResult.value.userId;
+                    label = 'ready-to-merge';
+                    source = 'origin';
+                  }
+```
+
+Note: When origin is `planning`, `targetLinearIssueId` stays `undefined`, so the rest of the label-setting block (line 1200: `if (targetLinearIssueId === undefined) { ... skipping }`) is naturally skipped.
+
+- [ ] **Step 5: Run tests to verify they pass**
 
 Run: `cd /repo && pnpm run verify:workspace:tracked -- code-agent 2>&1 | tail -30`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add apps/code-agent/src/routes/webhookRoutes.ts apps/code-agent/src/__tests__/routes/webhooks.test.ts
@@ -153,255 +169,319 @@ Plan-phase reviews that pass (needs_remediation: '0') no longer auto-set
 the ready-to-implement label. Execution must be explicitly triggered by
 the user from the UI. Execution-origin reviews still set ready-to-merge.
 
-Fixes INT-1255"
+Part of INT-1255"
 ```
 
 ---
 
-### Task 2: Remove label gate from pipeline derivation
+### Task 2: Remove label gate from pipeline + guard merge-fallback for planning→review
 
 **Files:**
-- Modify: `apps/code-agent/src/domain/issueGrouping/groupByLinearIssue.ts:73-78`
-- Test: `apps/code-agent/src/__tests__/domain/issueGrouping/groupByLinearIssue.test.ts`
+- Modify: `apps/web/src/utils/issueGroups.ts:213-258`
+- Test: `apps/web/src/utils/__tests__/issueGroups.test.ts:1085-1181`
 
-- [ ] **Step 1: Update the test — execution should be actionable without `ready-to-implement` label**
+This task addresses both INT-1255 (remove label gate) and INT-1256 (guard merge-fallback).
 
-In `apps/code-agent/src/__tests__/domain/issueGrouping/groupByLinearIssue.test.ts`, find the test `'does not create actionable execution step without ready-to-implement label'` (around line 366). This test asserts that without the label, no actionable step exists. Reverse the assertion:
+- [ ] **Step 1: Update failing test — execution should be actionable WITHOUT label**
+
+In `apps/web/src/utils/__tests__/issueGroups.test.ts`, find the test at line 1153 (`'does NOT show actionable when linearIssue has labels but neither ready-to-implement nor code-task'`). Change it to expect actionable:
 
 ```typescript
-it('creates actionable execution step for completed planning even without ready-to-implement label', () => {
-  const tasks = [
-    makeTask({
-      id: 'task-plan',
+  it('shows actionable even when linearIssue has labels without ready-to-implement or code-task', () => {
+    const task = createMockTask({
+      id: 't1',
+      linearIssueId: 'INT-100',
       agentType: 'planning',
       status: 'planned',
-      linearIssueId: 'INT-100',
       linearIssue: {
-        identifier: 'INT-100',
-        title: 'Test issue',
-        status: 'In Progress',
-        priority: 1,
-        assignee: null,
-        labels: [{ name: 'some-other-label' }],
-        url: 'https://linear.app/INT-100',
-        commentCount: 0,
+        ...linearIssueSkeleton,
+        labels: [{ id: 'l1', name: 'some-other-label' }],
       },
-    }),
-  ];
-  const pipeline = derivePipeline(tasks);
-  const actionable = pipeline.steps.find((s) => s.state === 'actionable');
-  expect(actionable).toBeDefined();
-  expect(actionable?.agentType).toBe('execution');
-});
+    });
+    const groups = groupByLinearIssue([task]);
+    expect(findStep(groups[0]?.pipeline, 'execution')?.state).toBe('actionable');
+  });
 ```
 
-Also, update all existing tests that set `labels: [{ name: 'ready-to-implement' }]` to verify the behavior works regardless of the label. Tests that pass `ready-to-implement` labels are fine — they should still produce actionable execution steps. But add a variant without the label to confirm it also works.
+- [ ] **Step 2: Update second failing test — `unclear` label should also show actionable**
 
-- [ ] **Step 2: Run tests to verify they fail**
+Find the test at line 1168 (`'does NOT show actionable when linearIssue has only unclear label'`). Change it:
 
-Run: `cd /repo && pnpm run verify:workspace:tracked -- code-agent 2>&1 | tail -30`
-Expected: FAIL — `derivePipeline` still checks `hasImplementationReadyLabel`.
-
-- [ ] **Step 3: Remove the label gate from `derivePipeline`**
-
-In `apps/code-agent/src/domain/issueGrouping/groupByLinearIssue.ts`, lines 73-78:
-
-Replace:
 ```typescript
-  if (
-    planningEntry?.step.state === 'completed' &&
-    executionEntry === undefined &&
-    planningEntry.task.implementationTaskId === undefined &&
-    (planningEntry.task.fanOutChildTaskIds === undefined || planningEntry.task.fanOutChildTaskIds.length === 0) &&
-    hasImplementationReadyLabel(planningEntry.task.linearIssue?.labels)
-  ) {
+  it('shows actionable even when linearIssue has only unclear label', () => {
+    const task = createMockTask({
+      id: 't1',
+      linearIssueId: 'INT-100',
+      agentType: 'planning',
+      status: 'planned',
+      linearIssue: {
+        ...linearIssueSkeleton,
+        labels: [{ id: 'l1', name: 'unclear' }],
+      },
+    });
+    const groups = groupByLinearIssue([task]);
+    expect(findStep(groups[0]?.pipeline, 'execution')?.state).toBe('actionable');
+  });
 ```
 
-With:
+- [ ] **Step 3: Add new test — planning→review pipeline shows Code (execution), not Merge**
+
+Add this test inside the `describe('groupByLinearIssue', ...)` block, after the existing review/merge tests (around line 1460):
+
 ```typescript
-  if (
-    planningEntry?.step.state === 'completed' &&
-    executionEntry === undefined &&
-    planningEntry.task.implementationTaskId === undefined &&
-    (planningEntry.task.fanOutChildTaskIds === undefined || planningEntry.task.fanOutChildTaskIds.length === 0)
-  ) {
+  it('shows actionable execution step (not merge) when planning→review pipeline has completed review', () => {
+    const tasks = [
+      createMockTask({
+        id: 'task-planning',
+        linearIssueId: 'INT-100',
+        agentType: 'planning',
+        status: 'planned',
+        createdAt: '2026-03-01T10:00:00Z',
+        updatedAt: '2026-03-01T10:05:00Z',
+      }),
+      createMockTask({
+        id: 'task-review',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+        status: 'reviewed',
+        prNumber: 42,
+        createdAt: '2026-03-02T10:00:00Z',
+        updatedAt: '2026-03-02T10:05:00Z',
+        result: { needs_remediation: '0' },
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    // Should have an actionable execution step (Code button), NOT a merge step
+    const executionStep = findStep(groups[0]?.pipeline, 'execution');
+    expect(executionStep).toBeDefined();
+    expect(executionStep?.state).toBe('actionable');
+
+    const mergeStep = findStep(groups[0]?.pipeline, 'merge');
+    expect(mergeStep).toBeUndefined();
+  });
 ```
 
-Remove the `hasImplementationReadyLabel` import if it's no longer used in this file. Check other usages first:
+- [ ] **Step 4: Add regression test — execution→review pipeline still shows Merge**
 
-```bash
-grep -n 'hasImplementationReadyLabel' apps/code-agent/src/domain/issueGrouping/groupByLinearIssue.ts
+Add right after the previous test:
+
+```typescript
+  it('still shows merge step for execution→review pipeline (regression guard)', () => {
+    const tasks = [
+      createMockTask({
+        id: 'task-execution',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-03-01T10:00:00Z',
+        updatedAt: '2026-03-01T10:05:00Z',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+      }),
+      createMockTask({
+        id: 'task-review',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+        status: 'reviewed',
+        prNumber: 42,
+        createdAt: '2026-03-02T10:00:00Z',
+        updatedAt: '2026-03-02T10:05:00Z',
+        result: { needs_remediation: '0' },
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    // execution→review pipeline: merge IS the terminal action
+    const mergeStep = findStep(groups[0]?.pipeline, 'merge');
+    expect(mergeStep).toBeDefined();
+    expect(mergeStep?.state).toBe('actionable');
+  });
 ```
 
-If it's only on the deleted line, remove the import. If used elsewhere, keep it.
+- [ ] **Step 5: Run tests to verify they fail**
 
-Also update the comment on lines 69-70 to remove the label reference:
+Run: `cd /repo && pnpm run verify:workspace:tracked -- web 2>&1 | tail -30`
+Expected: FAIL — the label-gated tests now expect actionable but still get undefined, and the planning→review test gets a merge step instead of execution.
 
-Replace:
+- [ ] **Step 6: Remove label gate from synthetic execution step**
+
+In `apps/web/src/utils/issueGroups.ts`, replace lines 210-228:
+
 ```typescript
   // Actionable logic: if planning completed, no execution step exists, no implementationTaskId,
   // AND the Linear issue has a ready-to-implement or code-task label (backward compat).
-```
-
-With:
-```typescript
-  // Actionable logic: if planning completed, no execution step exists, no implementationTaskId,
-  // and no fan-out children — the user can trigger execution.
-```
-
-- [ ] **Step 4: Run tests to verify they pass**
-
-Run: `cd /repo && pnpm run verify:workspace:tracked -- code-agent 2>&1 | tail -30`
-Expected: PASS
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add apps/code-agent/src/domain/issueGrouping/groupByLinearIssue.ts apps/code-agent/src/__tests__/domain/issueGrouping/groupByLinearIssue.test.ts
-git commit -m "fix: remove label gate from execution actionable pipeline step
-
-The Implement button now appears whenever planning is completed, regardless
-of the ready-to-implement label. The user's explicit click is the trigger.
-
-Part of INT-1255"
-```
-
----
-
-### Task 3: Remove label gate from aggregate status summary
-
-**Files:**
-- Modify: `apps/code-agent/src/domain/issueGrouping/deriveAggregateStatusFromSummary.ts:31-37`
-- Test: `apps/code-agent/src/__tests__/domain/issueGrouping/deriveAggregateStatusFromSummary.test.ts`
-
-- [ ] **Step 1: Update the test — `hasImplementationReadyLabel: false` should still yield `needs-action`**
-
-In `apps/code-agent/src/__tests__/domain/issueGrouping/deriveAggregateStatusFromSummary.test.ts`, find the test `'does not return needs-action for planning case when hasImplementationReadyLabel is false'` (around line 224). Change the assertion:
-
-```typescript
-it('returns needs-action for planning case even when hasImplementationReadyLabel is false', () => {
-  expect(
-    deriveAggregateStatusFromSummary({
-      ...BASE_FIELDS,
-      hasCompletedPlanning: true,
-      hasCompletedExecution: false,
-      hasImplementationTaskId: false,
-      hasImplementationReadyLabel: false,
-    }),
-  ).toBe('needs-action');
-});
-```
-
-Keep the other label-related tests (`hasImplementationReadyLabel is undefined` and `hasImplementationReadyLabel is true`) but update their descriptions if needed — they should all return `needs-action`.
-
-- [ ] **Step 2: Run tests to verify they fail**
-
-Run: `cd /repo && pnpm run verify:workspace:tracked -- code-agent 2>&1 | tail -30`
-Expected: FAIL — `deriveAggregateStatusFromSummary` still checks the label.
-
-- [ ] **Step 3: Remove the label check from `deriveAggregateStatusFromSummary`**
-
-In `apps/code-agent/src/domain/issueGrouping/deriveAggregateStatusFromSummary.ts`, lines 29-38:
-
-Replace:
-```typescript
-  // 2. Needs-action: planning completed but no execution yet
-  // Pessimistic when label unknown (undefined → true), accurate when set
+  // Falls back to allowing actionable if label data is unavailable.
+  const planningEntry = stepMap.get('planning');
+  const executionEntry = stepMap.get('execution');
   if (
-    fields.hasCompletedPlanning &&
-    !fields.hasCompletedExecution &&
-    !fields.hasImplementationTaskId &&
-    (fields.hasImplementationReadyLabel ?? true)
+    planningEntry?.step.state === 'completed' &&
+    executionEntry === undefined &&
+    planningEntry.task.implementationTaskId === undefined &&
+    hasImplementationReadyLabel(planningEntry.task.linearIssue?.labels)
   ) {
-    return 'needs-action';
+    // Insert synthetic execution step right after planning
+    const planningIndex = steps.findIndex((s) => s.agentType === 'planning');
+    steps.splice(planningIndex + 1, 0, {
+      agentType: 'execution',
+      state: 'actionable',
+      label: 'Execution',
+    });
   }
 ```
 
 With:
+
 ```typescript
-  // 2. Needs-action: planning completed but no execution yet
+  // Actionable logic: if planning completed, no execution step exists, and no
+  // implementationTaskId — the user can trigger execution from the UI.
+  const planningEntry = stepMap.get('planning');
+  const executionEntry = stepMap.get('execution');
   if (
-    fields.hasCompletedPlanning &&
-    !fields.hasCompletedExecution &&
-    !fields.hasImplementationTaskId
+    planningEntry?.step.state === 'completed' &&
+    executionEntry === undefined &&
+    planningEntry.task.implementationTaskId === undefined
   ) {
-    return 'needs-action';
+    // Insert synthetic execution step right after planning
+    const planningIndex = steps.findIndex((s) => s.agentType === 'planning');
+    steps.splice(planningIndex + 1, 0, {
+      agentType: 'execution',
+      state: 'actionable',
+      label: 'Execution',
+    });
   }
 ```
 
-Note: Keep the `hasImplementationReadyLabel` field in the `GroupSummaryFields` interface — it's still written by `recomputeWithLabels` and stored in Firestore. Removing it would require a data migration. It's simply no longer read during status derivation.
+- [ ] **Step 7: Guard the review merge-fallback for planning→review pipelines**
 
-- [ ] **Step 4: Run tests to verify they pass**
+In the same file, replace lines 243-258:
 
-Run: `cd /repo && pnpm run verify:workspace:tracked -- code-agent 2>&1 | tail -30`
+```typescript
+  // Merge-ready fallback for review tasks: if the review step completed with
+  // needs_remediation === '0', the PR is mergeable even without the ready-to-merge
+  // label (which may have been set on the origin task's Linear issue instead).
+  const reviewEntry = stepMap.get('review');
+  if (
+    reviewEntry?.step.state === 'completed' &&
+    reviewEntry.task.prNumber !== undefined &&
+    reviewEntry.task.result?.needs_remediation === REMEDIATION_NOT_NEEDED &&
+    !steps.some((s) => s.agentType === 'merge')
+  ) {
+    steps.push({
+      agentType: 'merge',
+      state: 'actionable',
+      label: 'Merge',
+    });
+  }
+```
+
+With:
+
+```typescript
+  // Merge-ready fallback for review tasks: if the review step completed with
+  // needs_remediation === '0', the PR is mergeable even without the ready-to-merge
+  // label (which may have been set on the origin task's Linear issue instead).
+  // GUARD: skip for planning→review pipelines — the next step is execution, not merge.
+  // The backend (submitToExecutionAgent) merges the plan PR under the hood.
+  const reviewEntry = stepMap.get('review');
+  if (
+    reviewEntry?.step.state === 'completed' &&
+    reviewEntry.task.prNumber !== undefined &&
+    reviewEntry.task.result?.needs_remediation === REMEDIATION_NOT_NEEDED &&
+    !steps.some((s) => s.agentType === 'merge') &&
+    !(planningEntry !== undefined && executionEntry === undefined)
+  ) {
+    steps.push({
+      agentType: 'merge',
+      state: 'actionable',
+      label: 'Merge',
+    });
+  }
+```
+
+The added condition `!(planningEntry !== undefined && executionEntry === undefined)` prevents the merge step when we're in a planning→review pipeline (planning exists, no execution yet). The `planningEntry` and `executionEntry` variables are already declared above (line 213-214).
+
+- [ ] **Step 8: Run tests to verify they pass**
+
+Run: `cd /repo && pnpm run verify:workspace:tracked -- web 2>&1 | tail -30`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add apps/code-agent/src/domain/issueGrouping/deriveAggregateStatusFromSummary.ts apps/code-agent/src/__tests__/domain/issueGrouping/deriveAggregateStatusFromSummary.test.ts
-git commit -m "fix: remove label gate from aggregate status needs-action check
+git add apps/web/src/utils/issueGroups.ts apps/web/src/utils/__tests__/issueGroups.test.ts
+git commit -m "fix: remove label gate from pipeline + guard merge-fallback for planning→review
 
-Planning completed + no execution = needs-action, regardless of
-ready-to-implement label presence.
+The synthetic execution step now appears whenever planning is completed,
+regardless of labels. The review merge-fallback is guarded to not fire
+for planning→review pipelines (where the next step is execution, not merge).
 
-Part of INT-1255"
+Fixes INT-1256, part of INT-1255"
 ```
 
 ---
 
-### Task 4: Remove label gate from web app detail view
+### Task 3: Remove label gate from web app detail view
 
 **Files:**
-- Modify: `apps/web/src/pages/CodeTaskViewPage.tsx:127-130`
+- Modify: `apps/web/src/pages/CodeTaskViewPageV2.tsx:124-127`
 
 - [ ] **Step 1: Remove `hasImplementationReadyLabel` from `isImplementable`**
 
-In `apps/web/src/pages/CodeTaskViewPage.tsx`, line 127-130:
+In `apps/web/src/pages/CodeTaskViewPageV2.tsx`, replace lines 124-127:
 
-Replace:
 ```typescript
   const isImplementable = task.status === 'planned' &&
-    implementationTaskIds.length === 0 &&
+    task.implementationTaskId === undefined &&
     task.linearIssueId !== undefined &&
     hasImplementationReadyLabel(task.linearIssue?.labels);
 ```
 
 With:
+
 ```typescript
   const isImplementable = task.status === 'planned' &&
-    implementationTaskIds.length === 0 &&
+    task.implementationTaskId === undefined &&
     task.linearIssueId !== undefined;
 ```
 
-Remove the `hasImplementationReadyLabel` import if no longer used in this file:
+- [ ] **Step 2: Remove the unused import**
 
-```bash
-grep -n 'hasImplementationReadyLabel' apps/web/src/pages/CodeTaskViewPage.tsx
+Check if `hasImplementationReadyLabel` is still used elsewhere in the file. At line 22:
+
+```typescript
+import { hasImplementationReadyLabel, isTaskMergeable, getTaskMergeUrl } from '@/utils/issueGroups.js';
 ```
 
-If only used on the deleted line, remove the import from the imports block (likely imported from `@/utils/issueGroups`).
+Replace with:
 
-- [ ] **Step 2: Verify the web app builds**
+```typescript
+import { isTaskMergeable, getTaskMergeUrl } from '@/utils/issueGroups.js';
+```
+
+- [ ] **Step 3: Verify the web app builds**
 
 Run: `cd /repo && pnpm run verify:workspace:tracked -- web 2>&1 | tail -30`
 Expected: PASS (build + lint + type-check succeed)
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add apps/web/src/pages/CodeTaskViewPage.tsx
+git add apps/web/src/pages/CodeTaskViewPageV2.tsx
 git commit -m "fix: remove label gate from Implement button in task detail view
 
 The Implement button now shows for any completed planning task with a
-Linear issue. No label check required.
+Linear issue. No label check required — the user's click is the trigger.
 
 Part of INT-1255"
 ```
 
 ---
 
-### Task 5: Run full CI and verify
+### Task 4: Run full CI and verify
 
 - [ ] **Step 1: Build all packages**
 
@@ -426,4 +506,4 @@ Fix any issues before proceeding.
 
 2. **Linear assignment triggering execution**: The user mentioned execution can be triggered "from linear by assigning that task to someone." This is a separate feature — no current webhook maps Linear assignment to execution dispatch.
 
-3. **`hasImplementationReadyLabel` cleanup**: The function, label constants, and Firestore field remain in the codebase. They're still written by `recomputeWithLabels` but no longer gate UI behavior. A follow-up can clean up the dead code path if desired.
+3. **`hasImplementationReadyLabel` cleanup**: The function, label constants, and Firestore field remain in the codebase. They're still exported and tested but no longer gate UI behavior. A follow-up can clean up the dead code path if desired.
