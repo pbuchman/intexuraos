@@ -321,7 +321,7 @@ run_codex_attempt() {
 
     if [ -n "$attempt_forensics_dir" ]; then
         if [ "$continue_flag" = "1" ]; then
-            timeout --signal=TERM --kill-after=10 "${timeout_s}s" \
+            timeout -s TERM -k 10 "${timeout_s}s" \
                 codex exec resume --json \
                 --skip-git-repo-check \
                 --dangerously-bypass-approvals-and-sandbox \
@@ -329,7 +329,7 @@ run_codex_attempt() {
                 "${CODEX_THREAD_ID}" \
                 - < "$prompt_file" > "$log_file" 2>&1 || raw_exit=$?
         else
-            timeout --signal=TERM --kill-after=10 "${timeout_s}s" \
+            timeout -s TERM -k 10 "${timeout_s}s" \
                 codex exec --json \
                 --skip-git-repo-check \
                 --dangerously-bypass-approvals-and-sandbox \
@@ -338,7 +338,7 @@ run_codex_attempt() {
         fi
     else
         if [ "$continue_flag" = "1" ]; then
-            timeout --signal=TERM --kill-after=10 "${timeout_s}s" \
+            timeout -s TERM -k 10 "${timeout_s}s" \
                 codex exec resume --json \
                 --skip-git-repo-check \
                 --dangerously-bypass-approvals-and-sandbox \
@@ -346,7 +346,7 @@ run_codex_attempt() {
                 "${CODEX_THREAD_ID}" \
                 - < "$prompt_file" > "$log_file" 2>&1 || raw_exit=$?
         else
-            timeout --signal=TERM --kill-after=10 "${timeout_s}s" \
+            timeout -s TERM -k 10 "${timeout_s}s" \
                 codex exec --json \
                 --skip-git-repo-check \
                 --dangerously-bypass-approvals-and-sandbox \
