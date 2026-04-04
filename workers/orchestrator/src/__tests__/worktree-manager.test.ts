@@ -886,12 +886,13 @@ describe('WorktreeManager - git stderr error handling', () => {
     const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
     const manager = new WM(mockConfig, mockLogger);
 
-    await expect(manager.createWorktree('task-mcp-non-error', 'feature-branch')).rejects.toThrow(
-      'Failed to copy MCP config: Unknown error'
-    );
-
-    // Clear override so subsequent tests are unaffected
-    fsPromisesReadFileOverride = null;
+    try {
+      await expect(manager.createWorktree('task-mcp-non-error', 'feature-branch')).rejects.toThrow(
+        'Failed to create worktree: Failed to copy MCP config: Unknown error'
+      );
+    } finally {
+      fsPromisesReadFileOverride = null;
+    }
   });
 
   it('should surface Unknown error when copySettingsLocal catch receives a non-Error', async () => {
@@ -925,12 +926,15 @@ describe('WorktreeManager - git stderr error handling', () => {
       mockLogger
     );
 
-    await expect(
-      manager.createWorktree('task-settings-non-error', 'feature-branch')
-    ).rejects.toThrow('Failed to copy settings.local.json: Unknown error');
-
-    // Clear override
-    fsPromisesReadFileOverride = null;
+    try {
+      await expect(
+        manager.createWorktree('task-settings-non-error', 'feature-branch')
+      ).rejects.toThrow(
+        'Failed to create worktree: Failed to copy settings.local.json: Unknown error'
+      );
+    } finally {
+      fsPromisesReadFileOverride = null;
+    }
   });
 });
 
