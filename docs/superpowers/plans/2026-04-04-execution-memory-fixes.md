@@ -202,7 +202,7 @@ it('throws when evaluation repair also fails schema validation', async () => {
         limit: 5,
       },
     ),
-  ).rejects.toThrow();
+  ).rejects.toThrow(/ZodError/);
 
   expect(evaluatorClient.generate).toHaveBeenCalledTimes(2);
 });
@@ -277,6 +277,7 @@ to the LLM for repair before failing."
 
 **Files:**
 - Modify: `apps/code-agent/src/routes/webhookRoutes.ts:856-870`
+- Modify: `apps/code-agent/src/__tests__/routes/webhookRoutes.test.ts`
 
 - [ ] **Step 1: Add executionMemory bag to triggerDrainForPR**
 
@@ -295,7 +296,7 @@ Replace lines 861-870:
             taskEnqueueService: services.taskEnqueueService,
             orchestratorSecret: loadConfig().orchestratorSecret,
             executionMemory: {
-              /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes @preserve */
+              /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes is not tracked after service override tests @preserve */
               ...(services.executionMemoryQueryClient !== undefined && {
                 queryClient: services.executionMemoryQueryClient,
               }),
@@ -318,15 +319,45 @@ Replace lines 861-870:
 Run: `cd apps/code-agent && pnpm vitest run src/__tests__/routes/webhookRoutes.test.ts`
 Expected: PASS (existing tests should continue to pass since executionMemory resources are optional in drainTaskQueue)
 
-- [ ] **Step 3: Run full test suite**
+- [ ] **Step 3: Write test — triggerDrainForPR passes executionMemory resources**
+
+In `apps/code-agent/src/__tests__/routes/webhookRoutes.test.ts`, add a test inside the existing `triggerDrainForPR` describe block (or the post-completion drain test group) that verifies the DI wiring:
+
+```typescript
+it('passes executionMemory resources to drainTaskQueue during post-completion drain', async () => {
+  // Setup: complete a task that triggers triggerDrainForPR
+  // ... (use existing test setup patterns for webhook task completion)
+
+  // Assert: drainTaskQueue was called with executionMemory bag populated
+  expect(drainTaskQueue).toHaveBeenCalledWith(
+    expect.objectContaining({
+      executionMemory: expect.objectContaining({
+        queryClient: expect.anything(),
+        embeddingClient: expect.anything(),
+        executionMemoryRepo: expect.anything(),
+        executionMemoryApplicationRepo: expect.anything(),
+      }),
+    }),
+  );
+});
+```
+
+Note: Adapt the test setup to match the existing `webhookRoutes.test.ts` patterns — use `app.inject()` for the webhook endpoint and verify `drainTaskQueue` receives the memory resources from `getServices()`. The exact mock names depend on the test file's existing service setup.
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd apps/code-agent && pnpm vitest run src/__tests__/routes/webhookRoutes.test.ts -t "passes executionMemory resources"`
+Expected: PASS (implementation from Step 1 already wires the resources)
+
+- [ ] **Step 5: Run full test suite**
 
 Run: `cd apps/code-agent && pnpm vitest run`
 Expected: ALL PASS
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add apps/code-agent/src/routes/webhookRoutes.ts
+git add apps/code-agent/src/routes/webhookRoutes.ts apps/code-agent/src/__tests__/routes/webhookRoutes.test.ts
 git commit -m "fix(code-agent): pass executionMemory resources in webhookRoutes triggerDrainForPR
 
 The post-completion drain triggered by webhookRoutes was not passing
