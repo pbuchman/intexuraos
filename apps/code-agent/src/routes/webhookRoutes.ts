@@ -1387,6 +1387,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                     eventId: taskId,
                     ...(task.baseBranch !== undefined && { baseBranch: task.baseBranch }),
                     ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+                    ...(task.prBranch !== undefined && { prBranch: task.prBranch }),
                   },
                 );
                 if (remediationResult.ok) {
