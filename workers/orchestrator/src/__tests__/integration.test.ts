@@ -442,18 +442,15 @@ describe('Orchestrator HTTP-Only Integration', () => {
     });
   });
 
-  describe('Timeout Completion and Cleanup', () => {
-    it('MCP timeout marker flows through log pipeline to code-agent', async () => {
-      const taskId = 'timeout-task-123';
+  describe('Failure Completion and Cleanup', () => {
+    it('entrypoint log lines flow through log pipeline to code-agent', async () => {
+      const taskId = 'log-pipeline-task-123';
 
-      // The entrypoint emits this stable marker when `timeout` kills the Codex process
-      // (exit code 124 → 1). The orchestrator must forward it through the log pipeline
-      // so operators can scan for "MCP timeout" + "server=linear" in production logs.
-      const timeoutMarker = '[entrypoint] MCP timeout server=linear timeout_ms=60000';
+      const entrypointMarker = '[entrypoint] Codex attempt finished with exit code: 1';
 
       const logChunks = [
         { sequence: 1, content: 'Starting codex...', timestamp: '2024-01-01T00:00:00.000Z' },
-        { sequence: 2, content: timeoutMarker, timestamp: '2024-01-01T00:01:00.000Z' },
+        { sequence: 2, content: entrypointMarker, timestamp: '2024-01-01T00:01:00.000Z' },
       ];
 
       const logPayload = { taskId, chunks: logChunks };
@@ -472,7 +469,7 @@ describe('Orchestrator HTTP-Only Integration', () => {
 
       expect(logResponse.ok).toBe(true);
 
-      // Verify the log request was signed and contains the timeout marker
+      // Verify the log request was signed and contains the entrypoint marker
       const logRequest = httpRequests.find((req) => req.url.includes('/internal/logs'));
       if (logRequest === undefined) {
         throw new Error('Expected log request to be captured but none was found');
@@ -489,17 +486,16 @@ describe('Orchestrator HTTP-Only Integration', () => {
         taskId: string;
         chunks: { content: string }[];
       };
-      expect(body.chunks.some((c) => c.content.includes('MCP timeout'))).toBe(true);
+      expect(body.chunks.some((c) => c.content.includes('exit code: 1'))).toBe(true);
     });
 
-    it('completion webhook accepts failure status with valid HMAC after timeout', async () => {
-      const taskId = 'timeout-task-456';
+    it('completion webhook accepts failure status with valid HMAC', async () => {
+      const taskId = 'failure-task-456';
 
-      // After timeout, task completion webhook fires with failure status
       const webhookPayload = {
         taskId,
         status: 'failed',
-        result: { error: 'MCP timeout (Linear server, 60000ms)' },
+        result: { error: 'Codex process exited with non-zero code' },
       };
 
       const { timestamp: whTimestamp, signature: whSignature } =
