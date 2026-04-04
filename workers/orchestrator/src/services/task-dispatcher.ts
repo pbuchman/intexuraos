@@ -313,9 +313,7 @@ export class TaskDispatcher {
                 request.continuationPrBranch
               );
       } catch (error) {
-        /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
         if (this.runningCount > 0) this.runningCount--;
-        /* v8 ignore stop @preserve */
         await this.sendSetupFailureWebhook(request, 'Failed to create worktree', error);
         return;
       }
@@ -372,9 +370,7 @@ export class TaskDispatcher {
         continueSession: false,
       });
       if (!startResult.ok) {
-        /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
         if (this.runningCount > 0) this.runningCount--;
-        /* v8 ignore stop @preserve */
         this.logger.error(
           {
             taskId,
@@ -454,9 +450,7 @@ export class TaskDispatcher {
       this.appendTaggedTaskLog(taskId, 'instructions', `${agentLabel}: ${agentDesc}`);
       this.logger.info({}, `Task started: id=${taskId} runningCount=${String(this.runningCount)}`);
     } catch (error) {
-      /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
       if (this.runningCount > 0) this.runningCount--;
-      /* v8 ignore stop @preserve */
       await this.sendSetupFailureWebhook(request, 'Failed to start task', error);
     }
   }
@@ -533,9 +527,7 @@ export class TaskDispatcher {
       await this.saveTask(task);
 
       // Decrease running count
-      /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
       if (this.runningCount > 0) this.runningCount--;
-      /* v8 ignore stop @preserve */
       this.clearTaskTimers(taskId);
 
       // Send webhook
@@ -561,7 +553,6 @@ export class TaskDispatcher {
     }
   }
 
-  /* v8 ignore start -- test-infra: cannot unit-test without Docker, SSH, and state persistence infrastructure @preserve */
   async sendMessage(
     taskId: string,
     message: string
@@ -663,7 +654,6 @@ export class TaskDispatcher {
       },
     };
   }
-  /* v8 ignore stop @preserve */
 
   async getTask(taskId: string): Promise<Task | null> {
     const state = await this.statePersistence.load();
@@ -727,7 +717,7 @@ export class TaskDispatcher {
 
   private async resumeTaskWithUserMessage(task: Task): Promise<void> {
     const prompt = task.pendingResumeStart?.prompt;
-    /* v8 ignore start -- async-timing: sendMessage and recoverPendingResumeTask validate pendingResumeStart before invoking the async helper; this only guards against unexpected in-flight mutation @preserve */
+    /* v8 ignore start -- upstream: sendMessage and recoverPendingResumeTask always set pendingResumeStart.prompt before invoking this helper; guards against unexpected in-flight mutation @preserve */
     if (prompt === undefined) {
       await this.failAcceptedResume(
         task,
@@ -764,7 +754,6 @@ export class TaskDispatcher {
   }
 
   private scheduleTimeoutWarning(taskId: string): void {
-    /* v8 ignore start -- test-infra: cannot trigger setTimeout callback with async task lookup in unit tests @preserve */
     const timeout = setTimeout(() => {
       void (async (): Promise<void> => {
         try {
@@ -777,13 +766,11 @@ export class TaskDispatcher {
         }
       })();
     }, TASK_TIMEOUT_WARNING_MS);
-    /* v8 ignore stop @preserve */
 
     this.activeTasks.set(`${taskId}-warning`, timeout);
   }
 
   private scheduleTimeoutKill(taskId: string): void {
-    /* v8 ignore start -- test-infra: cannot trigger setTimeout callback with complex async kill logic in unit tests @preserve */
     const timeout = setTimeout(() => {
       void (async (): Promise<void> => {
         try {
@@ -823,9 +810,7 @@ export class TaskDispatcher {
           await this.saveTask(task);
 
           // Decrease running count
-          /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
           if (this.runningCount > 0) this.runningCount--;
-          /* v8 ignore stop @preserve */
           this.clearTaskTimers(taskId);
 
           // Send webhook
@@ -845,7 +830,6 @@ export class TaskDispatcher {
         }
       })();
     }, TASK_TIMEOUT_KILL_MS);
-    /* v8 ignore stop @preserve */
 
     this.activeTasks.set(`${taskId}-kill`, timeout);
   }
@@ -1978,9 +1962,7 @@ export class TaskDispatcher {
     delete task.pendingResumeStart;
     await this.saveTask(task);
 
-    /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
     if (this.runningCount > 0) this.runningCount--;
-    /* v8 ignore stop @preserve */
     this.clearTaskTimers(task.taskId);
 
     // Send task lifecycle event to code-agent (best-effort)

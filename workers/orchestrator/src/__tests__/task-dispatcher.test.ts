@@ -7170,6 +7170,134 @@ describe('TaskDispatcher', () => {
       expect(finalizeDispatcher.getRunningCount()).toBe(0);
       vi.useRealTimers();
     });
+
+    it('double-decrement prevention: outer catch guard leaves runningCount at zero when inner guard already decremented', async () => {
+      // createWorktree throws → inner guard at worktree catch decrements runningCount from 1 to 0
+      // webhookClient.send throws → exception propagates to outer catch at executeTaskSetup
+      // outer catch guard sees runningCount=0 → FALSE branch → stays at 0 (not -1)
+      vi.mocked(mockWorktreeManager.createWorktree).mockRejectedValueOnce(
+        new Error('Worktree fail')
+      );
+      vi.mocked(mockWebhookClient.send).mockRejectedValueOnce(new Error('Webhook send failed'));
+
+      const request: CreateTaskRequest = {
+        taskId: 'double-decrement-test',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(dispatcher.getRunningCount()).toBe(0);
+    });
+
+    it('cancelTask guard: does not decrement runningCount below zero when already at zero', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'cancel-guard-false-branch',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+      expect(dispatcher.getRunningCount()).toBe(1);
+
+      // Manually set runningCount to 0 to simulate race condition
+      (dispatcher as unknown as { runningCount: number }).runningCount = 0;
+
+      // cancelTask should still complete but not go negative
+      await dispatcher.cancelTask('cancel-guard-false-branch');
+      expect(dispatcher.getRunningCount()).toBe(0);
+    });
+
+    it('timeout kill guard: does not decrement runningCount below zero when already at zero', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const killGuardState = createStatePersistence();
+      const killGuardDispatcher = new TaskDispatcher(
+        mockConfig,
+        killGuardState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'kill-guard-false-branch',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await killGuardDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(killGuardDispatcher.getRunningCount()).toBe(1);
+
+      // Manually set runningCount to 0 to simulate race condition
+      (killGuardDispatcher as unknown as { runningCount: number }).runningCount = 0;
+
+      // Advance past kill timeout — guard should prevent going to -1
+      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      expect(killGuardDispatcher.getRunningCount()).toBe(0);
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('finalizeTask guard: does not decrement runningCount below zero when already at zero', async () => {
+      vi.useFakeTimers();
+      const finalizeGuardState = createStatePersistence();
+      const finalizeGuardDispatcher = new TaskDispatcher(
+        mockConfig,
+        finalizeGuardState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'finalize-guard-false-branch',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await finalizeGuardDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(finalizeGuardDispatcher.getRunningCount()).toBe(1);
+
+      // Manually set runningCount to 0 to simulate race condition
+      (finalizeGuardDispatcher as unknown as { runningCount: number }).runningCount = 0;
+
+      // Trigger completion monitoring to call finalizeTask with runningCount already 0
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(finalizeGuardDispatcher.getRunningCount()).toBe(0);
+      vi.useRealTimers();
+    });
   });
 
   describe('conditional spread for optional properties', () => {
@@ -7885,6 +8013,146 @@ describe('TaskDispatcher', () => {
         { taskId: 'kill-flush-fail-test', error: expect.any(Error) },
         'Failed to flush logs during timeout kill'
       );
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('scheduleTimeoutWarning does not log warning when task is null (already completed)', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const nullTaskState = createStatePersistence();
+      const nullTaskDispatcher = new TaskDispatcher(
+        mockConfig,
+        nullTaskState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'warn-null-task-test',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await nullTaskDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Mock getTask to return null — task was removed before warning fired
+      vi.spyOn(nullTaskDispatcher, 'getTask').mockResolvedValue(null);
+      const warnSpy = vi.spyOn(mockLogger, 'warn');
+
+      await vi.advanceTimersByTimeAsync(175 * 60 * 1000);
+
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'warn-null-task-test' }),
+        'Task approaching 3-hour timeout'
+      );
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('scheduleTimeoutWarning does not log warning when task status is not running', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const completedTaskState = createStatePersistence();
+      const completedTaskDispatcher = new TaskDispatcher(
+        mockConfig,
+        completedTaskState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'warn-completed-task-test',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await completedTaskDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Simulate task completing before warning fires
+      const state = await completedTaskState.load();
+      const task = state.tasks['warn-completed-task-test'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      await completedTaskState.save(state);
+
+      const warnSpy = vi.spyOn(mockLogger, 'warn');
+
+      await vi.advanceTimersByTimeAsync(175 * 60 * 1000);
+
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'warn-completed-task-test' }),
+        'Task approaching 3-hour timeout'
+      );
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('scheduleTimeoutKill returns early when task is no longer running at kill time', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const earlyReturnState = createStatePersistence();
+      const earlyReturnDispatcher = new TaskDispatcher(
+        mockConfig,
+        earlyReturnState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'kill-early-return-test',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await earlyReturnDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(earlyReturnDispatcher.getRunningCount()).toBe(1);
+
+      // Simulate task completing before kill fires
+      const state = await earlyReturnState.load();
+      const task = state.tasks['kill-early-return-test'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      await earlyReturnState.save(state);
+
+      // Advance past kill timeout — early return should prevent any decrement
+      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+
+      // runningCount still 1 because early return prevented the decrement path
+      expect(earlyReturnDispatcher.getRunningCount()).toBe(1);
 
       vi.useRealTimers();
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
