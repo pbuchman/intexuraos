@@ -168,31 +168,40 @@ run_claude_attempt() {
         echo "[entrypoint] Resuming previous Claude session with --continue"
     fi
 
+    local linear_timeout_ms
+    linear_timeout_ms=$(read_linear_mcp_timeout_ms)
+    local timeout_s=$(( (linear_timeout_ms + 999) / 1000 ))
+
+    echo "[entrypoint] Claude runtime evidence: linear_mcp_timeout_ms=${linear_timeout_ms}"
     echo "[entrypoint] Starting Claude in --print mode..."
 
     set +e
     if [ -n "$attempt_forensics_dir" ]; then
         if [ "$continue_flag" = "1" ]; then
-            claude --print --verbose --output-format stream-json \
+            timeout --signal=TERM --kill-after=10 "${timeout_s}s" \
+                claude --print --verbose --output-format stream-json \
                 --dangerously-skip-permissions \
                 --system-prompt "$system_prompt" \
                 --continue \
                 < /secrets/user-prompt.txt 2>&1 | tee -a "${attempt_forensics_dir}/claude-stream.log"
         else
-            claude --print --verbose --output-format stream-json \
+            timeout --signal=TERM --kill-after=10 "${timeout_s}s" \
+                claude --print --verbose --output-format stream-json \
                 --dangerously-skip-permissions \
                 --system-prompt "$system_prompt" \
                 < /secrets/user-prompt.txt 2>&1 | tee -a "${attempt_forensics_dir}/claude-stream.log"
         fi
     else
         if [ "$continue_flag" = "1" ]; then
-            claude --print --verbose --output-format stream-json \
+            timeout --signal=TERM --kill-after=10 "${timeout_s}s" \
+                claude --print --verbose --output-format stream-json \
                 --dangerously-skip-permissions \
                 --system-prompt "$system_prompt" \
                 --continue \
                 < /secrets/user-prompt.txt
         else
-            claude --print --verbose --output-format stream-json \
+            timeout --signal=TERM --kill-after=10 "${timeout_s}s" \
+                claude --print --verbose --output-format stream-json \
                 --dangerously-skip-permissions \
                 --system-prompt "$system_prompt" \
                 < /secrets/user-prompt.txt
@@ -200,6 +209,11 @@ run_claude_attempt() {
     fi
     local exit_code=$?
     set -e
+
+    if [ "$exit_code" -eq 124 ]; then
+        echo "[entrypoint] MCP timeout server=linear timeout_ms=${linear_timeout_ms}"
+        exit_code=1
+    fi
 
     if [ -n "$attempt_forensics_dir" ]; then
         printf '%s\n' "$exit_code" > "${attempt_forensics_dir}/claude-exit-code.txt" 2>/dev/null || true

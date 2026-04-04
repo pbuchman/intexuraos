@@ -196,6 +196,29 @@ describe('Claude runtime contract', () => {
     expect(runtime.flushAttemptState(state)).toEqual([]);
   });
 
+  it('preserves operator-scannable timeout marker in log stream', () => {
+    const runtime = getRuntimeForWorkerType('auto');
+    const state = runtime.createAttemptState('task-timeout', createLogger());
+
+    // The entrypoint emits this stable marker when the `timeout` command kills the
+    // Claude process (exit code 124 → 1). Operators scan for "MCP timeout" + "server=linear".
+    const marker = '[entrypoint] MCP timeout server=linear timeout_ms=60000';
+
+    const events = runtime.processLogChunk(state, marker + '\n');
+
+    // The marker must appear verbatim in the log stream so operator log queries
+    // (e.g. `gcloud logging read 'textPayload:"MCP timeout"'`) match reliably.
+    expect(events).toContainEqual({
+      type: 'log',
+      text: marker + '\n',
+    });
+
+    // Verify the marker is NOT parsed as Claude JSON — it must not trigger
+    // completion or failure events, only a plain log passthrough.
+    expect(events).not.toContainEqual(expect.objectContaining({ type: 'attempt_completed' }));
+    expect(events).not.toContainEqual(expect.objectContaining({ type: 'attempt_failed' }));
+  });
+
   it('keeps malformed result fragments buffered when no JSON object start is present', () => {
     const runtime = getRuntimeForWorkerType('auto');
     const state = runtime.createAttemptState('task-7', createLogger());
