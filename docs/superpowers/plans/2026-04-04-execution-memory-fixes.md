@@ -87,7 +87,7 @@ Expected: FAIL — `EvaluationSchema.parse()` throws without retry
 
 - [ ] **Step 3: Add EVALUATION_SCHEMA_BLOCK constant**
 
-In `processExecutionMemoryBacklog.ts`, after the `DISTILLATION_SCHEMA_BLOCK` definition (after line 523), add:
+In `processExecutionMemoryBacklog.ts`, after the `DISTILLATION_SCHEMA_BLOCK` definition (after line 494), add:
 
 ```typescript
 const EVALUATION_SCHEMA_BLOCK = [
@@ -290,7 +290,7 @@ to the LLM for repair before failing."
 
 **Files:**
 - Modify: `apps/code-agent/src/routes/webhookRoutes.ts:856-870`
-- Modify: `apps/code-agent/src/__tests__/routes/webhookRoutes.test.ts`
+- Modify: `apps/code-agent/src/__tests__/routes/webhooks.test.ts`
 
 - [ ] **Step 1: Add executionMemory bag to triggerDrainForPR**
 
@@ -329,12 +329,12 @@ Replace lines 861-870:
 
 - [ ] **Step 2: Run webhook route tests**
 
-Run: `cd apps/code-agent && pnpm vitest run src/__tests__/routes/webhookRoutes.test.ts`
+Run: `cd apps/code-agent && pnpm vitest run src/__tests__/routes/webhooks.test.ts`
 Expected: PASS (existing tests should continue to pass since executionMemory resources are optional in drainTaskQueue)
 
 - [ ] **Step 3: Write test — triggerDrainForPR passes executionMemory resources**
 
-In `apps/code-agent/src/__tests__/routes/webhookRoutes.test.ts`, add a test inside the existing `triggerDrainForPR` describe block (or the post-completion drain test group) that verifies the DI wiring:
+In `apps/code-agent/src/__tests__/routes/webhooks.test.ts`, add a test inside the existing `triggerDrainForPR` describe block (or the post-completion drain test group) that verifies the DI wiring:
 
 ```typescript
 it('passes executionMemory resources to drainTaskQueue during post-completion drain', async () => {
@@ -355,11 +355,11 @@ it('passes executionMemory resources to drainTaskQueue during post-completion dr
 });
 ```
 
-Note: Adapt the test setup to match the existing `webhookRoutes.test.ts` patterns — use `app.inject()` for the webhook endpoint and verify `drainTaskQueue` receives the memory resources from `getServices()`. The exact mock names depend on the test file's existing service setup.
+Note: Adapt the test setup to match the existing `webhooks.test.ts` patterns — use `app.inject()` for the webhook endpoint and verify `drainTaskQueue` receives the memory resources from `getServices()`. The exact mock names depend on the test file's existing service setup.
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd apps/code-agent && pnpm vitest run src/__tests__/routes/webhookRoutes.test.ts -t "passes executionMemory resources"`
+Run: `cd apps/code-agent && pnpm vitest run src/__tests__/routes/webhooks.test.ts -t "passes executionMemory resources"`
 Expected: PASS (implementation from Step 1 already wires the resources)
 
 - [ ] **Step 5: Run full test suite**
@@ -370,7 +370,7 @@ Expected: ALL PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/code-agent/src/routes/webhookRoutes.ts apps/code-agent/src/__tests__/routes/webhookRoutes.test.ts
+git add apps/code-agent/src/routes/webhookRoutes.ts apps/code-agent/src/__tests__/routes/webhooks.test.ts
 git commit -m "fix(code-agent): pass executionMemory resources in webhookRoutes triggerDrainForPR
 
 The post-completion drain triggered by webhookRoutes was not passing
@@ -562,7 +562,7 @@ patterns learned from prior tasks in the same issue lifecycle."
 
 **Files:**
 - Modify: `workers/orchestrator/src/services/system-prompt.ts:80-116`
-- Modify: `workers/orchestrator/src/__tests__/services/system-prompt.test.ts`
+- Modify: `workers/orchestrator/src/__tests__/system-prompt.test.ts`
 
 - [ ] **Step 1: Write failing test — memory section includes usage instructions**
 
@@ -599,7 +599,7 @@ it('includes memory usage reporting instructions when memories are matched', () 
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd workers/orchestrator && pnpm vitest run src/__tests__/services/system-prompt.test.ts -t "includes memory usage reporting"`
+Run: `cd workers/orchestrator && pnpm vitest run src/__tests__/system-prompt.test.ts -t "includes memory usage reporting"`
 Expected: FAIL — current prompt does not mention these fields
 
 - [ ] **Step 3: Add usage reporting instructions to buildExecutionMemorySection**
@@ -630,12 +630,12 @@ After completing your work, include in your final summary which memories you app
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd workers/orchestrator && pnpm vitest run src/__tests__/services/system-prompt.test.ts -t "includes memory usage reporting"`
+Run: `cd workers/orchestrator && pnpm vitest run src/__tests__/system-prompt.test.ts -t "includes memory usage reporting"`
 Expected: PASS
 
 - [ ] **Step 5: Run all system prompt tests**
 
-Run: `cd workers/orchestrator && pnpm vitest run src/__tests__/services/system-prompt.test.ts`
+Run: `cd workers/orchestrator && pnpm vitest run src/__tests__/system-prompt.test.ts`
 Expected: ALL PASS
 
 - [ ] **Step 6: Bump prompt version**
@@ -650,7 +650,7 @@ Expected: ALL PASS
 - [ ] **Step 8: Commit**
 
 ```bash
-git add workers/orchestrator/src/services/system-prompt.ts workers/orchestrator/src/__tests__/services/system-prompt.test.ts
+git add workers/orchestrator/src/services/system-prompt.ts workers/orchestrator/src/__tests__/system-prompt.test.ts
 git commit -m "feat(orchestrator): add memory usage reporting instructions to system prompt
 
 Agents now receive explicit instructions to report which execution
