@@ -24,7 +24,7 @@ export interface CodeRoutesOptions {
   jwtValidator: JwtValidator;
 }
 
-const VALID_GROUP_STATUSES: ReadonlySet<string> = new Set(['active', 'needs-action', 'done', 'failed']);
+const VALID_GROUP_STATUSES: ReadonlySet<string> = new Set(['active', 'needs-action', 'done', 'failed', 'archived']);
 const VALID_SORT_OPTIONS: ReadonlySet<string> = new Set(['linear-id', 'pr-number', 'dispatched', 'last-updated']);
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
@@ -215,6 +215,7 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
         const { summaries, nextCursor: summariesNextCursor } = summariesResult.value;
 
         // 3+4. Fetch tasks and hydrate Linear issues concurrently
+        const includeArchived = statusFilter?.includes('archived') === true;
         const TASKS_PER_GROUP_LIMIT = 50;
         const taskFetchesPromise = Promise.all(summaries.map(async (summary): Promise<SerializedTask[]> => {
           if (summary.linearIssueId !== null) {
@@ -230,7 +231,7 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
               return [];
             }
             return tasksResult.value
-              .filter((t) => t.userId === userId && t.status !== 'archived')
+              .filter((t) => t.userId === userId && (includeArchived || t.status !== 'archived'))
               .map((t) => taskToSerializedTask(t));
           }
           const taskId = summary.groupKey.replace(/^standalone_/, '');
@@ -241,7 +242,7 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           }
           const task = taskResult.value;
           /* v8 ignore start -- test-infra: FakeFirestore cannot produce cross-user task leaks or archived standalone tasks in this test flow @preserve */
-          if (task.userId !== userId || task.status === 'archived') {
+          if (task.userId !== userId || (!includeArchived && task.status === 'archived')) {
             return [];
           }
           /* v8 ignore stop @preserve */
@@ -308,6 +309,7 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
             'needs-action': countsValue.needsAction,
             done: countsValue.done,
             failed: countsValue.failed,
+            archived: countsValue.archived,
           };
           /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes countMap[s] typed as number | undefined; statusFilter values are always valid GroupStatus keys present in countMap, so undefined branch is unreachable @preserve */
           totalGroups = statusFilter.reduce((sum, s) => sum + (countMap[s] ?? 0), 0);
@@ -328,6 +330,7 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
             'needs-action': countsValue.needsAction,
             done: countsValue.done,
             failed: countsValue.failed,
+            archived: countsValue.archived,
           },
           totalGroups,
           ...(summariesNextCursor !== undefined && { nextCursor: summariesNextCursor }),

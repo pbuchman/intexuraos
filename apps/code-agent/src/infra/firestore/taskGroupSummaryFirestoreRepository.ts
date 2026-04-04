@@ -41,12 +41,13 @@ function isActiveStatus(status: string): boolean {
 /**
  * Convert a status string to the user_group_counts field name.
  */
-function statusToCountField(status: GroupStatus): 'active' | 'needsAction' | 'done' | 'failed' {
+function statusToCountField(status: GroupStatus): 'active' | 'needsAction' | 'done' | 'failed' | 'archived' {
   switch (status) {
     case 'active': return 'active';
     case 'needs-action': return 'needsAction';
     case 'done': return 'done';
     case 'failed': return 'failed';
+    case 'archived': return 'archived';
   }
 }
 
@@ -162,6 +163,7 @@ function defaultCounts(userId: string): UserGroupCounts {
     needsAction: 0,
     done: 0,
     failed: 0,
+    archived: 0,
     totalGroups: 0,
     updatedAt: Timestamp.now(),
   };
@@ -178,6 +180,7 @@ function docToCounts(data: Record<string, unknown>): UserGroupCounts {
     needsAction: Number(data['needsAction'] ?? 0),
     done: Number(data['done'] ?? 0),
     failed: Number(data['failed'] ?? 0),
+    archived: Number(data['archived'] ?? 0),
     totalGroups: Number(data['totalGroups'] ?? 0),
     updatedAt: toTimestamp(data['updatedAt']),
   };
@@ -475,9 +478,10 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
             updated.taskCount = Math.max(0, current.taskCount - 1);
 
             if (updated.taskCount <= 0) {
-              // Delete summary doc and update user counts
-              tx.delete(asDocRef(summaryRef));
-              const newCounts = applyDeleteGroupDelta(existingCounts, oldAggregateStatus);
+              // All tasks archived — preserve summary with 'archived' status instead of deleting
+              updated.aggregateStatus = 'archived';
+              tx.set(asDocRef(summaryRef), updated as unknown as DocumentData);
+              const newCounts = applyStatusChangeDelta(existingCounts, oldAggregateStatus, 'archived');
               newCounts.userId = newTask.userId;
               newCounts.updatedAt = now;
               tx.set(asDocRef(countsRef), newCounts as unknown as DocumentData);
@@ -684,6 +688,9 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
         }
 
         const nonArchivedTasks = tasks.filter((t) => t.status !== 'archived');
+        // Fully-archived groups (all tasks archived) are not recreated by this recompute path.
+        // They are created incrementally via updateAfterStatusChange when the last task is archived,
+        // and can be recreated for legacy data via scripts/backfill-archived-group-summaries.ts.
         if (nonArchivedTasks.length === 0) {
           return;
         }

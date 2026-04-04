@@ -95,6 +95,7 @@ export function useIssueGroups(options: {
     'needs-action': 0,
     done: 0,
     failed: 0,
+    archived: 0,
   });
   const [totalGroups, setTotalGroups] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -156,7 +157,7 @@ export function useIssueGroups(options: {
           // Use counts/totalGroups from the last response
           response = lastResponse ?? {
             groups: [],
-            counts: { active: 0, 'needs-action': 0, done: 0, failed: 0 },
+            counts: { active: 0, 'needs-action': 0, done: 0, failed: 0, archived: 0 },
             totalGroups: 0,
           };
         }

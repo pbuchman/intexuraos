@@ -3,7 +3,7 @@
  * Operates on serialized API-shaped tasks with ISO string dates.
  */
 
-export type GroupStatus = 'active' | 'needs-action' | 'done' | 'failed';
+export type GroupStatus = 'active' | 'needs-action' | 'done' | 'failed' | 'archived';
 export type StepState = 'completed' | 'running' | 'dispatched' | 'queued' | 'failed' | 'waiting' | 'actionable';
 export type SortOption = 'linear-id' | 'pr-number' | 'dispatched' | 'last-updated';
 

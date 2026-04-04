@@ -138,12 +138,14 @@ function computeCountsFromSummaries(userId: string, userSummaries: TaskGroupSumm
   let needsAction = 0;
   let done = 0;
   let failed = 0;
+  let archived = 0;
 
   for (const s of userSummaries) {
     if (s.aggregateStatus === 'active') active++;
     else if (s.aggregateStatus === 'needs-action') needsAction++;
     else if (s.aggregateStatus === 'done') done++;
     else if (s.aggregateStatus === 'failed') failed++;
+    else if (s.aggregateStatus === 'archived') archived++;
   }
 
   return {
@@ -152,6 +154,7 @@ function computeCountsFromSummaries(userId: string, userSummaries: TaskGroupSumm
     needsAction,
     done,
     failed,
+    archived,
     totalGroups: userSummaries.length,
     updatedAt: now(),
   };
@@ -258,6 +261,7 @@ export function createFakeTaskGroupSummaryRepository(): FakeTaskGroupSummaryRepo
         needsAction: 0,
         done: 0,
         failed: 0,
+        archived: 0,
         totalGroups: 0,
         updatedAt: now(),
       });

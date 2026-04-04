@@ -2,8 +2,8 @@
  * Group tasks by Linear issue and derive pipeline state.
  * Ported from apps/web/src/utils/issueGroups.ts lines 157-415.
  *
- * Key difference from frontend: the backend does not include 'archived' as a
- * GroupStatus because archived tasks are excluded from the query.
+ * When fetching archived groups, archived tasks are included and the derived
+ * aggregateStatus will be 'archived' if all tasks in the group have status 'archived'.
  */
 
 import type { GroupStatus, IssueGroup, PipelineState, PipelineStepData, SerializedTask, StepState } from './types.js';
@@ -167,8 +167,12 @@ export function deriveAggregateStatus(tasks: SerializedTask[], pipeline: Pipelin
     return 'failed';
   }
 
+  // Archived: all tasks are archived
+  if (latestNonArchived === undefined && tasks.length > 0) {
+    return 'archived';
+  }
+
   // Done: otherwise (includes cancelled)
-  // Note: no 'archived' status on backend since archived tasks are excluded from the query
   return 'done';
 }
 
