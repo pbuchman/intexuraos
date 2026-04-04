@@ -144,7 +144,7 @@ function buildArchivedGroupSummary(
   userId: string,
   groupKey: string,
   tasks: ArchivedTask[],
-  now: Timestamp,
+  now: Timestamp
 ): TaskGroupSummaryDoc {
   const firstTask = tasks[0];
   const linearIssueId = firstTask?.linearIssueId ?? null;
@@ -303,7 +303,9 @@ async function main(): Promise<void> {
 
   if (DRY_RUN) {
     for (const { docId, tasks } of groupsToBackfill) {
-      console.log(`  [DRY RUN] Would create summary for: ${docId} (${tasks.length} archived tasks)`);
+      console.log(
+        `  [DRY RUN] Would create summary for: ${docId} (${tasks.length} archived tasks)`
+      );
     }
     console.log(`\nDry run complete. Would create ${groupsToBackfill.length} summaries.`);
     return;
@@ -356,7 +358,7 @@ async function main(): Promise<void> {
           archived: FieldValue.increment(increment),
           totalGroups: FieldValue.increment(increment),
         },
-        { merge: true },
+        { merge: true }
       );
     }
 
@@ -364,7 +366,9 @@ async function main(): Promise<void> {
     console.log(`  Committed user_group_counts batch for ${chunk.length} users`);
   }
 
-  console.log(`\nBackfill complete. Found ${groupsToBackfill.length} groups to backfill, created ${createdCount} summaries.`);
+  console.log(
+    `\nBackfill complete. Found ${groupsToBackfill.length} groups to backfill, created ${createdCount} summaries.`
+  );
 }
 
 main().catch((error: unknown) => {
