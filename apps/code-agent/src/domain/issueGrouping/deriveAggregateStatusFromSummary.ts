@@ -1,6 +1,8 @@
 import type { GroupStatus } from './types.js';
 
 export interface GroupSummaryFields {
+  /** Number of non-archived tasks in the group. When 0, all tasks are archived. */
+  taskCount?: number;
   activeTaskCount: number;
   hasCompletedPlanning: boolean;
   hasCompletedExecution: boolean;
@@ -16,6 +18,11 @@ export interface GroupSummaryFields {
 }
 
 export function deriveAggregateStatusFromSummary(fields: GroupSummaryFields): GroupStatus {
+  // 0. Archived: all tasks are archived (taskCount dropped to 0)
+  if (fields.taskCount !== undefined && fields.taskCount <= 0) {
+    return 'archived';
+  }
+
   // 1. Active: any task is running/dispatched/queued
   if (fields.activeTaskCount > 0) {
     return 'active';
