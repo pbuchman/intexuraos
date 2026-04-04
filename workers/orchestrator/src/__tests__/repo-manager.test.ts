@@ -601,6 +601,7 @@ describe('RepoManager', () => {
       expect(commands).toEqual([
         ['reset', '--hard', 'origin/development'],
         ['clean', '-df'],
+        ['branch', '-f', 'development', 'origin/development'],
       ]);
     });
 

@@ -93,6 +93,11 @@ export class WorktreeManager {
           await execAsync(`git fetch origin "${baseBranch}" --force`, {
             cwd: this.config.repositoryPath,
           });
+          // Sync local branch ref so agents that run `git checkout -b <branch> development`
+          // pick up the latest commit instead of a stale local ref
+          await execAsync(`git branch -f "${baseBranch}" "origin/${baseBranch}"`, {
+            cwd: this.config.repositoryPath,
+          });
         } catch (fetchError: unknown) {
           const message = fetchError instanceof Error ? fetchError.message : 'Unknown error';
           this.logger.warn(
