@@ -316,6 +316,17 @@ describe('deriveAggregateStatus', () => {
         status: 'planned',
         createdAt: '2026-01-01T10:00:00Z',
         updatedAt: '2026-01-01T10:05:00Z',
+        linearIssue: {
+          identifier: 'INT-1255',
+          title: 'Test',
+          state: { name: 'In Progress', type: 'started' },
+          priority: 1,
+          assignee: null,
+          labels: [{ name: 'ready-to-implement' }],
+          url: 'https://linear.app/INT-1255',
+          commentCount: 0,
+          lastCommentAt: null,
+        },
       }),
       makeTask({
         id: 't2',
@@ -327,16 +338,12 @@ describe('deriveAggregateStatus', () => {
       }),
     ];
 
-    // Use derivePipeline + deriveAggregateStatus directly (not groupByLinearIssue)
-    // because groupByLinearIssue sorts by updatedAt desc internally.
-    // We need tasks pre-sorted by updatedAt desc for derivePipeline.
-    const sorted = [...tasks].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-    const pipeline = derivePipeline(sorted);
+    const pipeline = derivePipeline(tasks);
 
-    // Pipeline DOES have an actionable execution step
+    // Pipeline has an actionable execution step (planning completed + ready-to-implement label)
     expect(pipeline.steps.find((s) => s.agentType === 'execution')?.state).toBe('actionable');
     // But aggregateStatus is 'active' because an active task takes priority
-    expect(deriveAggregateStatus(sorted, pipeline)).toBe('active');
+    expect(deriveAggregateStatus(tasks, pipeline)).toBe('active');
   });
 
   it('group with all terminal tasks and no execution agent → needs-action', () => {
@@ -348,6 +355,17 @@ describe('deriveAggregateStatus', () => {
         status: 'planned',
         createdAt: '2026-01-01T10:00:00Z',
         updatedAt: '2026-01-01T10:05:00Z',
+        linearIssue: {
+          identifier: 'INT-1255',
+          title: 'Test',
+          state: { name: 'In Progress', type: 'started' },
+          priority: 1,
+          assignee: null,
+          labels: [{ name: 'ready-to-implement' }],
+          url: 'https://linear.app/INT-1255',
+          commentCount: 0,
+          lastCommentAt: null,
+        },
       }),
       makeTask({
         id: 't2',
@@ -367,13 +385,13 @@ describe('deriveAggregateStatus', () => {
       }),
     ];
 
-    const sorted = [...tasks].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-    const pipeline = derivePipeline(sorted);
+    const pipeline = derivePipeline(tasks);
 
-    // No 'execution' agent task exists, so derivePipeline inserts a synthetic actionable step
+    // No execution agent task exists + planning completed with ready-to-implement label →
+    // derivePipeline inserts a synthetic actionable execution step
     expect(pipeline.steps.find((s) => s.agentType === 'execution')?.state).toBe('actionable');
     // With no active tasks, aggregateStatus correctly reflects the actionable step
-    expect(deriveAggregateStatus(sorted, pipeline)).toBe('needs-action');
+    expect(deriveAggregateStatus(tasks, pipeline)).toBe('needs-action');
   });
 });
 

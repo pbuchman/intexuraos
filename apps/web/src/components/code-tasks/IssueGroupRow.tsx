@@ -324,7 +324,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
   function renderActionButton(compact: boolean): React.JSX.Element | null {
     const px = compact ? 'px-2' : 'px-2.5';
     if (isActioning || isBatchActioning) return <WaveLoader compact={compact} variant={waveVariant} />;
-    if (hasMergeAction && pipeline.pr !== null) {
+    if (hasMergeAction && pipeline.pr !== null && aggregateStatus !== 'active') {
       return (
         <a
           href={pipeline.pr.url}
@@ -338,7 +338,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
         </a>
       );
     }
-    if (hasImplementAction) {
+    if (hasImplementAction && aggregateStatus !== 'active') {
       return (
         <button
           onClick={(e): void => {
