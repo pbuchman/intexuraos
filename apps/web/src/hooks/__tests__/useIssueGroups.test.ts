@@ -358,6 +358,107 @@ describe('useIssueGroups', () => {
     expect(mockListIssueGroups).toHaveBeenCalledTimes(callsAfterLoad);
   });
 
+  it('polling does not set refreshing state', async () => {
+    // Use a deferred promise so we can observe state mid-refresh
+    let resolveRefresh!: (value: ListIssueGroupsResponse) => void;
+    const refreshPromise = new Promise<ListIssueGroupsResponse>((resolve) => {
+      resolveRefresh = resolve;
+    });
+
+    mockListIssueGroups
+      .mockResolvedValueOnce(makeResponse({ counts: { ...defaultCounts, active: 3 } }))
+      .mockReturnValueOnce(refreshPromise); // second call (poll) blocks until resolved
+
+    const { result, unmount } = renderHook(() => useIssueGroups({}));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    // Trigger polling interval
+    act(() => {
+      vi.advanceTimersByTime(30001);
+    });
+
+    // At this point the poll has fired and refresh is in-flight — refreshing and loading must stay false
+    expect(result.current.refreshing).toBe(false);
+    expect(result.current.loading).toBe(false);
+
+    // Resolve the deferred promise so the hook completes cleanly
+    resolveRefresh(makeResponse({ counts: { ...defaultCounts, active: 3 } }));
+    await waitFor(() => {
+      expect(mockListIssueGroups.mock.calls.length).toBe(2);
+    });
+
+    expect(result.current.refreshing).toBe(false);
+    unmount();
+  });
+
+  it('tab visibility refresh does not set refreshing state', async () => {
+    // Use active:0 to prevent the polling interval from interfering.
+    const noActiveCounts = { ...defaultCounts, active: 0 };
+
+    mockListIssueGroups.mockResolvedValue(makeResponse({ counts: noActiveCounts }));
+
+    const { result, unmount } = renderHook(() => useIssueGroups({}));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    // First event initializes the isInitialLoadRef to false (no refresh fires on first event)
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    const callsBefore = mockListIssueGroups.mock.calls.length;
+
+    // The first visibilitychange event must NOT trigger an API call.
+    expect(mockListIssueGroups.mock.calls.length).toBe(callsBefore);
+
+    // Second event triggers the internal refresh(false, true) call.
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    // Wait for the async refresh to complete by watching the API call count.
+    await waitFor(() => {
+      expect(mockListIssueGroups.mock.calls.length).toBeGreaterThan(callsBefore);
+    });
+
+    // After the second event resolves: refreshing must be false and at least one additional call happened.
+    expect(result.current.refreshing).toBe(false);
+    expect(mockListIssueGroups.mock.calls.length).toBeGreaterThan(callsBefore);
+
+    unmount();
+  });
+
+  it('polling silent refresh with API error does not set refreshing but still sets error state', async () => {
+    mockListIssueGroups.mockResolvedValueOnce(
+      makeResponse({ counts: { ...defaultCounts, active: 1 } }),
+    );
+
+    const { result, unmount } = renderHook(() => useIssueGroups({}));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    // Change mock to reject on the next call (the poll)
+    mockListIssueGroups.mockRejectedValue(new Error('the error message'));
+
+    // Advance past poll interval to trigger silent poll
+    await act(async () => {
+      vi.advanceTimersByTime(30001);
+    });
+
+    // Wait for the error to surface
+    await waitFor(() => {
+      expect(result.current.error).toBe('the error message');
+    });
+
+    // Silent mode: refreshing must never have been set
+    expect(result.current.refreshing).toBe(false);
+
+    unmount();
+  });
+
   it('re-fetches when filter options change', async () => {
     mockListIssueGroups.mockResolvedValue(makeResponse());
 
