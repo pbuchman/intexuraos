@@ -4,6 +4,20 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Logger } from '@intexuraos/common-core';
 
+// Hook mechanism to override fs/promises functions for specific tests
+let fsPromisesReadFileOverride: (() => Promise<string>) | null = null;
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    readFile: async (path: string, options?: BufferEncoding): Promise<string> => {
+      if (fsPromisesReadFileOverride) return fsPromisesReadFileOverride();
+      return actual.readFile(path, { encoding: options ?? 'utf-8' });
+    },
+  };
+});
+
 const mockLogger: Logger = {
   info: () => undefined,
   warn: () => undefined,
@@ -850,6 +864,77 @@ describe('WorktreeManager - git stderr error handling', () => {
 
     // Should not throw - empty stderr is acceptable
     await expect(manager.removeWorktree('task-remove-empty')).resolves.toBeUndefined();
+  });
+
+  it('should surface Unknown error when copyMcpConfig catch receives a non-Error', async () => {
+    // Set readFile to throw a string (non-Error)
+    fsPromisesReadFileOverride = async (): Promise<string> => {
+      throw 'non-error thrown during mcp config read';
+    };
+
+    mockExecAsyncImpl = async (
+      command: string,
+      _options: { cwd?: string; timeout?: number }
+    ): Promise<{ stdout: string; stderr: string }> => {
+      if (command.includes('git worktree add')) {
+        return { stdout: '', stderr: 'Preparing worktree' };
+      }
+      return { stdout: '', stderr: '' };
+    };
+
+    vi.resetModules();
+    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+    const manager = new WM(mockConfig, mockLogger);
+
+    try {
+      await expect(manager.createWorktree('task-mcp-non-error', 'feature-branch')).rejects.toThrow(
+        'Failed to create worktree: Failed to copy MCP config: Unknown error'
+      );
+    } finally {
+      fsPromisesReadFileOverride = null;
+    }
+  });
+
+  it('should surface Unknown error when copySettingsLocal catch receives a non-Error', async () => {
+    const settingsTemplatePath = join(tempDir, 'settings.non-error.json');
+    writeFileSync(settingsTemplatePath, '{}', 'utf-8');
+
+    // Set readFile to throw a number (non-Error)
+    fsPromisesReadFileOverride = async (): Promise<string> => {
+      throw 999;
+    };
+
+    mockExecAsyncImpl = async (
+      command: string,
+      _options: { cwd?: string; timeout?: number }
+    ): Promise<{ stdout: string; stderr: string }> => {
+      if (command.includes('git worktree add')) {
+        return { stdout: '', stderr: 'Preparing worktree' };
+      }
+      return { stdout: '', stderr: '' };
+    };
+
+    vi.resetModules();
+    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+
+    const manager = new WM(
+      {
+        ...mockConfig,
+        mcpConfigTemplatePath: join(tempDir, 'non-existent-mcp.json'), // skip MCP
+        settingsLocalTemplatePath: settingsTemplatePath,
+      },
+      mockLogger
+    );
+
+    try {
+      await expect(
+        manager.createWorktree('task-settings-non-error', 'feature-branch')
+      ).rejects.toThrow(
+        'Failed to create worktree: Failed to copy settings.local.json: Unknown error'
+      );
+    } finally {
+      fsPromisesReadFileOverride = null;
+    }
   });
 });
 
