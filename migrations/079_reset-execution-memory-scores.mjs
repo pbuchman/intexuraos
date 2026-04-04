@@ -1,7 +1,8 @@
 export const metadata = {
   id: '079',
   name: 'reset-execution-memory-scores',
-  description: 'Reset all execution memory scoring counters and reactivate suppressed memories so past rejections no longer penalize retrieval',
+  description:
+    'Reset all execution memory scoring counters and reactivate suppressed memories so past rejections no longer penalize retrieval',
   createdAt: '2026-04-05',
 };
 
@@ -25,12 +26,11 @@ export async function up(context) {
 
   for (const doc of snapshot.docs) {
     const data = doc.data();
-    const confidence = typeof data.distillationConfidence === 'number'
-      ? data.distillationConfidence
-      : 0.5;
+    const confidence =
+      typeof data.distillationConfidence === 'number' ? data.distillationConfidence : 0.5;
 
     // Fresh qualityScore: effectiveness=0.5 (Laplace with 0 apps), recency=1.0 (never applied)
-    const freshQualityScore = (0.5 * 0.5) + (0.3 * confidence) + (0.2 * 1.0);
+    const freshQualityScore = 0.5 * 0.5 + 0.3 * confidence + 0.2 * 1.0;
 
     const wasSuppressed = data.status === 'suppressed';
 
