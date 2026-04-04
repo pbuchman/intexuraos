@@ -292,8 +292,6 @@ run_codex_attempt() {
     fi
 
     local raw_exit=0
-    local log_file
-    log_file="$(mktemp /tmp/codex-output.XXXXXX)"
     set +e
 
     if [ -n "$attempt_forensics_dir" ]; then
@@ -303,13 +301,13 @@ run_codex_attempt() {
                 --dangerously-bypass-approvals-and-sandbox \
                 "${effort_args[@]}" \
                 "${CODEX_THREAD_ID}" \
-                - < "$prompt_file" > "$log_file" 2>&1 || raw_exit=$?
+                - < "$prompt_file" 2>&1 | tee -a "${attempt_forensics_dir}/codex-stream.log"
         else
             codex exec --json \
                 --skip-git-repo-check \
                 --dangerously-bypass-approvals-and-sandbox \
                 "${effort_args[@]}" \
-                - < "$prompt_file" > "$log_file" 2>&1 || raw_exit=$?
+                - < "$prompt_file" 2>&1 | tee -a "${attempt_forensics_dir}/codex-stream.log"
         fi
     else
         if [ "$continue_flag" = "1" ]; then
@@ -318,23 +316,17 @@ run_codex_attempt() {
                 --dangerously-bypass-approvals-and-sandbox \
                 "${effort_args[@]}" \
                 "${CODEX_THREAD_ID}" \
-                - < "$prompt_file" > "$log_file" 2>&1 || raw_exit=$?
+                - < "$prompt_file" 2>&1
         else
             codex exec --json \
                 --skip-git-repo-check \
                 --dangerously-bypass-approvals-and-sandbox \
                 "${effort_args[@]}" \
-                - < "$prompt_file" > "$log_file" 2>&1 || raw_exit=$?
+                - < "$prompt_file" 2>&1
         fi
     fi
+    raw_exit=${PIPESTATUS[0]}
     set -e
-
-    if [ -n "$attempt_forensics_dir" ]; then
-        tee -a "${attempt_forensics_dir}/codex-stream.log" < "$log_file"
-    else
-        cat "$log_file"
-    fi
-    rm -f "$log_file"
 
     rm -f "$prompt_file"
 
