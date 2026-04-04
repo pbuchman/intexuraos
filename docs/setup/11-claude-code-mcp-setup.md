@@ -104,7 +104,7 @@ Located at project root, defines MCP server connections:
 
 #### Linear MCP Timeout
 
-The Linear MCP server includes an enforced `timeoutMs` of `60000` (60 seconds). The code-worker entrypoint reads this value from the worktree `.mcp.json` and wraps Codex execution with a `timeout` command, ensuring a stalled Linear MCP call fails the attempt cleanly instead of hanging indefinitely.
+The Linear MCP server includes an enforced `timeoutMs` of `60000` (60 seconds). The code-worker entrypoint reads this value from the worktree `.mcp.json` and wraps both Codex and Claude runtime execution with a `timeout` command, ensuring a stalled Linear MCP call fails the attempt cleanly instead of hanging indefinitely.
 
 **Timeout marker:** When the timeout fires, the entrypoint emits a stable log line:
 
