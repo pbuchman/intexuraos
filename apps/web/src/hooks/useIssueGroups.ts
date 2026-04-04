@@ -109,13 +109,15 @@ export function useIssueGroups(options: {
   const loadedGroupCountRef = useRef(0);
 
   const refresh = useCallback(
-    async (showLoading?: boolean): Promise<void> => {
+    async (showLoading?: boolean, silent?: boolean): Promise<void> => {
       const shouldShowLoading = showLoading !== false;
 
-      if (shouldShowLoading) {
-        setLoading(true);
-      } else {
-        setRefreshing(true);
+      if (silent !== true) {
+        if (shouldShowLoading) {
+          setLoading(true);
+        } else {
+          setRefreshing(true);
+        }
       }
       setError(null);
 
@@ -182,7 +184,7 @@ export function useIssueGroups(options: {
           setError(getErrorMessage(err, 'Failed to load issue groups'));
         }
       } finally {
-        if (isMountedRef.current) {
+        if (isMountedRef.current && silent !== true) {
           if (shouldShowLoading) {
             setLoading(false);
           } else {
@@ -210,7 +212,7 @@ export function useIssueGroups(options: {
   useEffect(() => {
     const handleVisibilityChange = (): void => {
       if (document.visibilityState === 'visible' && !isInitialLoadRef.current) {
-        void refresh(false);
+        void refresh(false, true);
       }
       isInitialLoadRef.current = false;
     };
@@ -225,7 +227,7 @@ export function useIssueGroups(options: {
   useEffect(() => {
     if (counts.active <= 0) return;
 
-    const pollId = setInterval(() => { void refresh(false); }, POLL_INTERVAL_MS);
+    const pollId = setInterval(() => { void refresh(false, true); }, POLL_INTERVAL_MS);
     return (): void => { clearInterval(pollId); };
   }, [counts.active, refresh]);
 
