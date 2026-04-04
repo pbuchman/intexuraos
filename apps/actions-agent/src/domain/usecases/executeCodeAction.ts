@@ -197,14 +197,16 @@ export function createExecuteCodeActionUseCase(
 
     logger.info({ actionId, status: 'completed' }, 'Action marked as completed');
 
-    const fullUrl = `${webAppUrl}${resourceUrl}`;
-    const whatsappMessage = `👻 Code task created! View it here: ${fullUrl}`;
+    const isAbsoluteUrl = resourceUrl.startsWith('http');
+    const fullUrl = isAbsoluteUrl ? resourceUrl : `${webAppUrl}${resourceUrl}`;
+    const whatsappMessage = '👻 Code Task Created';
 
     logger.info({ actionId, userId: action.userId }, 'Sending WhatsApp completion notification');
 
     const publishResult = await whatsappPublisher.publishSendMessage({
       userId: action.userId,
       message: whatsappMessage,
+      ctaUrl: { displayText: 'View Progress', url: fullUrl },
       correlationId: `code-complete-${actionId}`,
     });
 
