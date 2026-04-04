@@ -31,6 +31,11 @@ const defaultExecAsync = async (
   _options: { cwd?: string; timeout?: number }
 ): Promise<{ stdout: string; stderr: string }> => {
   if (command.includes('git worktree add')) {
+    // Simulate git creating the worktree directory (real git does this)
+    const match = /git worktree add -[bB] "[^"]*" "([^"]*)"/.exec(command);
+    if (match?.[1] !== undefined) {
+      mkdirSync(match[1], { recursive: true });
+    }
     return { stdout: '', stderr: 'Preparing worktree' };
   }
   if (command.includes('git worktree remove')) {
@@ -70,12 +75,10 @@ describe('WorktreeManager', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'worktree-test-'));
   const repoPath = join(tempDir, 'repo');
   const worktreeBasePath = join(tempDir, 'worktrees');
-  const mcpConfigTemplatePath = join(tempDir, 'mcp-template.json');
 
   const mockConfig = {
     repositoryPath: repoPath,
     worktreeBasePath,
-    mcpConfigTemplatePath,
   };
 
   beforeEach(async () => {
@@ -85,13 +88,6 @@ describe('WorktreeManager', () => {
     // Ensure temp directory exists
     mkdirSync(tempDir, { recursive: true });
     mkdirSync(repoPath, { recursive: true });
-
-    // Create MCP config template with placeholders
-    const template = JSON.stringify({
-      linear: { apiKey: '{{LINEAR_API_KEY}}' },
-      sentry: { authToken: '{{SENTRY_AUTH_TOKEN}}' },
-    });
-    writeFileSync(mcpConfigTemplatePath, template, 'utf-8');
   });
 
   afterEach(() => {
@@ -295,38 +291,6 @@ describe('WorktreeManager', () => {
       );
     });
 
-    it('should copy MCP config template with env var substitution', async () => {
-      process.env['INTEXURAOS_LINEAR_API_KEY'] = 'test-linear-key';
-      process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'] = 'test-sentry-token';
-
-      const WM = await loadWorktreeManager();
-      const manager = new WM(mockConfig, mockLogger);
-
-      await manager.createWorktree('task-mcp', 'feature-branch');
-
-      const mcpConfigPath = join(worktreeBasePath, 'task-mcp', '.mcp.json');
-      expect(existsSync(mcpConfigPath)).toBe(true);
-
-      const config = JSON.parse(readFileSync(mcpConfigPath, 'utf-8'));
-      expect(config.linear.apiKey).toBe('test-linear-key');
-      expect(config.sentry.authToken).toBe('test-sentry-token');
-
-      delete process.env['INTEXURAOS_LINEAR_API_KEY'];
-      delete process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
-    });
-
-    it('should handle missing env vars gracefully', async () => {
-      const WM = await loadWorktreeManager();
-      const manager = new WM(mockConfig, mockLogger);
-
-      await manager.createWorktree('task-no-env', 'feature-branch');
-
-      const mcpConfigPath = join(worktreeBasePath, 'task-no-env', '.mcp.json');
-      const config = JSON.parse(readFileSync(mcpConfigPath, 'utf-8'));
-      expect(config.linear.apiKey).toBe('');
-      expect(config.sentry.authToken).toBe('');
-    });
-
     it('should copy settings.local.json template into worktree', async () => {
       const settingsTemplatePath = join(tempDir, 'settings.local.json');
       writeFileSync(
@@ -404,35 +368,6 @@ describe('WorktreeManager', () => {
       warnSpy.mockRestore();
     });
 
-    it('should skip MCP config if template does not exist', async () => {
-      const WM = await loadWorktreeManager();
-      const manager = new WM(
-        {
-          ...mockConfig,
-          mcpConfigTemplatePath: join(tempDir, 'non-existent.json'),
-        },
-        mockLogger
-      );
-
-      // Should not throw
-      await manager.createWorktree('task-no-template', 'feature-branch');
-    });
-
-    it('should handle missing env vars with warning', async () => {
-      // Clear env vars
-      delete process.env['INTEXURAOS_LINEAR_API_KEY'];
-      delete process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
-
-      const warnSpy = vi.spyOn(mockLogger, 'warn');
-
-      const WM = await loadWorktreeManager();
-      const manager = new WM(mockConfig, mockLogger);
-
-      await manager.createWorktree('task-missing-env', 'feature-branch');
-
-      // Should have warned about missing keys twice (linear + sentry)
-      expect(warnSpy).toHaveBeenCalledTimes(2);
-    });
   });
 
   describe('lifecycle logging', () => {
@@ -545,31 +480,6 @@ describe('WorktreeManager', () => {
     });
   });
 
-  describe('copyMcpConfig error handling', () => {
-    it('should handle non-Error objects thrown during MCP config copy', async () => {
-      process.env['INTEXURAOS_LINEAR_API_KEY'] = 'test-key';
-      process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'] = 'test-token';
-
-      const WM = await loadWorktreeManager();
-      // Create a worktree without MCP config template to test error path
-      const managerWithoutTemplate = new WM(
-        {
-          ...mockConfig,
-          mcpConfigTemplatePath: join(tempDir, 'non-existent.json'),
-        },
-        mockLogger
-      );
-
-      // This should succeed (template is optional)
-      await expect(
-        managerWithoutTemplate.createWorktree('task-no-template', 'feature-branch')
-      ).resolves.toBe(join(worktreeBasePath, 'task-no-template'));
-
-      delete process.env['INTEXURAOS_LINEAR_API_KEY'];
-      delete process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
-    });
-  });
-
   describe('list worktrees error handling', () => {
     it('should return empty array when git command fails', async () => {
       const WM = await loadWorktreeManager();
@@ -599,25 +509,16 @@ describe('WorktreeManager - git stderr error handling', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'worktree-error-test-'));
   const repoPath = join(tempDir, 'repo');
   const worktreeBasePath = join(tempDir, 'worktrees');
-  const mcpConfigTemplatePath = join(tempDir, 'mcp-template.json');
 
   const mockConfig = {
     repositoryPath: repoPath,
     worktreeBasePath,
-    mcpConfigTemplatePath,
   };
 
   beforeEach(async () => {
     // Ensure temp directory exists
     mkdirSync(tempDir, { recursive: true });
     mkdirSync(repoPath, { recursive: true });
-
-    // Create MCP config template
-    const template = JSON.stringify({
-      linear: { apiKey: '{{LINEAR_API_KEY}}' },
-      sentry: { authToken: '{{SENTRY_AUTH_TOKEN}}' },
-    });
-    writeFileSync(mcpConfigTemplatePath, template, 'utf-8');
   });
 
   afterEach(() => {
@@ -790,35 +691,6 @@ describe('WorktreeManager - git stderr error handling', () => {
     expect(worktrees).toEqual([`${worktreeBasePath}/task-a`, `${worktreeBasePath}/task-c`]);
   });
 
-  it('should handle non-Error thrown during copyMcpConfig', async () => {
-    // We need to make readFile throw a non-Error inside copyMcpConfig
-    // The easiest way is to make the template file unreadable by corrupting the mock
-    mockExecAsyncImpl = async (
-      command: string,
-      _options: { cwd?: string; timeout?: number }
-    ): Promise<{ stdout: string; stderr: string }> => {
-      if (command.includes('git worktree add')) {
-        return { stdout: '', stderr: 'Preparing worktree' };
-      }
-      return { stdout: '', stderr: '' };
-    };
-
-    vi.resetModules();
-    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
-
-    // Point to a template that exists but will cause copyMcpConfig to fail
-    // We'll use a template path that triggers an error during processing
-    const badTemplatePath = join(tempDir, 'bad-template.json');
-    // Create a directory at the template path so readFile fails with EISDIR
-    mkdirSync(badTemplatePath, { recursive: true });
-
-    const manager = new WM({ ...mockConfig, mcpConfigTemplatePath: badTemplatePath }, mockLogger);
-
-    await expect(manager.createWorktree('task-mcp-error', 'feature-branch')).rejects.toThrow(
-      'Failed to create worktree'
-    );
-  });
-
   it('should handle non-Error thrown during copySettingsLocal', async () => {
     mockExecAsyncImpl = async (
       command: string,
@@ -840,7 +712,6 @@ describe('WorktreeManager - git stderr error handling', () => {
     const manager = new WM(
       {
         ...mockConfig,
-        mcpConfigTemplatePath: join(tempDir, 'non-existent-mcp.json'), // skip MCP config
         settingsLocalTemplatePath: badSettingsPath,
       },
       mockLogger
@@ -872,35 +743,6 @@ describe('WorktreeManager - git stderr error handling', () => {
     await expect(manager.removeWorktree('task-remove-empty')).resolves.toBeUndefined();
   });
 
-  it('should surface Unknown error when copyMcpConfig catch receives a non-Error', async () => {
-    // Set readFile to throw a string (non-Error)
-    fsPromisesReadFileOverride = async (): Promise<string> => {
-      throw 'non-error thrown during mcp config read';
-    };
-
-    mockExecAsyncImpl = async (
-      command: string,
-      _options: { cwd?: string; timeout?: number }
-    ): Promise<{ stdout: string; stderr: string }> => {
-      if (command.includes('git worktree add')) {
-        return { stdout: '', stderr: 'Preparing worktree' };
-      }
-      return { stdout: '', stderr: '' };
-    };
-
-    vi.resetModules();
-    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
-    const manager = new WM(mockConfig, mockLogger);
-
-    try {
-      await expect(manager.createWorktree('task-mcp-non-error', 'feature-branch')).rejects.toThrow(
-        'Failed to create worktree: Failed to copy MCP config: Unknown error'
-      );
-    } finally {
-      fsPromisesReadFileOverride = null;
-    }
-  });
-
   it('should surface Unknown error when copySettingsLocal catch receives a non-Error', async () => {
     const settingsTemplatePath = join(tempDir, 'settings.non-error.json');
     writeFileSync(settingsTemplatePath, '{}', 'utf-8');
@@ -926,7 +768,6 @@ describe('WorktreeManager - git stderr error handling', () => {
     const manager = new WM(
       {
         ...mockConfig,
-        mcpConfigTemplatePath: join(tempDir, 'non-existent-mcp.json'), // skip MCP
         settingsLocalTemplatePath: settingsTemplatePath,
       },
       mockLogger
@@ -944,189 +785,3 @@ describe('WorktreeManager - git stderr error handling', () => {
   });
 });
 
-describe('LINEAR_MCP_TIMEOUT_MS constant', () => {
-  it('should export 60000ms timeout for Linear MCP server', async () => {
-    const WM = await loadWorktreeManager();
-    // Import the constant from the same cached module
-    const mod = await import('../services/worktree-manager.js');
-    expect(mod.LINEAR_MCP_TIMEOUT_MS).toBe(60_000);
-    // Ensure WM is still accessible (avoids unused import lint)
-    expect(WM).toBeDefined();
-  });
-});
-
-describe('WorktreeManager - timeout evidence logging', () => {
-  const tempDir = mkdtempSync(join(tmpdir(), 'timeout-logging-test-'));
-  const repoPath = join(tempDir, 'repo');
-  const worktreeBasePath = join(tempDir, 'worktrees');
-  const mcpConfigTemplatePath = join(tempDir, 'mcp-template.json');
-
-  const mockConfig = {
-    repositoryPath: repoPath,
-    worktreeBasePath,
-    mcpConfigTemplatePath,
-  };
-
-  let mockLoggerWithSpies: Logger;
-
-  beforeEach(async () => {
-    mockExecAsyncImpl = defaultExecAsync;
-    mkdirSync(tempDir, { recursive: true });
-    mkdirSync(repoPath, { recursive: true });
-
-    // Create MCP config template with {{PLACEHOLDER}} syntax
-    const template = JSON.stringify({
-      mcpServers: {
-        linear: {
-          type: 'sse',
-          url: 'https://mcp.linear.app/sse',
-          headers: { Authorization: 'Bearer {{LINEAR_API_KEY}}' },
-        },
-        sentry: {
-          command: 'npx',
-          args: ['@sentry/mcp-server@latest', '--access-token', '{{SENTRY_AUTH_TOKEN}}'],
-        },
-      },
-    });
-    writeFileSync(mcpConfigTemplatePath, template, 'utf-8');
-
-    // Fresh logger per test
-    mockLoggerWithSpies = {
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      debug: vi.fn(),
-    };
-  });
-
-  afterEach(() => {
-    rmSync(tempDir, { recursive: true, force: true });
-  });
-
-  it('should log MCP timeout evidence with correct structured fields after worktree creation', async () => {
-    process.env['INTEXURAOS_LINEAR_API_KEY'] = 'test-linear-key';
-    process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'] = 'test-sentry-token';
-
-    vi.resetModules();
-    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
-    const manager = new WM(mockConfig, mockLoggerWithSpies);
-
-    await manager.createWorktree('task-timeout-log', 'feature-branch');
-
-    const infoSpy = vi.mocked(mockLoggerWithSpies.info);
-    // Verify structured fields and message markers in a single assertion
-    expect(infoSpy).toHaveBeenCalledWith(
-      { timeoutMs: 60_000, server: 'linear' },
-      expect.stringContaining('MCP timeout')
-    );
-    expect(infoSpy).toHaveBeenCalledWith(
-      { timeoutMs: 60_000, server: 'linear' },
-      expect.stringContaining('server=linear')
-    );
-
-    delete process.env['INTEXURAOS_LINEAR_API_KEY'];
-    delete process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
-  });
-
-  it('should log MCP timeout evidence even without MCP config template', async () => {
-    vi.resetModules();
-    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
-    const manager = new WM(
-      { ...mockConfig, mcpConfigTemplatePath: join(tempDir, 'non-existent.json') },
-      mockLoggerWithSpies
-    );
-
-    await manager.createWorktree('task-no-template-timeout', 'feature-branch');
-
-    const infoSpy = vi.mocked(mockLoggerWithSpies.info);
-    expect(infoSpy).toHaveBeenCalledWith(
-      { timeoutMs: 60_000, server: 'linear' },
-      expect.stringContaining('MCP timeout')
-    );
-  });
-
-  it('should inject timeoutMs into generated .mcp.json for the Linear server', async () => {
-    process.env['INTEXURAOS_LINEAR_API_KEY'] = 'test-linear-key';
-    process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'] = 'test-sentry-token';
-
-    // Create a template matching the real .mcp.json structure
-    const template = JSON.stringify({
-      mcpServers: {
-        linear: {
-          type: 'sse',
-          url: 'https://mcp.linear.app/sse',
-          headers: { Authorization: 'Bearer {{LINEAR_API_KEY}}' },
-        },
-        sentry: {
-          command: 'npx',
-          args: ['@sentry/mcp-server@latest', '--access-token', '{{SENTRY_AUTH_TOKEN}}'],
-        },
-      },
-    });
-    writeFileSync(mcpConfigTemplatePath, template, 'utf-8');
-
-    vi.resetModules();
-    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
-    const manager = new WM(mockConfig, mockLoggerWithSpies);
-
-    const worktreePath = await manager.createWorktree('task-config-inject', 'feature-branch');
-
-    // Read the generated .mcp.json from the worktree
-    const generatedPath = join(worktreePath, '.mcp.json');
-    expect(existsSync(generatedPath)).toBe(true);
-
-    const generated = JSON.parse(readFileSync(generatedPath, 'utf-8')) as {
-      mcpServers: {
-        linear: { timeoutMs?: number; type: string; headers: { Authorization: string } };
-        sentry: { args: string[] };
-      };
-    };
-
-    // Core contract: timeoutMs injected
-    expect(generated.mcpServers.linear.timeoutMs).toBe(60_000);
-    // Auth substitution still works
-    expect(generated.mcpServers.linear.headers.Authorization).toBe('Bearer test-linear-key');
-    // Other servers untouched
-    expect(generated.mcpServers.sentry.args).toContain('test-sentry-token');
-
-    delete process.env['INTEXURAOS_LINEAR_API_KEY'];
-    delete process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
-  });
-
-  it('should not inject timeoutMs when mcpServers.linear is absent', async () => {
-    process.env['INTEXURAOS_LINEAR_API_KEY'] = 'test-linear-key';
-    process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'] = 'test-sentry-token';
-
-    // Template with mcpServers but no linear entry
-    const template = JSON.stringify({
-      mcpServers: {
-        sentry: {
-          command: 'npx',
-          args: ['@sentry/mcp-server@latest', '--access-token', '{{SENTRY_AUTH_TOKEN}}'],
-        },
-      },
-    });
-    writeFileSync(mcpConfigTemplatePath, template, 'utf-8');
-
-    vi.resetModules();
-    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
-    const manager = new WM(mockConfig, mockLoggerWithSpies);
-
-    const worktreePath = await manager.createWorktree('task-no-linear', 'feature-branch');
-
-    const generatedPath = join(worktreePath, '.mcp.json');
-    expect(existsSync(generatedPath)).toBe(true);
-
-    const generated = JSON.parse(readFileSync(generatedPath, 'utf-8')) as {
-      mcpServers: { linear?: unknown; sentry: { args: string[] } };
-    };
-
-    // linear key should not be added when absent from template
-    expect(generated.mcpServers.linear).toBeUndefined();
-    // Other servers still work
-    expect(generated.mcpServers.sentry.args).toContain('test-sentry-token');
-
-    delete process.env['INTEXURAOS_LINEAR_API_KEY'];
-    delete process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
-  });
-});
