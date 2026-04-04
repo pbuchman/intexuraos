@@ -2423,6 +2423,7 @@ describe('POST /internal/webhooks/task-complete', () => {
     });
 
     it('does not queue execution-memory post-run work for non-execution agents', async () => {
+      process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] = 'true';
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
         prompt: 'Implement the task',
@@ -2434,7 +2435,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         baseBranch: 'development',
         traceId: 'trace_non_execution',
         linearIssueId: 'INT-123',
-        agentType: 'planning',
+        agentType: 'pull_request',
         webhookSecret: 'test-webhook-secret',
       });
 
@@ -2468,6 +2469,122 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.ok).toBe(true);
       if (!getResult.ok) throw new Error('Failed to get task');
       expect(getResult.value.executionMemoryPostRun).toBeUndefined();
+    });
+
+    it('queues execution memory post-run for planning task', async () => {
+      process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] = 'true';
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Plan the task',
+        sanitizedPrompt: 'Plan the task',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_planning_memory',
+        linearIssueId: 'INT-123',
+        agentType: 'planning',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Planned the task',
+          planning_outcome_label: 'planned' as const,
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.executionMemoryPostRun).toEqual(
+        expect.objectContaining({
+          status: 'pending',
+          attempts: 0,
+          generatedMemoryIds: [],
+        })
+      );
+    });
+
+    it('queues execution memory post-run for review task', async () => {
+      process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] = 'true';
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the task',
+        sanitizedPrompt: 'Review the task',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_review_memory',
+        linearIssueId: 'INT-123',
+        agentType: 'review',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Reviewed the task',
+          review_id: 'review-123',
+          review_comments_posted: '3',
+          review_types: 'security,performance',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.executionMemoryPostRun).toEqual(
+        expect.objectContaining({
+          status: 'pending',
+          attempts: 0,
+          generatedMemoryIds: [],
+        })
+      );
     });
 
     it('handles markdown-wrapped execution_linear_issue_url in execution completion', async () => {
