@@ -14,12 +14,12 @@ describe('isMemoryEligibleAgent', () => {
     expect(isMemoryEligibleAgent('review')).toBe(true);
   });
 
-  it('returns false for pull_request', () => {
-    expect(isMemoryEligibleAgent('pull_request')).toBe(false);
+  it('returns true for pull_request', () => {
+    expect(isMemoryEligibleAgent('pull_request')).toBe(true);
   });
 
-  it('returns false for remediation', () => {
-    expect(isMemoryEligibleAgent('remediation')).toBe(false);
+  it('returns true for remediation', () => {
+    expect(isMemoryEligibleAgent('remediation')).toBe(true);
   });
 
   it('returns false for undefined', () => {
