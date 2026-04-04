@@ -1237,8 +1237,8 @@ describe('system-prompt', () => {
     }
   });
 
-  it('planning prompt version is 4.0.0', () => {
-    expect(planningPrompt.version).toBe('4.0.0');
+  it('planning prompt version is 5.0.0', () => {
+    expect(planningPrompt.version).toBe('5.0.0');
   });
 
   it('execution prompt version is 8.0.0', () => {

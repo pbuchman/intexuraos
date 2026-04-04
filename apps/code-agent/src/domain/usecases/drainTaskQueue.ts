@@ -20,6 +20,7 @@ import { generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 import { buildLockCleanups, type LockCleanupInfo } from '../utils/prTaskLock.js';
 import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../utils/taskRouting.js';
 import { archiveRetriedTaskAfterDispatch } from '../utils/archiveRetriedTaskAfterDispatch.js';
+import { isMemoryEligibleAgent } from '../utils/memoryEligibility.js';
 import { shouldFanOut, fanOutChildTasks } from './fanOutChildTasks.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
 import {
@@ -371,7 +372,7 @@ export async function drainTaskQueue(
 
     if (
       config.executionMemoryEnabled
-      && agentType === 'execution'
+      && isMemoryEligibleAgent(agentType)
       && taskExecutionMemoryContext === undefined
     ) {
       taskExecutionMemoryContext = await prepareExecutionMemoryContext({

@@ -1,5 +1,6 @@
 import type { CodeTaskWorkerType } from '@intexuraos/common-core';
 import { Timestamp } from '@google-cloud/firestore';
+import type { ExecutionMemoryType } from './executionMemory.js';
 
 /**
  * Worker type determines which model Claude uses.
@@ -85,7 +86,10 @@ export interface TaskResult {
   review_id?: string;
   review_comments_posted?: string;
   review_types?: string;
+  review_body?: string;
+  review_inline_comments?: string;
   requirements_tracker_updated?: string;
+  gh_actions_status?: string;
   needs_remediation?: string;
   requires_re_review?: string;
 }
@@ -93,7 +97,7 @@ export interface TaskResult {
 export interface ExecutionMemoryContextMemory {
   memoryId: string;
   title: string;
-  memoryType: 'implementation_pattern' | 'verification_pattern' | 'pitfall_pattern';
+  memoryType: ExecutionMemoryType;
   score: number;
   appliesWhen: string;
   action: string;
@@ -118,7 +122,7 @@ export interface ExecutionMemoryPostRun {
   lastAttemptAt?: Timestamp;
   generatedMemoryIds: string[];
   evaluationSummary?: string;
-  skipReason?: 'infra_only' | 'insufficient_signal' | 'already_completed' | 'no_reusable_lesson';
+  skipReason?: 'infra_only' | 'insufficient_signal' | 'already_completed' | 'no_reusable_lesson' | 'planning_unclear';
   errorMessage?: string;
   completedAt?: Timestamp;
 }

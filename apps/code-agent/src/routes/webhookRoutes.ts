@@ -19,6 +19,7 @@ import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
 import { parseLinearIdentifierFromUrl } from '../domain/utils/linearIdentifierParser.js';
 import { parseOwnerRepo } from '../domain/utils/parseOwnerRepo.js';
 import { drainTaskQueue } from '../domain/usecases/drainTaskQueue.js';
+import { isMemoryEligibleAgent } from '../domain/utils/memoryEligibility.js';
 
 /**
  * Best-effort: record a task_failed automation log event for PR-linked tasks.
@@ -57,7 +58,7 @@ function shouldQueueExecutionMemoryPostRun(params: {
 }): boolean {
   return (
     loadConfig().executionMemoryEnabled
-    && params.agentType === 'execution'
+    && isMemoryEligibleAgent(params.agentType)
     && params.existingStatus === undefined
   );
 }

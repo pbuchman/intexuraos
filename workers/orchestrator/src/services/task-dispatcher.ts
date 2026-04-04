@@ -1328,6 +1328,12 @@ export class TaskDispatcher {
       base.requirements_tracker_updated = agentData.requirements_tracker_updated;
       base.gh_actions_status = agentData.gh_actions_status;
       base.needs_remediation = agentData.needs_remediation;
+      if (agentData.review_body !== '') {
+        base.review_body = agentData.review_body;
+      }
+      if (agentData.review_inline_comments !== '') {
+        base.review_inline_comments = agentData.review_inline_comments;
+      }
     } else if (agentData.agentType === 'remediation') {
       base.execution_outcome_label = agentData.outcome;
       if (agentData.gh_pr_url !== '') {

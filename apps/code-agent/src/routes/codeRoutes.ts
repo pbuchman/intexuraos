@@ -24,6 +24,7 @@ import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
 import { hasCodeTaskLabel } from '../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../domain/utils/promptSanitization.js';
 import type { AgentType, TaskStatus, WorkerType } from '../domain/models/codeTask.js';
+import type { ExecutionMemoryType } from '../domain/models/executionMemory.js';
 import { randomUUID } from 'node:crypto';
 import { generateWebhookSecret } from '../domain/utils/secrets.js';
 import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
@@ -114,7 +115,7 @@ const executionMemoryContextSchema = {
         properties: {
           memoryId: { type: 'string' },
           title: { type: 'string' },
-          memoryType: { type: 'string', enum: ['implementation_pattern', 'verification_pattern', 'pitfall_pattern'] },
+          memoryType: { type: 'string', enum: ['implementation_pattern', 'verification_pattern', 'pitfall_pattern', 'decomposition_pattern', 'planning_decision', 'review_finding'] },
           score: { type: 'number' },
           appliesWhen: { type: 'string' },
           action: { type: 'string' },
@@ -139,7 +140,7 @@ const executionMemoryPostRunSchema = {
     lastAttemptAt: { type: 'string', format: 'date-time', nullable: true },
     generatedMemoryIds: { type: 'array', items: { type: 'string' } },
     evaluationSummary: { type: 'string', nullable: true },
-    skipReason: { type: 'string', enum: ['infra_only', 'insufficient_signal', 'already_completed', 'no_reusable_lesson'], nullable: true },
+    skipReason: { type: 'string', enum: ['infra_only', 'insufficient_signal', 'already_completed', 'no_reusable_lesson', 'planning_unclear'], nullable: true },
     errorMessage: { type: 'string', nullable: true },
     completedAt: { type: 'string', format: 'date-time', nullable: true },
   },
@@ -371,7 +372,7 @@ function taskToApiResponse(task: {
     matchedMemories?: {
       memoryId: string;
       title: string;
-      memoryType: 'implementation_pattern' | 'verification_pattern' | 'pitfall_pattern';
+      memoryType: ExecutionMemoryType;
       score: number;
       appliesWhen: string;
       action: string;
@@ -387,7 +388,7 @@ function taskToApiResponse(task: {
     lastAttemptAt?: string;
     generatedMemoryIds: string[];
     evaluationSummary?: string;
-    skipReason?: 'infra_only' | 'insufficient_signal' | 'already_completed' | 'no_reusable_lesson';
+    skipReason?: 'infra_only' | 'insufficient_signal' | 'already_completed' | 'no_reusable_lesson' | 'planning_unclear';
     errorMessage?: string;
     completedAt?: string;
   };

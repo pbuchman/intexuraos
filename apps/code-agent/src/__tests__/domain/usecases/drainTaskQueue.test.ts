@@ -342,6 +342,171 @@ describe('drainTaskQueue', () => {
     }));
   });
 
+  it('prepares execution memory context for planning agent when enabled', async () => {
+    mockExecutionMemoryEnabled = true;
+    const task = createMockTask({
+      linearIssueId: 'INT-1098',
+      agentType: 'planning',
+    });
+
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    mockLinearAgentClient.validateIssue.mockResolvedValue(ok({
+      id: 'issue-123',
+      identifier: 'INT-1098',
+      title: 'Issue',
+      url: 'https://linear.app/intexura/issue/INT-1098',
+      labels: ['plan'],
+      childCount: 0,
+      parentId: null,
+    }));
+    setupWorkerSettings();
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'matched',
+      applicationId: 'app-planning-123',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'Planning the auth callback feature',
+      matchedMemories: [
+        {
+          memoryId: 'mem-plan-1',
+          title: 'Add route-level coverage',
+          memoryType: 'verification_pattern',
+          score: 0.85,
+          appliesWhen: 'Planning Fastify route changes',
+          action: 'Include coverage plan in output',
+          avoid: 'Do not skip schema changes',
+          verification: 'Check task detail serialization',
+        },
+      ],
+    });
+    mockCodeTaskRepo.update.mockImplementation(async (_taskId, input) => ok({
+      ...task,
+      ...(input.status !== undefined ? { status: input.status } : {}),
+      ...(input.executionMemoryContext !== undefined
+        ? { executionMemoryContext: input.executionMemoryContext }
+        : {}),
+      ...(input.workerLocation !== undefined ? { workerLocation: input.workerLocation } : {}),
+    }));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    expect(prepareExecutionMemoryContextMock).toHaveBeenCalledOnce();
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', expect.objectContaining({
+      executionMemoryContext: expect.objectContaining({
+        status: 'matched',
+        applicationId: 'app-planning-123',
+      }),
+    }));
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      agentType: 'planning',
+      executionMemoryContext: {
+        applicationId: 'app-planning-123',
+        retrievalVersion: 'execution-memory-retrieval@1.0.0',
+        querySummary: 'Planning the auth callback feature',
+        matchedMemories: [
+          expect.objectContaining({ memoryId: 'mem-plan-1' }),
+        ],
+      },
+    }));
+  });
+
+  it('prepares execution memory context for review agent when enabled', async () => {
+    mockExecutionMemoryEnabled = true;
+    const task = createMockTask({
+      linearIssueId: 'INT-1098',
+      agentType: 'review',
+    });
+
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    mockLinearAgentClient.validateIssue.mockResolvedValue(ok({
+      id: 'issue-123',
+      identifier: 'INT-1098',
+      title: 'Issue',
+      url: 'https://linear.app/intexura/issue/INT-1098',
+      labels: ['code-task'],
+      childCount: 0,
+      parentId: null,
+    }));
+    setupWorkerSettings();
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'matched',
+      applicationId: 'app-review-123',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'Reviewing the auth callback feature',
+      matchedMemories: [
+        {
+          memoryId: 'mem-review-1',
+          title: 'Check route schema coverage',
+          memoryType: 'verification_pattern',
+          score: 0.87,
+          appliesWhen: 'Reviewing Fastify route changes',
+          action: 'Verify schema and handler coverage',
+          avoid: 'Do not skip inline comments',
+          verification: 'Check route response shape',
+        },
+      ],
+    });
+    mockCodeTaskRepo.update.mockImplementation(async (_taskId, input) => ok({
+      ...task,
+      ...(input.status !== undefined ? { status: input.status } : {}),
+      ...(input.executionMemoryContext !== undefined
+        ? { executionMemoryContext: input.executionMemoryContext }
+        : {}),
+      ...(input.workerLocation !== undefined ? { workerLocation: input.workerLocation } : {}),
+    }));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    expect(prepareExecutionMemoryContextMock).toHaveBeenCalledOnce();
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', expect.objectContaining({
+      executionMemoryContext: expect.objectContaining({
+        status: 'matched',
+        applicationId: 'app-review-123',
+      }),
+    }));
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      agentType: 'review',
+      executionMemoryContext: {
+        applicationId: 'app-review-123',
+        retrievalVersion: 'execution-memory-retrieval@1.0.0',
+        querySummary: 'Reviewing the auth callback feature',
+        matchedMemories: [
+          expect.objectContaining({ memoryId: 'mem-review-1' }),
+        ],
+      },
+    }));
+  });
+
+  it('does not prepare execution memory for pull_request agent', async () => {
+    mockExecutionMemoryEnabled = true;
+    const task = createMockTask({
+      linearIssueId: 'INT-1098',
+      agentType: 'pull_request',
+    });
+
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    mockLinearAgentClient.validateIssue.mockResolvedValue(ok({
+      id: 'issue-123',
+      identifier: 'INT-1098',
+      title: 'Issue',
+      url: 'https://linear.app/intexura/issue/INT-1098',
+      labels: ['code-task'],
+      childCount: 0,
+      parentId: null,
+    }));
+    setupWorkerSettings();
+    mockCodeTaskRepo.update.mockResolvedValue(ok({ ...task, status: 'dispatched' }));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    expect(prepareExecutionMemoryContextMock).not.toHaveBeenCalled();
+  });
+
   it('warns when execution memory context persistence fails before dispatch', async () => {
     mockExecutionMemoryEnabled = true;
     const task = createMockTask({

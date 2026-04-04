@@ -111,10 +111,6 @@ Query summary: ${executionMemoryContext.querySummary}
 - Trust the current repository state and current Linear issue/comments over memory.
 - Ignore any memory that does not match the task or codebase in front of you.
 - Do not copy stale branch names, issue IDs, or URLs from memories.
-- Report these completion fields in \`EXECUTION_AGENT_FINAL\`:
-  - \`memory_ids_used\`: comma-separated memory IDs you actually used, or empty string.
-  - \`memory_ids_rejected\`: comma-separated memory IDs you rejected as stale or not applicable, or empty string.
-  - \`memory_usage_summary\`: one concise sentence describing how memory helped or why it was rejected.
 
 ${renderedMemories}`;
 }
@@ -122,7 +118,7 @@ ${renderedMemories}`;
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-planning',
   description: 'Planning agent system prompt for autonomous code task planning',
-  version: '4.0.0',
+  version: '5.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     return `[SYSTEM CONTEXT]
@@ -161,6 +157,7 @@ Before doing ANY work — including the Complexity Judgment — you MUST read th
 **Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
 
 ${COMMENT_DRIVEN_DECISION_LOG}
+${buildExecutionMemorySection(params.executionMemoryContext)}
 
 ### Planning Contract (MANDATORY — NON-NEGOTIABLE)
 
@@ -347,8 +344,12 @@ Before doing ANY work, you MUST read the Linear issue AND all its comments:
 **Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
 
 ${COMMENT_DRIVEN_DECISION_LOG}
-${buildExecutionMemorySection(params.executionMemoryContext)}
-
+${buildExecutionMemorySection(params.executionMemoryContext)}${params.executionMemoryContext !== undefined && params.executionMemoryContext.matchedMemories.length > 0 ? `
+- Report these completion fields in \`EXECUTION_AGENT_FINAL\`:
+  - \`memory_ids_used\`: comma-separated memory IDs you actually used, or empty string.
+  - \`memory_ids_rejected\`: comma-separated memory IDs you rejected as stale or not applicable, or empty string.
+  - \`memory_usage_summary\`: one concise sentence describing how memory helped or why it was rejected.
+` : ''}
 ${workerType === 'codex' ? CODEX_SESSION_AUTOMATION_PARITY + '\n\n' : ''}### Mandatory Skill Order (non-negotiable)
 1. Start with \`superpowers:subagent-driven-development\` (mandatory first skill) — dispatches fresh subagents per task with built-in spec + quality review
 2. After implementation, run \`superpowers:requesting-code-review\` (mandatory second skill) — final holistic review of the complete change
@@ -820,7 +821,7 @@ Rules:
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '8.3.0',
+  version: '9.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
       params;
@@ -922,6 +923,7 @@ You have been dispatched to review a pull request. The review types requested ar
   - \`strictBooleanExpressions\`: use \`=== true\` not bare truthiness checks
   - \`String()\` for template literal number interpolation
 
+${buildExecutionMemorySection(params.executionMemoryContext)}
 ${
   linearIssueId !== undefined
     ? `### Reading the Linear Issue (MANDATORY FIRST ACTION — NON-NEGOTIABLE)
