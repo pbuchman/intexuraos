@@ -8,7 +8,7 @@
 
 import type { GroupStatus, IssueGroup, PipelineState, PipelineStepData, SerializedTask, StepState } from './types.js';
 import { ACTIVE_STATUSES, AGENT_TYPE_LABELS, REMEDIATION_NOT_NEEDED } from './constants.js';
-import { hasImplementationReadyLabel, hasMergeReadyLabel } from './labelHelpers.js';
+import { hasMergeReadyLabel } from './labelHelpers.js';
 import { parseLinearIssueNumber } from './sortIssueGroups.js';
 
 const PR_URL_REGEX = /\/pull\/(\d+)/;
@@ -66,16 +66,15 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
 
   const steps = entries.map((e) => e.step);
 
-  // Actionable logic: if planning completed, no execution step exists, no implementationTaskId,
-  // AND the Linear issue has a ready-to-implement or code-task label (backward compat).
+  // Actionable logic: if planning completed, no execution step exists, and no
+  // implementationTaskId — the user can trigger execution from the UI.
   const planningEntry = stepMap.get('planning');
   const executionEntry = stepMap.get('execution');
   if (
     planningEntry?.step.state === 'completed' &&
     executionEntry === undefined &&
     planningEntry.task.implementationTaskId === undefined &&
-    (planningEntry.task.fanOutChildTaskIds === undefined || planningEntry.task.fanOutChildTaskIds.length === 0) &&
-    hasImplementationReadyLabel(planningEntry.task.linearIssue?.labels)
+    (planningEntry.task.fanOutChildTaskIds === undefined || planningEntry.task.fanOutChildTaskIds.length === 0)
   ) {
     // Insert synthetic execution step right after planning
     const planningIndex = steps.findIndex((s) => s.agentType === 'planning');
@@ -107,6 +106,8 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
   // needs_remediation === '0' AND the ready-to-merge label is still present.
   // The label check is essential: handlePrClose removes ready-to-merge when
   // a PR is closed (merged or not), preventing a stale merge button.
+  // GUARD: skip for planning→review pipelines where execution hasn't started yet.
+  // The backend (submitToExecutionAgent) merges the plan PR under the hood.
   const reviewEntry = stepMap.get('review');
   if (
     !hasActiveTask &&
@@ -114,7 +115,8 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
     reviewEntry.task.prNumber !== undefined &&
     reviewEntry.task.result?.needs_remediation === REMEDIATION_NOT_NEEDED &&
     hasMergeReadyLabel(reviewEntry.task.linearIssue?.labels) &&
-    !steps.some((s) => s.agentType === 'merge')
+    !steps.some((s) => s.agentType === 'merge') &&
+    !(planningEntry !== undefined && planningEntry.task.implementationTaskId === undefined)
   ) {
     steps.push({
       agentType: 'merge',
