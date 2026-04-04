@@ -7298,6 +7298,71 @@ describe('TaskDispatcher', () => {
       expect(finalizeGuardDispatcher.getRunningCount()).toBe(0);
       vi.useRealTimers();
     });
+
+    it('worktree creation guard: does not decrement runningCount below zero when already at zero', async () => {
+      vi.mocked(mockWorktreeManager.createWorktree).mockImplementationOnce(async () => {
+        // Simulate race: another path decremented runningCount to 0 before this catch fires
+        (dispatcher as unknown as { runningCount: number }).runningCount = 0;
+        throw new Error('Worktree fail');
+      });
+
+      const request: CreateTaskRequest = {
+        taskId: 'worktree-guard-false-branch',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      // Guard prevented decrement below zero
+      expect(dispatcher.getRunningCount()).toBe(0);
+    });
+
+    it('worker start guard: does not decrement runningCount below zero when already at zero', async () => {
+      const localWorktreeManager = {
+        ...mockWorktreeManager,
+        removeWorktree: vi.fn(async () => ({ ok: true, value: undefined })),
+      } as unknown as WorktreeManager;
+
+      const localDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        localWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      vi.mocked(mockIsolationProvider.createWorker).mockImplementationOnce(async () => {
+        // Simulate race: another path decremented runningCount to 0 before this failure check fires
+        (localDispatcher as unknown as { runningCount: number }).runningCount = 0;
+        throw new Error('Container failed');
+      });
+
+      const request: CreateTaskRequest = {
+        taskId: 'worker-start-guard-false-branch',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await localDispatcher.submitTask(request);
+      await flushAsync();
+
+      // Guard prevented decrement below zero
+      expect(localDispatcher.getRunningCount()).toBe(0);
+    });
   });
 
   describe('conditional spread for optional properties', () => {
