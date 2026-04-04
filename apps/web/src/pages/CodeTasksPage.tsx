@@ -14,8 +14,8 @@ import { ApiError } from '@/services/apiClient';
 import { startImplementation, retryCodeTask, archiveCodeTask, deleteCodeTask } from '@/services/codeAgentApi';
 import type { ActioningType, GroupStatus, IssueGroup, SortOption } from '@/types/issueGroups';
 
-// Backend excludes archived tasks
-const ALL_GROUP_STATUSES: GroupStatus[] = ['active', 'needs-action', 'done', 'failed'];
+const NON_ARCHIVED_STATUSES: GroupStatus[] = ['active', 'needs-action', 'done', 'failed'];
+const ALL_GROUP_STATUSES: GroupStatus[] = [...NON_ARCHIVED_STATUSES, 'archived'];
 
 const GROUP_STATUS_CONFIG: Record<GroupStatus, { label: string; dotClass: string; activeClass: string }> = {
   active: {
@@ -38,6 +38,11 @@ const GROUP_STATUS_CONFIG: Record<GroupStatus, { label: string; dotClass: string
     dotClass: 'bg-red-500',
     activeClass: 'border-red-500 bg-red-50 text-red-700 dark:border-red-400 dark:bg-red-900/30 dark:text-red-400',
   },
+  archived: {
+    label: 'Archived',
+    dotClass: 'bg-slate-400',
+    activeClass: 'border-slate-400 bg-slate-50 text-slate-600 dark:border-slate-500 dark:bg-slate-800 dark:text-slate-300',
+  },
 };
 
 const INACTIVE_SEGMENT_CLASS =
@@ -46,7 +51,7 @@ const INACTIVE_SEGMENT_CLASS =
 const STORAGE_KEY = 'code-tasks-group-filter';
 const SORT_STORAGE_KEY = 'code-tasks-sort';
 
-const DEFAULT_FILTERS = ALL_GROUP_STATUSES;
+const DEFAULT_FILTERS = NON_ARCHIVED_STATUSES;
 
 const SORT_OPTIONS: { key: SortOption; label: string }[] = [
   { key: 'linear-id', label: 'Linear' },
@@ -149,8 +154,8 @@ function StatusPipeline({ counts, activeFilters, onToggle }: StatusPipelineProps
   const activeSet = useMemo(() => new Set(activeFilters), [activeFilters]);
 
   return (
-    <div className="mb-4 flex flex-wrap gap-2">
-      {ALL_GROUP_STATUSES.map((status) => {
+    <div className="mb-4 flex flex-wrap items-center gap-2">
+      {NON_ARCHIVED_STATUSES.map((status) => {
         const cfg = GROUP_STATUS_CONFIG[status];
         const count = counts[status];
         const isActive = activeSet.has(status);
@@ -169,6 +174,18 @@ function StatusPipeline({ counts, activeFilters, onToggle }: StatusPipelineProps
           </button>
         );
       })}
+      {/* Visual separator between non-archived and archived filters */}
+      <div className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
+      <button
+        onClick={(): void => { onToggle('archived'); }}
+        className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors ${
+          activeSet.has('archived') ? GROUP_STATUS_CONFIG.archived.activeClass : INACTIVE_SEGMENT_CLASS
+        }`}
+      >
+        <span className={`inline-block h-2 w-2 rounded-full ${GROUP_STATUS_CONFIG.archived.dotClass}`} />
+        {GROUP_STATUS_CONFIG.archived.label}
+        <span className="font-medium">{String(counts.archived)}</span>
+      </button>
     </div>
   );
 }
@@ -273,6 +290,8 @@ export function CodeTasksPage(): React.JSX.Element {
     [groups],
   );
 
+  const isViewingArchived = activeFilters.length === 1 && activeFilters[0] === 'archived';
+
   // Prune selection when groups change (e.g. after refresh removes archived items)
   useEffect(() => {
     const validKeys = new Set(eligibleGroups.map(getGroupKey));
@@ -305,13 +324,32 @@ export function CodeTasksPage(): React.JSX.Element {
 
   const handleToggleFilter = useCallback((status: GroupStatus): void => {
     setActiveFilters((prev) => {
-      const set = new Set(prev);
-      if (set.has(status)) {
-        set.delete(status);
+      let next: GroupStatus[];
+
+      if (status === 'archived') {
+        // If archived is already selected, deselect it and show all non-archived
+        if (prev.includes('archived')) {
+          next = NON_ARCHIVED_STATUSES;
+        } else {
+          // Select only archived
+          next = ['archived'];
+        }
       } else {
-        set.add(status);
+        // Non-archived status toggled — ensure archived is removed
+        const withoutArchived = prev.filter((s) => s !== 'archived');
+        const set = new Set(withoutArchived);
+        if (set.has(status)) {
+          set.delete(status);
+        } else {
+          set.add(status);
+        }
+        next = [...set];
+        // If all deselected, fall back to all non-archived
+        if (next.length === 0) {
+          next = NON_ARCHIVED_STATUSES;
+        }
       }
-      const next = [...set];
+
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       return next;
     });
@@ -506,7 +544,7 @@ export function CodeTasksPage(): React.JSX.Element {
       ) : (
         <div>
           {/* Batch selection summary */}
-          {eligibleGroups.length > 0 ? (
+          {!isViewingArchived && eligibleGroups.length > 0 ? (
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs text-slate-600 dark:text-slate-400">
                 {String(selectedGroupKeys.size)} of {String(eligibleGroups.length)} eligible issue{eligibleGroups.length !== 1 ? 's' : ''} selected
@@ -558,10 +596,10 @@ export function CodeTasksPage(): React.JSX.Element {
                   actioningTaskId={actioningTaskId}
                   actioningType={actioningType}
                   groupKey={key}
-                  isSelectable={selectable}
+                  isSelectable={selectable && !isViewingArchived}
                   isSelected={selectedGroupKeys.has(key)}
                   isBatchActioning={batchActionGroupKeys.has(key)}
-                  onToggleSelection={selectable ? handleToggleSelection : undefined}
+                  onToggleSelection={selectable && !isViewingArchived ? handleToggleSelection : undefined}
                 />
               );
             })}
@@ -591,7 +629,7 @@ export function CodeTasksPage(): React.JSX.Element {
       )}
 
       {/* Floating batch action bar */}
-      {selectedGroupKeys.size > 0 && batchActionGroupKeys.size === 0 ? (
+      {selectedGroupKeys.size > 0 && batchActionGroupKeys.size === 0 && !isViewingArchived ? (
         <div className="fixed bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-slate-200 bg-white/95 px-5 py-3 shadow-lg backdrop-blur-sm dark:border-slate-700 dark:bg-slate-800/95">
           <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
             {String(selectedGroupKeys.size)} selected

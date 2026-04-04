@@ -62,7 +62,7 @@ function makeGroup(overrides: Partial<IssueGroup> = {}): IssueGroup {
   };
 }
 
-const defaultCounts: Record<GroupStatus, number> = { active: 1, 'needs-action': 0, done: 0, failed: 0 };
+const defaultCounts: Record<GroupStatus, number> = { active: 1, 'needs-action': 0, done: 0, failed: 0, archived: 0 };
 
 function makeResponse(overrides: Partial<ListIssueGroupsResponse> = {}): ListIssueGroupsResponse {
   return {

@@ -6,7 +6,7 @@
 
 import type { CodeTask } from './index.js';
 
-export type GroupStatus = 'active' | 'needs-action' | 'done' | 'failed';
+export type GroupStatus = 'active' | 'needs-action' | 'done' | 'failed' | 'archived';
 export type SortOption = 'linear-id' | 'pr-number' | 'dispatched' | 'last-updated';
 export type ActioningType = 'archive' | 'delete' | 'implement' | 'retry' | null;
 export type StepState = 'completed' | 'running' | 'dispatched' | 'queued' | 'failed' | 'waiting' | 'actionable';

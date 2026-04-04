@@ -218,6 +218,7 @@ function computeUserGroupCounts(
   let needsAction = 0;
   let done = 0;
   let failed = 0;
+  let archived = 0;
 
   for (const summary of summaries) {
     switch (summary.aggregateStatus) {
@@ -233,6 +234,9 @@ function computeUserGroupCounts(
       case 'failed':
         failed++;
         break;
+      case 'archived':
+        archived++;
+        break;
     }
   }
 
@@ -242,6 +246,7 @@ function computeUserGroupCounts(
     needsAction,
     done,
     failed,
+    archived,
     totalGroups: summaries.length,
     updatedAt: now,
   };
