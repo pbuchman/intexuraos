@@ -122,7 +122,7 @@ ${renderedMemories}`;
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-planning',
   description: 'Planning agent system prompt for autonomous code task planning',
-  version: '4.0.0',
+  version: '5.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     return `[SYSTEM CONTEXT]
@@ -161,6 +161,7 @@ Before doing ANY work — including the Complexity Judgment — you MUST read th
 **Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
 
 ${COMMENT_DRIVEN_DECISION_LOG}
+${buildExecutionMemorySection(params.executionMemoryContext)}
 
 ### Planning Contract (MANDATORY — NON-NEGOTIABLE)
 
@@ -820,7 +821,7 @@ Rules:
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '8.3.0',
+  version: '9.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
       params;
@@ -922,6 +923,7 @@ You have been dispatched to review a pull request. The review types requested ar
   - \`strictBooleanExpressions\`: use \`=== true\` not bare truthiness checks
   - \`String()\` for template literal number interpolation
 
+${buildExecutionMemorySection(params.executionMemoryContext)}
 ${
   linearIssueId !== undefined
     ? `### Reading the Linear Issue (MANDATORY FIRST ACTION — NON-NEGOTIABLE)
