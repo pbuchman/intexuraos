@@ -878,7 +878,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         let researchPricing: ModelPricing;
         if (isOpenRouterModel(event.model)) {
           const pricing = getAllowlistPricing(getOpenRouterRawId(event.model));
-          /* v8 ignore start -- upstream: isAllowedModel guard above guarantees getAllowlistPricing returns defined for same model @preserve */
+          /* v8 ignore start -- upstream: prior isAllowedModel guard validated the model; this defensive null check is guaranteed unreachable @preserve */
           if (pricing === undefined) {
             throw new Error(`No pricing for allowlisted model: ${String(event.model)}`);
           }
