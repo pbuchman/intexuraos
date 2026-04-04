@@ -86,6 +86,8 @@ export interface TaskResult {
   review_id?: string;
   review_comments_posted?: string;
   review_types?: string;
+  review_body?: string;
+  review_inline_comments?: string;
   requirements_tracker_updated?: string;
   needs_remediation?: string;
   requires_re_review?: string;

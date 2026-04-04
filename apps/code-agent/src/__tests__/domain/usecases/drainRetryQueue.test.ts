@@ -352,6 +352,125 @@ describe('drainRetryQueue', () => {
     expect(result.value.action).toBe('dispatched');
   });
 
+  it('prepares execution memory context for planning task retries', async () => {
+    mockExecutionMemoryEnabled = true;
+    mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+    mockCodeTaskRepo.findById.mockResolvedValue(ok({
+      ...sampleTask,
+      linearIssueId: 'INT-1098',
+      agentType: 'planning',
+    }));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'matched',
+      applicationId: 'app-planning-456',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'Retry planning the callback route change',
+      matchedMemories: [
+        {
+          memoryId: 'mem-plan-9',
+          title: 'Verify route serialization',
+          memoryType: 'verification_pattern',
+          score: 0.86,
+          appliesWhen: 'Planning route schema changes',
+          action: 'Include schema plan in output',
+          avoid: 'Do not patch the handler alone',
+          verification: 'Check route response shape',
+        },
+      ],
+    });
+
+    const result = await drainRetryQueue(buildDeps());
+
+    expect(result.ok).toBe(true);
+    expect(prepareExecutionMemoryContextMock).toHaveBeenCalledOnce();
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({
+      executionMemoryContext: expect.objectContaining({
+        status: 'matched',
+        applicationId: 'app-planning-456',
+      }),
+    }));
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      agentType: 'planning',
+      executionMemoryContext: {
+        applicationId: 'app-planning-456',
+        retrievalVersion: 'execution-memory-retrieval@1.0.0',
+        querySummary: 'Retry planning the callback route change',
+        matchedMemories: [
+          expect.objectContaining({ memoryId: 'mem-plan-9' }),
+        ],
+      },
+    }));
+  });
+
+  it('prepares execution memory context for review task retries', async () => {
+    mockExecutionMemoryEnabled = true;
+    mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+    mockCodeTaskRepo.findById.mockResolvedValue(ok({
+      ...sampleTask,
+      linearIssueId: 'INT-1098',
+      agentType: 'review',
+    }));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'matched',
+      applicationId: 'app-review-456',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'Retry reviewing the callback route change',
+      matchedMemories: [
+        {
+          memoryId: 'mem-review-9',
+          title: 'Check route schema coverage',
+          memoryType: 'verification_pattern',
+          score: 0.89,
+          appliesWhen: 'Reviewing route schema changes',
+          action: 'Verify handler and schema coverage',
+          avoid: 'Do not skip inline comments',
+          verification: 'Check route response shape',
+        },
+      ],
+    });
+
+    const result = await drainRetryQueue(buildDeps());
+
+    expect(result.ok).toBe(true);
+    expect(prepareExecutionMemoryContextMock).toHaveBeenCalledOnce();
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({
+      executionMemoryContext: expect.objectContaining({
+        status: 'matched',
+        applicationId: 'app-review-456',
+      }),
+    }));
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      agentType: 'review',
+      executionMemoryContext: {
+        applicationId: 'app-review-456',
+        retrievalVersion: 'execution-memory-retrieval@1.0.0',
+        querySummary: 'Retry reviewing the callback route change',
+        matchedMemories: [
+          expect.objectContaining({ memoryId: 'mem-review-9' }),
+        ],
+      },
+    }));
+  });
+
+  it('does not prepare execution memory for pull_request task retries', async () => {
+    mockExecutionMemoryEnabled = true;
+    mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+    mockCodeTaskRepo.findById.mockResolvedValue(ok({
+      ...sampleTask,
+      linearIssueId: 'INT-1098',
+      agentType: 'pull_request',
+    }));
+    mockCodeTaskRepo.update.mockResolvedValue(ok(sampleTask));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+
+    const result = await drainRetryQueue(buildDeps());
+
+    expect(result.ok).toBe(true);
+    expect(prepareExecutionMemoryContextMock).not.toHaveBeenCalled();
+  });
+
   afterEach(() => {
     _resetRetryDrainGuard();
   });
