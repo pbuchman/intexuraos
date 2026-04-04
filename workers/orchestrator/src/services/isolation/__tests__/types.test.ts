@@ -73,6 +73,7 @@ describe('WORKER_TYPES configuration', () => {
     expect(WORKER_TYPES['openrouter-free'].apiKeyEnvVar).toBe('OPENROUTER_API_KEY');
     expect(WORKER_TYPES['openrouter-free'].model).toBe('qwen/qwen3.6-plus:free');
     expect(WORKER_TYPES['openrouter-free'].effort).toBe('high');
+    expect(WORKER_TYPES['openrouter-free'].disableExperimentalBetas).toBe(true);
   });
 
   it('every apiKeyEnvVar referenced by a worker type is a valid WorkerSecrets field', () => {
