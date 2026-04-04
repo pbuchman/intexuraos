@@ -41,12 +41,13 @@ function isActiveStatus(status: string): boolean {
 /**
  * Convert a status string to the user_group_counts field name.
  */
-function statusToCountField(status: GroupStatus): 'active' | 'needsAction' | 'done' | 'failed' {
+function statusToCountField(status: GroupStatus): 'active' | 'needsAction' | 'done' | 'failed' | 'archived' {
   switch (status) {
     case 'active': return 'active';
     case 'needs-action': return 'needsAction';
     case 'done': return 'done';
     case 'failed': return 'failed';
+    case 'archived': return 'archived';
   }
 }
 
@@ -162,6 +163,7 @@ function defaultCounts(userId: string): UserGroupCounts {
     needsAction: 0,
     done: 0,
     failed: 0,
+    archived: 0,
     totalGroups: 0,
     updatedAt: Timestamp.now(),
   };
@@ -178,6 +180,7 @@ function docToCounts(data: Record<string, unknown>): UserGroupCounts {
     needsAction: Number(data['needsAction'] ?? 0),
     done: Number(data['done'] ?? 0),
     failed: Number(data['failed'] ?? 0),
+    archived: Number(data['archived'] ?? 0),
     totalGroups: Number(data['totalGroups'] ?? 0),
     updatedAt: toTimestamp(data['updatedAt']),
   };

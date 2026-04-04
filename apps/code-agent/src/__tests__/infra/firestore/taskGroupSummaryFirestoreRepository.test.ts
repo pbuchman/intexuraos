@@ -1342,6 +1342,39 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       // latestTaskStatus should NOT be 'archived' even though the updatedAt is newer
       expect(doc.get('latestTaskStatus')).not.toBe('archived');
     });
+
+    it('decrements failed count when last task in failed group is archived', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.now();
+      // Create a group where latestTaskStatus = 'failed' → aggregateStatus = 'failed'
+      const task = makeTask({
+        id: 'task-1',
+        linearIssueId: 'INT-FAILARCH',
+        status: 'failed',
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await repo.updateAfterCreate(task);
+
+      const countsBefore = await fakeFirestore.collection('user_group_counts').doc('user-1').get();
+      expect(countsBefore.get('failed')).toBe(1);
+      expect(countsBefore.get('totalGroups')).toBe(1);
+
+      // Archive the only task → summary deleted, group count decremented
+      const archivedTask = { ...task, status: 'archived' as const };
+      await repo.updateAfterStatusChange(task, archivedTask);
+
+      const summaryDoc = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-FAILARCH').get();
+      expect(summaryDoc.exists).toBe(false);
+
+      const countsAfter = await fakeFirestore.collection('user_group_counts').doc('user-1').get();
+      expect(countsAfter.get('failed')).toBe(0);
+      expect(countsAfter.get('totalGroups')).toBe(0);
+    });
   });
 
   describe('updateAfterDelete', () => {
@@ -1565,6 +1598,31 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(result.value.needsAction).toBe(0);
       expect(result.value.done).toBe(0);
       expect(result.value.failed).toBe(0);
+      expect(result.value.archived).toBe(0);
+    });
+
+    it('returns archived: 0 when no archived groups exist', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.now();
+      const task = makeTask({
+        id: 'task-1',
+        linearIssueId: 'INT-NOARCH',
+        agentType: 'planning',
+        status: 'planned',
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await repo.updateAfterCreate(task);
+
+      const result = await repo.getUserGroupCounts('user-1');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.archived).toBe(0);
     });
 
     it('returns stored counts', async () => {
