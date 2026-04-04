@@ -2420,4 +2420,151 @@ describe('processExecutionMemoryBacklog', () => {
       });
     });
   });
+
+  describe('evaluation schema repair', () => {
+    it('retries evaluation when first LLM response fails schema validation', async () => {
+      const invalidResponse = '{"perMemory":[]}'; // missing required "summary"
+      const validResponse = JSON.stringify({
+        summary: 'Memory was applied successfully.',
+        perMemory: [
+          { memoryId: 'mem-existing', outcome: 'positive', reason: 'Guided the approach.', confidence: 0.9 },
+        ],
+      });
+
+      evaluatorClient.generate
+        .mockResolvedValueOnce(ok({ content: invalidResponse }))
+        .mockResolvedValueOnce(ok({ content: validResponse }));
+
+      executionMemoryApplicationRepo.findById.mockResolvedValueOnce(ok(createApplicationRecord()));
+      executionMemoryApplicationRepo.update.mockResolvedValue(ok(createApplicationRecord({ evaluationSummary: 'Memory was applied successfully.' })));
+
+      executionMemoryRepo.findById.mockResolvedValueOnce(ok(createMemory()));
+      executionMemoryRepo.update.mockResolvedValueOnce(ok(undefined));
+
+      const summary = await processExecutionMemoryBacklogTestables.evaluateApplication(
+        createTask(),
+        [{ text: 'log line' }],
+        {
+          logger,
+          codeTaskRepo: codeTaskRepo as never,
+          logLineRepo: logLineRepo as never,
+          turnMetricsRepo: turnMetricsRepo as never,
+          linearAgentClient: linearAgentClient as never,
+          executionMemoryRepo: executionMemoryRepo as never,
+          executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+          evaluatorClient: evaluatorClient as never,
+          distillerClient: distillerClient as never,
+          embeddingClient: embeddingClient as never,
+          limit: 5,
+        },
+      );
+
+      expect(summary).toBe('Memory was applied successfully.');
+      expect(evaluatorClient.generate).toHaveBeenCalledTimes(2);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ err: expect.anything() }),
+        'Evaluator response failed Zod parse, retrying with refinement prompt',
+      );
+    });
+
+    it('throws when evaluation repair also fails schema validation', async () => {
+      const invalidResponse = '{"perMemory":[]}'; // missing "summary" both times
+
+      evaluatorClient.generate
+        .mockResolvedValueOnce(ok({ content: invalidResponse }))
+        .mockResolvedValueOnce(ok({ content: invalidResponse }));
+
+      executionMemoryApplicationRepo.findById.mockResolvedValueOnce(ok(createApplicationRecord()));
+
+      await expect(
+        processExecutionMemoryBacklogTestables.evaluateApplication(
+          createTask(),
+          [{ text: 'log line' }],
+          {
+            logger,
+            codeTaskRepo: codeTaskRepo as never,
+            logLineRepo: logLineRepo as never,
+            turnMetricsRepo: turnMetricsRepo as never,
+            linearAgentClient: linearAgentClient as never,
+            executionMemoryRepo: executionMemoryRepo as never,
+            executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+            evaluatorClient: evaluatorClient as never,
+            distillerClient: distillerClient as never,
+            embeddingClient: embeddingClient as never,
+            limit: 5,
+          },
+        ),
+      ).rejects.toThrow(/Required/);
+
+      expect(evaluatorClient.generate).toHaveBeenCalledTimes(2);
+    });
+
+    it('throws when evaluation retry generate call returns error result', async () => {
+      const invalidResponse = '{"perMemory":[]}'; // missing "summary"
+
+      evaluatorClient.generate
+        .mockResolvedValueOnce(ok({ content: invalidResponse }))
+        .mockResolvedValueOnce(err({ message: 'LLM service unavailable' }));
+
+      executionMemoryApplicationRepo.findById.mockResolvedValueOnce(ok(createApplicationRecord()));
+
+      await expect(
+        processExecutionMemoryBacklogTestables.evaluateApplication(
+          createTask(),
+          [{ text: 'log line' }],
+          {
+            logger,
+            codeTaskRepo: codeTaskRepo as never,
+            logLineRepo: logLineRepo as never,
+            turnMetricsRepo: turnMetricsRepo as never,
+            linearAgentClient: linearAgentClient as never,
+            executionMemoryRepo: executionMemoryRepo as never,
+            executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+            evaluatorClient: evaluatorClient as never,
+            distillerClient: distillerClient as never,
+            embeddingClient: embeddingClient as never,
+            limit: 5,
+          },
+        ),
+      ).rejects.toThrow('LLM service unavailable');
+
+      expect(evaluatorClient.generate).toHaveBeenCalledTimes(2);
+    });
+
+    it('includes EVALUATION_SCHEMA_BLOCK in evaluation prompt', async () => {
+      executionMemoryApplicationRepo.findById.mockResolvedValueOnce(ok(createApplicationRecord()));
+      evaluatorClient.generate.mockResolvedValueOnce(ok({
+        content: JSON.stringify({
+          summary: 'Test summary.',
+          perMemory: [{ memoryId: 'mem-existing', outcome: 'positive', reason: 'Applied.', confidence: 0.9 }],
+        }),
+      }));
+      executionMemoryApplicationRepo.update.mockResolvedValue(ok(createApplicationRecord()));
+      executionMemoryRepo.findById.mockResolvedValueOnce(ok(createMemory()));
+      executionMemoryRepo.update.mockResolvedValueOnce(ok(undefined));
+
+      await processExecutionMemoryBacklogTestables.evaluateApplication(
+        createTask(),
+        [{ text: 'log line' }],
+        {
+          logger,
+          codeTaskRepo: codeTaskRepo as never,
+          logLineRepo: logLineRepo as never,
+          turnMetricsRepo: turnMetricsRepo as never,
+          linearAgentClient: linearAgentClient as never,
+          executionMemoryRepo: executionMemoryRepo as never,
+          executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+          evaluatorClient: evaluatorClient as never,
+          distillerClient: distillerClient as never,
+          embeddingClient: embeddingClient as never,
+          limit: 5,
+        },
+      );
+
+      const prompt = evaluatorClient.generate.mock.calls[0]?.[0] as string;
+      expect(prompt).toContain('"summary"');
+      expect(prompt).toContain('"perMemory"');
+      expect(prompt).toContain('Return JSON only. Use this exact schema:');
+    });
+  });
 });
