@@ -114,12 +114,12 @@ describe('isTaskMergeable (detail view)', () => {
     })).toBe(false);
   });
 
-  it('returns true for reviewed task with needs_remediation=0 and prNumber, no label', () => {
+  it('returns false for reviewed task with needs_remediation=0 and prNumber but no label (planning-origin)', () => {
     expect(isTaskMergeable({
       status: 'reviewed',
       prNumber: 42,
       result: { needs_remediation: '0' },
-    })).toBe(true);
+    })).toBe(false);
   });
 
   it('returns false for reviewed task with needs_remediation=1 and prNumber, no label', () => {
@@ -158,6 +158,24 @@ describe('isTaskMergeable (detail view)', () => {
       status: 'implemented',
       result: { prUrl: 'https://github.com/org/repo/pull/42', needs_remediation: '0' },
     })).toBe(false);
+  });
+
+  it('returns false for reviewed task with needs_remediation=0 but no merge-ready label (planning-origin)', () => {
+    expect(isTaskMergeable({
+      status: 'reviewed',
+      prNumber: 42,
+      result: { needs_remediation: '0' },
+      linearIssue: { labels: [{ name: 'code-task' }] },
+    })).toBe(false);
+  });
+
+  it('returns true for reviewed task with needs_remediation=0 AND merge-ready label (execution-origin)', () => {
+    expect(isTaskMergeable({
+      status: 'reviewed',
+      prNumber: 42,
+      result: { needs_remediation: '0' },
+      linearIssue: { labels: [{ name: 'ready-to-merge' }] },
+    })).toBe(true);
   });
 });
 

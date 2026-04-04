@@ -19,7 +19,7 @@ import { TaskActions } from '@/components/code-tasks/TaskActions.js';
 import { NextSteps } from '@/components/code-tasks/NextSteps.js';
 import { ARCHIVABLE_STATUSES, EXECUTION_MEMORY_STATUS_STYLES, isActiveStatus } from '@/components/code-tasks/shared.js';
 import type { WorkerType } from '@/components/code-tasks/shared.js';
-import { hasImplementationReadyLabel, isTaskMergeable, getTaskMergeUrl } from '@/utils/issueGroups.js';
+import { isTaskMergeable, getTaskMergeUrl } from '@/utils/issueGroups.js';
 
 export function CodeTaskViewPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
@@ -126,8 +126,7 @@ export function CodeTaskViewPage(): React.JSX.Element {
         : [];
   const isImplementable = task.status === 'planned' &&
     implementationTaskIds.length === 0 &&
-    task.linearIssueId !== undefined &&
-    hasImplementationReadyLabel(task.linearIssue?.labels);
+    task.linearIssueId !== undefined;
   const isMergeable = isTaskMergeable(task);
   const prUrl = getTaskMergeUrl(task);
   const mergeUrl = isMergeable ? prUrl : undefined;
