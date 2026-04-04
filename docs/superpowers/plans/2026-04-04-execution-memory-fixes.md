@@ -10,6 +10,19 @@
 
 ---
 
+### Parallel Work Breakdown
+
+Two independent subtasks split by service boundary — executable in parallel with no coordination:
+
+| Subtask      | Service                | Tasks     | Linear   |
+| ------------ | ---------------------- | --------- | -------- |
+| code-agent   | `apps/code-agent`      | Tasks 1–4 | INT-1271 |
+| orchestrator | `workers/orchestrator` | Task 5    | INT-1272 |
+
+**Contract:** No direct code dependencies between subtasks. The orchestrator subtask adds prompt instructions telling agents to emit `execution_memory_ids_used`, `execution_memory_ids_rejected`, and `execution_memory_usage_summary` fields. The code-agent subtask does NOT parse or consume these fields. Task 6 (cross-workspace CI) runs after both subtasks complete.
+
+---
+
 ### Task 1: Add EVALUATION_SCHEMA_BLOCK and Schema Repair to Evaluation Prompt
 
 **Files:**
