@@ -140,7 +140,7 @@ const executionMemoryPostRunSchema = {
     lastAttemptAt: { type: 'string', format: 'date-time', nullable: true },
     generatedMemoryIds: { type: 'array', items: { type: 'string' } },
     evaluationSummary: { type: 'string', nullable: true },
-    skipReason: { type: 'string', enum: ['infra_only', 'insufficient_signal', 'already_completed', 'no_reusable_lesson'], nullable: true },
+    skipReason: { type: 'string', enum: ['infra_only', 'insufficient_signal', 'already_completed', 'no_reusable_lesson', 'planning_unclear'], nullable: true },
     errorMessage: { type: 'string', nullable: true },
     completedAt: { type: 'string', format: 'date-time', nullable: true },
   },
@@ -388,7 +388,7 @@ function taskToApiResponse(task: {
     lastAttemptAt?: string;
     generatedMemoryIds: string[];
     evaluationSummary?: string;
-    skipReason?: 'infra_only' | 'insufficient_signal' | 'already_completed' | 'no_reusable_lesson';
+    skipReason?: 'infra_only' | 'insufficient_signal' | 'already_completed' | 'no_reusable_lesson' | 'planning_unclear';
     errorMessage?: string;
     completedAt?: string;
   };

@@ -13,6 +13,8 @@ import type { ExecutionMemoryApplicationRepository } from '../repositories/execu
 import type { ExecutionMemoryEmbeddingClient } from './prepareExecutionMemoryContext.js';
 
 const DISTILLATION_VERSION = 'execution-memory-distiller@2.0.0';
+const PLANNING_DISTILLATION_VERSION = 'planning-memory-distiller@1.0.0';
+const REVIEW_DISTILLATION_VERSION = 'review-memory-distiller@1.0.0';
 const EVALUATION_VERSION = 'execution-memory-evaluator@1.0.0';
 const MAX_LOG_LINES = 350;
 const MAX_EVALUATION_LOG_LINES = 200;
@@ -29,10 +31,13 @@ const EvaluationSchema = z.object({
 
 const DistillationSchema = z.object({
   decision: z.enum(['create', 'skip']),
-  skipReason: z.enum(['infra_only', 'insufficient_signal', 'already_completed', 'no_reusable_lesson']).optional(),
+  skipReason: z.enum(['infra_only', 'insufficient_signal', 'already_completed', 'no_reusable_lesson', 'planning_unclear']).optional(),
   evidenceSummary: z.string().min(1),
   memories: z.array(z.object({
-    memoryType: z.enum(['implementation_pattern', 'verification_pattern', 'pitfall_pattern']),
+    memoryType: z.enum([
+      'implementation_pattern', 'verification_pattern', 'pitfall_pattern',
+      'decomposition_pattern', 'planning_decision', 'review_finding',
+    ]),
     title: z.string().min(1),
     appliesWhen: z.string().min(1),
     action: z.string().min(1),
@@ -166,6 +171,19 @@ export async function processExecutionMemoryBacklog(
   return ok(summary);
 }
 
+function shouldSkipDistillation(task: CodeTask): {
+  skip: boolean;
+  reason?: 'already_completed' | 'planning_unclear';
+} {
+  if (task.result?.execution_outcome_label === 'already_completed') {
+    return { skip: true, reason: 'already_completed' };
+  }
+  if (task.agentType === 'planning' && task.result?.planning_outcome_label === 'unclear') {
+    return { skip: true, reason: 'planning_unclear' };
+  }
+  return { skip: false };
+}
+
 async function processOneTask(
   task: CodeTask,
   deps: ProcessExecutionMemoryBacklogDeps
@@ -173,7 +191,7 @@ async function processOneTask(
   status: 'completed' | 'skipped';
   generatedMemoryIds: string[];
   evaluationSummary?: string;
-  skipReason?: 'infra_only' | 'insufficient_signal' | 'already_completed' | 'no_reusable_lesson';
+  skipReason?: 'infra_only' | 'insufficient_signal' | 'already_completed' | 'no_reusable_lesson' | 'planning_unclear';
 }> {
   const logsResult = await deps.logLineRepo.listRecent(task.id, MAX_LOG_LINES);
   if (!logsResult.ok) {
@@ -195,12 +213,13 @@ async function processOneTask(
 
   const evaluationSummary = await evaluateApplication(task, logsResult.value, deps);
 
-  if (task.result?.execution_outcome_label === 'already_completed') {
+  const skipCheck = shouldSkipDistillation(task);
+  if (skipCheck.skip) {
     return {
       status: 'skipped',
       generatedMemoryIds: [],
       ...(evaluationSummary !== undefined && { evaluationSummary }),
-      skipReason: 'already_completed',
+      ...(skipCheck.reason !== undefined && { skipReason: skipCheck.reason }),
     };
   }
 
@@ -213,6 +232,15 @@ async function processOneTask(
       ...(distillationResult.skipReason !== undefined && { skipReason: distillationResult.skipReason }),
     };
   }
+
+  const sourceAgentType: 'execution' | 'planning' | 'review' =
+    task.agentType === 'planning' ? 'planning'
+    : task.agentType === 'review' ? 'review'
+    : 'execution';
+
+  const distillationVersion = task.agentType === 'planning' ? PLANNING_DISTILLATION_VERSION
+    : task.agentType === 'review' ? REVIEW_DISTILLATION_VERSION
+    : DISTILLATION_VERSION;
 
   const generatedMemoryIds: string[] = [];
   for (const memory of distillationResult.memories.slice(0, 3)) {
@@ -233,7 +261,7 @@ async function processOneTask(
 
     const exactMatch = exactMatchResult.value;
     if (exactMatch !== null) {
-      const updatedId = await updateExistingMemory(exactMatch.id, exactMatch.applicationCount, exactMatch.positiveCount, exactMatch.negativeCount, memory.confidence, deps, memory, fingerprint, embeddingResult.value, task.id, task.linearIssueId);
+      const updatedId = await updateExistingMemory(exactMatch.id, exactMatch.applicationCount, exactMatch.positiveCount, exactMatch.negativeCount, memory.confidence, deps, memory, fingerprint, embeddingResult.value, task.id, task.linearIssueId, sourceAgentType, distillationVersion);
       generatedMemoryIds.push(updatedId);
       continue;
     }
@@ -263,7 +291,9 @@ async function processOneTask(
         fingerprint,
         embeddingResult.value,
         task.id,
-        task.linearIssueId
+        task.linearIssueId,
+        sourceAgentType,
+        distillationVersion
       );
       generatedMemoryIds.push(updatedId);
       continue;
@@ -273,6 +303,7 @@ async function processOneTask(
       repository: task.repository,
       sourceTaskId: task.id,
       ...(task.linearIssueId !== undefined && { sourceLinearIssueId: task.linearIssueId }),
+      sourceAgentType,
       memoryType: memory.memoryType,
       title: memory.title,
       appliesWhen: memory.appliesWhen,
@@ -287,7 +318,7 @@ async function processOneTask(
       embedding: embeddingResult.value,
       embeddingModel: 'text-embedding-3-small',
       fingerprint,
-      distillationVersion: DISTILLATION_VERSION,
+      distillationVersion,
       distillationConfidence: memory.confidence,
       qualityScore: computeQualityScore({
         applicationCount: 0,
@@ -314,14 +345,46 @@ async function processOneTask(
   };
 }
 
+function buildEvaluationContext(task: CodeTask): {
+  selfReportUsed: string;
+  selfReportRejected: string;
+  selfReportSummary: string;
+} {
+  switch (task.agentType) {
+    case 'planning':
+      return {
+        selfReportUsed: '',
+        selfReportRejected: '',
+        selfReportSummary: task.result?.planning_outcome_label === 'planned'
+          ? 'Planning completed successfully'
+          : 'Planning outcome was unclear',
+      };
+    case 'review':
+      return {
+        selfReportUsed: '',
+        selfReportRejected: '',
+        selfReportSummary: task.result?.needs_remediation === '1'
+          ? `Review found issues requiring remediation (${task.result.review_comments_posted ?? '0'} comments)`
+          : 'Review completed with no remediation needed',
+      };
+    default:
+      return {
+        selfReportUsed: task.result?.execution_memory_ids_used ?? '',
+        selfReportRejected: task.result?.execution_memory_ids_rejected ?? '',
+        selfReportSummary: task.result?.execution_memory_usage_summary ?? '',
+      };
+  }
+}
+
 async function evaluateApplication(
   task: CodeTask,
   logs: { text: string }[],
   deps: ProcessExecutionMemoryBacklogDeps
 ): Promise<string | undefined> {
+  const evalCtx = buildEvaluationContext(task);
   const applicationId = task.executionMemoryContext?.applicationId;
   if (applicationId === undefined) {
-    return task.result?.execution_memory_usage_summary;
+    return evalCtx.selfReportSummary !== '' ? evalCtx.selfReportSummary : undefined;
   }
 
   const applicationResult = await deps.executionMemoryApplicationRepo.findById(applicationId);
@@ -337,33 +400,33 @@ async function evaluateApplication(
     await deps.executionMemoryApplicationRepo.update(applicationId, {
       memoryIdsUsed,
       memoryIdsRejected,
-      ...(task.result?.execution_memory_usage_summary !== undefined && {
-        evaluationSummary: task.result.execution_memory_usage_summary,
+      ...(evalCtx.selfReportSummary !== '' && {
+        evaluationSummary: evalCtx.selfReportSummary,
       }),
       completedAt: new Date(),
     });
-    return task.result?.execution_memory_usage_summary;
+    return evalCtx.selfReportSummary !== '' ? evalCtx.selfReportSummary : undefined;
   }
 
   if (deps.evaluatorClient === undefined) {
     await deps.executionMemoryApplicationRepo.update(applicationId, {
       memoryIdsUsed,
       memoryIdsRejected,
-      ...(task.result?.execution_memory_usage_summary !== undefined && {
-        evaluationSummary: task.result.execution_memory_usage_summary,
+      ...(evalCtx.selfReportSummary !== '' && {
+        evaluationSummary: evalCtx.selfReportSummary,
       }),
       completedAt: new Date(),
     });
-    return task.result?.execution_memory_usage_summary;
+    return evalCtx.selfReportSummary !== '' ? evalCtx.selfReportSummary : undefined;
   }
 
   const evaluationPrompt = [
     `Version: ${EVALUATION_VERSION}`,
     `Task summary: ${task.result?.summary ?? ''}`,
     `Terminal status: ${task.status}`,
-    `Worker self report used: ${task.result?.execution_memory_ids_used ?? ''}`,
-    `Worker self report rejected: ${task.result?.execution_memory_ids_rejected ?? ''}`,
-    `Worker self report summary: ${task.result?.execution_memory_usage_summary ?? ''}`,
+    `Worker self report used: ${evalCtx.selfReportUsed}`,
+    `Worker self report rejected: ${evalCtx.selfReportRejected}`,
+    `Worker self report summary: ${evalCtx.selfReportSummary}`,
     `Matched memories: ${JSON.stringify(application.matchedMemories)}`,
     `Recent logs:\n${logs.slice(0, MAX_EVALUATION_LOG_LINES).map((line) => line.text).join('\n')}`,
     'Return JSON only.',
@@ -428,6 +491,155 @@ async function evaluateApplication(
   return parsed.summary;
 }
 
+const DISTILLATION_SCHEMA_BLOCK = [
+  'Return JSON only. Use this exact schema:',
+  '{',
+  '  "decision": "create" | "skip",',
+  '  "skipReason": "infra_only" | "insufficient_signal" | "already_completed" | "no_reusable_lesson" | "planning_unclear",  // required when decision is "skip"',
+  '  "evidenceSummary": "string (non-empty, summarize what happened)",',
+  '  "memories": [  // empty array when decision is "skip"',
+  '    {',
+  '      "memoryType": "implementation_pattern" | "verification_pattern" | "pitfall_pattern" | "decomposition_pattern" | "planning_decision" | "review_finding",',
+  '      "title": "string (short descriptive title)",',
+  '      "appliesWhen": "string (when this memory should be applied)",',
+  '      "action": "string (what to do)",',
+  '      "avoid": "string (what to avoid)",',
+  '      "verification": "string (how to verify correctness)",',
+  '      "evidenceSummary": "string (evidence from this task)",',
+  '      "retrievalText": "string (text used for semantic search matching)",',
+  '      "keywords": ["string"],',
+  '      "labelHints": ["string"],',
+  '      "componentHints": ["string"],',
+  '      "confidence": 0.0 to 1.0',
+  '    }',
+  '  ]',
+  '}',
+  '',
+  'Example (skip):',
+  '{"decision":"skip","skipReason":"no_reusable_lesson","evidenceSummary":"Task was a trivial typo fix with no reusable pattern.","memories":[]}',
+  '',
+  'Example (create):',
+  '{"decision":"create","evidenceSummary":"Discovered that route handlers need serialization tests.","memories":[{"memoryType":"verification_pattern","title":"Verify route serialization","appliesWhen":"Modifying route handlers","action":"Add app.inject tests for response shape","avoid":"Skipping serialization checks","verification":"Run route tests and check response schema","evidenceSummary":"Route handler returned wrong shape without test coverage","retrievalText":"route handler serialization verification test coverage","keywords":["route","serialization"],"labelHints":["testing"],"componentHints":["api"],"confidence":0.85}]}',
+].join('\n');
+
+function buildExecutionDistillationPrompt(
+  task: CodeTask,
+  logs: { text: string }[],
+  turnMetrics: unknown[],
+  issueContext: { description: string | null; comments: { body: string; createdAt: string }[] }
+): string {
+  return [
+    `Version: ${DISTILLATION_VERSION}`,
+    `Task status: ${task.status}`,
+    `Task summary: ${task.result?.summary ?? ''}`,
+    `Task error: ${task.error?.message ?? ''}`,
+    `Linear description: ${issueContext.description ?? ''}`,
+    `Linear comments: ${issueContext.comments.map((comment) => comment.body).join('\n')}`,
+    `Recent logs:\n${logs.map((line) => line.text).join('\n')}`,
+    `Turn metrics:\n${JSON.stringify(turnMetrics)}`,
+    DISTILLATION_SCHEMA_BLOCK,
+  ].join('\n\n');
+}
+
+function buildPlanningDistillationPrompt(
+  task: CodeTask,
+  logs: { text: string }[],
+  turnMetrics: unknown[],
+  issueContext: { description: string | null; comments: { body: string; createdAt: string }[] }
+): string {
+  const subtaskCount = (task.result?.planning_subtask_urls ?? '').split(',').filter((u) => u.trim() !== '').length;
+  return [
+    `Version: ${PLANNING_DISTILLATION_VERSION}`,
+    `Task status: ${task.status}`,
+    `Planning outcome: ${task.result?.planning_outcome_label ?? ''}`,
+    `Complexity classification: ${task.result?.planning_is_complex === '1' ? 'COMPLEX' : 'SIMPLE_OR_PLAN_DOC'}`,
+    `Subtask count: ${String(subtaskCount)}`,
+    `Used writing-plans skill: ${task.result?.planning_superpowers_writing_plans_used ?? ''}`,
+    `Planning PR URL: ${task.result?.planning_pr_url ?? ''}`,
+    `Linear description: ${issueContext.description ?? ''}`,
+    `Linear comments: ${issueContext.comments.map((comment) => comment.body).join('\n')}`,
+    `Recent logs:\n${logs.slice(0, MAX_LOG_LINES).map((line) => line.text).join('\n')}`,
+    `Turn metrics:\n${JSON.stringify(turnMetrics)}`,
+    [
+      'You are a planning memory distiller. Analyze this completed planning task and extract',
+      'reusable patterns about how issues should be planned and decomposed.',
+      '',
+      'Focus on:',
+      '1. DECOMPOSITION PATTERNS: How was the issue broken into subtasks? What service boundaries',
+      '   were identified? What parallelization strategy was used? Were subtasks properly scoped',
+      '   to single services/workers?',
+      '2. PLANNING DECISIONS: What indicators led to the complexity classification? What made this',
+      '   issue SIMPLE vs COMPLEX? What signals in the Linear issue description predicted the',
+      '   outcome?',
+      '3. Any verification or pitfall patterns that emerged during planning (e.g., missing',
+      '   composite indexes, cross-service dependencies that blocked parallelization).',
+      '',
+      'Memory types to use:',
+      '- "decomposition_pattern": How complex issues should be broken into subtasks',
+      '- "planning_decision": Complexity classification heuristics and indicators',
+      '- "implementation_pattern": Reusable if planning uncovered an implementation approach',
+      '- "verification_pattern": Reusable if planning identified verification requirements',
+      '- "pitfall_pattern": Reusable if planning identified risks or common mistakes',
+    ].join('\n'),
+    DISTILLATION_SCHEMA_BLOCK,
+  ].join('\n\n');
+}
+
+function buildReviewDistillationPrompt(
+  task: CodeTask,
+  logs: { text: string }[],
+  issueContext: { description: string | null; comments: { body: string; createdAt: string }[] }
+): string {
+  return [
+    `Version: ${REVIEW_DISTILLATION_VERSION}`,
+    `Task status: ${task.status}`,
+    `Review types: ${task.result?.review_types ?? ''}`,
+    `Comments posted: ${task.result?.review_comments_posted ?? ''}`,
+    `Needs remediation: ${task.result?.needs_remediation ?? ''}`,
+    `CI status: ${task.result?.gh_actions_status ?? ''}`,
+    `Review body:\n${task.result?.review_body ?? ''}`,
+    `Inline comments:\n${task.result?.review_inline_comments ?? ''}`,
+    `Linear description: ${issueContext.description ?? ''}`,
+    `Linear comments: ${issueContext.comments.map((comment) => comment.body).join('\n')}`,
+    `Recent logs:\n${logs.slice(0, MAX_LOG_LINES).map((line) => line.text).join('\n')}`,
+    [
+      'You are a review memory distiller. Analyze this completed code review and extract',
+      'reusable patterns that would help FUTURE EXECUTION AGENTS avoid the issues found.',
+      '',
+      'Focus on:',
+      '1. REVIEW FINDINGS: What code quality, security, or architecture issues were flagged?',
+      '   Are any of these recurring patterns that other execution tasks should know about?',
+      '2. PITFALL PATTERNS: What mistakes did the implementation make that a review caught?',
+      '   These are high-value memories — they prevent future agents from making the same errors.',
+      '3. VERIFICATION PATTERNS: What checks or tests would have caught these issues before',
+      '   review? These help execution agents self-verify before submitting for review.',
+      '',
+      'Memory types to use:',
+      '- "review_finding": Recurring patterns flagged by reviewers that execution agents should be aware of',
+      '- "pitfall_pattern": Specific mistakes the review caught that should be avoided',
+      '- "verification_pattern": Tests or checks that would have caught the issues pre-review',
+      '- "implementation_pattern": Better approaches the review suggested',
+    ].join('\n'),
+    DISTILLATION_SCHEMA_BLOCK,
+  ].join('\n\n');
+}
+
+function buildDistillationPrompt(
+  task: CodeTask,
+  logs: { text: string }[],
+  turnMetrics: unknown[],
+  issueContext: { description: string | null; comments: { body: string; createdAt: string }[] }
+): string {
+  switch (task.agentType) {
+    case 'planning':
+      return buildPlanningDistillationPrompt(task, logs, turnMetrics, issueContext);
+    case 'review':
+      return buildReviewDistillationPrompt(task, logs, issueContext);
+    default:
+      return buildExecutionDistillationPrompt(task, logs, turnMetrics, issueContext);
+  }
+}
+
 async function distillTask(
   task: CodeTask,
   logs: { text: string }[],
@@ -453,46 +665,7 @@ async function distillTask(
     };
   }
 
-  const prompt = [
-    `Version: ${DISTILLATION_VERSION}`,
-    `Task status: ${task.status}`,
-    `Task summary: ${task.result?.summary ?? ''}`,
-    `Task error: ${task.error?.message ?? ''}`,
-    `Linear description: ${issueContext.description ?? ''}`,
-    `Linear comments: ${issueContext.comments.map((comment) => comment.body).join('\n')}`,
-    `Recent logs:\n${logs.map((line) => line.text).join('\n')}`,
-    `Turn metrics:\n${JSON.stringify(turnMetrics)}`,
-    [
-      'Return JSON only. Use this exact schema:',
-      '{',
-      '  "decision": "create" | "skip",',
-      '  "skipReason": "infra_only" | "insufficient_signal" | "already_completed" | "no_reusable_lesson",  // required when decision is "skip"',
-      '  "evidenceSummary": "string (non-empty, summarize what happened)",',
-      '  "memories": [  // empty array when decision is "skip"',
-      '    {',
-      '      "memoryType": "implementation_pattern" | "verification_pattern" | "pitfall_pattern",',
-      '      "title": "string (short descriptive title)",',
-      '      "appliesWhen": "string (when this memory should be applied)",',
-      '      "action": "string (what to do)",',
-      '      "avoid": "string (what to avoid)",',
-      '      "verification": "string (how to verify correctness)",',
-      '      "evidenceSummary": "string (evidence from this task)",',
-      '      "retrievalText": "string (text used for semantic search matching)",',
-      '      "keywords": ["string"],',
-      '      "labelHints": ["string"],',
-      '      "componentHints": ["string"],',
-      '      "confidence": 0.0 to 1.0',
-      '    }',
-      '  ]',
-      '}',
-      '',
-      'Example (skip):',
-      '{"decision":"skip","skipReason":"no_reusable_lesson","evidenceSummary":"Task was a trivial typo fix with no reusable pattern.","memories":[]}',
-      '',
-      'Example (create):',
-      '{"decision":"create","evidenceSummary":"Discovered that route handlers need serialization tests.","memories":[{"memoryType":"verification_pattern","title":"Verify route serialization","appliesWhen":"Modifying route handlers","action":"Add app.inject tests for response shape","avoid":"Skipping serialization checks","verification":"Run route tests and check response schema","evidenceSummary":"Route handler returned wrong shape without test coverage","retrievalText":"route handler serialization verification test coverage","keywords":["route","serialization"],"labelHints":["testing"],"componentHints":["api"],"confidence":0.85}]}',
-    ].join('\n'),
-  ].join('\n\n');
+  const prompt = buildDistillationPrompt(task, logs, turnMetrics, issueContext);
 
   const result = await deps.distillerClient.generate(prompt);
   if (!result.ok) {
@@ -532,7 +705,9 @@ async function updateExistingMemory(
   fingerprint: string,
   embedding: number[],
   sourceTaskId: string,
-  sourceLinearIssueId: string | undefined // @allow-undefined-type -- function param, not optional property
+  sourceLinearIssueId: string | undefined, // @allow-undefined-type -- function param, not optional property
+  sourceAgentType: 'execution' | 'planning' | 'review',
+  distillationVersion: string
 ): Promise<string> {
   const qualityScore = computeQualityScore({ applicationCount, positiveCount, confidence });
   const status = shouldSuppressMemory(applicationCount, negativeCount, qualityScore) ? 'suppressed' : 'active';
@@ -540,6 +715,7 @@ async function updateExistingMemory(
   const updateResult = await deps.executionMemoryRepo.update(memoryId, {
     sourceTaskId,
     ...(sourceLinearIssueId !== undefined && { sourceLinearIssueId }),
+    sourceAgentType,
     memoryType: memory.memoryType,
     title: memory.title,
     appliesWhen: memory.appliesWhen,
@@ -554,7 +730,7 @@ async function updateExistingMemory(
     embedding,
     embeddingModel: 'text-embedding-3-small',
     fingerprint,
-    distillationVersion: DISTILLATION_VERSION,
+    distillationVersion,
     distillationConfidence: confidence,
     qualityScore,
     applicationCount,
@@ -661,4 +837,7 @@ export const __testables = {
   normalizeFingerprintText,
   buildFingerprint,
   isInfraOnlyFailure,
+  shouldSkipDistillation,
+  buildDistillationPrompt,
+  buildEvaluationContext,
 };

@@ -26,6 +26,7 @@ function toExecutionMemory(doc: { id: string; data(): Record<string, unknown> })
     ...(typeof data['sourceLinearIssueId'] === 'string'
       ? { sourceLinearIssueId: data['sourceLinearIssueId'] }
       : {}),
+    sourceAgentType: (data['sourceAgentType'] as ExecutionMemory['sourceAgentType']) ?? 'execution',
     memoryType: data['memoryType'] as ExecutionMemory['memoryType'],
     title: getStringField(data, 'title'),
     appliesWhen: getStringField(data, 'appliesWhen'),
