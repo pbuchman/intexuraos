@@ -263,9 +263,7 @@ export class WorktreeManager {
       // Atomic rename
       await (await import('node:fs/promises')).rename(tempPath, targetPath);
     } catch (error: unknown) {
-      /* v8 ignore start -- ts-type: catch block error type narrowing for non-Error throwables @preserve */
       const message = error instanceof Error ? error.message : 'Unknown error';
-      /* v8 ignore stop @preserve */
       throw new Error(`Failed to copy MCP config: ${message}`);
     }
   }
@@ -302,9 +300,7 @@ export class WorktreeManager {
       await mkdir(dirname(targetPath), { recursive: true });
       await writeFile(targetPath, content, 'utf-8');
     } catch (error: unknown) {
-      /* v8 ignore start -- ts-type: catch block error type narrowing for non-Error throwables @preserve */
       const message = error instanceof Error ? error.message : 'Unknown error';
-      /* v8 ignore stop @preserve */
       throw new Error(`Failed to copy settings.local.json: ${message}`);
     }
   }
