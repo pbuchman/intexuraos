@@ -31,7 +31,7 @@ class FakeDocRef {
   constructor(
     private collectionName: string,
     private docId: string,
-    private store: Map<string, Map<string, unknown>>,
+    private store: Map<string, Map<string, unknown>>
   ) {}
 
   get id() {
@@ -41,7 +41,13 @@ class FakeDocRef {
   async get() {
     const collection = this.store.get(this.collectionName);
     const data = collection?.get(this.docId);
-    return new FakeDocSnapshot(this.docId, data, data !== undefined, this.collectionName, this.store);
+    return new FakeDocSnapshot(
+      this.docId,
+      data,
+      data !== undefined,
+      this.collectionName,
+      this.store
+    );
   }
 
   async update(data: Record<string, unknown>) {
@@ -82,7 +88,7 @@ class FakeDocSnapshot {
     private _data: Record<string, unknown> | undefined,
     private _exists: boolean,
     private _collectionName: string,
-    private _store: Map<string, Map<string, unknown>>,
+    private _store: Map<string, Map<string, unknown>>
   ) {}
 
   get id() {
@@ -106,7 +112,7 @@ class FakeCollectionRef {
   constructor(
     private collectionName: string,
     private store: Map<string, Map<string, unknown>>,
-    private docCounter = { value: 0 },
+    private docCounter = { value: 0 }
   ) {}
 
   doc(docId?: string) {
@@ -120,7 +126,7 @@ class FakeCollectionRef {
       collection = new Map();
     }
     const docs = Array.from(collection.entries()).map(
-      ([id, data]) => new FakeDocSnapshot(id, data, true, this.collectionName, this.store),
+      ([id, data]) => new FakeDocSnapshot(id, data, true, this.collectionName, this.store)
     );
     return { docs, empty: docs.length === 0, size: docs.length };
   }
