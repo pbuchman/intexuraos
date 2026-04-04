@@ -158,12 +158,17 @@ describe('WorktreeManager', () => {
       const fetchIndex = calls.findIndex(
         (c) => c.command === 'git fetch origin "development" --force'
       );
+      const branchSyncIndex = calls.findIndex(
+        (c) => c.command === 'git branch -f "development" "origin/development"'
+      );
       const worktreeAddIndex = calls.findIndex((c) => c.command.includes('git worktree add'));
 
       expect(fetchIndex).toBeGreaterThanOrEqual(0);
       expect(calls[fetchIndex]?.cwd).toBe(repoPath);
+      expect(branchSyncIndex).toBeGreaterThan(fetchIndex);
+      expect(calls[branchSyncIndex]?.cwd).toBe(repoPath);
       expect(worktreeAddIndex).toBeGreaterThanOrEqual(0);
-      expect(fetchIndex).toBeLessThan(worktreeAddIndex);
+      expect(branchSyncIndex).toBeLessThan(worktreeAddIndex);
     });
 
     it('should proceed with worktree creation when fetch fails', async () => {
@@ -244,6 +249,7 @@ describe('WorktreeManager', () => {
       await manager.createWorktree('task-cont-fetch', 'development', 'task_existing_branch');
 
       expect(commands).toContain('git fetch origin "development" --force');
+      expect(commands).toContain('git branch -f "development" "origin/development"');
       expect(commands).toContain('git fetch origin "task_existing_branch"');
     });
 
