@@ -24,6 +24,7 @@ import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
 import { hasCodeTaskLabel } from '../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../domain/utils/promptSanitization.js';
 import type { AgentType, TaskStatus, WorkerType } from '../domain/models/codeTask.js';
+import type { ExecutionMemoryType } from '../domain/models/executionMemory.js';
 import { randomUUID } from 'node:crypto';
 import { generateWebhookSecret } from '../domain/utils/secrets.js';
 import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
@@ -114,7 +115,7 @@ const executionMemoryContextSchema = {
         properties: {
           memoryId: { type: 'string' },
           title: { type: 'string' },
-          memoryType: { type: 'string', enum: ['implementation_pattern', 'verification_pattern', 'pitfall_pattern'] },
+          memoryType: { type: 'string', enum: ['implementation_pattern', 'verification_pattern', 'pitfall_pattern', 'decomposition_pattern', 'planning_decision', 'review_finding'] },
           score: { type: 'number' },
           appliesWhen: { type: 'string' },
           action: { type: 'string' },
@@ -371,7 +372,7 @@ function taskToApiResponse(task: {
     matchedMemories?: {
       memoryId: string;
       title: string;
-      memoryType: 'implementation_pattern' | 'verification_pattern' | 'pitfall_pattern';
+      memoryType: ExecutionMemoryType;
       score: number;
       appliesWhen: string;
       action: string;

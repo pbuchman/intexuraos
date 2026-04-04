@@ -3,7 +3,10 @@ import type { Timestamp } from '@google-cloud/firestore';
 export type ExecutionMemoryType =
   | 'implementation_pattern'
   | 'verification_pattern'
-  | 'pitfall_pattern';
+  | 'pitfall_pattern'
+  | 'decomposition_pattern'
+  | 'planning_decision'
+  | 'review_finding';
 
 export type ExecutionMemoryStatus = 'active' | 'suppressed';
 
@@ -14,6 +17,7 @@ export interface ExecutionMemory {
   repository: string;
   sourceTaskId: string;
   sourceLinearIssueId?: string;
+  sourceAgentType?: 'execution' | 'planning' | 'review';
   memoryType: ExecutionMemoryType;
   title: string;
   appliesWhen: string;
