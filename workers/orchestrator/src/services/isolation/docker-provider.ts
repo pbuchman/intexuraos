@@ -676,6 +676,9 @@ export class DockerProvider implements IsolationProvider {
         if (workerTypeConfig.effort !== undefined) {
           env.push(`CLAUDE_CODE_EFFORT_LEVEL=${workerTypeConfig.effort}`);
         }
+        if (workerTypeConfig.disableExperimentalBetas === true) {
+          env.push('CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1');
+        }
       } else {
         env.push('CODEX_HOME=/home/claude/.codex');
         env.push('CODEX_SQLITE_HOME=/home/claude/.codex');
