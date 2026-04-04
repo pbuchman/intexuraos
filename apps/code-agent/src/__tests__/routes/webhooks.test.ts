@@ -6608,6 +6608,60 @@ describe('POST /internal/webhooks/task-complete', () => {
       // Verify drain WAS called (so the rejection was actually exercised, not bypassed)
       expect(mockDrain).toHaveBeenCalledOnce();
     });
+
+    it('passes executionMemory resources to drainTaskQueue during post-completion drain', async () => {
+      const mockDrain = vi.mocked(drainTaskQueueModule.drainTaskQueue);
+      mockDrain.mockClear();
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug with memory',
+        sanitizedPrompt: 'Fix the bug with memory',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_drain_memory',
+        prNumber: 99,
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          branch: 'fix/memory-drain-test',
+          commits: 1,
+          summary: 'Test memory drain trigger',
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/99',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockDrain).toHaveBeenCalledWith(
+        expect.objectContaining({
+          executionMemory: expect.any(Object),
+        }),
+      );
+    });
   });
 });
 
