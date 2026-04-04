@@ -489,9 +489,9 @@ describe('system-prompt', () => {
     const finalBlockEnd = result.indexOf('```', finalBlockStart);
     const finalBlock = result.slice(finalBlockStart, finalBlockEnd);
 
-    expect(finalBlock).toContain('- memory_ids_used: <comma-separated list or "none">');
-    expect(finalBlock).toContain('- memory_ids_rejected: <comma-separated list or "none">');
-    expect(finalBlock).toContain('- memory_usage_summary: <brief note, or "none">');
+    expect(finalBlock).toContain('- execution_memory_ids_used: <comma-separated list or "none">');
+    expect(finalBlock).toContain('- execution_memory_ids_rejected: <comma-separated list or "none">');
+    expect(finalBlock).toContain('- execution_memory_usage_summary: <brief note, or "none">');
   });
 
   it('builds execution continuation instructions when an open PR is inherited', () => {

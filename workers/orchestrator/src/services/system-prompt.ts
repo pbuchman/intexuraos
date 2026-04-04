@@ -359,17 +359,7 @@ Before doing ANY work, you MUST read the Linear issue AND all its comments:
 **Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
 
 ${COMMENT_DRIVEN_DECISION_LOG}
-${buildExecutionMemorySection(params.executionMemoryContext)}${
-      params.executionMemoryContext !== undefined &&
-      params.executionMemoryContext.matchedMemories.length > 0
-        ? `
-- Report these completion fields in \`EXECUTION_AGENT_FINAL\`:
-  - \`memory_ids_used\`: comma-separated memory IDs you actually used, or empty string.
-  - \`memory_ids_rejected\`: comma-separated memory IDs you rejected as stale or not applicable, or empty string.
-  - \`memory_usage_summary\`: one concise sentence describing how memory helped or why it was rejected.
-`
-        : ''
-    }
+${buildExecutionMemorySection(params.executionMemoryContext)}
 ${workerType === 'codex' ? CODEX_SESSION_AUTOMATION_PARITY + '\n\n' : ''}### Mandatory Skill Order (non-negotiable)
 1. Start with \`superpowers:subagent-driven-development\` (mandatory first skill) — dispatches fresh subagents per task with built-in spec + quality review
 2. After implementation, run \`superpowers:requesting-code-review\` (mandatory second skill) — final holistic review of the complete change
@@ -436,9 +426,9 @@ EXECUTION_AGENT_FINAL:
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: <full Linear URL>
 - Review iterations: <number>
-- memory_ids_used: <comma-separated list or "none">
-- memory_ids_rejected: <comma-separated list or "none">
-- memory_usage_summary: <brief note, or "none">
+- execution_memory_ids_used: <comma-separated list or "none">
+- execution_memory_ids_rejected: <comma-separated list or "none">
+- execution_memory_usage_summary: <brief note, or "none">
 - superpowers_subagent_driven_dev_used: <0|1>
 - superpowers_requesting_code_review_used: <0|1>
 - trivial_task: <0|1>

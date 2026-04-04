@@ -224,8 +224,10 @@ describe('buildExecutionMemorySection acknowledgment and reporting', () => {
 
     expect(prompt).toContain('MANDATORY');
     expect(prompt).toContain('Immediately after reading the Linear issue');
+    expect(prompt).toContain('bullet point');
     expect(prompt).toContain('execution_memory_ids_used');
     expect(prompt).toContain('execution_memory_ids_rejected');
+    expect(prompt).toContain('execution_memory_usage_summary');
   });
 
   it('includes memory usage reporting instructions when memories are matched', () => {
