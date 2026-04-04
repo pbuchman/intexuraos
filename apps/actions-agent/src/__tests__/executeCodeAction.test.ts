@@ -139,13 +139,13 @@ describe('executeCodeAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
-      expect(result.value.resourceUrl).toBe('https://app.intexuraos.com/code-tasks/123');
+      expect(result.value.resourceUrl).toBe('/#/code-tasks/code-task-123');
       expect(result.value.message).toContain('code-task-123');
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
     expect(updatedAction?.status).toBe('completed');
-    expect(updatedAction?.payload['resource_url']).toBe('https://app.intexuraos.com/code-tasks/123');
+    expect(updatedAction?.payload['resource_url']).toBe('/#/code-tasks/code-task-123');
     expect(updatedAction?.payload['approvalEventId']).toBeDefined();
   });
 
@@ -345,7 +345,7 @@ describe('executeCodeAction usecase', () => {
     await usecase('action-123');
 
     const updatedAction = await fakeActionRepo.getById('action-123');
-    expect(updatedAction?.payload['resource_url']).toBe('https://app.intexuraos.com/code-tasks/123');
+    expect(updatedAction?.payload['resource_url']).toBe('/#/code-tasks/code-task-123');
   });
 
   it('passes correct parameters to code-agent', async () => {
@@ -480,8 +480,8 @@ describe('executeCodeAction usecase', () => {
     const messages = fakeWhatsappPublisher.getSentMessages();
     expect(messages).toHaveLength(1);
     expect(messages[0]?.userId).toBe('user-456');
-    expect(messages[0]?.message).toContain('Code task');
-    expect(messages[0]?.message).toContain('https://app.intexuraos.com/code-tasks/123');
+    expect(messages[0]?.message).toBe('👻 Code Task Created');
+    expect(messages[0]?.ctaUrl).toEqual({ displayText: 'View Progress', url: 'https://app.intexuraos.com/#/code-tasks/code-task-123' });
     expect(messages[0]?.correlationId).toBe('code-complete-action-123');
   });
 
