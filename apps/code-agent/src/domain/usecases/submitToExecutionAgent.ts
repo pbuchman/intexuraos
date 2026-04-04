@@ -316,6 +316,8 @@ export async function submitToExecutionAgent(
   }
 
   // Step 8b: Merge plan PR if planning task produced one
+  // planning_pr_url is the canonical field; fall back to prUrl for planning tasks
+  // where result merging failed and the field was stored under the generic key.
   const planningPrUrl = planningTask.result?.planning_pr_url ?? planningTask.result?.prUrl;
   if (planningPrUrl !== undefined) {
     const gitHubToken = await fetchGitHubToken(userServiceClient, userId, logger);
