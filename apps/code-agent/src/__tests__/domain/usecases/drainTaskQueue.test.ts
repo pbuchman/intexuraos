@@ -949,8 +949,8 @@ describe('drainTaskQueue', () => {
     });
   });
 
-  it('forwards prNumber in dispatch request when task has prNumber', async () => {
-    const task = createMockTask({ prNumber: 42, agentType: 'review' });
+  it('forwards prNumber in dispatch request when task has prNumber and prBranch', async () => {
+    const task = createMockTask({ prNumber: 42, prBranch: 'fix/review-branch', agentType: 'review' });
     mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
     setupWorkerSettings();
     mockTaskDispatcher.dispatch.mockResolvedValue(
@@ -962,6 +962,33 @@ describe('drainTaskQueue', () => {
 
     expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
       expect.objectContaining({ prNumber: 42 })
+    );
+  });
+
+  it('fails task with MISSING_PR_BRANCH when review task has prNumber but no prBranch', async () => {
+    const task = createMockTask({ prNumber: 42, agentType: 'review' });
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    setupWorkerSettings();
+    mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'failed' })));
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.action).toBe('failed');
+      expect(result.value.locksToCleanup).toEqual([
+        { repository: 'pbuchman/intexuraos', prNumber: 42 },
+      ]);
+    }
+    expect(mockTaskDispatcher.dispatch).not.toHaveBeenCalled();
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
+      task.id,
+      expect.objectContaining({
+        status: 'failed',
+        error: expect.objectContaining({
+          code: 'MISSING_PR_BRANCH',
+        }),
+      })
     );
   });
 
@@ -1265,7 +1292,7 @@ describe('drainTaskQueue', () => {
     });
 
     it('returns locksToCleanup on dispatch failure (PR task)', async () => {
-      const task = createMockTask({ prNumber: 42 });
+      const task = createMockTask({ prNumber: 42, prBranch: 'fix/some-branch' });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
       setupWorkerSettings();
 
@@ -1327,6 +1354,7 @@ describe('drainTaskQueue', () => {
     it('returns empty locksToCleanup on dispatch failure when task is a follow-up (has parentTaskId)', async () => {
       const task = createMockTask({
         prNumber: 42,
+        prBranch: 'fix/some-branch',
         parentTaskId: 'parent-task-123',
       });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
@@ -1866,6 +1894,7 @@ describe('drainTaskQueue', () => {
         id: 'review-old',
         repository: 'pbuchman/intexuraos',
         prNumber: 42,
+        prBranch: 'fix/review-branch',
         agentType: 'review',
         createdAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)), // 10 min ago
         queuedAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
@@ -1875,6 +1904,7 @@ describe('drainTaskQueue', () => {
         id: 'review-new',
         repository: 'pbuchman/intexuraos',
         prNumber: 42,
+        prBranch: 'fix/review-branch',
         agentType: 'review',
         createdAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)), // 5 min ago
         queuedAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
@@ -1929,6 +1959,7 @@ describe('drainTaskQueue', () => {
         id: 'review-1',
         repository: 'pbuchman/intexuraos',
         prNumber: 42,
+        prBranch: 'fix/review-branch',
         agentType: 'review',
         createdAt: Timestamp.fromDate(new Date(Date.now() - 30 * 60 * 1000)),
         queuedAt: Timestamp.fromDate(new Date(Date.now() - 30 * 60 * 1000)),
@@ -1937,6 +1968,7 @@ describe('drainTaskQueue', () => {
         id: 'review-2',
         repository: 'pbuchman/intexuraos',
         prNumber: 42,
+        prBranch: 'fix/review-branch',
         agentType: 'review',
         createdAt: Timestamp.fromDate(new Date(Date.now() - 20 * 60 * 1000)),
         queuedAt: Timestamp.fromDate(new Date(Date.now() - 20 * 60 * 1000)),
@@ -1945,6 +1977,7 @@ describe('drainTaskQueue', () => {
         id: 'review-3',
         repository: 'pbuchman/intexuraos',
         prNumber: 42,
+        prBranch: 'fix/review-branch',
         agentType: 'review',
         createdAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
         queuedAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
@@ -1984,6 +2017,7 @@ describe('drainTaskQueue', () => {
         id: 'review-old',
         repository: 'pbuchman/intexuraos',
         prNumber: 42,
+        prBranch: 'fix/review-branch',
         agentType: 'review',
         createdAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
         queuedAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
@@ -1992,6 +2026,7 @@ describe('drainTaskQueue', () => {
         id: 'review-new',
         repository: 'pbuchman/intexuraos',
         prNumber: 42,
+        prBranch: 'fix/review-branch',
         agentType: 'review',
         createdAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
         queuedAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
@@ -2035,6 +2070,7 @@ describe('drainTaskQueue', () => {
         id: 'review-pr42',
         repository: 'pbuchman/intexuraos',
         prNumber: 42,
+        prBranch: 'fix/review-branch-42',
         agentType: 'review',
         createdAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
         queuedAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
@@ -2043,6 +2079,7 @@ describe('drainTaskQueue', () => {
         id: 'review-pr99',
         repository: 'pbuchman/intexuraos',
         prNumber: 99,
+        prBranch: 'fix/review-branch-99',
         agentType: 'review',
         createdAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
         queuedAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
