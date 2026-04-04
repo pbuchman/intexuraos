@@ -26,6 +26,8 @@ import { createHmac } from 'node:crypto';
 import type { AutomationLog } from '../ports/automationLog.js';
 import { updatePRTitleWithLinearTag } from '../utils/updatePRTitleWithLinearTag.js';
 import { extractIntIssueId, extractLinearIdentifierFromText } from '../utils/linearIdentifierParser.js';
+import { fetchGitHubToken } from '../utils/gitHubTokenResolver.js';
+import { parseOwnerRepo } from '../utils/parseOwnerRepo.js';
 
 export interface CreateReviewTaskRequest {
   repository: string;
@@ -373,6 +375,24 @@ export async function createReviewTask(
     }
   }
 
+  const parsed = parseOwnerRepo(repository);
+  const prBranchPromise = (async (): Promise<{ headBranch?: string; baseBranch?: string }> => {
+    if (parsed === null) return {};
+    const token = await fetchGitHubToken(deps.userServiceClient, userId, logger);
+    if (token === null) return {};
+    const [statusResult, baseResult] = await Promise.all([
+      deps.gitHubPRClient.getPullRequestStatus(token, parsed.owner, parsed.repo, prNumber),
+      deps.gitHubPRClient.getPullRequestBaseBranch(token, parsed.owner, parsed.repo, prNumber),
+    ]);
+    return {
+      ...(statusResult.ok && { headBranch: statusResult.value.headRef }),
+      ...(baseResult.ok && { baseBranch: baseResult.value }),
+    };
+  })().catch((error: unknown): { headBranch?: string; baseBranch?: string } => {
+    logger.warn({ error, prNumber }, 'PR branch resolution failed (best-effort)');
+    return {};
+  });
+
   // Run re-review detection and Linear issue linking in parallel — they are independent
   const reReviewPromise = (async (): Promise<string | undefined> => {
     if (deps.gitHubPRSummaryRepo === undefined) return undefined;
@@ -419,7 +439,7 @@ export async function createReviewTask(
     return {};
   })();
 
-  const [reReviewCommitSha, { linearIssueId, createdDescription }] = await Promise.all([reReviewPromise, linearPromise]);
+  const [reReviewCommitSha, { linearIssueId, createdDescription }, resolvedPrBranches] = await Promise.all([reReviewPromise, linearPromise, prBranchPromise]);
 
   // Best-effort: fetch issue description for review requirements context
   let issueDescription: string | undefined;
@@ -463,8 +483,7 @@ export async function createReviewTask(
   });
   const webhookSecret = createHmac('sha256', orchestratorSecret).update(eventId).digest('hex');
 
-  const [owner] = repository.split('/');
-  const baseBranch = request.baseBranch ?? 'main';
+  const baseBranch = resolvedPrBranches.baseBranch ?? request.baseBranch ?? 'main';
 
   const taskInput: CreateTaskInput = {
     userId,
@@ -480,6 +499,7 @@ export async function createReviewTask(
     prNumber,
     agentType: 'review',
     ...(linearIssueId !== undefined && { linearIssueId }),
+    ...(resolvedPrBranches.headBranch !== undefined && { prBranch: resolvedPrBranches.headBranch }),
     reviewTypes: request.reviewTypes,
   };
 
@@ -509,7 +529,7 @@ export async function createReviewTask(
   }
 
   logger.info(
-    { taskId: task.id, repository, prNumber, reviewTypes: request.reviewTypes, owner, queuePosition: enqueueResult.value.queuePosition },
+    { taskId: task.id, repository, prNumber, reviewTypes: request.reviewTypes, owner: parsed?.owner, queuePosition: enqueueResult.value.queuePosition },
     'Review task created and enqueued'
   );
 
