@@ -89,6 +89,7 @@ export interface TaskResult {
   review_body?: string;
   review_inline_comments?: string;
   requirements_tracker_updated?: string;
+  gh_actions_status?: string;
   needs_remediation?: string;
   requires_re_review?: string;
 }
@@ -121,7 +122,7 @@ export interface ExecutionMemoryPostRun {
   lastAttemptAt?: Timestamp;
   generatedMemoryIds: string[];
   evaluationSummary?: string;
-  skipReason?: 'infra_only' | 'insufficient_signal' | 'already_completed' | 'no_reusable_lesson';
+  skipReason?: 'infra_only' | 'insufficient_signal' | 'already_completed' | 'no_reusable_lesson' | 'planning_unclear';
   errorMessage?: string;
   completedAt?: Timestamp;
 }
