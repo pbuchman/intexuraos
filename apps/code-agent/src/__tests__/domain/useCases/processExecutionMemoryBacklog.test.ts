@@ -1056,13 +1056,16 @@ describe('processExecutionMemoryBacklog', () => {
         'fp-123',
         [0.1, 0.2],
         'task-1',
-        undefined
+        undefined,
+        'execution',
+        'execution-memory-distiller@2.0.0'
       )
     ).resolves.toBe('mem-existing');
 
     expect(executionMemoryRepo.update).toHaveBeenLastCalledWith('mem-existing', expect.objectContaining({
       status: 'suppressed',
       sourceTaskId: 'task-1',
+      sourceAgentType: 'execution',
       qualityScore: expect.any(Number),
     }));
 
@@ -1102,7 +1105,9 @@ describe('processExecutionMemoryBacklog', () => {
         'fp-123',
         [0.1, 0.2],
         'task-1',
-        'INT-1098'
+        'INT-1098',
+        'execution',
+        'execution-memory-distiller@2.0.0'
       )
     ).rejects.toThrow('update failed');
   });
@@ -1776,6 +1781,643 @@ describe('processExecutionMemoryBacklog', () => {
       const retryPrompt = capturedPrompts[1] ?? '';
       expect(retryPrompt).toContain('Fix the JSON schema violation and return valid JSON');
       expect(retryPrompt).toContain('Your previous response was invalid JSON');
+    });
+  });
+
+  it('uses planning distillation version and sourceAgentType when creating memories for planning tasks', async () => {
+    const task = createTask({
+      agentType: 'planning',
+      status: 'planned',
+      result: {
+        summary: 'planned the issue',
+        planning_outcome_label: 'planned',
+        planning_is_complex: '1',
+        planning_subtask_urls: 'url1,url2',
+      },
+      executionMemoryContext: { status: 'none' },
+    });
+    distillerClient.generate.mockResolvedValue(ok({
+      content: JSON.stringify({
+        decision: 'create',
+        evidenceSummary: 'Planning produced reusable decomposition.',
+        memories: [
+          {
+            memoryType: 'decomposition_pattern',
+            title: 'Split by service boundary',
+            appliesWhen: 'Multi-service issues',
+            action: 'Decompose into per-service subtasks',
+            avoid: 'Mixing services in one subtask',
+            verification: 'Check each subtask touches only one service',
+            evidenceSummary: 'evidence',
+            retrievalText: 'service boundary decomposition',
+            keywords: ['planning'],
+            labelHints: [],
+            componentHints: [],
+            confidence: 0.8,
+          },
+        ],
+      }),
+    }));
+    embeddingClient.embed.mockResolvedValue(ok([0.1, 0.2]));
+    executionMemoryRepo.findByFingerprint.mockResolvedValue(ok(null));
+    executionMemoryRepo.findNearest.mockResolvedValue(ok([]));
+    executionMemoryRepo.create.mockResolvedValue(ok(createMemory({ id: 'mem-plan' })));
+
+    const result = await processExecutionMemoryBacklogTestables.processOneTask(task, {
+      logger,
+      codeTaskRepo: codeTaskRepo as never,
+      logLineRepo: logLineRepo as never,
+      turnMetricsRepo: turnMetricsRepo as never,
+      linearAgentClient: linearAgentClient as never,
+      executionMemoryRepo: executionMemoryRepo as never,
+      executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+      distillerClient: distillerClient as never,
+      embeddingClient: embeddingClient as never,
+      limit: 10,
+    });
+
+    expect(result.status).toBe('completed');
+    expect(result.generatedMemoryIds).toEqual(['mem-plan']);
+    expect(executionMemoryRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      sourceAgentType: 'planning',
+      distillationVersion: 'planning-memory-distiller@1.0.0',
+      memoryType: 'decomposition_pattern',
+    }));
+  });
+
+  it('uses review distillation version and sourceAgentType when creating memories for review tasks', async () => {
+    const task = createTask({
+      agentType: 'review',
+      status: 'reviewed',
+      result: {
+        summary: 'review found issues',
+        review_types: 'code_quality',
+        review_comments_posted: '3',
+        needs_remediation: '1',
+        review_body: 'Found error handling issues.',
+        review_inline_comments: 'Line 10: missing null check',
+      },
+      executionMemoryContext: { status: 'none' },
+    });
+    distillerClient.generate.mockResolvedValue(ok({
+      content: JSON.stringify({
+        decision: 'create',
+        evidenceSummary: 'Review produced reusable pitfall.',
+        memories: [
+          {
+            memoryType: 'review_finding',
+            title: 'Always check null returns',
+            appliesWhen: 'Working with Firestore queries',
+            action: 'Check for null/undefined before accessing properties',
+            avoid: 'Assuming data is always present',
+            verification: 'Verify null guards in code review',
+            evidenceSummary: 'evidence',
+            retrievalText: 'null check firestore query',
+            keywords: ['null-check'],
+            labelHints: [],
+            componentHints: [],
+            confidence: 0.75,
+          },
+        ],
+      }),
+    }));
+    embeddingClient.embed.mockResolvedValue(ok([0.3, 0.4]));
+    executionMemoryRepo.findByFingerprint.mockResolvedValue(ok(null));
+    executionMemoryRepo.findNearest.mockResolvedValue(ok([]));
+    executionMemoryRepo.create.mockResolvedValue(ok(createMemory({ id: 'mem-rev' })));
+
+    const result = await processExecutionMemoryBacklogTestables.processOneTask(task, {
+      logger,
+      codeTaskRepo: codeTaskRepo as never,
+      logLineRepo: logLineRepo as never,
+      turnMetricsRepo: turnMetricsRepo as never,
+      linearAgentClient: linearAgentClient as never,
+      executionMemoryRepo: executionMemoryRepo as never,
+      executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+      distillerClient: distillerClient as never,
+      embeddingClient: embeddingClient as never,
+      limit: 10,
+    });
+
+    expect(result.status).toBe('completed');
+    expect(result.generatedMemoryIds).toEqual(['mem-rev']);
+    expect(executionMemoryRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      sourceAgentType: 'review',
+      distillationVersion: 'review-memory-distiller@1.0.0',
+      memoryType: 'review_finding',
+    }));
+  });
+
+  it('passes sourceAgentType through to updateExistingMemory on exact match for planning tasks', async () => {
+    const task = createTask({
+      agentType: 'planning',
+      status: 'planned',
+      result: {
+        summary: 'planned',
+        planning_outcome_label: 'planned',
+      },
+      executionMemoryContext: { status: 'none' },
+    });
+    distillerClient.generate.mockResolvedValue(ok({
+      content: JSON.stringify({
+        decision: 'create',
+        evidenceSummary: 'Planning update.',
+        memories: [{
+          memoryType: 'planning_decision',
+          title: 'Simple issues need no subtasks',
+          appliesWhen: 'Single-service issues',
+          action: 'Classify as simple',
+          avoid: 'Over-decomposition',
+          verification: 'Check subtask count is 0',
+          evidenceSummary: 'evidence',
+          retrievalText: 'simple issue classification',
+          keywords: [],
+          labelHints: [],
+          componentHints: [],
+          confidence: 0.9,
+        }],
+      }),
+    }));
+    embeddingClient.embed.mockResolvedValue(ok([0.1, 0.2]));
+    executionMemoryRepo.findByFingerprint.mockResolvedValue(ok(createMemory({ id: 'mem-exact-plan' })));
+    executionMemoryRepo.update.mockResolvedValue(ok(createMemory()));
+
+    const result = await processExecutionMemoryBacklogTestables.processOneTask(task, {
+      logger,
+      codeTaskRepo: codeTaskRepo as never,
+      logLineRepo: logLineRepo as never,
+      turnMetricsRepo: turnMetricsRepo as never,
+      linearAgentClient: linearAgentClient as never,
+      executionMemoryRepo: executionMemoryRepo as never,
+      executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+      distillerClient: distillerClient as never,
+      embeddingClient: embeddingClient as never,
+      limit: 10,
+    });
+
+    expect(result.generatedMemoryIds).toEqual(['mem-exact-plan']);
+    expect(executionMemoryRepo.update).toHaveBeenCalledWith('mem-exact-plan', expect.objectContaining({
+      sourceAgentType: 'planning',
+      distillationVersion: 'planning-memory-distiller@1.0.0',
+    }));
+  });
+
+  it('skips planning tasks with unclear outcome via shouldSkipDistillation in processOneTask', async () => {
+    const task = createTask({
+      agentType: 'planning',
+      status: 'planned',
+      result: {
+        summary: 'unclear',
+        planning_outcome_label: 'unclear',
+      },
+      executionMemoryContext: { status: 'none' },
+    });
+
+    const result = await processExecutionMemoryBacklogTestables.processOneTask(task, {
+      logger,
+      codeTaskRepo: codeTaskRepo as never,
+      logLineRepo: logLineRepo as never,
+      turnMetricsRepo: turnMetricsRepo as never,
+      linearAgentClient: linearAgentClient as never,
+      executionMemoryRepo: executionMemoryRepo as never,
+      executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+      limit: 10,
+    });
+
+    expect(result).toEqual(expect.objectContaining({
+      status: 'skipped',
+      generatedMemoryIds: [],
+      skipReason: 'planning_unclear',
+    }));
+  });
+
+  describe('shouldSkipDistillation', () => {
+    it('returns skip with already_completed for execution tasks with that outcome', () => {
+      const task = createTask({
+        result: { summary: 'done', execution_outcome_label: 'already_completed' },
+      });
+      expect(processExecutionMemoryBacklogTestables.shouldSkipDistillation(task)).toEqual({
+        skip: true,
+        reason: 'already_completed',
+      });
+    });
+
+    it('returns skip with planning_unclear for planning tasks with unclear outcome', () => {
+      const task = createTask({
+        agentType: 'planning',
+        status: 'planned',
+        result: { summary: 'unclear', planning_outcome_label: 'unclear' },
+      });
+      expect(processExecutionMemoryBacklogTestables.shouldSkipDistillation(task)).toEqual({
+        skip: true,
+        reason: 'planning_unclear',
+      });
+    });
+
+    it('does not skip planning tasks with planned outcome', () => {
+      const task = createTask({
+        agentType: 'planning',
+        status: 'planned',
+        result: { summary: 'done', planning_outcome_label: 'planned' },
+      });
+      expect(processExecutionMemoryBacklogTestables.shouldSkipDistillation(task)).toEqual({
+        skip: false,
+      });
+    });
+
+    it('does not skip review tasks regardless of status', () => {
+      const task = createTask({
+        agentType: 'review',
+        status: 'reviewed',
+        result: { summary: 'done', needs_remediation: '1' },
+      });
+      expect(processExecutionMemoryBacklogTestables.shouldSkipDistillation(task)).toEqual({
+        skip: false,
+      });
+    });
+
+    it('does not skip execution tasks with implemented outcome', () => {
+      const task = createTask({
+        result: { summary: 'done', execution_outcome_label: 'implemented' },
+      });
+      expect(processExecutionMemoryBacklogTestables.shouldSkipDistillation(task)).toEqual({
+        skip: false,
+      });
+    });
+  });
+
+  describe('DistillationSchema extended types', () => {
+    it('accepts decomposition_pattern, planning_decision, and review_finding as memory types', () => {
+      const newTypes = ['decomposition_pattern', 'planning_decision', 'review_finding'] as const;
+      for (const memoryType of newTypes) {
+        const input = {
+          decision: 'create' as const,
+          evidenceSummary: 'test evidence',
+          memories: [{
+            memoryType,
+            title: 'Test',
+            appliesWhen: 'always',
+            action: 'do something',
+            avoid: 'avoid something',
+            verification: 'verify something',
+            evidenceSummary: 'evidence',
+            retrievalText: 'retrieval text',
+            keywords: [],
+            labelHints: [],
+            componentHints: [],
+            confidence: 0.8,
+          }],
+        };
+        // Should not throw
+        expect(() => processExecutionMemoryBacklogTestables.parseJsonObject(JSON.stringify(input))).not.toThrow();
+      }
+    });
+
+    it('accepts planning_unclear as a valid skipReason', () => {
+      const input = {
+        decision: 'skip' as const,
+        skipReason: 'planning_unclear',
+        evidenceSummary: 'unclear planning',
+        memories: [],
+      };
+      expect(() => processExecutionMemoryBacklogTestables.parseJsonObject(JSON.stringify(input))).not.toThrow();
+    });
+  });
+
+  describe('buildDistillationPrompt router', () => {
+    it('routes planning agent type to planning-memory-distiller@1.0.0', () => {
+      const task = createTask({
+        agentType: 'planning',
+        status: 'planned',
+        result: { summary: 'planned', planning_outcome_label: 'planned', planning_is_complex: '1', planning_subtask_urls: 'url1,url2' },
+      });
+      const prompt = processExecutionMemoryBacklogTestables.buildDistillationPrompt(
+        task, [{ text: 'log' }], [], { description: 'issue', comments: [] }
+      );
+      expect(prompt).toContain('planning-memory-distiller@1.0.0');
+    });
+
+    it('routes review agent type to review-memory-distiller@1.0.0', () => {
+      const task = createTask({
+        agentType: 'review',
+        status: 'reviewed',
+        result: { summary: 'reviewed', review_types: 'code_quality', review_comments_posted: '3', needs_remediation: '0' },
+      });
+      const prompt = processExecutionMemoryBacklogTestables.buildDistillationPrompt(
+        task, [{ text: 'log' }], [], { description: 'issue', comments: [] }
+      );
+      expect(prompt).toContain('review-memory-distiller@1.0.0');
+    });
+
+    it('routes execution and undefined agent type to execution-memory-distiller@2.0.0', () => {
+      const executionTask = createTask({ agentType: 'execution' });
+      const prompt = processExecutionMemoryBacklogTestables.buildDistillationPrompt(
+        executionTask, [{ text: 'log' }], [], { description: null, comments: [] }
+      );
+      expect(prompt).toContain('execution-memory-distiller@2.0.0');
+
+      const undefinedTask = createTask({ agentType: undefined } as never);
+      const prompt2 = processExecutionMemoryBacklogTestables.buildDistillationPrompt(
+        undefinedTask, [{ text: 'log' }], [], { description: null, comments: [] }
+      );
+      expect(prompt2).toContain('execution-memory-distiller@2.0.0');
+    });
+  });
+
+  describe('planning distillation prompt content', () => {
+    it('includes planning-specific fields in the prompt', () => {
+      const task = createTask({
+        agentType: 'planning',
+        status: 'planned',
+        result: {
+          summary: 'planned the thing',
+          planning_outcome_label: 'planned',
+          planning_is_complex: '1',
+          planning_subtask_urls: 'url1,url2,url3',
+          planning_superpowers_writing_plans_used: '1',
+          planning_pr_url: 'https://github.com/pr/1',
+        },
+      });
+      const prompt = processExecutionMemoryBacklogTestables.buildDistillationPrompt(
+        task, [{ text: 'log line' }], [{ metric: 1 }], { description: 'Linear issue', comments: [{ body: 'comment', createdAt: '2026-01-01' }] }
+      );
+      expect(prompt).toContain('Planning outcome:');
+      expect(prompt).toContain('Complexity classification:');
+      expect(prompt).toContain('COMPLEX');
+      expect(prompt).toContain('Subtask count: 3');
+      expect(prompt).toContain('Used writing-plans skill:');
+      expect(prompt).toContain('Planning PR URL:');
+      expect(prompt).toContain('planning memory distiller');
+      expect(prompt).toContain('DECOMPOSITION PATTERNS');
+      expect(prompt).toContain('decomposition_pattern');
+      expect(prompt).toContain('planning_decision');
+    });
+
+    it('uses fallback values when planning result fields are missing', () => {
+      const task = createTask({
+        agentType: 'planning',
+        status: 'planned',
+        result: { summary: 'done' },
+      });
+      const prompt = processExecutionMemoryBacklogTestables.buildDistillationPrompt(
+        task, [{ text: 'log line' }], [], { description: null, comments: [] }
+      );
+      expect(prompt).toContain('Planning outcome: ');
+      expect(prompt).toContain('SIMPLE_OR_PLAN_DOC');
+      expect(prompt).toContain('Subtask count: 0');
+      expect(prompt).toContain('Used writing-plans skill: ');
+      expect(prompt).toContain('Planning PR URL: ');
+    });
+  });
+
+  describe('review distillation prompt content', () => {
+    it('includes review-specific fields in the prompt', () => {
+      const task = createTask({
+        agentType: 'review',
+        status: 'reviewed',
+        result: {
+          summary: 'reviewed',
+          review_types: 'code_quality,security',
+          review_comments_posted: '5',
+          needs_remediation: '1',
+          review_body: 'Found issues with error handling.',
+          review_inline_comments: 'Line 42: Missing null check',
+        },
+      });
+      const prompt = processExecutionMemoryBacklogTestables.buildDistillationPrompt(
+        task, [{ text: 'log line' }], [], { description: 'Linear issue', comments: [] }
+      );
+      expect(prompt).toContain('Review body:');
+      expect(prompt).toContain('Found issues with error handling.');
+      expect(prompt).toContain('Inline comments:');
+      expect(prompt).toContain('Line 42: Missing null check');
+      expect(prompt).toContain('review memory distiller');
+      expect(prompt).toContain('REVIEW FINDINGS');
+      expect(prompt).toContain('review_finding');
+    });
+
+    it('uses fallback values when review result fields are missing', () => {
+      const task = createTask({
+        agentType: 'review',
+        status: 'reviewed',
+        result: { summary: 'reviewed' },
+      });
+      const prompt = processExecutionMemoryBacklogTestables.buildDistillationPrompt(
+        task, [{ text: 'log line' }], [], { description: null, comments: [] }
+      );
+      expect(prompt).toContain('Review types: ');
+      expect(prompt).toContain('Comments posted: ');
+      expect(prompt).toContain('Needs remediation: ');
+      expect(prompt).toContain('CI status: ');
+    });
+  });
+
+  it('returns undefined evaluationSummary when execution task has no usage summary and no applicationId', async () => {
+    const summary = await processExecutionMemoryBacklogTestables.evaluateApplication(
+      createTask({
+        executionMemoryContext: { status: 'none' },
+        result: { summary: 'done' },
+      }),
+      [],
+      {
+        logger,
+        codeTaskRepo: codeTaskRepo as never,
+        logLineRepo: logLineRepo as never,
+        turnMetricsRepo: turnMetricsRepo as never,
+        linearAgentClient: linearAgentClient as never,
+        executionMemoryRepo: executionMemoryRepo as never,
+        executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+        limit: 10,
+      }
+    );
+    expect(summary).toBeUndefined();
+  });
+
+  it('returns undefined evaluationSummary when empty matches and no self-report summary', async () => {
+    executionMemoryApplicationRepo.findById.mockResolvedValueOnce(ok(createApplicationRecord({
+      matchedMemories: [],
+    })));
+    executionMemoryApplicationRepo.update.mockResolvedValue(ok(createApplicationRecord({
+      matchedMemories: [],
+    })));
+
+    const summary = await processExecutionMemoryBacklogTestables.evaluateApplication(
+      createTask({
+        result: { summary: 'done' },
+      }),
+      [],
+      {
+        logger,
+        codeTaskRepo: codeTaskRepo as never,
+        logLineRepo: logLineRepo as never,
+        turnMetricsRepo: turnMetricsRepo as never,
+        linearAgentClient: linearAgentClient as never,
+        executionMemoryRepo: executionMemoryRepo as never,
+        executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+        limit: 10,
+      }
+    );
+    expect(summary).toBeUndefined();
+  });
+
+  it('returns undefined evaluationSummary when evaluator missing and no self-report summary', async () => {
+    executionMemoryApplicationRepo.findById.mockResolvedValueOnce(ok(createApplicationRecord()));
+    executionMemoryApplicationRepo.update.mockResolvedValue(ok(createApplicationRecord()));
+
+    const summary = await processExecutionMemoryBacklogTestables.evaluateApplication(
+      createTask({
+        result: { summary: 'done' },
+      }),
+      [],
+      {
+        logger,
+        codeTaskRepo: codeTaskRepo as never,
+        logLineRepo: logLineRepo as never,
+        turnMetricsRepo: turnMetricsRepo as never,
+        linearAgentClient: linearAgentClient as never,
+        executionMemoryRepo: executionMemoryRepo as never,
+        executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+        limit: 10,
+      }
+    );
+    expect(summary).toBeUndefined();
+  });
+
+  it('uses buildEvaluationContext for planning tasks in evaluateApplication', async () => {
+    const summary = await processExecutionMemoryBacklogTestables.evaluateApplication(
+      createTask({
+        agentType: 'planning',
+        status: 'planned',
+        executionMemoryContext: { status: 'none' },
+        result: { summary: 'done', planning_outcome_label: 'planned' },
+      }),
+      [],
+      {
+        logger,
+        codeTaskRepo: codeTaskRepo as never,
+        logLineRepo: logLineRepo as never,
+        turnMetricsRepo: turnMetricsRepo as never,
+        linearAgentClient: linearAgentClient as never,
+        executionMemoryRepo: executionMemoryRepo as never,
+        executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+        limit: 10,
+      }
+    );
+    expect(summary).toBe('Planning completed successfully');
+  });
+
+  it('uses buildEvaluationContext for review tasks in evaluateApplication', async () => {
+    const summary = await processExecutionMemoryBacklogTestables.evaluateApplication(
+      createTask({
+        agentType: 'review',
+        status: 'reviewed',
+        executionMemoryContext: { status: 'none' },
+        result: { summary: 'done', needs_remediation: '1', review_comments_posted: '3' },
+      }),
+      [],
+      {
+        logger,
+        codeTaskRepo: codeTaskRepo as never,
+        logLineRepo: logLineRepo as never,
+        turnMetricsRepo: turnMetricsRepo as never,
+        linearAgentClient: linearAgentClient as never,
+        executionMemoryRepo: executionMemoryRepo as never,
+        executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+        limit: 10,
+      }
+    );
+    expect(summary).toBe('Review found issues requiring remediation (3 comments)');
+  });
+
+  describe('buildEvaluationContext', () => {
+    it('returns execution fields for execution tasks with all fields', () => {
+      const task = createTask({
+        result: {
+          summary: 'done',
+          execution_memory_ids_used: 'mem-1,mem-2',
+          execution_memory_ids_rejected: 'mem-3',
+          execution_memory_usage_summary: 'Used both memories.',
+        },
+      });
+      expect(processExecutionMemoryBacklogTestables.buildEvaluationContext(task)).toEqual({
+        selfReportUsed: 'mem-1,mem-2',
+        selfReportRejected: 'mem-3',
+        selfReportSummary: 'Used both memories.',
+      });
+    });
+
+    it('returns empty strings for execution tasks with missing fields', () => {
+      const task = createTask({ result: { summary: 'done' } });
+      expect(processExecutionMemoryBacklogTestables.buildEvaluationContext(task)).toEqual({
+        selfReportUsed: '',
+        selfReportRejected: '',
+        selfReportSummary: '',
+      });
+    });
+
+    it('returns success summary for planning tasks with planned outcome', () => {
+      const task = createTask({
+        agentType: 'planning',
+        status: 'planned',
+        result: { summary: 'done', planning_outcome_label: 'planned' },
+      });
+      expect(processExecutionMemoryBacklogTestables.buildEvaluationContext(task)).toEqual({
+        selfReportUsed: '',
+        selfReportRejected: '',
+        selfReportSummary: 'Planning completed successfully',
+      });
+    });
+
+    it('returns unclear summary for planning tasks with unclear outcome', () => {
+      const task = createTask({
+        agentType: 'planning',
+        status: 'planned',
+        result: { summary: 'unclear', planning_outcome_label: 'unclear' },
+      });
+      expect(processExecutionMemoryBacklogTestables.buildEvaluationContext(task)).toEqual({
+        selfReportUsed: '',
+        selfReportRejected: '',
+        selfReportSummary: 'Planning outcome was unclear',
+      });
+    });
+
+    it('returns remediation summary for review tasks with needs_remediation', () => {
+      const task = createTask({
+        agentType: 'review',
+        status: 'reviewed',
+        result: { summary: 'done', needs_remediation: '1', review_comments_posted: '5' },
+      });
+      expect(processExecutionMemoryBacklogTestables.buildEvaluationContext(task)).toEqual({
+        selfReportUsed: '',
+        selfReportRejected: '',
+        selfReportSummary: 'Review found issues requiring remediation (5 comments)',
+      });
+    });
+
+    it('defaults comment count to 0 when review_comments_posted is missing', () => {
+      const task = createTask({
+        agentType: 'review',
+        status: 'reviewed',
+        result: { summary: 'done', needs_remediation: '1' },
+      });
+      expect(processExecutionMemoryBacklogTestables.buildEvaluationContext(task)).toEqual({
+        selfReportUsed: '',
+        selfReportRejected: '',
+        selfReportSummary: 'Review found issues requiring remediation (0 comments)',
+      });
+    });
+
+    it('returns no remediation summary for review tasks without remediation', () => {
+      const task = createTask({
+        agentType: 'review',
+        status: 'reviewed',
+        result: { summary: 'done', needs_remediation: '0' },
+      });
+      expect(processExecutionMemoryBacklogTestables.buildEvaluationContext(task)).toEqual({
+        selfReportUsed: '',
+        selfReportRejected: '',
+        selfReportSummary: 'Review completed with no remediation needed',
+      });
     });
   });
 });

@@ -83,6 +83,8 @@ export interface ReviewAgentData {
   requirements_tracker_updated: string;
   gh_actions_status: string;
   needs_remediation: string;
+  review_body: string;
+  review_inline_comments: string;
   summary: string;
 }
 
@@ -153,6 +155,8 @@ export const REVIEW_SCHEMA = z.object({
     .regex(/^[01]$/)
     .optional()
     .default('1'),
+  review_body: z.string().optional().default(''),
+  review_inline_comments: z.string().optional().default(''),
   summary: z.string(),
 });
 

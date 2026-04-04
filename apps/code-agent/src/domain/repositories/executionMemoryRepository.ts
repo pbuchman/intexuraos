@@ -12,6 +12,7 @@ export interface CreateExecutionMemoryInput {
   repository: string;
   sourceTaskId: string;
   sourceLinearIssueId?: string;
+  sourceAgentType?: 'execution' | 'planning' | 'review';
   memoryType: ExecutionMemoryType;
   title: string;
   appliesWhen: string;
@@ -39,6 +40,7 @@ export interface CreateExecutionMemoryInput {
 export interface UpdateExecutionMemoryInput {
   sourceTaskId?: string;
   sourceLinearIssueId?: string;
+  sourceAgentType?: 'execution' | 'planning' | 'review';
   memoryType?: ExecutionMemoryType;
   title?: string;
   appliesWhen?: string;

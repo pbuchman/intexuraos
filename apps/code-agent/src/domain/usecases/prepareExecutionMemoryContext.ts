@@ -1,6 +1,7 @@
 import { Timestamp } from '@google-cloud/firestore';
 import { getErrorMessage, type Logger, type Result } from '@intexuraos/common-core';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
+import type { ExecutionMemoryType } from '../models/executionMemory.js';
 import { z } from 'zod';
 import type { CodeTask } from '../models/codeTask.js';
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
@@ -234,7 +235,7 @@ export function toDispatchExecutionMemoryContext(
 }
 
 async function getLinearContext(
-  linearIssueId: string | undefined,
+  linearIssueId: string | undefined, // @allow-undefined-type -- function parameter mirrors CodeTask.linearIssueId which is optional
   linearAgentClient: Pick<LinearAgentClient, 'getIssueContext'>,
   logger: Logger
 ): Promise<{ description: string | null; comments: string[] }> {
@@ -407,7 +408,7 @@ async function createApplication(params: {
     memory: {
       id: string;
       title: string;
-      memoryType: 'implementation_pattern' | 'verification_pattern' | 'pitfall_pattern';
+      memoryType: ExecutionMemoryType;
       vectorScore: number;
     };
     rerankScore: number;
