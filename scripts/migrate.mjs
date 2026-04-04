@@ -29,6 +29,28 @@ const repoRoot = resolve(import.meta.dirname, '..');
 const migrationsDir = join(repoRoot, 'migrations');
 const MIGRATIONS_COLLECTION = '_migrations';
 
+function normalizeVectorFields(index) {
+  const hasVector = index.fields?.some((f) => f.vectorConfig != null) === true;
+  if (!hasVector) return index;
+
+  return {
+    ...index,
+    fields: index.fields.map((field) => {
+      if (field.vectorConfig == null) return field;
+      // Firebase CLI requires vector fields to have vectorConfig WITHOUT order.
+      // Using both causes composites to silently deploy as regular indexes.
+      const { order, vectorConfig, ...rest } = field;
+      return {
+        ...rest,
+        vectorConfig: {
+          dimension: vectorConfig.dimension,
+          flat: {},
+        },
+      };
+    }),
+  };
+}
+
 function aggregateIndexes(migrations) {
   const allIndexes = [];
   const allFieldOverrides = [];
@@ -43,10 +65,11 @@ function aggregateIndexes(migrations) {
       if ((index.fields?.length ?? 0) < 2 && !hasVectorField) {
         continue;
       }
-      const key = JSON.stringify(index);
+      const normalized = normalizeVectorFields(index);
+      const key = JSON.stringify(normalized);
       if (!seenIndexes.has(key)) {
         seenIndexes.add(key);
-        allIndexes.push(index);
+        allIndexes.push(normalized);
       }
     }
     for (const override of migration.fieldOverrides ?? []) {
@@ -426,4 +449,4 @@ if (isMain) {
   });
 }
 
-export { aggregateIndexes };
+export { aggregateIndexes, normalizeVectorFields };
