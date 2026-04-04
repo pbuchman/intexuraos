@@ -306,6 +306,93 @@ describe('deriveAggregateStatus', () => {
     const pipeline = derivePipeline(tasks);
     expect(deriveAggregateStatus(tasks, pipeline)).toBe('done');
   });
+
+  it('group with actionable execution step AND active review task gets aggregateStatus active (not needs-action)', () => {
+    const tasks = [
+      makeTask({
+        id: 't1',
+        linearIssueId: 'INT-1255',
+        agentType: 'planning',
+        status: 'planned',
+        createdAt: '2026-01-01T10:00:00Z',
+        updatedAt: '2026-01-01T10:05:00Z',
+        linearIssue: {
+          identifier: 'INT-1255',
+          title: 'Test',
+          state: { name: 'In Progress', type: 'started' },
+          priority: 1,
+          assignee: null,
+          labels: [{ name: 'ready-to-implement' }],
+          url: 'https://linear.app/INT-1255',
+          commentCount: 0,
+          lastCommentAt: null,
+        },
+      }),
+      makeTask({
+        id: 't2',
+        linearIssueId: 'INT-1255',
+        agentType: 'review',
+        status: 'running',
+        createdAt: '2026-01-01T11:00:00Z',
+        updatedAt: '2026-01-01T11:05:00Z',
+      }),
+    ];
+
+    const pipeline = derivePipeline(tasks);
+
+    // Pipeline has an actionable execution step (planning completed + ready-to-implement label)
+    expect(pipeline.steps.find((s) => s.agentType === 'execution')?.state).toBe('actionable');
+    // But aggregateStatus is 'active' because an active task takes priority
+    expect(deriveAggregateStatus(tasks, pipeline)).toBe('active');
+  });
+
+  it('group with all terminal tasks and no execution agent → needs-action', () => {
+    const tasks = [
+      makeTask({
+        id: 't1',
+        linearIssueId: 'INT-1255',
+        agentType: 'planning',
+        status: 'planned',
+        createdAt: '2026-01-01T10:00:00Z',
+        updatedAt: '2026-01-01T10:05:00Z',
+        linearIssue: {
+          identifier: 'INT-1255',
+          title: 'Test',
+          state: { name: 'In Progress', type: 'started' },
+          priority: 1,
+          assignee: null,
+          labels: [{ name: 'ready-to-implement' }],
+          url: 'https://linear.app/INT-1255',
+          commentCount: 0,
+          lastCommentAt: null,
+        },
+      }),
+      makeTask({
+        id: 't2',
+        linearIssueId: 'INT-1255',
+        agentType: 'pull_request',
+        status: 'implemented',
+        createdAt: '2026-01-01T12:00:00Z',
+        updatedAt: '2026-01-01T12:05:00Z',
+      }),
+      makeTask({
+        id: 't3',
+        linearIssueId: 'INT-1255',
+        agentType: 'review',
+        status: 'reviewed',
+        createdAt: '2026-01-01T11:00:00Z',
+        updatedAt: '2026-01-01T11:05:00Z',
+      }),
+    ];
+
+    const pipeline = derivePipeline(tasks);
+
+    // No execution agent task exists + planning completed with ready-to-implement label →
+    // derivePipeline inserts a synthetic actionable execution step
+    expect(pipeline.steps.find((s) => s.agentType === 'execution')?.state).toBe('actionable');
+    // With no active tasks, aggregateStatus correctly reflects the actionable step
+    expect(deriveAggregateStatus(tasks, pipeline)).toBe('needs-action');
+  });
 });
 
 describe('derivePipeline', () => {
