@@ -1031,7 +1031,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
     listPendingExecutionMemoryPostRun: async (limit: number): Promise<Result<CodeTask[], RepositoryError>> => {
       try {
         const snapshot = await collection
-          .where('agentType', '==', 'execution')
+          .where('agentType', 'in', ['execution', 'planning', 'review'])
           .where('executionMemoryPostRun.status', '==', 'pending')
           .orderBy('completedAt', 'asc')
           .limit(limit)
