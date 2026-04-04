@@ -2,9 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** (1) When a review passes on a plan PR, the system must NOT auto-advance to execution — the user must explicitly trigger it. (2) When a planning→review pipeline completes, show the Code button (execution), not a Merge button. This plan fixes the label/pipeline/UI paths (webhook label auto-set, pipeline derivation, detail-view button gate). The dispatch-layer re-trigger path (PR events resuming completed planning tasks) is deferred to a linked follow-up — see Out of Scope #4.
+**Goal:** (1) When a review passes on a plan PR, the system must NOT auto-advance to execution — the user must explicitly trigger it. (2) When a planning→review pipeline completes, show the Code button (execution), not a Merge button — in both the code tasks list AND the task detail page.
 
-**Architecture:** Three coordinated changes: (a) the webhook stops auto-setting `ready-to-implement` for plan-origin reviews, (b) the `derivePipeline()` function removes the label gate from the synthetic execution step AND guards the review merge-fallback to not fire for planning→review pipelines, (c) the detail view removes the label gate from the Implement button.
+**Scope boundary:** This plan fixes four paths: (a) the webhook label auto-set, (b) the list-view pipeline derivation in `derivePipeline()`, (c) the detail-view Implement button gate, and (d) the detail-view Merge fallback for planning-origin review tasks. The dispatch-layer re-trigger path (PR events resuming completed planning tasks via `gitHubDispatchService.ts` → `sendTaskMessage()`) is deferred to a linked follow-up — see Out of Scope #4. After this plan, the label/pipeline/UI layer is fully guarded, but the dispatch layer still routes `pull_request_review` events to existing tasks unconditionally.
+
+**Architecture:** Four coordinated changes: (a) the webhook stops auto-setting `ready-to-implement` for plan-origin reviews, (b) the `derivePipeline()` function removes the label gate from the synthetic execution step AND guards the review merge-fallback to not fire for planning→review pipelines, (c) the detail view removes the label gate from the Implement button, and (d) the detail view guards the Merge action for planning-origin review tasks via `isTaskMergeable()` origin-awareness.
 
 **Tech Stack:** TypeScript, Fastify, React, Vitest
 
@@ -66,6 +68,9 @@ No HTTP endpoints are modified, created, or removed.
 | Modify | `apps/web/src/utils/issueGroups.ts:213-258`                       | Remove label gate from execution step + guard merge-fallback |
 | Test   | `apps/web/src/utils/__tests__/issueGroups.test.ts:1085-1181`      | Update label-gated tests + add planning→review tests         |
 | Modify | `apps/web/src/pages/CodeTaskViewPageV2.tsx:124-127`               | Remove `hasImplementationReadyLabel` from `isImplementable`  |
+| Modify | `apps/web/src/utils/issueGroups.ts:129-145`                       | Guard `isTaskMergeable()` for planning-origin review tasks   |
+| Modify | `apps/web/src/utils/__tests__/issueGroups.test.ts`                | Add `isTaskMergeable()` origin-awareness tests               |
+| Test   | `apps/web/src/__tests__/CodeTaskViewPageV2.test.tsx`              | Add behavioral tests for isImplementable + isMergeable       |
 
 ---
 
@@ -494,10 +499,20 @@ Fixes INT-1256, part of INT-1255"
 
 ---
 
-### Task 3: Remove label gate from web app detail view
+### Task 3: Remove label gate + guard merge action on detail view
 
 **Files:**
-- Modify: `apps/web/src/pages/CodeTaskViewPageV2.tsx:124-127`
+- Modify: `apps/web/src/pages/CodeTaskViewPageV2.tsx:22,124-128`
+- Modify: `apps/web/src/utils/issueGroups.ts:129-145`
+- Modify: `apps/web/src/utils/__tests__/issueGroups.test.ts`
+- Test: `apps/web/src/__tests__/CodeTaskViewPageV2.test.tsx`
+
+This task addresses two gaps on the task detail page:
+1. Remove the `hasImplementationReadyLabel` gate from `isImplementable` (original Task 3)
+2. Guard `isTaskMergeable()` so it does NOT return `true` for planning-origin review tasks (new — from completeness review finding #2)
+3. Add behavioral tests for both changes in `CodeTaskViewPageV2.test.tsx` (new — from completeness review finding #3)
+
+#### Part A: Remove label gate from `isImplementable`
 
 - [ ] **Step 1: Remove `hasImplementationReadyLabel` from `isImplementable`**
 
@@ -532,19 +547,213 @@ Replace with:
 import { isTaskMergeable, getTaskMergeUrl } from '@/utils/issueGroups.js';
 ```
 
-- [ ] **Step 3: Verify the web app builds**
+#### Part B: Guard `isTaskMergeable()` for planning-origin review tasks
+
+**Problem:** `isTaskMergeable(task)` (`apps/web/src/utils/issueGroups.ts:129-145`) returns `true` for any reviewed task with `needs_remediation === '0'` and a `prNumber`. When the user views the detail page of a review task for a **planning** PR, this incorrectly shows "Merge on GitHub" — but the correct next action is execution (Code), not merge. The list view handles this correctly via `derivePipeline()` (Task 2), but the detail view computes merge eligibility independently via `isTaskMergeable()`.
+
+**Root cause:** `isTaskMergeable()` operates on a single task without origin context. The `passedReview` fallback (line 136: `task.status === 'reviewed' && task.result?.needs_remediation === REMEDIATION_NOT_NEEDED`) fires for both planning→review and execution→review tasks identically.
+
+**Design decision — require `hasMergeReadyLabel` for reviewed tasks:**
+
+After Task 1 of this plan, the webhook sets `ready-to-merge` only for execution-origin reviews and sets NO label for planning-origin reviews. Since review tasks share the same `linearIssueId` as their origin (via `createReviewTask.ts` Tier 1 resolution at line 80), the `ready-to-merge` label on the shared Linear issue is visible to the review task's `linearIssue.labels`. This means `hasMergeReadyLabel()` naturally distinguishes:
+- Execution→review: `ready-to-merge` present → `hasMergeReadyLabel` = true → mergeable ✅
+- Planning→review: no merge label set → `hasMergeReadyLabel` = false → not mergeable ✅
+
+The `passedReview` fallback was designed for "review tasks / external PRs where the `ready-to-merge` label was set on the origin task's Linear issue, not the review task's" (existing JSDoc). However, review tasks resolve their `linearIssueId` from the origin task in `createReviewTask.ts:80-84`, so the review task and origin task share the same Linear issue and see the same labels. Remove the `passedReview` fallback to make `isTaskMergeable()` label-gated.
+
+**Edge case — label resolution failure:** If the review task gets a different `linearIssueId` (Tier 2/3 in `createReviewTask.ts`), the review task won't see the origin's `ready-to-merge` label. In this case, merge won't show on the detail page — but it WILL still show on the list view via `derivePipeline()`. This is an acceptable degradation: the list view remains the authoritative source for pipeline-derived actions.
+
+- [ ] **Step 3: Write failing test for `isTaskMergeable` — planning-origin review should NOT be mergeable**
+
+In `apps/web/src/utils/__tests__/issueGroups.test.ts`, add a test inside the `isTaskMergeable` describe block:
+
+```typescript
+  it('returns false for reviewed task with needs_remediation 0 but no merge-ready label (planning-origin)', () => {
+    expect(isTaskMergeable({
+      status: 'reviewed',
+      prNumber: 42,
+      result: { needs_remediation: '0' },
+      linearIssue: { labels: [{ name: 'code-task' }] },
+    })).toBe(false);
+  });
+```
+
+- [ ] **Step 4: Write regression test — execution-origin review IS still mergeable**
+
+```typescript
+  it('returns true for reviewed task with needs_remediation 0 AND merge-ready label (execution-origin)', () => {
+    expect(isTaskMergeable({
+      status: 'reviewed',
+      prNumber: 42,
+      result: { needs_remediation: '0' },
+      linearIssue: { labels: [{ name: 'ready-to-merge' }] },
+    })).toBe(true);
+  });
+```
+
+- [ ] **Step 5: Run tests to verify they fail**
 
 Run: `cd /repo && pnpm run verify:workspace:tracked -- web 2>&1 | tail -30`
-Expected: PASS (build + lint + type-check succeed)
+Expected: FAIL — the planning-origin test expects `false` but gets `true` (passedReview fallback fires).
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 6: Remove the `passedReview` fallback from `isTaskMergeable()`**
+
+In `apps/web/src/utils/issueGroups.ts`, replace lines 129-145:
+
+```typescript
+export function isTaskMergeable(task: {
+  status: string;
+  prNumber?: number;
+  result?: { prUrl?: string; needs_remediation?: string };
+  linearIssue?: { labels: { name: string }[] };
+}): boolean {
+  const hasLabel = hasMergeReadyLabel(task.linearIssue?.labels);
+  const passedReview = task.status === 'reviewed' && task.result?.needs_remediation === REMEDIATION_NOT_NEEDED;
+
+  if (!hasLabel && !passedReview) {
+    return false;
+  }
+  return (
+    (task.status === 'implemented' && task.result?.prUrl !== undefined) ||
+    (task.status === 'reviewed' && task.prNumber !== undefined)
+  );
+}
+```
+
+With:
+
+```typescript
+export function isTaskMergeable(task: {
+  status: string;
+  prNumber?: number;
+  result?: { prUrl?: string; needs_remediation?: string };
+  linearIssue?: { labels: { name: string }[] };
+}): boolean {
+  // Merge eligibility requires the ready-to-merge label on the Linear issue.
+  // After the planning-origin review fix (INT-1255), only execution-origin
+  // reviews get this label — planning-origin reviews intentionally do not,
+  // so merge does not appear on their detail page.
+  if (!hasMergeReadyLabel(task.linearIssue?.labels)) {
+    return false;
+  }
+  return (
+    (task.status === 'implemented' && task.result?.prUrl !== undefined) ||
+    (task.status === 'reviewed' && task.prNumber !== undefined)
+  );
+}
+```
+
+Update the JSDoc above (lines 117-128) to reflect the simplified logic:
+
+```typescript
+/**
+ * Determines if a single task is merge-ready for the detail view.
+ *
+ * Requires the `ready-to-merge` label on the task's Linear issue. This
+ * naturally distinguishes execution-origin reviews (label set by webhook)
+ * from planning-origin reviews (no label set after INT-1255).
+ *
+ * Covers two cases:
+ * 1. An `implemented` task with its own `result.prUrl` and `ready-to-merge` label
+ * 2. A `reviewed` task with a `prNumber` and `ready-to-merge` label
+ *
+ * Note: if the review task's Linear issue differs from the origin's (rare),
+ * merge won't show on the detail page — the list view pipeline is authoritative.
+ */
+```
+
+- [ ] **Step 7: Run tests to verify they pass**
+
+Run: `cd /repo && pnpm run verify:workspace:tracked -- web 2>&1 | tail -30`
+Expected: PASS
+
+#### Part C: Add behavioral tests for `CodeTaskViewPageV2`
+
+The existing test file `apps/web/src/__tests__/CodeTaskViewPageV2.test.tsx` covers PR link fallback behavior but does NOT test `isImplementable` or `isMergeable` rendering. Add tests for the changed behavior.
+
+- [ ] **Step 8: Add test — Implement button appears for planned task without label**
+
+In `apps/web/src/__tests__/CodeTaskViewPageV2.test.tsx`, add a new describe block or tests:
+
+```typescript
+  it('shows Implement button for planned task with linearIssueId (no label check)', () => {
+    mockUseTaskView.mockReturnValue(createTaskViewState(
+      createTask({
+        agentType: 'planning',
+        status: 'planned',
+        linearIssueId: 'INT-100',
+        linearIssue: { labels: [{ id: 'l1', name: 'some-label' }], url: 'https://linear.app/...' },
+      })
+    ));
+
+    render(<CodeTaskViewPageV2 />);
+
+    // The Implement button renders inside V2NextSteps — verify isImplementable is passed correctly
+    // by checking that the implement-related UI is present
+    expect(screen.getByText(/implement/i)).toBeInTheDocument();
+  });
+```
+
+- [ ] **Step 9: Add test — Merge does NOT appear for planning-origin review task**
+
+```typescript
+  it('does NOT show Merge button for planning-origin review task (no ready-to-merge label)', () => {
+    mockUseTaskView.mockReturnValue(createTaskViewState(
+      createTask({
+        agentType: 'review',
+        status: 'reviewed',
+        prNumber: 42,
+        result: { needs_remediation: '0' },
+        linearIssue: { labels: [{ id: 'l1', name: 'code-task' }], url: 'https://linear.app/...' },
+      })
+    ));
+
+    render(<CodeTaskViewPageV2 />);
+
+    expect(screen.queryByText(/merge on github/i)).not.toBeInTheDocument();
+  });
+```
+
+- [ ] **Step 10: Add regression test — Merge DOES appear for execution-origin review task**
+
+```typescript
+  it('shows Merge button for execution-origin review task (has ready-to-merge label)', () => {
+    mockUseTaskView.mockReturnValue(createTaskViewState(
+      createTask({
+        agentType: 'review',
+        status: 'reviewed',
+        prNumber: 42,
+        result: { needs_remediation: '0' },
+        linearIssue: { labels: [{ id: 'l1', name: 'ready-to-merge' }], url: 'https://linear.app/...' },
+      })
+    ));
+
+    render(<CodeTaskViewPageV2 />);
+
+    expect(screen.getByText(/merge on github/i)).toBeInTheDocument();
+  });
+```
+
+Note: these tests may need to account for how `V2NextSteps` renders. If V2NextSteps is mocked, you may need to check the props passed to it instead of rendered text. Adjust the assertions to match the actual component structure — the intent is to verify that `isImplementable` and `isMergeable` are correctly computed and propagated.
+
+- [ ] **Step 11: Run tests to verify they pass**
+
+Run: `cd /repo && pnpm run verify:workspace:tracked -- web 2>&1 | tail -30`
+Expected: PASS
+
+- [ ] **Step 12: Commit**
 
 ```bash
-git add apps/web/src/pages/CodeTaskViewPageV2.tsx
-git commit -m "fix: remove label gate from Implement button in task detail view
+git add apps/web/src/pages/CodeTaskViewPageV2.tsx apps/web/src/utils/issueGroups.ts \
+  apps/web/src/utils/__tests__/issueGroups.test.ts apps/web/src/__tests__/CodeTaskViewPageV2.test.tsx
+git commit -m "fix: remove label gate from Implement + guard merge for planning-origin reviews
 
 The Implement button now shows for any completed planning task with a
-Linear issue. No label check required — the user's click is the trigger.
+Linear issue (no label check). The Merge action on the detail page now
+requires the ready-to-merge label, which is only set for execution-origin
+reviews — planning-origin reviews correctly suppress merge.
+
+Adds behavioral tests for CodeTaskViewPageV2 isImplementable/isMergeable.
 
 Part of INT-1255"
 ```
@@ -570,6 +779,35 @@ Fix any issues before proceeding.
 
 ---
 
+## Acceptance Criteria
+
+These criteria define exactly what this plan achieves and what remains for follow-up work.
+
+### ✅ In scope — verified after implementation
+
+| #    | Criterion                                                                                       | Verification                               |
+| ---- | ----------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| AC-1 | Plan-origin review with `needs_remediation: '0'` does NOT auto-set `ready-to-implement` label   | Unit test in `webhooks.test.ts`            |
+| AC-2 | Execution-origin review still sets `ready-to-merge` label (unchanged)                           | Existing unit test preserved               |
+| AC-3 | `derivePipeline()` shows execution as actionable for completed planning without label gate      | Unit test in `issueGroups.test.ts`         |
+| AC-4 | Planning→review pipeline shows Code (execution) action, NOT Merge, in list view                 | Unit test in `issueGroups.test.ts`         |
+| AC-5 | Execution→review pipeline still shows Merge in list view (regression guard)                     | Unit test in `issueGroups.test.ts`         |
+| AC-6 | Detail view: Implement button appears for planned tasks without `ready-to-implement` label      | Unit test in `CodeTaskViewPageV2.test.tsx` |
+| AC-7 | Detail view: Merge does NOT appear for planning-origin review tasks (no `ready-to-merge` label) | Unit test in `CodeTaskViewPageV2.test.tsx` |
+| AC-8 | Detail view: Merge still appears for execution-origin review tasks (has `ready-to-merge` label) | Unit test in `CodeTaskViewPageV2.test.tsx` |
+| AC-9 | Full CI passes                                                                                  | `pnpm run ci:tracked`                      |
+
+### ⚠️ NOT in scope — dispatch layer remains unguarded
+
+| #     | Gap                                                                                                                                                                                 | Why deferred                                                                                                                 | Follow-up                                |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| GAP-1 | `pull_request_review` events on completed planning PRs still route through `findLatestExecutionTaskByPR()` → `handleExistingTask()` → `sendTaskMessage()`                           | Requires changes to `gitHubWebhookRules.ts` and/or `gitHubDispatchService.ts` — different code layer, different risk surface | Out of Scope #4 with acceptance criteria |
+| GAP-2 | The use case matrix claim "After this plan, only explicit user action starts execution" is partially true — it holds for the label/pipeline/UI layer but NOT for the dispatch layer | Dispatch-layer guard is a prerequisite for the full end-to-end claim                                                         | Same follow-up as GAP-1                  |
+
+After this plan, explicit user action is the sole execution trigger **through the UI** (list view pipeline, detail view buttons). The dispatch layer still processes `pull_request_review` events unconditionally — a human posting a PR review on a completed planning PR may still cause task resumption via `sendTaskMessage()`. This is the documented remaining gap.
+
+---
+
 ## Out of Scope
 
 1. **Group summary `hasImplementationTaskId` staleness bug**: The `codeTaskRepositoryWithGroupUpdates` decorator doesn't trigger summary updates when `implementationTaskId` changes (only on status changes). Track as a separate issue.
@@ -580,6 +818,6 @@ Fix any issues before proceeding.
 
 4. **Planning task re-triggering on PR events — linked follow-up** (reported by @pbuchman, 2026-04-04): When reviews or comments are posted on a planning PR, the webhook dispatch service (`gitHubDispatchService.ts`) routes the `pull_request_review` event through the standard dispatch flow via `findLatestExecutionTaskByPR()` → `handleExistingTask()` → `sendTaskMessage()`, which resumes terminal tasks. This causes the planning phase to re-execute even though the plan is already complete. This is the same re-trigger pattern as the execution auto-advancing addressed in this plan, but at the dispatch/orchestration level rather than the label/pipeline/UI level.
 
-   **Scope clarification:** This plan fixes three paths: (a) the label auto-set in the webhook, (b) the pipeline derivation in the web UI, and (c) the detail-view Implement button gate. The dispatch-layer re-trigger (path d) remains deferred because it requires changes to `gitHubWebhookRules.ts` and/or `gitHubDispatchService.ts` to detect that a planning PR already has a completed plan and skip re-dispatch.
+   **Scope clarification:** This plan fixes four paths: (a) the label auto-set in the webhook, (b) the pipeline derivation in the web UI, (c) the detail-view Implement button gate, and (d) the detail-view Merge action for planning-origin review tasks. The dispatch-layer re-trigger (path e) remains deferred because it requires changes to `gitHubWebhookRules.ts` and/or `gitHubDispatchService.ts` to detect that a planning PR already has a completed plan and skip re-dispatch. See Acceptance Criteria section (GAP-1, GAP-2) for the precise boundary.
 
    **Acceptance criteria for follow-up:** (1) A `pull_request_review` event on a PR whose latest planning task is in terminal state (`planned`) does NOT create a new task or resume the completed planning task. (2) A `pull_request_review` event on a PR whose latest planning task is still running (`dispatched`, `running`) continues to route normally. Track as a linked Linear issue.
