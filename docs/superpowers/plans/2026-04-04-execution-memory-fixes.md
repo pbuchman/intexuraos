@@ -2,11 +2,24 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fix five issues found in the INT-1267 execution memory audit: evaluation schema validation, DI wiring gap, vector scoring, remediation agent eligibility, and agent memory usage tracking.
+**Goal:** Fix five issues found in the INT-1267 execution memory audit: evaluation schema validation, DI wiring gap, vector scoring, full agent eligibility (all types including remediation and pull_request), and agent memory acknowledgment + usage tracking.
 
 **Architecture:** All fixes are in `apps/code-agent` except Task 5 (orchestrator system prompt). Each task is independently testable and deployable. TDD throughout.
 
 **Tech Stack:** TypeScript, Vitest, Zod, `@google-cloud/firestore@7.11.6`, pnpm monorepo
+
+---
+
+### Parallel Work Breakdown
+
+Two independent subtasks split by service boundary — executable in parallel with no coordination:
+
+| Subtask      | Service                | Tasks     | Linear   |
+| ------------ | ---------------------- | --------- | -------- |
+| code-agent   | `apps/code-agent`      | Tasks 1–4 | INT-1271 |
+| orchestrator | `workers/orchestrator` | Task 5    | INT-1272 |
+
+**Contract:** No direct code dependencies between subtasks. The orchestrator subtask adds prompt instructions telling agents to emit `execution_memory_ids_used`, `execution_memory_ids_rejected`, and `execution_memory_usage_summary` fields. The code-agent subtask does NOT parse or consume these fields. Task 6 (cross-workspace CI) runs after both subtasks complete.
 
 ---
 
@@ -74,7 +87,7 @@ Expected: FAIL — `EvaluationSchema.parse()` throws without retry
 
 - [ ] **Step 3: Add EVALUATION_SCHEMA_BLOCK constant**
 
-In `processExecutionMemoryBacklog.ts`, after the `DISTILLATION_SCHEMA_BLOCK` definition (after line 523), add:
+In `processExecutionMemoryBacklog.ts`, after the `DISTILLATION_SCHEMA_BLOCK` definition (after line 494), add:
 
 ```typescript
 const EVALUATION_SCHEMA_BLOCK = [
@@ -277,7 +290,7 @@ to the LLM for repair before failing."
 
 **Files:**
 - Modify: `apps/code-agent/src/routes/webhookRoutes.ts:856-870`
-- Modify: `apps/code-agent/src/__tests__/routes/webhookRoutes.test.ts`
+- Modify: `apps/code-agent/src/__tests__/routes/webhooks.test.ts`
 
 - [ ] **Step 1: Add executionMemory bag to triggerDrainForPR**
 
@@ -316,12 +329,12 @@ Replace lines 861-870:
 
 - [ ] **Step 2: Run webhook route tests**
 
-Run: `cd apps/code-agent && pnpm vitest run src/__tests__/routes/webhookRoutes.test.ts`
+Run: `cd apps/code-agent && pnpm vitest run src/__tests__/routes/webhooks.test.ts`
 Expected: PASS (existing tests should continue to pass since executionMemory resources are optional in drainTaskQueue)
 
 - [ ] **Step 3: Write test — triggerDrainForPR passes executionMemory resources**
 
-In `apps/code-agent/src/__tests__/routes/webhookRoutes.test.ts`, add a test inside the existing `triggerDrainForPR` describe block (or the post-completion drain test group) that verifies the DI wiring:
+In `apps/code-agent/src/__tests__/routes/webhooks.test.ts`, add a test inside the existing `triggerDrainForPR` describe block (or the post-completion drain test group) that verifies the DI wiring:
 
 ```typescript
 it('passes executionMemory resources to drainTaskQueue during post-completion drain', async () => {
@@ -342,11 +355,11 @@ it('passes executionMemory resources to drainTaskQueue during post-completion dr
 });
 ```
 
-Note: Adapt the test setup to match the existing `webhookRoutes.test.ts` patterns — use `app.inject()` for the webhook endpoint and verify `drainTaskQueue` receives the memory resources from `getServices()`. The exact mock names depend on the test file's existing service setup.
+Note: Adapt the test setup to match the existing `webhooks.test.ts` patterns — use `app.inject()` for the webhook endpoint and verify `drainTaskQueue` receives the memory resources from `getServices()`. The exact mock names depend on the test file's existing service setup.
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd apps/code-agent && pnpm vitest run src/__tests__/routes/webhookRoutes.test.ts -t "passes executionMemory resources"`
+Run: `cd apps/code-agent && pnpm vitest run src/__tests__/routes/webhooks.test.ts -t "passes executionMemory resources"`
 Expected: PASS (implementation from Step 1 already wires the resources)
 
 - [ ] **Step 5: Run full test suite**
@@ -357,7 +370,7 @@ Expected: ALL PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/code-agent/src/routes/webhookRoutes.ts apps/code-agent/src/__tests__/routes/webhookRoutes.test.ts
+git add apps/code-agent/src/routes/webhookRoutes.ts apps/code-agent/src/__tests__/routes/webhooks.test.ts
 git commit -m "fix(code-agent): pass executionMemory resources in webhookRoutes triggerDrainForPR
 
 The post-completion drain triggered by webhookRoutes was not passing
@@ -498,36 +511,43 @@ in the document data. Changed the unknown-distance fallback from 0
 
 ---
 
-### Task 4: Include Remediation Agents in Memory Eligibility
+### Task 4: Include All Agent Types in Memory Eligibility
+
+**Context:** The web app UI already renders execution memory details for all task types when the data exists — it is not filtered by agent type. The bottleneck is backend eligibility: `MEMORY_ELIGIBLE_AGENTS` currently only includes `execution`, `planning`, `review`. Adding `remediation` and `pull_request` ensures all agent types receive memory and the UI displays it consistently across all code task views.
 
 **Files:**
 - Modify: `apps/code-agent/src/domain/utils/memoryEligibility.ts:1`
 - Modify: `apps/code-agent/src/__tests__/domain/utils/memoryEligibility.test.ts:21-23`
 
-- [ ] **Step 1: Update test — expect remediation to be eligible**
+- [ ] **Step 1: Update tests — expect remediation and pull_request to be eligible**
 
-In `memoryEligibility.test.ts`, change the existing test at line 21:
+In `memoryEligibility.test.ts`, add/change tests:
 
 ```typescript
   it('returns true for remediation', () => {
     expect(isMemoryEligibleAgent('remediation')).toBe(true);
   });
+
+  it('returns true for pull_request', () => {
+    expect(isMemoryEligibleAgent('pull_request')).toBe(true);
+  });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run tests to verify they fail**
 
 Run: `cd apps/code-agent && pnpm vitest run src/__tests__/domain/utils/memoryEligibility.test.ts -t "returns true for remediation"`
-Expected: FAIL — `isMemoryEligibleAgent('remediation')` currently returns `false`
+Run: `cd apps/code-agent && pnpm vitest run src/__tests__/domain/utils/memoryEligibility.test.ts -t "returns true for pull_request"`
+Expected: FAIL — both currently return `false`
 
-- [ ] **Step 3: Add remediation to eligible agents**
+- [ ] **Step 3: Add remediation and pull_request to eligible agents**
 
 In `memoryEligibility.ts` line 1:
 
 ```typescript
-const MEMORY_ELIGIBLE_AGENTS = new Set(['execution', 'planning', 'review', 'remediation']);
+const MEMORY_ELIGIBLE_AGENTS = new Set(['execution', 'planning', 'review', 'remediation', 'pull_request']);
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd apps/code-agent && pnpm vitest run src/__tests__/domain/utils/memoryEligibility.test.ts`
 Expected: ALL PASS
@@ -536,27 +556,32 @@ Expected: ALL PASS
 
 ```bash
 git add apps/code-agent/src/domain/utils/memoryEligibility.ts apps/code-agent/src/__tests__/domain/utils/memoryEligibility.test.ts
-git commit -m "feat(code-agent): include remediation agents in execution memory eligibility
+git commit -m "feat(code-agent): include all agent types in execution memory eligibility
 
-Remediation agents now receive matched execution memories during
-dispatch. This allows them to benefit from pitfall and verification
-patterns learned from prior tasks in the same issue lifecycle."
+All agent types (execution, planning, review, remediation, pull_request)
+now receive matched execution memories during dispatch. This ensures
+UI consistency — the web app already renders memory details for any
+task that has the data; the bottleneck was backend eligibility filtering."
 ```
 
 ---
 
-### Task 5: Add Memory Usage Reporting Instructions to System Prompt
+### Task 5: Add Memory Acknowledgment and Usage Reporting Instructions to System Prompt
+
+**Context:** Two gaps exist in how agents handle execution memory:
+1. **No upfront acknowledgment:** Agents receive memories in the system prompt but never explicitly confirm they read them. A mandatory acknowledgment step ensures agents actually process memories rather than ignoring them.
+2. **No usage reporting:** Agents don't report which memories they applied vs rejected, making it impossible to evaluate memory effectiveness.
 
 **Files:**
 - Modify: `workers/orchestrator/src/services/system-prompt.ts:80-116`
-- Modify: `workers/orchestrator/src/__tests__/services/system-prompt.test.ts`
+- Modify: `workers/orchestrator/src/__tests__/system-prompt.test.ts`
 
-- [ ] **Step 1: Write failing test — memory section includes usage instructions**
+- [ ] **Step 1: Write failing test — memory section includes acknowledgment instructions**
 
 In `system-prompt.test.ts`, add within the existing planning prompt describe block:
 
 ```typescript
-it('includes memory usage reporting instructions when memories are matched', () => {
+it('includes mandatory memory acknowledgment instructions when memories are matched', () => {
   const prompt = planningPrompt.build({
     taskId: 'task-plan-456',
     linearIssueLabels: [],
@@ -579,6 +604,11 @@ it('includes memory usage reporting instructions when memories are matched', () 
     },
   });
 
+  // Upfront acknowledgment
+  expect(prompt).toContain('MANDATORY');
+  expect(prompt).toContain('immediately after reading the Linear issue');
+  expect(prompt).toContain('bullet point');
+  // End-of-task reporting
   expect(prompt).toContain('execution_memory_ids_used');
   expect(prompt).toContain('execution_memory_ids_rejected');
 });
@@ -586,12 +616,12 @@ it('includes memory usage reporting instructions when memories are matched', () 
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd workers/orchestrator && pnpm vitest run src/__tests__/services/system-prompt.test.ts -t "includes memory usage reporting"`
-Expected: FAIL — current prompt does not mention these fields
+Run: `cd workers/orchestrator && pnpm vitest run src/__tests__/system-prompt.test.ts -t "includes mandatory memory acknowledgment"`
+Expected: FAIL — current prompt does not mention acknowledgment or reporting fields
 
-- [ ] **Step 3: Add usage reporting instructions to buildExecutionMemorySection**
+- [ ] **Step 3: Add acknowledgment and usage reporting to buildExecutionMemorySection**
 
-In `system-prompt.ts`, update `buildExecutionMemorySection()`. After the rendered memories (line 115, before the closing backtick), append:
+In `system-prompt.ts`, update `buildExecutionMemorySection()`. After the rendered memories (line 115, before the closing backtick), append both an acknowledgment section and a reporting section:
 
 ```typescript
   return `
@@ -608,6 +638,17 @@ Query summary: ${executionMemoryContext.querySummary}
 
 ${renderedMemories}
 
+#### Memory Acknowledgment (MANDATORY)
+Immediately after reading the Linear issue, you MUST print a confirmation of all execution memories you received. List each memory as a bullet point with its ID and title:
+
+\`\`\`
+📋 **Execution Memories Received:**
+- [mem-id-1] Title of memory 1
+- [mem-id-2] Title of memory 2
+\`\`\`
+
+This step is non-negotiable. You must explicitly acknowledge every memory before proceeding with any implementation or analysis work. Carefully consider each memory and determine whether it applies to the current task.
+
 #### Memory Usage Reporting
 After completing your work, include in your final summary which memories you applied and which you did not:
 - **execution_memory_ids_used**: comma-separated memory IDs you applied (e.g. "mem-abc,mem-def")
@@ -617,17 +658,17 @@ After completing your work, include in your final summary which memories you app
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd workers/orchestrator && pnpm vitest run src/__tests__/services/system-prompt.test.ts -t "includes memory usage reporting"`
+Run: `cd workers/orchestrator && pnpm vitest run src/__tests__/system-prompt.test.ts -t "includes mandatory memory acknowledgment"`
 Expected: PASS
 
 - [ ] **Step 5: Run all system prompt tests**
 
-Run: `cd workers/orchestrator && pnpm vitest run src/__tests__/services/system-prompt.test.ts`
+Run: `cd workers/orchestrator && pnpm vitest run src/__tests__/system-prompt.test.ts`
 Expected: ALL PASS
 
 - [ ] **Step 6: Bump prompt version**
 
-The `buildExecutionMemorySection` is shared across all prompt builders. Since this adds new behavioral instructions (agents should now report memory usage), the prompt versions in `system-prompt.ts` need a minor version bump. Find each `PromptBuilder` that calls `buildExecutionMemorySection` (planning, review, execution) and bump the minor version (e.g. `'5.0.0'` -> `'5.1.0'`).
+The `buildExecutionMemorySection` is shared across all prompt builders. Since this adds new behavioral instructions (mandatory acknowledgment + usage reporting), the prompt versions in `system-prompt.ts` need a minor version bump. Find each `PromptBuilder` that calls `buildExecutionMemorySection` (planning, review, execution, remediation, pull_request) and bump the minor version (e.g. `'5.0.0'` -> `'5.1.0'`).
 
 - [ ] **Step 7: Run all orchestrator tests**
 
@@ -637,13 +678,14 @@ Expected: ALL PASS
 - [ ] **Step 8: Commit**
 
 ```bash
-git add workers/orchestrator/src/services/system-prompt.ts workers/orchestrator/src/__tests__/services/system-prompt.test.ts
-git commit -m "feat(orchestrator): add memory usage reporting instructions to system prompt
+git add workers/orchestrator/src/services/system-prompt.ts workers/orchestrator/src/__tests__/system-prompt.test.ts
+git commit -m "feat(orchestrator): add mandatory memory acknowledgment and usage reporting to system prompt
 
-Agents now receive explicit instructions to report which execution
-memories they applied vs rejected. The completion verifier already
-extracts these fields — the gap was that agents didn't know to emit
-them. Prompt versions bumped to reflect new behavioral instructions."
+Agents now must explicitly confirm execution memories received (as a
+bullet list with IDs and titles) immediately after reading the Linear
+issue. This ensures memories are actually processed, not ignored.
+Also adds end-of-task reporting instructions for memory usage tracking.
+Prompt versions bumped to reflect new behavioral instructions."
 ```
 
 ---
