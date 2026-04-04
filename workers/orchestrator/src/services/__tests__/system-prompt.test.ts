@@ -489,9 +489,9 @@ describe('system-prompt', () => {
     const finalBlockEnd = result.indexOf('```', finalBlockStart);
     const finalBlock = result.slice(finalBlockStart, finalBlockEnd);
 
-    expect(finalBlock).toContain('- memory_ids_used: <comma-separated list or "none">');
-    expect(finalBlock).toContain('- memory_ids_rejected: <comma-separated list or "none">');
-    expect(finalBlock).toContain('- memory_usage_summary: <brief note, or "none">');
+    expect(finalBlock).toContain('- execution_memory_ids_used: <comma-separated list or "none">');
+    expect(finalBlock).toContain('- execution_memory_ids_rejected: <comma-separated list or "none">');
+    expect(finalBlock).toContain('- execution_memory_usage_summary: <brief note, or "none">');
   });
 
   it('builds execution continuation instructions when an open PR is inherited', () => {
@@ -1237,16 +1237,16 @@ describe('system-prompt', () => {
     }
   });
 
-  it('planning prompt version is 5.0.0', () => {
-    expect(planningPrompt.version).toBe('5.0.0');
+  it('planning prompt version is 5.1.0', () => {
+    expect(planningPrompt.version).toBe('5.1.0');
   });
 
-  it('execution prompt version is 8.0.0', () => {
-    expect(executionPrompt.version).toBe('8.0.0');
+  it('execution prompt version is 8.1.0', () => {
+    expect(executionPrompt.version).toBe('8.1.0');
   });
 
-  it('remediation prompt version is 3.1.0', () => {
-    expect(remediationPrompt.version).toBe('3.1.0');
+  it('remediation prompt version is 3.2.0', () => {
+    expect(remediationPrompt.version).toBe('3.2.0');
   });
 
   it('injects execution memory section only for execution tasks', () => {

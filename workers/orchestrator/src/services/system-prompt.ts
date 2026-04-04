@@ -112,13 +112,28 @@ Query summary: ${executionMemoryContext.querySummary}
 - Ignore any memory that does not match the task or codebase in front of you.
 - Do not copy stale branch names, issue IDs, or URLs from memories.
 
-${renderedMemories}`;
+${renderedMemories}
+
+#### Memory Acknowledgment (MANDATORY)
+Immediately after reading the Linear issue, you MUST print a confirmation of all execution memories you received. List each memory as a bullet point with its ID and title:
+
+📋 **Execution Memories Received:**
+- [mem-id-1] Title of memory 1
+- [mem-id-2] Title of memory 2
+
+This step is non-negotiable. You must explicitly acknowledge every memory before proceeding with any implementation or analysis work. Carefully consider each memory and determine whether it applies to the current task.
+
+#### Memory Usage Reporting
+After completing your work, include in your final summary which memories you applied and which you did not:
+- **execution_memory_ids_used**: comma-separated memory IDs you applied (e.g. "mem-abc,mem-def")
+- **execution_memory_ids_rejected**: comma-separated memory IDs you found irrelevant or inapplicable
+- **execution_memory_usage_summary**: one sentence describing how memories influenced your work, or "No memories applied" if none were relevant`;
 }
 
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-planning',
   description: 'Planning agent system prompt for autonomous code task planning',
-  version: '5.0.0',
+  version: '5.1.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     return `[SYSTEM CONTEXT]
@@ -281,7 +296,7 @@ Note: For complex planned outcomes, you MUST include explicit proof of the paral
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '8.0.0',
+  version: '8.1.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const hasContinuationPr =
@@ -344,12 +359,7 @@ Before doing ANY work, you MUST read the Linear issue AND all its comments:
 **Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
 
 ${COMMENT_DRIVEN_DECISION_LOG}
-${buildExecutionMemorySection(params.executionMemoryContext)}${params.executionMemoryContext !== undefined && params.executionMemoryContext.matchedMemories.length > 0 ? `
-- Report these completion fields in \`EXECUTION_AGENT_FINAL\`:
-  - \`memory_ids_used\`: comma-separated memory IDs you actually used, or empty string.
-  - \`memory_ids_rejected\`: comma-separated memory IDs you rejected as stale or not applicable, or empty string.
-  - \`memory_usage_summary\`: one concise sentence describing how memory helped or why it was rejected.
-` : ''}
+${buildExecutionMemorySection(params.executionMemoryContext)}
 ${workerType === 'codex' ? CODEX_SESSION_AUTOMATION_PARITY + '\n\n' : ''}### Mandatory Skill Order (non-negotiable)
 1. Start with \`superpowers:subagent-driven-development\` (mandatory first skill) — dispatches fresh subagents per task with built-in spec + quality review
 2. After implementation, run \`superpowers:requesting-code-review\` (mandatory second skill) — final holistic review of the complete change
@@ -416,9 +426,9 @@ EXECUTION_AGENT_FINAL:
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: <full Linear URL>
 - Review iterations: <number>
-- memory_ids_used: <comma-separated list or "none">
-- memory_ids_rejected: <comma-separated list or "none">
-- memory_usage_summary: <brief note, or "none">
+- execution_memory_ids_used: <comma-separated list or "none">
+- execution_memory_ids_rejected: <comma-separated list or "none">
+- execution_memory_usage_summary: <brief note, or "none">
 - superpowers_subagent_driven_dev_used: <0|1>
 - superpowers_requesting_code_review_used: <0|1>
 - trivial_task: <0|1>
@@ -434,7 +444,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const remediationPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-remediation',
   description: 'Remediation agent system prompt for addressing review findings on an existing PR',
-  version: '3.1.0',
+  version: '3.2.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const continuationPrNumber = params.continuationPrNumber;
@@ -485,6 +495,7 @@ Before doing ANY work, you MUST read the Linear issue AND all its comments:
 **Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
 
 ${COMMENT_DRIVEN_DECISION_LOG}
+${buildExecutionMemorySection(params.executionMemoryContext)}
 
 ### Mandatory Execution: /nitpick-nuker (NON-NEGOTIABLE)
 
@@ -531,7 +542,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pull-request',
   description: 'Pull request agent system prompt for addressing PR review feedback',
-  version: '4.1.0',
+  version: '4.2.0',
   build(params: SystemPromptParams): string {
     const {
       taskId,
@@ -574,6 +585,7 @@ Before doing ANY work, you MUST read the Linear issue AND all its comments:
 4. If the task was previously flagged as unclear and re-executed, the user's clarifying answers WILL be in the comments. You MUST incorporate them.
 
 **Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
+${buildExecutionMemorySection(params.executionMemoryContext)}
 
 ### Ignore Bot-Directed Comments
 
@@ -821,7 +833,7 @@ Rules:
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '9.0.0',
+  version: '9.1.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
       params;
