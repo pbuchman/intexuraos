@@ -847,8 +847,12 @@ describe('createReviewTask', () => {
     }
   });
 
-  it('uses provided baseBranch instead of default main', async () => {
-    const deps = createFakeDeps();
+  it('uses provided baseBranch as fallback when PR base branch fetch fails', async () => {
+    const gitHubPRClient = createFakeGitHubPRClient();
+    vi.mocked(gitHubPRClient.getPullRequestBaseBranch).mockResolvedValue(
+      err({ code: 'API_ERROR' as const, message: 'GitHub unavailable' })
+    );
+    const deps = createFakeDeps({ gitHubPRClient });
     await createReviewTask(deps, {
       repository: 'intexuraos/intexuraos',
       prNumber: 42,
@@ -1968,6 +1972,113 @@ describe('createReviewTask', () => {
       expect(createCall).toBeDefined();
       if (createCall !== undefined) {
         expect(createCall[0].prompt).not.toContain('## Re-review Context');
+      }
+    });
+  });
+
+  describe('PR branch resolution (INT-1258)', () => {
+    it('sets prBranch from PR headRef via getPullRequestStatus', async () => {
+      const gitHubPRClient = createFakeGitHubPRClient();
+      vi.mocked(gitHubPRClient.getPullRequestStatus).mockResolvedValue(
+        ok({ state: 'open' as const, mergedAt: null, headRef: 'fix/INT-123-auth' })
+      );
+      const deps = createFakeDeps({ gitHubPRClient });
+
+      const result = await createReviewTask(deps, {
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-branch-1',
+      });
+
+      expect(result.ok).toBe(true);
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].prBranch).toBe('fix/INT-123-auth');
+      }
+    });
+
+    it('sets baseBranch from PR baseRefName via getPullRequestBaseBranch', async () => {
+      const gitHubPRClient = createFakeGitHubPRClient();
+      vi.mocked(gitHubPRClient.getPullRequestBaseBranch).mockResolvedValue(ok('development'));
+      const deps = createFakeDeps({ gitHubPRClient });
+
+      const result = await createReviewTask(deps, {
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-branch-2',
+      });
+
+      expect(result.ok).toBe(true);
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].baseBranch).toBe('development');
+      }
+    });
+
+    it('falls back to request.baseBranch when getPullRequestStatus fails', async () => {
+      const gitHubPRClient = createFakeGitHubPRClient();
+      vi.mocked(gitHubPRClient.getPullRequestStatus).mockResolvedValue(
+        err({ code: 'API_ERROR' as const, message: 'GitHub down' })
+      );
+      vi.mocked(gitHubPRClient.getPullRequestBaseBranch).mockResolvedValue(
+        err({ code: 'API_ERROR' as const, message: 'GitHub down' })
+      );
+      const deps = createFakeDeps({ gitHubPRClient });
+
+      const result = await createReviewTask(deps, {
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-branch-3',
+        baseBranch: 'development',
+      });
+
+      expect(result.ok).toBe(true);
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        // Falls back to request.baseBranch
+        expect(createCall[0].baseBranch).toBe('development');
+        // prBranch not set when status fetch fails
+        expect(createCall[0].prBranch).toBeUndefined();
+      }
+    });
+
+    it('falls back to main when both PR fetch and request.baseBranch are absent', async () => {
+      const gitHubPRClient = createFakeGitHubPRClient();
+      vi.mocked(gitHubPRClient.getPullRequestStatus).mockResolvedValue(
+        err({ code: 'API_ERROR' as const, message: 'GitHub down' })
+      );
+      vi.mocked(gitHubPRClient.getPullRequestBaseBranch).mockResolvedValue(
+        err({ code: 'API_ERROR' as const, message: 'GitHub down' })
+      );
+      const userServiceClient = createFakeUserServiceClient();
+      vi.mocked(userServiceClient.getOAuthToken).mockResolvedValue(
+        err({ code: 'CONNECTION_NOT_FOUND', message: 'No token' }) as never
+      );
+      const deps = createFakeDeps({ gitHubPRClient, userServiceClient });
+
+      const result = await createReviewTask(deps, {
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-branch-4',
+      });
+
+      expect(result.ok).toBe(true);
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].baseBranch).toBe('main');
+        expect(createCall[0].prBranch).toBeUndefined();
       }
     });
   });
