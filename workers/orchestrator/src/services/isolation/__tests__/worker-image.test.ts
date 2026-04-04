@@ -5,6 +5,9 @@ import { fileURLToPath } from 'node:url';
 const dockerfilePath = fileURLToPath(
   new URL('../../../../../code-worker/Dockerfile', import.meta.url)
 );
+const dockerfileTestPath = fileURLToPath(
+  new URL('../../../../../code-worker/Dockerfile.test', import.meta.url)
+);
 const entrypointPath = fileURLToPath(
   new URL('../../../../../code-worker/entrypoint.sh', import.meta.url)
 );
@@ -49,5 +52,34 @@ describe('code-worker image Codex skill bootstrap', () => {
     expect(entrypoint).toContain('CODEX_REASONING_EFFORT');
     expect(entrypoint).toContain('model_reasoning_effort=${CODEX_REASONING_EFFORT}');
     expect(entrypoint).toContain('"${effort_args[@]}"');
+  });
+
+  it('streams Codex output live instead of buffering to a temp file', () => {
+    const entrypoint = readFileSync(entrypointPath, 'utf8');
+
+    // Forensics path: output piped through tee for live streaming + log capture
+    expect(entrypoint).toContain('| tee -a "${attempt_forensics_dir}/codex-stream.log"');
+
+    // No temp file buffering pattern (the old approach used mktemp + cat)
+    expect(entrypoint).not.toContain('mktemp /tmp/codex-output');
+    expect(entrypoint).not.toMatch(/> "\$log_file"/);
+    expect(entrypoint).not.toMatch(/cat "\$log_file"/);
+  });
+
+  it('preserves the Codex exit code through the pipe via PIPESTATUS', () => {
+    const entrypoint = readFileSync(entrypointPath, 'utf8');
+
+    // PIPESTATUS[0] captures the exit code of the first command in the pipe
+    expect(entrypoint).toContain('raw_exit=${PIPESTATUS[0]}');
+
+    // Exit code is used for the return value
+    expect(entrypoint).toContain('return "$raw_exit"');
+  });
+
+  it('includes a codex stub in the test Dockerfile for E2E Codex-path coverage', () => {
+    const dockerfileTest = readFileSync(dockerfileTestPath, 'utf8');
+
+    expect(dockerfileTest).toContain('COPY test-fixtures/codex-stub.sh /usr/local/bin/codex');
+    expect(dockerfileTest).toContain('chmod +x /usr/local/bin/codex');
   });
 });
