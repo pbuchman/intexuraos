@@ -485,6 +485,33 @@ describe('executeCodeAction usecase', () => {
     expect(messages[0]?.correlationId).toBe('code-complete-action-123');
   });
 
+  it('uses absolute URL directly when resourceUrl is already absolute', async () => {
+    const action = createAction({ status: 'pending' });
+    await fakeActionRepo.save(action);
+
+    // Set the code agent to return an absolute URL
+    fakeCodeClient.setNextResponse({
+      codeTaskId: 'code-task-123',
+      resourceUrl: 'https://intexuraos.cloud/#/code-tasks/code-task-123',
+    });
+
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
+    });
+
+    await usecase('action-123');
+
+    const messages = fakeWhatsappPublisher.getSentMessages();
+    expect(messages).toHaveLength(1);
+    // Absolute URL should be used directly without prepending webAppUrl
+    expect(messages[0]?.ctaUrl).toEqual({ displayText: 'View Progress', url: 'https://intexuraos.cloud/#/code-tasks/code-task-123' });
+  });
+
   it('succeeds even when WhatsApp notification fails (best-effort)', async () => {
     const action = createAction({ status: 'pending' });
     await fakeActionRepo.save(action);
