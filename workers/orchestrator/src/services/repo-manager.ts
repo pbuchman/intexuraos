@@ -184,6 +184,9 @@ export async function cleanWorktree(path: string, logger: Logger): Promise<void>
   try {
     await execFileAsync('git', ['reset', '--hard', 'origin/development'], { cwd: path });
     await execFileAsync('git', ['clean', '-df'], { cwd: path });
+    await execFileAsync('git', ['branch', '-f', 'development', 'origin/development'], {
+      cwd: path,
+    });
     logger.info({ path }, 'Worktree cleaned successfully');
   } catch (error: unknown) {
     const execError = error as { message?: string; stderr?: string; code?: number };
