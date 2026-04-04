@@ -8334,6 +8334,93 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     expect(params.message).not.toContain('🔁');
   });
 
+  it('merges result fields on resumed completion instead of replacing', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Implement the new feature',
+      sanitizedPrompt: 'Implement the new feature',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_merge_test',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    // First: send a normal completion to set initial result fields including
+    // a field (planning_outcome_label) that will NOT be present in the second webhook
+    const firstPayload = {
+      taskId: task.id,
+      status: 'completed' as const,
+      result: {
+        branch: 'feature/initial-branch',
+        summary: 'Original summary',
+        planning_outcome_label: 'planned' as const,
+      },
+    };
+    const { timestamp: ts1, signature: sig1 } = generateWebhookSignature(firstPayload, 'test-webhook-secret');
+    const firstResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': ts1,
+        'x-request-signature': sig1,
+      },
+      payload: firstPayload,
+    });
+    expect(firstResponse.statusCode).toBe(200);
+
+    // Confirm first webhook stored planning_outcome_label
+    const afterFirst = await codeTaskRepo.findById(task.id);
+    expect(afterFirst.ok).toBe(true);
+    if (!afterFirst.ok) throw new Error('Failed to get task after first webhook');
+    expect(afterFirst.value.result?.planning_outcome_label).toBe('planned');
+
+    // Second: send resumed completion with git result fields — does NOT include planning_outcome_label
+    const resumedPayload = {
+      taskId: task.id,
+      status: 'completed' as const,
+      resumedCompletion: true,
+      result: {
+        branch: 'feature/final-branch',
+        commits: 3,
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+        summary: 'Updated summary from resumed run',
+      },
+    };
+    const { timestamp: ts2, signature: sig2 } = generateWebhookSignature(resumedPayload, 'test-webhook-secret');
+    const resumedResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': ts2,
+        'x-request-signature': sig2,
+      },
+      payload: resumedPayload,
+    });
+    expect(resumedResponse.statusCode).toBe(200);
+
+    // Verify the result was MERGED: new fields present AND first-webhook-only field preserved
+    const getResult = await codeTaskRepo.findById(task.id);
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) throw new Error('Failed to get task');
+    // New fields from resumed payload are present
+    expect(getResult.value.result?.branch).toBe('feature/final-branch');
+    expect(getResult.value.result?.commits).toBe(3);
+    expect(getResult.value.result?.prUrl).toBe('https://github.com/pbuchman/intexuraos/pull/42');
+    // summary updated by resumed payload
+    expect(getResult.value.result?.summary).toBe('Updated summary from resumed run');
+    // planning_outcome_label from first webhook is preserved (this is the key assertion)
+    expect(getResult.value.result?.planning_outcome_label).toBe('planned');
+  });
+
   describe('stale callback handling for cancelled tasks', () => {
     it('ignores completed callback for already cancelled task', async () => {
       const createResult = await codeTaskRepo.create({

@@ -874,6 +874,23 @@ describe('submitToExecutionAgent', () => {
       );
     });
 
+    it('falls back to result.prUrl when planning_pr_url is missing for planning tasks', async () => {
+      setupHappyPathMocks({
+        result: {
+          branch: 'plan/my-feature',
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+          // Note: NO planning_pr_url field
+        },
+      });
+
+      const result = await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+      expect(mockGitHubPRClient.mergePullRequest).toHaveBeenCalledWith(
+        'ghp_test_token', 'pbuchman', 'intexuraos', 42, 'merge', expect.any(String),
+      );
+    });
+
     it('does not include planningPrBranch or planningPrUrl on execution task', async () => {
       setupHappyPathMocks({
         result: {
