@@ -478,9 +478,10 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
             updated.taskCount = Math.max(0, current.taskCount - 1);
 
             if (updated.taskCount <= 0) {
-              // Delete summary doc and update user counts
-              tx.delete(asDocRef(summaryRef));
-              const newCounts = applyDeleteGroupDelta(existingCounts, oldAggregateStatus);
+              // All tasks archived — preserve summary with 'archived' status instead of deleting
+              updated.aggregateStatus = 'archived';
+              tx.set(asDocRef(summaryRef), updated as unknown as DocumentData);
+              const newCounts = applyStatusChangeDelta(existingCounts, oldAggregateStatus, 'archived');
               newCounts.userId = newTask.userId;
               newCounts.updatedAt = now;
               tx.set(asDocRef(countsRef), newCounts as unknown as DocumentData);

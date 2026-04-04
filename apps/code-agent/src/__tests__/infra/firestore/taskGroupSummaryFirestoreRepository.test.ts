@@ -837,7 +837,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(doc.get('taskCount')).toBe(1);
     });
 
-    it('deletes summary when last task archived', async () => {
+    it('preserves summary with archived status when last task archived', async () => {
       const repo = createTaskGroupSummaryFirestoreRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -859,8 +859,18 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       const archivedTask = { ...task, status: 'archived' as const };
       await repo.updateAfterStatusChange(task, archivedTask);
 
+      // Summary doc should still exist with aggregateStatus = 'archived'
       const afterDoc = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-400').get();
-      expect(afterDoc.exists).toBe(false);
+      expect(afterDoc.exists).toBe(true);
+      expect(afterDoc.get('aggregateStatus')).toBe('archived');
+      // taskCount decremented to 0
+      expect(afterDoc.get('taskCount')).toBe(0);
+
+      // user counts: done -> 0, archived -> 1, totalGroups stays at 1
+      const countsDoc = await fakeFirestore.collection('user_group_counts').doc('user-1').get();
+      expect(countsDoc.get('done')).toBe(0);
+      expect(countsDoc.get('archived')).toBe(1);
+      expect(countsDoc.get('totalGroups')).toBe(1);
     });
 
     it('logs warning when summary doc not found', async () => {
@@ -1364,16 +1374,18 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(countsBefore.get('failed')).toBe(1);
       expect(countsBefore.get('totalGroups')).toBe(1);
 
-      // Archive the only task → summary deleted, group count decremented
+      // Archive the only task → summary preserved with 'archived' status, group count stays at 1
       const archivedTask = { ...task, status: 'archived' as const };
       await repo.updateAfterStatusChange(task, archivedTask);
 
       const summaryDoc = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-FAILARCH').get();
-      expect(summaryDoc.exists).toBe(false);
+      expect(summaryDoc.exists).toBe(true);
+      expect(summaryDoc.get('aggregateStatus')).toBe('archived');
 
       const countsAfter = await fakeFirestore.collection('user_group_counts').doc('user-1').get();
       expect(countsAfter.get('failed')).toBe(0);
-      expect(countsAfter.get('totalGroups')).toBe(0);
+      expect(countsAfter.get('archived')).toBe(1);
+      expect(countsAfter.get('totalGroups')).toBe(1);
     });
   });
 
