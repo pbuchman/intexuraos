@@ -316,7 +316,7 @@ export async function submitToExecutionAgent(
   }
 
   // Step 8b: Merge plan PR if planning task produced one
-  const planningPrUrl = planningTask.result?.planning_pr_url;
+  const planningPrUrl = planningTask.result?.planning_pr_url ?? planningTask.result?.prUrl;
   if (planningPrUrl !== undefined) {
     const gitHubToken = await fetchGitHubToken(userServiceClient, userId, logger);
     if (gitHubToken === null) {
