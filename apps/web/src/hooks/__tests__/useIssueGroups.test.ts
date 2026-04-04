@@ -391,6 +391,7 @@ describe('useIssueGroups', () => {
     });
 
     expect(result.current.refreshing).toBe(false);
+    expect(result.current.loading).toBe(false);
     unmount();
   });
 
@@ -422,9 +423,8 @@ describe('useIssueGroups', () => {
       expect(mockListIssueGroups.mock.calls.length).toBeGreaterThan(callsBefore);
     });
 
-    // After the second event resolves: refreshing must be false and at least one additional call happened.
+    // After the second event resolves: refreshing must be false (silent mode suppressed it).
     expect(result.current.refreshing).toBe(false);
-    expect(mockListIssueGroups.mock.calls.length).toBeGreaterThan(callsBefore);
 
     unmount();
   });
