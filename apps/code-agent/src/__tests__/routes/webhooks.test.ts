@@ -4981,7 +4981,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       });
     }
 
-    it('adds ready-to-implement label when origin task is a planning task', async () => {
+    it('does NOT set ready-to-implement label when origin task is a planning task', async () => {
       await createOriginTask({ traceId: 'trace_label_planning', agentType: 'planning' });
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_planning_review' });
       const payload = makeLabelPayload(reviewTask.id);
@@ -4990,17 +4990,9 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
       const { linearAgentClient: lac } = getServices();
-      const validateSpy = vi.mocked(lac.validateIssue);
       const metadataSpy = vi.mocked(lac.updateIssueMetadata);
-      expect(validateSpy).toHaveBeenCalledWith({
-        userId: 'user-123',
-        identifier: 'INT-500',
-      });
-      expect(metadataSpy).toHaveBeenCalledWith({
-        userId: 'user-123',
-        issueId: 'linear-issue-uuid',
-        addLabels: ['ready-to-implement'],
-      });
+      // Plan-origin reviews skip labeling entirely — no ready-to-implement set
+      expect(metadataSpy).not.toHaveBeenCalled();
     });
 
     it('adds ready-to-merge label when origin task is an execution task', async () => {
@@ -5020,14 +5012,9 @@ describe('POST /internal/webhooks/task-complete', () => {
       });
     });
 
-    it('walks past pull_request task to find planning origin and sets ready-to-implement', async () => {
-      // Create planning origin task first, then a newer pull_request task on the same PR.
-      // findOriginTaskByPR should skip the pull_request task and find the planning origin.
+    it('walks past pull_request task to find planning origin and does NOT set ready-to-implement', async () => {
       const planningTask = await createOriginTask({ traceId: 'trace_label_pr_task_planning', agentType: 'planning' });
-      // Mark planning task as completed so the Layer 3 dedup (active task for same linear issue) doesn't block
       await codeTaskRepo.update(planningTask.id, { status: 'planned' });
-
-      // Create a newer pull_request task on the same PR
       await createOriginTask({ traceId: 'trace_label_pr_task_newer', agentType: 'pull_request' });
 
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_pr_task_review' });
@@ -5036,14 +5023,10 @@ describe('POST /internal/webhooks/task-complete', () => {
       const response = await sendLabelPayload(payload);
 
       expect(response.statusCode).toBe(200);
-      // Label SHOULD be set — findOriginTaskByPR walks past pull_request to the planning task
+      // Plan-origin reviews skip labeling entirely
       const { linearAgentClient: lac } = getServices();
       const metadataSpy = vi.mocked(lac.updateIssueMetadata);
-      expect(metadataSpy).toHaveBeenCalledWith({
-        userId: 'user-123',
-        issueId: 'linear-issue-uuid',
-        addLabels: ['ready-to-implement'],
-      });
+      expect(metadataSpy).not.toHaveBeenCalled();
     });
 
     it('adds ready-to-merge label when origin is a pull_request task (fallback)', async () => {
