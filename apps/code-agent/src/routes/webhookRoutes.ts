@@ -1245,15 +1245,22 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               try {
                 const originResult = await codeTaskRepo.findOriginTaskByPR(task.repository, prNumber);
                 let targetLinearIssueId: string | undefined;
-                let targetUserId: string;
-                let label: string;
-                let source: string;
+                let targetUserId: string | undefined;
+                let label: string | undefined;
+                let source: string | undefined;
 
                 if (originResult.ok && originResult.value !== null && originResult.value.linearIssueId !== undefined) {
-                  targetLinearIssueId = originResult.value.linearIssueId;
-                  targetUserId = originResult.value.userId;
-                  label = originResult.value.agentType === 'planning' ? 'ready-to-implement' : 'ready-to-merge';
-                  source = 'origin';
+                  if (originResult.value.agentType === 'planning') {
+                    // Plan-phase reviews do not auto-advance to execution.
+                    // The user must explicitly trigger execution from the UI.
+                    request.log.info({ taskId, prNumber, linearIssueId: originResult.value.linearIssueId },
+                      'Plan review passed — skipping ready-to-implement label (user must explicitly trigger execution)');
+                  } else {
+                    targetLinearIssueId = originResult.value.linearIssueId;
+                    targetUserId = originResult.value.userId;
+                    label = 'ready-to-merge';
+                    source = 'origin';
+                  }
                 } else {
                   // Fallback: use review task's own issue (common for external PRs)
                   targetLinearIssueId = task.linearIssueId;
@@ -1277,14 +1284,14 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                     'No Linear issue available for review-outcome label — skipping');
                 } else {
                   const issueValidation = await linearAgentClient.validateIssue({
-                    userId: targetUserId,
+                    userId: targetUserId!,
                     identifier: targetLinearIssueId,
                   });
                   if (issueValidation.ok) {
                     const labelResult = await linearAgentClient.updateIssueMetadata({
-                      userId: targetUserId,
+                      userId: targetUserId!,
                       issueId: issueValidation.value.id,
-                      addLabels: [label],
+                      addLabels: [label!],
                     });
                     if (labelResult.ok) {
                       if (labelResult.value.droppedLabels.length > 0) {
@@ -1300,10 +1307,10 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                         if (summaryRepoForLabel !== undefined && targetLinearIssueId !== undefined) {
                           const updatedLabels: { id: string; name: string }[] = [
                             ...issueValidation.value.labels.map((l) => ({ id: '', name: l })),
-                            { id: '', name: label },
+                            { id: '', name: label! },
                           ];
                           void summaryRepoForLabel.recomputeWithLabels(
-                            targetUserId, targetLinearIssueId, updatedLabels, completedAt.toISOString(),
+                            targetUserId!, targetLinearIssueId, updatedLabels, completedAt.toISOString(),
                           ).catch((recomputeErr: unknown) => {
                             request.log.warn({ linearIssueId: targetLinearIssueId, error: recomputeErr },
                               'Failed to recompute group summary after review-outcome label (best-effort)');
