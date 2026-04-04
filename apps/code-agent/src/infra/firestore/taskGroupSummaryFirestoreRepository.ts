@@ -688,6 +688,9 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
         }
 
         const nonArchivedTasks = tasks.filter((t) => t.status !== 'archived');
+        // Fully-archived groups (all tasks archived) are not recreated by this recompute path.
+        // They are created incrementally via updateAfterStatusChange when the last task is archived,
+        // and can be recreated for legacy data via scripts/backfill-archived-group-summaries.ts.
         if (nonArchivedTasks.length === 0) {
           return;
         }

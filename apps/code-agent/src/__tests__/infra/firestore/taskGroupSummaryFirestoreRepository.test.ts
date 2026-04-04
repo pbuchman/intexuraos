@@ -711,6 +711,55 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       const oldest = doc.get('oldestTaskCreatedAt') as Timestamp;
       expect(oldest.toMillis()).toBe(t2.toMillis());
     });
+
+    it('reverts archived group to active when new non-archived task is created in it', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.now();
+      const task1 = makeTask({
+        id: 'task-1',
+        linearIssueId: 'INT-REVIVE',
+        status: 'planned',
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      // Step 1: create group
+      await repo.updateAfterCreate(task1);
+
+      // Step 2: archive the only task → group becomes aggregateStatus: 'archived'
+      const archivedTask = { ...task1, status: 'archived' as const, updatedAt: Timestamp.now() };
+      await repo.updateAfterStatusChange(task1, archivedTask);
+
+      const afterArchive = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-REVIVE').get();
+      expect(afterArchive.get('aggregateStatus')).toBe('archived');
+
+      const countsAfterArchive = await fakeFirestore.collection('user_group_counts').doc('user-1').get();
+      expect(countsAfterArchive.get('archived')).toBe(1);
+
+      // Step 3: create a new non-archived task in the same group
+      const newTask = makeTask({
+        id: 'task-2',
+        linearIssueId: 'INT-REVIVE',
+        status: 'queued',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
+      await repo.updateAfterCreate(newTask);
+
+      // Step 4: summary should no longer be archived
+      const afterRevive = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-REVIVE').get();
+      expect(afterRevive.exists).toBe(true);
+      expect(afterRevive.get('aggregateStatus')).not.toBe('archived');
+      expect(afterRevive.get('taskCount')).toBe(1);
+
+      // Step 5: user counts should reflect the group is no longer archived
+      const countsAfterRevive = await fakeFirestore.collection('user_group_counts').doc('user-1').get();
+      expect(countsAfterRevive.get('archived')).toBe(0);
+      expect(countsAfterRevive.get('totalGroups')).toBe(1);
+    });
   });
 
   describe('updateAfterStatusChange', () => {
@@ -1591,6 +1640,49 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       const doc = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-DELARC').get();
       // Should still be 2 (archived task was already excluded from count on create)
       expect(doc.get('taskCount')).toBe(2);
+    });
+
+    it('deletes summary and clears archived count when archived task in fully-archived group is hard-deleted', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.now();
+      const task = makeTask({
+        id: 'task-1',
+        linearIssueId: 'INT-ARCHDEL',
+        status: 'planned',
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      // Step 1: create the group
+      await repo.updateAfterCreate(task);
+
+      // Step 2: archive the only task → group becomes aggregateStatus: 'archived'
+      const archivedTask = { ...task, status: 'archived' as const, updatedAt: Timestamp.now() };
+      await repo.updateAfterStatusChange(task, archivedTask);
+
+      const afterArchive = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-ARCHDEL').get();
+      expect(afterArchive.exists).toBe(true);
+      expect(afterArchive.get('aggregateStatus')).toBe('archived');
+      expect(afterArchive.get('taskCount')).toBe(0);
+
+      const countsAfterArchive = await fakeFirestore.collection('user_group_counts').doc('user-1').get();
+      expect(countsAfterArchive.get('archived')).toBe(1);
+      expect(countsAfterArchive.get('totalGroups')).toBe(1);
+
+      // Step 3: hard-delete the archived task
+      await repo.updateAfterDelete(archivedTask);
+
+      // Step 4: summary doc should be deleted (group gone)
+      const afterDelete = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-ARCHDEL').get();
+      expect(afterDelete.exists).toBe(false);
+
+      // Step 5: user counts should reflect no groups remain
+      const countsAfterDelete = await fakeFirestore.collection('user_group_counts').doc('user-1').get();
+      expect(countsAfterDelete.get('archived')).toBe(0);
+      expect(countsAfterDelete.get('totalGroups')).toBe(0);
     });
   });
 
