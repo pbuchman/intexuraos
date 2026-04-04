@@ -151,15 +151,13 @@ export class FirestoreExecutionMemoryRepository implements ExecutionMemoryReposi
         .where('repository', '==', input.repository)
         .where('status', '==', input.status ?? 'active');
 
-      // eslint-disable-next-line @typescript-eslint/no-deprecated
-      const vectorQuery = filteredCollection.findNearest(
-        'embedding',
-        FieldValue.vector(input.embedding),
-        {
-          limit: input.limit,
-          distanceMeasure: 'COSINE',
-        }
-      );
+      const vectorQuery = filteredCollection.findNearest({
+        vectorField: 'embedding',
+        queryVector: FieldValue.vector(input.embedding),
+        limit: input.limit,
+        distanceMeasure: 'COSINE',
+        distanceResultField: 'vectorDistance',
+      });
 
       const snapshot = await vectorQuery.get();
       if (snapshot.empty) {
@@ -168,7 +166,8 @@ export class FirestoreExecutionMemoryRepository implements ExecutionMemoryReposi
 
       const matches = snapshot.docs.map((doc) => {
         const memory = toExecutionMemory(doc as { id: string; data(): Record<string, unknown> });
-        const distance = (doc as { distance?: number }).distance ?? 0;
+        const data = doc.data() as Record<string, unknown>;
+        const distance = typeof data['vectorDistance'] === 'number' ? data['vectorDistance'] : 1;
         return {
           ...memory,
           vectorScore: 1 - distance,
