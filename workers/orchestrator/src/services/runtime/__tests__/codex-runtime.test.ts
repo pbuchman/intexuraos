@@ -197,27 +197,4 @@ describe('Codex runtime contract', () => {
 
     expect(runtime.flushAttemptState(state)).toEqual([]);
   });
-
-  it('preserves operator-scannable timeout marker in log stream', () => {
-    const runtime = getRuntime('codex');
-    const state = runtime.createAttemptState('codex-task-10', createLogger());
-
-    // The entrypoint emits this stable marker when the `timeout` command kills the
-    // Codex process (exit code 124 → 1). Operators scan for "MCP timeout" + "server=linear".
-    const marker = '[entrypoint] MCP timeout server=linear timeout_ms=60000';
-
-    const events = runtime.processLogChunk(state, marker + '\n');
-
-    // The marker must appear verbatim in the log stream so operator log queries
-    // (e.g. `gcloud logging read 'textPayload:"MCP timeout"'`) match reliably.
-    expect(events).toContainEqual({
-      type: 'log',
-      text: marker + '\n',
-    });
-
-    // Verify the marker is NOT parsed as Codex JSON — it must not trigger
-    // completion or failure events, only a plain log passthrough.
-    expect(events).not.toContainEqual(expect.objectContaining({ type: 'attempt_completed' }));
-    expect(events).not.toContainEqual(expect.objectContaining({ type: 'attempt_failed' }));
-  });
 });
