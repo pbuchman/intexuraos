@@ -529,16 +529,6 @@
       ]
     },
     {
-      "collectionGroup": "logs",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "sequence",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "code_tasks",
       "queryScope": "COLLECTION",
       "fields": [
@@ -650,10 +640,9 @@
       "fields": [
         {
           "fieldPath": "embedding",
-          "order": "ASCENDING",
           "vectorConfig": {
             "dimension": 1536,
-            "flatIndexEnabled": true
+            "flat": {}
           }
         }
       ]
@@ -687,16 +676,6 @@
         {
           "fieldPath": "createdAt",
           "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "github-pr-events",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "githubEventId",
-          "order": "ASCENDING"
         }
       ]
     },
@@ -1230,10 +1209,9 @@
       "fields": [
         {
           "fieldPath": "embedding",
-          "order": "ASCENDING",
           "vectorConfig": {
             "dimension": 1536,
-            "flatIndexEnabled": true
+            "flat": {}
           }
         }
       ]
@@ -1252,10 +1230,9 @@
         },
         {
           "fieldPath": "embedding",
-          "order": "ASCENDING",
           "vectorConfig": {
             "dimension": 1536,
-            "flatIndexEnabled": true
+            "flat": {}
           }
         }
       ]
@@ -1367,5 +1344,16 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "by_user",
+      "fieldPath": "userId",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    }
+  ]
 }
