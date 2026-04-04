@@ -244,4 +244,44 @@ describe('deriveAggregateStatusFromSummary', () => {
       }),
     ).toBe('needs-action');
   });
+
+  it('returns archived when taskCount is 0', () => {
+    expect(
+      deriveAggregateStatusFromSummary({ ...base, taskCount: 0 }),
+    ).toBe('archived');
+  });
+
+  it('returns archived when taskCount is 0 even if active conditions are met', () => {
+    expect(
+      deriveAggregateStatusFromSummary({
+        ...base,
+        taskCount: 0,
+        activeTaskCount: 1,
+        hasCompletedExecutionAgent: true,
+        latestReviewNeedsRemediation: null,
+      }),
+    ).toBe('archived');
+  });
+
+  it('returns archived when taskCount is 0 even if failed conditions are met', () => {
+    expect(
+      deriveAggregateStatusFromSummary({
+        ...base,
+        taskCount: 0,
+        latestTaskStatus: 'failed',
+      }),
+    ).toBe('archived');
+  });
+
+  it('does not return archived when taskCount is undefined (backward compat)', () => {
+    expect(
+      deriveAggregateStatusFromSummary(base),
+    ).toBe('done');
+  });
+
+  it('does not return archived when taskCount is greater than 0', () => {
+    expect(
+      deriveAggregateStatusFromSummary({ ...base, taskCount: 1 }),
+    ).toBe('done');
+  });
 });

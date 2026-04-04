@@ -3064,5 +3064,47 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(countsDoc.get('needsAction')).toBe(1);
       expect(countsDoc.get('done')).toBe(0);
     });
+
+    it('preserves archived status and does not change counts for fully-archived groups', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.now();
+      // Create a task, then archive it so the group becomes archived
+      const task = makeTask({
+        id: 'task-archived-lbl',
+        userId: 'user-archived',
+        linearIssueId: 'INT-ARCH',
+        agentType: 'planning',
+        status: 'planned',
+        createdAt: now,
+        updatedAt: now,
+      });
+      await repo.updateAfterCreate(task);
+      // Archive the task → group becomes archived (taskCount goes to 0)
+      await repo.updateAfterStatusChange(task, { ...task, status: 'archived' });
+
+      // Confirm archived state and counts
+      const beforeDoc = await fakeFirestore.collection('task_group_summaries').doc('user-archived_INT-ARCH').get();
+      expect(beforeDoc.get('aggregateStatus')).toBe('archived');
+      const beforeCounts = await fakeFirestore.collection('user_group_counts').doc('user-archived').get();
+      expect(beforeCounts.get('archived')).toBe(1);
+      expect(beforeCounts.get('done')).toBe(0);
+
+      // Recompute with labels — should NOT flip to 'done'
+      const result = await repo.recomputeWithLabels('user-archived', 'INT-ARCH', [
+        { id: 'label-rti', name: 'ready-to-implement' },
+      ], '2026-04-01T00:00:00.000Z');
+      expect(result.ok).toBe(true);
+
+      // Status must still be archived
+      const afterDoc = await fakeFirestore.collection('task_group_summaries').doc('user-archived_INT-ARCH').get();
+      expect(afterDoc.get('aggregateStatus')).toBe('archived');
+      // Counts must not have changed
+      const afterCounts = await fakeFirestore.collection('user_group_counts').doc('user-archived').get();
+      expect(afterCounts.get('archived')).toBe(1);
+      expect(afterCounts.get('done')).toBe(0);
+    });
   });
 });
