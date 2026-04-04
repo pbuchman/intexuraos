@@ -4411,6 +4411,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       traceId: string;
       prNumber?: number;
       agentType?: 'review' | 'remediation';
+      prBranch?: string;
     }): Promise<import('../../domain/models/codeTask.js').CodeTask> {
       const result = await codeTaskRepo.create({
         userId: 'user-123',
@@ -4425,6 +4426,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         prNumber: overrides.prNumber ?? 42,
         webhookSecret: 'test-webhook-secret',
         agentType: overrides.agentType ?? 'review',
+        ...(overrides.prBranch !== undefined && { prBranch: overrides.prBranch }),
       });
       if (!result.ok) throw new Error('Failed to create task');
       return result.value;
@@ -4513,7 +4515,7 @@ describe('POST /internal/webhooks/task-complete', () => {
     }
 
     it('creates remediation task when needs_remediation is "1"', async () => {
-      const task = await createReviewTask({ traceId: 'trace_rem_1' });
+      const task = await createReviewTask({ traceId: 'trace_rem_1', prBranch: 'feature/test-pr-branch' });
       const payload = makeRemediationPayload(task.id, '1');
 
       const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
@@ -4526,6 +4528,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           repository: 'pbuchman/intexuraos',
           prNumber: 42,
           workerType: 'auto',
+          prBranch: 'feature/test-pr-branch',
         }),
       );
       const automationLogMock = vi.mocked(getServices().automationLog.record);

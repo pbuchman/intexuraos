@@ -28,6 +28,7 @@ export interface CreateRemediationTaskRequest {
   eventId: string;
   linearIssueId?: string;
   baseBranch?: string;
+  prBranch?: string;
 }
 
 export interface CreateRemediationTaskError {
@@ -136,6 +137,11 @@ export async function createRemediationTask(
     } else {
       logger.warn({ error: existingResult.error, prNumber }, 'Failed to look up existing execution task for remediation PR continuation');
     }
+  }
+
+  if (prBranch === undefined && request.prBranch !== undefined) {
+    prBranch = request.prBranch;
+    logger.info({ prBranch, prNumber }, 'Using prBranch from request for remediation task');
   }
 
   // Build prompt with effective worker type
