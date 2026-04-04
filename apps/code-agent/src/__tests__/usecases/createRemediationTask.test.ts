@@ -383,6 +383,62 @@ describe('createRemediationTask', () => {
     expect(createCall?.workerType).toBe('sonnet');
   });
 
+  it('uses prBranch from request when findLatestExecutionTaskByPR returns null', async () => {
+    const deps = createFakeDeps();
+    // findLatestExecutionTaskByPR returns null (default)
+
+    await createRemediationTask(deps, createDefaultRequest({ prBranch: 'feature/from-request' }));
+
+    const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0]?.[0];
+    expect(createCall?.prBranch).toBe('feature/from-request');
+  });
+
+  it('prefers prBranch from execution task lookup over request.prBranch', async () => {
+    const deps = createFakeDeps({
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(ok({ id: 'task-remediation-1' })),
+        findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(
+          ok({ id: 'task-exec-1', linearIssueId: 'INT-500', prBranch: 'feature/from-lookup' }),
+        ),
+      } as unknown as CodeTaskRepository,
+    });
+
+    await createRemediationTask(deps, createDefaultRequest({ prBranch: 'feature/from-request' }));
+
+    const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0]?.[0];
+    expect(createCall?.prBranch).toBe('feature/from-lookup');
+  });
+
+  it('uses prBranch from request when execution task lookup has no prBranch', async () => {
+    const deps = createFakeDeps({
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(ok({ id: 'task-remediation-1' })),
+        findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(
+          ok({ id: 'task-exec-1', linearIssueId: 'INT-500' }),
+        ),
+      } as unknown as CodeTaskRepository,
+    });
+
+    await createRemediationTask(deps, createDefaultRequest({ prBranch: 'feature/from-request' }));
+
+    const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0]?.[0];
+    expect(createCall?.prBranch).toBe('feature/from-request');
+  });
+
+  it('uses prBranch from request when findLatestExecutionTaskByPR fails', async () => {
+    const deps = createFakeDeps({
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(ok({ id: 'task-remediation-1' })),
+        findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'timeout' })),
+      } as unknown as CodeTaskRepository,
+    });
+
+    await createRemediationTask(deps, createDefaultRequest({ prBranch: 'feature/from-request' }));
+
+    const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0]?.[0];
+    expect(createCall?.prBranch).toBe('feature/from-request');
+  });
+
   it('keeps explicit workerType when not auto', async () => {
     const deps = createFakeDeps({
       workerSettingsRepo: createFakeWorkerSettingsRepo({
