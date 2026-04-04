@@ -306,6 +306,75 @@ describe('deriveAggregateStatus', () => {
     const pipeline = derivePipeline(tasks);
     expect(deriveAggregateStatus(tasks, pipeline)).toBe('done');
   });
+
+  it('group with actionable execution step AND active review task gets aggregateStatus active (not needs-action)', () => {
+    const tasks = [
+      makeTask({
+        id: 't1',
+        linearIssueId: 'INT-1255',
+        agentType: 'planning',
+        status: 'planned',
+        createdAt: '2026-01-01T10:00:00Z',
+        updatedAt: '2026-01-01T10:05:00Z',
+      }),
+      makeTask({
+        id: 't2',
+        linearIssueId: 'INT-1255',
+        agentType: 'review',
+        status: 'running',
+        createdAt: '2026-01-01T11:00:00Z',
+        updatedAt: '2026-01-01T11:05:00Z',
+      }),
+    ];
+
+    // Use derivePipeline + deriveAggregateStatus directly (not groupByLinearIssue)
+    // because groupByLinearIssue sorts by updatedAt desc internally.
+    // We need tasks pre-sorted by updatedAt desc for derivePipeline.
+    const sorted = [...tasks].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const pipeline = derivePipeline(sorted);
+
+    // Pipeline DOES have an actionable execution step
+    expect(pipeline.steps.find((s) => s.agentType === 'execution')?.state).toBe('actionable');
+    // But aggregateStatus is 'active' because an active task takes priority
+    expect(deriveAggregateStatus(sorted, pipeline)).toBe('active');
+  });
+
+  it('group with all terminal tasks and no execution agent → needs-action', () => {
+    const tasks = [
+      makeTask({
+        id: 't1',
+        linearIssueId: 'INT-1255',
+        agentType: 'planning',
+        status: 'planned',
+        createdAt: '2026-01-01T10:00:00Z',
+        updatedAt: '2026-01-01T10:05:00Z',
+      }),
+      makeTask({
+        id: 't2',
+        linearIssueId: 'INT-1255',
+        agentType: 'pull_request',
+        status: 'implemented',
+        createdAt: '2026-01-01T12:00:00Z',
+        updatedAt: '2026-01-01T12:05:00Z',
+      }),
+      makeTask({
+        id: 't3',
+        linearIssueId: 'INT-1255',
+        agentType: 'review',
+        status: 'reviewed',
+        createdAt: '2026-01-01T11:00:00Z',
+        updatedAt: '2026-01-01T11:05:00Z',
+      }),
+    ];
+
+    const sorted = [...tasks].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const pipeline = derivePipeline(sorted);
+
+    // No 'execution' agent task exists, so derivePipeline inserts a synthetic actionable step
+    expect(pipeline.steps.find((s) => s.agentType === 'execution')?.state).toBe('actionable');
+    // With no active tasks, aggregateStatus correctly reflects the actionable step
+    expect(deriveAggregateStatus(sorted, pipeline)).toBe('needs-action');
+  });
 });
 
 describe('derivePipeline', () => {
