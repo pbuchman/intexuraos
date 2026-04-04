@@ -117,20 +117,8 @@ describe('code_tasks Firestore composite indexes', () => {
     });
   });
 
-  describe('logs subcollection indexes', () => {
-    const logsIndexes = indexesJson.indexes.filter(
-      (idx) => idx.collectionGroup === 'logs'
-    );
-
-    it('should have sequence ASC index for log streaming', () => {
-      const index = logsIndexes.find((idx) =>
-        idx.fields.length === 1 &&
-        idx.fields[0]?.fieldPath === 'sequence' &&
-        idx.fields[0]?.order === 'ASCENDING'
-      );
-      expect(index).toBeDefined();
-    });
-  });
+  // logs.sequence ASC is a single-field index — Firestore auto-creates these,
+  // so aggregateIndexes correctly excludes them from firestore.indexes.json.
 
   describe('index query requirements', () => {
     const codeTasksIndexes = indexesJson.indexes.filter(
@@ -192,17 +180,6 @@ describe('code_tasks Firestore composite indexes', () => {
       expect(hasIndex).toBe(true);
     });
 
-    it('should support log streaming in order', () => {
-      // Query: collection('code_tasks').doc(taskId).collection('logs').orderBy('sequence', 'asc')
-      const logsIndexes = indexesJson.indexes.filter(
-        (idx) => idx.collectionGroup === 'logs'
-      );
-      const hasIndex = logsIndexes.some((idx) =>
-        idx.fields.length === 1 &&
-        idx.fields[0]?.fieldPath === 'sequence' &&
-        idx.fields[0]?.order === 'ASCENDING'
-      );
-      expect(hasIndex).toBe(true);
-    });
+    // log streaming (logs.sequence ASC) is a single-field index auto-created by Firestore
   });
 });
