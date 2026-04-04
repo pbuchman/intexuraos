@@ -385,9 +385,11 @@ describe('useIssueGroups', () => {
     expect(result.current.loading).toBe(false);
 
     // Resolve the deferred promise so the hook completes cleanly
-    resolveRefresh(makeResponse({ counts: { ...defaultCounts, active: 3 } }));
+    const resolvedGroup = makeGroup({ linearIssueId: 'INT-999' });
+    resolveRefresh(makeResponse({ groups: [resolvedGroup], counts: { ...defaultCounts, active: 3 } }));
+    // Wait on committed state (groups updated) to ensure the finally block has run
     await waitFor(() => {
-      expect(mockListIssueGroups.mock.calls.length).toBe(2);
+      expect(result.current.groups[0]?.linearIssueId).toBe('INT-999');
     });
 
     expect(result.current.refreshing).toBe(false);
@@ -423,8 +425,9 @@ describe('useIssueGroups', () => {
       expect(mockListIssueGroups.mock.calls.length).toBeGreaterThan(callsBefore);
     });
 
-    // After the second event resolves: refreshing must be false (silent mode suppressed it).
+    // After the second event resolves: both loading indicators must be false (silent mode suppressed them).
     expect(result.current.refreshing).toBe(false);
+    expect(result.current.loading).toBe(false);
 
     unmount();
   });
