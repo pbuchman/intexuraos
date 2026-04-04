@@ -480,7 +480,7 @@ describe('drainTaskQueue', () => {
     }));
   });
 
-  it('does not prepare execution memory for pull_request agent', async () => {
+  it('prepares execution memory for pull_request agent', async () => {
     mockExecutionMemoryEnabled = true;
     const task = createMockTask({
       linearIssueId: 'INT-1098',
@@ -498,13 +498,20 @@ describe('drainTaskQueue', () => {
       parentId: null,
     }));
     setupWorkerSettings();
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'no_memories',
+      applicationId: 'app-pr-1',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'PR review task',
+      matchedMemories: [],
+    });
     mockCodeTaskRepo.update.mockResolvedValue(ok({ ...task, status: 'dispatched' }));
     mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
 
     const result = await drainTaskQueue(createDeps());
 
     expect(result.ok).toBe(true);
-    expect(prepareExecutionMemoryContextMock).not.toHaveBeenCalled();
+    expect(prepareExecutionMemoryContextMock).toHaveBeenCalledOnce();
   });
 
   it('warns when execution memory context persistence fails before dispatch', async () => {

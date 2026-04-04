@@ -454,7 +454,7 @@ describe('drainRetryQueue', () => {
     }));
   });
 
-  it('does not prepare execution memory for pull_request task retries', async () => {
+  it('prepares execution memory for pull_request task retries', async () => {
     mockExecutionMemoryEnabled = true;
     mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
     mockCodeTaskRepo.findById.mockResolvedValue(ok({
@@ -462,13 +462,20 @@ describe('drainRetryQueue', () => {
       linearIssueId: 'INT-1098',
       agentType: 'pull_request',
     }));
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'no_memories',
+      applicationId: 'app-pr-retry-1',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'PR review retry',
+      matchedMemories: [],
+    });
     mockCodeTaskRepo.update.mockResolvedValue(ok(sampleTask));
     mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
 
     const result = await drainRetryQueue(buildDeps());
 
     expect(result.ok).toBe(true);
-    expect(prepareExecutionMemoryContextMock).not.toHaveBeenCalled();
+    expect(prepareExecutionMemoryContextMock).toHaveBeenCalledOnce();
   });
 
   afterEach(() => {

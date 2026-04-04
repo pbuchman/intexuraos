@@ -429,7 +429,7 @@ async function evaluateApplication(
     `Worker self report summary: ${evalCtx.selfReportSummary}`,
     `Matched memories: ${JSON.stringify(application.matchedMemories)}`,
     `Recent logs:\n${logs.slice(0, MAX_EVALUATION_LOG_LINES).map((line) => line.text).join('\n')}`,
-    'Return JSON only.',
+    EVALUATION_SCHEMA_BLOCK,
   ].join('\n\n');
 
   const evaluationResult = await deps.evaluatorClient.generate(evaluationPrompt);
@@ -437,7 +437,27 @@ async function evaluateApplication(
     throw new Error(evaluationResult.error.message);
   }
 
-  const parsed = EvaluationSchema.parse(parseJsonObject(evaluationResult.value.content));
+  let parsed: z.infer<typeof EvaluationSchema>;
+  try {
+    parsed = EvaluationSchema.parse(parseJsonObject(evaluationResult.value.content));
+  } catch (firstError) {
+    deps.logger.warn({ err: firstError }, 'Evaluator response failed Zod parse, retrying with refinement prompt');
+
+    const refinementPrompt = [
+      evaluationPrompt,
+      '',
+      'Your previous response was invalid JSON or did not match the required schema.',
+      `Error: ${getErrorMessage(firstError, 'Unknown parse error')}`,
+      'Fix the JSON schema violation and return valid JSON matching the exact schema above.',
+    ].join('\n');
+
+    const retryResult = await deps.evaluatorClient.generate(refinementPrompt);
+    if (!retryResult.ok) {
+      throw new Error(retryResult.error.message);
+    }
+
+    parsed = EvaluationSchema.parse(parseJsonObject(retryResult.value.content));
+  }
 
   await deps.executionMemoryApplicationRepo.update(applicationId, {
     memoryIdsUsed,
@@ -520,6 +540,27 @@ const DISTILLATION_SCHEMA_BLOCK = [
   '',
   'Example (create):',
   '{"decision":"create","evidenceSummary":"Discovered that route handlers need serialization tests.","memories":[{"memoryType":"verification_pattern","title":"Verify route serialization","appliesWhen":"Modifying route handlers","action":"Add app.inject tests for response shape","avoid":"Skipping serialization checks","verification":"Run route tests and check response schema","evidenceSummary":"Route handler returned wrong shape without test coverage","retrievalText":"route handler serialization verification test coverage","keywords":["route","serialization"],"labelHints":["testing"],"componentHints":["api"],"confidence":0.85}]}',
+].join('\n');
+
+const EVALUATION_SCHEMA_BLOCK = [
+  'Return JSON only. Use this exact schema:',
+  '{',
+  '  "summary": "string (non-empty, overall assessment of how matched memories helped this task)",',
+  '  "perMemory": [',
+  '    {',
+  '      "memoryId": "string (exact ID from matched memories above)",',
+  '      "outcome": "positive" | "neutral" | "negative" | "unknown",',
+  '      "reason": "string (why this outcome)",',
+  '      "confidence": 0.0 to 1.0',
+  '    }',
+  '  ]',
+  '}',
+  '',
+  'Example (memories helped):',
+  '{"summary":"The previous verification memory directly helped the fix.","perMemory":[{"memoryId":"mem-existing","outcome":"positive","reason":"The route coverage lesson was applied.","confidence":0.84}]}',
+  '',
+  'Example (no matched memories to evaluate):',
+  '{"summary":"No matched memories were provided for this task.","perMemory":[]}',
 ].join('\n');
 
 function buildExecutionDistillationPrompt(
@@ -840,4 +881,5 @@ export const __testables = {
   shouldSkipDistillation,
   buildDistillationPrompt,
   buildEvaluationContext,
+  EVALUATION_SCHEMA_BLOCK,
 };
