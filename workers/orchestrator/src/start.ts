@@ -54,7 +54,7 @@ const DEFAULT_WORKER_IMAGE =
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
-  /* v8 ignore start -- test-infra: process.exit() terminates the process, cannot test in unit tests @preserve */
+  /* v8 ignore start -- module-init: bootstrap function calls process.exit() which terminates test runner, impossible to test @preserve */
   if (value === undefined || value === '') {
     process.stderr.write(
       `\n❌ PRECONDITION FAILED: Required environment variable '${name}' is not set\n`
@@ -98,7 +98,7 @@ function readRepoGitConfig(repoPath: string, key: string): string | undefined {
 /**
  * Validate GCP credentials are properly configured
  */
-/* v8 ignore start -- test-infra: cannot test startup validation that calls process.exit() @preserve */
+/* v8 ignore start -- module-init: bootstrap function calls process.exit() during startup, cannot test @preserve */
 function validateGcpCredentials(gcpSaKeyPath: string, projectId: string): void {
   // Check if credentials file exists
   if (!existsSync(gcpSaKeyPath)) {
@@ -131,7 +131,7 @@ function validateGcpCredentials(gcpSaKeyPath: string, projectId: string): void {
 /**
  * Check if a port is available (synchronous check using lsof)
  */
-/* v8 ignore start -- test-infra: cannot test startup validation that calls process.exit() @preserve */
+/* v8 ignore start -- module-init: bootstrap function calls process.exit() during startup, cannot test @preserve */
 function validatePortAvailable(port: number): void {
   try {
     // Use lsof to check if port is in use
@@ -159,7 +159,7 @@ function validatePortAvailable(port: number): void {
  * Validates Anthropic OAuth credentials and third-party API keys.
  * Warns (does not exit) so tasks of one type can still run if the other fails.
  */
-/* v8 ignore start -- test-infra: cannot test startup bootstrap that makes live network calls @preserve */
+/* v8 ignore start -- module-init: bootstrap function makes live network calls during startup, cannot test network @preserve */
 async function fetchWithRetry(
   input: string,
   init: RequestInit & { signal?: AbortSignal },
@@ -365,7 +365,7 @@ function ensureDirectoryExists(path: string): void {
  * Get GitHub private key from Secret Manager or cached file.
  * The key is multiline (PEM format) so it can't be in .envrc.
  */
-/* v8 ignore start -- test-infra: cannot test bootstrap function that calls process.exit() on failure @preserve */
+/* v8 ignore start -- module-init: bootstrap function loads Secret Manager keys and calls process.exit() on failure, cannot test @preserve */
 function getGitHubPrivateKey(projectId: string, cachePath: string, gcpSaKeyPath: string): string {
   // Check env var first (for testing or manual override)
   const envKey = process.env['INTEXURAOS_GITHUB_APP_PRIVATE_KEY'];
@@ -375,15 +375,11 @@ function getGitHubPrivateKey(projectId: string, cachePath: string, gcpSaKeyPath:
 
   // Check if cached file exists and is recent (< 1 hour old)
   if (existsSync(cachePath)) {
-    /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
     const stats = statSync(cachePath);
-    /* v8 ignore stop @preserve */
     const ageMs = Date.now() - stats.mtimeMs;
-    /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
     if (ageMs < 60 * 60 * 1000) {
       return readFileSync(cachePath, 'utf-8');
     }
-    /* v8 ignore stop @preserve */
   }
 
   // Fetch from Secret Manager with timeout
