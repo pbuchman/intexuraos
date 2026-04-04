@@ -38,6 +38,8 @@ function deriveAggregateStatus(tasks, pipeline): GroupStatus {
 
 **The conflict:** When a group has BOTH an active task (running/dispatched/queued) AND a planning-completed step with no execution agent, the pipeline contains a synthetic actionable `execution` step AND `aggregateStatus` is `active`. The `renderActionButton` renders the Code button (because `hasImplementAction` is checked first), but the group sits in the "Active" filter — not "Needs Action".
 
+**The same bug affects the Merge button:** If execution completed with a PR and `ready-to-merge` label, but review is still running, the pipeline has an actionable `merge` step while `aggregateStatus` is `active`. The `hasMergeAction` check (line ~229) fires before the `active` check (line ~285), rendering a Merge button on a group in the "Active" filter. The fix must guard both action buttons.
+
 **INT-1255 scenario:** Tasks are `[planning(planned), review(...), remediation(...), pull_request(implemented)]`. If the review or remediation task was still active (running/dispatched/queued) at the time of observation, while planning had completed and no `execution` agent task existed, the pipeline would show an actionable execution step (Code button), but `aggregateStatus` would be `active`.
 
 ## Evidence
@@ -49,11 +51,10 @@ function deriveAggregateStatus(tasks, pipeline): GroupStatus {
 
 ## File Structure
 
-| File                                                   | Action   | Responsibility                                                                                  |
-| ------------------------------------------------------ | -------- | ----------------------------------------------------------------------------------------------- |
-| `apps/web/src/components/code-tasks/IssueGroupRow.tsx` | Modify   | Fix `renderActionButton` to suppress Code button when `aggregateStatus === 'active'`            |
-| `apps/web/src/utils/__tests__/issueGroups.test.ts`     | Modify   | Add regression test: group with actionable step AND active task → `aggregateStatus` is `active` |
-| `apps/web/src/components/code-tasks/IssueGroupRow.tsx` | Modify   | (same file) Ensure WaveLoader renders for active groups even when actionable step exists        |
+| File                                                   | Action   | Responsibility                                                                                       |
+| ------------------------------------------------------ | -------- | ---------------------------------------------------------------------------------------------------- |
+| `apps/web/src/components/code-tasks/IssueGroupRow.tsx` | Modify   | Guard Code and Merge buttons with `aggregateStatus !== 'active'`; preserve PR link for active groups |
+| `apps/web/src/utils/__tests__/issueGroups.test.ts`     | Modify   | Add regression tests: group with actionable step AND active task → `aggregateStatus` is `active`     |
 
 ---
 
@@ -98,7 +99,7 @@ it('group with actionable execution step AND active review task gets aggregateSt
   expect(groups[0]?.aggregateStatus).toBe('active');
 });
 
-it('group with planning + completed pull_request and no execution → needs-action when all terminal', () => {
+it('group with all terminal tasks and no execution agent → needs-action', () => {
   const tasks = [
     createMockTask({
       id: 't1',
@@ -129,9 +130,10 @@ it('group with planning + completed pull_request and no execution → needs-acti
   const groups = groupByLinearIssue(tasks);
 
   expect(groups).toHaveLength(1);
-  // pull_request does NOT block the actionable execution step
+  // No 'execution' agent task exists, so derivePipeline inserts a synthetic actionable step
+  // (pull_request is a separate agent type — it doesn't satisfy the execution step check)
   expect(findStep(groups[0]?.pipeline, 'execution')?.state).toBe('actionable');
-  // When all tasks are terminal, aggregateStatus IS 'needs-action'
+  // With no active tasks, aggregateStatus correctly reflects the actionable step
   expect(groups[0]?.aggregateStatus).toBe('needs-action');
 });
 ```
@@ -155,38 +157,41 @@ git commit -m "test(web): add regression tests for active-vs-actionable status p
 **Files:**
 - Modify: `apps/web/src/components/code-tasks/IssueGroupRow.tsx` (line ~226)
 
-The fix moves the `aggregateStatus === 'active'` check above `hasImplementAction`, so that active groups show a WaveLoader instead of the misleading Code button.
+The fix guards the **action buttons** (Code, Merge) with an `aggregateStatus !== 'active'` check, while preserving the informational PR link for active groups. A blanket early-return would suppress the PR link, losing useful context when a group is active but already has a PR.
 
 - [ ] **Step 1: Fix `renderActionButton` in IssueGroupRow.tsx**
 
-Change the check order so `aggregateStatus === 'active'` is evaluated before `hasImplementAction`:
+Guard the Merge and Code button branches so they don't render when the group is active. The PR link and the existing `active` WaveLoader fallback at the bottom remain unchanged:
 
 ```typescript
 function renderActionButton(compact: boolean): React.JSX.Element | null {
   const px = compact ? 'px-2' : 'px-2.5';
   if (isActioning) return <WaveLoader compact={compact} />;
-  if (aggregateStatus === 'active') return <WaveLoader compact={compact} />;
-  if (hasMergeAction && pipeline.pr !== null) {
+  if (hasMergeAction && pipeline.pr !== null && aggregateStatus !== 'active') {
     // ... merge link (unchanged)
   }
-  if (hasImplementAction) {
+  if (hasImplementAction && aggregateStatus !== 'active') {
     // ... Code button (unchanged)
   }
   if (pipeline.pr !== null) {
-    // ... PR link (unchanged)
+    // ... PR link (unchanged — informational, always shown)
   }
   if (aggregateStatus === 'failed') {
     // ... Retry button (unchanged)
   }
+  if (aggregateStatus === 'active') return <WaveLoader compact={compact} />;
   return null;
 }
 ```
 
 This ensures:
-- Active groups: always show WaveLoader (consistent with "Active" filter placement)
-- Needs-action groups: show Code button (consistent with "Needs Action" filter placement)
+- Active groups with PR: show PR link (informational, not an action)
+- Active groups without PR: show WaveLoader (consistent with "Active" filter placement)
+- Needs-action groups: show Code or Merge button (consistent with "Needs Action" filter placement)
 - Failed groups: show Retry button
 - Done groups: show PR link or nothing
+
+**Why not a blanket early return?** The PR link (`#{pipeline.pr.number}`) is informational — it tells the user "your group is busy, here's the PR it produced". Suppressing it during active state would lose useful context. Only the action buttons (Code, Merge) are misleading when the group is active.
 
 - [ ] **Step 2: Verify the change doesn't break existing tests**
 
