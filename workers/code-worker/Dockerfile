@@ -21,6 +21,7 @@ RUN apk add --no-cache \
     gdb \
     python3 \
     py3-pip \
+    coreutils \
     && rm -rf /var/cache/apk/*
 
 # Install ripgrep, fd, bat from edge/community (not in main repos)

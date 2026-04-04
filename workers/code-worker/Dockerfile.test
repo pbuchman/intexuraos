@@ -13,6 +13,7 @@ RUN apk add --no-cache \
     curl \
     bash \
     jq \
+    coreutils \
     && rm -rf /var/cache/apk/*
 
 # Install ripgrep, fd, bat, github-cli from edge/community
