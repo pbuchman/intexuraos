@@ -467,7 +467,6 @@ export function initServices(config: ServiceConfig): void {
   const taskEnqueueService = createTaskEnqueueService({
     logger: logger.child({ service: 'task-enqueue' }),
     codeTaskRepo,
-    whatsappNotifier,
   });
 
   const mergeConflictDetector = createDetectMergeConflictsOnPush({
