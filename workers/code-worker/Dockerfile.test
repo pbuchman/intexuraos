@@ -41,6 +41,10 @@ RUN mkdir -p /repo /secrets /tmp /home/claude/.claude \
 COPY test-fixtures/claude-stub.sh /usr/local/bin/claude
 RUN chmod +x /usr/local/bin/claude
 
+# Copy codex stub instead of installing real Codex CLI
+COPY test-fixtures/codex-stub.sh /usr/local/bin/codex
+RUN chmod +x /usr/local/bin/codex
+
 # Bake Claude default config to skip onboarding (same as production)
 COPY --chown=claude:claude config-defaults/claude.json /opt/claude-defaults/.claude.json
 
