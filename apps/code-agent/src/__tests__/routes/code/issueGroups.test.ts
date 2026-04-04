@@ -401,7 +401,7 @@ describe('GET /code/issue-groups', () => {
     const body = JSON.parse(response.body) as { data: { groups: unknown[]; counts: Record<string, number>; totalGroups: number } };
     expect(body.data.groups).toEqual([]);
     expect(body.data.totalGroups).toBe(0);
-    expect(body.data.counts).toEqual({ active: 0, 'needs-action': 0, done: 0, failed: 0 });
+    expect(body.data.counts).toEqual({ active: 0, 'needs-action': 0, done: 0, failed: 0, archived: 0 });
   });
 
   it('groups tasks by linearIssueId', async () => {
@@ -1568,6 +1568,62 @@ describe('GET /code/issue-groups', () => {
     const body = JSON.parse(response.body) as { data: { groups: unknown[] } };
     // No group produced because tasks returned empty array (fetch failed)
     expect(body.data.groups).toHaveLength(0);
+  });
+
+  it('accepts groupStatus=archived filter and returns 200 with archived count', async () => {
+    // Create an archived task (linearIssueId group)
+    const r = await codeTaskRepo.create(makeTaskInput({ linearIssueId: 'INT-2100', traceId: 'trace-archived' }));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    await codeTaskRepo.update(r.value.id, { status: 'archived' });
+
+    mockSummaries = [makeSummary({ linearIssueId: 'INT-2100', aggregateStatus: 'archived', latestTaskStatus: 'archived' })];
+    mockCounts = { ...mockCounts, archived: 1, totalGroups: 1 };
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/issue-groups?groupStatus=archived',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { data: { groups: { linearIssueId: string | null; aggregateStatus: string; tasks: unknown[] }[]; counts: Record<string, number>; totalGroups: number } };
+    expect(body.data.counts['archived']).toBeDefined();
+    expect(body.data.counts['archived']).toBe(1);
+    expect(body.data.totalGroups).toBe(1);
+    // Group should include the archived task
+    const group = body.data.groups.find((g) => g.linearIssueId === 'INT-2100');
+    expect(group).toBeDefined();
+    expect(group?.aggregateStatus).toBe('archived');
+    expect(group?.tasks).toHaveLength(1);
+  });
+
+  it('excludes archived tasks from non-archived group views', async () => {
+    // Create a task and mark it archived
+    const r1 = await codeTaskRepo.create(makeTaskInput({ linearIssueId: 'INT-2200', traceId: 'trace-mix1' }));
+    expect(r1.ok).toBe(true);
+    if (!r1.ok) return;
+    await codeTaskRepo.update(r1.value.id, { status: 'archived' });
+
+    // Create an active task in the same group (via different traceId)
+    const r2 = await codeTaskRepo.create(makeTaskInput({ linearIssueId: 'INT-2200', traceId: 'trace-mix2' }));
+    expect(r2.ok).toBe(true);
+
+    mockSummaries = [makeSummary({ linearIssueId: 'INT-2200', taskCount: 2, aggregateStatus: 'active' })];
+    mockCounts = { ...mockCounts, active: 1, totalGroups: 1 };
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/issue-groups',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { data: { groups: { linearIssueId: string | null; tasks: unknown[] }[] } };
+    const group = body.data.groups.find((g) => g.linearIssueId === 'INT-2200');
+    expect(group).toBeDefined();
+    // Only the non-archived task should appear
+    expect(group?.tasks).toHaveLength(1);
   });
 
   it('returns empty tasks for standalone group when findById fails', async () => {
