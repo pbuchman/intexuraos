@@ -116,7 +116,7 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
     reviewEntry.task.result?.needs_remediation === REMEDIATION_NOT_NEEDED &&
     hasMergeReadyLabel(reviewEntry.task.linearIssue?.labels) &&
     !steps.some((s) => s.agentType === 'merge') &&
-    !(planningEntry !== undefined && planningEntry.task.implementationTaskId === undefined)
+    (planningEntry === undefined || planningEntry.task.implementationTaskId !== undefined)
   ) {
     steps.push({
       agentType: 'merge',

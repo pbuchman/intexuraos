@@ -946,7 +946,9 @@ describe('derivePipeline', () => {
 
     const pipeline = derivePipeline(tasks);
 
-    // Should have an actionable execution step (Code button), NOT a merge step
+    // Should have exactly 3 steps: planning (completed), review (completed), execution (actionable)
+    expect(pipeline.steps).toHaveLength(3);
+
     const executionStep = pipeline.steps.find((s) => s.agentType === 'execution');
     expect(executionStep).toBeDefined();
     expect(executionStep?.state).toBe('actionable');
