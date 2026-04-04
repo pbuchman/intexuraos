@@ -37,4 +37,43 @@ describe('CreateTaskRequestSchema', () => {
     if (!result.success) return;
     expect(result.data.executionMemoryContext).toEqual(executionMemoryContext);
   });
+
+  it.each([
+    'implementation_pattern',
+    'verification_pattern',
+    'pitfall_pattern',
+    'decomposition_pattern',
+    'planning_decision',
+    'review_finding',
+  ] as const)('accepts memoryType %s', (memoryType) => {
+    const result = CreateTaskRequestSchema.safeParse({
+      taskId: `task-memory-type-${memoryType}`,
+      workerType: 'auto',
+      prompt: 'Test memory type acceptance',
+      webhookUrl: 'https://example.com/webhook',
+      webhookSecret: 'secret',
+      linearIssueLabels: ['code-task'],
+      hasChildren: false,
+      agentType: 'execution',
+      executionMemoryContext: {
+        applicationId: 'app_123',
+        retrievalVersion: 'execution-memory-retrieval@1.0.0',
+        querySummary: 'Test query',
+        matchedMemories: [
+          {
+            memoryId: 'mem_test',
+            title: 'Test memory',
+            memoryType,
+            score: 0.85,
+            appliesWhen: 'When testing',
+            action: 'Do something',
+            avoid: 'Avoid nothing',
+            verification: 'Check it works',
+          },
+        ],
+      },
+    });
+
+    expect(result.success).toBe(true);
+  });
 });
