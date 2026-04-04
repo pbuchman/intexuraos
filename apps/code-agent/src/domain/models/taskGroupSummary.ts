@@ -58,6 +58,7 @@ export interface UserGroupCounts {
   needsAction: number;
   done: number;
   failed: number;
+  archived: number;
   totalGroups: number;
   updatedAt: Timestamp;
 }

@@ -83,6 +83,7 @@ function makeGroupSummaryRepo(overrides: Partial<TaskGroupSummaryRepository> = {
     needsAction: 0,
     done: 0,
     failed: 0,
+    archived: 0,
     totalGroups: 0,
     updatedAt: new Date() as unknown as import('@google-cloud/firestore').Timestamp,
   };
@@ -230,6 +231,7 @@ describe('GET /code/issue-groups', () => {
       needsAction: 0,
       done: 0,
       failed: 0,
+      archived: 0,
       totalGroups: 0,
       updatedAt: new Date() as unknown as import('@google-cloud/firestore').Timestamp,
     };
@@ -1282,6 +1284,7 @@ describe('GET /code/issue-groups', () => {
         needsAction: 2,
         done: 10,
         failed: 1,
+        archived: 0,
         totalGroups: 16,
         updatedAt: new Date() as unknown as import('@google-cloud/firestore').Timestamp,
       };
