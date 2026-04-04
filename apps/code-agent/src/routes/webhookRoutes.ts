@@ -867,6 +867,22 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             workerSettingsRepo: services.workerSettingsRepo,
             taskEnqueueService: services.taskEnqueueService,
             orchestratorSecret: loadConfig().orchestratorSecret,
+            executionMemory: {
+              /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes is not tracked after service override tests @preserve */
+              ...(services.executionMemoryQueryClient !== undefined && {
+                queryClient: services.executionMemoryQueryClient,
+              }),
+              ...(services.executionMemoryEmbeddingClient !== undefined && {
+                embeddingClient: services.executionMemoryEmbeddingClient,
+              }),
+              ...(services.executionMemoryRepo !== undefined && {
+                executionMemoryRepo: services.executionMemoryRepo,
+              }),
+              ...(services.executionMemoryApplicationRepo !== undefined && {
+                executionMemoryApplicationRepo: services.executionMemoryApplicationRepo,
+              }),
+              /* v8 ignore stop @preserve */
+            },
           });
         } catch (drainErr) {
           logger.warn({ taskId, prNumber: task.prNumber, error: drainErr }, 'Post-completion drain failed (non-blocking)');
