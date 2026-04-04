@@ -803,6 +803,8 @@ describe('OrchestratorCompletionVerifier', () => {
         requirements_tracker_updated: '',
         gh_actions_status: '',
         needs_remediation: '1',
+        review_body: '',
+        review_inline_comments: '',
         summary: 'Reviewed and posted 3 comments.',
       });
     });
@@ -837,6 +839,8 @@ describe('OrchestratorCompletionVerifier', () => {
         requirements_tracker_updated: '',
         gh_actions_status: '',
         needs_remediation: '1',
+        review_body: '',
+        review_inline_comments: '',
         summary: 'Reviewed and posted 3 comments.',
       });
     });

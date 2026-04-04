@@ -129,6 +129,8 @@ export interface TaskResult {
   requirements_tracker_updated?: string;
   gh_actions_status?: string;
   needs_remediation?: string; // '0' or '1'
+  review_body?: string;
+  review_inline_comments?: string;
   requires_re_review?: string; // '0' or '1'
   rebaseResult?: {
     attempted: boolean;
