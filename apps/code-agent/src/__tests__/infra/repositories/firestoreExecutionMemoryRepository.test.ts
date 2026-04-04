@@ -151,11 +151,11 @@ describe('firestoreExecutionMemoryRepository', () => {
     const docs = [
       {
         id: 'mem-1',
-        distance: 0.2,
         data: (): Record<string, unknown> => ({
           repository: 'pbuchman/intexuraos',
           sourceTaskId: 'task-1',
           memoryType: 'pitfall_pattern',
+          vectorDistance: 0.2,
           title: 'Always log incoming requests',
           appliesWhen: 'Adding a new route',
           action: 'Call logIncomingRequest() at the top of the handler.',
@@ -229,11 +229,76 @@ describe('firestoreExecutionMemoryRepository', () => {
     expect(whereRepository).toHaveBeenCalledWith('repository', '==', 'pbuchman/intexuraos');
     expect(whereStatus).toHaveBeenCalledWith('status', '==', 'active');
     expect(findNearest).toHaveBeenCalledWith(
-      'embedding',
-      expect.anything(),
-      expect.objectContaining({ limit: 2, distanceMeasure: 'COSINE' })
+      expect.objectContaining({
+        vectorField: 'embedding',
+        limit: 2,
+        distanceMeasure: 'COSINE',
+        distanceResultField: 'vectorDistance',
+      })
     );
-    expect(result.value.map((memory) => memory.vectorScore)).toEqual([0.8, 1]);
+    expect(result.value.map((memory) => memory.vectorScore)).toEqual([0.8, 0]);
+  });
+
+  it('computes vectorScore from distanceResultField instead of defaulting to 1.0', async () => {
+    const fakeDoc = {
+      id: 'mem-1',
+      data: (): Record<string, unknown> => ({
+        repository: 'owner/repo',
+        sourceTaskId: 'task-1',
+        sourceAgentType: 'execution',
+        memoryType: 'pitfall_pattern',
+        title: 'Test memory',
+        appliesWhen: 'When testing',
+        action: 'Do this',
+        avoid: 'Avoid that',
+        verification: 'Check this',
+        evidenceSummary: 'Evidence',
+        retrievalText: 'retrieval text',
+        keywords: [],
+        labelHints: [],
+        componentHints: [],
+        embedding: [0.1, 0.2],
+        embeddingModel: 'text-embedding-3-small',
+        fingerprint: 'fp-1',
+        distillationVersion: 'v1',
+        qualityScore: 0.8,
+        distillationConfidence: 0.9,
+        applicationCount: 0,
+        positiveCount: 0,
+        negativeCount: 0,
+        status: 'active',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        vectorDistance: 0.35,
+      }),
+    };
+
+    const fakeSnapshot = {
+      empty: false,
+      docs: [fakeDoc],
+    };
+
+    const get = vi.fn().mockResolvedValue(fakeSnapshot);
+    const findNearest = vi.fn().mockReturnValue({ get });
+    const whereStatus = vi.fn().mockReturnValue({ findNearest });
+    const whereRepository = vi.fn().mockReturnValue({ where: whereStatus });
+    const firestore = {
+      collection: vi.fn().mockReturnValue({ where: whereRepository }),
+    } as unknown as Firestore;
+
+    const repo = createFirestoreExecutionMemoryRepository({ firestore, logger });
+
+    const result = await repo.findNearest({
+      repository: 'owner/repo',
+      embedding: [0.1, 0.2],
+      limit: 5,
+      status: 'active',
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value[0]?.vectorScore).toBeCloseTo(0.65, 2);
+    }
   });
 
   it('handles malformed memory documents and empty vector-search snapshots', async () => {
