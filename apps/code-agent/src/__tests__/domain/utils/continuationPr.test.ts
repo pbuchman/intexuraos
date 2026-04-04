@@ -8,7 +8,6 @@ import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRe
 import {
   bootstrapContinuationPrTaskComment,
   postContinuationPrComment,
-  resolveExecutionContinuationPr,
   resolveContinuationPr,
   type BootstrapContinuationPrTaskCommentDeps,
   type PostContinuationCommentDeps,
@@ -521,19 +520,49 @@ describe('continuationPr utilities', () => {
         1139
       );
     });
-  });
 
-  describe('resolveExecutionContinuationPr', () => {
-    it('returns null without loading GitHub state for non-execution tasks', async () => {
-      const result = await resolveExecutionContinuationPr(createResolveDeps(), {
-        agentType: 'planning',
-        task: createTask({ agentType: 'planning', prNumber: 1131 }),
+    it('resolves continuation PR for review agents with prNumber', async () => {
+      mockGitHubPRClient.getPullRequestStatus.mockResolvedValue(
+        ok({
+          state: 'open',
+          mergedAt: null,
+          headRef: 'fix/INT-123-review-branch',
+        })
+      );
+
+      const result = await resolveContinuationPr(createResolveDeps(), {
+        task: createTask({ agentType: 'review', prNumber: 1622 }),
         userId: 'user-123',
       });
 
-      expect(result).toEqual(ok(null));
-      expect(mockUserServiceClient.getOAuthToken).not.toHaveBeenCalled();
-      expect(mockGitHubPRClient.getPullRequestStatus).not.toHaveBeenCalled();
+      expect(result).toEqual(
+        ok({
+          prNumber: 1622,
+          prBranch: 'fix/INT-123-review-branch',
+        })
+      );
+    });
+
+    it('resolves continuation PR for remediation agents with prNumber', async () => {
+      mockGitHubPRClient.getPullRequestStatus.mockResolvedValue(
+        ok({
+          state: 'open',
+          mergedAt: null,
+          headRef: 'fix/INT-456-remediation-branch',
+        })
+      );
+
+      const result = await resolveContinuationPr(createResolveDeps(), {
+        task: createTask({ agentType: 'remediation', prNumber: 1623 }),
+        userId: 'user-123',
+      });
+
+      expect(result).toEqual(
+        ok({
+          prNumber: 1623,
+          prBranch: 'fix/INT-456-remediation-branch',
+        })
+      );
     });
   });
 

@@ -43,7 +43,7 @@ export interface CreateReviewTaskRequest {
 }
 
 export interface CreateReviewTaskError {
-  code: 'user_not_found' | 'no_workers_configured' | 'task_creation_failed' | 'dispatch_failed' | 'queue_full' | 'internal_error';
+  code: 'user_not_found' | 'no_workers_configured' | 'task_creation_failed' | 'dispatch_failed' | 'queue_full' | 'internal_error' | 'pr_branch_unavailable';
   message: string;
   taskId?: string;
 }
@@ -485,6 +485,11 @@ export async function createReviewTask(
 
   const baseBranch = resolvedPrBranches.baseBranch ?? request.baseBranch ?? 'main';
 
+  if (resolvedPrBranches.headBranch === undefined) {
+    logger.error({ repository, prNumber }, 'Cannot create review task: PR head branch resolution failed');
+    return err({ code: 'pr_branch_unavailable', message: `Failed to resolve head branch for PR #${String(prNumber)}` });
+  }
+
   const taskInput: CreateTaskInput = {
     userId,
     prompt,
@@ -499,7 +504,7 @@ export async function createReviewTask(
     prNumber,
     agentType: 'review',
     ...(linearIssueId !== undefined && { linearIssueId }),
-    ...(resolvedPrBranches.headBranch !== undefined && { prBranch: resolvedPrBranches.headBranch }),
+    prBranch: resolvedPrBranches.headBranch,
     reviewTypes: request.reviewTypes,
   };
 

@@ -23,7 +23,7 @@ import { resolveTaskAgentType } from '../../domain/utils/taskRouting.js';
 import { generateWebhookSecret } from '../utils/secrets.js';
 import {
   bootstrapContinuationPrTaskComment,
-  resolveExecutionContinuationPr,
+  resolveContinuationPr,
 } from '../../domain/utils/continuationPr.js';
 import type { AutomationLog } from '../../domain/ports/automationLog.js';
 
@@ -207,7 +207,7 @@ ${feedback.trim()}
 
   // resolveTaskAgentType() already routes legacy PR-linked tasks back to execution
   // when they only carry prNumber, prBranch, or result.prUrl metadata.
-  const continuationResult = await resolveExecutionContinuationPr(
+  const continuationResult = await resolveContinuationPr(
     {
       logger,
       codeTaskRepo,
@@ -215,7 +215,6 @@ ${feedback.trim()}
       userServiceClient: deps.userServiceClient,
     },
     {
-      agentType,
       task: originalTask,
       userId,
     }
