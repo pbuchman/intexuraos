@@ -23,7 +23,7 @@ import { resolveTaskAgentType } from '../../domain/utils/taskRouting.js';
 import { generateWebhookSecret } from '../utils/secrets.js';
 import {
   bootstrapContinuationPrTaskComment,
-  resolveExecutionContinuationPr,
+  resolveContinuationPr,
 } from '../../domain/utils/continuationPr.js';
 import type { AutomationLog } from '../../domain/ports/automationLog.js';
 
@@ -229,7 +229,7 @@ ${additionalContext.trim()}
   const retryTaskId = `task_${randomUUID()}`;
   const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, retryTaskId);
 
-  const continuationResult = await resolveExecutionContinuationPr(
+  const continuationResult = await resolveContinuationPr(
     {
       logger,
       codeTaskRepo,
@@ -237,7 +237,6 @@ ${additionalContext.trim()}
       userServiceClient: deps.userServiceClient,
     },
     {
-      agentType,
       task: originalTask,
       userId,
     }

@@ -411,6 +411,24 @@ export async function drainTaskQueue(
 
     const dispatchExecutionMemoryContext = toDispatchExecutionMemoryContext(taskExecutionMemoryContext);
 
+    // Guard: refuse to dispatch review/remediation tasks with prNumber but no prBranch —
+    // these agents read code from the worktree and would silently check out the base branch
+    // instead of the PR head, producing wrong review findings or fixing the wrong code.
+    if (task.prNumber !== undefined && task.prBranch === undefined && (agentType === 'review' || agentType === 'remediation')) {
+      logger.error(
+        { taskId: task.id, prNumber: task.prNumber, agentType },
+        'Review/remediation task has prNumber but no prBranch — refusing to dispatch on base branch'
+      );
+      await codeTaskRepo.update(task.id, {
+        status: 'failed',
+        error: {
+          code: 'MISSING_PR_BRANCH',
+          message: `prBranch required for ${agentType} task (PR #${String(task.prNumber)})`,
+        },
+      });
+      return ok({ action: 'failed', taskId: task.id, locksToCleanup: buildLockCleanups(task) });
+    }
+
     // Step 5: Attempt dispatch
     const webhookUrl = `${config.serviceUrl}/internal/webhooks/task-complete`;
 

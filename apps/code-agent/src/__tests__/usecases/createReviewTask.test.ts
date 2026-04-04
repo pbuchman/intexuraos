@@ -975,7 +975,7 @@ describe('createReviewTask', () => {
       expect(result.ok).toBe(true);
     });
 
-    it('skips PR title update when repository format is invalid (no slash)', async () => {
+    it('fails with pr_branch_unavailable when repository format is invalid (no slash)', async () => {
       const gitHubPRClient = createFakeGitHubPRClient();
       const deps = createFakeDeps({ gitHubPRClient });
 
@@ -988,11 +988,13 @@ describe('createReviewTask', () => {
         prTitle: 'Fix bug',
       });
 
-      expect(result.ok).toBe(true);
-      expect(gitHubPRClient.updatePRTitle).not.toHaveBeenCalled();
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('pr_branch_unavailable');
+      }
     });
 
-    it('skips PR title update when GitHub token is not available', async () => {
+    it('fails with pr_branch_unavailable when GitHub token is not available', async () => {
       const gitHubPRClient = createFakeGitHubPRClient();
       const userServiceClient = createFakeUserServiceClient();
       vi.mocked(userServiceClient.getOAuthToken).mockResolvedValue(
@@ -1009,8 +1011,10 @@ describe('createReviewTask', () => {
         prTitle: 'Fix bug',
       });
 
-      expect(result.ok).toBe(true);
-      expect(gitHubPRClient.updatePRTitle).not.toHaveBeenCalled();
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('pr_branch_unavailable');
+      }
     });
 
     it('logs warning when updatePRTitle fails (best-effort)', async () => {
@@ -2021,7 +2025,7 @@ describe('createReviewTask', () => {
       }
     });
 
-    it('falls back to request.baseBranch when getPullRequestStatus fails', async () => {
+    it('fails with pr_branch_unavailable when getPullRequestStatus fails', async () => {
       const gitHubPRClient = createFakeGitHubPRClient();
       vi.mocked(gitHubPRClient.getPullRequestStatus).mockResolvedValue(
         err({ code: 'API_ERROR' as const, message: 'GitHub down' })
@@ -2040,18 +2044,15 @@ describe('createReviewTask', () => {
         baseBranch: 'development',
       });
 
-      expect(result.ok).toBe(true);
-      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
-      expect(createCall).toBeDefined();
-      if (createCall !== undefined) {
-        // Falls back to request.baseBranch
-        expect(createCall[0].baseBranch).toBe('development');
-        // prBranch not set when status fetch fails
-        expect(createCall[0].prBranch).toBeUndefined();
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('pr_branch_unavailable');
+        expect(result.error.message).toContain('PR #42');
       }
+      expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
     });
 
-    it('falls back to main when both PR fetch and request.baseBranch are absent', async () => {
+    it('fails with pr_branch_unavailable when GitHub token is unavailable', async () => {
       const gitHubPRClient = createFakeGitHubPRClient();
       vi.mocked(gitHubPRClient.getPullRequestStatus).mockResolvedValue(
         err({ code: 'API_ERROR' as const, message: 'GitHub down' })
@@ -2073,13 +2074,11 @@ describe('createReviewTask', () => {
         eventId: 'evt-branch-4',
       });
 
-      expect(result.ok).toBe(true);
-      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
-      expect(createCall).toBeDefined();
-      if (createCall !== undefined) {
-        expect(createCall[0].baseBranch).toBe('main');
-        expect(createCall[0].prBranch).toBeUndefined();
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('pr_branch_unavailable');
       }
+      expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
     });
   });
 });
