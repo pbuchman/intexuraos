@@ -1164,7 +1164,11 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const updateResult = await codeTaskRepo.update(taskId, {
           status: resolvedStatus,
           completedAt,
-          ...(result !== undefined && { result }),
+          ...(result !== undefined && {
+            result: request.body.resumedCompletion === true && task.result !== undefined
+              ? { ...task.result, ...result }
+              : result,
+          }),
           error: null,
           ...(prNumber !== undefined && { prNumber }),
           ...(result?.branch !== undefined && { prBranch: result.branch }),
