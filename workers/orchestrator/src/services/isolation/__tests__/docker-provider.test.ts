@@ -1384,6 +1384,22 @@ describe('DockerProvider', () => {
       expect(modelEntry).toBe('ANTHROPIC_MODEL=qwen/qwen3.6-plus:free');
       const effortEntry = envArr.find((e: string) => e.startsWith('CLAUDE_CODE_EFFORT_LEVEL='));
       expect(effortEntry).toBe('CLAUDE_CODE_EFFORT_LEVEL=high');
+      const betasEntry = envArr.find((e: string) =>
+        e.startsWith('CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=')
+      );
+      expect(betasEntry).toBe('CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1');
+    });
+
+    it('does not set CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS for opus worker', async () => {
+      const config = createTestConfig({ workerType: 'opus' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const betasEntry = envArr.find((e: string) =>
+        e.startsWith('CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=')
+      );
+      expect(betasEntry).toBeUndefined();
     });
 
     it('sets CLAUDE_CODE_EFFORT_LEVEL for opus worker', async () => {

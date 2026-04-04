@@ -34,6 +34,7 @@ export interface WorkerTypeConfig {
     | 'OPENROUTER_API_KEY';
   model?: string;
   effort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh';
+  disableExperimentalBetas?: boolean;
 }
 
 export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
@@ -94,6 +95,7 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     apiKeyEnvVar: 'OPENROUTER_API_KEY',
     model: 'qwen/qwen3.6-plus:free',
     effort: 'high',
+    disableExperimentalBetas: true,
   },
 };
 
