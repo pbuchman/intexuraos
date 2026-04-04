@@ -129,6 +129,23 @@ describe('mergeGroups', () => {
     expect(result).not.toBe(prev);
   });
 
+  it('detects order change when items are reordered (sort change)', () => {
+    const g1 = makeGroup({ linearIssueId: 'INT-100' });
+    const g2 = makeGroup({ linearIssueId: 'INT-200', latestTask: makeTask({ id: 'task-2' }) });
+    const prev = [g1, g2];
+    // Same groups, reversed order (simulates sort change)
+    const incoming = [
+      makeGroup({ linearIssueId: 'INT-200', latestTask: makeTask({ id: 'task-2' }) }),
+      makeGroup({ linearIssueId: 'INT-100' }),
+    ];
+
+    const result = mergeGroups(prev, incoming);
+    expect(result).not.toBe(prev);
+    // Reuses existing references but in the new order
+    expect(result[0]).toBe(g2);
+    expect(result[1]).toBe(g1);
+  });
+
   it('uses latestTask.id as key when linearIssueId is null', () => {
     const prev = [makeGroup({ linearIssueId: null, latestTask: makeTask({ id: 'task-A' }) })];
     const incoming = [makeGroup({ linearIssueId: null, latestTask: makeTask({ id: 'task-A' }) })];

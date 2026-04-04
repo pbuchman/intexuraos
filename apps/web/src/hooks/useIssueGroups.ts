@@ -59,6 +59,15 @@ export function mergeGroups(prev: IssueGroup[], incoming: IssueGroup[]): IssueGr
     changed = true;
     return g;
   });
+  if (!changed) {
+    // Detect order changes (e.g. sort changed) by comparing references at each position
+    for (let i = 0; i < prev.length; i++) {
+      if (merged[i] !== prev[i]) {
+        changed = true;
+        break;
+      }
+    }
+  }
   return changed ? merged : prev;
 }
 
