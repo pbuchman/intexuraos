@@ -20,6 +20,8 @@ import { parseLinearIdentifierFromUrl } from '../domain/utils/linearIdentifierPa
 import { parseOwnerRepo } from '../domain/utils/parseOwnerRepo.js';
 import { drainTaskQueue } from '../domain/usecases/drainTaskQueue.js';
 import { isMemoryEligibleAgent } from '../domain/utils/memoryEligibility.js';
+import { mergePlanPr } from '../domain/utils/mergePlanPr.js';
+import { fetchGitHubToken } from '../domain/utils/gitHubTokenResolver.js';
 
 /**
  * Best-effort: record a task_failed automation log event for PR-linked tasks.
@@ -1269,8 +1271,33 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   if (originResult.value.agentType === 'planning') {
                     // Plan-phase reviews do not auto-advance to execution.
                     // The user must explicitly trigger execution from the UI.
+                    // But we DO auto-merge the plan PR so the plan docs land on development immediately.
                     request.log.info({ taskId, prNumber, linearIssueId: originResult.value.linearIssueId },
-                      'Plan review passed — skipping ready-to-implement label (user must explicitly trigger execution)');
+                      'Plan review passed — auto-merging plan PR (user must explicitly trigger execution)');
+
+                    const planningPrUrl = originResult.value.result?.planning_pr_url ?? originResult.value.result?.prUrl;
+                    if (planningPrUrl !== undefined && planningPrUrl !== '') {
+                      try {
+                        const gitHubToken = await fetchGitHubToken(userServiceClient, task.userId, request.log);
+                        if (gitHubToken !== null) {
+                          const mergeResult = await mergePlanPr(
+                            { logger: request.log, gitHubPRClient },
+                            { planningPrUrl, repository: task.repository, token: gitHubToken },
+                          );
+                          if (mergeResult.ok) {
+                            request.log.info({ prNumber, planningPrUrl }, 'Plan PR auto-merged on review pass');
+                          } else {
+                            request.log.warn({ prNumber, planningPrUrl, error: mergeResult.error }, 'Plan PR auto-merge failed (best-effort)');
+                          }
+                        } else {
+                          request.log.warn({ prNumber }, 'Skipping plan PR auto-merge — no GitHub token available');
+                        }
+                      } catch (mergeError: unknown) {
+                        request.log.warn({ prNumber, planningPrUrl, error: mergeError }, 'Plan PR auto-merge threw (best-effort)');
+                      }
+                    } else {
+                      request.log.debug({ prNumber, taskId: originResult.value.id }, 'No planning_pr_url on origin task — skipping plan PR auto-merge');
+                    }
                   } else {
                     targetLinearIssueId = originResult.value.linearIssueId;
                     targetUserId = originResult.value.userId;
