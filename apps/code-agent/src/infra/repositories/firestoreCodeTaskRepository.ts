@@ -1297,6 +1297,26 @@ export const createFirestoreCodeTaskRepository = (deps: {
         });
       }
     },
+
+    findAllNonArchived: async (): Promise<Result<CodeTask[], RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('status', '!=', 'archived')
+          .get();
+
+        const tasks = snapshot.docs.map((doc: QueryDocumentSnapshot) =>
+          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
+        );
+
+        return ok(tasks);
+      } catch (error) {
+        logger.error({ error }, 'Failed to find all non-archived tasks');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
   };
 };
 
