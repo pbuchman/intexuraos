@@ -261,6 +261,15 @@ export interface CodeTaskRepository {
   ): Promise<Result<{ id: string; workerLocation: string; userId: string } | null, RepositoryError>>;
 
   /**
+   * Find the most recent non-archived ask-agent task for a user.
+   * Returns null if none exists. Used by GET /code/ask-agent/active
+   * to restore the user's conversation across devices.
+   */
+  findLatestAskAgentTask(
+    userId: string
+  ): Promise<Result<CodeTask | null, RepositoryError>>;
+
+  /**
    * Delete a task by ID, scoped to a user.
    * Returns NOT_FOUND if the task does not exist or belongs to a different user.
    */
