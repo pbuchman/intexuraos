@@ -29,6 +29,7 @@ import {
   type CompletionVerifier,
   type CompletionVerifierVerdict,
   getLast50Lines,
+  getLast50ClaudeLines,
 } from './completion-verifier.js';
 import { getRuntime, type RuntimeEvent, type WorkerRuntime } from './runtime/index.js';
 import type { TurnMetricsCollector } from './turn-metrics-collector.js';
@@ -437,9 +438,11 @@ export class TaskDispatcher {
               ? 'Execution Agent'
               : task.agentType === 'planning'
                 ? 'Planning Agent'
-                : hasCodeTaskLabel(task.linearIssueLabels)
-                  ? 'Execution Agent'
-                  : 'Planning Agent';
+                : task.agentType === 'ask_agent'
+                  ? 'Ask Agent'
+                  : hasCodeTaskLabel(task.linearIssueLabels)
+                    ? 'Execution Agent'
+                    : 'Planning Agent';
       const agentDesc =
         agentLabel === 'Pull Request Agent'
           ? 'Pull Request Agent \u2014 respond to PR comment/review and push to existing PR branch'
@@ -447,9 +450,11 @@ export class TaskDispatcher {
             ? 'Review Agent \u2014 read-only PR review, post review comments'
             : agentLabel === 'Remediation Agent'
               ? 'Remediation Agent \u2014 address review findings on the existing PR branch and decide if re-review is needed'
-              : agentLabel === 'Execution Agent'
-                ? 'Execution Agent \u2014 implement autonomously, run CI, create PR'
-                : 'Planning Agent \u2014 create planning artifacts only, no implementation coding';
+              : agentLabel === 'Ask Agent'
+                ? 'Ask Agent \u2014 interactive code assistant, respond to user questions'
+                : agentLabel === 'Execution Agent'
+                  ? 'Execution Agent \u2014 implement autonomously, run CI, create PR'
+                  : 'Planning Agent \u2014 create planning artifacts only, no implementation coding';
       /* v8 ignore stop @preserve */
       this.appendTaggedTaskLog(taskId, 'instructions', `${agentLabel}: ${agentDesc}`);
       this.logger.info({}, `Task started: id=${taskId} runningCount=${String(this.runningCount)}`);
@@ -919,10 +924,32 @@ export class TaskDispatcher {
             ? 'execution'
             : task.agentType === 'planning'
               ? 'planning'
-              : hasCodeTaskLabel(task.linearIssueLabels)
-                ? 'execution'
-                : 'planning';
+              : task.agentType === 'ask_agent'
+                ? 'ask_agent'
+                : hasCodeTaskLabel(task.linearIssueLabels)
+                  ? 'execution'
+                  : 'planning';
     this.attemptCompletionSignals.delete(task.taskId);
+
+    // ask_agent: skip structured completion verification — extract summary and finalize
+    if (completionAgentType === 'ask_agent') {
+      try {
+        await this.logForwarder.flushAndStop(task.taskId);
+      } catch (flushError: unknown) {
+        this.logger.error(
+          { taskId: task.taskId, error: flushError },
+          'Failed to flush logs on ask_agent task completion'
+        );
+      }
+      const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
+      const summary = getLast50ClaudeLines(rawLogs);
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `Ask agent completed — skipping structured verification`
+      );
+      await this.finalizeTaskWithResult(task, 'ask_agent', { summary });
+      return;
+    }
 
     this.logger.info(
       {},

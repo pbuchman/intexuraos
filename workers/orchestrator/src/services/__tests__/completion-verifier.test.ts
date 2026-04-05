@@ -24,6 +24,7 @@ const {
   buildReviewPrompt,
   buildResumeSummaryPrompt,
   getLast50Lines,
+  getLast50ClaudeLines,
   getLast20Lines,
   detectFatalExitCode,
 } = await import('../completion-verifier.js');
@@ -652,6 +653,62 @@ describe('getLast50Lines', () => {
 
   it('returns empty string for empty input', () => {
     const result = getLast50Lines('');
+    expect(result).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getLast50ClaudeLines
+// ---------------------------------------------------------------------------
+
+describe('getLast50ClaudeLines', () => {
+  it('filters to only [claude]-tagged lines and returns last 50', () => {
+    const lines = Array.from({ length: 100 }, (_, i) =>
+      i % 2 === 0 ? `[claude] line-${String(i + 1)}` : `[system] line-${String(i + 1)}`
+    );
+    const result = getLast50ClaudeLines(lines.join('\n'));
+    const resultLines = result.split('\n');
+    // Only 50 [claude] lines (every even index from 100 total)
+    expect(resultLines).toHaveLength(50);
+    // All 50 [claude] lines are returned (50 or fewer filtered, so all included)
+    expect(resultLines[0]).toBe('[claude] line-1'); // First [claude] line
+    expect(resultLines[49]).toBe('[claude] line-99'); // Last [claude] line
+  });
+
+  it('returns all [claude] lines when fewer than 50', () => {
+    const result = getLast50ClaudeLines(
+      `[system] noise\n[claude] hello\n[system] noise\n[claude] world`
+    );
+    expect(result).toBe('[claude] hello\n[claude] world');
+  });
+
+  it('truncates to last 50 [claude] lines when more than 50 exist', () => {
+    // Create 55 [claude] lines (more than 50) mixed with system lines
+    const lines: string[] = [];
+    for (let i = 0; i < 110; i++) {
+      if (i % 2 === 0) {
+        lines.push(`[claude] line-${String(i + 1)}`);
+      } else {
+        lines.push(`[system] line-${String(i + 1)}`);
+      }
+    }
+    const result = getLast50ClaudeLines(lines.join('\n'));
+    const resultLines = result.split('\n');
+    // 110 total lines, 55 are [claude] (every even index), slice(-50) returns last 50
+    expect(resultLines).toHaveLength(50);
+    // First returned should be the 6th [claude] line (line-11, slice(-50) skips first 5 of 55)
+    expect(resultLines[0]).toBe('[claude] line-11');
+    // Last returned should be the 55th [claude] line (line-109)
+    expect(resultLines[49]).toBe('[claude] line-109');
+  });
+
+  it('returns empty string when no [claude] lines', () => {
+    const result = getLast50ClaudeLines('[system] noise\n[system] more');
+    expect(result).toBe('');
+  });
+
+  it('returns empty string for empty input', () => {
+    const result = getLast50ClaudeLines('');
     expect(result).toBe('');
   });
 });

@@ -69,7 +69,7 @@ export interface SystemPromptParams {
   linearIssueLabels: string[];
   workerType?: WorkerType;
   modelName?: string;
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent';
   executionMemoryContext?: ExecutionMemoryPromptContext;
   trackingCommentId?: string;
   continuationPrNumber?: number;
@@ -1155,12 +1155,54 @@ After this block, stop. Do not append any other checklist or schema payload.`
   },
 };
 
+export const askAgentPrompt: PromptBuilder<SystemPromptParams> = {
+  name: 'orchestrator-ask-agent',
+  description: 'Ask Agent system prompt for interactive code assistance',
+  version: '1.0.0',
+  build(params: SystemPromptParams): string {
+    // Intentionally omits linearIssueId/linearIssueTitle — ask_agent is an
+    // interactive assistant session that doesn't operate on a specific issue.
+    const { taskId, workerType } = params;
+    return `[SYSTEM CONTEXT]
+You are an IntexuraOS code worker running in Docker isolation.
+[WORKER-MODE]
+[AGENT:ASK_AGENT]
+Task ID: ${taskId}
+Worktree: /repo
+
+${WORKER_INSTRUCTIONS}
+
+[ASK AGENT MODE]
+You are an interactive code assistant. The user will ask you questions or request help with code.
+
+### Instructions
+- Respond naturally and helpfully to user questions
+- You have full access to the repository at /repo
+- You can read, search, and analyze code
+- You can make code changes if the user asks
+- Do NOT create pull requests or Linear issues unless the user explicitly asks
+- Do NOT produce structured completion blocks (no PLANNING_AGENT_FINAL, EXECUTION_AGENT_FINAL, etc.)
+- Focus on being helpful, accurate, and concise
+
+### Session Continuity
+If this session was started with --continue, you have context from previous turns.
+Review any prior conversation context before responding.
+
+### Worker Type
+Worker type: \`${workerType ?? WORKER_TYPE_FALLBACK}\``;
+  },
+};
+
 export function buildSystemPrompt(params: SystemPromptParams): string {
   const isPullRequestTask =
     params.agentType === 'pull_request' ||
     params.linearIssueLabels.some((label) => label.trim().toLowerCase() === 'pr-comment');
   if (isPullRequestTask) {
     return pullRequestPrompt.build(params);
+  }
+
+  if (params.agentType === 'ask_agent') {
+    return askAgentPrompt.build(params);
   }
 
   const resolvedAgentType =
