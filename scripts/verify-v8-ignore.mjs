@@ -9,36 +9,6 @@ import { strict as assert } from 'node:assert';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = resolve(__dirname, '..');
 
-const NO_OVERRIDES = process.argv.includes('--no-overrides');
-
-// ============================================================================
-// OVERRIDE MECHANISM
-// ============================================================================
-
-function loadOverrides() {
-  if (NO_OVERRIDES) {
-    return { overriddenFiles: new Set(), taskMap: new Map() };
-  }
-
-  const overridesPath = resolve(ROOT_DIR, 'v8-ignore-overrides.json');
-
-  if (!existsSync(overridesPath)) {
-    return { overriddenFiles: new Set(), taskMap: new Map() };
-  }
-
-  const data = JSON.parse(readFileSync(overridesPath, 'utf8'));
-  const overriddenFiles = new Set();
-  const taskMap = new Map();
-
-  for (const [taskId, entry] of Object.entries(data.overrides ?? {})) {
-    for (const file of entry.files ?? []) {
-      overriddenFiles.add(file);
-      taskMap.set(file, taskId);
-    }
-  }
-
-  return { overriddenFiles, taskMap };
-}
 
 const VALID_CATEGORIES = [
   'ts-type',
@@ -665,9 +635,8 @@ function validateSyntax(comments) {
 // PHASE C: Pattern Validation
 // ============================================================================
 
-function validatePatterns(comments, overriddenFiles, taskMap) {
+function validatePatterns(comments) {
   const errors = [];
-  const overrideSkips = [];
 
   for (const comment of comments) {
     const detector = CATEGORY_DETECTORS[comment.category];
@@ -683,8 +652,6 @@ function validatePatterns(comments, overriddenFiles, taskMap) {
     const result = detector.detect(sourceCode, comment.line, comment.file);
 
     if (!result.valid) {
-      if (checkOverride(comment, overriddenFiles, taskMap, overrideSkips)) continue;
-
       errors.push({
         file: comment.file,
         line: comment.line,
@@ -693,20 +660,7 @@ function validatePatterns(comments, overriddenFiles, taskMap) {
     }
   }
 
-  return { errors, overrideSkips };
-}
-
-// ============================================================================
-// Override helper (shared by Phase C and C-1)
-// ============================================================================
-
-function checkOverride(comment, overriddenFiles, taskMap, overrideSkips) {
-  if (overriddenFiles.has(comment.file)) {
-    const taskId = taskMap.get(comment.file) ?? 'UNKNOWN';
-    overrideSkips.push({ file: comment.file, line: comment.line, taskId });
-    return true;
-  }
-  return false;
+  return { errors };
 }
 
 // ============================================================================
@@ -738,9 +692,8 @@ const NEVER_VALID_PATTERNS = [
 // Categories that legitimately cover NEVER-valid patterns
 const NEVER_VALID_EXEMPT_CATEGORIES = ['auth-guard', 'module-init'];
 
-function validateNeverValidPatterns(comments, overriddenFiles, taskMap) {
+function validateNeverValidPatterns(comments) {
   const errors = [];
-  const overrideSkips = [];
 
   for (const comment of comments) {
     if (NEVER_VALID_EXEMPT_CATEGORIES.includes(comment.category)) continue;
@@ -760,8 +713,6 @@ function validateNeverValidPatterns(comments, overriddenFiles, taskMap) {
 
     for (const { pattern, message } of NEVER_VALID_PATTERNS) {
       if (pattern.test(ignoredBlock)) {
-        if (checkOverride(comment, overriddenFiles, taskMap, overrideSkips)) break;
-
         errors.push({
           file: comment.file,
           line: comment.line,
@@ -772,7 +723,7 @@ function validateNeverValidPatterns(comments, overriddenFiles, taskMap) {
     }
   }
 
-  return { errors, overrideSkips };
+  return { errors };
 }
 
 // ============================================================================
@@ -1087,7 +1038,6 @@ async function main() {
     VALID_CATEGORIES.forEach((cat) => console.log(`  - ${cat}`));
     console.log('');
     console.log('Flags:');
-    console.log('  --no-overrides  Ignore v8-ignore-overrides.json (strict auditing)');
     console.log('  --all           Show all uncovered branches (not just first 50)');
     console.log('');
     console.log('Rules:');
@@ -1129,19 +1079,11 @@ async function main() {
   // Phase B-1: Blocker keyword enforcement
   const { errors: blockerErrors } = validateBlockerKeywords(Array.from(validComments));
 
-  // Load overrides
-  const { overriddenFiles, taskMap } = loadOverrides();
-
   // Phase C: Pattern validation
-  const { errors: patternErrors, overrideSkips: patternOverrideSkips } = validatePatterns(
-    Array.from(validComments),
-    overriddenFiles,
-    taskMap
-  );
+  const { errors: patternErrors } = validatePatterns(Array.from(validComments));
 
   // Phase C-1: NEVER-valid pattern blocklist
-  const { errors: neverValidErrors, overrideSkips: neverValidOverrideSkips } =
-    validateNeverValidPatterns(Array.from(validComments), overriddenFiles, taskMap);
+  const { errors: neverValidErrors } = validateNeverValidPatterns(Array.from(validComments));
 
   // Phase D: Coverage cross-reference
   const coveragePath = resolve(ROOT_DIR, 'coverage/coverage-final.json');
@@ -1192,15 +1134,6 @@ async function main() {
   // Count lines within v8 ignore blocks
   const startComments = comments.filter((c) => c.type === 'start');
   const blockCount = startComments.length;
-
-  // Report override skips
-  const allOverrideSkips = [...patternOverrideSkips, ...neverValidOverrideSkips];
-  if (allOverrideSkips.length > 0) {
-    console.log(`\n⏭ ${allOverrideSkips.length} block(s) skipped via overrides:`);
-    for (const skip of allOverrideSkips) {
-      console.log(`  ⏭ OVERRIDE: ${skip.file}:${skip.line} (${skip.taskId})`);
-    }
-  }
 
   console.log(`\n✓ ${validCount} v8 ignore comments validated`);
   console.log(
