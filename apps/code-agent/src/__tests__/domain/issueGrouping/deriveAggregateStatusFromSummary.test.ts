@@ -171,6 +171,17 @@ describe('deriveAggregateStatusFromSummary', () => {
     expect(result).not.toBe('needs-action');
   });
 
+  it('does not return active when review needs remediation but hasMergeReadyLabel is true (label cleared in practice)', () => {
+    expect(
+      deriveAggregateStatusFromSummary({
+        ...base,
+        hasCompletedExecutionAgent: true,
+        latestReviewNeedsRemediation: true,
+        hasMergeReadyLabel: true,
+      }),
+    ).toBe('done');
+  });
+
   it('returns needs-action when PR exists, review skipped (null), and merge-ready label present (full path)', () => {
     expect(
       deriveAggregateStatusFromSummary({
