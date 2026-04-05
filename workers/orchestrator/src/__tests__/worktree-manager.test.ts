@@ -367,7 +367,6 @@ describe('WorktreeManager', () => {
       );
       warnSpy.mockRestore();
     });
-
   });
 
   describe('lifecycle logging', () => {
@@ -784,4 +783,3 @@ describe('WorktreeManager - git stderr error handling', () => {
     }
   });
 });
-
