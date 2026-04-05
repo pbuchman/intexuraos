@@ -171,6 +171,18 @@ describe('sendTaskMessage', () => {
       expect(mockTaskDispatcher.sendMessageToWorker).not.toHaveBeenCalled();
     });
 
+    it('should allow ask_agent tasks (not blocked by agent type check)', async () => {
+      setupSuccessPath({ agentType: 'ask_agent', status: 'running' }, 'queued');
+
+      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('queued');
+      }
+      expect(mockTaskDispatcher.sendMessageToWorker).toHaveBeenCalled();
+    });
+
     it('should return invalid_agent_type for remediation tasks', async () => {
       const remediationTask = createMockTask({ agentType: 'remediation', status: 'running' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(remediationTask));
