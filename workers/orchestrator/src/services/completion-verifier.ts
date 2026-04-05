@@ -199,7 +199,11 @@ const FATAL_EXIT_CODE_PATTERN =
   /\[entrypoint\] (?:Claude|Codex) attempt finished with exit code: (137|139)/;
 
 export function detectFatalExitCode(rawLogs: string): number | undefined {
-  const match = FATAL_EXIT_CODE_PATTERN.exec(rawLogs);
+  // Only search the last 5 lines to avoid false positives from Claude's
+  // stream-json output containing test fixtures or code snippets with the pattern.
+  // The actual [entrypoint] exit line is always near the end of raw logs.
+  const tail = rawLogs.split('\n').slice(-5).join('\n');
+  const match = FATAL_EXIT_CODE_PATTERN.exec(tail);
   if (match?.[1] !== undefined) {
     return Number(match[1]);
   }
