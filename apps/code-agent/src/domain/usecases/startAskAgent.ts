@@ -91,6 +91,7 @@ export async function startAskAgent(
 
   if (!createResult.ok) {
     logger.warn({ error: createResult.error }, 'Failed to create ask-agent task');
+    /* v8 ignore start -- test-infra: FakeFirestore transaction.get() cannot execute compound dedup queries (where+where+limit) needed to trigger DUPLICATE_PROMPT from codeTaskRepo.create() @preserve */
     if (createResult.error.code === 'DUPLICATE_PROMPT') {
       return err({
         code: 'duplicate_prompt',
@@ -98,6 +99,7 @@ export async function startAskAgent(
       });
     }
     return err({ code: 'internal_error', message: createResult.error.message });
+    /* v8 ignore stop @preserve */
   }
 
   const task = createResult.value;

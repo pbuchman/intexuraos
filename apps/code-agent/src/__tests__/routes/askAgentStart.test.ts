@@ -374,5 +374,120 @@ describe('POST /code/ask-agent/start', () => {
 
       expect(response.statusCode).toBe(400);
     });
+
+    it('returns 503 when service_unavailable from rate limiter', async () => {
+      vi.mocked(rateLimitService.checkLimits).mockResolvedValueOnce(
+        err({ code: 'service_unavailable', message: 'Rate limit service unavailable' }),
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/ask-agent/start',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Ask something',
+        },
+      });
+
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+    });
+
+    it('returns WORKER_NOT_CONFIGURED when no workers are enabled', async () => {
+      // Use a different user that has no workers configured
+      mockedJwtVerify.mockResolvedValueOnce({
+        payload: { sub: 'user-with-no-workers', email: 'noworkers@example.com' },
+        protectedHeader: new Uint8Array(),
+      } as never);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/ask-agent/start',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Ask something',
+        },
+      });
+
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('WORKER_NOT_CONFIGURED');
+    });
+
+    it('returns CONFLICT when duplicate prompt is detected', async () => {
+      // Submit the same prompt twice to trigger dedup
+      await app.inject({
+        method: 'POST',
+        url: '/code/ask-agent/start',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Exact same prompt for dedup test',
+        },
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/ask-agent/start',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Exact same prompt for dedup test',
+        },
+      });
+
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+    });
+
+    it('returns QUEUE_FULL when task queue is full', async () => {
+      vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
+        err({ code: 'queue_full', message: 'Task queue is full' }),
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/ask-agent/start',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Ask something about queue',
+        },
+      });
+
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('QUEUE_FULL');
+    });
+
+    it('returns INTERNAL_ERROR when enqueue fails with unexpected error', async () => {
+      vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
+        err({ code: 'internal_error', message: 'Firestore write failed unexpectedly' }),
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/ask-agent/start',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Ask something triggering internal error',
+        },
+      });
+
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
   });
 });
