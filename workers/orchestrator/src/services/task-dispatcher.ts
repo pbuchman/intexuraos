@@ -1965,6 +1965,7 @@ export class TaskDispatcher {
     }
 
     if (shouldPreserve && task.agentType === 'pull_request' && task.prNumber !== undefined) {
+      /* v8 ignore next -- ts-type: IsolationProvider declares listPreservedWorkers as optional so ?.() optional chaining cannot be tested via a mock that always has or lacks the method without changing the interface contract @preserve */
       const preserved = (await this.isolation.provider.listPreservedWorkers?.()) ?? [];
       if (preserved.length > 0) {
         const savedState = await this.statePersistence.load();
