@@ -141,7 +141,7 @@ export async function startAskAgent(
   logger.info({ taskId: task.id }, 'Ask-agent task submitted and enqueued successfully');
 
   return ok({
-    status: 'submitted' as const,
+    status: 'submitted',
     codeTaskId: task.id,
   });
 }
