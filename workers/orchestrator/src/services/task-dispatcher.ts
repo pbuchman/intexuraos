@@ -2211,32 +2211,11 @@ export class TaskDispatcher {
           : undefined;
 
         // Check for rebase result
-        let rebaseResult: TaskResult['rebaseResult'] | undefined;
-        try {
-          const { stdout: rebaseOutput } = await execAsync(
-            'cat .rebase-result.json 2>/dev/null || echo "{}"',
-            execOptions
-          );
-          const parsed = JSON.parse(rebaseOutput) as {
-            attempted?: boolean;
-            success?: boolean;
-            conflictFiles?: string[];
-          };
-          /* v8 ignore start -- ts-type: spread operator with optional property creates type narrowing branch @preserve */
-          if (parsed.attempted === true && typeof parsed.success === 'boolean') {
-            rebaseResult = {
-              attempted: parsed.attempted,
-              success: parsed.success,
-              ...(parsed.conflictFiles !== undefined && { conflictFiles: parsed.conflictFiles }),
-            };
-          }
-          /* v8 ignore stop @preserve */
-        } catch (parseError) {
-          this.logger.warn(
-            { taskId: task.taskId, error: parseError },
-            'Failed to parse rebase result'
-          );
-        }
+        const { stdout: rebaseOutput } = await execAsync(
+          'cat .rebase-result.json 2>/dev/null || echo "{}"',
+          execOptions
+        );
+        const rebaseResult = this.parseRebaseResultOutput(rebaseOutput, task.taskId);
 
         /* v8 ignore start -- ts-type: spread operator with optional rebaseResult creates type narrowing branch @preserve */
         const result: TaskResult = {
