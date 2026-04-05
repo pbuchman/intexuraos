@@ -1,9 +1,9 @@
 /**
- * Tests for migration 079: Reset execution memory scores
+ * Tests for migration 081: Reset execution memory scores
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { metadata, up } from '../079_reset-execution-memory-scores.mjs'; // @allow-missing-js -- importing .mjs file directly
+import { metadata, up } from '../081_reset-execution-memory-scores.mjs'; // @allow-missing-js -- importing .mjs file directly
 
 // Mock console.log during tests to prevent stdout noise
 let logSpy: ReturnType<typeof vi.spyOn>;
@@ -167,14 +167,14 @@ describe('079_reset-execution-memory-scores migration', () => {
   describe('metadata', () => {
     it('should have correct metadata structure', () => {
       expect(metadata).toMatchObject({
-        id: '079',
+        id: '081',
         name: 'reset-execution-memory-scores',
         createdAt: '2026-04-05',
       });
     });
 
     it('should have sequential ID', () => {
-      expect(Number.parseInt(metadata.id, 10)).toBe(79);
+      expect(Number.parseInt(metadata.id, 10)).toBe(81);
     });
   });
 
