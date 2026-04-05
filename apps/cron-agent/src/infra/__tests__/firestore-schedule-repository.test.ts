@@ -17,7 +17,8 @@ describe('FirestoreScheduleRepository', () => {
   it('creates a schedule and returns it', async () => {
     const result = await repo.create('user-1', {
       name: 'Test Schedule',
-      description: 'Every minute',
+      schedule: 'Every minute',
+      scheduleSummary: 'Every minute',
       cronExpression: '* * * * *',
       timezone: 'UTC',
       action: { services: ['code-agent'], instruction: 'do something', preferredTools: [] },
@@ -42,7 +43,8 @@ describe('FirestoreScheduleRepository', () => {
   it('finds a schedule by id', async () => {
     const createResult = await repo.create('user-1', {
       name: 'Test',
-      description: 'test',
+      schedule: 'test',
+      scheduleSummary: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
@@ -69,7 +71,8 @@ describe('FirestoreScheduleRepository', () => {
   it('finds schedules by userId with status filter', async () => {
     await repo.create('user-1', {
       name: 'Active',
-      description: 'test',
+      schedule: 'test',
+      scheduleSummary: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
@@ -87,7 +90,8 @@ describe('FirestoreScheduleRepository', () => {
     const past = new Date(Date.now() - 60000).toISOString();
     await repo.create('user-1', {
       name: 'Due',
-      description: 'test',
+      schedule: 'test',
+      scheduleSummary: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
@@ -105,7 +109,8 @@ describe('FirestoreScheduleRepository', () => {
     const future = new Date(Date.now() + 3600000).toISOString();
     await repo.create('user-1', {
       name: 'Future',
-      description: 'test',
+      schedule: 'test',
+      scheduleSummary: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
@@ -121,7 +126,8 @@ describe('FirestoreScheduleRepository', () => {
   it('updates a schedule', async () => {
     const createResult = await repo.create('user-1', {
       name: 'Original',
-      description: 'test',
+      schedule: 'test',
+      scheduleSummary: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
@@ -146,7 +152,8 @@ describe('FirestoreScheduleRepository', () => {
   it('finds by userId without status filter', async () => {
     await repo.create('user-1', {
       name: 'Test',
-      description: 'test',
+      schedule: 'test',
+      scheduleSummary: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
@@ -162,7 +169,8 @@ describe('FirestoreScheduleRepository', () => {
   it('does not return schedules for a different user', async () => {
     await repo.create('user-1', {
       name: 'User1 Schedule',
-      description: 'test',
+      schedule: 'test',
+      scheduleSummary: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
@@ -178,7 +186,8 @@ describe('FirestoreScheduleRepository', () => {
   it('handles pagination with limit', async () => {
     await repo.create('user-1', {
       name: 'First',
-      description: 'test',
+      schedule: 'test',
+      scheduleSummary: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
@@ -187,7 +196,8 @@ describe('FirestoreScheduleRepository', () => {
 
     await repo.create('user-1', {
       name: 'Second',
-      description: 'test',
+      schedule: 'test',
+      scheduleSummary: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
@@ -205,7 +215,8 @@ describe('FirestoreScheduleRepository', () => {
     const past = new Date(Date.now() - 60000).toISOString();
     const createResult = await repo.create('user-1', {
       name: 'Paused',
-      description: 'test',
+      schedule: 'test',
+      scheduleSummary: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
@@ -225,7 +236,8 @@ describe('FirestoreScheduleRepository', () => {
   it('sets updatedAt on update', async () => {
     const createResult = await repo.create('user-1', {
       name: 'Test',
-      description: 'test',
+      schedule: 'test',
+      scheduleSummary: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
@@ -244,7 +256,8 @@ describe('FirestoreScheduleRepository', () => {
   it('filters by empty status array returns all', async () => {
     await repo.create('user-1', {
       name: 'Test',
-      description: 'test',
+      schedule: 'test',
+      scheduleSummary: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
@@ -260,7 +273,8 @@ describe('FirestoreScheduleRepository', () => {
   it('returns count matching schedules length', async () => {
     await repo.create('user-1', {
       name: 'A',
-      description: 'test',
+      schedule: 'test',
+      scheduleSummary: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
@@ -269,7 +283,8 @@ describe('FirestoreScheduleRepository', () => {
 
     await repo.create('user-1', {
       name: 'B',
-      description: 'test',
+      schedule: 'test',
+      scheduleSummary: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
@@ -285,7 +300,8 @@ describe('FirestoreScheduleRepository', () => {
   it('returns null nextCursor when all results fit in limit', async () => {
     await repo.create('user-1', {
       name: 'Only',
-      description: 'test',
+      schedule: 'test',
+      scheduleSummary: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
@@ -301,7 +317,8 @@ describe('FirestoreScheduleRepository', () => {
   it('paginates using cursor in findByUserId', async () => {
     const first = await repo.create('user-1', {
       name: 'First',
-      description: 'test',
+      schedule: 'test',
+      scheduleSummary: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
@@ -312,7 +329,8 @@ describe('FirestoreScheduleRepository', () => {
 
     await repo.create('user-1', {
       name: 'Second',
-      description: 'test',
+      schedule: 'test',
+      scheduleSummary: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
@@ -338,7 +356,8 @@ describe('FirestoreScheduleRepository', () => {
     delete process.env['INTEXURAOS_GCP_PROJECT_ID'];
     const result = await repo.create('user-1', {
       name: 'Test',
-      description: 'test',
+      schedule: 'test',
+      scheduleSummary: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
@@ -402,7 +421,8 @@ describe('FirestoreScheduleRepository', () => {
   it('incrementCounters with both counters', async () => {
     const createResult = await repo.create('user-1', {
       name: 'Test',
-      description: 'test',
+      schedule: 'test',
+      scheduleSummary: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
@@ -422,7 +442,8 @@ describe('FirestoreScheduleRepository', () => {
   it('incrementCounters with only executionCount', async () => {
     const createResult = await repo.create('user-1', {
       name: 'Test',
-      description: 'test',
+      schedule: 'test',
+      scheduleSummary: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
@@ -458,7 +479,8 @@ describe('FirestoreScheduleRepository', () => {
   it('handles cursor for non-existent doc in findByUserId', async () => {
     await repo.create('user-1', {
       name: 'Test',
-      description: 'test',
+      schedule: 'test',
+      scheduleSummary: 'test',
       cronExpression: '* * * * *',
       timezone: 'UTC',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
