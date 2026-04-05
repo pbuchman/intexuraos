@@ -111,22 +111,45 @@ In `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts`, add 
 
 - [ ] **Step 3: Add Firestore composite index migration**
 
-Create a new migration file in `apps/code-agent/migrations/` (use the next sequential number). The migration should create a composite index:
+Create a new migration file in `migrations/` (use the next sequential number — 083). The migration should create a composite index:
 
 ```javascript
-// Migration: Add composite index for ask-agent active query
-// Index: code_tasks (userId ASC, agentType ASC, status ASC, createdAt DESC)
-export async function up(firestore) {
-  // Composite indexes are created via gcloud/Firebase console, not via code.
-  // This migration documents the required index.
-  // Run: gcloud firestore indexes composite create \
-  //   --collection-group=code_tasks \
-  //   --field-config field-path=userId,order=ascending \
-  //   --field-config field-path=agentType,order=ascending \
-  //   --field-config field-path=status,order=ascending \
-  //   --field-config field-path=createdAt,order=descending \
-  //   --project=intexuraos-dev-pbuchman
-  console.log('Index documented. Create via gcloud CLI if not auto-created.');
+/**
+ * Migration 083: Composite index for code_tasks ask-agent active query
+ *
+ * Required for GET /code/ask-agent/active:
+ *   .where('userId', '==', userId)
+ *   .where('agentType', '==', 'ask_agent')
+ *   .where('status', 'in', NON_ARCHIVED_STATUSES)
+ *   .orderBy('createdAt', 'desc')
+ *   .limit(1)
+ */
+
+export const metadata = {
+  id: '083',
+  name: 'code-tasks-ask-agent-active-query-index',
+  description: 'Composite index for code_tasks (userId, agentType, status, createdAt) for GET /code/ask-agent/active',
+  createdAt: '2026-04-05',
+};
+
+export const indexes = [
+  {
+    collectionGroup: 'code_tasks',
+    queryScope: 'COLLECTION',
+    fields: [
+      { fieldPath: 'userId', order: 'ASCENDING' },
+      { fieldPath: 'agentType', order: 'ASCENDING' },
+      { fieldPath: 'status', order: 'ASCENDING' },
+      { fieldPath: 'createdAt', order: 'DESCENDING' },
+    ],
+  },
+];
+
+export const collections = ['code_tasks'];
+
+export async function up(context) {
+  console.log('  Deploying code_tasks ask-agent active query composite index...');
+  await context.deployIndexes();
 }
 ```
 
