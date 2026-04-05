@@ -13,9 +13,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
 
 import { buildServer } from '../../server.js';
-import { resetServices } from '../../services.js';
+import { getServices, resetServices, setServices } from '../../services.js';
 import { resetFirestore } from '@intexuraos/infra-firestore';
 import { setupTestServices } from '../helpers/mockServices.js';
+import { err } from '@intexuraos/common-core';
 
 const processExecutionMemoryBacklogMock = vi.fn();
 
@@ -133,5 +134,24 @@ describe('POST /internal/auto-archive-merged-tasks', () => {
     // With empty Firestore, result is always 0 regardless of mergeDays
     const body = JSON.parse(response.body) as { totalTasksFetched: number };
     expect(body.totalTasksFetched).toBe(0);
+  });
+
+  it('returns 500 when autoArchiveMergedTasks use case returns error', async () => {
+    const services = getServices();
+    const archiveSpy = vi.fn().mockResolvedValue(err(new Error('Firestore connection lost')));
+
+    setServices({ ...services, autoArchiveMergedTasks: archiveSpy });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/auto-archive-merged-tasks',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+    expect(body.error.message).toBe('Firestore connection lost');
   });
 });
