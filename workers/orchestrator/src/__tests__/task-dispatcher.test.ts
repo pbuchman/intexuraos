@@ -7371,6 +7371,28 @@ describe('TaskDispatcher', () => {
       expect(log).toContain('Execution Agent');
     });
 
+    it('logs Ask Agent for agentType=ask_agent', async () => {
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+      const request: CreateTaskRequest = {
+        taskId: 'agent-label-ask-agent',
+        workerType: 'auto',
+        prompt: 'Test ask_agent agent label',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'ask_agent',
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const log = getInstructionsLog();
+      expect(log).toBeDefined();
+      expect(log).toContain('Ask Agent');
+      expect(log).toContain('interactive code assistant');
+    });
+
     it('logs Planning Agent when no agent type and no code-task label', async () => {
       vi.mocked(mockLogForwarder.appendChunk).mockClear();
       const request: CreateTaskRequest = {

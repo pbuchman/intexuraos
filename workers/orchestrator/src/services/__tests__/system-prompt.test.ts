@@ -1372,7 +1372,9 @@ describe('system-prompt', () => {
     expect(result).toContain('[AGENT:ASK_AGENT]');
     expect(result).toContain('[ASK AGENT MODE]');
     expect(result).toContain('interactive code assistant');
-    expect(result).toContain('Do NOT create pull requests or Linear issues unless the user explicitly asks');
+    expect(result).toContain(
+      'Do NOT create pull requests or Linear issues unless the user explicitly asks'
+    );
     expect(result).toContain('Do NOT produce structured completion blocks');
     expect(result).toContain('Session Continuity');
     expect(result).toContain('Worker type:');
