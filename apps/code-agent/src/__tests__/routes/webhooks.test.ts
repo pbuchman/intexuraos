@@ -67,9 +67,12 @@ import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js'
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
-import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
+import type { GitHubPRClient, PullRequestStatus, PullRequestFile, PullRequestCommit, GitHubPullRequestListItem, GitHubPullRequestDetails, GitHubPRClientError } from '../../domain/ports/gitHubPRClient.js';
+import type { GitHubPRSummaryRepository } from '../../domain/repositories/gitHubPRSummaryRepository.js';
+import type { GitHubPRSummary } from '../../domain/models/gitHubPRSummary.js';
 import type { CreateRemediationTaskRequest, CreateRemediationTaskResult, CreateRemediationTaskError } from '../../domain/usecases/createRemediationTask.js';
 import type { Result } from '@intexuraos/common-core';
+import type { SummaryRepositoryError } from '../../domain/repositories/gitHubPRSummaryRepository.js';
 
 // Mock fetchWithAuth
 vi.mock('@intexuraos/internal-clients', async () => ({
@@ -82,6 +85,116 @@ vi.mock('../../domain/usecases/drainTaskQueue.js', () => ({
   _resetDrainGuard: vi.fn(),
 }));
 import * as drainTaskQueueModule from '../../domain/usecases/drainTaskQueue.js';
+
+/**
+ * In-memory fake for GitHubPRSummaryRepository with declarative seeding.
+ */
+class FakeGitHubPRSummaryRepo implements GitHubPRSummaryRepository {
+  private summaries = new Map<string, GitHubPRSummary>();
+
+  private key(repository: string, prNumber: number): string {
+    return `${repository}:${prNumber}`;
+  }
+
+  seedSummary(summary: GitHubPRSummary): void {
+    this.summaries.set(this.key(summary.repository, summary.pullRequestNumber), summary);
+  }
+
+  async upsert(): Promise<Result<void, { code: 'FIRESTORE_ERROR'; message: string }>> {
+    return ok(undefined);
+  }
+
+  async findRecentlyActive(): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>> {
+    return ok([]);
+  }
+
+  async findByPullRequest(repository: string, prNumber: number): Promise<Result<GitHubPRSummary | null, SummaryRepositoryError>> {
+    return ok(this.summaries.get(this.key(repository, prNumber)) ?? null);
+  }
+
+  async findOpenByBaseBranch(): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>> {
+    return ok([]);
+  }
+
+  async findOpenByRepository(): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>> {
+    return ok([]);
+  }
+
+  async findAllOpen(): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>> {
+    return ok([]);
+  }
+}
+
+/**
+ * In-memory fake for GitHubPRClient with declarative seeding.
+ */
+class FakeGitHubPRClient implements GitHubPRClient {
+  private prStatuses = new Map<string, PullRequestStatus>();
+
+  private key(owner: string, repo: string, prNumber: number): string {
+    return `${owner}/${repo}:${prNumber}`;
+  }
+
+  seedPrStatus(owner: string, repo: string, prNumber: number, status: PullRequestStatus): void {
+    this.prStatuses.set(this.key(owner, repo, prNumber), status);
+  }
+
+  async updatePRTitle(): Promise<Result<void, GitHubPRClientError>> {
+    return ok(undefined);
+  }
+
+  async getPullRequestFiles(): Promise<Result<PullRequestFile[], GitHubPRClientError>> {
+    return ok([]);
+  }
+
+  async getPullRequestCommits(): Promise<Result<PullRequestCommit[], GitHubPRClientError>> {
+    return ok([]);
+  }
+
+  async getPullRequestBaseBranch(): Promise<Result<string, GitHubPRClientError>> {
+    return ok('main');
+  }
+
+  async getPullRequestStatus(_token: string, owner: string, repo: string, prNumber: number): Promise<Result<PullRequestStatus, GitHubPRClientError>> {
+    const status = this.prStatuses.get(this.key(owner, repo, prNumber));
+    if (status === undefined) {
+      return ok({ state: 'open' as const, mergedAt: null, headRef: '' });
+    }
+    return ok(status);
+  }
+
+  async postPRComment(): Promise<Result<{ commentId: number }, GitHubPRClientError>> {
+    return ok({ commentId: 1 });
+  }
+
+  async listOpenPullRequestsByBaseBranch(): Promise<Result<GitHubPullRequestListItem[], GitHubPRClientError>> {
+    return ok([]);
+  }
+
+  async getPullRequestDetails(): Promise<Result<GitHubPullRequestDetails, GitHubPRClientError>> {
+    return ok({} as GitHubPullRequestDetails);
+  }
+
+  async getIssueComment(): Promise<Result<{ body: string }, GitHubPRClientError>> {
+    return ok({ body: '' });
+  }
+
+  async updateIssueComment(): Promise<Result<{ commentId: number }, GitHubPRClientError>> {
+    return ok({ commentId: 1 });
+  }
+
+  async mergePullRequest(): Promise<Result<{ sha: string; merged: boolean }, GitHubPRClientError>> {
+    return ok({ sha: '', merged: false });
+  }
+
+  async getCombinedCheckStatus(): Promise<Result<{ state: 'success' | 'failure' | 'pending' }, GitHubPRClientError>> {
+    return ok({ state: 'success' });
+  }
+
+  async listAllOpenPullRequests(): Promise<Result<GitHubPullRequestListItem[], GitHubPRClientError>> {
+    return ok([]);
+  }
+}
 
 describe('POST /internal/webhooks/task-complete', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -5250,16 +5363,32 @@ describe('POST /internal/webhooks/task-complete', () => {
       await createOriginTask({ traceId: 'trace_label_merged', agentType: 'execution' });
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_merged_review' });
 
-      // Simulate PR already merged by providing a gitHubPRSummaryRepo with mergedAt set
-      const mockFindByPullRequest = vi.fn().mockResolvedValue(
-        ok({ mergedAt: new Date('2026-04-01T09:35:00Z') })
-      );
+      // Use fake with seeding instead of vi.fn() override
+      const fakeSummaryRepo = new FakeGitHubPRSummaryRepo();
+      fakeSummaryRepo.seedSummary({
+        repository: 'pbuchman/intexuraos',
+        pullRequestNumber: reviewTask.prNumber ?? 42,
+        title: 'Test PR',
+        state: 'closed',
+        mergedAt: new Date('2026-04-01T09:35:00Z'),
+        baseBranch: 'main',
+        authorLogin: 'test-user',
+        headBranch: 'feature/test',
+        mergeConflictStatus: null,
+        lastConflictCheckedAt: null,
+        conflictEpisodeStartedAt: null,
+        conflictResolvedAt: null,
+        managedConflictCommentId: null,
+        managedConflictTaskId: null,
+        managedConflictTaskOwnerUserId: null,
+        lastActivityAt: new Date(),
+        firstSeenAt: new Date(),
+        lastReviewedCommitSha: null,
+        lastReviewNeedsRemediation: null,
+      });
       setServices({
         ...getServices(),
-        gitHubPRSummaryRepo: {
-          ...getServices().gitHubPRSummaryRepo,
-          findByPullRequest: mockFindByPullRequest,
-        },
+        gitHubPRSummaryRepo: fakeSummaryRepo,
       });
 
       const payload = makeLabelPayload(reviewTask.id);
@@ -5279,32 +5408,50 @@ describe('POST /internal/webhooks/task-complete', () => {
       await createOriginTask({ traceId: 'trace_label_merged_fallback', agentType: 'execution' });
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_merged_fallback_review' });
 
+      // Use fakes with seeding instead of vi.fn() overrides
+      const fakeSummaryRepo = new FakeGitHubPRSummaryRepo();
       // Simulate stale summary: says NOT merged
-      const mockFindByPullRequest = vi.fn().mockResolvedValue(
-        ok({ mergedAt: null })
-      );
+      fakeSummaryRepo.seedSummary({
+        repository: 'pbuchman/intexuraos',
+        pullRequestNumber: reviewTask.prNumber ?? 42,
+        title: 'Test PR',
+        state: 'open',
+        mergedAt: null,
+        baseBranch: 'main',
+        authorLogin: 'test-user',
+        headBranch: 'feature/test',
+        mergeConflictStatus: null,
+        lastConflictCheckedAt: null,
+        conflictEpisodeStartedAt: null,
+        conflictResolvedAt: null,
+        managedConflictCommentId: null,
+        managedConflictTaskId: null,
+        managedConflictTaskOwnerUserId: null,
+        lastActivityAt: new Date(),
+        firstSeenAt: new Date(),
+        lastReviewedCommitSha: null,
+        lastReviewNeedsRemediation: null,
+      });
+
+      const fakePRClient = new FakeGitHubPRClient();
       // GitHub API says actually merged
-      const mockGetPullRequestStatus = vi.fn().mockResolvedValue(
-        ok({ state: 'closed' as const, mergedAt: new Date('2026-04-01T09:35:00Z'), headRef: 'feature/test' })
-      );
+      fakePRClient.seedPrStatus('pbuchman', 'intexuraos', reviewTask.prNumber ?? 42, {
+        state: 'closed',
+        mergedAt: new Date('2026-04-01T09:35:00Z'),
+        headRef: 'feature/test',
+      });
+
       // OAuth token needed for fallback API call
-      const mockGetOAuthToken = vi.fn().mockResolvedValue(
-        ok({ accessToken: 'test-token', email: 'test@test.com' })
-      );
+      const fakeUserServiceClient = {
+        ...mockUserServiceClient,
+        getOAuthToken: async (): Promise<Result<{ accessToken: string; email: string }, { code: string; message: string }>> => ok({ accessToken: 'test-token', email: 'test@test.com' }),
+      } as UserServiceClient;
+
       setServices({
         ...getServices(),
-        gitHubPRSummaryRepo: {
-          ...getServices().gitHubPRSummaryRepo,
-          findByPullRequest: mockFindByPullRequest,
-        },
-        gitHubPRClient: {
-          ...getServices().gitHubPRClient,
-          getPullRequestStatus: mockGetPullRequestStatus,
-        },
-        userServiceClient: {
-          ...getServices().userServiceClient,
-          getOAuthToken: mockGetOAuthToken,
-        },
+        gitHubPRSummaryRepo: fakeSummaryRepo,
+        gitHubPRClient: fakePRClient,
+        userServiceClient: fakeUserServiceClient,
       });
 
       const payload = makeLabelPayload(reviewTask.id);
@@ -5324,32 +5471,50 @@ describe('POST /internal/webhooks/task-complete', () => {
       await createOriginTask({ traceId: 'trace_label_fallback_not_merged', agentType: 'execution' });
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_fallback_not_merged_review' });
 
+      // Use fakes with seeding instead of vi.fn() overrides
+      const fakeSummaryRepo = new FakeGitHubPRSummaryRepo();
       // Simulate stale summary: says NOT merged
-      const mockFindByPullRequest = vi.fn().mockResolvedValue(
-        ok({ mergedAt: null })
-      );
+      fakeSummaryRepo.seedSummary({
+        repository: 'pbuchman/intexuraos',
+        pullRequestNumber: reviewTask.prNumber ?? 42,
+        title: 'Test PR',
+        state: 'open',
+        mergedAt: null,
+        baseBranch: 'main',
+        authorLogin: 'test-user',
+        headBranch: 'feature/test',
+        mergeConflictStatus: null,
+        lastConflictCheckedAt: null,
+        conflictEpisodeStartedAt: null,
+        conflictResolvedAt: null,
+        managedConflictCommentId: null,
+        managedConflictTaskId: null,
+        managedConflictTaskOwnerUserId: null,
+        lastActivityAt: new Date(),
+        firstSeenAt: new Date(),
+        lastReviewedCommitSha: null,
+        lastReviewNeedsRemediation: null,
+      });
+
+      const fakePRClient = new FakeGitHubPRClient();
       // GitHub API also says NOT merged (PR still open)
-      const mockGetPullRequestStatus = vi.fn().mockResolvedValue(
-        ok({ state: 'open' as const, mergedAt: null, headRef: 'feature/test' })
-      );
+      fakePRClient.seedPrStatus('pbuchman', 'intexuraos', reviewTask.prNumber ?? 42, {
+        state: 'open',
+        mergedAt: null,
+        headRef: 'feature/test',
+      });
+
       // OAuth token needed for fallback API call
-      const mockGetOAuthToken = vi.fn().mockResolvedValue(
-        ok({ accessToken: 'test-token', email: 'test@test.com' })
-      );
+      const fakeUserServiceClient = {
+        ...mockUserServiceClient,
+        getOAuthToken: async (): Promise<Result<{ accessToken: string; email: string }, { code: string; message: string }>> => ok({ accessToken: 'test-token', email: 'test@test.com' }),
+      } as UserServiceClient;
+
       setServices({
         ...getServices(),
-        gitHubPRSummaryRepo: {
-          ...getServices().gitHubPRSummaryRepo,
-          findByPullRequest: mockFindByPullRequest,
-        },
-        gitHubPRClient: {
-          ...getServices().gitHubPRClient,
-          getPullRequestStatus: mockGetPullRequestStatus,
-        },
-        userServiceClient: {
-          ...getServices().userServiceClient,
-          getOAuthToken: mockGetOAuthToken,
-        },
+        gitHubPRSummaryRepo: fakeSummaryRepo,
+        gitHubPRClient: fakePRClient,
+        userServiceClient: fakeUserServiceClient,
       });
 
       const payload = makeLabelPayload(reviewTask.id);
