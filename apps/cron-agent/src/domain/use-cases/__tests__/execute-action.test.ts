@@ -71,6 +71,7 @@ describe('executeAction', () => {
         toolCallingClient: createFakeToolCallingClient('Task completed successfully'),
       },
       { services: ['code-agent'], instruction: 'check running tasks', preferredTools: [] },
+      'user-123',
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -87,6 +88,7 @@ describe('executeAction', () => {
         toolCallingClient: createFakeToolCallingClient('done'),
       },
       { services: ['unknown-service'], instruction: 'do something', preferredTools: [] },
+      'user-123',
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -101,6 +103,7 @@ describe('executeAction', () => {
         toolCallingClient: createFailingToolCallingClient(),
       },
       { services: ['code-agent'], instruction: 'check tasks', preferredTools: [] },
+      'user-123',
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -139,6 +142,7 @@ describe('executeAction', () => {
         toolCallingClient,
       },
       { services: ['code-agent'], instruction: 'list tasks', preferredTools: [] },
+      'user-123',
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -186,6 +190,7 @@ describe('executeAction', () => {
         toolCallingClient,
       },
       { services: ['code-agent'], instruction: 'do something', preferredTools: [] },
+      'user-123',
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -220,6 +225,7 @@ describe('executeAction', () => {
         toolCallingClient,
       },
       { services: ['code-agent'], instruction: 'exhaust iterations', preferredTools: [] },
+      'user-123',
     );
     expect(result.ok).toBe(true);
     expect(onExhaustedCalled).toBe(true);
@@ -263,6 +269,7 @@ describe('executeAction', () => {
         toolCallingClient,
       },
       { services: ['code-agent'], instruction: 'test', preferredTools: [] },
+      'user-123',
     );
     expect(capturedPrompt).toContain('My Code Agent');
   });
@@ -307,6 +314,7 @@ describe('executeAction', () => {
         instruction: 'test',
         preferredTools: ['code_agent__preferredTool'],
       },
+      'user-123',
     );
 
     expect(result.ok).toBe(true);
@@ -346,7 +354,35 @@ describe('executeAction', () => {
         toolCallingClient,
       },
       { services: ['code-agent'], instruction: 'test', preferredTools: [] },
+      'user-123',
     );
     expect(capturedPrompt).toContain('code-agent');
+  });
+
+  it('includes userId in system prompt for security', async () => {
+    let capturedPrompt = '';
+    const toolCallingClient: ToolCallingClient = {
+      run: async (opts) => {
+        capturedPrompt = opts.systemPrompt;
+        return ok({
+          content: 'Done',
+          toolCallsMade: 0,
+          iterationCount: 1,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costUsd: 0.0001 },
+        });
+      },
+    };
+
+    await executeAction(
+      {
+        logger: createTestLogger(),
+        toolRegistry: createFakeToolRegistry([testTool]),
+        toolCallingClient,
+      },
+      { services: ['code-agent'], instruction: 'test', preferredTools: [] },
+      'user-456',
+    );
+    expect(capturedPrompt).toContain('user-456');
+    expect(capturedPrompt).toContain('Security:');
   });
 });

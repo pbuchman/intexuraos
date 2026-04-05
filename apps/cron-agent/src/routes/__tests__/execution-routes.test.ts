@@ -47,7 +47,7 @@ const testSchedule: CronSchedule = {
   id: 'schedule-1',
   userId: TEST_USER_ID,
   name: 'Test Schedule',
-  description: 'Every minute',
+  scheduleSummary: 'Every minute',
   cronExpression: '* * * * *',
   timezone: 'UTC',
   action: { services: ['code-agent'], instruction: 'do something', preferredTools: [] },

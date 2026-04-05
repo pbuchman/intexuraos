@@ -198,10 +198,10 @@ export function CronScheduleViewPage(): React.JSX.Element {
               <InlineEditText value={schedule.name} onSave={handleNameSave} label="name" />
             </div>
 
-            {/* Description */}
-            {schedule.description !== '' ? (
+            {/* Schedule summary */}
+            {schedule.scheduleSummary !== '' ? (
               <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
-                {schedule.description}
+                {schedule.scheduleSummary}
               </p>
             ) : null}
 
