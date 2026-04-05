@@ -215,6 +215,37 @@ describe('groupByLinearIssue', () => {
     ]);
     expect(pipeline.steps.some((step) => step.agentType === 'execution' && step.state === 'actionable')).toBe(false);
   });
+
+  it('shows merge step when execution task has ready-to-merge label (skipped review)', () => {
+    const tasks: SerializedTask[] = [
+      makeTask({
+        id: 'task-merge',
+        agentType: 'execution',
+        status: 'implemented',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+        linearIssueId: 'INT-100',
+        linearIssue: {
+          identifier: 'INT-100',
+          title: 'Test',
+          state: { name: 'In Review', type: 'started' },
+          priority: 3,
+          assignee: null,
+          labels: [{ name: 'ready-to-merge' }],
+          url: 'https://linear.app/test/INT-100',
+          commentCount: 0,
+          lastCommentAt: null,
+        },
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+    const group = groups[0];
+    expect(group).toBeDefined();
+    const mergeStep = group?.pipeline.steps.find((s) => s.agentType === 'merge');
+
+    expect(mergeStep).toBeDefined();
+    expect(mergeStep?.state).toBe('actionable');
+  });
 });
 
 describe('deriveAggregateStatus', () => {
