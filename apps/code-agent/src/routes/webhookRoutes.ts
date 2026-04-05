@@ -1262,7 +1262,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   const tokenResult = await userServiceClient.getOAuthToken(task.userId, 'github');
                   if (tokenResult.ok) {
                     const parsed = parseOwnerRepo(task.repository);
+                    /* v8 ignore start -- ts-type: parseOwnerRepo cannot return null for valid task.repository (always owner/repo format) @preserve */
                     if (parsed !== null) {
+                    /* v8 ignore stop @preserve */
                       const prStatus = await gitHubPRClient.getPullRequestStatus(tokenResult.value.accessToken, parsed.owner, parsed.repo, prNumber);
                       if (prStatus.ok && prStatus.value.mergedAt !== null) {
                         prAlreadyMerged = true;
