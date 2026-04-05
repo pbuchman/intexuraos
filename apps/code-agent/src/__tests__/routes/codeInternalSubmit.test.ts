@@ -34,7 +34,7 @@ import type { LogLineRepository } from '../../domain/repositories/logLineReposit
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { RateLimitService } from '../../domain/services/rateLimitService.js';
-import { ok } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
@@ -428,5 +428,207 @@ describe('POST /internal/code/submit', () => {
     expect(response.statusCode).toBe(424);
     const body = JSON.parse(response.payload);
     expect(body.success).toBe(false);
+  });
+
+  it('returns 409 for duplicate_prompt when same prompt is submitted twice', async () => {
+    // Seed worker settings for the user
+    const { getServices } = await import('../../services.js');
+    const services = getServices();
+    await services.workerSettingsRepo.addWorker('test-user-id', {
+      name: 'test-worker',
+      url: 'https://test-worker.intexuraos.cloud',
+      cfAccessClientId: 'test-client-id',
+      cfAccessClientSecret: 'test-client-secret',
+      dispatchSigningSecret: 'test-dispatch-secret',
+    });
+
+    // First submission — should succeed
+    const first = await app.inject({
+      method: 'POST',
+      url: '/internal/code/submit',
+      payload: { userId: 'test-user-id', prompt: 'Fix the login bug for duplicate test' },
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+    expect(first.statusCode).toBe(200);
+
+    // Second submission with identical prompt — triggers duplicate_prompt dedup
+    const second = await app.inject({
+      method: 'POST',
+      url: '/internal/code/submit',
+      payload: { userId: 'test-user-id', prompt: 'Fix the login bug for duplicate test' },
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(second.statusCode).toBe(409);
+    const body = JSON.parse(second.payload);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('CONFLICT');
+    expect(body.error.message).toContain('Similar task');
+  });
+
+  it('returns 409 for active_task_exists when same linearIssueId is submitted twice', async () => {
+    // Seed worker settings for the user
+    const { getServices } = await import('../../services.js');
+    const services = getServices();
+    await services.workerSettingsRepo.addWorker('test-user-id', {
+      name: 'test-worker',
+      url: 'https://test-worker.intexuraos.cloud',
+      cfAccessClientId: 'test-client-id',
+      cfAccessClientSecret: 'test-client-secret',
+      dispatchSigningSecret: 'test-dispatch-secret',
+    });
+
+    // Mock the linear-agent GET validate endpoint for INT-888
+    nock('http://linear-agent:8086')
+      .persist()
+      .get(/\/internal\/linear\/issues\/INT-888\/validate/)
+      .reply(200, {
+        success: true,
+        data: {
+          id: 'linear-id-888',
+          identifier: 'INT-888',
+          title: 'Test Linear Issue',
+          url: 'https://linear.app/intexuraos/issue/INT-888',
+          labels: [],
+          childCount: 0,
+        },
+      });
+
+    // First submission with linearIssueId — should succeed
+    const first = await app.inject({
+      method: 'POST',
+      url: '/internal/code/submit',
+      payload: {
+        userId: 'test-user-id',
+        prompt: 'First prompt for active task test',
+        linearIssueId: 'INT-888',
+      },
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+    expect(first.statusCode).toBe(200);
+
+    // Second submission with same linearIssueId — triggers active_task_exists dedup
+    const second = await app.inject({
+      method: 'POST',
+      url: '/internal/code/submit',
+      payload: {
+        userId: 'test-user-id',
+        prompt: 'Second different prompt for same issue',
+        linearIssueId: 'INT-888',
+      },
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(second.statusCode).toBe(409);
+    const body = JSON.parse(second.payload);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('CONFLICT');
+    expect(body.error.message).toContain('Active task already exists');
+  });
+
+  it('returns 400 for validation_error when prompt contains base64 blob', async () => {
+    // Seed worker settings for the user
+    const { getServices } = await import('../../services.js');
+    const services = getServices();
+    await services.workerSettingsRepo.addWorker('test-user-id', {
+      name: 'test-worker',
+      url: 'https://test-worker.intexuraos.cloud',
+      cfAccessClientId: 'test-client-id',
+      cfAccessClientSecret: 'test-client-secret',
+      dispatchSigningSecret: 'test-dispatch-secret',
+    });
+
+    // Create a prompt with a base64 blob (3000+ chars triggers rejection)
+    const base64Blob = 'A'.repeat(3100);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/code/submit',
+      payload: {
+        userId: 'test-user-id',
+        prompt: `Fix this: ${base64Blob}`,
+      },
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.payload);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INVALID_REQUEST');
+  });
+
+  it('returns 503 for queue_full when enqueue service reports full queue', async () => {
+    // Seed worker settings for the user
+    const { getServices, setServices: setServicesLocal } = await import('../../services.js');
+    const services = getServices();
+    await services.workerSettingsRepo.addWorker('test-user-id', {
+      name: 'test-worker',
+      url: 'https://test-worker.intexuraos.cloud',
+      cfAccessClientId: 'test-client-id',
+      cfAccessClientSecret: 'test-client-secret',
+      dispatchSigningSecret: 'test-dispatch-secret',
+    });
+
+    // Override taskEnqueueService to return queue_full error
+    setServicesLocal({
+      ...services,
+      taskEnqueueService: {
+        enqueue: vi.fn().mockResolvedValue(
+          err({ code: 'queue_full', message: 'Queue is full (11/10). Please try again later.' })
+        ),
+      },
+    } as never);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/code/submit',
+      payload: {
+        userId: 'test-user-id',
+        prompt: 'Fix the queue full bug',
+      },
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(503);
+    const body = JSON.parse(response.payload);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('QUEUE_FULL');
+  });
+
+  it('returns 500 for internal_error when enqueue fails with non-queue_full error', async () => {
+    // Seed worker settings for the user
+    const { getServices, setServices: setServicesLocal } = await import('../../services.js');
+    const services = getServices();
+    await services.workerSettingsRepo.addWorker('test-user-id', {
+      name: 'test-worker',
+      url: 'https://test-worker.intexuraos.cloud',
+      cfAccessClientId: 'test-client-id',
+      cfAccessClientSecret: 'test-client-secret',
+      dispatchSigningSecret: 'test-dispatch-secret',
+    });
+
+    // Override taskEnqueueService to return internal_error (not queue_full)
+    setServicesLocal({
+      ...services,
+      taskEnqueueService: {
+        enqueue: vi.fn().mockResolvedValue(
+          err({ code: 'internal_error', message: 'Enqueue failed unexpectedly' })
+        ),
+      },
+    } as never);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/code/submit',
+      payload: {
+        userId: 'test-user-id',
+        prompt: 'Fix the internal error bug',
+      },
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.payload);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
   });
 });
