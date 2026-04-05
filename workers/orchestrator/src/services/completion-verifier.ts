@@ -109,40 +109,38 @@ export interface CompletionVerifierConfig {
   auditLogPath: string;
 }
 
-export const PLANNING_SCHEMA = z.object({
-  outcome: z.enum(['planned', 'unclear']),
-  superpowers_writing_plans: z.enum(['used', 'not used']),
-  linear_url: z.string(),
-  is_complex: z.enum(['0', '1']),
-  has_plan_doc: z.enum(['0', '1']),
-  subtask_urls: z.string(),
-  pr_url: z.string(),
-  summary: z.string(),
-  unclear_clarification: z.string(),
-}).refine(
-  (data) => data.outcome !== 'planned' || data.pr_url !== '',
-  {
+export const PLANNING_SCHEMA = z
+  .object({
+    outcome: z.enum(['planned', 'unclear']),
+    superpowers_writing_plans: z.enum(['used', 'not used']),
+    linear_url: z.string(),
+    is_complex: z.enum(['0', '1']),
+    has_plan_doc: z.enum(['0', '1']),
+    subtask_urls: z.string(),
+    pr_url: z.string(),
+    summary: z.string(),
+    unclear_clarification: z.string(),
+  })
+  .refine((data) => data.outcome !== 'planned' || data.pr_url !== '', {
     message: 'pr_url is required when outcome is "planned"',
     path: ['pr_url'],
-  }
-);
+  });
 
-export const EXECUTION_SCHEMA = z.object({
-  outcome: z.enum(['implemented', 'already_completed']),
-  superpowers_subagent_driven_dev: z.enum(['used', 'not used']),
-  superpowers_requesting_code_review: z.enum(['used', 'not used']),
-  gh_pr_url: z.string(),
-  memory_ids_used: z.string(),
-  memory_ids_rejected: z.string(),
-  memory_usage_summary: z.string(),
-  summary: z.string(),
-}).refine(
-  (data) => data.gh_pr_url !== '',
-  {
+export const EXECUTION_SCHEMA = z
+  .object({
+    outcome: z.enum(['implemented', 'already_completed']),
+    superpowers_subagent_driven_dev: z.enum(['used', 'not used']),
+    superpowers_requesting_code_review: z.enum(['used', 'not used']),
+    gh_pr_url: z.string(),
+    memory_ids_used: z.string(),
+    memory_ids_rejected: z.string(),
+    memory_usage_summary: z.string(),
+    summary: z.string(),
+  })
+  .refine((data) => data.gh_pr_url !== '', {
     message: 'gh_pr_url is required for all execution outcomes',
     path: ['gh_pr_url'],
-  }
-);
+  });
 
 export const PULL_REQUEST_SCHEMA = z.object({
   gh_pr_url: z.string(),
@@ -173,18 +171,17 @@ export const REVIEW_SCHEMA = z.object({
   summary: z.string(),
 });
 
-export const REMEDIATION_SCHEMA = z.object({
-  outcome: z.enum(['implemented', 'already_completed']),
-  gh_pr_url: z.string(),
-  requires_re_review: z.string().regex(/^[01]$/, 'requires_re_review must be "0" or "1"'),
-  summary: z.string(),
-}).refine(
-  (data) => data.outcome !== 'implemented' || data.gh_pr_url !== '',
-  {
+export const REMEDIATION_SCHEMA = z
+  .object({
+    outcome: z.enum(['implemented', 'already_completed']),
+    gh_pr_url: z.string(),
+    requires_re_review: z.string().regex(/^[01]$/, 'requires_re_review must be "0" or "1"'),
+    summary: z.string(),
+  })
+  .refine((data) => data.outcome !== 'implemented' || data.gh_pr_url !== '', {
     message: 'gh_pr_url is required when outcome is "implemented"',
     path: ['gh_pr_url'],
-  }
-);
+  });
 
 export const RESUME_SUMMARY_SCHEMA = z.object({
   summary: z.string(),
@@ -211,6 +208,12 @@ export function detectFatalExitCode(rawLogs: string): number | undefined {
 
 export function getLast50Lines(rawLogs: string): string {
   return stripDockerHeaders(rawLogs).split('\n').slice(-50).join('\n');
+}
+
+export function getLast50ClaudeLines(rawLogs: string): string {
+  const lines = stripDockerHeaders(rawLogs).split('\n');
+  const claudeLines = lines.filter((line) => line.startsWith('[claude]'));
+  return claudeLines.slice(-50).join('\n');
 }
 
 export function getLast20Lines(rawLogs: string): string {
