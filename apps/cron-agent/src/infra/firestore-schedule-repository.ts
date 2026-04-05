@@ -54,7 +54,7 @@ export class FirestoreScheduleRepository implements ScheduleRepository {
         return ok(null);
       }
       const data = doc.data() as Record<string, unknown>;
-      const scheduleSummary = (data['scheduleSummary'] ?? data['description'] ?? '') as string;
+      const scheduleSummary = (data['scheduleSummary'] ?? '') as string;
       return ok(normalizeCronSchedule({ id: doc.id, ...data, scheduleSummary } as CronSchedule));
     } catch (error: unknown) {
       return err({ code: 'INTERNAL_ERROR', message: `Failed to find schedule: ${getErrorMessage(error, 'Unknown error')}` });
@@ -88,7 +88,7 @@ export class FirestoreScheduleRepository implements ScheduleRepository {
       const schedules: CronSchedule[] = [];
       snapshot.docs.slice(0, options.limit).forEach((doc) => {
         const data = doc.data() as Record<string, unknown>;
-        const scheduleSummary = (data['scheduleSummary'] ?? data['description'] ?? '') as string;
+        const scheduleSummary = (data['scheduleSummary'] ?? '') as string;
         schedules.push(normalizeCronSchedule({ id: doc.id, ...data, scheduleSummary } as CronSchedule));
       });
 
@@ -117,7 +117,7 @@ export class FirestoreScheduleRepository implements ScheduleRepository {
       const schedules: CronSchedule[] = snapshot.docs.map(
         (doc) => {
           const data = doc.data() as Record<string, unknown>;
-          const scheduleSummary = (data['scheduleSummary'] ?? data['description'] ?? '') as string;
+          const scheduleSummary = (data['scheduleSummary'] ?? '') as string;
           return normalizeCronSchedule({ id: doc.id, ...data, scheduleSummary } as CronSchedule);
         },
       );
@@ -144,7 +144,7 @@ export class FirestoreScheduleRepository implements ScheduleRepository {
       await docRef.update(patchData);
       const updated = await docRef.get();
       const refreshedData = updated.data() as Record<string, unknown>;
-      const updatedSummary = (refreshedData['scheduleSummary'] ?? refreshedData['description'] ?? '') as string;
+      const updatedSummary = (refreshedData['scheduleSummary'] ?? '') as string;
       return ok(normalizeCronSchedule({ id: updated.id, ...refreshedData, scheduleSummary: updatedSummary } as CronSchedule));
     } catch (error: unknown) {
       return err({ code: 'INTERNAL_ERROR', message: `Failed to update schedule: ${getErrorMessage(error, 'Unknown error')}` });

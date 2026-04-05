@@ -477,14 +477,13 @@ describe('FirestoreScheduleRepository', () => {
     initTestFirestore();
   });
 
-  describe('backward compatibility: legacy description fallback', () => {
+  describe('missing scheduleSummary field defaults to empty string', () => {
     const COLLECTION = 'cron_schedules';
 
-    function legacyDoc(overrides?: Record<string, unknown>): Record<string, unknown> {
+    function docWithoutSummary(overrides?: Record<string, unknown>): Record<string, unknown> {
       return {
         userId: 'user-1',
-        name: 'Legacy Schedule',
-        description: 'Every weekday at 9am',
+        name: 'No Summary',
         cronExpression: '0 9 * * 1-5',
         timezone: 'UTC',
         action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
@@ -499,104 +498,44 @@ describe('FirestoreScheduleRepository', () => {
       };
     }
 
-    it('findById falls back to description when scheduleSummary is missing', async () => {
+    it('findById defaults scheduleSummary to empty string', async () => {
       const db = getFirestore();
-      await db.collection(COLLECTION).doc('legacy-1').set(legacyDoc());
+      await db.collection(COLLECTION).doc('no-summary-1').set(docWithoutSummary());
 
-      const result = await repo.findById('legacy-1');
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
-      expect(result.value).not.toBeNull();
-      expect(result.value?.scheduleSummary).toBe('Every weekday at 9am');
-    });
-
-    it('findByUserId falls back to description when scheduleSummary is missing', async () => {
-      const db = getFirestore();
-      await db.collection(COLLECTION).doc('legacy-2').set(legacyDoc());
-
-      const result = await repo.findByUserId('user-1', { limit: 50 });
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
-      expect(result.value.schedules.length).toBeGreaterThanOrEqual(1);
-      const legacy = result.value.schedules.find((s) => s.id === 'legacy-2');
-      expect(legacy).toBeDefined();
-      expect(legacy?.scheduleSummary).toBe('Every weekday at 9am');
-    });
-
-    it('findDueSchedules falls back to description when scheduleSummary is missing', async () => {
-      const db = getFirestore();
-      const past = new Date(Date.now() - 60000).toISOString();
-      await db.collection(COLLECTION).doc('legacy-3').set(legacyDoc({
-        nextExecutionAt: past,
-      }));
-
-      const result = await repo.findDueSchedules(new Date());
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
-      const legacy = result.value.find((s) => s.id === 'legacy-3');
-      expect(legacy).toBeDefined();
-      expect(legacy?.scheduleSummary).toBe('Every weekday at 9am');
-    });
-
-    it('update falls back to description when scheduleSummary is missing', async () => {
-      const db = getFirestore();
-      await db.collection(COLLECTION).doc('legacy-4').set(legacyDoc());
-
-      const result = await repo.update('legacy-4', { name: 'Updated Legacy' });
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
-      expect(result.value.name).toBe('Updated Legacy');
-      expect(result.value.scheduleSummary).toBe('Every weekday at 9am');
-    });
-
-    it('falls back to empty string when both scheduleSummary and description are missing', async () => {
-      const db = getFirestore();
-      const docData = legacyDoc();
-      delete docData['description'];
-      await db.collection(COLLECTION).doc('legacy-5').set(docData);
-
-      const result = await repo.findById('legacy-5');
+      const result = await repo.findById('no-summary-1');
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.value?.scheduleSummary).toBe('');
     });
 
-    it('findByUserId falls back to empty string when both fields missing', async () => {
+    it('findByUserId defaults scheduleSummary to empty string', async () => {
       const db = getFirestore();
-      const docData = legacyDoc();
-      delete docData['description'];
-      await db.collection(COLLECTION).doc('legacy-6').set(docData);
+      await db.collection(COLLECTION).doc('no-summary-2').set(docWithoutSummary());
 
       const result = await repo.findByUserId('user-1', { limit: 50 });
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      const legacy = result.value.schedules.find((s) => s.id === 'legacy-6');
-      expect(legacy).toBeDefined();
-      expect(legacy?.scheduleSummary).toBe('');
+      const match = result.value.schedules.find((s) => s.id === 'no-summary-2');
+      expect(match?.scheduleSummary).toBe('');
     });
 
-    it('findDueSchedules falls back to empty string when both fields missing', async () => {
+    it('findDueSchedules defaults scheduleSummary to empty string', async () => {
       const db = getFirestore();
       const past = new Date(Date.now() - 60000).toISOString();
-      const docData = legacyDoc({ nextExecutionAt: past });
-      delete docData['description'];
-      await db.collection(COLLECTION).doc('legacy-7').set(docData);
+      await db.collection(COLLECTION).doc('no-summary-3').set(docWithoutSummary({ nextExecutionAt: past }));
 
       const result = await repo.findDueSchedules(new Date());
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      const legacy = result.value.find((s) => s.id === 'legacy-7');
-      expect(legacy).toBeDefined();
-      expect(legacy?.scheduleSummary).toBe('');
+      const match = result.value.find((s) => s.id === 'no-summary-3');
+      expect(match?.scheduleSummary).toBe('');
     });
 
-    it('update falls back to empty string when both fields missing', async () => {
+    it('update defaults scheduleSummary to empty string', async () => {
       const db = getFirestore();
-      const docData = legacyDoc();
-      delete docData['description'];
-      await db.collection(COLLECTION).doc('legacy-8').set(docData);
+      await db.collection(COLLECTION).doc('no-summary-4').set(docWithoutSummary());
 
-      const result = await repo.update('legacy-8', { name: 'Updated No Summary' });
+      const result = await repo.update('no-summary-4', { name: 'Updated' });
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.value.scheduleSummary).toBe('');
