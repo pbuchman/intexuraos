@@ -62,6 +62,7 @@ describe('handlePrClose (merged and closed-without-merge)', () => {
     findLatestExecutionTaskByPR: ReturnType<typeof vi.fn>;
     findOriginTaskByPR: ReturnType<typeof vi.fn>;
     findPreservedPullRequestTask: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
   };
   let mockLinearIssueService: {
     markQa: ReturnType<typeof vi.fn>;
@@ -88,6 +89,7 @@ describe('handlePrClose (merged and closed-without-merge)', () => {
       findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
       findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
       findPreservedPullRequestTask: vi.fn().mockResolvedValue(ok(null)),
+      update: vi.fn().mockResolvedValue(ok(createBaseTask())),
     };
     mockLinearIssueService = {
       markQa: vi.fn().mockResolvedValue(undefined),
@@ -594,6 +596,80 @@ describe('handlePrClose (merged and closed-without-merge)', () => {
       expect(mockLinearIssueService.markTodo).toHaveBeenCalledWith('resolved-user', 'INT-300');
       expect(mockLinearIssueService.markTodo).toHaveBeenCalledTimes(1);
       expect(mockLinearIssueService.markQa).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('prMergedAt population (INT-1174)', () => {
+    beforeEach(() => {
+      mockCodeTaskRepo.update = vi.fn().mockResolvedValue(ok(createBaseTask()));
+    });
+
+    it('sets prMergedAt on task found via findByPR when PR is merged', async () => {
+      const task = createBaseTask({ id: 'task-merged-1', linearIssueId: 'INT-100', prNumber: 42 });
+      mockCodeTaskRepo.findByPR.mockResolvedValue(ok(task));
+
+      await handlePrClose(buildDeps(), createMergedInput({
+        sourceTimestamp: '2026-04-01T12:00:00.000Z',
+      }));
+
+      // Fire-and-forget — need to flush microtasks
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-merged-1', {
+        prMergedAt: new Date('2026-04-01T12:00:00.000Z'),
+      });
+    });
+
+    it('sets prMergedAt on task found via findLatestExecutionTaskByPR when PR is merged', async () => {
+      const task = createBaseTask({ id: 'task-merged-2', linearIssueId: 'INT-200', prNumber: 42 });
+      mockCodeTaskRepo.findLatestExecutionTaskByPR.mockResolvedValue(ok(task));
+
+      await handlePrClose(buildDeps(), createMergedInput({
+        sourceTimestamp: '2026-04-02T08:00:00.000Z',
+      }));
+
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-merged-2', {
+        prMergedAt: new Date('2026-04-02T08:00:00.000Z'),
+      });
+    });
+
+    it('deduplicates when both discovery methods find same task', async () => {
+      const task = createBaseTask({ id: 'task-dedup', linearIssueId: 'INT-300', prNumber: 42 });
+      mockCodeTaskRepo.findByPR.mockResolvedValue(ok(task));
+      mockCodeTaskRepo.findLatestExecutionTaskByPR.mockResolvedValue(ok(task));
+
+      await handlePrClose(buildDeps(), createMergedInput({
+        sourceTimestamp: '2026-04-01T12:00:00.000Z',
+      }));
+
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT set prMergedAt when PR is closed without merge', async () => {
+      const task = createBaseTask({ id: 'task-closed', linearIssueId: 'INT-400', prNumber: 43 });
+      mockCodeTaskRepo.findByPR.mockResolvedValue(ok(task));
+
+      await handlePrClose(buildDeps(), createClosedInput());
+
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('does not fail when prMergedAt update rejects (best-effort)', async () => {
+      const task = createBaseTask({ id: 'task-fail', linearIssueId: 'INT-500', prNumber: 42 });
+      mockCodeTaskRepo.findByPR.mockResolvedValue(ok(task));
+      mockCodeTaskRepo.update.mockRejectedValue(new Error('Firestore down'));
+
+      await expect(
+        handlePrClose(buildDeps(), createMergedInput({
+          sourceTimestamp: '2026-04-01T12:00:00.000Z',
+        }))
+      ).resolves.toBeUndefined();
     });
   });
 });

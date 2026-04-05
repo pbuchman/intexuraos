@@ -126,6 +126,26 @@ export async function handlePrClose(deps: HandlePrCloseDeps, input: HandlePrClos
     }
   }
 
+  // --- Set prMergedAt on discovered tasks (INT-1174) ---
+  if (isMerged) {
+    const mergedAt = new Date(sourceTimestamp);
+    const taskIdsToMark = new Set<string>();
+
+    if (findByPRResult.ok && findByPRResult.value !== null) {
+      taskIdsToMark.add(findByPRResult.value.id);
+    }
+    if (findLatestResult.ok && findLatestResult.value !== null) {
+      taskIdsToMark.add(findLatestResult.value.id);
+    }
+
+    for (const taskId of taskIdsToMark) {
+      void codeTaskRepo.update(taskId, { prMergedAt: mergedAt }).catch((updateErr: unknown) => {
+        logger.warn({ taskId, prNumber, error: updateErr },
+          'handlePrClose: failed to set prMergedAt (best-effort)');
+      });
+    }
+  }
+
   // --- Transition / Label Cleanup ---
 
   if (issueMap.size === 0) {

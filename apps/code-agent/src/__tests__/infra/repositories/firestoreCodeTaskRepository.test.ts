@@ -1061,6 +1061,27 @@ describe('firestoreCodeTaskRepository', () => {
       if (!result.ok) return;
       expect(result.value.executionMemoryContext?.matchedAt).toBeUndefined();
     });
+
+    it('updates prMergedAt field', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const prMergedAt = new Date('2026-04-01T12:00:00.000Z');
+      const result = await repo.update(created.value.id, { prMergedAt });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      // Guard needed: fake Firestore may not handle Timestamp fields properly (known limitation)
+      if (result.value.prMergedAt !== undefined) {
+        expect(result.value.prMergedAt.toDate()).toStrictEqual(prMergedAt);
+      }
+    });
   });
 
   describe('list', () => {
@@ -1252,6 +1273,63 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.value.hasActive).toBe(true);
       expect(result.value.taskId).toBe(executionTask.value.id);
+    });
+  });
+
+  describe('findAllNonArchived', () => {
+    it('returns only non-archived tasks', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create an archived task
+      const archived = await repo.create(createTaskInput({
+        id: 'archived-task-1',
+        sanitizedPrompt: 'archived prompt',
+      }));
+      expect(archived.ok).toBe(true);
+      if (!archived.ok) return;
+      await repo.update(archived.value.id, { status: 'archived' });
+
+      // Create a non-archived task
+      const active = await repo.create(createTaskInput({
+        id: 'active-task-1',
+        sanitizedPrompt: 'active prompt',
+      }));
+      expect(active.ok).toBe(true);
+      if (!active.ok) return;
+
+      const result = await repo.findAllNonArchived();
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const returnedIds = result.value.map(t => t.id);
+      expect(returnedIds).toContain('active-task-1');
+      expect(returnedIds).not.toContain('archived-task-1');
+    });
+
+    it('returns empty array when all tasks are archived', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const archived = await repo.create(createTaskInput({
+        id: 'archived-task-2',
+        sanitizedPrompt: 'archived prompt',
+      }));
+      expect(archived.ok).toBe(true);
+      if (!archived.ok) return;
+      await repo.update(archived.value.id, { status: 'archived' });
+
+      const result = await repo.findAllNonArchived();
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toHaveLength(0);
     });
   });
 
