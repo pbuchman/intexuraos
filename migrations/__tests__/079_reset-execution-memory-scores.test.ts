@@ -2,7 +2,7 @@
  * Tests for migration 079: Reset execution memory scores
  */
 
-import { describe, it, expect, beforeEach, vi, afterAll } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { metadata, up } from '../079_reset-execution-memory-scores.mjs'; // @allow-missing-js -- importing .mjs file directly
 
 // Mock console.log during tests to prevent stdout noise
@@ -10,7 +10,7 @@ let logSpy: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 });
-afterAll(() => {
+afterEach(() => {
   logSpy?.mockRestore();
 });
 
