@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Remove the redundant `description` field from cron schedules, enforce `allowedOperations` per service to restrict tool access, inject schedule-owner `userId` into all tool calls, and block application-wide endpoints from cron agent access.
+**Goal:** Simplify cron schedule config to three user-facing fields (name, schedule timing, instructions), enforce `allowedOperations` per service with empty-service filtering, inject schedule-owner `userId` into all tool calls, and block application-wide endpoints from cron agent access.
 
-**Architecture:** Four independent changes within `apps/cron-agent` (plus web app frontend). (1) Replace the stored `description` field with a transient `schedule` input for cron parsing. (2) Populate `allowedOperations` on every service in the catalog to create an explicit allowlist. (3) Inject `X-Cron-User-Id` header into all outgoing tool calls so downstream services can verify identity. (4) Audit and exclude application-wide endpoints from the allowlist.
+**Architecture:** Four independent changes within `apps/cron-agent` (plus web app frontend). (1) Replace the stored `description` field with a transient `schedule` input for cron parsing and stored `scheduleSummary`. (2) Populate `allowedOperations` on every service in the catalog and filter out services with no available tools from the services listing. (3) Inject `X-Cron-User-Id` header into all outgoing tool calls so downstream services can verify identity. (4) Update web app to use the new field names.
 
 **Tech Stack:** TypeScript, Fastify, Firestore, Vitest, React (web app)
 
@@ -18,7 +18,12 @@ The `description` field on `CronSchedule` serves as the human-language timing in
 
 The `instruction` field (`ScheduleAction.instruction`) describes **what to do** (the task). These are fundamentally different purposes, but the field name "description" is misleading and the original text is redundant once `cronExpression` exists.
 
-**Decision:** Rename the API input from `description` to `schedule` (to clarify it's about timing), and stop storing the raw input. Instead, store the `humanSummary` returned by the LLM parser (currently discarded) in a new `scheduleSummary` field. This preserves display value while eliminating the confusing `description` field.
+**Decision:** The create form has three user-facing fields:
+1. **Name** — schedule name (existing `name` field, unchanged)
+2. **Schedule** — timing input like "Every 5 minutes on weekdays" (rename API field from `description` to `schedule`)
+3. **Instructions** — what to do (existing `action.instruction` field, unchanged)
+
+The raw timing input (`schedule`) is parsed into `cronExpression` and a `humanSummary`. Stop storing the raw input. Instead, store the `humanSummary` returned by the LLM parser (currently discarded) in a new `scheduleSummary` field. This preserves display value while eliminating the confusing `description` field.
 
 **Affected files:**
 - `apps/cron-agent/src/domain/types.ts` — `CronSchedule`, `CreateScheduleInput`, `UpdateScheduleInput`
@@ -38,15 +43,13 @@ The `instruction` field (`ScheduleAction.instruction`) describes **what to do** 
 
 The `ServiceDefinition` type includes an `allowedOperations?: string[]` field (see `apps/cron-agent/src/config.ts:6`). The `OpenApiToolRegistry` already filters by it (`openapi-tool-registry.ts:129-134`). However, **no service in the catalog sets this field**, meaning ALL `/internal/*` endpoints from every configured service are exposed as tools.
 
-The validation flow for tool selection is sound:
-1. Service keys are validated against `toolRegistry.listServiceTools()` (manage-schedule.ts:51-59)
-2. Preferred tools are validated against available tools from selected services (manage-schedule.ts:70-84)
-3. During execution, only tools from selected services are loaded (execute-action.ts:28)
+Additionally, `listServiceTools()` (line 47-63) returns ALL services including those with zero tools. Services with empty `allowedOperations` arrays would have zero tools after filtering — they should be excluded from the API response entirely so the UI doesn't show them.
 
-**Decision:** Populate `allowedOperations` for every service in the catalog. This is the designed mechanism — it just needs to be filled in. Requires auditing each service's OpenAPI spec to identify safe, user-scoped operationIds.
+**Decision:** Populate `allowedOperations` for every service in the catalog. Filter `listServiceTools()` to exclude services with no available tools.
 
 **Affected files:**
 - `apps/cron-agent/src/config.ts` — add `allowedOperations` arrays to each catalog entry
+- `apps/cron-agent/src/infra/openapi-tool-registry.ts` — filter empty services in `listServiceTools()`
 
 ### Finding 3: User ID is NOT injected into tool calls — critical security gap
 
@@ -56,18 +59,9 @@ When the cron agent's LLM executes tools, the execution flow is:
 3. The LLM decides tool arguments freely, including any `userId` in request bodies or path parameters
 4. `createRunCallback()` blindly passes whatever arguments the LLM provides (openapi-tool-registry.ts:213)
 
-This means a compromised LLM (via prompt injection in the instruction text) could call endpoints with **any user's ID**. Examples of exploitable endpoints:
-- `GET /internal/users/:uid/llm-keys` — access other users' API keys
-- `GET /internal/users/:uid/oauth/google/token` — access other users' OAuth tokens
-- `POST /internal/notes` with arbitrary `userId` in body — create notes for any user
-- `POST /internal/issues` with spoofed `x-user-id` header — create Linear issues as any user
+This means a compromised LLM (via prompt injection in the instruction text) could call endpoints with **any user's ID**.
 
-**Decision:** Inject the schedule owner's `userId` into all outgoing tool calls via an `X-Cron-User-Id` header. This requires:
-1. Threading `userId` from `executeSchedule` → `executeAction` → `toolRegistry.getToolsForServices`
-2. Adding the header in `createRunCallback()`
-3. Downstream services should validate `X-Cron-User-Id` matches any userId in the request body/params (future work, not in this plan's scope — documented as follow-up)
-
-Additionally, the system prompt should explicitly instruct the LLM to ONLY use the owner's userId — though this is a defense-in-depth measure, not a security boundary.
+**Decision:** Inject the schedule owner's `userId` into all outgoing tool calls via an `X-Cron-User-Id` header. Thread `userId` through the execution chain. Additionally, the system prompt instructs the LLM to ONLY use the owner's userId (defense-in-depth, not a security boundary).
 
 ### Finding 4: Application-wide endpoints are exposed — access control gap
 
@@ -88,7 +82,7 @@ Additionally, some user-scoped endpoints expose sensitive data:
 - `GET /internal/users/:uid/llm-keys` — decrypted API keys
 - `GET /internal/users/:uid/oauth/google/token` — OAuth tokens
 
-**Decision:** These are blocked by populating `allowedOperations` (Finding 2). Services like `app-settings-service` should have an **empty** `allowedOperations` array (no operations exposed). Sensitive endpoints on `user-service` should be excluded from the allowlist.
+**Decision:** These are blocked by populating `allowedOperations` (Finding 2). Services like `app-settings-service` get an **empty** `allowedOperations` array (no operations exposed), meaning they produce zero tools and are filtered out of `listServiceTools()` entirely — they won't appear in the UI.
 
 ---
 
@@ -106,9 +100,9 @@ Additionally, some user-scoped endpoints expose sensitive data:
 | `apps/cron-agent/src/domain/use-cases/execute-schedule.ts`   | Pass `schedule.userId` to `executeAction`                                                                                                            |
 | `apps/cron-agent/src/domain/use-cases/parse-schedule.ts`     | Rename param from `description` to `schedule` (cosmetic)                                                                                             |
 | `apps/cron-agent/src/prompts/execute-action-prompt.ts`       | Add userId context to system prompt (version bump)                                                                                                   |
-| `apps/cron-agent/src/infra/openapi-tool-registry.ts`         | Accept `userId` in `createRunCallback`, inject `X-Cron-User-Id` header                                                                               |
+| `apps/cron-agent/src/infra/openapi-tool-registry.ts`         | Accept `userId` in `createRunCallback`, inject `X-Cron-User-Id` header; filter empty services in `listServiceTools()`                                |
 | `apps/cron-agent/src/infra/firestore-schedule-repository.ts` | Store `scheduleSummary` instead of `description`                                                                                                     |
-| `apps/cron-agent/src/config.ts`                              | Add `allowedOperations` to every catalog entry                                                                                                       |
+| `apps/cron-agent/src/config.ts`                              | Add `allowedOperations` to every catalog entry; propagate in `buildAllowedServices`                                                                  |
 | `apps/cron-agent/src/routes/schemas.ts`                      | Update response schema (`scheduleSummary` replaces `description`)                                                                                    |
 | `apps/cron-agent/src/routes/schedule-routes.ts`              | Update body types, pass `schedule` input to manager                                                                                                  |
 | `apps/web/src/types/cronAgent.ts`                            | Replace `description` with `scheduleSummary`; update `CreateScheduleRequest`                                                                         |
@@ -342,13 +336,15 @@ INT-1288"
 
 ---
 
-### Task 2: Populate `allowedOperations` for every service in the catalog
+### Task 2: Populate `allowedOperations` for every service and filter empty services
 
 **Files:**
 - Modify: `apps/cron-agent/src/config.ts`
+- Modify: `apps/cron-agent/src/infra/openapi-tool-registry.ts`
 - Test: `apps/cron-agent/src/__tests__/config.test.ts`
+- Test: `apps/cron-agent/src/infra/__tests__/openapi-tool-registry.test.ts`
 
-This task requires auditing each service's `/internal/*` endpoints and deciding which operationIds are safe for cron agent use. The `allowedOperations` mechanism already exists and is tested — we just need to populate the arrays.
+This task requires auditing each service's `/internal/*` endpoints and deciding which operationIds are safe for cron agent use. The `allowedOperations` mechanism already exists and is tested — we just need to populate the arrays. Services with empty `allowedOperations` (i.e., zero available tools) must be filtered out from `listServiceTools()` so they don't appear in the UI.
 
 - [ ] **Step 1: Audit and populate allowedOperations**
 
@@ -531,7 +527,33 @@ return [
 
 Note: since `INTERNAL_API_SERVICE_CATALOG` is `as const`, `entry.allowedOperations` is `readonly string[]` — spread into a mutable array to satisfy `allowedOperations?: string[] | undefined`.
 
-- [ ] **Step 2: Verify operationIds are correct**
+- [ ] **Step 2: Filter out empty services in `listServiceTools()`**
+
+In `apps/cron-agent/src/infra/openapi-tool-registry.ts`, update `listServiceTools()` to filter out services that have zero tools. This ensures services with `allowedOperations: []` (or services whose OpenAPI spec yields no tools) don't appear in the `GET /cron/services` response or the UI:
+
+```typescript
+async listServiceTools(): Promise<ServiceToolInfo[]> {
+  const results = await Promise.all(
+    this.deps.allowedServices.map(async (service) => {
+      const tools = await this.getToolsForService(service.key);
+      return {
+        key: service.key,
+        name: service.name,
+        tools: tools.map((t) => ({
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        })),
+      };
+    }),
+  );
+  return results.filter((service) => service.tools.length > 0);
+}
+```
+
+The single-line change is `return results.filter((service) => service.tools.length > 0);` replacing `return results;`.
+
+- [ ] **Step 3: Verify operationIds are correct**
 
 For each service in the catalog, read the internal routes file and extract the actual `operationId` values. Update the allowlist with the verified values. This is critical — a typo means the operation is silently blocked.
 
@@ -541,22 +563,70 @@ Run this verification:
 grep -r "operationId" apps/*/src/routes/internal* --include="*.ts" -h
 ```
 
-- [ ] **Step 3: Run tests and verify**
+- [ ] **Step 4: Add test for empty-service filtering**
+
+In `apps/cron-agent/src/infra/__tests__/openapi-tool-registry.test.ts`, add a test that verifies services with zero tools are excluded from `listServiceTools()`:
+
+```typescript
+it('listServiceTools excludes services with zero tools', async () => {
+  const emptyService: ServiceDefinition = {
+    key: 'empty-service',
+    name: 'Empty Service',
+    url: 'http://empty:8080',
+    openapiUrl: 'http://empty:8080/openapi.json',
+    allowedOperations: [],  // blocks all operations
+  };
+
+  const multiRegistry = new OpenApiToolRegistry({
+    allowedServices: [testService, emptyService],
+    internalAuthToken: 'test-token',
+    logger: createTestLogger() as unknown as Logger,
+  });
+
+  // testService returns tools from TEST_OPENAPI_SPEC
+  nock('http://code-agent:8128')
+    .get('/openapi.json')
+    .reply(200, TEST_OPENAPI_SPEC);
+
+  // emptyService returns a spec but all ops are blocked
+  nock('http://empty:8080')
+    .get('/openapi.json')
+    .reply(200, {
+      openapi: '3.1.1',
+      info: { title: 'Empty', version: '1.0.0' },
+      paths: {
+        '/internal/admin': {
+          post: {
+            operationId: 'adminAction',
+            summary: 'Admin action',
+          },
+        },
+      },
+    });
+
+  const services = await multiRegistry.listServiceTools();
+  expect(services.length).toBe(1);
+  expect(services[0]?.key).toBe('code-agent');
+  // emptyService is filtered out because allowedOperations: [] blocks adminAction
+});
+```
+
+- [ ] **Step 5: Run tests and verify**
 
 Run: `pnpm run verify:workspace:tracked -- cron-agent`
 Expected: All tests pass. The existing `allowedOperations` filter test already covers the mechanism.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add apps/cron-agent/src/config.ts
-git commit -m "feat(cron-agent): populate allowedOperations for all services in catalog
+git add apps/cron-agent/src/config.ts apps/cron-agent/src/infra/openapi-tool-registry.ts apps/cron-agent/src/infra/__tests__/openapi-tool-registry.test.ts
+git commit -m "feat(cron-agent): populate allowedOperations and filter empty services
 
 Add explicit operation-level allowlists to every service in the internal
-API catalog. Services with only app-wide or sensitive endpoints (user-service,
-app-settings-service, commands-agent, cron-agent) get empty arrays, blocking
-all their operations from cron tool access. This uses the existing
-allowedOperations filter mechanism that was designed but never populated.
+API catalog. Services with only app-wide or sensitive endpoints get empty
+arrays, blocking all their operations from cron tool access. Filter out
+services with zero available tools from listServiceTools() so they do not
+appear in the UI service selector.
 
 INT-1288"
 ```
@@ -726,7 +796,7 @@ async getToolsForServices(
 }
 ```
 
-> **Why this approach:** `ToolDefinition` from `@intexuraos/llm-contract` only has `{ name, description, parameters, run }` — no `method` or `path` fields. The plan's original approach (rebuilding tools with `tool.method`/`tool.path`) would cause a TypeScript compile error. Threading `userId` through the generation pipeline is the correct approach. The cache bypass for user-specific requests is acceptable since tool generation is fast (just a local fetch of the OpenAPI spec).
+> **Why this approach:** `ToolDefinition` from `@intexuraos/llm-contract` only has `{ name, description, parameters, run }` — no `method` or `path` fields. Threading `userId` through the generation pipeline is the correct approach. The cache bypass for user-specific requests is acceptable since tool generation is fast (just a local fetch of the OpenAPI spec).
 
 - [ ] **Step 4: Update execute-action to pass userId context**
 
@@ -790,9 +860,26 @@ Update test files to pass `userId` through the execution chain:
 Add a new test in `openapi-tool-registry.test.ts`:
 ```typescript
 it('injects X-Cron-User-Id header when context provided', async () => {
+  nock('http://code-agent:8128')
+    .get('/openapi.json')
+    .reply(200, TEST_OPENAPI_SPEC);
+
   const tools = await registry.getToolsForService('code-agent', { userId: 'user-123' });
-  // Call the tool and verify the header was sent
-  // Use nock to assert the header
+  expect(tools.length).toBeGreaterThan(0);
+
+  // Set up nock to verify the header
+  const scope = nock('http://code-agent:8128', {
+    reqheaders: {
+      'X-Cron-User-Id': 'user-123',
+      'X-Internal-Auth': 'test-token',
+    },
+  })
+    .get('/internal/tasks')
+    .query(true)
+    .reply(200, { tasks: [] });
+
+  await tools[0]!.run({});
+  expect(scope.isDone()).toBe(true);
 });
 ```
 
@@ -900,6 +987,8 @@ Update the label and input:
 </div>
 ```
 
+Note: The `ServiceSelector` component does NOT need changes. It already correctly handles the case where `services.length === 0` (shows "No services available"). Since the backend now filters out services with no tools, only services with available tools will appear. The component already shows the tool count badge per service (line 88: `{String(service.tools.length)} {service.tools.length === 1 ? 'tool' : 'tools'}`).
+
 - [ ] **Step 4: Update CronScheduleViewPage**
 
 In `apps/web/src/pages/cron-agent/CronScheduleViewPage.tsx`:
@@ -945,7 +1034,8 @@ git commit -m "feat(web): update cron UI for schedule/scheduleSummary rename
 
 Replace 'Description' field with 'Schedule' in the create form.
 Display scheduleSummary instead of description in list and detail views.
-Aligns with the backend API changes removing the description field.
+Services with no available tools are already filtered by the backend
+and won't appear in the service selector.
 
 INT-1288"
 ```
@@ -990,6 +1080,7 @@ The `normalizeCronSchedule` function in `types.ts` is the wrong location because
 - `POST /cron/schedules` — Request body: `description` renamed to `schedule`
 - `PATCH /cron/schedules/:id` — Request body: `description` renamed to `schedule`
 - All schedule response objects — `description` field replaced with `scheduleSummary`
+- `GET /cron/services` — Now excludes services with zero available tools
 
 ### Created
 - None
@@ -998,7 +1089,6 @@ The `normalizeCronSchedule` function in `types.ts` is the wrong location because
 - None (fields renamed, not endpoints removed)
 
 ### Unchanged
-- `GET /cron/services`
 - `GET /cron/schedules`
 - `GET /cron/schedules/:id`
 - `DELETE /cron/schedules/:id`
