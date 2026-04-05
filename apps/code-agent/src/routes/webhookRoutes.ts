@@ -1255,6 +1255,27 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 // gitHubPRSummaryRepo may not be fully initialized — assume not merged
               }
 
+              // Fallback: if summary says not-merged, check GitHub API directly.
+              // The summary is updated by a webhook that may arrive after this callback.
+              if (!prAlreadyMerged) {
+                try {
+                  const tokenResult = await userServiceClient.getOAuthToken(task.userId, 'github');
+                  if (tokenResult.ok) {
+                    const parsed = parseOwnerRepo(task.repository);
+                    if (parsed !== null) {
+                      const prStatus = await gitHubPRClient.getPullRequestStatus(tokenResult.value.accessToken, parsed.owner, parsed.repo, prNumber);
+                      if (prStatus.ok && prStatus.value.mergedAt !== null) {
+                        prAlreadyMerged = true;
+                        request.log.info({ taskId, prNumber },
+                          'prAlreadyMerged detected via GitHub API fallback (summary was stale)');
+                      }
+                    }
+                  }
+                } catch {
+                  // GitHub API unavailable — proceed with summary-based decision
+                }
+              }
+
               if (prAlreadyMerged) {
                 request.log.debug({ taskId, prNumber }, 'Skipping review-outcome label — PR already merged');
               } else {
