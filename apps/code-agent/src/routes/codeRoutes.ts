@@ -2251,10 +2251,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', listResult.error.message);
       }
 
-      const apiTasks = listResult.value.tasks.map(taskToApiResponse);
+      const filteredTasks = listResult.value.tasks.filter((t) => t.agentType !== 'ask_agent');
+      const apiTasks = filteredTasks.map(taskToApiResponse);
       const linearIssueIds = Array.from(
         new Set(
-          listResult.value.tasks
+          filteredTasks
             .map((task) => task.linearIssueId)
             .filter((issueId): issueId is string => issueId !== undefined)
         )

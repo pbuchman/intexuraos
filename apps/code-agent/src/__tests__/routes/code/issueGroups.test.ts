@@ -443,6 +443,55 @@ describe('GET /code/issue-groups', () => {
     expect(int200Group?.tasks).toHaveLength(1);
   });
 
+  it('excludes ask_agent tasks from linear issue groups', async () => {
+    // Create an execution task and an ask_agent task under the same linear issue
+    const execResult = await codeTaskRepo.create(makeTaskInput({ linearIssueId: 'INT-FILTER', traceId: 'trace-exec', agentType: 'execution' }));
+    expect(execResult.ok).toBe(true);
+    if (!execResult.ok) return;
+    await codeTaskRepo.update(execResult.value.id, { status: 'planned' });
+
+    const askResult = await codeTaskRepo.create(makeTaskInput({ linearIssueId: 'INT-FILTER', traceId: 'trace-ask', agentType: 'ask_agent' }));
+    expect(askResult.ok).toBe(true);
+
+    mockSummaries = [makeSummary({ linearIssueId: 'INT-FILTER', taskCount: 2 })];
+    mockCounts = { ...mockCounts, active: 1, totalGroups: 1 };
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/issue-groups',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { data: { groups: { linearIssueId: string | null; tasks: { agentType?: string }[] }[] } };
+    const group = body.data.groups.find((g) => g.linearIssueId === 'INT-FILTER');
+    expect(group).toBeDefined();
+    // Only the execution task should be returned; ask_agent task is filtered out
+    expect(group?.tasks).toHaveLength(1);
+    expect(group?.tasks[0]?.agentType).toBe('execution');
+  });
+
+  it('excludes ask_agent tasks from standalone groups', async () => {
+    // Create a standalone ask_agent task (no linearIssueId)
+    const askResult = await codeTaskRepo.create(makeTaskInput({ traceId: 'trace-standalone-ask', agentType: 'ask_agent' }));
+    expect(askResult.ok).toBe(true);
+    if (!askResult.ok) return;
+
+    mockSummaries = [makeStandaloneSummary(askResult.value.id)];
+    mockCounts = { ...mockCounts, active: 1, totalGroups: 1 };
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/issue-groups',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { data: { groups: unknown[] } };
+    // Standalone ask_agent task should be filtered out, resulting in no groups
+    expect(body.data.groups).toHaveLength(0);
+  });
+
   it('returns correct aggregate status for active group', async () => {
     // Create a running task -- 'queued' is the initial status from create
     const result = await codeTaskRepo.create(makeTaskInput({ linearIssueId: 'INT-300', traceId: 'trace-active' }));
