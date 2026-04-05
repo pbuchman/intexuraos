@@ -332,18 +332,15 @@ describe('POST /internal/code/submit', () => {
   });
 
   it('successfully creates a code task with valid internal auth', async () => {
-    // Seed worker settings for the user (copy pattern from codeProcess.test.ts)
-    const workerSettingsCollection = fakeFirestore.collection('worker_settings');
-    await workerSettingsCollection.doc('test-user-id').set({
-      userId: 'test-user-id',
-      workers: [
-        {
-          name: 'test-worker',
-          type: 'claude-code',
-          enabled: true,
-          credentials: { apiKey: 'test-key' },
-        },
-      ],
+    // Seed worker settings for the user using the repository (same pattern as codeProcess.test.ts)
+    const { getServices } = await import('../../services.js');
+    const services = getServices();
+    await services.workerSettingsRepo.addWorker('test-user-id', {
+      name: 'test-worker',
+      url: 'https://test-worker.intexuraos.cloud',
+      cfAccessClientId: 'test-client-id',
+      cfAccessClientSecret: 'test-client-secret',
+      dispatchSigningSecret: 'test-dispatch-secret',
     });
 
     const response = await app.inject({
@@ -366,18 +363,31 @@ describe('POST /internal/code/submit', () => {
   });
 
   it('passes optional workerType and linearIssueId', async () => {
-    const workerSettingsCollection = fakeFirestore.collection('worker_settings');
-    await workerSettingsCollection.doc('test-user-id').set({
-      userId: 'test-user-id',
-      workers: [
-        {
-          name: 'test-worker',
-          type: 'claude-code',
-          enabled: true,
-          credentials: { apiKey: 'test-key' },
-        },
-      ],
+    // Seed worker settings for the user using the repository (same pattern as codeProcess.test.ts)
+    const { getServices } = await import('../../services.js');
+    const services = getServices();
+    await services.workerSettingsRepo.addWorker('test-user-id', {
+      name: 'test-worker',
+      url: 'https://test-worker.intexuraos.cloud',
+      cfAccessClientId: 'test-client-id',
+      cfAccessClientSecret: 'test-client-secret',
+      dispatchSigningSecret: 'test-dispatch-secret',
     });
+
+    // Mock the linear-agent GET validate endpoint for INT-999
+    nock('http://linear-agent:8086')
+      .get(/\/internal\/linear\/issues\/INT-999\/validate/)
+      .reply(200, {
+        success: true,
+        data: {
+          id: 'linear-id-999',
+          identifier: 'INT-999',
+          title: 'Test Linear Issue',
+          url: 'https://linear.app/intexuraos/issue/INT-999',
+          labels: [],
+          childCount: 0,
+        },
+      });
 
     const response = await app.inject({
       method: 'POST',
@@ -385,7 +395,7 @@ describe('POST /internal/code/submit', () => {
       payload: {
         userId: 'test-user-id',
         prompt: 'Fix the login bug',
-        workerType: 'claude-code',
+        workerType: 'opus',
         linearIssueId: 'INT-999',
       },
       headers: {
@@ -400,12 +410,8 @@ describe('POST /internal/code/submit', () => {
   });
 
   it('returns 424 when user has no workers configured', async () => {
-    // Seed worker settings with no enabled workers
-    const workerSettingsCollection = fakeFirestore.collection('worker_settings');
-    await workerSettingsCollection.doc('test-user-id').set({
-      userId: 'test-user-id',
-      workers: [],
-    });
+    // No workers seeded for test-user-id — getSettings returns null (no doc),
+    // which processCodeAction treats the same as empty workers → worker_not_configured
 
     const response = await app.inject({
       method: 'POST',
