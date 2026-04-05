@@ -1051,13 +1051,13 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     return ok({ codeTaskId: `code-task-${this.taskIdCounter++}` });
   }
 
-  async notifyGroupSummaryRecompute(_request: {
+  async notifyGroupSummaryRecompute(request: {
     userId: string;
     linearIssueId: string;
     labels: { id: string; name: string }[];
     sourceTimestamp: string;
   }): Promise<Result<void, CodeAgentError>> {
-    this.recomputeCalls.push(_request);
+    this.recomputeCalls.push(request);
     return ok(undefined);
   }
 
