@@ -278,6 +278,38 @@ describe('onReviewSkipped callback branches', () => {
     );
   });
 
+  // --- Branch 7b: Success (ready-to-merge already present — no duplicate) ---
+
+  it('does not duplicate ready-to-merge label when already present on success', async () => {
+    mockCodeTaskRepo.findOriginTaskByPR = vi.fn().mockResolvedValue(
+      ok(createFakeCodeTask({ agentType: 'execution', linearIssueId: 'INT-123', userId: 'user-1' })),
+    );
+    mockLinearAgentClient.validateIssue = vi.fn().mockResolvedValue(
+      ok({ id: 'linear-id-123', identifier: 'INT-123', title: 'Test', url: 'https://linear.app/INT-123', labels: ['ready-to-merge'] }),
+    );
+    mockLinearAgentClient.updateIssueMetadata = vi.fn().mockResolvedValue(
+      ok({ droppedLabels: [] }),
+    );
+
+    const callback = createOnReviewSkippedCallback({
+      codeTaskRepo: mockCodeTaskRepo,
+      linearAgentClient: mockLinearAgentClient,
+      automationLog: mockAutomationLog,
+      groupSummaryRepo: mockGroupSummaryRepo,
+      logger,
+    });
+
+    await callback({ repository: 'pbuchman/intexuraos', prNumber: 42 });
+
+    // Verify group summary recomputed WITHOUT duplicating ready-to-merge
+    expect(mockGroupSummaryRepo.recomputeWithLabels).toHaveBeenCalledWith(
+      'user-1',
+      'INT-123',
+      [{ id: '', name: 'ready-to-merge' }], // no duplicate
+      expect.any(String),
+    );
+  });
+
   // --- Branch 8: updateIssueMetadata returns error ---
 
   it('warns when updateIssueMetadata returns error', async () => {
