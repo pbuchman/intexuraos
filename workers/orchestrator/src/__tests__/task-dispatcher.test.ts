@@ -7400,11 +7400,12 @@ describe('TaskDispatcher', () => {
 
     it('double-decrement prevention: outer catch guard leaves runningCount at zero when inner guard already decremented', async () => {
       // createWorktree SUCCEEDS (inner catch does not fire)
-      // runningCount is manually set to 0 to simulate it already being decremented
-      // logForwarder.registerTask throws → exception escapes inner try-catch, reaches outer catch
+      // submitTask increments runningCount (0→1) inside the mutex, then
+      // the registerTask mock sets runningCount to 0 and throws, simulating
+      // it already being decremented before the outer catch fires
       // outer catch guard sees runningCount=0 → FALSE branch exercised → stays at 0 (not -1)
-      (dispatcher as unknown as { runningCount: number }).runningCount = 0;
       vi.mocked(mockLogForwarder.registerTask).mockImplementationOnce(() => {
+        (dispatcher as unknown as { runningCount: number }).runningCount = 0;
         throw new Error('registerTask failed');
       });
 
