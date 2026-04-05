@@ -41,6 +41,7 @@ import { createProcessHeartbeatUseCase, type ProcessHeartbeatUseCase } from './d
 import { createDetectZombieTasksUseCase, type DetectZombieTasksUseCase } from './domain/usecases/detectZombieTasks.js';
 import { createCleanupTaskLogsUseCase, type CleanupTaskLogsUseCase } from './domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase, type ArchiveStaleGroupsUseCase } from './domain/usecases/archiveStaleGroups.js';
+import { createAutoArchiveMergedTasksUseCase, type AutoArchiveMergedTasksUseCase } from './domain/usecases/autoArchiveMergedTasks.js';
 import { createMetricsClient, createNoOpMetricsClient, type MetricsClient } from './infra/metrics.js';
 import { createWorkerSettingsRepository } from './infra/firestore/workerSettingsRepository.js';
 import { createWorkerHealthProbe } from './infra/services/workerHealthProbe.js';
@@ -115,6 +116,7 @@ export interface ServiceContainer {
   detectZombieTasks: DetectZombieTasksUseCase;
   cleanupTaskLogs: CleanupTaskLogsUseCase;
   archiveStaleGroups: ArchiveStaleGroupsUseCase;
+  autoArchiveMergedTasks: AutoArchiveMergedTasksUseCase;
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
   workerHealthProbe: WorkerHealthProbe;
@@ -599,6 +601,10 @@ export function initServices(config: ServiceConfig): void {
       logger,
     }),
     archiveStaleGroups: createArchiveStaleGroupsUseCase({
+      codeTaskRepository: codeTaskRepo,
+      logger,
+    }),
+    autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({
       codeTaskRepository: codeTaskRepo,
       logger,
     }),

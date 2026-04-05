@@ -75,6 +75,7 @@ export interface UpdateTaskInput {
   // PR correlation (INT-465): populated on task completion from result.prUrl
   prNumber?: number;
   prBranch?: string;
+  prMergedAt?: Date;  // When PR was merged (INT-1174)
   executionMemoryContext?: CodeTask['executionMemoryContext'];
   executionMemoryPostRun?: CodeTask['executionMemoryPostRun'];
 
@@ -313,4 +314,13 @@ export interface CodeTaskRepository {
    * Returns all tasks with non-archived statuses, ordered by updatedAt asc.
    */
   listAllNonArchivedGlobal(): Promise<Result<CodeTask[], RepositoryError>>;
+
+  /**
+   * Find all non-archived tasks.
+   * Returns ALL non-archived tasks (including active ones with no prMergedAt)
+   * so that the caller can properly check for active siblings before archiving.
+   * The prMergedAt < cutoffDate filtering happens in-memory in the use case.
+   * Used by auto-archive-merged-tasks scheduler (INT-1174).
+   */
+  findAllNonArchived(): Promise<Result<CodeTask[], RepositoryError>>;
 }
