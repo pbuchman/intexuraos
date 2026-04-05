@@ -1,31 +1,18 @@
-# Auto-Archive Merged Code Tasks + Archived Tasks UI
+# Auto-Archive Merged Code Tasks
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Auto-archive code tasks whose PRs were merged >7 days ago via a scheduled background job, and enhance the web UI with a dedicated archived-tasks view.
+**Goal:** Auto-archive code tasks whose PRs were merged >7 days ago via a scheduled background job.
 
-**Architecture:** Add a `prMergedAt` timestamp to the `CodeTask` model, populated when the PR-close webhook fires with `isMerged: true`. A new scheduled use case queries tasks by `prMergedAt < cutoff`, groups by `linearIssueId`, and archives entire groups (skipping active ones). The web app gets a dedicated `/code-tasks/archived` route and header link for quick access to the archived view.
+**Architecture:** Add a `prMergedAt` timestamp to the `CodeTask` model, populated when the PR-close webhook fires with `isMerged: true`. A new scheduled use case queries tasks by `prMergedAt < cutoff`, groups by `linearIssueId`, and archives entire groups (skipping active ones).
 
-**Tech Stack:** TypeScript, Fastify, Firestore, Terraform (Cloud Scheduler), React, TailwindCSS
-
----
-
-## Parallel Subtask Structure
-
-This plan splits into two independently-executable subtasks by service boundary:
-
-| Subtask            | Service           | Description                                                                                                                            |
-| ------------------ | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| **S1: code-agent** | `apps/code-agent` | Background auto-archive job: data model change, webhook integration, use case, internal endpoint, Terraform scheduler, Firestore index |
-| **S2: web**        | `apps/web`        | Archived tasks UI: dedicated route, header navigation link, enhanced archived view                                                     |
-
-**Contract:** The API contract between S1 and S2 is **already defined** and requires no changes. The existing `GET /code/issue-groups?groupStatus=archived` endpoint returns archived groups with full task data. S2 only consumes this existing API. S1 adds a new internal-only endpoint (`/internal/auto-archive-merged-tasks`) called exclusively by Cloud Scheduler, not by the web app.
+**Tech Stack:** TypeScript, Fastify, Firestore, Terraform (Cloud Scheduler)
 
 ---
 
 ## File Structure
 
-### S1: code-agent (new/modified files)
+### code-agent (new/modified files)
 
 | File                                                                                 | Action   | Responsibility                                                                          |
 | ------------------------------------------------------------------------------------ | -------- | --------------------------------------------------------------------------------------- |
@@ -42,17 +29,9 @@ This plan splits into two independently-executable subtasks by service boundary:
 | `apps/code-agent/src/__tests__/routes/internalRoutes.autoArchiveMergedTasks.test.ts` | Create   | Route tests                                                                             |
 | `apps/code-agent/src/__tests__/usecases/handlePrClose.test.ts`                       | Modify   | Add tests for `prMergedAt` population                                                   |
 
-### S2: web (new/modified files)
-
-| File                                       | Action   | Responsibility                             |
-| ------------------------------------------ | -------- | ------------------------------------------ |
-| `apps/web/src/pages/ArchivedTasksPage.tsx` | Create   | Dedicated page for browsing archived tasks |
-| `apps/web/src/pages/CodeTasksPage.tsx`     | Modify   | Add "Archive" link to page header          |
-| `apps/web/src/App.tsx`                     | Modify   | Add route for `/code-tasks/archived`       |
-
 ---
 
-## S1: code-agent — Auto-Archive Background Job
+## code-agent — Auto-Archive Background Job
 
 ### Task 1: Add `prMergedAt` field to CodeTask model
 
@@ -207,15 +186,13 @@ git add apps/code-agent/src/domain/usecases/handlePrClose.ts apps/code-agent/src
 git commit -m "feat(code-agent): set prMergedAt on tasks when PR is merged (INT-1174)"
 ```
 
-### Task 3: Add `findTasksWithMergedPrBefore` repository method
+### Task 3: Add `findAllNonArchived` repository method
 
-> **⚠️ Architecture note (INT-1174 review):** The original plan used `findTasksWithMergedPrBefore()` which pre-filters by `status IN TERMINAL_NON_ARCHIVED_STATUSES`. This excludes active tasks from the query results, making the `hasActive` safety check in the use case a no-op. The fix uses `listAllNonArchivedGlobal()` and filters in-memory, matching the `archiveStaleGroups` pattern.
+> **Architecture note:** This method returns ALL non-archived tasks (including active ones with no `prMergedAt`). The `prMergedAt < cutoffDate` filtering happens in-memory in the use case. This ensures the `hasActive` safety check correctly sees all sibling tasks for a given `linearIssueId`, matching the `archiveStaleGroups` pattern.
 
 **Files:**
 - Modify: `apps/code-agent/src/domain/repositories/codeTaskRepository.ts`
 - Modify: `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts`
-
-> **Architecture note (INT-1174 review):** The repository method `findTasksWithMergedPrBefore` returns ALL non-archived tasks (including active ones). The `prMergedAt < cutoffDate` filtering happens in-memory in the use case. This ensures the `hasActive` safety check correctly sees all sibling tasks for a given `linearIssueId`, matching the `archiveStaleGroups` pattern.
 
 - [ ] **Step 1: Add method to repository interface**
 
@@ -749,142 +726,6 @@ Run: `pnpm run ci:tracked`
 
 ---
 
-## S2: web — Archived Tasks UI
-
-### Task 9: Create dedicated ArchivedTasksPage
-
-**Files:**
-- Create: `apps/web/src/pages/ArchivedTasksPage.tsx`
-
-- [ ] **Step 1: Create the ArchivedTasksPage component**
-
-Create `apps/web/src/pages/ArchivedTasksPage.tsx`. This page reuses the `useIssueGroups` hook with `groupStatus: ['archived']` and provides a focused view for browsing archived tasks:
-
-```typescript
-/**
- * Dedicated page for browsing archived code tasks.
- * Uses the same useIssueGroups hook as CodeTasksPage but locked to archived status.
- */
-
-import { useCallback, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
-import { Button, CodeTaskLogsModal, Layout } from '@/components';
-import { IssueGroupRow } from '@/components/code-tasks/IssueGroupRow';
-import { useIssueGroups } from '@/hooks/useIssueGroups';
-import { useTimeTick } from '@/hooks';
-import type { SortOption } from '@/types/issueGroups';
-
-const SORT_OPTIONS: { key: SortOption; label: string }[] = [
-  { key: 'linear-id', label: 'Linear' },
-  { key: 'last-updated', label: 'Updated' },
-  { key: 'dispatched', label: 'Dispatched' },
-];
-
-export function ArchivedTasksPage(): React.JSX.Element {
-  const [activeSort, setActiveSort] = useState<SortOption>('last-updated');
-  const [previewTaskId, setPreviewTaskId] = useState<string | null>(null);
-
-  const {
-    groups,
-    counts,
-    loading,
-    loadingMore,
-    refreshing,
-    error,
-    hasMore,
-    loadMore,
-  } = useIssueGroups({
-    groupStatus: ['archived'],
-    sortBy: activeSort,
-  });
-
-  const timeTick = useTimeTick(30000, false);
-
-  // ... render: header with back link, sort selector, group list
-  // No batch actions needed for archived view
-  // No action buttons (retry/implement/archive) — archived groups are read-only
-}
-```
-
-The page should:
-- Show a "Back to Code Tasks" link in the header
-- Display the total archived count from `counts.archived`
-- Allow sorting by Linear ID, Updated, or Dispatched
-- Render `IssueGroupRow` for each archived group (with actions disabled)
-- Support pagination (Load More)
-- Support opening log preview modal
-
-- [ ] **Step 2: Commit**
-
-```bash
-git add apps/web/src/pages/ArchivedTasksPage.tsx
-git commit -m "feat(web): create ArchivedTasksPage component (INT-1174)"
-```
-
-### Task 10: Add route and navigation link
-
-**Files:**
-- Modify: `apps/web/src/App.tsx`
-- Modify: `apps/web/src/pages/CodeTasksPage.tsx`
-
-- [ ] **Step 1: Add route in App.tsx**
-
-In `apps/web/src/App.tsx`, add the route alongside existing code-task routes:
-
-```typescript
-import { ArchivedTasksPage } from '@/pages/ArchivedTasksPage';
-
-// In the router config:
-{ path: '/code-tasks/archived', element: <ArchivedTasksPage /> },
-```
-
-- [ ] **Step 2: Add "Archive" link in CodeTasksPage header**
-
-In `apps/web/src/pages/CodeTasksPage.tsx`, in the `PageHeader` component, add an "Archive" link next to the "Queue" link:
-
-```typescript
-<Link
-  to="/code-tasks/archived"
-  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-800 dark:border-slate-600 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-200"
->
-  <Archive className="h-4 w-4" />
-  Archive
-  {counts.archived > 0 ? (
-    <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">
-      {String(counts.archived)}
-    </span>
-  ) : null}
-</Link>
-```
-
-Update the `PageHeaderProps` to pass `counts` (it already does).
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add apps/web/src/App.tsx apps/web/src/pages/CodeTasksPage.tsx
-git commit -m "feat(web): add /code-tasks/archived route and header link (INT-1174)"
-```
-
-### Task 11: Run full verification
-
-- [ ] **Step 1: Build packages**
-
-Run: `pnpm build`
-
-- [ ] **Step 2: Run workspace verification**
-
-Run: `pnpm run verify:workspace:tracked -- web`
-
-- [ ] **Step 3: Run full CI**
-
-Run: `pnpm run ci:tracked`
-
-- [ ] **Step 4: Fix any issues, commit**
-
----
-
 ## Endpoint Changes
 
 ### Modified
@@ -897,7 +738,7 @@ Run: `pnpm run ci:tracked`
 - None
 
 ### Unchanged
-- `GET /code/issue-groups?groupStatus=archived` — Existing endpoint used by the new archived tasks UI page (no changes needed)
+- `GET /code/issue-groups?groupStatus=archived` — Existing endpoint (no changes needed)
 - `POST /code/tasks/:taskId/archive` — Existing manual archive endpoint (no changes)
 - `POST /internal/archive-stale-groups` — Existing staleness-based archiver (complementary, not replaced)
 
@@ -912,5 +753,3 @@ Run: `pnpm run ci:tracked`
 3. **Best-effort `prMergedAt` population**: Setting `prMergedAt` in `handlePrClose` is fire-and-forget (matching existing patterns in that handler). Existing tasks without `prMergedAt` will be caught by the existing `archiveStaleGroups` staleness archiver instead. No backfill migration is needed.
 
 4. **Daily schedule (4 AM UTC)**: The `archiveStaleGroups` runs hourly. The new merged-PR archiver runs daily since PR merge timing is less time-sensitive. 4 AM UTC avoids overlap with the hourly staleness check and the 3 AM log-cleanup job.
-
-5. **Dedicated ArchivedTasksPage**: Instead of relying solely on the existing filter pill toggle, a dedicated page provides a cleaner UX with a discoverable header link. The Archive filter pill on the main page remains functional for quick access.
