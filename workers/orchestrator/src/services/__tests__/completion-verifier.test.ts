@@ -588,6 +588,7 @@ describe('buildExecutionPrompt', () => {
   it('marks gh_pr_url as REQUIRED for all outcomes', () => {
     const prompt = buildExecutionPrompt('exec-log');
     expect(prompt).toContain('REQUIRED for all execution outcomes');
+    expect(prompt).not.toContain('"gh_pr_url":""');
   });
 });
 
