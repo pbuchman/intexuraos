@@ -277,6 +277,8 @@ The wiring callback needs to:
 
 This mirrors the logic in `webhookRoutes.ts` lines 1261-1334 but extracted into a standalone callback.
 
+> **Note on `addLabel` vs `linearAgentClient` direct calls:** Task 1 adds `linearIssueService.addLabel` as a reusable abstraction. The `onReviewSkipped` callback uses `linearAgentClient.validateIssue` + `linearAgentClient.updateIssueMetadata` directly rather than `addLabel`. This is intentional because the callback also needs `issueValidation.value.labels` (the current label set from Linear) to pass to `recomputeWithLabels` — `addLabel` is a lower-level mutation primitive that doesn't return the full label state. An implementer should not treat this as an oversight.
+
 - [ ] **Step 1: Add the `onReviewSkipped` callback in services.ts**
 
 In `apps/code-agent/src/services.ts`, find the `createUnifiedEvaluator({...})` call (around line 522). Add the `onReviewSkipped` property:
@@ -414,18 +416,18 @@ git commit -m "feat(code-agent): record automation log when skipped review sets 
 ### Task 5: Integration test -- skipped review triggers merge-ready pipeline
 
 **Files:**
-- Modify: `apps/code-agent/src/__tests__/routes/code/issueGroups.test.ts` (or a new focused test file)
+- Modify: `apps/code-agent/src/__tests__/domain/issueGrouping/groupByLinearIssue.test.ts`
 
 - [ ] **Step 1: Write integration test verifying pipeline shows merge step**
 
 Add a test that verifies the end-to-end behavior: when a task group has an execution task with `status: 'implemented'`, a `prUrl`, and the Linear issue has `ready-to-merge` label (simulating the label being set after a skipped review), the pipeline includes a merge step.
 
-Look at the existing `issueGroups.test.ts` file for the test patterns used. The test should use the `groupByLinearIssue` function directly with a mock task that has `linearIssue.labels` containing `ready-to-merge`.
+Look at the existing `groupByLinearIssue.test.ts` file for the test patterns used. The test uses the local `makeTask` helper (which is already defined in that file) to build a mock task with `linearIssue.labels` containing `ready-to-merge`.
 
 ```typescript
 it('shows merge step when execution task has ready-to-merge label (skipped review)', () => {
   const tasks: SerializedTask[] = [
-    createSerializedTask({
+    makeTask({
       agentType: 'execution',
       status: 'implemented',
       result: { prUrl: 'https://github.com/org/repo/pull/42' },
@@ -463,7 +465,7 @@ Expected: PASS
 - [ ] **Step 3: Commit**
 
 ```bash
-git add apps/code-agent/src/__tests__/routes/code/issueGroups.test.ts
+git add apps/code-agent/src/__tests__/domain/issueGrouping/groupByLinearIssue.test.ts
 git commit -m "test(code-agent): verify merge step appears for skipped review with label"
 ```
 
