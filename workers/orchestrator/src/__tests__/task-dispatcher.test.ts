@@ -2100,6 +2100,71 @@ describe('TaskDispatcher', () => {
         })
       );
     });
+
+    it('buildResultFromVerification returns base result when agentData is undefined', () => {
+      const internal = agentDispatcher as unknown as {
+        buildResultFromVerification: (
+          task: Task,
+          gitResult: TaskResult | undefined, // @allow-undefined-type -- function parameter type in as-cast block cannot use ?: syntax
+          verification: {
+            agentData: undefined;
+            passed: boolean;
+            missingFields: string[];
+            verifierFailure: boolean;
+            trace: { transcript: string; prompt: string; response: string };
+          }
+        ) => TaskResult;
+      };
+      const fakeTask = { taskId: 'undef-agentdata', linearIssueLabels: [] } as unknown as Task;
+      const gitResult: TaskResult = { branch: 'feat/test' };
+      const result = internal.buildResultFromVerification(fakeTask, gitResult, {
+        agentData: undefined,
+        passed: true,
+        missingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+      });
+      expect(result).toEqual(gitResult);
+    });
+
+    it('finalizeTask skips lifecycle event when finalStatus is not completed/failed/interrupted', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'lifecycle-cancelled-test',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const state = agentDispatcher as unknown as {
+        statePersistence: StatePersistence;
+      };
+      const savedState = await state.statePersistence.load();
+      const task = savedState.tasks['lifecycle-cancelled-test'];
+      if (task === undefined) throw new Error('Task not found');
+      task.status = 'running';
+      await state.statePersistence.save(savedState);
+
+      const internalFinalizeTask = agentDispatcher as unknown as {
+        finalizeTask: (
+          task: Task,
+          status: string,
+          payload: Record<string, unknown>,
+          keepLogOpen?: boolean
+        ) => Promise<void>;
+      };
+      await internalFinalizeTask.finalizeTask(task, 'cancelled', {});
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({ status: 'cancelled' }),
+        })
+      );
+    });
   });
 
   describe('agentType priority', () => {
@@ -3539,6 +3604,168 @@ describe('TaskDispatcher', () => {
       expect(destroyWorker).not.toHaveBeenCalledWith(oldTaskId);
       // New container (PR #200) should be preserved
       expect(preserveWorker).toHaveBeenCalledWith(newTaskId);
+    });
+
+    it('skips destroyWorker loop when listPreservedWorkers returns empty array', async () => {
+      const state = createStatePersistence();
+      const destroyWorker = vi.fn(async () => undefined);
+      const preserveWorker = vi.fn(async () => undefined);
+      const listPreservedWorkers = vi.fn(async () => []);
+
+      const isolationProvider: IsolationProvider = {
+        ...mockIsolationProvider,
+        destroyWorker,
+        preserveWorker,
+        cleanupTaskSession: vi.fn(async () => undefined),
+        listPreservedWorkers,
+      };
+      const isolation: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: isolationProvider,
+      };
+
+      const dispatcher = new TaskDispatcher(
+        mockConfig,
+        state,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        isolation,
+        {
+          maxAttempts: 1,
+          preserveWorkerContainers: true,
+          verifier: {
+            verify: vi.fn().mockResolvedValue({
+              passed: true,
+              missingFields: [],
+              verifierFailure: false,
+              trace: dummyTrace,
+            }),
+            describe: (): { enabled: boolean } => ({ enabled: true }),
+            extractResumeSummary: vi.fn().mockResolvedValue(undefined),
+          },
+        }
+      );
+
+      const taskId = 'pr-empty-preserved-list';
+      await dispatcher.submitTask({
+        taskId,
+        workerType: 'auto',
+        prompt: 'PR task with no preserved containers',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'pull_request',
+        prNumber: 42,
+      });
+      await flushAsync();
+
+      const task = await dispatcher.getTask(taskId);
+      if (task === null) {
+        throw new Error('Task not found');
+      }
+
+      const internalDispatcher = dispatcher as unknown as {
+        finalizeTask: (
+          taskArg: Record<string, unknown>,
+          finalStatus: 'completed',
+          payload: { result?: unknown; error?: unknown }
+        ) => Promise<void>;
+      };
+      await internalDispatcher.finalizeTask(
+        task as unknown as Record<string, unknown>,
+        'completed',
+        {}
+      );
+
+      // No old containers to destroy
+      expect(destroyWorker).not.toHaveBeenCalled();
+      // New container should still be preserved
+      expect(preserveWorker).toHaveBeenCalledWith(taskId);
+      expect(listPreservedWorkers).toHaveBeenCalled();
+    });
+
+    it('skips listPreservedWorkers check when provider does not implement it', async () => {
+      const state = createStatePersistence();
+      const destroyWorker = vi.fn(async () => undefined);
+      const preserveWorker = vi.fn(async () => undefined);
+
+      // Intentionally omit listPreservedWorkers to exercise optional chaining
+      const isolationProvider: IsolationProvider = {
+        ...mockIsolationProvider,
+        destroyWorker,
+        preserveWorker,
+        cleanupTaskSession: vi.fn(async () => undefined),
+      };
+      const isolation: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: isolationProvider,
+      };
+
+      const dispatcher = new TaskDispatcher(
+        mockConfig,
+        state,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        isolation,
+        {
+          maxAttempts: 1,
+          preserveWorkerContainers: true,
+          verifier: {
+            verify: vi.fn().mockResolvedValue({
+              passed: true,
+              missingFields: [],
+              verifierFailure: false,
+              trace: dummyTrace,
+            }),
+            describe: (): { enabled: boolean } => ({ enabled: true }),
+            extractResumeSummary: vi.fn().mockResolvedValue(undefined),
+          },
+        }
+      );
+
+      const taskId = 'pr-no-list-preserved-impl';
+      await dispatcher.submitTask({
+        taskId,
+        workerType: 'auto',
+        prompt: 'PR task with provider lacking listPreservedWorkers',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'pull_request',
+        prNumber: 55,
+      });
+      await flushAsync();
+
+      const task = await dispatcher.getTask(taskId);
+      if (task === null) {
+        throw new Error('Task not found');
+      }
+
+      const internalDispatcher = dispatcher as unknown as {
+        finalizeTask: (
+          taskArg: Record<string, unknown>,
+          finalStatus: 'completed',
+          payload: { result?: unknown; error?: unknown }
+        ) => Promise<void>;
+      };
+      await internalDispatcher.finalizeTask(
+        task as unknown as Record<string, unknown>,
+        'completed',
+        {}
+      );
+
+      // No old containers to destroy (no listPreservedWorkers available)
+      expect(destroyWorker).not.toHaveBeenCalled();
+      // New container should still be preserved
+      expect(preserveWorker).toHaveBeenCalledWith(taskId);
     });
 
     it('uses fallback attempt metadata when persisted task is missing fields', async () => {
@@ -7170,6 +7397,201 @@ describe('TaskDispatcher', () => {
       expect(finalizeDispatcher.getRunningCount()).toBe(0);
       vi.useRealTimers();
     });
+
+    it('double-decrement prevention: outer catch guard leaves runningCount at zero when inner guard already decremented', async () => {
+      // createWorktree SUCCEEDS (inner catch does not fire)
+      // submitTask increments runningCount (0→1) inside the mutex, then
+      // the registerTask mock sets runningCount to 0 and throws, simulating
+      // it already being decremented before the outer catch fires
+      // outer catch guard sees runningCount=0 → FALSE branch exercised → stays at 0 (not -1)
+      vi.mocked(mockLogForwarder.registerTask).mockImplementationOnce(() => {
+        (dispatcher as unknown as { runningCount: number }).runningCount = 0;
+        throw new Error('registerTask failed');
+      });
+
+      const request: CreateTaskRequest = {
+        taskId: 'double-decrement-test',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(dispatcher.getRunningCount()).toBe(0);
+    });
+
+    it('cancelTask guard: does not decrement runningCount below zero when already at zero', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'cancel-guard-false-branch',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+      expect(dispatcher.getRunningCount()).toBe(1);
+
+      // Manually set runningCount to 0 to simulate race condition
+      (dispatcher as unknown as { runningCount: number }).runningCount = 0;
+
+      // cancelTask should still complete but not go negative
+      await dispatcher.cancelTask('cancel-guard-false-branch');
+      expect(dispatcher.getRunningCount()).toBe(0);
+    });
+
+    it('timeout kill guard: does not decrement runningCount below zero when already at zero', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const killGuardState = createStatePersistence();
+      const killGuardDispatcher = new TaskDispatcher(
+        mockConfig,
+        killGuardState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'kill-guard-false-branch',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await killGuardDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(killGuardDispatcher.getRunningCount()).toBe(1);
+
+      // Manually set runningCount to 0 to simulate race condition
+      (killGuardDispatcher as unknown as { runningCount: number }).runningCount = 0;
+
+      // Advance past kill timeout — guard should prevent going to -1
+      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      expect(killGuardDispatcher.getRunningCount()).toBe(0);
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('finalizeTask guard: does not decrement runningCount below zero when already at zero', async () => {
+      vi.useFakeTimers();
+      const finalizeGuardState = createStatePersistence();
+      const finalizeGuardDispatcher = new TaskDispatcher(
+        mockConfig,
+        finalizeGuardState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'finalize-guard-false-branch',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await finalizeGuardDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(finalizeGuardDispatcher.getRunningCount()).toBe(1);
+
+      // Manually set runningCount to 0 to simulate race condition
+      (finalizeGuardDispatcher as unknown as { runningCount: number }).runningCount = 0;
+
+      // Trigger completion monitoring to call finalizeTask with runningCount already 0
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(finalizeGuardDispatcher.getRunningCount()).toBe(0);
+      vi.useRealTimers();
+    });
+
+    it('worktree creation guard: does not decrement runningCount below zero when already at zero', async () => {
+      vi.mocked(mockWorktreeManager.createWorktree).mockImplementationOnce(async () => {
+        // Simulate race: another path decremented runningCount to 0 before this catch fires
+        (dispatcher as unknown as { runningCount: number }).runningCount = 0;
+        throw new Error('Worktree fail');
+      });
+
+      const request: CreateTaskRequest = {
+        taskId: 'worktree-guard-false-branch',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      // Guard prevented decrement below zero
+      expect(dispatcher.getRunningCount()).toBe(0);
+    });
+
+    it('worker start guard: does not decrement runningCount below zero when already at zero', async () => {
+      const localWorktreeManager = {
+        ...mockWorktreeManager,
+        removeWorktree: vi.fn(async () => ({ ok: true, value: undefined })),
+      } as unknown as WorktreeManager;
+
+      const localDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        localWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      vi.mocked(mockIsolationProvider.createWorker).mockImplementationOnce(async () => {
+        // Simulate race: another path decremented runningCount to 0 before this failure check fires
+        (localDispatcher as unknown as { runningCount: number }).runningCount = 0;
+        throw new Error('Container failed');
+      });
+
+      const request: CreateTaskRequest = {
+        taskId: 'worker-start-guard-false-branch',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await localDispatcher.submitTask(request);
+      await flushAsync();
+
+      // Guard prevented decrement below zero
+      expect(localDispatcher.getRunningCount()).toBe(0);
+    });
   });
 
   describe('conditional spread for optional properties', () => {
@@ -7753,6 +8175,119 @@ describe('TaskDispatcher', () => {
         expect(result.error.type).toBe('not_found');
       }
     });
+
+    it('queues long message (>200 chars) with truncated log entry', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-long-queue-task',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+      const longMessage = 'A'.repeat(250);
+      const result = await dispatcher.sendMessage('msg-long-queue-task', longMessage);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({
+          action: 'queued',
+          pendingMessages: [longMessage],
+        });
+      }
+
+      // Verify the log entry was truncated at 200 chars with ellipsis (the >200 ternary branch)
+      const logCalls = vi.mocked(mockLogForwarder.appendChunk).mock.calls;
+      const queuedLog = logCalls.find(
+        (call) => typeof call[1] === 'string' && (call[1] as string).includes('Message queued')
+      );
+      expect(queuedLog).toBeDefined();
+      const logEntry = queuedLog?.[1] as string;
+      expect(logEntry).toContain('\u2026'); // ellipsis = truncation occurred
+      expect(logEntry).not.toContain('A'.repeat(250)); // full message not present
+    });
+
+    it('resumes completed task with long message (>200 chars)', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-long-resume-task',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const state = await statePersistence.load();
+      const task = state.tasks['msg-long-resume-task'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      await statePersistence.save(state);
+
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+      const longMessage = 'B'.repeat(250);
+      const result = await dispatcher.sendMessage('msg-long-resume-task', longMessage);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'resumed' });
+      }
+
+      // Verify the prompt log entry was truncated at 200 chars with ellipsis (the >200 ternary branch)
+      const logCalls = vi.mocked(mockLogForwarder.appendChunk).mock.calls;
+      const promptLog = logCalls.find(
+        (call) => typeof call[1] === 'string' && (call[1] as string).includes('[prompt]')
+      );
+      expect(promptLog).toBeDefined();
+      const promptEntry = promptLog?.[1] as string;
+      expect(promptEntry).toContain('\u2026'); // ellipsis = truncation occurred
+      expect(promptEntry).not.toContain('B'.repeat(250)); // full message not present
+    });
+
+    it('returns not_found when isResumeAvailable is not implemented on provider', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-no-resume-check-task',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const state = await statePersistence.load();
+      const task = state.tasks['msg-no-resume-check-task'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      await statePersistence.save(state);
+
+      // Remove isResumeAvailable so optional chaining returns undefined → ?? false → not available
+      const providerWithoutCheck = mockIsolationProvider as Required<IsolationProvider>;
+      const original = providerWithoutCheck.isResumeAvailable;
+      providerWithoutCheck.isResumeAvailable = undefined as unknown as typeof original;
+
+      let result: Awaited<ReturnType<typeof dispatcher.sendMessage>>;
+      try {
+        result = await dispatcher.sendMessage('msg-no-resume-check-task', 'Follow-up');
+      } finally {
+        // Restore even if sendMessage throws, to avoid polluting other tests
+        providerWithoutCheck.isResumeAvailable = original;
+      }
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('not_found');
+      }
+    });
   });
 
   describe('resumeTaskWithUserMessage pendingResumeStart guard', () => {
@@ -7971,6 +8506,151 @@ describe('TaskDispatcher', () => {
         { taskId: 'kill-flush-fail-test', error: expect.any(Error) },
         'Failed to flush logs during timeout kill'
       );
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('scheduleTimeoutWarning does not log warning when task is null (already completed)', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const nullTaskState = createStatePersistence();
+      const nullTaskDispatcher = new TaskDispatcher(
+        mockConfig,
+        nullTaskState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'warn-null-task-test',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await nullTaskDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Mock getTask to return null — task was removed before warning fired
+      vi.spyOn(nullTaskDispatcher, 'getTask').mockResolvedValue(null);
+      const warnSpy = vi.spyOn(mockLogger, 'warn');
+
+      await vi.advanceTimersByTimeAsync(175 * 60 * 1000);
+
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'warn-null-task-test' }),
+        'Task approaching 3-hour timeout'
+      );
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('scheduleTimeoutWarning does not log warning when task status is not running', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const completedTaskState = createStatePersistence();
+      const completedTaskDispatcher = new TaskDispatcher(
+        mockConfig,
+        completedTaskState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'warn-completed-task-test',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await completedTaskDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Simulate task completing before warning fires
+      const state = await completedTaskState.load();
+      const task = state.tasks['warn-completed-task-test'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      await completedTaskState.save(state);
+
+      const warnSpy = vi.spyOn(mockLogger, 'warn');
+
+      await vi.advanceTimersByTimeAsync(175 * 60 * 1000);
+
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'warn-completed-task-test' }),
+        'Task approaching 3-hour timeout'
+      );
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('scheduleTimeoutKill returns early when task is no longer running at kill time', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const earlyReturnState = createStatePersistence();
+      const earlyReturnDispatcher = new TaskDispatcher(
+        mockConfig,
+        earlyReturnState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'kill-early-return-test',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await earlyReturnDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(earlyReturnDispatcher.getRunningCount()).toBe(1);
+
+      // Simulate task completing before kill fires
+      const state = await earlyReturnState.load();
+      const task = state.tasks['kill-early-return-test'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      await earlyReturnState.save(state);
+
+      // Manually set runningCount to 0 to simulate the race where finalization already
+      // decremented it before the kill timer fires. This is the key guard scenario.
+      (earlyReturnDispatcher as unknown as { runningCount: number }).runningCount = 0;
+
+      // Advance past kill timeout — early return (task not running) prevents the decrement
+      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+
+      // runningCount stays at 0 (not -1) because the early return at `task?.status !== 'running'`
+      // fires before reaching the `if (this.runningCount > 0) this.runningCount--` guard
+      expect(earlyReturnDispatcher.getRunningCount()).toBe(0);
 
       vi.useRealTimers();
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
