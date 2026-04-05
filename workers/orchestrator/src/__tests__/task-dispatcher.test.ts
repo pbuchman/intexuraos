@@ -2105,7 +2105,7 @@ describe('TaskDispatcher', () => {
       const internal = agentDispatcher as unknown as {
         buildResultFromVerification: (
           task: Task,
-          gitResult: TaskResult | undefined,
+          gitResult: TaskResult | undefined, // @allow-undefined-type -- function parameter type in as-cast block cannot use ?: syntax
           verification: {
             agentData: undefined;
             passed: boolean;
@@ -3604,6 +3604,168 @@ describe('TaskDispatcher', () => {
       expect(destroyWorker).not.toHaveBeenCalledWith(oldTaskId);
       // New container (PR #200) should be preserved
       expect(preserveWorker).toHaveBeenCalledWith(newTaskId);
+    });
+
+    it('skips destroyWorker loop when listPreservedWorkers returns empty array', async () => {
+      const state = createStatePersistence();
+      const destroyWorker = vi.fn(async () => undefined);
+      const preserveWorker = vi.fn(async () => undefined);
+      const listPreservedWorkers = vi.fn(async () => []);
+
+      const isolationProvider: IsolationProvider = {
+        ...mockIsolationProvider,
+        destroyWorker,
+        preserveWorker,
+        cleanupTaskSession: vi.fn(async () => undefined),
+        listPreservedWorkers,
+      };
+      const isolation: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: isolationProvider,
+      };
+
+      const dispatcher = new TaskDispatcher(
+        mockConfig,
+        state,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        isolation,
+        {
+          maxAttempts: 1,
+          preserveWorkerContainers: true,
+          verifier: {
+            verify: vi.fn().mockResolvedValue({
+              passed: true,
+              missingFields: [],
+              verifierFailure: false,
+              trace: dummyTrace,
+            }),
+            describe: (): { enabled: boolean } => ({ enabled: true }),
+            extractResumeSummary: vi.fn().mockResolvedValue(undefined),
+          },
+        }
+      );
+
+      const taskId = 'pr-empty-preserved-list';
+      await dispatcher.submitTask({
+        taskId,
+        workerType: 'auto',
+        prompt: 'PR task with no preserved containers',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'pull_request',
+        prNumber: 42,
+      });
+      await flushAsync();
+
+      const task = await dispatcher.getTask(taskId);
+      if (task === null) {
+        throw new Error('Task not found');
+      }
+
+      const internalDispatcher = dispatcher as unknown as {
+        finalizeTask: (
+          taskArg: Record<string, unknown>,
+          finalStatus: 'completed',
+          payload: { result?: unknown; error?: unknown }
+        ) => Promise<void>;
+      };
+      await internalDispatcher.finalizeTask(
+        task as unknown as Record<string, unknown>,
+        'completed',
+        {}
+      );
+
+      // No old containers to destroy
+      expect(destroyWorker).not.toHaveBeenCalled();
+      // New container should still be preserved
+      expect(preserveWorker).toHaveBeenCalledWith(taskId);
+      expect(listPreservedWorkers).toHaveBeenCalled();
+    });
+
+    it('skips listPreservedWorkers check when provider does not implement it', async () => {
+      const state = createStatePersistence();
+      const destroyWorker = vi.fn(async () => undefined);
+      const preserveWorker = vi.fn(async () => undefined);
+
+      // Intentionally omit listPreservedWorkers to exercise optional chaining
+      const isolationProvider: IsolationProvider = {
+        ...mockIsolationProvider,
+        destroyWorker,
+        preserveWorker,
+        cleanupTaskSession: vi.fn(async () => undefined),
+      };
+      const isolation: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: isolationProvider,
+      };
+
+      const dispatcher = new TaskDispatcher(
+        mockConfig,
+        state,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        isolation,
+        {
+          maxAttempts: 1,
+          preserveWorkerContainers: true,
+          verifier: {
+            verify: vi.fn().mockResolvedValue({
+              passed: true,
+              missingFields: [],
+              verifierFailure: false,
+              trace: dummyTrace,
+            }),
+            describe: (): { enabled: boolean } => ({ enabled: true }),
+            extractResumeSummary: vi.fn().mockResolvedValue(undefined),
+          },
+        }
+      );
+
+      const taskId = 'pr-no-list-preserved-impl';
+      await dispatcher.submitTask({
+        taskId,
+        workerType: 'auto',
+        prompt: 'PR task with provider lacking listPreservedWorkers',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'pull_request',
+        prNumber: 55,
+      });
+      await flushAsync();
+
+      const task = await dispatcher.getTask(taskId);
+      if (task === null) {
+        throw new Error('Task not found');
+      }
+
+      const internalDispatcher = dispatcher as unknown as {
+        finalizeTask: (
+          taskArg: Record<string, unknown>,
+          finalStatus: 'completed',
+          payload: { result?: unknown; error?: unknown }
+        ) => Promise<void>;
+      };
+      await internalDispatcher.finalizeTask(
+        task as unknown as Record<string, unknown>,
+        'completed',
+        {}
+      );
+
+      // No old containers to destroy (no listPreservedWorkers available)
+      expect(destroyWorker).not.toHaveBeenCalled();
+      // New container should still be preserved
+      expect(preserveWorker).toHaveBeenCalledWith(taskId);
     });
 
     it('uses fallback attempt metadata when persisted task is missing fields', async () => {
