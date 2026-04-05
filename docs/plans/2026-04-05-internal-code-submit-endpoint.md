@@ -45,16 +45,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as jose from 'jose';
 import nock from 'nock';
 
-// Mock jose library for JWT validation
+// Mock jose library for JWT validation (required because server imports jose at module level)
 vi.mock('jose', () => ({
   createRemoteJWKSet: vi.fn(() => vi.fn()),
   jwtVerify: vi.fn(),
 }));
-
-const mockedJwtVerify = vi.mocked(jose.jwtVerify);
-
-// Note: mockedJwtVerify is declared for compatibility with vi.mock('jose', ...) which is
-// required because the server imports jose at module level. Internal auth does not use JWT.
 
 import { buildServer } from '../../server.js';
 import { resetServices, setServices } from '../../services.js';
@@ -397,7 +392,7 @@ Insert the following route definition after the `POST /internal/code/process` ro
             },
           },
           503: {
-            description: 'Worker unavailable',
+            description: 'Worker unavailable or queue full',
             type: 'object',
             required: ['success', 'error'],
             properties: {
@@ -406,7 +401,7 @@ Insert the following route definition after the `POST /internal/code/process` ro
                 type: 'object',
                 required: ['code', 'message'],
                 properties: {
-                  code: { type: 'string', enum: ['MISCONFIGURED'] },
+                  code: { type: 'string', enum: ['MISCONFIGURED', 'QUEUE_FULL'] },
                   message: { type: 'string' },
                 },
               },
@@ -438,7 +433,7 @@ Insert the following route definition after the `POST /internal/code/process` ro
                 type: 'object',
                 required: ['code', 'message'],
                 properties: {
-                  code: { type: 'string', enum: ['INTERNAL_ERROR', 'QUEUE_FULL', 'QUEUE_TIMEOUT'] },
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
                   message: { type: 'string' },
                 },
               },
@@ -548,7 +543,7 @@ Insert the following route definition after the `POST /internal/code/process` ro
         }
 
         if (error.code === 'worker_not_configured') {
-          return await reply.fail(424, error.message);
+          return await reply.fail('WORKER_NOT_CONFIGURED', error.message);
         }
 
         if (error.code === 'validation_error') {
@@ -560,7 +555,9 @@ Insert the following route definition after the `POST /internal/code/process` ro
         }
 
         if (error.code === 'queue_timeout') {
-          return await reply.fail('QUEUE_TIMEOUT', error.message);
+          // Note: QUEUE_TIMEOUT is not in ErrorCode union; map to INTERNAL_ERROR.
+          // TODO: Consider adding QUEUE_TIMEOUT to common-core/src/errors.ts if needed.
+          return await reply.fail('INTERNAL_ERROR', error.message);
         }
 
         return await reply.fail('INTERNAL_ERROR', error.message);
