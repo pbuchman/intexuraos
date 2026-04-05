@@ -983,8 +983,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         );
 
         if (error.code === 'duplicate_prompt') {
-          /* v8 ignore start -- upstream: firestoreCodeTaskRepository always provides existingTaskId for duplicate_prompt; fallback is defensive @preserve */
-          return await reply.fail('CONFLICT', `Similar task submitted in last 5 minutes: ${error.existingTaskId ?? ''}`);
+          // firestoreCodeTaskRepository always provides existingTaskId for duplicate_prompt
+          const existingTaskId = error.existingTaskId;
+          /* v8 ignore start -- ts-type: firestoreCodeTaskRepository always provides existingTaskId; fallback unreachable @preserve */
+          return await reply.fail('CONFLICT', `Similar task submitted in last 5 minutes: ${existingTaskId ?? ''}`);
           /* v8 ignore stop @preserve */
         }
 
