@@ -368,6 +368,16 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return { ok: false, message: 'Planning enforcement requires original linearIssueId' };
         }
 
+        if (outcome === 'planned') {
+          const prUrl = planningResult.planning_pr_url ?? planningResult.prUrl;
+          if (!prUrl) {
+            return {
+              ok: false,
+              message: 'Planning enforcement requires a PR URL for planned outcomes — all planned tasks must produce an evidence PR',
+            };
+          }
+        }
+
         const originalIssueValidation = await linearAgentClient.validateIssue({
           userId: task.userId,
           identifier: task.linearIssueId,
@@ -1144,6 +1154,67 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               task, taskId, completedAt,
               error: reviewEnforcement.message,
               errorCode: reviewEnforcement.code,
+            });
+
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return await reply.send({ received: true });
+          }
+        }
+
+        if (task.agentType === 'remediation') {
+          if (result === undefined) {
+            request.log.error(
+              { taskId, routedIssueId: task.linearIssueId },
+              'Remediation completion missing result payload'
+            );
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              error: {
+                code: 'REMEDIATION_AGENT_ENFORCEMENT_FAILED',
+                message: 'Remediation completion missing result payload',
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return reply.fail('INTERNAL_ERROR', failResult.error.message);
+            }
+            await cleanupLockIfPR();
+
+            recordTaskFailed({
+              task, taskId, completedAt,
+              error: 'Remediation completion missing result payload',
+              errorCode: 'REMEDIATION_AGENT_ENFORCEMENT_FAILED',
+            });
+
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return await reply.send({ received: true });
+          }
+
+          if (result.execution_outcome_label === 'implemented' && !result.prUrl) {
+            request.log.error(
+              { taskId, routedIssueId: task.linearIssueId },
+              'Remediation deterministic enforcement failed: no PR URL for implemented outcome'
+            );
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              result,
+              error: {
+                code: 'REMEDIATION_AGENT_ENFORCEMENT_FAILED',
+                message: 'Remediation enforcement requires result.prUrl for implemented outcome',
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return reply.fail('INTERNAL_ERROR', failResult.error.message);
+            }
+            await cleanupLockIfPR();
+
+            recordTaskFailed({
+              task, taskId, completedAt,
+              error: 'Remediation enforcement requires result.prUrl for implemented outcome',
+              errorCode: 'REMEDIATION_AGENT_ENFORCEMENT_FAILED',
             });
 
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
