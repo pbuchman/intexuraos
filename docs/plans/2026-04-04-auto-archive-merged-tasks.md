@@ -27,20 +27,20 @@ This plan splits into two independently-executable subtasks by service boundary:
 
 ### S1: code-agent (new/modified files)
 
-| File                                                                                 | Action   | Responsibility                                                            |
-| ------------------------------------------------------------------------------------ | -------- | ------------------------------------------------------------------------- |
-| `apps/code-agent/src/domain/models/codeTask.ts`                                      | Modify   | Add `prMergedAt?: Timestamp` field to `CodeTask` interface                |
-| `apps/code-agent/src/domain/repositories/codeTaskRepository.ts`                      | Modify   | Add `findTasksWithMergedPrBefore()` method to interface                   |
-| `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts`              | Modify   | Implement `findTasksWithMergedPrBefore()` + handle `prMergedAt` in update |
-| `apps/code-agent/src/domain/usecases/autoArchiveMergedTasks.ts`                      | Create   | New use case: query merged tasks > N days, group by issue, archive        |
-| `apps/code-agent/src/domain/usecases/handlePrClose.ts`                               | Modify   | Set `prMergedAt` on tasks when `isMerged: true`                           |
-| `apps/code-agent/src/routes/internalRoutes.ts`                                       | Modify   | Add `POST /internal/auto-archive-merged-tasks` endpoint                   |
-| `apps/code-agent/src/services.ts`                                                    | Modify   | Add `autoArchiveMergedTasks` to `ServiceContainer`                        |
-| `apps/code-agent/src/infra/migrations/017_prMergedAt_status_index.mjs`               | Create   | Firestore composite index on `(prMergedAt, status)`                       |
-| `terraform/environments/dev/main.tf`                                                 | Modify   | New Cloud Scheduler job for auto-archive                                  |
-| `apps/code-agent/src/__tests__/usecases/autoArchiveMergedTasks.test.ts`              | Create   | Unit tests for use case                                                   |
-| `apps/code-agent/src/__tests__/routes/internalRoutes.autoArchiveMergedTasks.test.ts` | Create   | Route tests                                                               |
-| `apps/code-agent/src/__tests__/usecases/handlePrClose.test.ts`                       | Modify   | Add tests for `prMergedAt` population                                     |
+| File                                                                                 | Action   | Responsibility                                                                          |
+| ------------------------------------------------------------------------------------ | -------- | --------------------------------------------------------------------------------------- |
+| `apps/code-agent/src/domain/models/codeTask.ts`                                      | Modify   | Add `prMergedAt?: Timestamp` field to `CodeTask` interface                              |
+| `apps/code-agent/src/domain/repositories/codeTaskRepository.ts`                      | Modify   | Add `findTasksWithMergedPrBefore()` method to interface                                 |
+| `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts`              | Modify   | Implement `findTasksWithMergedPrBefore()` + handle `prMergedAt` in update               |
+| `apps/code-agent/src/domain/usecases/autoArchiveMergedTasks.ts`                      | Create   | New use case: query merged tasks > N days, group by issue, archive                      |
+| `apps/code-agent/src/domain/usecases/handlePrClose.ts`                               | Modify   | Set `prMergedAt` on tasks when `isMerged: true`                                         |
+| `apps/code-agent/src/routes/internalRoutes.ts`                                       | Modify   | Add `POST /internal/auto-archive-merged-tasks` endpoint                                 |
+| `apps/code-agent/src/services.ts`                                                    | Modify   | Add `autoArchiveMergedTasks` to `ServiceContainer`                                      |
+| `apps/code-agent/src/infra/migrations/prMergedAtStatusIndex.ts` (optional)           | Create   | Firestore composite index on `(prMergedAt, status)` — if using composite query approach |
+| `terraform/environments/dev/main.tf`                                                 | Modify   | New Cloud Scheduler job for auto-archive                                                |
+| `apps/code-agent/src/__tests__/usecases/autoArchiveMergedTasks.test.ts`              | Create   | Unit tests for use case                                                                 |
+| `apps/code-agent/src/__tests__/routes/internalRoutes.autoArchiveMergedTasks.test.ts` | Create   | Route tests                                                                             |
+| `apps/code-agent/src/__tests__/usecases/handlePrClose.test.ts`                       | Modify   | Add tests for `prMergedAt` population                                                   |
 
 ### S2: web (new/modified files)
 
@@ -113,11 +113,11 @@ git commit -m "feat(code-agent): add prMergedAt field to CodeTask model (INT-117
 
 **Files:**
 - Modify: `apps/code-agent/src/domain/usecases/handlePrClose.ts`
-- Modify: `apps/code-agent/src/__tests__/usecases/handlePrClose.test.ts`
+- Modify: `apps/code-agent/src/__tests__/domain/useCases/handlePrClose.test.ts`
 
 - [ ] **Step 1: Write failing test for prMergedAt population**
 
-Add a test in `apps/code-agent/src/__tests__/usecases/handlePrClose.test.ts`:
+Add a test in `apps/code-agent/src/__tests__/domain/useCases/handlePrClose.test.ts`:
 
 ```typescript
 it('sets prMergedAt on tasks found via findByPR when PR is merged', async () => {
@@ -203,16 +203,17 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/code-agent/src/domain/usecases/handlePrClose.ts apps/code-agent/src/__tests__/usecases/handlePrClose.test.ts
+git add apps/code-agent/src/domain/usecases/handlePrClose.ts apps/code-agent/src/__tests__/domain/useCases/handlePrClose.test.ts
 git commit -m "feat(code-agent): set prMergedAt on tasks when PR is merged (INT-1174)"
 ```
 
 ### Task 3: Add `findTasksWithMergedPrBefore` repository method
 
+> **⚠️ Architecture note (INT-1174 review):** The original plan used `findTasksWithMergedPrBefore()` which pre-filters by `status IN TERMINAL_NON_ARCHIVED_STATUSES`. This excludes active tasks from the query results, making the `hasActive` safety check in the use case a no-op. The fix uses `listAllNonArchivedGlobal()` and filters in-memory, matching the `archiveStaleGroups` pattern.
+
 **Files:**
 - Modify: `apps/code-agent/src/domain/repositories/codeTaskRepository.ts`
 - Modify: `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts`
-- Create: `apps/code-agent/src/infra/migrations/017_prMergedAt_status_index.mjs`
 
 - [ ] **Step 1: Add method to repository interface**
 
@@ -221,29 +222,21 @@ In `apps/code-agent/src/domain/repositories/codeTaskRepository.ts`, add after `l
 ```typescript
   /**
    * Find tasks with merged PRs older than cutoff date.
-   * Returns tasks where prMergedAt < cutoffDate and status is terminal but not archived.
+   * Returns all non-archived tasks where prMergedAt < cutoffDate.
    * Used by the auto-archive-merged-tasks scheduler (INT-1174).
+   *
+   * NOTE: This method returns ALL non-archived tasks (including active ones)
+   * so that the caller can properly check for active siblings before archiving.
+   * The hasActive check in autoArchiveMergedTasks requires seeing all tasks
+   * for a given linearIssueId to avoid archiving a task while its sibling
+   * is still running.
    */
   findTasksWithMergedPrBefore(
     cutoffDate: Date
   ): Promise<Result<CodeTask[], RepositoryError>>;
 ```
 
-- [ ] **Step 2: Define terminal non-archived statuses constant**
-
-In `apps/code-agent/src/domain/issueGrouping/constants.ts`, add:
-
-```typescript
-/**
- * Terminal statuses that are eligible for auto-archiving.
- * Excludes 'archived' (already archived) and active statuses (running/dispatched/queued).
- */
-export const TERMINAL_NON_ARCHIVED_STATUSES = [
-  'planned', 'implemented', 'reviewed', 'failed', 'interrupted', 'cancelled',
-] as const;
-```
-
-- [ ] **Step 3: Implement in Firestore repository**
+- [ ] **Step 2: Implement in Firestore repository**
 
 In `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts`, add near `listAllNonArchivedGlobal`:
 
@@ -251,10 +244,12 @@ In `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts`, add 
 findTasksWithMergedPrBefore: async (cutoffDate: Date): Promise<Result<CodeTask[], RepositoryError>> => {
   try {
     const cutoffTimestamp = Timestamp.fromDate(cutoffDate);
+    // Query ALL non-archived tasks (including active ones) so the caller
+    // can properly check for active siblings before archiving a group.
+    // The hasActive safety check requires seeing all tasks for a given issue.
     const snapshot = await collection
       .where('prMergedAt', '<', cutoffTimestamp)
-      .where('status', 'in', TERMINAL_NON_ARCHIVED_STATUSES)
-      .orderBy('prMergedAt', 'asc')
+      .where('status', '!=', 'archived')
       .get();
 
     const tasks = snapshot.docs.map((doc: QueryDocumentSnapshot) =>
@@ -272,41 +267,10 @@ findTasksWithMergedPrBefore: async (cutoffDate: Date): Promise<Result<CodeTask[]
 },
 ```
 
-- [ ] **Step 4: Create Firestore composite index migration**
-
-Create `apps/code-agent/src/infra/migrations/017_prMergedAt_status_index.mjs`:
-
-```javascript
-/**
- * Migration 017: Composite index for auto-archive merged tasks query (INT-1174).
- *
- * Query: where('prMergedAt', '<', cutoff).where('status', 'in', [...])
- * Requires composite index: (prMergedAt ASC, status ASC)
- *
- * Create via Firebase CLI or Console:
- *   Collection: code_tasks
- *   Fields: prMergedAt (Ascending), status (Ascending)
- *   Query scope: Collection
- */
-
-export const migration = {
-  id: '017_prMergedAt_status_index',
-  description: 'Composite index on (prMergedAt, status) for auto-archive merged tasks query',
-  collection: 'code_tasks',
-  index: {
-    fields: [
-      { fieldPath: 'prMergedAt', order: 'ASCENDING' },
-      { fieldPath: 'status', order: 'ASCENDING' },
-    ],
-    queryScope: 'COLLECTION',
-  },
-};
-```
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add apps/code-agent/src/domain/repositories/codeTaskRepository.ts apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts apps/code-agent/src/domain/issueGrouping/constants.ts apps/code-agent/src/infra/migrations/017_prMergedAt_status_index.mjs
+git add apps/code-agent/src/domain/repositories/codeTaskRepository.ts apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts
 git commit -m "feat(code-agent): add findTasksWithMergedPrBefore repository method (INT-1174)"
 ```
 
