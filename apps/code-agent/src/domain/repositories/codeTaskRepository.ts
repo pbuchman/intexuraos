@@ -75,6 +75,7 @@ export interface UpdateTaskInput {
   // PR correlation (INT-465): populated on task completion from result.prUrl
   prNumber?: number;
   prBranch?: string;
+  prMergedAt?: Date;  // When PR was merged (INT-1174)
   executionMemoryContext?: CodeTask['executionMemoryContext'];
   executionMemoryPostRun?: CodeTask['executionMemoryPostRun'];
 

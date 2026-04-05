@@ -500,6 +500,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.prBranch !== undefined) {
           updateData['prBranch'] = input.prBranch;
         }
+        if (input.prMergedAt !== undefined) {
+          updateData['prMergedAt'] = Timestamp.fromDate(input.prMergedAt);
+        }
         if (input.executionMemoryContext !== undefined) {
           const serializedExecutionMemoryContext = serializeExecutionMemoryContext(
             input.executionMemoryContext
