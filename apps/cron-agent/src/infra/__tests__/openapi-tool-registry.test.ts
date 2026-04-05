@@ -652,6 +652,45 @@ describe('OpenApiToolRegistry', () => {
     );
   });
 
+  it('listServiceTools excludes services with empty allowedOperations that produce zero tools', async () => {
+    const blockedService: ServiceDefinition = {
+      key: 'blocked-service',
+      name: 'Blocked Service',
+      url: 'http://blocked:8128',
+      openapiUrl: 'http://blocked:8128/openapi.json',
+      allowedOperations: [],
+    };
+
+    const multiRegistry = new OpenApiToolRegistry({
+      allowedServices: [testService, blockedService],
+      internalAuthToken: 'test-token',
+      logger: createTestLogger() as unknown as Logger,
+    });
+
+    nock('http://code-agent:8128')
+      .get('/openapi.json')
+      .reply(200, TEST_OPENAPI_SPEC);
+
+    nock('http://blocked:8128')
+      .get('/openapi.json')
+      .reply(200, {
+        openapi: '3.1.1',
+        info: { title: 'Blocked', version: '1.0.0' },
+        paths: {
+          '/internal/dangerous': {
+            post: {
+              operationId: 'dangerousOp',
+              summary: 'Should be blocked',
+            },
+          },
+        },
+      });
+
+    const services = await multiRegistry.listServiceTools();
+    expect(services.length).toBe(1);
+    expect(services[0]?.key).toBe('code-agent');
+  });
+
   it('handles parameter without schema', async () => {
     const specNoParamSchema = {
       openapi: '3.1.1',

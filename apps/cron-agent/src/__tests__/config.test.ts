@@ -90,6 +90,7 @@ describe('loadConfig', () => {
     expect(config.allowedServices[0]?.name).toBe('Code Agent');
     expect(config.allowedServices[0]?.url).toBe('https://code-agent.example.com');
     expect(config.allowedServices[0]?.openapiUrl).toBe('https://code-agent.example.com/openapi.json');
+    expect(config.allowedServices[0]?.allowedOperations).toEqual(['getTaskDispatchMetadata', 'getLinearIssueContext']);
   });
 
   it('uses explicit OpenAPI URL when provided for a configured service', () => {
@@ -116,24 +117,28 @@ describe('loadConfig', () => {
         name: 'User Service',
         url: 'https://user-service.example.com',
         openapiUrl: 'https://user-service.example.com/openapi.json',
+        allowedOperations: [],
       },
       {
         key: 'code-agent',
         name: 'Code Agent',
         url: 'https://code-agent.example.com',
         openapiUrl: 'https://code-agent.example.com/openapi.json',
+        allowedOperations: ['getTaskDispatchMetadata', 'getLinearIssueContext'],
       },
       {
         key: 'web-agent',
         name: 'Web Agent',
         url: 'https://web-agent.example.com',
         openapiUrl: 'https://web-agent.example.com/openapi.json',
+        allowedOperations: ['fetchLinkPreviewsInternal', 'summarizePageInternal'],
       },
       {
         key: 'cron-agent',
         name: 'Cron Agent',
         url: 'https://cron-agent.example.com',
         openapiUrl: 'https://cron-agent.example.com/openapi.json',
+        allowedOperations: [],
       },
     ]);
   });
@@ -144,5 +149,57 @@ describe('loadConfig', () => {
     const config = loadConfig();
 
     expect(config.allowedServices).toEqual([]);
+  });
+
+  it('every catalog entry propagates allowedOperations to built services', () => {
+    process.env['INTEXURAOS_USER_SERVICE_URL'] = 'https://user-service.example.com';
+    process.env['INTEXURAOS_NOTION_SERVICE_URL'] = 'https://notion-service.example.com';
+    process.env['INTEXURAOS_WHATSAPP_SERVICE_URL'] = 'https://whatsapp-service.example.com';
+    process.env['INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL'] = 'https://mobile-notifications-service.example.com';
+    process.env['INTEXURAOS_RESEARCH_AGENT_URL'] = 'https://research-agent.example.com';
+    process.env['INTEXURAOS_COMMANDS_AGENT_URL'] = 'https://commands-agent.example.com';
+    process.env['INTEXURAOS_ACTIONS_AGENT_URL'] = 'https://actions-agent.example.com';
+    process.env['INTEXURAOS_DATA_INSIGHTS_AGENT_URL'] = 'https://data-insights-agent.example.com';
+    process.env['INTEXURAOS_IMAGE_SERVICE_URL'] = 'https://image-service.example.com';
+    process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'] = 'https://app-settings-service.example.com';
+    process.env['INTEXURAOS_NOTES_AGENT_URL'] = 'https://notes-agent.example.com';
+    process.env['INTEXURAOS_TODOS_AGENT_URL'] = 'https://todos-agent.example.com';
+    process.env['INTEXURAOS_BOOKMARKS_AGENT_URL'] = 'https://bookmarks-agent.example.com';
+    process.env['INTEXURAOS_CALENDAR_AGENT_URL'] = 'https://calendar-agent.example.com';
+    process.env['INTEXURAOS_CHAT_AGENT_URL'] = 'https://chat-agent.example.com';
+    process.env['INTEXURAOS_CODE_AGENT_URL'] = 'https://code-agent.example.com';
+    process.env['INTEXURAOS_LINEAR_AGENT_URL'] = 'https://linear-agent.example.com';
+    process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
+    process.env['INTEXURAOS_CRON_AGENT_URL'] = 'https://cron-agent.example.com';
+    process.env['INTEXURAOS_HELLSCRIPT_AGENT_URL'] = 'https://hellscript-agent.example.com';
+
+    const config = loadConfig();
+
+    for (const service of config.allowedServices) {
+      expect(service).toHaveProperty('allowedOperations');
+      expect(Array.isArray(service.allowedOperations)).toBe(true);
+    }
+  });
+
+  it('blocked services have empty allowedOperations arrays', () => {
+    process.env['INTEXURAOS_USER_SERVICE_URL'] = 'https://user-service.example.com';
+    process.env['INTEXURAOS_COMMANDS_AGENT_URL'] = 'https://commands-agent.example.com';
+    process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'] = 'https://app-settings-service.example.com';
+    process.env['INTEXURAOS_CRON_AGENT_URL'] = 'https://cron-agent.example.com';
+    process.env['INTEXURAOS_CHAT_AGENT_URL'] = 'https://chat-agent.example.com';
+    process.env['INTEXURAOS_WHATSAPP_SERVICE_URL'] = 'https://whatsapp-service.example.com';
+    process.env['INTEXURAOS_HELLSCRIPT_AGENT_URL'] = 'https://hellscript-agent.example.com';
+
+    const config = loadConfig();
+
+    const blockedKeys = [
+      'user-service', 'commands-agent', 'app-settings-service',
+      'cron-agent', 'chat-agent', 'whatsapp-service', 'hellscript-agent',
+    ];
+
+    for (const key of blockedKeys) {
+      const service = config.allowedServices.find((s) => s.key === key);
+      expect(service?.allowedOperations).toEqual([]);
+    }
   });
 });
