@@ -100,7 +100,7 @@ Additionally, some user-scoped endpoints expose sensitive data:
 | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `apps/cron-agent/src/domain/types.ts`                        | Replace `description` with `scheduleSummary` on `CronSchedule`; replace `description` with `schedule` on `CreateScheduleInput`/`UpdateScheduleInput` |
 | `apps/cron-agent/src/domain/ports/schedule-repository.ts`    | Update `create` signature (input type changes)                                                                                                       |
-| `apps/cron-agent/src/domain/ports/tool-registry.ts`          | No change (interface is fine)                                                                                                                        |
+| `apps/cron-agent/src/domain/ports/tool-registry.ts`          | Add `ToolExecutionContext` interface; update `getToolsForService`/`getToolsForServices` to accept optional `context?: ToolExecutionContext`          |
 | `apps/cron-agent/src/domain/use-cases/manage-schedule.ts`    | Pass `schedule` (not `description`) to parser; store `scheduleSummary`; pass `userId` to execute deps                                                |
 | `apps/cron-agent/src/domain/use-cases/execute-action.ts`     | Accept `userId`, pass to tool registry and include in prompt                                                                                         |
 | `apps/cron-agent/src/domain/use-cases/execute-schedule.ts`   | Pass `schedule.userId` to `executeAction`                                                                                                            |
@@ -509,6 +509,28 @@ const INTERNAL_API_SERVICE_CATALOG = [
 2. Verify the operationId matches exactly (case-sensitive)
 3. If a service has no internal routes with operationIds, set `allowedOperations: []`
 
+- [ ] **Step 1b: Update `buildAllowedServices` to propagate `allowedOperations`**
+
+The `buildAllowedServices` function in `config.ts` converts catalog entries into `ServiceDefinition` objects. It currently does NOT copy `allowedOperations`, silently dropping the field and defeating the security allowlists.
+
+Update the return object in `buildAllowedServices` to spread `allowedOperations` from the catalog entry:
+
+```typescript
+return [
+  {
+    key: entry.key,
+    name: entry.name,
+    url,
+    openapiUrl: explicitOpenApiUrl !== '' ? explicitOpenApiUrl : `${url}/openapi.json`,
+    ...(entry.allowedOperations !== undefined && {
+      allowedOperations: [...entry.allowedOperations],
+    }),
+  },
+];
+```
+
+Note: since `INTERNAL_API_SERVICE_CATALOG` is `as const`, `entry.allowedOperations` is `readonly string[]` — spread into a mutable array to satisfy `allowedOperations?: string[] | undefined`.
+
 - [ ] **Step 2: Verify operationIds are correct**
 
 For each service in the catalog, read the internal routes file and extract the actual `operationId` values. Update the allowlist with the verified values. This is critical — a typo means the operation is silently blocked.
@@ -589,20 +611,21 @@ export interface ToolRegistry {
 }
 ```
 
-- [ ] **Step 3: Inject X-Cron-User-Id header in OpenApiToolRegistry**
+- [ ] **Step 3: Inject X-Cron-User-Id header in OpenApiToolRegistry via closure capture**
 
-In `apps/cron-agent/src/infra/openapi-tool-registry.ts`, update `createRunCallback` to accept and inject userId:
+In `apps/cron-agent/src/infra/openapi-tool-registry.ts`, update `createRunCallback` to capture `userId` directly in its closure:
 
 ```typescript
 private createRunCallback(
   service: ServiceDefinition,
   method: string,
   path: string,
-): (args: Record<string, unknown>, context?: ToolExecutionContext) => Promise<string> {
+  userId?: string,   // NEW — captured directly in the closure
+): (args: Record<string, unknown>) => Promise<string> {
   const { internalAuthToken } = this.deps;
   const baseUrl = service.url;
 
-  return async (args: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> => {
+  return async (args: Record<string, unknown>): Promise<string> => {
     // ... existing arg processing ...
 
     const headers: Record<string, string> = {
@@ -611,8 +634,8 @@ private createRunCallback(
     };
 
     // Inject user identity for downstream authorization
-    if (context?.userId !== undefined) {
-      headers['X-Cron-User-Id'] = context.userId;
+    if (userId !== undefined) {
+      headers['X-Cron-User-Id'] = userId;
     }
 
     // ... rest of fetch logic unchanged
@@ -620,7 +643,7 @@ private createRunCallback(
 }
 ```
 
-Update `getToolsForService` and `getToolsForServices` to pass context through to tool run callbacks. The `ToolDefinition.run` signature accepts `Record<string, unknown>` — the context needs to be woven into the closure:
+Update `getToolsForService` to pass `context?.userId` when building tools:
 
 ```typescript
 async getToolsForService(serviceKey: string, context?: ToolExecutionContext): Promise<ToolDefinition[]> {
@@ -628,13 +651,11 @@ async getToolsForService(serviceKey: string, context?: ToolExecutionContext): Pr
   const tools = await this.fetchAndGenerateTools(service);
   // ... cache logic ...
 
-  // If context provided, wrap run callbacks to inject context
+  // If context provided, rebuild tools with userId-capturing callbacks
   if (context !== undefined) {
     return tools.map((tool) => ({
       ...tool,
-      run: async (args: Record<string, unknown>): Promise<string> => {
-        return await (tool.run as (args: Record<string, unknown>, ctx?: ToolExecutionContext) => Promise<string>)(args, context);
-      },
+      run: this.createRunCallback(service, tool.method, tool.path, context.userId),
     }));
   }
   return tools;
@@ -871,7 +892,20 @@ Existing Firestore documents have a `description` field but will NOT have `sched
 1. **Preferred:** Add a Firestore migration that copies `description` → `scheduleSummary` for all existing documents and removes the `description` field
 2. **Alternative:** Handle both fields in the read path with a fallback: `doc.scheduleSummary ?? doc.description ?? ''`
 
-Option 2 is simpler and more resilient. If chosen, add it in `firestore-schedule-repository.ts` in the `normalizeCronSchedule` function.
+Option 2 is simpler and more resilient. If chosen, apply the fallback at the document read site before the `CronSchedule` cast, e.g. in `firestore-schedule-repository.ts` wherever `doc.data()` is read:
+
+```typescript
+// In firestore-schedule-repository.ts, wherever doc.data() is read:
+const data = doc.data() as Record<string, unknown>;
+const scheduleSummary = (data['scheduleSummary'] ?? data['description'] ?? '') as string;
+return ok(normalizeCronSchedule({
+  id: doc.id,
+  ...data,
+  scheduleSummary,
+} as CronSchedule));
+```
+
+The `normalizeCronSchedule` function in `types.ts` is the wrong location because by the time `normalizeCronSchedule` is called, the data has already been cast to `CronSchedule`, so `description` and `scheduleSummary` are already the wrong TypeScript type (one is missing).
 
 ---
 
