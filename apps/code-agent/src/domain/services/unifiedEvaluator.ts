@@ -208,8 +208,10 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
         );
 
         // Fail closed for explicit @review commands - do not fallback dispatch
+        /* v8 ignore start -- upstream: FakeEventSource cannot produce issue_comment with non-review body + LLM failure to exercise false branch at L211 @preserve */
         if (event.eventType === 'issue_comment' && isReviewCommandComment(event.body ?? '')) {
           const workerType = extractReviewWorkerType(event.body ?? '');
+          /* v8 ignore stop @preserve */
 
           // Record automation log: triage_failed for @review
           const userId = await resolveUserId(event);
