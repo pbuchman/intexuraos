@@ -11,7 +11,8 @@ export type CompletionAgentType =
   | 'execution'
   | 'pull_request'
   | 'review'
-  | 'remediation';
+  | 'remediation'
+  | 'ask_agent';
 
 export interface CompletionVerifierInput {
   taskId: string;

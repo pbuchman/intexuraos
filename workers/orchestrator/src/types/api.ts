@@ -24,7 +24,7 @@ export interface CreateTaskRequest {
    */
   retriedFrom?: string;
   /** Agent type determined by code-agent routing analysis. */
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent';
   /** Prompt-ready execution memory context prepared by code-agent retrieval. */
   executionMemoryContext?: ExecutionMemoryPromptContext;
   /** Existing PR tracking comment to reuse instead of creating a new one. */
