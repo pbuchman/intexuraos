@@ -5320,6 +5320,51 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(labelCalls).toHaveLength(0);
     });
 
+    it('still applies ready-to-merge label when GitHub API fallback confirms PR is not merged', async () => {
+      await createOriginTask({ traceId: 'trace_label_fallback_not_merged', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_fallback_not_merged_review' });
+
+      // Simulate stale summary: says NOT merged
+      const mockFindByPullRequest = vi.fn().mockResolvedValue(
+        ok({ mergedAt: null })
+      );
+      // GitHub API also says NOT merged (PR still open)
+      const mockGetPullRequestStatus = vi.fn().mockResolvedValue(
+        ok({ state: 'open' as const, mergedAt: null, headRef: 'feature/test' })
+      );
+      // OAuth token needed for fallback API call
+      const mockGetOAuthToken = vi.fn().mockResolvedValue(
+        ok({ accessToken: 'test-token', email: 'test@test.com' })
+      );
+      setServices({
+        ...getServices(),
+        gitHubPRSummaryRepo: {
+          ...getServices().gitHubPRSummaryRepo,
+          findByPullRequest: mockFindByPullRequest,
+        },
+        gitHubPRClient: {
+          ...getServices().gitHubPRClient,
+          getPullRequestStatus: mockGetPullRequestStatus,
+        },
+        userServiceClient: {
+          ...getServices().userServiceClient,
+          getOAuthToken: mockGetOAuthToken,
+        },
+      });
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      // Label SHOULD be applied since PR is not merged
+      const labelCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].addLabels !== undefined && call[0].addLabels.includes('ready-to-merge')
+      );
+      expect(labelCalls).toHaveLength(1);
+    });
+
     it('does NOT set labels when needs_remediation is not "0"', async () => {
       await createOriginTask({ traceId: 'trace_label_remediation', agentType: 'execution' });
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_remediation_review' });
