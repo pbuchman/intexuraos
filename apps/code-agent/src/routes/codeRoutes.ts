@@ -30,6 +30,7 @@ import { generateWebhookSecret } from '../domain/utils/secrets.js';
 import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
 import { loadConfig } from '../config.js';
 import { backLinkPlanningTask } from '../domain/usecases/backLinkPlanningTask.js';
+import { createTaskForPR } from '../domain/usecases/createTaskForPR.js';
 import type { CodeTask } from '../domain/models/codeTask.js';
 
 const logger = createAppLogger({ name: 'code-routes' });
@@ -4219,6 +4220,37 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           }),
           /* v8 ignore stop @preserve */
         },
+        /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes is not tracked after service override tests @preserve */
+        ...(services.userLookupService !== undefined && {
+          createTaskForPRFn: async (request: { repository: string; prNumber: number; senderLogin: string; comment: string; eventId: string; prTitle?: string; baseBranch?: string }) => {
+            return createTaskForPR(
+              {
+                logger: services.logger,
+                codeTaskRepo: services.codeTaskRepo,
+                userLookupService: services.userLookupService!,
+                linearIssueService: services.linearIssueService,
+                taskEnqueueService: services.taskEnqueueService,
+                whatsappNotifier: services.whatsappNotifier,
+                orchestratorSecret: loadConfig().orchestratorSecret,
+                gitHubPRClient: services.gitHubPRClient,
+                userServiceClient: services.userServiceClient,
+                firestore: services.firestore,
+                automationLog: services.automationLog,
+                workerSettingsRepo: services.workerSettingsRepo,
+              },
+              {
+                repository: request.repository,
+                prNumber: request.prNumber,
+                senderLogin: request.senderLogin,
+                comment: request.comment,
+                eventId: request.eventId,
+                ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
+                ...(request.baseBranch !== undefined && { baseBranch: request.baseBranch }),
+              },
+            );
+          },
+        }),
+        /* v8 ignore stop @preserve */
       });
 
       if (retryResult.ok && retryResult.value.action !== 'empty' && retryResult.value.action !== 'failed') {

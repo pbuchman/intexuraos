@@ -305,6 +305,40 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
       });
       if (!updateResult.ok) return await handleLinearError(updateResult.error, reply);
 
+      // Write-through: update the Firestore cache with the actual labels from Linear.
+      // This prevents stale label data from being served by fetchIssuesForDisplay
+      // until the next Linear webhook arrives.
+      const updatedLabels = updateResult.value.labels.map((l) => ({ // @allow-result-access -- guarded by if (!updateResult.ok) above
+        id: l.id,
+        name: l.name,
+        color: l.color,
+      }));
+      const saveResult = await services.issueRepository.save({
+        ...syncedIssue,
+        labels: updatedLabels,
+        syncedAt: new Date().toISOString(),
+      });
+      if (!saveResult.ok) {
+        request.log.warn(
+          { issueId, error: saveResult.error },
+          'updateIssueMetadata: write-through cache update failed (best-effort)'
+        );
+      }
+
+      // Best-effort: notify code-agent to recompute group summary with updated labels.
+      // This mirrors what processWebhook does when it receives a label-change webhook.
+      void services.codeAgentClient.notifyGroupSummaryRecompute({
+        userId,
+        linearIssueId: syncedIssue.identifier,
+        labels: updatedLabels.map((l) => ({ id: l.id, name: l.name })),
+        sourceTimestamp: new Date().toISOString(),
+      }).catch((notifyErr: unknown) => {
+        request.log.warn(
+          { issueId, error: notifyErr },
+          'updateIssueMetadata: failed to notify code-agent of label change (best-effort)'
+        );
+      });
+
       return await reply.ok({
         id: updateResult.value.id, // @allow-result-access -- guarded by if (!updateResult.ok) above
         labels: updateResult.value.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
