@@ -45,6 +45,8 @@ export interface UnifiedEvaluatorDeps {
   codeTaskRepo?: CodeTaskRepository | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
   /** Best-effort callback to post a GitHub comment when an unauthorized sender is rejected. */
   onUnauthorizedSender?: ((event: GitHubPREvent) => Promise<void>) | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
+  /** Best-effort callback when LLM triage skips a review. Used to set ready-to-merge label. */
+  onReviewSkipped?: ((params: { repository: string; prNumber: number }) => Promise<void>) | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
 }
 
 export interface UnifiedEvaluator {
@@ -395,6 +397,14 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
         llmToolCalls: usage.toolCalls,
         llmReasoning: reasoning,
       }, startTime, logger);
+
+      // Best-effort: notify that review was skipped so ready-to-merge label can be set.
+      // Only LLM triage skips qualify — hard-rules skips are pre-triage rejections.
+      if (deps.onReviewSkipped !== undefined) {
+        void deps.onReviewSkipped({ repository: event.repository, prNumber: event.pullRequestNumber }).catch((skipErr: unknown) => {
+          logger.warn({ error: skipErr, eventId: event.id }, 'onReviewSkipped callback failed (best-effort)');
+        });
+      }
     },
   };
 }
