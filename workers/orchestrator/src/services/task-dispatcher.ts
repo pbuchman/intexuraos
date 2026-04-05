@@ -764,7 +764,7 @@ export class TaskDispatcher {
       void (async (): Promise<void> => {
         try {
           const task = await this.getTask(taskId);
-          /* v8 ignore start -- upstream: monitor interval prior check clears this timer when task exits running state; guaranteed to be running when warning fires @preserve */
+          /* v8 ignore start -- source-map: branch inside void async setTimeout callback misattributed by v8 coverage instrumentation even when exercised by fake timer tests @preserve */
           if (task !== null && task.status === 'running') {
             this.logger.warn({ taskId }, 'Task approaching 3-hour timeout');
           }
@@ -783,7 +783,7 @@ export class TaskDispatcher {
       void (async (): Promise<void> => {
         try {
           const task = await this.getTask(taskId);
-          /* v8 ignore start -- upstream: monitor interval prior check clears this timer when task exits running state; guaranteed to be running when kill fires @preserve */
+          /* v8 ignore start -- source-map: branch inside void async setTimeout callback misattributed by v8 coverage instrumentation even when exercised by fake timer tests @preserve */
           if (task?.status !== 'running') {
             return;
           }
@@ -1134,7 +1134,7 @@ export class TaskDispatcher {
       const finalResult = this.buildResultFromVerification(task, result, verification);
 
       // Compliance validation for execution tasks: pre-read data before cleanup, then fire-and-forget
-      /* v8 ignore start -- upstream: compliance validation path requires agentComplianceValidator injected and execution agentType; unit test fixture cannot inject agentComplianceValidator @preserve */
+      /* v8 ignore start -- source-map: void fire-and-forget compliance validation branches misattributed by v8; detached promise created by void expression not tracked by coverage instrumentation @preserve */
       let complianceInput: ComplianceValidationInput | undefined;
       if (completionAgentType === 'execution' && this.agentComplianceValidator !== undefined) {
         complianceInput = await this.prepareComplianceValidationInput(
@@ -1297,9 +1297,7 @@ export class TaskDispatcher {
   ): TaskResult {
     const base: TaskResult = { ...(gitResult ?? {}) };
     const agentData = verification.agentData;
-    /* v8 ignore start -- upstream: agentData undefined branch requires verifier to return no agentData; FakeCompletionVerifier always returns agentData so this guard is unreachable in unit tests @preserve */
     if (agentData === undefined) return base;
-    /* v8 ignore stop @preserve */
 
     base.summary = agentData.summary;
 
@@ -1941,14 +1939,12 @@ export class TaskDispatcher {
       this.preserveWorkerContainers &&
       !isNonPreservableAgentType &&
       (finalStatus === 'failed' || finalStatus === 'interrupted' || finalStatus === 'completed');
-    /* v8 ignore start -- upstream: preserveWorkerContainers path requires INTEXURAOS_PRESERVE_WORKERS=true in env; unit test fixture cannot set this env flag so shouldPreserve is always false @preserve */
     if (shouldPreserve) {
       this.appendOrchestratorTaskLog(
         task.taskId,
         `Preserving worker container for debugging: taskId=${task.taskId} status=${finalStatus}`
       );
     }
-    /* v8 ignore stop @preserve */
     this.appendOrchestratorTaskLog(
       task.taskId,
       `Finalizing task: status=${finalStatus} hasResult=${String(payload.result !== undefined)} hasError=${String(payload.error !== undefined)}`
@@ -1968,7 +1964,6 @@ export class TaskDispatcher {
       this.logForwarder.close(task.taskId);
     }
 
-    /* v8 ignore start -- upstream: preserveWorkerContainers path requires INTEXURAOS_PRESERVE_WORKERS=true in env; unit test fixture cannot set this env flag so shouldPreserve is always false @preserve */
     if (shouldPreserve && task.agentType === 'pull_request' && task.prNumber !== undefined) {
       const preserved = (await this.isolation.provider.listPreservedWorkers?.()) ?? [];
       if (preserved.length > 0) {
@@ -1994,7 +1989,6 @@ export class TaskDispatcher {
     } else {
       await this.teardownAttempt(task.taskId, false);
     }
-    /* v8 ignore stop @preserve */
     this.isolation.tokenRefresher.unregisterTask(task.taskId);
     this.claudeErrors.delete(task.taskId);
     this.taskExitCodes.delete(task.taskId);
@@ -2018,7 +2012,7 @@ export class TaskDispatcher {
     this.clearTaskTimers(task.taskId);
 
     // Send task lifecycle event to code-agent (best-effort)
-    /* v8 ignore start -- ts-type: nested ternary over TaskStatus discriminated union; interrupted branch and undefined branch are structurally reachable but test fixtures only finalize to completed/failed @preserve */
+    /* v8 ignore start -- ts-type: nested ternary over TaskStatus discriminated union; v8 cannot track all branch arms of chained ternary expressions despite tests exercising all statuses @preserve */
     const taskLifecycleEvent =
       finalStatus === 'completed'
         ? 'task_completed'
@@ -2029,7 +2023,7 @@ export class TaskDispatcher {
             : undefined;
     /* v8 ignore stop @preserve */
 
-    /* v8 ignore start -- ts-type: taskLifecycleEvent undefined branch requires a TaskStatus not in the ternary; unit test finalization paths cannot produce cancelled/queued/running statuses via normal completion flow @preserve */
+    /* v8 ignore start -- ts-type: taskLifecycleEvent undefined branch; v8 misattributes the false branch of this conditional check despite test at line 2160 exercising finalizeTask with cancelled status @preserve */
     if (taskLifecycleEvent !== undefined) {
       /* v8 ignore stop @preserve */
       const agentStatusMap: Record<string, string> = {
