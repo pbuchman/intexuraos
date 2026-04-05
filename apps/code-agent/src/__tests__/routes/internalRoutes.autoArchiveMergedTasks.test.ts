@@ -16,7 +16,7 @@ import { buildServer } from '../../server.js';
 import { getServices, resetServices, setServices } from '../../services.js';
 import { resetFirestore } from '@intexuraos/infra-firestore';
 import { setupTestServices } from '../helpers/mockServices.js';
-import { err } from '@intexuraos/common-core';
+import { err, ok } from '@intexuraos/common-core';
 
 const processExecutionMemoryBacklogMock = vi.fn();
 
@@ -120,6 +120,19 @@ describe('POST /internal/auto-archive-merged-tasks', () => {
   });
 
   it('passes mergeDays from request body to use case', async () => {
+    const services = getServices();
+    const archiveSpy = vi.fn().mockResolvedValue(ok({
+      totalTasksFetched: 0,
+      totalGroupsEvaluated: 0,
+      groupsArchived: 0,
+      groupsSkippedActive: 0,
+      tasksArchived: 0,
+      tasksFailed: 0,
+      durationMs: 0,
+    }));
+
+    setServices({ ...services, autoArchiveMergedTasks: archiveSpy });
+
     const response = await app.inject({
       method: 'POST',
       url: '/internal/auto-archive-merged-tasks',
@@ -131,9 +144,7 @@ describe('POST /internal/auto-archive-merged-tasks', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    // With empty Firestore, result is always 0 regardless of mergeDays
-    const body = JSON.parse(response.body) as { totalTasksFetched: number };
-    expect(body.totalTasksFetched).toBe(0);
+    expect(archiveSpy).toHaveBeenCalledWith({ mergeDays: 14 });
   });
 
   it('returns 500 when autoArchiveMergedTasks use case returns error', async () => {
