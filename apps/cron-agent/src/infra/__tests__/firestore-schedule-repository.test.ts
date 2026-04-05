@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { getFirestore } from '@intexuraos/infra-firestore';
 import { FirestoreScheduleRepository } from '../firestore-schedule-repository.js';
 import { initTestFirestore, cleanupTestFirestore } from './test-helpers.js';
 
@@ -474,6 +475,132 @@ describe('FirestoreScheduleRepository', () => {
     expect(result.error.code).toBe('INTERNAL_ERROR');
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = savedProjectId ?? '';
     initTestFirestore();
+  });
+
+  describe('backward compatibility: legacy description fallback', () => {
+    const COLLECTION = 'cron_schedules';
+
+    function legacyDoc(overrides?: Record<string, unknown>): Record<string, unknown> {
+      return {
+        userId: 'user-1',
+        name: 'Legacy Schedule',
+        description: 'Every weekday at 9am',
+        cronExpression: '0 9 * * 1-5',
+        timezone: 'UTC',
+        action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
+        status: 'active',
+        lastExecutedAt: null,
+        nextExecutionAt: '2026-01-02T09:00:00.000Z',
+        executionCount: 0,
+        failureCount: 0,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        ...overrides,
+      };
+    }
+
+    it('findById falls back to description when scheduleSummary is missing', async () => {
+      const db = getFirestore();
+      await db.collection(COLLECTION).doc('legacy-1').set(legacyDoc());
+
+      const result = await repo.findById('legacy-1');
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).not.toBeNull();
+      expect(result.value?.scheduleSummary).toBe('Every weekday at 9am');
+    });
+
+    it('findByUserId falls back to description when scheduleSummary is missing', async () => {
+      const db = getFirestore();
+      await db.collection(COLLECTION).doc('legacy-2').set(legacyDoc());
+
+      const result = await repo.findByUserId('user-1', { limit: 50 });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.schedules.length).toBeGreaterThanOrEqual(1);
+      const legacy = result.value.schedules.find((s) => s.id === 'legacy-2');
+      expect(legacy).toBeDefined();
+      expect(legacy?.scheduleSummary).toBe('Every weekday at 9am');
+    });
+
+    it('findDueSchedules falls back to description when scheduleSummary is missing', async () => {
+      const db = getFirestore();
+      const past = new Date(Date.now() - 60000).toISOString();
+      await db.collection(COLLECTION).doc('legacy-3').set(legacyDoc({
+        nextExecutionAt: past,
+      }));
+
+      const result = await repo.findDueSchedules(new Date());
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const legacy = result.value.find((s) => s.id === 'legacy-3');
+      expect(legacy).toBeDefined();
+      expect(legacy?.scheduleSummary).toBe('Every weekday at 9am');
+    });
+
+    it('update falls back to description when scheduleSummary is missing', async () => {
+      const db = getFirestore();
+      await db.collection(COLLECTION).doc('legacy-4').set(legacyDoc());
+
+      const result = await repo.update('legacy-4', { name: 'Updated Legacy' });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.name).toBe('Updated Legacy');
+      expect(result.value.scheduleSummary).toBe('Every weekday at 9am');
+    });
+
+    it('falls back to empty string when both scheduleSummary and description are missing', async () => {
+      const db = getFirestore();
+      const docData = legacyDoc();
+      delete docData['description'];
+      await db.collection(COLLECTION).doc('legacy-5').set(docData);
+
+      const result = await repo.findById('legacy-5');
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value?.scheduleSummary).toBe('');
+    });
+
+    it('findByUserId falls back to empty string when both fields missing', async () => {
+      const db = getFirestore();
+      const docData = legacyDoc();
+      delete docData['description'];
+      await db.collection(COLLECTION).doc('legacy-6').set(docData);
+
+      const result = await repo.findByUserId('user-1', { limit: 50 });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const legacy = result.value.schedules.find((s) => s.id === 'legacy-6');
+      expect(legacy).toBeDefined();
+      expect(legacy?.scheduleSummary).toBe('');
+    });
+
+    it('findDueSchedules falls back to empty string when both fields missing', async () => {
+      const db = getFirestore();
+      const past = new Date(Date.now() - 60000).toISOString();
+      const docData = legacyDoc({ nextExecutionAt: past });
+      delete docData['description'];
+      await db.collection(COLLECTION).doc('legacy-7').set(docData);
+
+      const result = await repo.findDueSchedules(new Date());
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const legacy = result.value.find((s) => s.id === 'legacy-7');
+      expect(legacy).toBeDefined();
+      expect(legacy?.scheduleSummary).toBe('');
+    });
+
+    it('update falls back to empty string when both fields missing', async () => {
+      const db = getFirestore();
+      const docData = legacyDoc();
+      delete docData['description'];
+      await db.collection(COLLECTION).doc('legacy-8').set(docData);
+
+      const result = await repo.update('legacy-8', { name: 'Updated No Summary' });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.scheduleSummary).toBe('');
+    });
   });
 
   it('handles cursor for non-existent doc in findByUserId', async () => {
