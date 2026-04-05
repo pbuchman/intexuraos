@@ -1176,11 +1176,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               },
               callbackReceived: true,
             });
-            /* v8 ignore start -- test-infra: FakeFirestore update always returns ok; cannot simulate repo failure @preserve */
             if (!failResult.ok) {
               return reply.fail('INTERNAL_ERROR', failResult.error.message);
             }
-            /* v8 ignore stop @preserve */
             await cleanupLockIfPR();
 
             recordTaskFailed({
@@ -1208,11 +1206,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               },
               callbackReceived: true,
             });
-            /* v8 ignore start -- test-infra: FakeFirestore update always returns ok; cannot simulate repo failure @preserve */
             if (!failResult.ok) {
               return reply.fail('INTERNAL_ERROR', failResult.error.message);
             }
-            /* v8 ignore stop @preserve */
             await cleanupLockIfPR();
 
             recordTaskFailed({

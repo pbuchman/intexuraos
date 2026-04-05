@@ -9924,6 +9924,46 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     expect(getResult.value.error?.message).toContain('prUrl');
   });
 
+  it('returns INTERNAL_ERROR when remediation missing-result update fails', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'Remediate update fail', sanitizedPrompt: 'Remediate update fail',
+      systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_rem_update_fail_1',
+      webhookSecret: 'test-webhook-secret', agentType: 'remediation',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR' as const, message: 'db down' }));
+
+    const payload = { taskId: task.id, status: 'completed' as const };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+
+    expect(response.statusCode).toBe(500);
+  });
+
+  it('returns INTERNAL_ERROR when remediation no-PR update fails', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'Remediate update fail 2', sanitizedPrompt: 'Remediate update fail 2',
+      systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_rem_update_fail_2',
+      webhookSecret: 'test-webhook-secret', agentType: 'remediation',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR' as const, message: 'db down' }));
+
+    const payload = { taskId: task.id, status: 'completed' as const, result: { execution_outcome_label: 'implemented' as const, summary: 'Fixed stuff' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+
+    expect(response.statusCode).toBe(500);
+  });
+
   it('remediation with already_completed outcome and no PR URL passes enforcement', async () => {
     const createResult = await codeTaskRepo.create({
       userId: 'user-123', prompt: 'Remediate already done', sanitizedPrompt: 'Remediate already done',
