@@ -151,6 +151,17 @@ describe('drainRetryQueue', () => {
     ttlMinutes: 10,
   };
 
+  const sampleTaskMessageRetryWithContext = {
+    ...sampleTaskMessageRetry,
+    prTitle: 'Fix the login bug',
+    baseBranch: 'feature/login',
+  };
+
+  const sampleTaskMessageRetryNullMessage = {
+    ...sampleTaskMessageRetry,
+    message: null,
+  };
+
   const sampleTask = {
     id: 'task_xyz',
     userId: 'user_123',
@@ -1113,6 +1124,122 @@ describe('drainRetryQueue', () => {
       if (!result.ok) return;
       expect(result.value.action).toBe('failed');
       expect(result.value.taskId).toBe('task_xyz');
+      expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_def');
+    });
+
+    it('creates new task when message retry fails with stale task error (worker_error + Task not found)', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [workerConfig] }));
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(
+        err({ code: 'worker_error', message: 'Worker returned HTTP 404: Task not found' })
+      );
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('stale_task_fallback');
+      expect(result.value.taskId).toBe('task_fallback_new');
+      expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_def');
+      expect(mockCreateTaskForPRFn).toHaveBeenCalledWith(expect.objectContaining({
+        repository: 'intexuraos/test-repo',
+        prNumber: 10,
+        senderLogin: 'testuser',
+        comment: 'please also fix tests',
+      }));
+    });
+
+    it('creates new task when message retry fails with task_not_found code', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [workerConfig] }));
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(
+        err({ code: 'task_not_found', message: 'Task task_xyz not found' })
+      );
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('stale_task_fallback');
+      expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_def');
+    });
+
+    it('creates new task with prTitle and baseBranch when message retry fails with stale task error', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetryWithContext));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [workerConfig] }));
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(
+        err({ code: 'worker_error', message: 'Worker returned HTTP 404: Task not found' })
+      );
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('stale_task_fallback');
+      expect(mockCreateTaskForPRFn).toHaveBeenCalledWith(expect.objectContaining({
+        prTitle: 'Fix the login bug',
+        baseBranch: 'feature/login',
+      }));
+    });
+
+    it('passes empty string when message is null', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetryNullMessage));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [workerConfig] }));
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(
+        err({ code: 'worker_error', message: 'Worker returned HTTP 404: Task not found' })
+      );
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('stale_task_fallback');
+      expect(mockCreateTaskForPRFn).toHaveBeenCalledWith(expect.objectContaining({
+        comment: '',
+      }));
+    });
+
+    it('returns failed when stale task fallback createTaskForPRFn fails', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [workerConfig] }));
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(
+        err({ code: 'worker_error', message: 'Worker returned HTTP 404: Task not found' })
+      );
+      mockCreateTaskForPRFn.mockResolvedValue(err({ code: 'internal_error', message: 'Linear issue creation failed' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('failed');
+      expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_def');
+    });
+
+    it('falls through to permanent failure when stale but no createTaskForPRFn configured', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [workerConfig] }));
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(
+        err({ code: 'worker_error', message: 'Worker returned HTTP 404: Task not found' })
+      );
+
+      // Build deps WITHOUT createTaskForPRFn
+      const depsWithoutFallback: Omit<DrainRetryQueueDeps, 'createTaskForPRFn'> = {
+        logger: mockLogger,
+        dispatchRetryRepo: mockDispatchRetryRepo as unknown as DrainRetryQueueDeps['dispatchRetryRepo'],
+        codeTaskRepo: mockCodeTaskRepo as unknown as DrainRetryQueueDeps['codeTaskRepo'],
+        taskDispatcher: mockTaskDispatcher as unknown as DrainRetryQueueDeps['taskDispatcher'],
+        linearAgentClient: mockLinearAgentClient as unknown as DrainRetryQueueDeps['linearAgentClient'],
+        whatsappNotifier: mockWhatsappNotifier as unknown as DrainRetryQueueDeps['whatsappNotifier'],
+        workerSettingsRepo: mockWorkerSettingsRepo as unknown as DrainRetryQueueDeps['workerSettingsRepo'],
+        logLineRepo: mockLogLineRepo as unknown as DrainRetryQueueDeps['logLineRepo'],
+        statusMirrorService: mockStatusMirrorService as unknown as DrainRetryQueueDeps['statusMirrorService'],
+      };
+
+      const result = await drainRetryQueue(depsWithoutFallback as DrainRetryQueueDeps);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('failed');
       expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_def');
     });
   });
