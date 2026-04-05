@@ -236,6 +236,7 @@ describe('POST /webhooks/github', () => {
       detectZombieTasks: {} as never,
       cleanupTaskLogs: {} as never,
       archiveStaleGroups: {} as never,
+      autoArchiveMergedTasks: {} as never,
       metricsClient: {} as never,
       workerSettingsRepo: {} as never,
       workerHealthProbe: {} as never,

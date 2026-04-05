@@ -1061,6 +1061,26 @@ describe('firestoreCodeTaskRepository', () => {
       if (!result.ok) return;
       expect(result.value.executionMemoryContext?.matchedAt).toBeUndefined();
     });
+
+    it('updates prMergedAt field', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const prMergedAt = new Date('2026-04-01T12:00:00.000Z');
+      const result = await repo.update(created.value.id, { prMergedAt });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      if (result.value.prMergedAt !== undefined) {
+        expect(result.value.prMergedAt.toDate()).toEqual(prMergedAt);
+      }
+    });
   });
 
   describe('list', () => {
