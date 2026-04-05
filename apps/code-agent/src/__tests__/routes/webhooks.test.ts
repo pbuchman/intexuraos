@@ -9854,6 +9854,29 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     expect(getResult.value.error?.message).toContain('PR URL');
   });
 
+  it('passes planning enforcement when prUrl is set as fallback (no planning_pr_url)', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'Plan with prUrl fallback', sanitizedPrompt: 'Plan with prUrl fallback',
+      systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_prurl_fallback',
+      linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '0' as const, planning_subtask_urls: '', prUrl: 'https://github.com/pbuchman/intexuraos/pull/999' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+
+    expect(response.statusCode).toBe(200);
+    const getResult = await codeTaskRepo.findById(task.id);
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) throw new Error('Failed');
+    // Should not fail enforcement — prUrl fallback is used
+    expect(getResult.value.status).not.toBe('failed');
+  });
+
   it('fails remediation when result is missing (no payload)', async () => {
     const createResult = await codeTaskRepo.create({
       userId: 'user-123', prompt: 'Remediate', sanitizedPrompt: 'Remediate',
