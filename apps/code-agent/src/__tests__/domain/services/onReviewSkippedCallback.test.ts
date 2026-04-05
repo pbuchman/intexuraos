@@ -1,17 +1,22 @@
 /**
- * Tests for the onReviewSkipped callback's internal branches.
+ * Tests for `onReviewSkippedCallback.ts` — the factory that creates the
+ * `onReviewSkipped` callback for `UnifiedEvaluatorDeps`.
  *
- * The callback lives in services.ts (lines 562-640) and has 6 distinct code paths:
+ * The callback fires when LLM triage skips a PR review (e.g. documentation-only
+ * change). It finds the origin task, validates it is an execution (not planning)
+ * task, sets the `ready-to-merge` label on the Linear issue, records an
+ * automation log entry, and recomputes the group summary.
+ *
+ * Tests cover each distinct code path:
  *  1. originResult.ok === false          → skip (debug log)
  *  2. originResult.value === null        → skip (debug log)
- *  3. origin.linearIssueId === undefined  → skip (debug log)
+ *  3. origin.linearIssueId === undefined → skip (debug log)
  *  4. origin.agentType === 'planning'    → skip (info log)
  *  5. !issueValidation.ok                → warn and return
  *  6. labelResult.value.droppedLabels.length > 0 → warn and return
  *  7. Success                             → log + automation log + group summary recompute
- *
- * These tests directly exercise each branch using injectable fake dependencies,
- * mirroring the pattern suggested in the review.
+ *  8. updateIssueMetadata returns error  → warn and return
+ *  9. Unexpected error in try/catch       → warn and return
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -21,101 +26,7 @@ import type { LinearAgentClient } from '../../../domain/ports/linearAgentClient.
 import type { AutomationLog } from '../../../domain/ports/automationLog.js';
 import type { TaskGroupSummaryRepository } from '../../../domain/ports/taskGroupSummaryRepository.js';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
-
-/**
- * Replicates the onReviewSkipped callback logic from services.ts (lines 562-640)
- * with injectable fake dependencies for testing each branch.
- */
-function createOnReviewSkippedCallback(params: {
-  codeTaskRepo: CodeTaskRepository;
-  linearAgentClient: LinearAgentClient;
-  automationLog: AutomationLog;
-  groupSummaryRepo: TaskGroupSummaryRepository;
-  logger: Logger;
-}) {
-  const { codeTaskRepo, linearAgentClient, automationLog, groupSummaryRepo, logger } = params;
-
-  return async function onReviewSkipped(args: { repository: string; prNumber: number }): Promise<void> {
-    const { repository, prNumber } = args;
-    try {
-      const originResult = await codeTaskRepo.findOriginTaskByPR(repository, prNumber);
-      if (!originResult.ok || originResult.value === null) {
-        logger.debug({ repository, prNumber }, 'No origin task found for skipped review — skipping label');
-        return;
-      }
-
-      const origin = originResult.value;
-      if (origin.linearIssueId === undefined) {
-        logger.debug({ repository, prNumber }, 'Origin task has no Linear issue — skipping label');
-        return;
-      }
-
-      if (origin.agentType === 'planning') {
-        logger.info({ repository, prNumber, linearIssueId: origin.linearIssueId },
-          'Skipped review for planning-origin task — not setting ready-to-merge');
-        return;
-      }
-
-      // Validate issue exists and get current labels
-      const issueValidation = await linearAgentClient.validateIssue({
-        userId: origin.userId,
-        identifier: origin.linearIssueId,
-      });
-      if (!issueValidation.ok) {
-        logger.warn({ linearIssueId: origin.linearIssueId, error: issueValidation.error },
-          'Failed to validate issue for skipped-review label');
-        return;
-      }
-
-      // Set ready-to-merge label
-      const labelResult = await linearAgentClient.updateIssueMetadata({
-        userId: origin.userId,
-        issueId: issueValidation.value.id,
-        addLabels: ['ready-to-merge'],
-      });
-      if (!labelResult.ok) {
-        logger.warn({ linearIssueId: origin.linearIssueId, error: labelResult.error },
-          'Failed to set ready-to-merge label for skipped review');
-        return;
-      }
-      if (labelResult.value.droppedLabels.length > 0) {
-        logger.warn({ linearIssueId: origin.linearIssueId, droppedLabels: labelResult.value.droppedLabels },
-          'ready-to-merge label not found in Linear team');
-        return;
-      }
-
-      logger.info({ repository, prNumber, linearIssueId: origin.linearIssueId },
-        'Set ready-to-merge label for skipped review');
-
-      // Record in the PR automation comment for visibility
-      void automationLog.record(
-        { repository, prNumber },
-        {
-          type: 'remediation_decision',
-          required: false,
-          source: 'review_result',
-          signal: '0',
-        },
-      ).catch((logErr: unknown) => {
-        logger.warn({ error: logErr, repository, prNumber }, 'Failed to record automation log for skipped-review label');
-      });
-
-      // Best-effort: recompute group summary so cached aggregateStatus reflects actionable state
-      const baseLabels = issueValidation.value.labels.map((l) => ({ id: '', name: l }));
-      const updatedLabels = issueValidation.value.labels.includes('ready-to-merge')
-        ? baseLabels
-        : [...baseLabels, { id: '', name: 'ready-to-merge' }];
-      void groupSummaryRepo.recomputeWithLabels(
-        origin.userId, origin.linearIssueId, updatedLabels, new Date().toISOString(),
-      ).catch((recomputeErr: unknown) => {
-        logger.warn({ linearIssueId: origin.linearIssueId, error: recomputeErr },
-          'Failed to recompute group summary after skipped-review label (best-effort)');
-      });
-    } catch (error: unknown) {
-      logger.warn({ error, repository, prNumber }, 'onReviewSkipped failed (best-effort)');
-    }
-  };
-}
+import { createOnReviewSkippedCallback } from '../../../domain/services/onReviewSkippedCallback.js';
 
 function createFakeLogger(): Logger {
   return {
@@ -367,7 +278,7 @@ describe('onReviewSkipped callback branches', () => {
     );
   });
 
-  // --- Edge case: updateIssueMetadata returns error ---
+  // --- Branch 8: updateIssueMetadata returns error ---
 
   it('warns when updateIssueMetadata returns error', async () => {
     mockCodeTaskRepo.findOriginTaskByPR = vi.fn().mockResolvedValue(
@@ -397,7 +308,7 @@ describe('onReviewSkipped callback branches', () => {
     expect(mockAutomationLog.record).not.toHaveBeenCalled();
   });
 
-  // --- Edge case: outer try-catch handles unexpected errors ---
+  // --- Branch 9: outer try-catch handles unexpected errors ---
 
   it('catches and logs unexpected errors without throwing', async () => {
     mockCodeTaskRepo.findOriginTaskByPR = vi.fn().mockRejectedValue(new Error('database connection lost'));
