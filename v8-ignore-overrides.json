@@ -1,6 +1,10 @@
 {
   "_comment": "Blocks that fail tightened validation but have planned fixes. Keyed by Linear task ID.",
   "overrides": {
+    "INT-1294": {
+      "files": ["apps/code-agent/src/domain/usecases/startAskAgent.ts"],
+      "description": "DUPLICATE_PROMPT branch at line 94 covered by test but v8 coverage reports uncovered in CI forks pool; FakeFirestore dedup logic is exercised by startAskAgent.test.ts:153"
+    },
     "INT-1071": {
       "files": [
         "workers/orchestrator/src/services/isolation/docker-provider.ts",

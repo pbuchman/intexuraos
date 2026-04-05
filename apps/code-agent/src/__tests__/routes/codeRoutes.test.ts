@@ -1008,6 +1008,50 @@ describe('codeRoutes', () => {
       expect(body.data.task.status).toBe('planned');
     });
 
+    it('accepts implemented status for ask_agent tasks', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a task with agentType ask_agent and status running
+      const created = await repo.create({
+        userId: 'user-123',
+        prompt: 'Ask agent question',
+        sanitizedPrompt: 'ask agent question',
+        systemPromptHash: 'abc123',
+        workerType: 'opus',
+        workerLocation: 'vm',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-123',
+        agentType: 'ask_agent',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, { status: 'running' });
+
+      const response = await server.inject({
+        method: 'PATCH',
+        url: `/internal/code-tasks/${created.value.id}`,
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {
+          status: 'implemented',
+          result: {
+            summary: 'Agent answered the question',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.task.status).toBe('implemented');
+    });
+
     it('returns 404 when task not found', async () => {
       const response = await server.inject({
         method: 'PATCH',

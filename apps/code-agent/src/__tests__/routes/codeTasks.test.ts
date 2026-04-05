@@ -405,6 +405,58 @@ describe('GET /code/tasks endpoints', () => {
       });
     });
 
+    describe('ask_agent filtering', () => {
+      it('excludes tasks with agentType ask_agent from results', async () => {
+        const userId = 'test-user-id';
+
+        const executionResult = await codeTaskRepo.create({
+          userId,
+          prompt: 'Execution task',
+          sanitizedPrompt: 'Execution task',
+          systemPromptHash: 'default',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace_exec',
+          agentType: 'execution',
+        });
+        if (!executionResult.ok) {
+          throw new Error(`Failed to create execution task: ${executionResult.error.message}`);
+        }
+
+        const askAgentResult = await codeTaskRepo.create({
+          userId,
+          prompt: 'Ask agent task',
+          sanitizedPrompt: 'Ask agent task',
+          systemPromptHash: 'default',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace_ask',
+          agentType: 'ask_agent',
+        });
+        if (!askAgentResult.ok) {
+          throw new Error(`Failed to create ask_agent task: ${askAgentResult.error.message}`);
+        }
+
+        const response = await app.inject({
+          method: 'GET',
+          url: '/code/tasks',
+          headers: {
+            authorization: 'Bearer test-token',
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(true);
+        expect(body.data.tasks.length).toBe(1);
+        expect(body.data.tasks[0].prompt).toBe('Execution task');
+      });
+    });
+
     describe('status filtering', () => {
       beforeEach(async () => {
         const userId = 'test-user-id';

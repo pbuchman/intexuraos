@@ -231,7 +231,7 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
               return [];
             }
             return tasksResult.value
-              .filter((t) => t.userId === userId && (includeArchived || t.status !== 'archived'))
+              .filter((t) => t.userId === userId && (includeArchived || t.status !== 'archived') && t.agentType !== 'ask_agent')
               .map((t) => taskToSerializedTask(t));
           }
           const taskId = summary.groupKey.replace(/^standalone_/, '');
@@ -242,7 +242,7 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           }
           const task = taskResult.value;
           /* v8 ignore start -- test-infra: FakeFirestore cannot produce cross-user task leaks or archived standalone tasks in this test flow @preserve */
-          if (task.userId !== userId || (!includeArchived && task.status === 'archived')) {
+          if (task.userId !== userId || (!includeArchived && task.status === 'archived') || task.agentType === 'ask_agent') {
             return [];
           }
           /* v8 ignore stop @preserve */
