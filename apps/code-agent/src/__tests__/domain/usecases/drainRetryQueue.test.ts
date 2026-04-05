@@ -27,6 +27,7 @@ import {
 
 const prepareExecutionMemoryContextMock = vi.fn();
 let mockExecutionMemoryEnabled = false;
+const mockCreateTaskForPRFn = vi.fn();
 
 vi.mock('../../../domain/usecases/prepareExecutionMemoryContext.js', (): {
   prepareExecutionMemoryContext: (...args: unknown[]) => unknown;
@@ -176,6 +177,7 @@ describe('drainRetryQueue', () => {
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as DrainRetryQueueDeps['workerSettingsRepo'],
       logLineRepo: mockLogLineRepo as unknown as DrainRetryQueueDeps['logLineRepo'],
       statusMirrorService: mockStatusMirrorService as unknown as DrainRetryQueueDeps['statusMirrorService'],
+      createTaskForPRFn: mockCreateTaskForPRFn,
     };
   }
 
@@ -184,6 +186,8 @@ describe('drainRetryQueue', () => {
     _resetRetryDrainGuard();
     prepareExecutionMemoryContextMock.mockReset();
     mockExecutionMemoryEnabled = false;
+    mockCreateTaskForPRFn.mockReset();
+    mockCreateTaskForPRFn.mockResolvedValue(ok({ taskId: 'task_fallback_new' }));
 
     mockLogger = {
       info: vi.fn(),
