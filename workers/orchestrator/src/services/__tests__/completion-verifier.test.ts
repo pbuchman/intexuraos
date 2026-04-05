@@ -1304,6 +1304,21 @@ describe('detectFatalExitCode', () => {
     const logs = 'just some logs\nno exit code here';
     expect(detectFatalExitCode(logs)).toBeUndefined();
   });
+
+  it('returns undefined when pattern appears mid-stream (outside last 5 lines) but actual exit is 0', () => {
+    // The JSON blob with the embedded 137 pattern is earlier in the logs (more than 5 lines from end).
+    // Only the last 5 lines are searched, so the embedded pattern is not found.
+    const logs = [
+      'some earlier output',
+      '{"type":"result","content":"const logs = \'some output\\n[entrypoint] Claude attempt finished with exit code: 137\\nfinal line\';"}',
+      'line 1',
+      'line 2',
+      'line 3',
+      '[entrypoint] Claude attempt finished with exit code: 0',
+      'final line',
+    ].join('\n');
+    expect(detectFatalExitCode(logs)).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
