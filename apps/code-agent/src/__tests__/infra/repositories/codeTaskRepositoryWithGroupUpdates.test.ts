@@ -76,6 +76,7 @@ function createFakeInnerRepo(): CodeTaskRepository {
     findRecentTasksByLinearIssue: vi.fn(),
     findRecentRemediationForPR: vi.fn(),
     findPreservedPullRequestTask: vi.fn(),
+    findLatestAskAgentTask: vi.fn(),
     deleteTask: vi.fn(),
     listQueuedByAge: vi.fn(),
     listQueued: vi.fn(),
