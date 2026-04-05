@@ -46,3 +46,5 @@ export { useWritingConfig } from './useWritingConfig.js';
 export { useWritingSamples } from './useWritingSamples.js';
 export { useTimezone } from './useTimezone.js';
 export { useTimezoneAutoDetect } from './useTimezoneAutoDetect.js';
+export { useAskAgent } from './useAskAgent.js';
+export type { AskAgentState } from './useAskAgent.js';
