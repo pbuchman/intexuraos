@@ -97,9 +97,8 @@ export async function startAskAgent(
         message: `Similar task submitted in last 5 minutes: ${createResult.error.existingTaskId}`,
       });
     }
-    /* v8 ignore start -- test-infra: FakeFirestore cannot simulate write failures, so codeTaskRepo.create() cannot return a non-DUPLICATE_PROMPT error code @preserve */
+    /* v8 ignore next -- FakeFirestore cannot simulate write failures, so codeTaskRepo.create() cannot return a non-DUPLICATE_PROMPT error code @preserve */
     return err({ code: 'internal_error', message: createResult.error.message });
-    /* v8 ignore stop @preserve */
   }
 
   const task = createResult.value;
