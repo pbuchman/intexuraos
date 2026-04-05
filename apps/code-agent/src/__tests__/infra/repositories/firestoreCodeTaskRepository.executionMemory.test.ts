@@ -79,7 +79,7 @@ describe('firestoreCodeTaskRepository execution memory queries', () => {
 
     if (!result.ok) throw new Error(`Expected ok result, got: ${result.error.message}`);
 
-    expect(whereAgentType).toHaveBeenCalledWith('agentType', 'in', ['execution', 'planning', 'review']);
+    expect(whereAgentType).toHaveBeenCalledWith('agentType', 'in', ['execution', 'planning', 'review', 'remediation', 'pull_request']);
     expect(wherePending).toHaveBeenCalledWith('executionMemoryPostRun.status', '==', 'pending');
     expect(orderBy).toHaveBeenCalledWith('completedAt', 'asc');
     expect(limit).toHaveBeenCalledWith(10);

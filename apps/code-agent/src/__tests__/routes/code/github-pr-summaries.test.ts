@@ -36,6 +36,7 @@ import { createProcessHeartbeatUseCase } from '../../../domain/usecases/processH
 import { createDetectZombieTasksUseCase } from '../../../domain/usecases/detectZombieTasks.js';
 import { createCleanupTaskLogsUseCase } from '../../../domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase } from '../../../domain/usecases/archiveStaleGroups.js';
+import { createAutoArchiveMergedTasksUseCase } from '../../../domain/usecases/autoArchiveMergedTasks.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../../infra/firestore/workerSettingsRepository.js';
 import type { TaskDispatcherService, DispatchResult } from '../../../domain/services/taskDispatcher.js';
@@ -163,6 +164,7 @@ describe('GET /code/github-pr-summaries', () => {
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -215,6 +217,7 @@ describe('GET /code/github-pr-summaries', () => {
       detectZombieTasks: import('../../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
+      autoArchiveMergedTasks: import('../../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerSettingsRepo: ReturnType<typeof createWorkerSettingsRepository>;
       workerHealthProbe: import('../../../domain/ports/workerHealthProbe.js').WorkerHealthProbe;
       gitHubPREventRepo: import('../../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;

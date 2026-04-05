@@ -11,17 +11,10 @@ const SAFE_GIT_BRANCH_PATTERN = /^[A-Za-z0-9._/-]+$/;
 export interface WorktreeManagerConfig {
   repositoryPath: string;
   worktreeBasePath: string;
-  mcpConfigTemplatePath: string;
   settingsLocalTemplatePath?: string;
 }
 
 const LOCK_TIMEOUT_MS = 10_000;
-
-/**
- * Configured timeout for the Linear MCP server in worktree tasks.
- * Exported so tests and diagnostics can verify the contract.
- */
-export const LINEAR_MCP_TIMEOUT_MS = 60_000;
 
 function assertSafeBranchName(branch: string, branchLabel: string): void {
   if (!SAFE_GIT_BRANCH_PATTERN.test(branch)) {
@@ -134,12 +127,6 @@ export class WorktreeManager {
           throw new Error(`Failed to create worktree: ${stderr}`);
         }
 
-        // Copy MCP config template if provided
-        if (this.config.mcpConfigTemplatePath && existsSync(this.config.mcpConfigTemplatePath)) {
-          await this.copyMcpConfig(worktreePath);
-        }
-        this.logTimeoutEvidence();
-
         // Copy settings.local.json template if provided
         if (
           this.config.settingsLocalTemplatePath !== undefined &&
@@ -217,84 +204,6 @@ export class WorktreeManager {
   async worktreeExists(taskId: string): Promise<boolean> {
     const worktreePath = join(this.config.worktreeBasePath, taskId);
     return existsSync(worktreePath);
-  }
-
-  private logTimeoutEvidence(): void {
-    this.logger.info(
-      { timeoutMs: LINEAR_MCP_TIMEOUT_MS, server: 'linear' },
-      `MCP timeout configured for Linear MCP server: ${String(LINEAR_MCP_TIMEOUT_MS)}ms (server=linear)`
-    );
-  }
-
-  private async copyMcpConfig(worktreePath: string): Promise<void> {
-    const targetPath = join(worktreePath, '.mcp.json');
-
-    try {
-      // Read template
-      const template = await readFile(this.config.mcpConfigTemplatePath, 'utf-8');
-
-      // Validate environment variables
-      const linearKey = process.env['INTEXURAOS_LINEAR_API_KEY'];
-      const sentryToken = process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
-
-      if (linearKey === undefined || linearKey === '') {
-        this.logger.warn(
-          {},
-          'INTEXURAOS_LINEAR_API_KEY not set - MCP Linear integration will fail'
-        );
-      }
-      if (sentryToken === undefined || sentryToken === '') {
-        this.logger.warn(
-          {},
-          'INTEXURAOS_SENTRY_AUTH_TOKEN not set - MCP Sentry integration will fail'
-        );
-      }
-
-      // Substitute environment variables
-      const configStr = template
-        .replace(/\{\{LINEAR_API_KEY\}\}/g, linearKey ?? '')
-        .replace(/\{\{SENTRY_AUTH_TOKEN\}\}/g, sentryToken ?? '');
-
-      // Inject timeoutMs into the Linear MCP server config
-      const config = this.injectLinearTimeout(configStr);
-
-      // Ensure target directory exists
-      await mkdir(dirname(targetPath), { recursive: true });
-
-      // Write to temp file first for atomicity
-      const tempPath = `${targetPath}.tmp`;
-      await writeFile(tempPath, config, 'utf-8');
-
-      // Atomic rename
-      await (await import('node:fs/promises')).rename(tempPath, targetPath);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Failed to copy MCP config: ${message}`);
-    }
-  }
-
-  /**
-   * Injects `timeoutMs` into the `mcpServers.linear` section of the MCP config.
-   * Falls back to writing the original string if parsing fails.
-   */
-  private injectLinearTimeout(configStr: string): string {
-    try {
-      const parsed = JSON.parse(configStr) as Record<string, unknown>;
-      const servers = parsed['mcpServers'] as Record<string, unknown> | undefined;
-      if (servers !== undefined) {
-        const linear = servers['linear'] as Record<string, unknown> | undefined;
-        if (linear !== undefined) {
-          linear['timeoutMs'] = LINEAR_MCP_TIMEOUT_MS;
-        }
-      }
-      return JSON.stringify(parsed, null, 2);
-    } catch {
-      this.logger.warn(
-        {},
-        'Failed to parse MCP config as JSON — writing without timeout injection'
-      );
-      return configStr;
-    }
   }
 
   private async copySettingsLocal(worktreePath: string): Promise<void> {

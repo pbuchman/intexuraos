@@ -1765,7 +1765,7 @@ describe('TaskDispatcher', () => {
           outcome: 'already_completed',
           superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'not used',
-          gh_pr_url: '',
+          gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
           memory_ids_used: '',
           memory_ids_rejected: '',
           memory_usage_summary:
@@ -4859,7 +4859,7 @@ describe('TaskDispatcher', () => {
           outcome: 'implemented',
           superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'used',
-          gh_pr_url: '',
+          gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/123',
           memory_ids_used: '',
           memory_ids_rejected: '',
           memory_usage_summary: '',
@@ -5096,7 +5096,7 @@ describe('TaskDispatcher', () => {
           outcome: 'implemented',
           superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'used',
-          gh_pr_url: '',
+          gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/123',
           memory_ids_used: '',
           memory_ids_rejected: '',
           memory_usage_summary: '',
@@ -7791,6 +7791,92 @@ describe('TaskDispatcher', () => {
       const log = getInstructionsLog();
       expect(log).toBeDefined();
       expect(log).toContain('Execution Agent');
+    });
+
+    it('logs Ask Agent for agentType=ask_agent', async () => {
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+      const request: CreateTaskRequest = {
+        taskId: 'agent-label-ask-agent',
+        workerType: 'auto',
+        prompt: 'Test ask_agent agent label',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'ask_agent',
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const log = getInstructionsLog();
+      expect(log).toBeDefined();
+      expect(log).toContain('Ask Agent');
+      expect(log).toContain('interactive code assistant');
+    });
+
+    it('routes ask_agent to ask_agent completion type', async () => {
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+      const request: CreateTaskRequest = {
+        taskId: 'ask-agent-completion-type',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'ask_agent',
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const task = await dispatcher.getTask('ask-agent-completion-type');
+      expect(task).toBeDefined();
+      expect(task?.agentType).toBe('ask_agent');
+    });
+
+    it('skips verification and extracts summary on ask_agent completion', async () => {
+      vi.useFakeTimers();
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockClear();
+
+      const mockLogs =
+        '[system] start\n[claude] Hello\n[claude] How can I help?\n[claude] Here is the answer';
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(mockLogs);
+
+      const request: CreateTaskRequest = {
+        taskId: 'ask-agent-skip-verification',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'ask_agent',
+      };
+
+      await dispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      // Verifier should NOT have been called for ask_agent
+      expect(singleAttemptCompletionControl.verifier.verify).not.toHaveBeenCalled();
+
+      // Webhook should have been called with summary from getLast50ClaudeLines
+      const webhookCalls = vi.mocked(mockWebhookClient.send).mock.calls;
+      expect(webhookCalls.length).toBeGreaterThan(0);
+      const lastCallArgs = webhookCalls[webhookCalls.length - 1] as unknown[];
+      // send() is called with a single object argument: { url, secret, payload, taskId }
+      const callArg = lastCallArgs[0] as { payload: { result?: { summary?: string } } };
+      expect(callArg.payload.result?.summary).toBeDefined();
+      expect(callArg.payload.result?.summary).toContain('[claude]');
+
+      const task = await dispatcher.getTask('ask-agent-skip-verification');
+      expect(task?.status).toBe('completed');
+
+      vi.useRealTimers();
     });
 
     it('logs Planning Agent when no agent type and no code-task label', async () => {

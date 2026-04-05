@@ -6,6 +6,7 @@ import {
   Bell,
   BellRing,
   Bookmark,
+  Bot,
   Calendar,
   CheckSquare,
   ChevronDown,
@@ -83,6 +84,7 @@ const hellscriptItems: NavItem[] = [
 const codeTasksItems: NavItem[] = [
   { to: '/code-tasks', label: 'Battlefield', icon: List },
   { to: '/code-tasks/new', label: 'New Task', icon: Plus },
+  { to: '/code-tasks/ask-agent', label: 'Ask Agent', icon: Bot },
   { to: '/code-tasks/dispatch-queue', label: 'Dispatch Queue', icon: Clock },
   { to: '/code-tasks/pr-events', label: 'GitHub Event Log', icon: RadioTower },
   { to: '/code-tasks/merge-queue', label: 'Merge Queue', icon: GitMerge },

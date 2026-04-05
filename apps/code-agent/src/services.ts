@@ -41,6 +41,7 @@ import { createProcessHeartbeatUseCase, type ProcessHeartbeatUseCase } from './d
 import { createDetectZombieTasksUseCase, type DetectZombieTasksUseCase } from './domain/usecases/detectZombieTasks.js';
 import { createCleanupTaskLogsUseCase, type CleanupTaskLogsUseCase } from './domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase, type ArchiveStaleGroupsUseCase } from './domain/usecases/archiveStaleGroups.js';
+import { createAutoArchiveMergedTasksUseCase, type AutoArchiveMergedTasksUseCase } from './domain/usecases/autoArchiveMergedTasks.js';
 import { createMetricsClient, createNoOpMetricsClient, type MetricsClient } from './infra/metrics.js';
 import { createWorkerSettingsRepository } from './infra/firestore/workerSettingsRepository.js';
 import { createWorkerHealthProbe } from './infra/services/workerHealthProbe.js';
@@ -88,6 +89,7 @@ import { createTaskEnqueueService } from './infra/services/taskEnqueueServiceImp
 import type { MergeQueueWatchRepository } from './domain/repositories/mergeQueueWatchRepository.js';
 import { createFirestoreMergeQueueWatchRepository } from './infra/firestore/mergeQueueWatchRepository.js';
 import { createUnauthorizedSenderCommentHandler } from './domain/services/unauthorizedSenderCommentHandler.js';
+import { createOnReviewSkippedCallback } from './domain/services/onReviewSkippedCallback.js';
 import type { TaskGroupSummaryRepository } from './domain/ports/taskGroupSummaryRepository.js';
 import { createTaskGroupSummaryFirestoreRepository } from './infra/firestore/taskGroupSummaryFirestoreRepository.js';
 import { withGroupUpdates } from './infra/repositories/codeTaskRepositoryWithGroupUpdates.js';
@@ -114,6 +116,7 @@ export interface ServiceContainer {
   detectZombieTasks: DetectZombieTasksUseCase;
   cleanupTaskLogs: CleanupTaskLogsUseCase;
   archiveStaleGroups: ArchiveStaleGroupsUseCase;
+  autoArchiveMergedTasks: AutoArchiveMergedTasksUseCase;
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
   workerHealthProbe: WorkerHealthProbe;
@@ -559,6 +562,13 @@ export function initServices(config: ServiceConfig): void {
     },
     allowedBots: ALLOWED_BOTS,
     codeTaskRepo,
+    onReviewSkipped: createOnReviewSkippedCallback({
+      codeTaskRepo,
+      linearAgentClient,
+      automationLog,
+      groupSummaryRepo,
+      logger,
+    }),
     onUnauthorizedSender: createUnauthorizedSenderCommentHandler({ gitHubPRClient, userServiceClient, logger }),
   });
 
@@ -591,6 +601,10 @@ export function initServices(config: ServiceConfig): void {
       logger,
     }),
     archiveStaleGroups: createArchiveStaleGroupsUseCase({
+      codeTaskRepository: codeTaskRepo,
+      logger,
+    }),
+    autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({
       codeTaskRepository: codeTaskRepo,
       logger,
     }),

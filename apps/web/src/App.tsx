@@ -19,6 +19,7 @@ import { config } from '@/config';
 
 import {
   ApiKeysSettingsPage,
+  AskAgentPage,
   BookmarksListPage,
   CalendarPage,
   CodeTaskViewPage,
@@ -306,6 +307,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <CodeTaskNewPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/code-tasks/ask-agent"
+        element={
+          <ProtectedRoute>
+            <AskAgentPage />
           </ProtectedRoute>
         }
       />

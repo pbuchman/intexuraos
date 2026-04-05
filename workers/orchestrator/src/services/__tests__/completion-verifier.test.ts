@@ -16,6 +16,7 @@ const {
   EXECUTION_SCHEMA,
   PULL_REQUEST_SCHEMA,
   REVIEW_SCHEMA,
+  REMEDIATION_SCHEMA,
   RESUME_SUMMARY_SCHEMA,
   buildPlanningPrompt,
   buildExecutionPrompt,
@@ -23,6 +24,7 @@ const {
   buildReviewPrompt,
   buildResumeSummaryPrompt,
   getLast50Lines,
+  getLast50ClaudeLines,
   getLast20Lines,
   detectFatalExitCode,
 } = await import('../completion-verifier.js');
@@ -71,7 +73,7 @@ describe('PLANNING_SCHEMA', () => {
       is_complex: '0',
       has_plan_doc: '0',
       subtask_urls: '',
-      pr_url: '',
+      pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
       summary: 'Planned the task.',
       unclear_clarification: '',
     });
@@ -117,7 +119,7 @@ describe('PLANNING_SCHEMA', () => {
       has_plan_doc: '1',
       subtask_urls:
         'https://linear.app/pbuchman/issue/INT-632/subtask-one,https://linear.app/pbuchman/issue/INT-633/subtask-two',
-      pr_url: '',
+      pr_url: 'https://github.com/pbuchman/intexuraos/pull/631',
       summary: 'Planned with subtasks.',
       unclear_clarification: '',
     });
@@ -156,7 +158,7 @@ describe('PLANNING_SCHEMA', () => {
       is_complex: '0',
       has_plan_doc: '0',
       subtask_urls: '',
-      pr_url: '',
+      pr_url: 'https://github.com/pbuchman/intexuraos/pull/640',
       summary: 'Simple task planned.',
       unclear_clarification: '',
     });
@@ -184,6 +186,36 @@ describe('PLANNING_SCHEMA', () => {
   it('rejects missing fields', () => {
     const result = PLANNING_SCHEMA.safeParse({ outcome: 'planned' });
     expect(result.success).toBe(false);
+  });
+
+  it('rejects empty pr_url when outcome is planned', () => {
+    const result = PLANNING_SCHEMA.safeParse({
+      outcome: 'planned',
+      superpowers_writing_plans: 'used',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-100/test',
+      is_complex: '0',
+      has_plan_doc: '0',
+      subtask_urls: '',
+      pr_url: '',
+      summary: 'test',
+      unclear_clarification: '',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('allows empty pr_url when outcome is unclear', () => {
+    const result = PLANNING_SCHEMA.safeParse({
+      outcome: 'unclear',
+      superpowers_writing_plans: 'used',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-100/test',
+      is_complex: '0',
+      has_plan_doc: '0',
+      subtask_urls: '',
+      pr_url: '',
+      summary: 'test',
+      unclear_clarification: 'Not enough info',
+    });
+    expect(result.success).toBe(true);
   });
 });
 
@@ -213,6 +245,48 @@ describe('EXECUTION_SCHEMA', () => {
       summary: 'x',
     });
     expect(result.success).toBe(false);
+  });
+
+  it('rejects empty gh_pr_url when outcome is implemented', () => {
+    const result = EXECUTION_SCHEMA.safeParse({
+      outcome: 'implemented',
+      superpowers_subagent_driven_dev: 'used',
+      superpowers_requesting_code_review: 'used',
+      gh_pr_url: '',
+      memory_ids_used: '',
+      memory_ids_rejected: '',
+      memory_usage_summary: '',
+      summary: 'test',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects empty gh_pr_url when outcome is already_completed', () => {
+    const result = EXECUTION_SCHEMA.safeParse({
+      outcome: 'already_completed',
+      superpowers_subagent_driven_dev: 'used',
+      superpowers_requesting_code_review: 'not used',
+      gh_pr_url: '',
+      memory_ids_used: '',
+      memory_ids_rejected: '',
+      memory_usage_summary: '',
+      summary: 'test',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts non-empty gh_pr_url when outcome is already_completed', () => {
+    const result = EXECUTION_SCHEMA.safeParse({
+      outcome: 'already_completed',
+      superpowers_subagent_driven_dev: 'used',
+      superpowers_requesting_code_review: 'not used',
+      gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
+      memory_ids_used: '',
+      memory_ids_rejected: '',
+      memory_usage_summary: '',
+      summary: 'Evidence PR for already-completed work.',
+    });
+    expect(result.success).toBe(true);
   });
 });
 
@@ -428,6 +502,38 @@ describe('REVIEW_SCHEMA', () => {
   });
 });
 
+describe('REMEDIATION_SCHEMA', () => {
+  it('rejects empty gh_pr_url when outcome is implemented', () => {
+    const result = REMEDIATION_SCHEMA.safeParse({
+      outcome: 'implemented',
+      gh_pr_url: '',
+      requires_re_review: '0',
+      summary: 'test',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('allows empty gh_pr_url when outcome is already_completed', () => {
+    const result = REMEDIATION_SCHEMA.safeParse({
+      outcome: 'already_completed',
+      gh_pr_url: '',
+      requires_re_review: '0',
+      summary: 'test',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts valid remediation data with gh_pr_url', () => {
+    const result = REMEDIATION_SCHEMA.safeParse({
+      outcome: 'implemented',
+      gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/901',
+      requires_re_review: '1',
+      summary: 'Fixed review findings.',
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Prompt Builders
 // ---------------------------------------------------------------------------
@@ -478,6 +584,12 @@ describe('buildExecutionPrompt', () => {
     expect(prompt).toContain(
       'LLM agent delivers its summary in one of the last assistant messages'
     );
+  });
+
+  it('marks gh_pr_url as REQUIRED for all outcomes', () => {
+    const prompt = buildExecutionPrompt('exec-log');
+    expect(prompt).toContain('REQUIRED for all execution outcomes');
+    expect(prompt).not.toContain('"gh_pr_url":""');
   });
 });
 
@@ -546,6 +658,62 @@ describe('getLast50Lines', () => {
 });
 
 // ---------------------------------------------------------------------------
+// getLast50ClaudeLines
+// ---------------------------------------------------------------------------
+
+describe('getLast50ClaudeLines', () => {
+  it('filters to only [claude]-tagged lines and returns last 50', () => {
+    const lines = Array.from({ length: 100 }, (_, i) =>
+      i % 2 === 0 ? `[claude] line-${String(i + 1)}` : `[system] line-${String(i + 1)}`
+    );
+    const result = getLast50ClaudeLines(lines.join('\n'));
+    const resultLines = result.split('\n');
+    // Only 50 [claude] lines (every even index from 100 total)
+    expect(resultLines).toHaveLength(50);
+    // All 50 [claude] lines are returned (50 or fewer filtered, so all included)
+    expect(resultLines[0]).toBe('[claude] line-1'); // First [claude] line
+    expect(resultLines[49]).toBe('[claude] line-99'); // Last [claude] line
+  });
+
+  it('returns all [claude] lines when fewer than 50', () => {
+    const result = getLast50ClaudeLines(
+      `[system] noise\n[claude] hello\n[system] noise\n[claude] world`
+    );
+    expect(result).toBe('[claude] hello\n[claude] world');
+  });
+
+  it('truncates to last 50 [claude] lines when more than 50 exist', () => {
+    // Create 55 [claude] lines (more than 50) mixed with system lines
+    const lines: string[] = [];
+    for (let i = 0; i < 110; i++) {
+      if (i % 2 === 0) {
+        lines.push(`[claude] line-${String(i + 1)}`);
+      } else {
+        lines.push(`[system] line-${String(i + 1)}`);
+      }
+    }
+    const result = getLast50ClaudeLines(lines.join('\n'));
+    const resultLines = result.split('\n');
+    // 110 total lines, 55 are [claude] (every even index), slice(-50) returns last 50
+    expect(resultLines).toHaveLength(50);
+    // First returned should be the 6th [claude] line (line-11, slice(-50) skips first 5 of 55)
+    expect(resultLines[0]).toBe('[claude] line-11');
+    // Last returned should be the 55th [claude] line (line-109)
+    expect(resultLines[49]).toBe('[claude] line-109');
+  });
+
+  it('returns empty string when no [claude] lines', () => {
+    const result = getLast50ClaudeLines('[system] noise\n[system] more');
+    expect(result).toBe('');
+  });
+
+  it('returns empty string for empty input', () => {
+    const result = getLast50ClaudeLines('');
+    expect(result).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // OrchestratorCompletionVerifier — constructor
 // ---------------------------------------------------------------------------
 
@@ -593,7 +761,7 @@ describe('OrchestratorCompletionVerifier', () => {
       is_complex: '0',
       has_plan_doc: '0',
       subtask_urls: '',
-      pr_url: '',
+      pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
       summary: 'The agent planned successfully.',
       unclear_clarification: '',
     });
@@ -625,7 +793,7 @@ describe('OrchestratorCompletionVerifier', () => {
         is_complex: '0',
         has_plan_doc: '0',
         subtask_urls: '',
-        pr_url: '',
+        pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
         summary: 'The agent planned successfully.',
         unclear_clarification: '',
       });
@@ -986,7 +1154,7 @@ describe('OrchestratorCompletionVerifier', () => {
       is_complex: '0',
       has_plan_doc: '0',
       subtask_urls: '',
-      pr_url: '',
+      pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
       summary: 'Planned.',
       unclear_clarification: '',
     });
@@ -1076,7 +1244,7 @@ describe('OrchestratorCompletionVerifier', () => {
         is_complex: '0',
         has_plan_doc: '0',
         subtask_urls: '',
-        pr_url: '',
+        pr_url: 'https://github.com/pbuchman/intexuraos/pull/50',
         summary: 'Planned.',
         unclear_clarification: '',
       })}\nDone.`;
@@ -1136,6 +1304,21 @@ describe('detectFatalExitCode', () => {
     const logs = 'just some logs\nno exit code here';
     expect(detectFatalExitCode(logs)).toBeUndefined();
   });
+
+  it('returns undefined when pattern appears mid-stream (outside last 5 lines) but actual exit is 0', () => {
+    // The JSON blob with the embedded 137 pattern is earlier in the logs (more than 5 lines from end).
+    // Only the last 5 lines are searched, so the embedded pattern is not found.
+    const logs = [
+      'some earlier output',
+      '{"type":"result","content":"const logs = \'some output\\n[entrypoint] Claude attempt finished with exit code: 137\\nfinal line\';"}',
+      'line 1',
+      'line 2',
+      'line 3',
+      '[entrypoint] Claude attempt finished with exit code: 0',
+      'final line',
+    ].join('\n');
+    expect(detectFatalExitCode(logs)).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1183,7 +1366,7 @@ describe('verify — fatal exit code pre-check', () => {
           is_complex: '0',
           has_plan_doc: '0',
           subtask_urls: '',
-          pr_url: '',
+          pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
           summary: 'Planned.',
           unclear_clarification: '',
         }),
@@ -1210,7 +1393,7 @@ describe('verify — fatal exit code pre-check', () => {
           outcome: 'implemented',
           superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'not used',
-          gh_pr_url: '',
+          gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
           memory_ids_used: '',
           memory_ids_rejected: '',
           memory_usage_summary: '',

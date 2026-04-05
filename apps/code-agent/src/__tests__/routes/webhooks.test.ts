@@ -60,6 +60,7 @@ import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHear
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
+import { createAutoArchiveMergedTasksUseCase } from '../../domain/usecases/autoArchiveMergedTasks.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
@@ -67,9 +68,12 @@ import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js'
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
-import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
+import type { GitHubPRClient, PullRequestStatus, PullRequestFile, PullRequestCommit, GitHubPullRequestListItem, GitHubPullRequestDetails, GitHubPRClientError } from '../../domain/ports/gitHubPRClient.js';
+import type { GitHubPRSummaryRepository } from '../../domain/repositories/gitHubPRSummaryRepository.js';
+import type { GitHubPRSummary } from '../../domain/models/gitHubPRSummary.js';
 import type { CreateRemediationTaskRequest, CreateRemediationTaskResult, CreateRemediationTaskError } from '../../domain/usecases/createRemediationTask.js';
 import type { Result } from '@intexuraos/common-core';
+import type { SummaryRepositoryError } from '../../domain/repositories/gitHubPRSummaryRepository.js';
 
 // Mock fetchWithAuth
 vi.mock('@intexuraos/internal-clients', async () => ({
@@ -82,6 +86,116 @@ vi.mock('../../domain/usecases/drainTaskQueue.js', () => ({
   _resetDrainGuard: vi.fn(),
 }));
 import * as drainTaskQueueModule from '../../domain/usecases/drainTaskQueue.js';
+
+/**
+ * In-memory fake for GitHubPRSummaryRepository with declarative seeding.
+ */
+class FakeGitHubPRSummaryRepo implements GitHubPRSummaryRepository {
+  private summaries = new Map<string, GitHubPRSummary>();
+
+  private key(repository: string, prNumber: number): string {
+    return `${repository}:${prNumber}`;
+  }
+
+  seedSummary(summary: GitHubPRSummary): void {
+    this.summaries.set(this.key(summary.repository, summary.pullRequestNumber), summary);
+  }
+
+  async upsert(): Promise<Result<void, { code: 'FIRESTORE_ERROR'; message: string }>> {
+    return ok(undefined);
+  }
+
+  async findRecentlyActive(): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>> {
+    return ok([]);
+  }
+
+  async findByPullRequest(repository: string, prNumber: number): Promise<Result<GitHubPRSummary | null, SummaryRepositoryError>> {
+    return ok(this.summaries.get(this.key(repository, prNumber)) ?? null);
+  }
+
+  async findOpenByBaseBranch(): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>> {
+    return ok([]);
+  }
+
+  async findOpenByRepository(): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>> {
+    return ok([]);
+  }
+
+  async findAllOpen(): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>> {
+    return ok([]);
+  }
+}
+
+/**
+ * In-memory fake for GitHubPRClient with declarative seeding.
+ */
+class FakeGitHubPRClient implements GitHubPRClient {
+  private prStatuses = new Map<string, PullRequestStatus>();
+
+  private key(owner: string, repo: string, prNumber: number): string {
+    return `${owner}/${repo}:${prNumber}`;
+  }
+
+  seedPrStatus(owner: string, repo: string, prNumber: number, status: PullRequestStatus): void {
+    this.prStatuses.set(this.key(owner, repo, prNumber), status);
+  }
+
+  async updatePRTitle(): Promise<Result<void, GitHubPRClientError>> {
+    return ok(undefined);
+  }
+
+  async getPullRequestFiles(): Promise<Result<PullRequestFile[], GitHubPRClientError>> {
+    return ok([]);
+  }
+
+  async getPullRequestCommits(): Promise<Result<PullRequestCommit[], GitHubPRClientError>> {
+    return ok([]);
+  }
+
+  async getPullRequestBaseBranch(): Promise<Result<string, GitHubPRClientError>> {
+    return ok('main');
+  }
+
+  async getPullRequestStatus(_token: string, owner: string, repo: string, prNumber: number): Promise<Result<PullRequestStatus, GitHubPRClientError>> {
+    const status = this.prStatuses.get(this.key(owner, repo, prNumber));
+    if (status === undefined) {
+      return ok({ state: 'open' as const, mergedAt: null, headRef: '' });
+    }
+    return ok(status);
+  }
+
+  async postPRComment(): Promise<Result<{ commentId: number }, GitHubPRClientError>> {
+    return ok({ commentId: 1 });
+  }
+
+  async listOpenPullRequestsByBaseBranch(): Promise<Result<GitHubPullRequestListItem[], GitHubPRClientError>> {
+    return ok([]);
+  }
+
+  async getPullRequestDetails(): Promise<Result<GitHubPullRequestDetails, GitHubPRClientError>> {
+    return ok({} as GitHubPullRequestDetails);
+  }
+
+  async getIssueComment(): Promise<Result<{ body: string }, GitHubPRClientError>> {
+    return ok({ body: '' });
+  }
+
+  async updateIssueComment(): Promise<Result<{ commentId: number }, GitHubPRClientError>> {
+    return ok({ commentId: 1 });
+  }
+
+  async mergePullRequest(): Promise<Result<{ sha: string; merged: boolean }, GitHubPRClientError>> {
+    return ok({ sha: '', merged: false });
+  }
+
+  async getCombinedCheckStatus(): Promise<Result<{ state: 'success' | 'failure' | 'pending' }, GitHubPRClientError>> {
+    return ok({ state: 'success' });
+  }
+
+  async listAllOpenPullRequests(): Promise<Result<GitHubPullRequestListItem[], GitHubPRClientError>> {
+    return ok([]);
+  }
+}
 
 describe('POST /internal/webhooks/task-complete', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -231,6 +345,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         logger,
       }),
       archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
@@ -282,6 +397,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
+      autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
@@ -1267,7 +1383,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '1' as const,
           planning_subtask_urls: '',
-          planning_pr_url: '',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
           planning_unclear_clarification: '',
         },
       };
@@ -1348,7 +1464,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '1' as const,
           planning_subtask_urls: '',
-          planning_pr_url: '',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
           planning_unclear_clarification: '',
         },
       };
@@ -1455,7 +1571,14 @@ describe('POST /internal/webhooks/task-complete', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      // No PR comment should be added
+      // With PR URL enforcement, empty planning_pr_url causes enforcement failure
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('failed');
+      expect(getResult.value.error?.code).toBe('PLANNING_AGENT_ENFORCEMENT_FAILED');
+      expect(getResult.value.error?.message).toContain('PR URL');
+      // No PR comment should be added since enforcement failed before comment logic
       expect(addCommentSpy).not.toHaveBeenCalled();
     });
 
@@ -1627,7 +1750,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '1' as const,
           planning_subtask_urls: 'not-a-url,https://linear.app/pbuchman/issue/INT-200/subtask-1',
-          planning_pr_url: '',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
           planning_unclear_clarification: '',
         },
       };
@@ -1702,7 +1825,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '1' as const,
           planning_subtask_urls: '',
-          planning_pr_url: '',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
           planning_unclear_clarification: '',
         },
       };
@@ -1818,7 +1941,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_is_complex: '1' as const,
           // Only 1 of 3 subtask URLs extracted by LLM
           planning_subtask_urls: 'https://linear.app/pbuchman/issue/INT-200/subtask-1',
-          planning_pr_url: '',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
           planning_unclear_clarification: '',
         },
       };
@@ -1918,7 +2041,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_superpowers_writing_plans_used: '1' as const,
           planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '0' as const,
-          planning_pr_url: '',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
           planning_unclear_clarification: '',
         },
       };
@@ -2026,7 +2149,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_superpowers_writing_plans_used: '0' as const,
           planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '0' as const,
-          planning_pr_url: '',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
           planning_unclear_clarification: '',
         },
       };
@@ -2106,7 +2229,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_superpowers_writing_plans_used: '0' as const,
           planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '0' as const,
-          planning_pr_url: '',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
           planning_unclear_clarification: '',
         },
       };
@@ -2499,6 +2622,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'Planned the task',
           planning_outcome_label: 'planned' as const,
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
         },
       };
 
@@ -5108,6 +5232,218 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(labelCalls).toHaveLength(0);
     });
 
+    describe('plan PR auto-merge on review pass', () => {
+      // Shared setup for auto-merge tests
+      async function createPlanningTaskWithPrUrl(traceId: string, prUrl: string): Promise<import('../../domain/models/codeTask.js').CodeTask> {
+        const result = await codeTaskRepo.create({
+          userId: 'user-123',
+          prompt: 'Plan the task',
+          sanitizedPrompt: 'Plan the task',
+          systemPromptHash: 'plan-auto',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId,
+          prNumber: 1654,
+          webhookSecret: 'test-webhook-secret',
+          agentType: 'planning',
+          linearIssueId: 'INT-500',
+        });
+        if (!result.ok) throw new Error('Failed to create planning task');
+        await codeTaskRepo.update(result.value.id, { result: { planning_pr_url: prUrl } });
+        const taskResult = await codeTaskRepo.findById(result.value.id);
+        if (!taskResult.ok) throw new Error('Failed to refetch planning task');
+        return taskResult.value;
+      }
+
+      async function createReviewTaskWithPr(traceId: string, prNumber = 1654): Promise<import('../../domain/models/codeTask.js').CodeTask> {
+        const result = await codeTaskRepo.create({
+          userId: 'user-123',
+          prompt: 'Review the PR',
+          sanitizedPrompt: 'Review the PR',
+          systemPromptHash: 'review-auto',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId,
+          prNumber,
+          webhookSecret: 'test-webhook-secret',
+          agentType: 'review',
+          linearIssueId: 'INT-500',
+        });
+        if (!result.ok) throw new Error('Failed to create review task');
+        return result.value;
+      }
+
+      it('auto-merges plan PR when plan review passes and planning_pr_url exists', async () => {
+        await createPlanningTaskWithPrUrl('trace_plan_merge_ok', 'https://github.com/pbuchman/intexuraos/pull/1654');
+        const reviewTask = await createReviewTaskWithPr('trace_plan_merge_ok_review');
+
+        // Install fresh gitHubPRClient mock with mergePullRequest
+        const { gitHubPRClient: ghClient } = installPRNotificationServices();
+        vi.mocked(ghClient.getPullRequestStatus).mockResolvedValueOnce(
+          ok({ state: 'open' as const, mergedAt: null, headRef: 'plan/test' })
+        );
+        vi.mocked(ghClient.mergePullRequest).mockResolvedValueOnce(
+          ok({ sha: 'abc123', merged: true })
+        );
+
+        const payload = {
+          taskId: reviewTask.id,
+          status: 'completed' as const,
+          result: {
+            summary: 'Plan review passed',
+            review_comments_posted: '0',
+            review_types: 'plan-review',
+            needs_remediation: '0',
+            prUrl: 'https://github.com/pbuchman/intexuraos/pull/1654',
+          },
+        };
+
+        const response = await sendLabelPayload(payload);
+
+        expect(response.statusCode).toBe(200);
+        expect(ghClient.mergePullRequest).toHaveBeenCalledWith(
+          'ghp_test_token',
+          'pbuchman',
+          'intexuraos',
+          1654,
+          'merge',
+          expect.stringContaining('[plan]'),
+        );
+      });
+
+      it('succeeds even when plan PR auto-merge fails', async () => {
+        await createPlanningTaskWithPrUrl('trace_plan_merge_fail', 'https://github.com/pbuchman/intexuraos/pull/1654');
+        const reviewTask = await createReviewTaskWithPr('trace_plan_merge_fail_review');
+
+        const { gitHubPRClient: ghClient } = installPRNotificationServices();
+        vi.mocked(ghClient.getPullRequestStatus).mockResolvedValueOnce(
+          ok({ state: 'open' as const, mergedAt: null, headRef: 'plan/test' })
+        );
+        vi.mocked(ghClient.mergePullRequest).mockResolvedValueOnce(
+          err({ code: 'API_ERROR' as const, message: 'Merge conflict' })
+        );
+
+        const payload = {
+          taskId: reviewTask.id,
+          status: 'completed' as const,
+          result: {
+            summary: 'Plan review passed',
+            review_comments_posted: '0',
+            review_types: 'plan-review',
+            needs_remediation: '0',
+            prUrl: 'https://github.com/pbuchman/intexuraos/pull/1654',
+          },
+        };
+
+        const response = await sendLabelPayload(payload);
+
+        // Webhook still succeeds — merge failure is best-effort
+        expect(response.statusCode).toBe(200);
+      });
+
+      it('skips plan PR merge when GitHub token is unavailable', async () => {
+        await createPlanningTaskWithPrUrl('trace_plan_merge_no_token', 'https://github.com/pbuchman/intexuraos/pull/1654');
+        const reviewTask = await createReviewTaskWithPr('trace_plan_merge_no_token_review');
+
+        installPRNotificationServices();
+        // Override getOAuthToken to return an error (no token available)
+        const { userServiceClient: uc } = getServices();
+        vi.mocked(uc.getOAuthToken).mockResolvedValue(
+          err({ code: 'CONNECTION_NOT_FOUND' as const, message: 'Connection not found' })
+        );
+
+        const payload = {
+          taskId: reviewTask.id,
+          status: 'completed' as const,
+          result: {
+            summary: 'Plan review passed',
+            review_comments_posted: '0',
+            review_types: 'plan-review',
+            needs_remediation: '0',
+            prUrl: 'https://github.com/pbuchman/intexuraos/pull/1654',
+          },
+        };
+
+        const response = await sendLabelPayload(payload);
+
+        expect(response.statusCode).toBe(200);
+        // mergePullRequest should not have been called since we have no token
+        const { gitHubPRClient: ghClient } = getServices();
+        expect(ghClient.mergePullRequest).not.toHaveBeenCalled();
+      });
+
+      it('skips plan PR merge when planning task has no planning_pr_url', async () => {
+        const result = await codeTaskRepo.create({
+          userId: 'user-123',
+          prompt: 'Plan the task',
+          sanitizedPrompt: 'Plan the task',
+          systemPromptHash: 'plan-auto',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace_plan_merge_no_url',
+          prNumber: 1654,
+          webhookSecret: 'test-webhook-secret',
+          agentType: 'planning',
+          linearIssueId: 'INT-500',
+        });
+        if (!result.ok) throw new Error('Failed to create planning task');
+        // Update result to have empty planning_pr_url
+        await codeTaskRepo.update(result.value.id, { result: { planning_pr_url: '' } });
+        const reviewTask = await createReviewTaskWithPr('trace_plan_merge_no_url_review');
+
+        installPRNotificationServices();
+
+        const payload = {
+          taskId: reviewTask.id,
+          status: 'completed' as const,
+          result: {
+            summary: 'Plan review passed',
+            review_comments_posted: '0',
+            review_types: 'plan-review',
+            needs_remediation: '0',
+            prUrl: 'https://github.com/pbuchman/intexuraos/pull/1654',
+          },
+        };
+
+        const response = await sendLabelPayload(payload);
+
+        expect(response.statusCode).toBe(200);
+        const { gitHubPRClient: ghClient } = getServices();
+        expect(ghClient.mergePullRequest).not.toHaveBeenCalled();
+      });
+
+      it('does NOT auto-merge plan PR when review requires remediation', async () => {
+        await createPlanningTaskWithPrUrl('trace_plan_merge_remediation', 'https://github.com/pbuchman/intexuraos/pull/1654');
+        const reviewTask = await createReviewTaskWithPr('trace_plan_merge_remediation_review');
+
+        installPRNotificationServices();
+
+        const payload = {
+          taskId: reviewTask.id,
+          status: 'completed' as const,
+          result: {
+            summary: 'Plan review needs remediation',
+            review_comments_posted: '2',
+            review_types: 'plan-review',
+            needs_remediation: '1',
+            prUrl: 'https://github.com/pbuchman/intexuraos/pull/1654',
+          },
+        };
+
+        const response = await sendLabelPayload(payload);
+
+        expect(response.statusCode).toBe(200);
+        const { gitHubPRClient: ghClient } = getServices();
+        expect(ghClient.mergePullRequest).not.toHaveBeenCalled();
+      });
+    });
+
     it('logs warning and succeeds when findOriginTaskByPR returns error', async () => {
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_origin_error' });
       const payload = makeLabelPayload(reviewTask.id);
@@ -5250,16 +5586,32 @@ describe('POST /internal/webhooks/task-complete', () => {
       await createOriginTask({ traceId: 'trace_label_merged', agentType: 'execution' });
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_merged_review' });
 
-      // Simulate PR already merged by providing a gitHubPRSummaryRepo with mergedAt set
-      const mockFindByPullRequest = vi.fn().mockResolvedValue(
-        ok({ mergedAt: new Date('2026-04-01T09:35:00Z') })
-      );
+      // Use fake with seeding instead of vi.fn() override
+      const fakeSummaryRepo = new FakeGitHubPRSummaryRepo();
+      fakeSummaryRepo.seedSummary({
+        repository: 'pbuchman/intexuraos',
+        pullRequestNumber: reviewTask.prNumber ?? 42,
+        title: 'Test PR',
+        state: 'closed',
+        mergedAt: new Date('2026-04-01T09:35:00Z'),
+        baseBranch: 'main',
+        authorLogin: 'test-user',
+        headBranch: 'feature/test',
+        mergeConflictStatus: null,
+        lastConflictCheckedAt: null,
+        conflictEpisodeStartedAt: null,
+        conflictResolvedAt: null,
+        managedConflictCommentId: null,
+        managedConflictTaskId: null,
+        managedConflictTaskOwnerUserId: null,
+        lastActivityAt: new Date(),
+        firstSeenAt: new Date(),
+        lastReviewedCommitSha: null,
+        lastReviewNeedsRemediation: null,
+      });
       setServices({
         ...getServices(),
-        gitHubPRSummaryRepo: {
-          ...getServices().gitHubPRSummaryRepo,
-          findByPullRequest: mockFindByPullRequest,
-        },
+        gitHubPRSummaryRepo: fakeSummaryRepo,
       });
 
       const payload = makeLabelPayload(reviewTask.id);
@@ -5273,6 +5625,132 @@ describe('POST /internal/webhooks/task-complete', () => {
         (call) => call[0].addLabels !== undefined
       );
       expect(labelCalls).toHaveLength(0);
+    });
+
+    it('skips review-outcome label when GitHub API fallback detects PR is merged (stale summary)', async () => {
+      await createOriginTask({ traceId: 'trace_label_merged_fallback', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_merged_fallback_review' });
+
+      // Use fakes with seeding instead of vi.fn() overrides
+      const fakeSummaryRepo = new FakeGitHubPRSummaryRepo();
+      // Simulate stale summary: says NOT merged
+      fakeSummaryRepo.seedSummary({
+        repository: 'pbuchman/intexuraos',
+        pullRequestNumber: reviewTask.prNumber ?? 42,
+        title: 'Test PR',
+        state: 'open',
+        mergedAt: null,
+        baseBranch: 'main',
+        authorLogin: 'test-user',
+        headBranch: 'feature/test',
+        mergeConflictStatus: null,
+        lastConflictCheckedAt: null,
+        conflictEpisodeStartedAt: null,
+        conflictResolvedAt: null,
+        managedConflictCommentId: null,
+        managedConflictTaskId: null,
+        managedConflictTaskOwnerUserId: null,
+        lastActivityAt: new Date(),
+        firstSeenAt: new Date(),
+        lastReviewedCommitSha: null,
+        lastReviewNeedsRemediation: null,
+      });
+
+      const fakePRClient = new FakeGitHubPRClient();
+      // GitHub API says actually merged
+      fakePRClient.seedPrStatus('pbuchman', 'intexuraos', reviewTask.prNumber ?? 42, {
+        state: 'closed',
+        mergedAt: new Date('2026-04-01T09:35:00Z'),
+        headRef: 'feature/test',
+      });
+
+      // OAuth token needed for fallback API call
+      const fakeUserServiceClient = {
+        ...mockUserServiceClient,
+        getOAuthToken: async (): Promise<Result<{ accessToken: string; email: string }, { code: string; message: string }>> => ok({ accessToken: 'test-token', email: 'test@test.com' }),
+      } as UserServiceClient;
+
+      setServices({
+        ...getServices(),
+        gitHubPRSummaryRepo: fakeSummaryRepo,
+        gitHubPRClient: fakePRClient,
+        userServiceClient: fakeUserServiceClient,
+      });
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      // updateIssueMetadata should NOT have been called for label addition
+      const labelCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].addLabels !== undefined
+      );
+      expect(labelCalls).toHaveLength(0);
+    });
+
+    it('still applies ready-to-merge label when GitHub API fallback confirms PR is not merged', async () => {
+      await createOriginTask({ traceId: 'trace_label_fallback_not_merged', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_fallback_not_merged_review' });
+
+      // Use fakes with seeding instead of vi.fn() overrides
+      const fakeSummaryRepo = new FakeGitHubPRSummaryRepo();
+      // Simulate stale summary: says NOT merged
+      fakeSummaryRepo.seedSummary({
+        repository: 'pbuchman/intexuraos',
+        pullRequestNumber: reviewTask.prNumber ?? 42,
+        title: 'Test PR',
+        state: 'open',
+        mergedAt: null,
+        baseBranch: 'main',
+        authorLogin: 'test-user',
+        headBranch: 'feature/test',
+        mergeConflictStatus: null,
+        lastConflictCheckedAt: null,
+        conflictEpisodeStartedAt: null,
+        conflictResolvedAt: null,
+        managedConflictCommentId: null,
+        managedConflictTaskId: null,
+        managedConflictTaskOwnerUserId: null,
+        lastActivityAt: new Date(),
+        firstSeenAt: new Date(),
+        lastReviewedCommitSha: null,
+        lastReviewNeedsRemediation: null,
+      });
+
+      const fakePRClient = new FakeGitHubPRClient();
+      // GitHub API also says NOT merged (PR still open)
+      fakePRClient.seedPrStatus('pbuchman', 'intexuraos', reviewTask.prNumber ?? 42, {
+        state: 'open',
+        mergedAt: null,
+        headRef: 'feature/test',
+      });
+
+      // OAuth token needed for fallback API call
+      const fakeUserServiceClient = {
+        ...mockUserServiceClient,
+        getOAuthToken: async (): Promise<Result<{ accessToken: string; email: string }, { code: string; message: string }>> => ok({ accessToken: 'test-token', email: 'test@test.com' }),
+      } as UserServiceClient;
+
+      setServices({
+        ...getServices(),
+        gitHubPRSummaryRepo: fakeSummaryRepo,
+        gitHubPRClient: fakePRClient,
+        userServiceClient: fakeUserServiceClient,
+      });
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      // Label SHOULD be applied since PR is not merged
+      const labelCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].addLabels !== undefined && call[0].addLabels.includes('ready-to-merge')
+      );
+      expect(labelCalls).toHaveLength(1);
     });
 
     it('does NOT set labels when needs_remediation is not "0"', async () => {
@@ -6784,6 +7262,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
         logger,
       }),
       archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
@@ -6835,6 +7314,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
+      autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
@@ -7159,6 +7639,7 @@ describe('POST /internal/logs', () => {
         logger,
       }),
       archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
@@ -7210,6 +7691,7 @@ describe('POST /internal/logs', () => {
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
+      autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
@@ -8046,6 +8528,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
         logger,
       }),
       archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
@@ -8097,6 +8580,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
+      autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
@@ -8920,6 +9404,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
       gitHubPRSummaryRepo: {} as never,
@@ -8966,6 +9451,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
+      autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
@@ -9030,7 +9516,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     vi.mocked(getServices().linearAgentClient.validateIssue).mockReset();
     vi.mocked(getServices().linearAgentClient.validateIssue).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'Linear down' }));
 
-    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '0' as const, planning_subtask_urls: '', planning_pr_url: '' } };
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '0' as const, planning_subtask_urls: '', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999' } };
     const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
     const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
 
@@ -9053,7 +9539,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     const lac = getServices().linearAgentClient;
     vi.mocked(lac.validateIssue).mockReset();
     vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'original-uuid', identifier: 'INT-123', title: 'O', url: 'u', labels: [], childCount: 1, parentId: null })).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'down' }));
-    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: 'https://linear.app/pbuchman/issue/INT-200/sub', planning_pr_url: '' } };
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: 'https://linear.app/pbuchman/issue/INT-200/sub', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999' } };
     const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
     const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
     expect(response.statusCode).toBe(200);
@@ -9075,7 +9561,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     const lac = getServices().linearAgentClient;
     vi.mocked(lac.validateIssue).mockReset();
     vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'original-uuid', identifier: 'INT-123', title: 'O', url: 'u', labels: [], childCount: 1, parentId: null })).mockResolvedValueOnce(ok({ id: 'child-uuid', identifier: 'INT-200', title: 'C', url: 'u', labels: [], childCount: 0, parentId: 'wrong-parent' }));
-    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: 'https://linear.app/pbuchman/issue/INT-200/sub', planning_pr_url: '' } };
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: 'https://linear.app/pbuchman/issue/INT-200/sub', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999' } };
     const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
     const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
     expect(response.statusCode).toBe(200);
@@ -9098,7 +9584,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'original-uuid', identifier: 'INT-123', title: 'O', url: 'u', labels: [], childCount: 1, parentId: null })).mockResolvedValueOnce(ok({ id: 'child-uuid', identifier: 'INT-200', title: 'C', url: 'u', labels: [], childCount: 0, parentId: 'original-uuid' }));
     vi.mocked(lac.updateIssueState).mockReset();
     vi.mocked(lac.updateIssueState).mockResolvedValueOnce(ok(undefined)).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'state fail' }));
-    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: 'https://linear.app/pbuchman/issue/INT-200/sub', planning_pr_url: '' } };
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: 'https://linear.app/pbuchman/issue/INT-200/sub', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999' } };
     const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
     const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
     expect(response.statusCode).toBe(200);
@@ -9123,7 +9609,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     vi.mocked(lac.updateIssueState).mockResolvedValue(ok(undefined));
     vi.mocked(lac.updateIssueMetadata).mockReset();
     vi.mocked(lac.updateIssueMetadata).mockResolvedValueOnce(ok({ droppedLabels: [] })).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'meta fail' }));
-    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: 'https://linear.app/pbuchman/issue/INT-200/sub', planning_pr_url: '' } };
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: 'https://linear.app/pbuchman/issue/INT-200/sub', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999' } };
     const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
     const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
     expect(response.statusCode).toBe(200);
@@ -9169,7 +9655,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'original-uuid', identifier: 'INT-123', title: 'O', url: 'u', labels: [], childCount: 1, parentId: null }));
     vi.mocked(lac.fetchDirectChildrenLive).mockReset();
     vi.mocked(lac.fetchDirectChildrenLive).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'children fail' }));
-    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: '', planning_pr_url: '' } };
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: '', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999' } };
     const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
     const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
     expect(response.statusCode).toBe(200);
@@ -9194,7 +9680,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     vi.mocked(lac.fetchDirectChildrenLive).mockResolvedValueOnce(ok([{ id: 'c', identifier: 'INT-200', url: 'u', parentId: 'original-uuid', labels: [], assigneeId: null, state: 'IP' }]));
     vi.mocked(lac.updateIssueState).mockReset();
     vi.mocked(lac.updateIssueState).mockResolvedValueOnce(ok(undefined)).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'state fail' }));
-    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: '', planning_pr_url: '' } };
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: '', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999' } };
     const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
     const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
     expect(response.statusCode).toBe(200);
@@ -9221,7 +9707,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     vi.mocked(lac.updateIssueState).mockResolvedValue(ok(undefined));
     vi.mocked(lac.updateIssueMetadata).mockReset();
     vi.mocked(lac.updateIssueMetadata).mockResolvedValueOnce(ok({ droppedLabels: [] })).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'meta fail' }));
-    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: '', planning_pr_url: '' } };
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: '', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999' } };
     const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
     const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
     expect(response.statusCode).toBe(200);
@@ -9275,7 +9761,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     vi.mocked(lac.updateIssueState).mockResolvedValue(ok(undefined));
     vi.mocked(lac.updateIssueMetadata).mockReset();
     vi.mocked(lac.updateIssueMetadata).mockResolvedValueOnce(ok({ droppedLabels: [] })).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'stamp fail' }));
-    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '0' as const, planning_subtask_urls: '', planning_pr_url: '' } };
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '0' as const, planning_subtask_urls: '', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999' } };
     const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
     const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
     expect(response.statusCode).toBe(200);
@@ -9353,6 +9839,163 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     expect(g.ok).toBe(true);
     if (!g.ok) throw new Error('Failed');
     expect(g.value.error?.message).toContain('Failed to enforce unclear labels');
+  });
+
+  it('fails planning enforcement when planned outcome has no PR URL', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'Plan without PR', sanitizedPrompt: 'Plan without PR',
+      systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_no_pr',
+      linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '0' as const, planning_subtask_urls: '', planning_pr_url: '' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+
+    expect(response.statusCode).toBe(200);
+    const getResult = await codeTaskRepo.findById(task.id);
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) throw new Error('Failed');
+    expect(getResult.value.status).toBe('failed');
+    expect(getResult.value.error?.code).toBe('PLANNING_AGENT_ENFORCEMENT_FAILED');
+    expect(getResult.value.error?.message).toContain('PR URL');
+  });
+
+  it('passes planning enforcement when prUrl is set as fallback (no planning_pr_url)', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'Plan with prUrl fallback', sanitizedPrompt: 'Plan with prUrl fallback',
+      systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_prurl_fallback',
+      linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '0' as const, planning_subtask_urls: '', prUrl: 'https://github.com/pbuchman/intexuraos/pull/999' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+
+    expect(response.statusCode).toBe(200);
+    const getResult = await codeTaskRepo.findById(task.id);
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) throw new Error('Failed');
+    // Should not fail enforcement — prUrl fallback is used
+    expect(getResult.value.status).not.toBe('failed');
+  });
+
+  it('fails remediation when result is missing (no payload)', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'Remediate', sanitizedPrompt: 'Remediate',
+      systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_rem_no_result',
+      webhookSecret: 'test-webhook-secret', agentType: 'remediation',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    const payload = { taskId: task.id, status: 'completed' as const };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+
+    expect(response.statusCode).toBe(200);
+    const getResult = await codeTaskRepo.findById(task.id);
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) throw new Error('Failed');
+    expect(getResult.value.status).toBe('failed');
+    expect(getResult.value.error?.code).toBe('REMEDIATION_AGENT_ENFORCEMENT_FAILED');
+  });
+
+  it('fails remediation enforcement when implemented outcome has no PR URL', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'Remediate no PR', sanitizedPrompt: 'Remediate no PR',
+      systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_rem_no_pr',
+      webhookSecret: 'test-webhook-secret', agentType: 'remediation',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    const payload = { taskId: task.id, status: 'completed' as const, result: { execution_outcome_label: 'implemented' as const, summary: 'Fixed stuff' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+
+    expect(response.statusCode).toBe(200);
+    const getResult = await codeTaskRepo.findById(task.id);
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) throw new Error('Failed');
+    expect(getResult.value.status).toBe('failed');
+    expect(getResult.value.error?.code).toBe('REMEDIATION_AGENT_ENFORCEMENT_FAILED');
+    expect(getResult.value.error?.message).toContain('prUrl');
+  });
+
+  it('returns INTERNAL_ERROR when remediation missing-result update fails', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'Remediate update fail', sanitizedPrompt: 'Remediate update fail',
+      systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_rem_update_fail_1',
+      webhookSecret: 'test-webhook-secret', agentType: 'remediation',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR' as const, message: 'db down' }));
+
+    const payload = { taskId: task.id, status: 'completed' as const };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+
+    expect(response.statusCode).toBe(500);
+  });
+
+  it('returns INTERNAL_ERROR when remediation no-PR update fails', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'Remediate update fail 2', sanitizedPrompt: 'Remediate update fail 2',
+      systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_rem_update_fail_2',
+      webhookSecret: 'test-webhook-secret', agentType: 'remediation',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR' as const, message: 'db down' }));
+
+    const payload = { taskId: task.id, status: 'completed' as const, result: { execution_outcome_label: 'implemented' as const, summary: 'Fixed stuff' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+
+    expect(response.statusCode).toBe(500);
+  });
+
+  it('remediation with already_completed outcome and no PR URL passes enforcement', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'Remediate already done', sanitizedPrompt: 'Remediate already done',
+      systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_rem_already_done',
+      webhookSecret: 'test-webhook-secret', agentType: 'remediation',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    const payload = { taskId: task.id, status: 'completed' as const, result: { execution_outcome_label: 'already_completed' as const, summary: 'Already done' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+
+    expect(response.statusCode).toBe(200);
+    const getResult = await codeTaskRepo.findById(task.id);
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) throw new Error('Failed');
+    // Should NOT be failed — should be 'implemented' (the resolved status for remediation)
+    expect(getResult.value.status).toBe('implemented');
   });
 
   it('fails execution enforcement when linearIssueId is undefined', async () => {
@@ -9821,7 +10464,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     vi.mocked(lac.validateIssue).mockReset();
     vi.mocked(lac.validateIssue).mockResolvedValue(ok({ id: 'uuid', identifier: 'INT-123', title: 'T', url: 'u', labels: [], childCount: 0, parentId: null }));
     vi.spyOn(getServices().whatsappNotifier, 'notifyDesignComplete').mockResolvedValueOnce(err({ code: 'notification_failed' as const, message: 'down' }));
-    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '0' as const, planning_subtask_urls: '', planning_pr_url: '' } };
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '0' as const, planning_subtask_urls: '', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999' } };
     const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
     const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
     expect(response.statusCode).toBe(200);
@@ -10272,6 +10915,7 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
       gitHubPRSummaryRepo: {} as never,
@@ -10292,6 +10936,7 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
+      autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;

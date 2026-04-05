@@ -1263,6 +1263,14 @@ export interface SubmitCodeTaskResponse {
 }
 
 /**
+ * Response from POST /code/ask-agent/start
+ */
+export interface AskAgentStartResponse {
+  status: 'submitted';
+  codeTaskId: string;
+}
+
+/**
  * Request to retry a failed code task
  */
 export interface RetryCodeTaskRequest {

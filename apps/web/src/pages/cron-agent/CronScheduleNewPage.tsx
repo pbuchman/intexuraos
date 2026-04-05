@@ -38,7 +38,7 @@ export function CronScheduleNewPage(): React.JSX.Element {
   const { services, loading: servicesLoading, error: servicesError } = useCronServices();
 
   const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
+  const [scheduleTiming, setScheduleTiming] = useState('');
   const [selectedServiceKeys, setSelectedServiceKeys] = useState<Set<string>>(new Set());
   const [instruction, setInstruction] = useState('');
   const [preferredTools, setPreferredTools] = useState<string[]>([]);
@@ -48,7 +48,7 @@ export function CronScheduleNewPage(): React.JSX.Element {
 
   const isValid =
     name.trim().length > 0 &&
-    description.trim().length > 0 &&
+    scheduleTiming.trim().length > 0 &&
     selectedServiceKeys.size > 0 &&
     instruction.trim().length > 0;
 
@@ -90,9 +90,9 @@ export function CronScheduleNewPage(): React.JSX.Element {
 
     try {
       const token = await getAccessToken();
-      const schedule = await createScheduleApi(token, {
+      const createdSchedule = await createScheduleApi(token, {
         name: name.trim(),
-        description: description.trim(),
+        schedule: scheduleTiming.trim(),
         action: {
           services: Array.from(selectedServiceKeys),
           instruction: instruction.trim(),
@@ -100,7 +100,7 @@ export function CronScheduleNewPage(): React.JSX.Element {
         },
         timezone,
       });
-      void navigate(`/cron-agent/${schedule.id}`);
+      void navigate(`/cron-agent/${createdSchedule.id}`);
     } catch (err) {
       setError(getErrorMessage(err));
       setSubmitting(false);
@@ -141,23 +141,23 @@ export function CronScheduleNewPage(): React.JSX.Element {
             />
           </div>
 
-          {/* Description */}
+          {/* Schedule */}
           <div>
             <label
-              htmlFor="schedule-description"
+              htmlFor="schedule-timing"
               className="block text-sm font-medium text-slate-700 mb-2 dark:text-slate-200"
             >
-              Description <span className="text-red-500">*</span>
+              Schedule <span className="text-red-500">*</span>
             </label>
             <textarea
-              id="schedule-description"
-              value={description}
+              id="schedule-timing"
+              value={scheduleTiming}
               onChange={(e): void => {
-                setDescription(e.target.value);
+                setScheduleTiming(e.target.value);
               }}
               disabled={submitting}
-              rows={3}
-              placeholder="Describe when this should run, e.g. 'every 5 minutes check if there is a running code task'"
+              rows={2}
+              placeholder="e.g. 'Every 5 minutes on weekdays' or 'Daily at 9am'"
               className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:border-blue-400 dark:focus:ring-blue-400/20"
             />
           </div>

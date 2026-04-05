@@ -22,11 +22,11 @@ export interface ParseScheduleDeps {
 
 export async function parseSchedule(
   deps: ParseScheduleDeps,
-  description: string,
+  schedule: string,
 ): Promise<Result<ParseScheduleResult, ParseScheduleError>> {
   const { logger, geminiClient } = deps;
 
-  const prompt = parseSchedulePrompt.build({ description });
+  const prompt = parseSchedulePrompt.build({ description: schedule });
   const result = await geminiClient.generate(prompt);
 
   if (!result.ok) {

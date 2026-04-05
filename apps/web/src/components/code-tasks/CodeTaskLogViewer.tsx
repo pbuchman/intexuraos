@@ -103,7 +103,6 @@ export function CodeTaskLogViewer({
   sendError = null,
   messageStatus = 'idle',
 }: CodeTaskLogViewerProps): React.JSX.Element {
-  const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [followLogs, setFollowLogs] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -160,12 +159,15 @@ export function CodeTaskLogViewer({
 
   useEffect(() => {
     if (logs.length > prevLogCountRef.current && followRef.current) {
-      isAutoScrollingRef.current = true;
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-      clearTimeout(autoScrollTimerRef.current);
-      autoScrollTimerRef.current = setTimeout(() => {
-        isAutoScrollingRef.current = false;
-      }, SMOOTH_SCROLL_GUARD_MS);
+      const el = containerRef.current;
+      if (el !== null) {
+        isAutoScrollingRef.current = true;
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+        clearTimeout(autoScrollTimerRef.current);
+        autoScrollTimerRef.current = setTimeout(() => {
+          isAutoScrollingRef.current = false;
+        }, SMOOTH_SCROLL_GUARD_MS);
+      }
     }
     prevLogCountRef.current = logs.length;
     return (): void => {
@@ -200,12 +202,15 @@ export function CodeTaskLogViewer({
     followRef.current = next;
     setFollowLogs(next);
     if (next) {
-      isAutoScrollingRef.current = true;
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-      clearTimeout(autoScrollTimerRef.current);
-      autoScrollTimerRef.current = setTimeout(() => {
-        isAutoScrollingRef.current = false;
-      }, SMOOTH_SCROLL_GUARD_MS);
+      const el = containerRef.current;
+      if (el !== null) {
+        isAutoScrollingRef.current = true;
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+        clearTimeout(autoScrollTimerRef.current);
+        autoScrollTimerRef.current = setTimeout(() => {
+          isAutoScrollingRef.current = false;
+        }, SMOOTH_SCROLL_GUARD_MS);
+      }
     }
   };
 
@@ -392,7 +397,6 @@ export function CodeTaskLogViewer({
               );
             })
           )}
-          <div ref={bottomRef} />
         </div>
 
         {showMessageInput ? (

@@ -29,6 +29,8 @@ import {
   toDispatchExecutionMemoryContext,
   type PrepareExecutionMemoryResources,
 } from './prepareExecutionMemoryContext.js';
+import { isStaleTaskError } from '../services/gitHubDispatchService.js';
+import type { SendTaskMessageErrorCode } from './sendTaskMessage.js';
 
 // In-memory guard for single-instance environments
 let isDrainingRetries = false;
@@ -39,7 +41,7 @@ export function _resetRetryDrainGuard(): void {
 }
 
 export interface DrainRetryQueueResult {
-  action: 'dispatched' | 'message_sent' | 'expired' | 'exhausted' | 'retry_failed' | 'failed' | 'empty' | 'skipped';
+  action: 'dispatched' | 'message_sent' | 'expired' | 'exhausted' | 'retry_failed' | 'failed' | 'empty' | 'skipped' | 'stale_task_fallback';
   taskId?: string;
   locksToCleanup?: LockCleanupInfo[];
 }
@@ -60,6 +62,15 @@ export interface DrainRetryQueueDeps {
   logLineRepo: LogLineRepository;
   statusMirrorService: StatusMirrorService;
   executionMemory?: PrepareExecutionMemoryResources;
+  createTaskForPRFn?: (request: {
+    repository: string;
+    prNumber: number;
+    senderLogin: string;
+    comment: string;
+    eventId: string;
+    prTitle?: string;
+    baseBranch?: string;
+  }) => Promise<Result<{ taskId: string }, { code: string; message: string }>>;
 }
 
 export async function drainRetryQueue(
@@ -432,7 +443,48 @@ async function handleTaskMessageRetry(
       return ok({ action: 'retry_failed', taskId: entry.taskId });
     }
 
-    // Non-retryable
+    // Check if this is a stale task (worker says task doesn't exist anymore)
+    const staleCheck: { success: false; dispatched: false; errorCode?: SendTaskMessageErrorCode; error?: string } = {
+      success: false,
+      dispatched: false,
+      errorCode: sendResult.error.code as SendTaskMessageErrorCode,
+      error: sendResult.error.message,
+    };
+
+    if (isStaleTaskError(staleCheck) && deps.createTaskForPRFn !== undefined) {
+      logger.info(
+        { retryId: entry.id, staleTaskId: entry.taskId, prNumber: entry.pullRequestNumber },
+        'Message retry detected stale task, falling back to new task creation'
+      );
+
+      const createResult = await deps.createTaskForPRFn({
+        repository: entry.repository,
+        prNumber: entry.pullRequestNumber,
+        senderLogin: entry.senderLogin,
+        comment: entry.message ?? '',
+        eventId: entry.eventId,
+        ...(entry.prTitle !== undefined && { prTitle: entry.prTitle }),
+        ...(entry.baseBranch !== undefined && { baseBranch: entry.baseBranch }),
+      });
+
+      await dispatchRetryRepo.delete(entry.id);
+
+      if (createResult.ok) {
+        logger.info(
+          { newTaskId: createResult.value.taskId, staleTaskId: entry.taskId },
+          'Created fallback task after stale task message retry'
+        );
+        return ok({ action: 'stale_task_fallback', taskId: createResult.value.taskId });
+      }
+
+      logger.error(
+        { error: createResult.error, staleTaskId: entry.taskId },
+        'Failed to create fallback task after stale task message retry'
+      );
+      return ok({ action: 'failed', taskId: entry.taskId });
+    }
+
+    // Non-retryable and not stale — drop permanently
     await dispatchRetryRepo.delete(entry.id);
     logger.warn({ retryId: entry.id, error: sendResult.error }, 'Message retry failed permanently');
     return ok({ action: 'failed', taskId: entry.taskId });

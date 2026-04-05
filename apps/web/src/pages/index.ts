@@ -15,6 +15,7 @@ export { WhatsAppNotesPage } from './WhatsAppNotesPage.js';
 export { MobileNotificationsConnectionPage } from './MobileNotificationsConnectionPage.js';
 export { MobileNotificationsListPage } from './MobileNotificationsListPage.js';
 export { ApiKeysSettingsPage } from './ApiKeysSettingsPage.js';
+export { AskAgentPage } from './AskAgentPage.js';
 export { ResearchAgentPage } from './ResearchAgentPage.js';
 export { ResearchListPage } from './ResearchListPage.js';
 export { ResearchDetailPage } from './ResearchDetailPage.js';

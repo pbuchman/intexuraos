@@ -53,6 +53,7 @@ function createMockLinearIssueService(): LinearIssueService {
     async markTodo(): Promise<void> { return; },
     async markQa(): Promise<void> { return; },
     async removeLabel(): Promise<void> { return; },
+    async addLabel(): Promise<void> { return; },
   };
 }
 
@@ -134,6 +135,9 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
       return ok([]);
     },
     async listAllNonArchivedGlobal(): ReturnType<CodeTaskRepository['listAllNonArchivedGlobal']> {
+      return ok([]);
+    },
+    async findAllNonArchived(): ReturnType<CodeTaskRepository['findAllNonArchived']> {
       return ok([]);
     },
   };
