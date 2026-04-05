@@ -360,6 +360,36 @@ describe('autoArchiveMergedTasks', () => {
     if (result.ok) {
       expect(result.value.tasksFailed).toBe(1);
       expect(result.value.tasksArchived).toBe(0);
+      // groupsArchived should be 0 when all tasks in group fail
+      expect(result.value.groupsArchived).toBe(0);
+    }
+  });
+
+  it('does not count group as archived when all tasks in group fail to update', async () => {
+    const tasks = [
+      makeTask({
+        id: 'task-1',
+        linearIssueId: 'INT-802',
+        updatedAt: daysAgo(10),
+        prMergedAt: Timestamp.fromDate(daysAgo(10)),
+      }),
+      makeTask({
+        id: 'task-2',
+        linearIssueId: 'INT-802',
+        updatedAt: daysAgo(10),
+        prMergedAt: Timestamp.fromDate(daysAgo(10)),
+      }),
+    ];
+    findAllNonArchivedMock.mockResolvedValue(ok(tasks));
+    updateMock.mockResolvedValue(err({ code: 'FIRESTORE_ERROR' as const, message: 'Write failed' }));
+
+    const result = await useCase();
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.tasksFailed).toBe(2);
+      expect(result.value.tasksArchived).toBe(0);
+      expect(result.value.groupsArchived).toBe(0);
     }
   });
 
