@@ -20,12 +20,13 @@ export interface ExecuteActionDeps {
 export async function executeAction(
   deps: ExecuteActionDeps,
   action: ScheduleAction,
+  userId: string,
 ): Promise<Result<ActionResult, ActionError>> {
   const { logger, toolRegistry, toolCallingClient } = deps;
   const preferredToolNames = new Set(action.preferredTools);
 
   // Get tools for the specified services
-  const tools = await toolRegistry.getToolsForServices(action.services);
+  const tools = await toolRegistry.getToolsForServices(action.services, { userId });
   if (tools.length === 0) {
     return err({
       code: 'UNKNOWN_SERVICE',
@@ -44,6 +45,7 @@ export async function executeAction(
     instruction: action.instruction,
     serviceNames,
     preferredTools: action.preferredTools,
+    userId,
   });
 
   const orderedTools = [

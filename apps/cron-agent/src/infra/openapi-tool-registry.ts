@@ -1,7 +1,7 @@
 import { getErrorMessage, type Logger } from '@intexuraos/common-core';
 import type { ToolDefinition } from '@intexuraos/llm-contract';
 import type { ServiceDefinition } from '../config.js';
-import type { ToolRegistry, ServiceToolInfo } from '../domain/ports/tool-registry.js';
+import type { ToolRegistry, ServiceToolInfo, ToolExecutionContext } from '../domain/ports/tool-registry.js';
 
 export class OpenApiToolRegistry implements ToolRegistry {
   private cache = new Map<string, ToolDefinition[]>();
@@ -19,28 +19,31 @@ export class OpenApiToolRegistry implements ToolRegistry {
     );
   }
 
-  async getToolsForService(serviceKey: string): Promise<ToolDefinition[]> {
+  async getToolsForService(serviceKey: string, context?: ToolExecutionContext): Promise<ToolDefinition[]> {
     const service = this.serviceMap.get(serviceKey);
     if (service === undefined) {
       this.deps.logger.warn({ serviceKey }, 'Service not in allowlist');
       return [];
     }
 
-    const cached = this.cache.get(serviceKey);
-    if (cached !== undefined) {
-      return cached;
+    const userId = context?.userId;
+    // If userId is provided, bypass cache (tools need user-specific headers)
+    if (userId === undefined) {
+      const cached = this.cache.get(serviceKey);
+      if (cached !== undefined) {
+        return cached;
+      }
     }
 
-    const tools = await this.fetchAndGenerateTools(service);
-    // Only cache non-empty results to avoid permanently disabling a service after transient failures
-    if (tools.length > 0) {
+    const tools = await this.fetchAndGenerateTools(service, userId);
+    if (userId === undefined && tools.length > 0) {
       this.cache.set(serviceKey, tools);
     }
     return tools;
   }
 
-  async getToolsForServices(serviceKeys: string[]): Promise<ToolDefinition[]> {
-    const results = await Promise.all(serviceKeys.map((key) => this.getToolsForService(key)));
+  async getToolsForServices(serviceKeys: string[], context?: ToolExecutionContext): Promise<ToolDefinition[]> {
+    const results = await Promise.all(serviceKeys.map((key) => this.getToolsForService(key, context)));
     return results.flat();
   }
 
@@ -67,7 +70,7 @@ export class OpenApiToolRegistry implements ToolRegistry {
     await Promise.all(this.deps.allowedServices.map((service) => this.getToolsForService(service.key)));
   }
 
-  private async fetchAndGenerateTools(service: ServiceDefinition): Promise<ToolDefinition[]> {
+  private async fetchAndGenerateTools(service: ServiceDefinition, userId?: string): Promise<ToolDefinition[]> {
     this.deps.logger.info(
       { service: service.key, openapiUrl: service.openapiUrl },
       'Fetching OpenAPI spec for service',
@@ -83,7 +86,7 @@ export class OpenApiToolRegistry implements ToolRegistry {
       }
 
       const spec = await response.json() as Record<string, unknown>;
-      return this.generateToolsFromSpec(service, spec);
+      return this.generateToolsFromSpec(service, spec, userId);
     } catch (error: unknown) {
       this.deps.logger.warn(
         { service: service.key, error: String(error) },
@@ -96,6 +99,7 @@ export class OpenApiToolRegistry implements ToolRegistry {
   private generateToolsFromSpec(
     service: ServiceDefinition,
     spec: Record<string, unknown>,
+    userId?: string,
   ): ToolDefinition[] {
     const paths = spec['paths'] as Record<string, Record<string, Record<string, unknown>>> | undefined;
     if (paths === undefined) {
@@ -144,7 +148,7 @@ export class OpenApiToolRegistry implements ToolRegistry {
           name: toolName,
           description: toolDescription || `${method.toUpperCase()} ${path}`,
           parameters,
-          run: this.createRunCallback(service, method, path),
+          run: this.createRunCallback(service, method, path, userId),
         });
       }
     }
@@ -206,6 +210,7 @@ export class OpenApiToolRegistry implements ToolRegistry {
     service: ServiceDefinition,
     method: string,
     path: string,
+    userId?: string,
   ): (args: Record<string, unknown>) => Promise<string> {
     const { internalAuthToken } = this.deps;
     const baseUrl = service.url;
@@ -235,6 +240,9 @@ export class OpenApiToolRegistry implements ToolRegistry {
         'X-Internal-Auth': internalAuthToken,
         'Content-Type': 'application/json',
       };
+      if (userId !== undefined) {
+        headers['X-Cron-User-Id'] = userId;
+      }
 
       const controller = new AbortController();
       const timeout = setTimeout(() => { controller.abort(); }, 30_000);
