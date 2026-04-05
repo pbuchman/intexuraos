@@ -8,6 +8,7 @@ import {
   pullRequestPrompt,
   prReviewOverlayPrompt,
   reviewPrompt,
+  askAgentPrompt,
 } from '../system-prompt.js';
 
 const EXPECTED_WORKER_TYPE_FALLBACK = `\`<${CODE_TASK_WORKER_TYPES.join('|')}>\``;
@@ -23,6 +24,7 @@ describe('system-prompt', () => {
       { name: 'pullRequestPrompt', prompt: pullRequestPrompt },
       { name: 'prReviewOverlayPrompt', prompt: prReviewOverlayPrompt },
       { name: 'reviewPrompt', prompt: reviewPrompt },
+      { name: 'askAgentPrompt', prompt: askAgentPrompt },
     ])('$name has valid semver version', ({ prompt }) => {
       expect(prompt.version).toMatch(SEMVER_REGEX);
     });
@@ -34,6 +36,7 @@ describe('system-prompt', () => {
       { name: 'pullRequestPrompt', prompt: pullRequestPrompt },
       { name: 'prReviewOverlayPrompt', prompt: prReviewOverlayPrompt },
       { name: 'reviewPrompt', prompt: reviewPrompt },
+      { name: 'askAgentPrompt', prompt: askAgentPrompt },
     ])('$name has required metadata fields', ({ prompt }) => {
       expect(prompt.name).toBeTruthy();
       expect(prompt.description).toBeTruthy();
@@ -87,7 +90,7 @@ describe('system-prompt', () => {
   it('enforces Plan PR rules in PLANNING_AGENT_FINAL', () => {
     const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
 
-    expect(result).toContain('NEVER for SIMPLE tasks, ALWAYS for PLAN-DOC and COMPLEX tasks');
+    expect(result).toContain('MANDATORY for ALL planned outcomes, including SIMPLE tasks');
   });
 
   it('enforces Clarification message rules in PLANNING_AGENT_FINAL', () => {
@@ -132,6 +135,18 @@ describe('system-prompt', () => {
     const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
 
     expect(result).toContain('### Self-Verification (MANDATORY before completion)');
+  });
+
+  it('planning prompt requires evidence PR for SIMPLE tasks', () => {
+    const result = planningPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
+    expect(result).toContain('evidence PR');
+    expect(result).not.toContain('No subtasks, no plan doc, no PR');
+  });
+
+  it('includes debugging/investigation task handling guidance in planning prompt', () => {
+    const result = planningPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
+    expect(result).toContain('### Debugging/Investigation Tasks (routed as planning)');
+    expect(result).toContain('docs/plans/<INT-XXX>-investigation.md');
   });
 
   it('includes the strengthened SIMPLE guardrail text in the planning prompt', () => {
@@ -481,6 +496,16 @@ describe('system-prompt', () => {
     expect(result).toContain('- Review iterations: <number>');
     expect(result).toContain('- Skill sequence proof:');
     expect(result).not.toContain('- Turn summary:');
+    expect(result).toContain('- PR: <full GitHub PR URL>');
+    expect(result).not.toContain('"N/A"');
+  });
+
+  it('execution prompt requires evidence PR for already_completed', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+
+    expect(result).toContain('Evidence PR (MANDATORY for already_completed)');
+    expect(result).toContain('docs/evidence/');
+    expect(result).not.toContain('Set PR to "N/A"');
   });
 
   it('pins execution final block memory self-report fields', () => {
@@ -490,7 +515,9 @@ describe('system-prompt', () => {
     const finalBlock = result.slice(finalBlockStart, finalBlockEnd);
 
     expect(finalBlock).toContain('- execution_memory_ids_used: <comma-separated list or "none">');
-    expect(finalBlock).toContain('- execution_memory_ids_rejected: <comma-separated list or "none">');
+    expect(finalBlock).toContain(
+      '- execution_memory_ids_rejected: <comma-separated list or "none">'
+    );
     expect(finalBlock).toContain('- execution_memory_usage_summary: <brief note, or "none">');
   });
 
@@ -1238,11 +1265,11 @@ describe('system-prompt', () => {
   });
 
   it('planning prompt version is 5.1.0', () => {
-    expect(planningPrompt.version).toBe('5.1.0');
+    expect(planningPrompt.version).toBe('6.0.0');
   });
 
-  it('execution prompt version is 8.1.0', () => {
-    expect(executionPrompt.version).toBe('8.1.0');
+  it('execution prompt version is 9.0.0', () => {
+    expect(executionPrompt.version).toBe('9.0.0');
   });
 
   it('remediation prompt version is 3.2.0', () => {
@@ -1330,5 +1357,55 @@ describe('system-prompt', () => {
     const result = reviewPrompt.build(baseParams);
     expect(result).toContain('gh_actions_status');
     expect(result).toContain('REVIEW_AGENT_FINAL');
+  });
+
+  it('routes ask_agent to askAgentPrompt', () => {
+    const result = buildSystemPrompt({ ...baseParams, agentType: 'ask_agent' });
+    expect(result).toContain('[AGENT:ASK_AGENT]');
+    expect(result).toContain('[ASK AGENT MODE]');
+    expect(result).not.toContain('[AGENT:PLANNING]');
+    expect(result).not.toContain('[AGENT:EXECUTION]');
+  });
+
+  it('ask agent prompt contains required markers and instructions', () => {
+    const result = askAgentPrompt.build({ ...baseParams, agentType: 'ask_agent' });
+    expect(result).toContain('[AGENT:ASK_AGENT]');
+    expect(result).toContain('[ASK AGENT MODE]');
+    expect(result).toContain('interactive code assistant');
+    expect(result).toContain(
+      'Do NOT create pull requests or Linear issues unless the user explicitly asks'
+    );
+    expect(result).toContain('Do NOT produce structured completion blocks');
+    expect(result).toContain('Session Continuity');
+    expect(result).toContain('Worker type:');
+    expect(result).toContain('Task ID: task-123');
+  });
+
+  it('ask agent prompt includes worker instructions', () => {
+    const result = askAgentPrompt.build({ ...baseParams, agentType: 'ask_agent' });
+    expect(result).toContain('Git CLI (MANDATORY');
+    expect(result).toContain('GCP Service Account Credentials');
+    expect(result).toContain('Code Task Debugging');
+  });
+
+  it('ask agent prompt omits Linear Issue line when linearIssueId is undefined', () => {
+    const { linearIssueId: _, ...paramsWithoutLinear } = baseParams;
+    const result = askAgentPrompt.build({
+      ...paramsWithoutLinear,
+      agentType: 'ask_agent',
+      linearIssueLabels: [],
+    });
+    expect(result).not.toContain('Linear Issue:');
+    expect(result).toContain('[AGENT:ASK_AGENT]');
+  });
+
+  it('ask agent prompt uses worker type fallback when workerType is undefined', () => {
+    const { workerType: _, ...paramsWithoutWorkerType } = baseParams;
+    const result = askAgentPrompt.build({
+      ...paramsWithoutWorkerType,
+      agentType: 'ask_agent',
+      linearIssueLabels: [],
+    });
+    expect(result).toContain(EXPECTED_WORKER_TYPE_FALLBACK);
   });
 });

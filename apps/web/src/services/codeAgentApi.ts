@@ -1,6 +1,7 @@
 import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
 import type {
+  AskAgentStartResponse,
   CodeTask,
   CodeTaskStatus,
   GitHubEventLogResponse,
@@ -267,4 +268,17 @@ export async function getDispatchQueue(accessToken: string): Promise<QueueRespon
     '/code/queue',
     accessToken,
   );
+}
+
+/**
+ * Start a new Ask Agent session
+ */
+export async function startAskAgent(
+  accessToken: string,
+  request: { prompt: string }
+): Promise<AskAgentStartResponse> {
+  return await apiRequest<AskAgentStartResponse>(config.codeAgentUrl, '/code/ask-agent/start', accessToken, {
+    method: 'POST',
+    body: request,
+  });
 }

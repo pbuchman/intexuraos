@@ -26,7 +26,14 @@ export const RemediationActionSchema = z.enum([
 const ExecutionMemoryPromptMemorySchema = z.object({
   memoryId: z.string().min(1),
   title: z.string().min(1),
-  memoryType: z.enum(['implementation_pattern', 'verification_pattern', 'pitfall_pattern', 'decomposition_pattern', 'planning_decision', 'review_finding']),
+  memoryType: z.enum([
+    'implementation_pattern',
+    'verification_pattern',
+    'pitfall_pattern',
+    'decomposition_pattern',
+    'planning_decision',
+    'review_finding',
+  ]),
   score: z.number(),
   appliesWhen: z.string().min(1),
   action: z.string().min(1),
@@ -56,7 +63,9 @@ export const CreateTaskRequestSchema = z.object({
   webhookUrl: z.string().url(),
   webhookSecret: z.string().min(1),
   actionId: z.string().optional(),
-  agentType: z.enum(['planning', 'execution', 'pull_request', 'review', 'remediation']).optional(),
+  agentType: z
+    .enum(['planning', 'execution', 'pull_request', 'review', 'remediation', 'ask_agent'])
+    .optional(),
   executionMemoryContext: ExecutionMemoryPromptContextSchema.optional(),
   trackingCommentId: z.string().min(1).optional(),
   prNumber: z.number().int().positive().optional(),

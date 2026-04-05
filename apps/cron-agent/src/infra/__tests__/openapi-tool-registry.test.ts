@@ -652,6 +652,129 @@ describe('OpenApiToolRegistry', () => {
     );
   });
 
+  it('listServiceTools excludes services with empty allowedOperations that produce zero tools', async () => {
+    const blockedService: ServiceDefinition = {
+      key: 'blocked-service',
+      name: 'Blocked Service',
+      url: 'http://blocked:8128',
+      openapiUrl: 'http://blocked:8128/openapi.json',
+      allowedOperations: [],
+    };
+
+    const multiRegistry = new OpenApiToolRegistry({
+      allowedServices: [testService, blockedService],
+      internalAuthToken: 'test-token',
+      logger: createTestLogger() as unknown as Logger,
+    });
+
+    nock('http://code-agent:8128')
+      .get('/openapi.json')
+      .reply(200, TEST_OPENAPI_SPEC);
+
+    nock('http://blocked:8128')
+      .get('/openapi.json')
+      .reply(200, {
+        openapi: '3.1.1',
+        info: { title: 'Blocked', version: '1.0.0' },
+        paths: {
+          '/internal/dangerous': {
+            post: {
+              operationId: 'dangerousOp',
+              summary: 'Should be blocked',
+            },
+          },
+        },
+      });
+
+    const services = await multiRegistry.listServiceTools();
+    expect(services.length).toBe(1);
+    expect(services[0]?.key).toBe('code-agent');
+  });
+
+  it('injects X-Cron-User-Id header when context has userId', async () => {
+    nock('http://code-agent:8128')
+      .get('/openapi.json')
+      .reply(200, TEST_OPENAPI_SPEC);
+
+    nock('http://code-agent:8128')
+      .get('/internal/tasks')
+      .matchHeader('X-Internal-Auth', 'test-token')
+      .matchHeader('X-Cron-User-Id', 'user-789')
+      .reply(200, JSON.stringify({ success: true }));
+
+    const tools = await registry.getToolsForService('code-agent', { userId: 'user-789' });
+    const getTasks = tools.find((t) => t.name === 'code_agent__getRunningTasks');
+    if (getTasks === undefined) { expect(getTasks).toBeDefined(); return; }
+
+    const result = await getTasks.run({});
+    expect(result).toContain('success');
+  });
+
+  it('does not inject X-Cron-User-Id header when context is undefined', async () => {
+    nock('http://code-agent:8128')
+      .get('/openapi.json')
+      .reply(200, TEST_OPENAPI_SPEC);
+
+    nock('http://code-agent:8128')
+      .get('/internal/tasks')
+      .matchHeader('X-Internal-Auth', 'test-token')
+      .reply(200, function () {
+        const cronUserIdHeader = this.req.headers['x-cron-user-id'];
+        return JSON.stringify({ hasCronUserId: cronUserIdHeader !== undefined });
+      });
+
+    const tools = await registry.getToolsForService('code-agent');
+    const getTasks = tools.find((t) => t.name === 'code_agent__getRunningTasks');
+    if (getTasks === undefined) { expect(getTasks).toBeDefined(); return; }
+
+    const result = await getTasks.run({});
+    expect(result).toContain('"hasCronUserId":false');
+  });
+
+  it('bypasses cache when context has userId', async () => {
+    // First call without context — caches the tools
+    nock('http://code-agent:8128')
+      .get('/openapi.json')
+      .reply(200, TEST_OPENAPI_SPEC);
+
+    await registry.getToolsForService('code-agent');
+
+    // Second call with userId — should re-fetch (bypass cache)
+    nock('http://code-agent:8128')
+      .get('/openapi.json')
+      .reply(200, TEST_OPENAPI_SPEC);
+
+    nock('http://code-agent:8128')
+      .get('/internal/tasks')
+      .matchHeader('X-Cron-User-Id', 'user-abc')
+      .reply(200, JSON.stringify({ ok: true }));
+
+    const tools = await registry.getToolsForService('code-agent', { userId: 'user-abc' });
+    const getTasks = tools.find((t) => t.name === 'code_agent__getRunningTasks');
+    if (getTasks === undefined) { expect(getTasks).toBeDefined(); return; }
+
+    const result = await getTasks.run({});
+    expect(result).toContain('"ok":true');
+  });
+
+  it('getToolsForServices passes context through to getToolsForService', async () => {
+    nock('http://code-agent:8128')
+      .get('/openapi.json')
+      .reply(200, TEST_OPENAPI_SPEC);
+
+    nock('http://code-agent:8128')
+      .get('/internal/tasks')
+      .matchHeader('X-Cron-User-Id', 'user-ctx')
+      .reply(200, JSON.stringify({ forwarded: true }));
+
+    const tools = await registry.getToolsForServices(['code-agent'], { userId: 'user-ctx' });
+    const getTasks = tools.find((t) => t.name === 'code_agent__getRunningTasks');
+    if (getTasks === undefined) { expect(getTasks).toBeDefined(); return; }
+
+    const result = await getTasks.run({});
+    expect(result).toContain('"forwarded":true');
+  });
+
   it('handles parameter without schema', async () => {
     const specNoParamSchema = {
       openapi: '3.1.1',

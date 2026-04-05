@@ -84,6 +84,7 @@ function createFakeInnerRepo(): CodeTaskRepository {
     listAllNonArchived: vi.fn(),
     listPendingExecutionMemoryPostRun: vi.fn(),
     listAllNonArchivedGlobal: vi.fn(),
+    findAllNonArchived: vi.fn(),
   };
 }
 

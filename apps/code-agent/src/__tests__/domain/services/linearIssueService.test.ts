@@ -676,6 +676,42 @@ describe('linearIssueService', () => {
     });
   });
 
+  describe('addLabel', () => {
+    it('calls updateIssueMetadata with addLabels', async () => {
+      mockUpdateIssueMetadata = vi.fn().mockResolvedValue(ok({ droppedLabels: [] }));
+
+      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
+
+      await service.addLabel('test-user-123', 'INT-100', 'ready-to-merge');
+
+      expect(mockUpdateIssueMetadata).toHaveBeenCalledWith({
+        userId: 'test-user-123',
+        issueId: 'INT-100',
+        addLabels: ['ready-to-merge'],
+      });
+    });
+
+    it('logs warning on failure but does not throw', async () => {
+      mockUpdateIssueMetadata = vi.fn().mockResolvedValue(
+        err({ code: 'LINEAR_ERROR', message: 'fail' })
+      );
+
+      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
+
+      await service.addLabel('test-user-123', 'INT-100', 'ready-to-merge');
+
+      expect(mockLogger.warn).toHaveBeenCalled();
+    });
+
+    it('skips when linearIssueId is empty', async () => {
+      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
+
+      await service.addLabel('test-user-123', '', 'ready-to-merge');
+
+      expect(mockUpdateIssueMetadata).not.toHaveBeenCalled();
+    });
+  });
+
   describe('markQa', () => {
     it('should call updateIssueState with qa', async () => {
       mockUpdateIssueState = vi.fn().mockResolvedValue(ok(undefined));

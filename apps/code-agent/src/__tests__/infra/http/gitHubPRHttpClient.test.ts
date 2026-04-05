@@ -859,13 +859,27 @@ describe('GitHubPRHttpClient', () => {
     it('returns ok with empty sha when PR is already merged (405)', async () => {
       nock('https://api.github.com')
         .put('/repos/owner/repo/pulls/42/merge')
-        .reply(405, { message: 'Pull Request is not mergeable' });
+        .reply(405, { message: 'Pull Request already merged' });
 
       const result = await client.mergePullRequest('test-token', 'owner', 'repo', 42, 'merge');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value).toEqual({ sha: '', merged: true });
+      }
+    });
+
+    it('returns API_ERROR when 405 indicates merge is blocked', async () => {
+      nock('https://api.github.com')
+        .put('/repos/owner/repo/pulls/42/merge')
+        .reply(405, { message: 'Required status check "CI" is expected' });
+
+      const result = await client.mergePullRequest('test-token', 'owner', 'repo', 42, 'merge');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+        expect(result.error.message).toContain('merge blocked');
       }
     });
 

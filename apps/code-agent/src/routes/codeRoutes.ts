@@ -30,6 +30,7 @@ import { generateWebhookSecret } from '../domain/utils/secrets.js';
 import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
 import { loadConfig } from '../config.js';
 import { backLinkPlanningTask } from '../domain/usecases/backLinkPlanningTask.js';
+import { createTaskForPR } from '../domain/usecases/createTaskForPR.js';
 import type { CodeTask } from '../domain/models/codeTask.js';
 
 const logger = createAppLogger({ name: 'code-routes' });
@@ -741,6 +742,292 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         status: 'submitted',
         codeTaskId: result.value.codeTaskId, // @allow-result-access -- .ok checked at line 461
         resourceUrl: result.value.resourceUrl, // @allow-result-access -- .ok checked at line 461
+      });
+    }
+  );
+
+  // POST /internal/code/submit - Internal endpoint to create tasks on behalf of a user (INT-1287)
+  fastify.post<{
+    Body: {
+      userId: string;
+      prompt: string;
+      workerType?: WorkerType;
+      linearIssueId?: string;
+    };
+  }>(
+    '/internal/code/submit',
+    {
+      schema: {
+        operationId: 'internalSubmitCodeTask',
+        summary: 'Create a code task on behalf of a user',
+        description:
+          'Internal endpoint for creating code tasks on behalf of a user. ' +
+          'Mirrors POST /code/submit but uses internal auth and accepts userId in the body.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          properties: {
+            userId: { type: 'string', minLength: 1 },
+            prompt: { type: 'string', minLength: 1, maxLength: 100000 },
+            workerType: workerTypeSchema,
+            linearIssueId: { type: 'string' },
+          },
+          required: ['userId', 'prompt'],
+        },
+        response: {
+          200: {
+            description: 'Task submitted successfully',
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  status: { type: 'string', enum: ['submitted'] },
+                  codeTaskId: { type: 'string' },
+                  resourceUrl: { type: 'string' },
+                },
+                required: ['status', 'codeTaskId', 'resourceUrl'],
+              },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          409: {
+            description: 'Duplicate task',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['CONFLICT'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          400: {
+            description: 'Invalid request - prompt failed injection sanitization',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['INVALID_REQUEST'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          503: {
+            description: 'Queue full',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['QUEUE_FULL'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          424: {
+            description: 'Worker not configured',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['WORKER_NOT_CONFIGURED'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          500: {
+            description: 'Server error',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{
+        Body: {
+          userId: string;
+          prompt: string;
+          workerType?: WorkerType;
+          linearIssueId?: string;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/code/submit',
+      });
+
+      // Validate internal auth
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for internal code submit');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      const services = getServices();
+      const body = request.body;
+
+      // Extract or generate traceId from headers
+      const traceId = extractOrGenerateTraceId(request.headers);
+
+      request.log.info(
+        {
+          userId: body.userId,
+          workerType: body.workerType,
+          promptLength: body.prompt.length,
+          traceId,
+        },
+        'Internal code task submission on behalf of user'
+      );
+
+      // Generate synthetic actionId/approvalEventId for processCodeAction.
+      // These are prefixed with 'internal-submit-' so they are distinguishable
+      // from real action approvals and won't collide with Layer 0/1 dedup.
+      const syntheticId = `internal-submit-${randomUUID()}`;
+
+      const processRequest: {
+        actionId: string;
+        approvalEventId: string;
+        userId: string;
+        prompt: string;
+        workerType: WorkerType;
+        linearIssueId?: string;
+        traceId?: string;
+        source?: 'whatsapp' | 'web';
+      } = {
+        actionId: syntheticId,
+        approvalEventId: syntheticId,
+        userId: body.userId,
+        prompt: body.prompt,
+        workerType: body.workerType ?? 'auto',
+        traceId,
+        source: 'web',
+      };
+
+      if (body.linearIssueId !== undefined) {
+        processRequest.linearIssueId = body.linearIssueId;
+      }
+
+      const result = await processCodeAction(
+        {
+          logger: services.logger,
+          codeTaskRepo: services.codeTaskRepo,
+          taskEnqueueService: services.taskEnqueueService,
+          linearIssueService: services.linearIssueService,
+          linearAgentClient: services.linearAgentClient,
+          whatsappNotifier: services.whatsappNotifier,
+          metricsClient: services.metricsClient,
+          workerSettingsRepo: services.workerSettingsRepo,
+          orchestratorSecret: loadConfig().orchestratorSecret,
+        },
+        processRequest
+      );
+
+      if (!result.ok) {
+        const error = result.error;
+        request.log.warn(
+          {
+            errorCode: error.code,
+            errorMessage: error.message,
+            existingTaskId: error.existingTaskId,
+          },
+          'Failed to create internal code task'
+        );
+
+        if (error.code === 'duplicate_prompt') {
+          // firestoreCodeTaskRepository always provides existingTaskId for duplicate_prompt
+          const existingTaskId = error.existingTaskId;
+          /* v8 ignore start -- ts-type: firestoreCodeTaskRepository always provides existingTaskId; fallback unreachable @preserve */
+          return await reply.fail('CONFLICT', `Similar task submitted in last 5 minutes: ${existingTaskId ?? ''}`);
+          /* v8 ignore stop @preserve */
+        }
+
+        if (error.code === 'active_task_exists') {
+          // firestoreCodeTaskRepository always provides existingTaskId for active_task_exists
+          const existingTaskId = error.existingTaskId;
+          /* v8 ignore start -- ts-type: firestoreCodeTaskRepository always provides existingTaskId; fallback unreachable @preserve */
+          return await reply.fail('CONFLICT', `Active task already exists for this Linear issue: ${existingTaskId ?? ''}`);
+          /* v8 ignore stop @preserve */
+        }
+
+        if (error.code === 'worker_not_configured') {
+          return await reply.fail('WORKER_NOT_CONFIGURED', error.message);
+        }
+
+        if (error.code === 'validation_error') {
+          return await reply.fail('INVALID_REQUEST', error.message);
+        }
+
+        if (error.code === 'queue_full') {
+          return await reply.fail('QUEUE_FULL', error.message);
+        }
+
+        /* v8 ignore start -- ts-type: queue_timeout is not in EnqueueError code union; codeRoutes.ts handler is defensive only @preserve */
+        if (error.code === 'queue_timeout') {
+          // Note: QUEUE_TIMEOUT is not in ErrorCode union; map to INTERNAL_ERROR.
+          // TODO: Consider adding QUEUE_TIMEOUT to common-core/src/errors.ts if needed.
+          return await reply.fail('INTERNAL_ERROR', error.message);
+        }
+        /* v8 ignore stop @preserve */
+
+        return await reply.fail('INTERNAL_ERROR', error.message);
+      }
+
+      request.log.info({ codeTaskId: result.value.codeTaskId }, 'Internal code task created successfully'); // @allow-result-access -- .ok checked at line 958
+
+      return await reply.ok({
+        status: 'submitted',
+        codeTaskId: result.value.codeTaskId, // @allow-result-access -- .ok checked at line 958
+        resourceUrl: result.value.resourceUrl, // @allow-result-access -- .ok checked at line 958
       });
     }
   );
@@ -4219,6 +4506,37 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           }),
           /* v8 ignore stop @preserve */
         },
+        /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes is not tracked after service override tests @preserve */
+        ...(services.userLookupService !== undefined && {
+          createTaskForPRFn: async (request: { repository: string; prNumber: number; senderLogin: string; comment: string; eventId: string; prTitle?: string; baseBranch?: string }) => {
+            return createTaskForPR(
+              {
+                logger: services.logger,
+                codeTaskRepo: services.codeTaskRepo,
+                userLookupService: services.userLookupService!,
+                linearIssueService: services.linearIssueService,
+                taskEnqueueService: services.taskEnqueueService,
+                whatsappNotifier: services.whatsappNotifier,
+                orchestratorSecret: loadConfig().orchestratorSecret,
+                gitHubPRClient: services.gitHubPRClient,
+                userServiceClient: services.userServiceClient,
+                firestore: services.firestore,
+                automationLog: services.automationLog,
+                workerSettingsRepo: services.workerSettingsRepo,
+              },
+              {
+                repository: request.repository,
+                prNumber: request.prNumber,
+                senderLogin: request.senderLogin,
+                comment: request.comment,
+                eventId: request.eventId,
+                ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
+                ...(request.baseBranch !== undefined && { baseBranch: request.baseBranch }),
+              },
+            );
+          },
+        }),
+        /* v8 ignore stop @preserve */
       });
 
       if (retryResult.ok && retryResult.value.action !== 'empty' && retryResult.value.action !== 'failed') {

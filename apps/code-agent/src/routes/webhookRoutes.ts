@@ -20,6 +20,8 @@ import { parseLinearIdentifierFromUrl } from '../domain/utils/linearIdentifierPa
 import { parseOwnerRepo } from '../domain/utils/parseOwnerRepo.js';
 import { drainTaskQueue } from '../domain/usecases/drainTaskQueue.js';
 import { isMemoryEligibleAgent } from '../domain/utils/memoryEligibility.js';
+import { mergePlanPr } from '../domain/utils/mergePlanPr.js';
+import { fetchGitHubToken } from '../domain/utils/gitHubTokenResolver.js';
 
 /**
  * Best-effort: record a task_failed automation log event for PR-linked tasks.
@@ -364,6 +366,16 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       ): Promise<{ ok: true } | { ok: false; message: string }> => {
         if (task.linearIssueId === undefined) {
           return { ok: false, message: 'Planning enforcement requires original linearIssueId' };
+        }
+
+        if (outcome === 'planned') {
+          const prUrl = planningResult.planning_pr_url ?? planningResult.prUrl;
+          if (!prUrl) {
+            return {
+              ok: false,
+              message: 'Planning enforcement requires a PR URL for planned outcomes — all planned tasks must produce an evidence PR',
+            };
+          }
         }
 
         const originalIssueValidation = await linearAgentClient.validateIssue({
@@ -1149,6 +1161,67 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
         }
 
+        if (task.agentType === 'remediation') {
+          if (result === undefined) {
+            request.log.error(
+              { taskId, routedIssueId: task.linearIssueId },
+              'Remediation completion missing result payload'
+            );
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              error: {
+                code: 'REMEDIATION_AGENT_ENFORCEMENT_FAILED',
+                message: 'Remediation completion missing result payload',
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return reply.fail('INTERNAL_ERROR', failResult.error.message);
+            }
+            await cleanupLockIfPR();
+
+            recordTaskFailed({
+              task, taskId, completedAt,
+              error: 'Remediation completion missing result payload',
+              errorCode: 'REMEDIATION_AGENT_ENFORCEMENT_FAILED',
+            });
+
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return await reply.send({ received: true });
+          }
+
+          if (result.execution_outcome_label === 'implemented' && !result.prUrl) {
+            request.log.error(
+              { taskId, routedIssueId: task.linearIssueId },
+              'Remediation deterministic enforcement failed: no PR URL for implemented outcome'
+            );
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              result,
+              error: {
+                code: 'REMEDIATION_AGENT_ENFORCEMENT_FAILED',
+                message: 'Remediation enforcement requires result.prUrl for implemented outcome',
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return reply.fail('INTERNAL_ERROR', failResult.error.message);
+            }
+            await cleanupLockIfPR();
+
+            recordTaskFailed({
+              task, taskId, completedAt,
+              error: 'Remediation enforcement requires result.prUrl for implemented outcome',
+              errorCode: 'REMEDIATION_AGENT_ENFORCEMENT_FAILED',
+            });
+
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return await reply.send({ received: true });
+          }
+        }
+
         // Extract PR number from prUrl for findByPR correlation (INT-465).
         let prNumber: number | undefined;
         if (result?.prUrl) {
@@ -1255,6 +1328,29 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 // gitHubPRSummaryRepo may not be fully initialized — assume not merged
               }
 
+              // Fallback: if summary says not-merged, check GitHub API directly.
+              // The summary is updated by a webhook that may arrive after this callback.
+              if (!prAlreadyMerged) {
+                try {
+                  const tokenResult = await userServiceClient.getOAuthToken(task.userId, 'github');
+                  if (tokenResult.ok) {
+                    const parsed = parseOwnerRepo(task.repository);
+                    /* v8 ignore start -- ts-type: task creation helpers always defined with valid owner/repo strings; no fake mechanism can inject a malformed repository field post-task-creation @preserve */
+                    if (parsed !== null) {
+                    /* v8 ignore stop @preserve */
+                      const prStatus = await gitHubPRClient.getPullRequestStatus(tokenResult.value.accessToken, parsed.owner, parsed.repo, prNumber);
+                      if (prStatus.ok && prStatus.value.mergedAt !== null) {
+                        prAlreadyMerged = true;
+                        request.log.info({ taskId, prNumber },
+                          'prAlreadyMerged detected via GitHub API fallback (summary was stale)');
+                      }
+                    }
+                  }
+                } catch {
+                  // GitHub API unavailable — proceed with summary-based decision
+                }
+              }
+
               if (prAlreadyMerged) {
                 request.log.debug({ taskId, prNumber }, 'Skipping review-outcome label — PR already merged');
               } else {
@@ -1269,8 +1365,33 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   if (originResult.value.agentType === 'planning') {
                     // Plan-phase reviews do not auto-advance to execution.
                     // The user must explicitly trigger execution from the UI.
+                    // But we DO auto-merge the plan PR so the plan docs land on development immediately.
                     request.log.info({ taskId, prNumber, linearIssueId: originResult.value.linearIssueId },
-                      'Plan review passed — skipping ready-to-implement label (user must explicitly trigger execution)');
+                      'Plan review passed — auto-merging plan PR (user must explicitly trigger execution)');
+
+                    const planningPrUrl = originResult.value.result?.planning_pr_url ?? originResult.value.result?.prUrl;
+                    if (planningPrUrl !== undefined && planningPrUrl !== '') {
+                      try {
+                        const gitHubToken = await fetchGitHubToken(userServiceClient, task.userId, request.log);
+                        if (gitHubToken !== null) {
+                          const mergeResult = await mergePlanPr(
+                            { logger: request.log, gitHubPRClient },
+                            { planningPrUrl, repository: task.repository, token: gitHubToken },
+                          );
+                          if (mergeResult.ok) {
+                            request.log.info({ prNumber, planningPrUrl }, 'Plan PR auto-merged on review pass');
+                          } else {
+                            request.log.warn({ prNumber, planningPrUrl, error: mergeResult.error }, 'Plan PR auto-merge failed (best-effort)');
+                          }
+                        } else {
+                          request.log.warn({ prNumber }, 'Skipping plan PR auto-merge — no GitHub token available');
+                        }
+                      } catch (mergeError: unknown) {
+                        request.log.warn({ prNumber, planningPrUrl, error: mergeError }, 'Plan PR auto-merge threw (best-effort)');
+                      }
+                    } else {
+                      request.log.debug({ prNumber, taskId: originResult.value.id }, 'No planning_pr_url on origin task — skipping plan PR auto-merge');
+                    }
                   } else {
                     targetLinearIssueId = originResult.value.linearIssueId;
                     targetUserId = originResult.value.userId;

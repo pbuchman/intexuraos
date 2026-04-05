@@ -45,6 +45,8 @@ export interface UnifiedEvaluatorDeps {
   codeTaskRepo?: CodeTaskRepository | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
   /** Best-effort callback to post a GitHub comment when an unauthorized sender is rejected. */
   onUnauthorizedSender?: ((event: GitHubPREvent) => Promise<void>) | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
+  /** Best-effort callback when LLM triage skips a review. Used to set ready-to-merge label. */
+  onReviewSkipped?: ((params: { repository: string; prNumber: number }) => Promise<void>) | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
 }
 
 export interface UnifiedEvaluator {
@@ -208,7 +210,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
         );
 
         // Fail closed for explicit @review commands - do not fallback dispatch
-        /* v8 ignore start -- upstream: FakeEventSource always provides body — cannot simulate undefined body on issue_comment @preserve */
+        /* v8 ignore start -- upstream: isReviewCommandComment('') is always false, so event.body must be truthy when the if-true branch is taken — the ?? '' right side is unreachable in practice @preserve */
         if (event.eventType === 'issue_comment' && isReviewCommandComment(event.body ?? '')) {
           const workerType = extractReviewWorkerType(event.body ?? '');
           /* v8 ignore stop @preserve */
@@ -395,6 +397,14 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
         llmToolCalls: usage.toolCalls,
         llmReasoning: reasoning,
       }, startTime, logger);
+
+      // Best-effort: notify that review was skipped so ready-to-merge label can be set.
+      // Only LLM triage skips qualify — hard-rules skips are pre-triage rejections.
+      if (deps.onReviewSkipped !== undefined) {
+        void deps.onReviewSkipped({ repository: event.repository, prNumber: event.pullRequestNumber }).catch((skipErr: unknown) => {
+          logger.warn({ error: skipErr, eventId: event.id }, 'onReviewSkipped callback failed (best-effort)');
+        });
+      }
     },
   };
 }

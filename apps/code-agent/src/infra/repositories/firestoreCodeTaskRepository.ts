@@ -500,6 +500,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.prBranch !== undefined) {
           updateData['prBranch'] = input.prBranch;
         }
+        if (input.prMergedAt !== undefined) {
+          updateData['prMergedAt'] = Timestamp.fromDate(input.prMergedAt);
+        }
         if (input.executionMemoryContext !== undefined) {
           const serializedExecutionMemoryContext = serializeExecutionMemoryContext(
             input.executionMemoryContext
@@ -1031,7 +1034,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
     listPendingExecutionMemoryPostRun: async (limit: number): Promise<Result<CodeTask[], RepositoryError>> => {
       try {
         const snapshot = await collection
-          .where('agentType', 'in', ['execution', 'planning', 'review'])
+          .where('agentType', 'in', ['execution', 'planning', 'review', 'remediation', 'pull_request'])
           .where('executionMemoryPostRun.status', '==', 'pending')
           .orderBy('completedAt', 'asc')
           .limit(limit)
@@ -1288,6 +1291,30 @@ export const createFirestoreCodeTaskRepository = (deps: {
         return ok(tasks);
       } catch (error) {
         logger.error({ error }, 'Failed to list all non-archived tasks globally');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    findAllNonArchived: async (): Promise<Result<CodeTask[], RepositoryError>> => {
+      try {
+        // Uses != 'archived' (not 'in NON_ARCHIVED_STATUSES') deliberately:
+        // this approach is future-proof — any new status added later is automatically
+        // included, ensuring the hasActive safety check in the use case always sees
+        // the complete picture. listAllNonArchivedGlobal uses 'in' for backward compat.
+        const snapshot = await collection
+          .where('status', '!=', 'archived')
+          .get();
+
+        const tasks = snapshot.docs.map((doc: QueryDocumentSnapshot) =>
+          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
+        );
+
+        return ok(tasks);
+      } catch (error) {
+        logger.error({ error }, 'Failed to find all non-archived tasks');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,

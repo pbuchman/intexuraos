@@ -1027,6 +1027,7 @@ export class FakeCodeAgentClient implements CodeAgentClient {
   private failError: CodeAgentError = { code: 'UNAVAILABLE', message: 'code-agent unavailable' };
   private lastRequest: { userId: string; linearIssueId: string; prompt: string; workerType: string; actionId: string; approvalEventId: string } | null = null;
   private taskIdCounter = 1;
+  private recomputeCalls: { userId: string; linearIssueId: string; labels: { id: string; name: string }[]; sourceTimestamp: string }[] = [];
 
   async triggerCodeTask(request: {
     userId: string;
@@ -1050,13 +1051,18 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     return ok({ codeTaskId: `code-task-${this.taskIdCounter++}` });
   }
 
-  async notifyGroupSummaryRecompute(_request: {
+  async notifyGroupSummaryRecompute(request: {
     userId: string;
     linearIssueId: string;
     labels: { id: string; name: string }[];
     sourceTimestamp: string;
   }): Promise<Result<void, CodeAgentError>> {
+    this.recomputeCalls.push(request);
     return ok(undefined);
+  }
+
+  getRecomputeCalls(): { userId: string; linearIssueId: string; labels: { id: string; name: string }[]; sourceTimestamp: string }[] {
+    return this.recomputeCalls;
   }
 
   setFailure(fail: boolean, error?: CodeAgentError): void {
@@ -1072,6 +1078,7 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     this.shouldFail = false;
     this.lastRequest = null;
     this.taskIdCounter = 1;
+    this.recomputeCalls = [];
   }
 }
 

@@ -2059,4 +2059,68 @@ describe('LLM retry for pull_request events', () => {
       );
     });
   });
+
+  describe('onReviewSkipped callback', () => {
+    it('calls onReviewSkipped when LLM triage skips', async () => {
+      const onReviewSkipped = vi.fn().mockResolvedValue(undefined);
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'skip' as const, reason: 'Documentation-only change' },
+          usage: { costUsd: 0.001, toolCalls: [] },
+          reasoning: 'Docs only.',
+        })),
+        onReviewSkipped,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({ repository: 'pbuchman/intexuraos', pullRequestNumber: 42 });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(onReviewSkipped).toHaveBeenCalledWith({
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+      });
+    });
+
+    it('does not call onReviewSkipped when hard rules skip', async () => {
+      const onReviewSkipped = vi.fn().mockResolvedValue(undefined);
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'skip', reason: 'PROTECTED_BASE_BRANCH' }),
+        } as unknown as WebhookRulesService,
+        onReviewSkipped,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(onReviewSkipped).not.toHaveBeenCalled();
+    });
+
+    it('swallows onReviewSkipped errors', async () => {
+      const onReviewSkipped = vi.fn().mockRejectedValue(new Error('boom'));
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'skip' as const, reason: 'No code changes' },
+          usage: { costUsd: 0.001, toolCalls: [] },
+          reasoning: 'No code.',
+        })),
+        onReviewSkipped,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent();
+
+      // Should not throw
+      await evaluator.evaluate(event, logger);
+
+      expect(onReviewSkipped).toHaveBeenCalled();
+    });
+  });
 });

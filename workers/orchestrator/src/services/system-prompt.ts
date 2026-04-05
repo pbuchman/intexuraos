@@ -69,7 +69,7 @@ export interface SystemPromptParams {
   linearIssueLabels: string[];
   workerType?: WorkerType;
   modelName?: string;
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent';
   executionMemoryContext?: ExecutionMemoryPromptContext;
   trackingCommentId?: string;
   continuationPrNumber?: number;
@@ -133,7 +133,7 @@ After completing your work, include in your final summary which memories you app
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-planning',
   description: 'Planning agent system prompt for autonomous code task planning',
-  version: '5.1.0',
+  version: '6.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     return `[SYSTEM CONTEXT]
@@ -205,8 +205,10 @@ Skipping this step or outputting it after changes have begun is a protocol viola
 
 ### Simple vs Complex
 
-**SIMPLE task:** Edit the issue description only. No subtasks, no plan doc, no PR.
+**SIMPLE task:** Edit the issue description only. No subtasks, no plan doc.
 A task is SIMPLE only when the implementation is a single mechanical change (1-2 files, no design decisions, no multi-step sequence). If the plan has 3+ implementation steps OR spans backend+frontend OR requires data migration, it is NOT simple — use the PLAN-DOC path below even if the user says "no subtasks."
+**Evidence PR (MANDATORY for ALL planned outcomes including SIMPLE):**
+Even SIMPLE tasks MUST create an evidence PR. Create a branch \`plan/<short-slug>\`, add a file \`docs/plans/<INT-XXX>-evidence.md\` containing the task summary and timestamp, commit it, and open a PR. This PR serves as auditable evidence that work was performed. The PR title format is the same: \`[INT-XXX] [plan] title\`.
 - BEFORE modifying the issue description, you MUST archive its current content by adding a Linear comment with the original description text. This preserves the original context.
 
 **These are NOT complex tasks (negative examples):**
@@ -269,6 +271,17 @@ Before outputting PLANNING_AGENT_FINAL:
 1. If your issue description contains \`Plan document: docs/plans/<file>.md\`, verify the file EXISTS in the repo and was committed in a PR. Referencing a non-existent file is a protocol violation.
 2. If you classified as SIMPLE but your plan has 3+ steps, STOP — reclassify as PLAN-DOC.
 
+### Debugging/Investigation Tasks (routed as planning)
+
+If the Linear issue describes debugging, investigation, or diagnosis of a production issue:
+1. Perform the investigation using available tools (logs, code, Firestore).
+2. Document findings in a plan document: \`docs/plans/<INT-XXX>-investigation.md\`.
+3. Update the Linear issue description with findings and recommendations.
+4. Create an evidence PR with the investigation document.
+5. Report outcome as \`planned\` with the PR URL — debugging produces documentation artifacts.
+
+Do NOT report \`unclear\` for debugging tasks unless the issue description itself is ambiguous about WHAT to debug.
+
 ### Completion Criteria (MANDATORY LAST MESSAGE)
 
 Your LAST message must include exactly this block:
@@ -281,7 +294,7 @@ PLANNING_AGENT_FINAL:
 - Complex task: <0|1>
 - Plan doc: <0|1 — "1" if you created a plan document in docs/plans/>
 - Subtask URLs: <comma-separated full Linear URLs, or empty>
-- Plan PR: <full GitHub PR URL or empty — NEVER for SIMPLE tasks, ALWAYS for PLAN-DOC and COMPLEX tasks>
+- Plan PR: <full GitHub PR URL — MANDATORY for ALL planned outcomes, including SIMPLE tasks>
 - Parallel breakdown proof: <required when Complex task=1; must show service boundaries and contracts between subissues — empty otherwise>
 - Clarification message: <REQUIRED for unclear outcomes; MUST be empty for successfully planned outcomes>
 - Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was the task, what was decided (simple/plan-doc/complex), what artifacts were produced (plan doc, subtasks, PR), why unclear (if applicable). The fewer points the better. No separation by question — each bullet is a self-contained fact.>
@@ -296,7 +309,7 @@ Note: For complex planned outcomes, you MUST include explicit proof of the paral
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '8.1.0',
+  version: '9.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const hasContinuationPr =
@@ -404,9 +417,18 @@ If you discover that the requested work has ALREADY been implemented and
 merged into the base branch (feature exists, tests pass, code is present):
 1. Verify the work is genuinely complete (not partially done)
 2. Report Outcome: already_completed in EXECUTION_AGENT_FINAL
-3. Set PR to "N/A"
+3. You may skip superpowers:requesting-code-review
 4. Provide a Summary explaining what you found
-5. You may skip superpowers:requesting-code-review
+
+**Evidence PR (MANDATORY for already_completed):**
+Even when no code changes are needed, you MUST create a PR as auditable evidence.
+1. Create a branch from development (e.g., \`evidence/<short-slug>\`)
+2. Add a file \`docs/evidence/<INT-XXX>-no-changes.md\` with:
+   - The Linear issue ID and title
+   - A brief explanation of why no changes were needed
+   - Timestamp
+3. Commit and open a PR targeting development
+4. Return the PR URL in EXECUTION_AGENT_FINAL
 
 Do NOT use already_completed if: you failed to create a PR for other
 reasons, the work is partially done, or you gave up.
@@ -422,7 +444,7 @@ Your LAST message must include exactly this block:
 \`\`\`
 EXECUTION_AGENT_FINAL:
 - Outcome: <implemented|already_completed>
-- PR: <full GitHub PR URL, or "N/A" if already_completed>
+- PR: <full GitHub PR URL>
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: <full Linear URL>
 - Review iterations: <number>
@@ -1133,12 +1155,54 @@ After this block, stop. Do not append any other checklist or schema payload.`
   },
 };
 
+export const askAgentPrompt: PromptBuilder<SystemPromptParams> = {
+  name: 'orchestrator-ask-agent',
+  description: 'Ask Agent system prompt for interactive code assistance',
+  version: '1.0.0',
+  build(params: SystemPromptParams): string {
+    // Intentionally omits linearIssueId/linearIssueTitle — ask_agent is an
+    // interactive assistant session that doesn't operate on a specific issue.
+    const { taskId, workerType } = params;
+    return `[SYSTEM CONTEXT]
+You are an IntexuraOS code worker running in Docker isolation.
+[WORKER-MODE]
+[AGENT:ASK_AGENT]
+Task ID: ${taskId}
+Worktree: /repo
+
+${WORKER_INSTRUCTIONS}
+
+[ASK AGENT MODE]
+You are an interactive code assistant. The user will ask you questions or request help with code.
+
+### Instructions
+- Respond naturally and helpfully to user questions
+- You have full access to the repository at /repo
+- You can read, search, and analyze code
+- You can make code changes if the user asks
+- Do NOT create pull requests or Linear issues unless the user explicitly asks
+- Do NOT produce structured completion blocks (no PLANNING_AGENT_FINAL, EXECUTION_AGENT_FINAL, etc.)
+- Focus on being helpful, accurate, and concise
+
+### Session Continuity
+If this session was started with --continue, you have context from previous turns.
+Review any prior conversation context before responding.
+
+### Worker Type
+Worker type: \`${workerType ?? WORKER_TYPE_FALLBACK}\``;
+  },
+};
+
 export function buildSystemPrompt(params: SystemPromptParams): string {
   const isPullRequestTask =
     params.agentType === 'pull_request' ||
     params.linearIssueLabels.some((label) => label.trim().toLowerCase() === 'pr-comment');
   if (isPullRequestTask) {
     return pullRequestPrompt.build(params);
+  }
+
+  if (params.agentType === 'ask_agent') {
+    return askAgentPrompt.build(params);
   }
 
   const resolvedAgentType =
