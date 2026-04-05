@@ -11,7 +11,8 @@ export type CompletionAgentType =
   | 'execution'
   | 'pull_request'
   | 'review'
-  | 'remediation';
+  | 'remediation'
+  | 'ask_agent';
 
 export interface CompletionVerifierInput {
   taskId: string;
@@ -207,6 +208,12 @@ export function detectFatalExitCode(rawLogs: string): number | undefined {
 
 export function getLast50Lines(rawLogs: string): string {
   return stripDockerHeaders(rawLogs).split('\n').slice(-50).join('\n');
+}
+
+export function getLast50ClaudeLines(rawLogs: string): string {
+  const lines = stripDockerHeaders(rawLogs).split('\n');
+  const claudeLines = lines.filter((line) => line.startsWith('[claude]'));
+  return claudeLines.slice(-50).join('\n');
 }
 
 export function getLast20Lines(rawLogs: string): string {

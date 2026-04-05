@@ -8,6 +8,7 @@ import {
   pullRequestPrompt,
   prReviewOverlayPrompt,
   reviewPrompt,
+  askAgentPrompt,
 } from '../system-prompt.js';
 
 const EXPECTED_WORKER_TYPE_FALLBACK = `\`<${CODE_TASK_WORKER_TYPES.join('|')}>\``;
@@ -23,6 +24,7 @@ describe('system-prompt', () => {
       { name: 'pullRequestPrompt', prompt: pullRequestPrompt },
       { name: 'prReviewOverlayPrompt', prompt: prReviewOverlayPrompt },
       { name: 'reviewPrompt', prompt: reviewPrompt },
+      { name: 'askAgentPrompt', prompt: askAgentPrompt },
     ])('$name has valid semver version', ({ prompt }) => {
       expect(prompt.version).toMatch(SEMVER_REGEX);
     });
@@ -34,6 +36,7 @@ describe('system-prompt', () => {
       { name: 'pullRequestPrompt', prompt: pullRequestPrompt },
       { name: 'prReviewOverlayPrompt', prompt: prReviewOverlayPrompt },
       { name: 'reviewPrompt', prompt: reviewPrompt },
+      { name: 'askAgentPrompt', prompt: askAgentPrompt },
     ])('$name has required metadata fields', ({ prompt }) => {
       expect(prompt.name).toBeTruthy();
       expect(prompt.description).toBeTruthy();
@@ -1354,5 +1357,55 @@ describe('system-prompt', () => {
     const result = reviewPrompt.build(baseParams);
     expect(result).toContain('gh_actions_status');
     expect(result).toContain('REVIEW_AGENT_FINAL');
+  });
+
+  it('routes ask_agent to askAgentPrompt', () => {
+    const result = buildSystemPrompt({ ...baseParams, agentType: 'ask_agent' });
+    expect(result).toContain('[AGENT:ASK_AGENT]');
+    expect(result).toContain('[ASK AGENT MODE]');
+    expect(result).not.toContain('[AGENT:PLANNING]');
+    expect(result).not.toContain('[AGENT:EXECUTION]');
+  });
+
+  it('ask agent prompt contains required markers and instructions', () => {
+    const result = askAgentPrompt.build({ ...baseParams, agentType: 'ask_agent' });
+    expect(result).toContain('[AGENT:ASK_AGENT]');
+    expect(result).toContain('[ASK AGENT MODE]');
+    expect(result).toContain('interactive code assistant');
+    expect(result).toContain(
+      'Do NOT create pull requests or Linear issues unless the user explicitly asks'
+    );
+    expect(result).toContain('Do NOT produce structured completion blocks');
+    expect(result).toContain('Session Continuity');
+    expect(result).toContain('Worker type:');
+    expect(result).toContain('Task ID: task-123');
+  });
+
+  it('ask agent prompt includes worker instructions', () => {
+    const result = askAgentPrompt.build({ ...baseParams, agentType: 'ask_agent' });
+    expect(result).toContain('Git CLI (MANDATORY');
+    expect(result).toContain('GCP Service Account Credentials');
+    expect(result).toContain('Code Task Debugging');
+  });
+
+  it('ask agent prompt omits Linear Issue line when linearIssueId is undefined', () => {
+    const { linearIssueId: _, ...paramsWithoutLinear } = baseParams;
+    const result = askAgentPrompt.build({
+      ...paramsWithoutLinear,
+      agentType: 'ask_agent',
+      linearIssueLabels: [],
+    });
+    expect(result).not.toContain('Linear Issue:');
+    expect(result).toContain('[AGENT:ASK_AGENT]');
+  });
+
+  it('ask agent prompt uses worker type fallback when workerType is undefined', () => {
+    const { workerType: _, ...paramsWithoutWorkerType } = baseParams;
+    const result = askAgentPrompt.build({
+      ...paramsWithoutWorkerType,
+      agentType: 'ask_agent',
+      linearIssueLabels: [],
+    });
+    expect(result).toContain(EXPECTED_WORKER_TYPE_FALLBACK);
   });
 });

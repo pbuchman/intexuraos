@@ -63,7 +63,9 @@ export const CreateTaskRequestSchema = z.object({
   webhookUrl: z.string().url(),
   webhookSecret: z.string().min(1),
   actionId: z.string().optional(),
-  agentType: z.enum(['planning', 'execution', 'pull_request', 'review', 'remediation']).optional(),
+  agentType: z
+    .enum(['planning', 'execution', 'pull_request', 'review', 'remediation', 'ask_agent'])
+    .optional(),
   executionMemoryContext: ExecutionMemoryPromptContextSchema.optional(),
   trackingCommentId: z.string().min(1).optional(),
   prNumber: z.number().int().positive().optional(),
