@@ -1,5 +1,5 @@
 export const metadata = {
-  id: '079',
+  id: '081',
   name: 'reset-execution-memory-scores',
   description:
     'Reset all execution memory scoring counters and reactivate suppressed memories so past rejections no longer penalize retrieval',
