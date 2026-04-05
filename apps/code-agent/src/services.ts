@@ -559,6 +559,85 @@ export function initServices(config: ServiceConfig): void {
     },
     allowedBots: ALLOWED_BOTS,
     codeTaskRepo,
+    onReviewSkipped: async ({ repository, prNumber }): Promise<void> => {
+      try {
+        const originResult = await codeTaskRepo.findOriginTaskByPR(repository, prNumber);
+        if (!originResult.ok || originResult.value === null) {
+          logger.debug({ repository, prNumber }, 'No origin task found for skipped review — skipping label');
+          return;
+        }
+
+        const origin = originResult.value;
+        if (origin.linearIssueId === undefined) {
+          logger.debug({ repository, prNumber }, 'Origin task has no Linear issue — skipping label');
+          return;
+        }
+
+        if (origin.agentType === 'planning') {
+          logger.info({ repository, prNumber, linearIssueId: origin.linearIssueId },
+            'Skipped review for planning-origin task — not setting ready-to-merge');
+          return;
+        }
+
+        // Validate issue exists and get current labels
+        const issueValidation = await linearAgentClient.validateIssue({
+          userId: origin.userId,
+          identifier: origin.linearIssueId,
+        });
+        if (!issueValidation.ok) {
+          logger.warn({ linearIssueId: origin.linearIssueId, error: issueValidation.error },
+            'Failed to validate issue for skipped-review label');
+          return;
+        }
+
+        // Set ready-to-merge label
+        const labelResult = await linearAgentClient.updateIssueMetadata({
+          userId: origin.userId,
+          issueId: issueValidation.value.id,
+          addLabels: ['ready-to-merge'],
+        });
+        if (!labelResult.ok) {
+          logger.warn({ linearIssueId: origin.linearIssueId, error: labelResult.error },
+            'Failed to set ready-to-merge label for skipped review');
+          return;
+        }
+        if (labelResult.value.droppedLabels.length > 0) {
+          logger.warn({ linearIssueId: origin.linearIssueId, droppedLabels: labelResult.value.droppedLabels },
+            'ready-to-merge label not found in Linear team');
+          return;
+        }
+
+        logger.info({ repository, prNumber, linearIssueId: origin.linearIssueId },
+          'Set ready-to-merge label for skipped review');
+
+        // Record in the PR automation comment for visibility (Task 4)
+        void automationLog.record(
+          { repository, prNumber },
+          {
+            type: 'remediation_decision',
+            required: false,
+            source: 'review_result',
+            signal: '0',
+          },
+        ).catch((logErr: unknown) => {
+          logger.warn({ error: logErr, repository, prNumber }, 'Failed to record automation log for skipped-review label');
+        });
+
+        // Best-effort: recompute group summary so cached aggregateStatus reflects actionable state
+        const updatedLabels = [
+          ...issueValidation.value.labels.map((l) => ({ id: '', name: l })),
+          { id: '', name: 'ready-to-merge' },
+        ];
+        void groupSummaryRepo.recomputeWithLabels(
+          origin.userId, origin.linearIssueId, updatedLabels, new Date().toISOString(),
+        ).catch((recomputeErr: unknown) => {
+          logger.warn({ linearIssueId: origin.linearIssueId, error: recomputeErr },
+            'Failed to recompute group summary after skipped-review label (best-effort)');
+        });
+      } catch (error: unknown) {
+        logger.warn({ error, repository, prNumber }, 'onReviewSkipped failed (best-effort)');
+      }
+    },
     onUnauthorizedSender: createUnauthorizedSenderCommentHandler({ gitHubPRClient, userServiceClient, logger }),
   });
 
