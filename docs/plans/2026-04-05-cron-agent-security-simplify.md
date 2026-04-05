@@ -611,9 +611,11 @@ export interface ToolRegistry {
 }
 ```
 
-- [ ] **Step 3: Inject X-Cron-User-Id header in OpenApiToolRegistry via closure capture**
+- [ ] **Step 3: Thread userId through fetchAndGenerateTools → createRunCallback**
 
-In `apps/cron-agent/src/infra/openapi-tool-registry.ts`, update `createRunCallback` to capture `userId` directly in its closure:
+In `apps/cron-agent/src/infra/openapi-tool-registry.ts`, thread `userId` through the tool generation pipeline so it's captured at tool-creation time rather than grafted onto cached tools:
+
+**Update `createRunCallback` signature** to accept optional `userId`:
 
 ```typescript
 private createRunCallback(
@@ -643,24 +645,88 @@ private createRunCallback(
 }
 ```
 
-Update `getToolsForService` to pass `context?.userId` when building tools:
+**Update `generateToolsFromSpec`** to accept optional `userId` and pass it to `createRunCallback`:
 
 ```typescript
-async getToolsForService(serviceKey: string, context?: ToolExecutionContext): Promise<ToolDefinition[]> {
-  // ... existing cache logic ...
-  const tools = await this.fetchAndGenerateTools(service);
-  // ... cache logic ...
+private generateToolsFromSpec(
+  service: ServiceDefinition,
+  spec: Record<string, unknown>,
+  userId?: string,   // NEW
+): ToolDefinition[] {
+  // ... existing path/operation iteration ...
+  // In the tool creation:
+  tools.push({
+    name: toolName,
+    description: toolDescription || `${method.toUpperCase()} ${path}`,
+    parameters,
+    run: this.createRunCallback(service, method, path, userId),  // Pass userId
+  });
+  // ...
+}
+```
 
-  // If context provided, rebuild tools with userId-capturing callbacks
-  if (context !== undefined) {
-    return tools.map((tool) => ({
-      ...tool,
-      run: this.createRunCallback(service, tool.method, tool.path, context.userId),
-    }));
+**Update `fetchAndGenerateTools`** to accept and forward `userId`:
+
+```typescript
+private async fetchAndGenerateTools(
+  service: ServiceDefinition,
+  userId?: string,  // NEW
+): Promise<ToolDefinition[]> {
+  // ... fetch spec ...
+  return this.generateToolsFromSpec(service, spec, userId);  // Forward userId
+}
+```
+
+**Update `getToolsForService`** to accept context and pass `userId` to `fetchAndGenerateTools`:
+
+```typescript
+async getToolsForService(
+  serviceKey: string,
+  context?: ToolExecutionContext,
+): Promise<ToolDefinition[]> {
+  const service = this.serviceMap.get(serviceKey);
+  if (service === undefined) {
+    this.deps.logger.warn({ serviceKey }, 'Service not in allowlist');
+    return [];
+  }
+
+  const userId = context?.userId;
+
+  // NOTE: Cache stores tools WITHOUT userId context (cached at spec-fetch time).
+  // If userId is needed, we bypass cache and re-fetch. This is intentional —
+  // cached tools are shared across users; user-specific context must be injected at call time.
+  if (userId === undefined) {
+    const cached = this.cache.get(serviceKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+  }
+
+  const tools = await this.fetchAndGenerateTools(service, userId);
+
+  // Only cache non-user-specific tools
+  if (userId === undefined && tools.length > 0) {
+    this.cache.set(serviceKey, tools);
   }
   return tools;
 }
 ```
+
+**Update `getToolsForServices`** similarly:
+
+```typescript
+async getToolsForServices(
+  serviceKeys: string[],
+  context?: ToolExecutionContext,
+): Promise<ToolDefinition[]> {
+  const results = await Promise.all(
+    serviceKeys.map((key) => this.getToolsForService(key, context)),
+  );
+  return results.flat();
+}
+```
+
+> **Why this approach:** `ToolDefinition` from `@intexuraos/llm-contract` only has `{ name, description, parameters, run }` — no `method` or `path` fields. The plan's original approach (rebuilding tools with `tool.method`/`tool.path`) would cause a TypeScript compile error. Threading `userId` through the generation pipeline is the correct approach. The cache bypass for user-specific requests is acceptable since tool generation is fast (just a local fetch of the OpenAPI spec).
 
 - [ ] **Step 4: Update execute-action to pass userId context**
 
