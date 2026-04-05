@@ -728,7 +728,7 @@ export class TaskDispatcher {
 
   private async resumeTaskWithUserMessage(task: Task): Promise<void> {
     const prompt = task.pendingResumeStart?.prompt;
-    /* v8 ignore start -- async-timing: sendMessage and recoverPendingResumeTask validate pendingResumeStart before invoking the async helper; this guard protects against unexpected in-flight mutation @preserve */
+    /* v8 ignore start -- upstream: sendMessage and recoverPendingResumeTask validate pendingResumeStart before invoking this async helper; this guard cannot be reached in unit tests because callers always set pendingResumeStart before calling resumeTaskWithUserMessage @preserve */
     if (prompt === undefined) {
       await this.failAcceptedResume(
         task,
@@ -1540,6 +1540,30 @@ export class TaskDispatcher {
     ].join('\n');
   }
 
+  private parseRebaseResultOutput(
+    output: string,
+    taskId: string
+  ): TaskResult['rebaseResult'] | undefined {
+    try {
+      const parsed = JSON.parse(output) as {
+        attempted?: boolean;
+        success?: boolean;
+        conflictFiles?: string[];
+      };
+      if (parsed.attempted === true && typeof parsed.success === 'boolean') {
+        return {
+          attempted: parsed.attempted,
+          success: parsed.success,
+          ...(parsed.conflictFiles !== undefined && { conflictFiles: parsed.conflictFiles }),
+        };
+      }
+      return undefined;
+    } catch (parseError) {
+      this.logger.warn({ taskId, error: parseError }, 'Failed to parse rebase result');
+      return undefined;
+    }
+  }
+
   private parseContinuationPrOutput(
     taskId: string,
     prOutput: string
@@ -2139,30 +2163,11 @@ export class TaskDispatcher {
           String(pr.state).toUpperCase() === 'OPEN' &&
           (pr.mergedAt === null || pr.mergedAt === undefined)
         ) {
-          let rebaseResult: TaskResult['rebaseResult'] | undefined;
-          try {
-            const { stdout: rebaseOutput } = await execAsync(
-              'cat .rebase-result.json 2>/dev/null || echo "{}"',
-              execOptions
-            );
-            const parsed = JSON.parse(rebaseOutput) as {
-              attempted?: boolean;
-              success?: boolean;
-              conflictFiles?: string[];
-            };
-            if (parsed.attempted === true && typeof parsed.success === 'boolean') {
-              rebaseResult = {
-                attempted: parsed.attempted,
-                success: parsed.success,
-                ...(parsed.conflictFiles !== undefined && { conflictFiles: parsed.conflictFiles }),
-              };
-            }
-          } catch (parseError) {
-            this.logger.warn(
-              { taskId: task.taskId, error: parseError },
-              'Failed to parse rebase result'
-            );
-          }
+          const { stdout: rebaseOutput } = await execAsync(
+            'cat .rebase-result.json 2>/dev/null || echo "{}"',
+            execOptions
+          );
+          const rebaseResult = this.parseRebaseResultOutput(rebaseOutput, task.taskId);
 
           return {
             branch: pr.headRefName,
