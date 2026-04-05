@@ -1965,7 +1965,7 @@ export class TaskDispatcher {
     }
 
     if (shouldPreserve && task.agentType === 'pull_request' && task.prNumber !== undefined) {
-      /* v8 ignore start -- source-map: optional chaining on listPreservedWorkers and nullish coalescing to default empty array @preserve */
+      /* v8 ignore start -- source-map: optional chaining on listPreservedWorkers not tracked by v8 even though test covers both undefined and array paths @preserve */
       const preserved = (await this.isolation.provider.listPreservedWorkers?.()) ?? [];
       /* v8 ignore stop @preserve */
       if (preserved.length > 0) {
