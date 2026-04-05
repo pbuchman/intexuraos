@@ -29,7 +29,8 @@ export function deriveAggregateStatusFromSummary(fields: GroupSummaryFields): Gr
   }
 
   // 1b. Active: execution agent completed but review hasn't cleared it
-  if (fields.hasCompletedExecutionAgent && fields.latestReviewNeedsRemediation !== false) {
+  // Exception: if merge-ready label is set, skip to needs-action check instead
+  if (fields.hasCompletedExecutionAgent && fields.latestReviewNeedsRemediation !== false && !(fields.hasMergeReadyLabel === true)) {
     return 'active';
   }
 
@@ -49,7 +50,7 @@ export function deriveAggregateStatusFromSummary(fields: GroupSummaryFields): Gr
   // Conservative when label unknown (undefined → false)
   if (
     fields.hasPrUrl &&
-    fields.latestReviewNeedsRemediation === false &&
+    fields.latestReviewNeedsRemediation !== true &&
     (fields.hasMergeReadyLabel ?? false)
   ) {
     return 'needs-action';
