@@ -728,7 +728,7 @@ export class TaskDispatcher {
 
   private async resumeTaskWithUserMessage(task: Task): Promise<void> {
     const prompt = task.pendingResumeStart?.prompt;
-    /* v8 ignore start -- source-map: direct invocation via as-cast in test bypasses v8 branch instrumentation for the undefined prompt guard @preserve */
+    /* v8 ignore start -- async-timing: sendMessage and recoverPendingResumeTask validate pendingResumeStart before invoking the async helper; this guard protects against unexpected in-flight mutation @preserve */
     if (prompt === undefined) {
       await this.failAcceptedResume(
         task,
