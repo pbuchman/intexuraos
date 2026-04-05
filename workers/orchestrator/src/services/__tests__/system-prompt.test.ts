@@ -87,7 +87,7 @@ describe('system-prompt', () => {
   it('enforces Plan PR rules in PLANNING_AGENT_FINAL', () => {
     const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
 
-    expect(result).toContain('NEVER for SIMPLE tasks, ALWAYS for PLAN-DOC and COMPLEX tasks');
+    expect(result).toContain('MANDATORY for ALL planned outcomes, including SIMPLE tasks');
   });
 
   it('enforces Clarification message rules in PLANNING_AGENT_FINAL', () => {
@@ -132,6 +132,18 @@ describe('system-prompt', () => {
     const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
 
     expect(result).toContain('### Self-Verification (MANDATORY before completion)');
+  });
+
+  it('planning prompt requires evidence PR for SIMPLE tasks', () => {
+    const result = planningPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
+    expect(result).toContain('evidence PR');
+    expect(result).not.toContain('No subtasks, no plan doc, no PR');
+  });
+
+  it('includes debugging/investigation task handling guidance in planning prompt', () => {
+    const result = planningPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
+    expect(result).toContain('### Debugging/Investigation Tasks (routed as planning)');
+    expect(result).toContain('docs/plans/<INT-XXX>-investigation.md');
   });
 
   it('includes the strengthened SIMPLE guardrail text in the planning prompt', () => {
@@ -1240,7 +1252,7 @@ describe('system-prompt', () => {
   });
 
   it('planning prompt version is 5.1.0', () => {
-    expect(planningPrompt.version).toBe('5.1.0');
+    expect(planningPrompt.version).toBe('6.0.0');
   });
 
   it('execution prompt version is 8.1.0', () => {

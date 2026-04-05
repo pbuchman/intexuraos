@@ -118,7 +118,13 @@ export const PLANNING_SCHEMA = z.object({
   pr_url: z.string(),
   summary: z.string(),
   unclear_clarification: z.string(),
-});
+}).refine(
+  (data) => data.outcome !== 'planned' || data.pr_url !== '',
+  {
+    message: 'pr_url is required when outcome is "planned"',
+    path: ['pr_url'],
+  }
+);
 
 export const EXECUTION_SCHEMA = z.object({
   outcome: z.enum(['implemented', 'already_completed']),
@@ -165,7 +171,13 @@ export const REMEDIATION_SCHEMA = z.object({
   gh_pr_url: z.string(),
   requires_re_review: z.string().regex(/^[01]$/, 'requires_re_review must be "0" or "1"'),
   summary: z.string(),
-});
+}).refine(
+  (data) => data.outcome !== 'implemented' || data.gh_pr_url !== '',
+  {
+    message: 'gh_pr_url is required when outcome is "implemented"',
+    path: ['gh_pr_url'],
+  }
+);
 
 export const RESUME_SUMMARY_SCHEMA = z.object({
   summary: z.string(),
@@ -224,7 +236,7 @@ export function buildPlanningPrompt(transcript: string): string {
     '- is_complex: "1" if the agent created subtasks for parallel execution, "0" otherwise',
     '- has_plan_doc: "1" if the agent created a plan document in docs/plans/, "0" otherwise',
     '- subtask_urls: comma-separated Linear issue URLs for all subtasks created (string, empty string if none)',
-    '- pr_url: the GitHub Pull Request URL if the agent created one (string, empty string if not found)',
+    '- pr_url: the GitHub Pull Request URL — REQUIRED for "planned" outcome (ALL planned tasks must produce a PR, including simple ones). Empty string ONLY for "unclear" outcome.',
     '- summary: concise bullet-point summary (markdown *, max 5-6 points) of what happened — the LLM agent typically states this clearly as a summary block in its final output',
     '- unclear_clarification: required when outcome is "unclear" — the message explaining why; empty string if outcome is "planned"',
     '',
@@ -319,7 +331,7 @@ export function buildRemediationPrompt(transcript: string): string {
     ...sharedPreamble(),
     'Fields:',
     '- outcome: "implemented" if the agent pushed remediation changes, "already_completed" if it determined the findings were already addressed',
-    '- gh_pr_url: the GitHub Pull Request URL (string, empty string if not found)',
+    '- gh_pr_url: the GitHub Pull Request URL — REQUIRED for "implemented" outcome. Empty string ONLY for "already_completed" outcome.',
     '- requires_re_review: "1" if the agent decided the PR must be re-reviewed after the changes, "0" otherwise',
     '- summary: concise bullet-point summary (markdown *, max 5-6 points) of the remediation work — the LLM agent typically states this clearly as a summary block in its final output',
     '',
