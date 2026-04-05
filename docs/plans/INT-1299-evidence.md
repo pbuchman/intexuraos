@@ -1,24 +1,33 @@
 # INT-1299: Fix ask-agent page showing incorrect conversation status
 
 **Planned:** 2026-04-05
-**Classification:** SIMPLE
+**Classification:** PLAN-DOC (revised from SIMPLE — user requires cross-device persistence)
 **Linear:** [INT-1299](https://linear.app/pbuchman/issue/INT-1299/fix-ask-agent-page-showing-incorrect-conversation-status)
 
 ## Task Summary
 
-Two frontend bugs in the ask-agent page and shared log viewer:
+Two bugs in the ask-agent page and shared log viewer, with a revised persistence approach:
 
-1. **Active conversation not restored on page return:** `useAskAgent` initializes `taskId` as `null` on every mount, so navigating away from the ask-agent page and returning always shows a blank "Start" view instead of the user's active conversation. Fix: persist the active taskId in localStorage.
+1. **Active conversation not restored on page return:** `useAskAgent` initializes `taskId` as `null` on every mount, so navigating away and returning shows a blank "Start" view. Fix: add a backend `GET /code/ask-agent/active` endpoint that queries the user's latest non-archived ask-agent task from Firestore, and call it on hook mount. This replaces the original localStorage approach to support cross-device persistence.
 
-2. **Empty state shows misleading loader:** Both ask-agent and code execution pages display a spinning `Loader2` with "Waiting for logs..." when no logs exist. Fix: replace with a static friendly message ("Your conversation will appear here when available" / "Execution logs will appear here when available") and remove the spinner.
+2. **Empty state shows misleading loader:** Both ask-agent and code execution pages display a spinning `Loader2` with "Waiting for logs..." when no logs exist. Fix: replace with a static friendly message and remove the spinner.
+
+## Plan Document
+
+Plan document: docs/plans/INT-1299-fix-ask-agent-conversation-persistence.md
 
 ## Files to Modify
 
-| File                                                       | Change                                                                             |
-| ---------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `apps/web/src/hooks/useAskAgent.ts`                        | Add localStorage persistence for taskId (lazy init, save on start, clear on clear) |
-| `apps/web/src/components/code-tasks/CodeTaskLogViewer.tsx` | Replace empty state: remove Loader2 spinner, show context-aware static message     |
+| File                                                                    | Change                                           |
+| ----------------------------------------------------------------------- | ------------------------------------------------ |
+| `apps/code-agent/src/domain/repositories/codeTaskRepository.ts`         | Add `findLatestAskAgentTask` method to interface |
+| `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts` | Implement Firestore query                        |
+| `apps/code-agent/src/domain/usecases/getActiveAskAgent.ts`              | New use case                                     |
+| `apps/code-agent/src/routes/codeRoutes.ts`                              | Add `GET /code/ask-agent/active` route           |
+| `apps/web/src/services/codeAgentApi.ts`                                 | Add `getActiveAskAgent` API function             |
+| `apps/web/src/hooks/useAskAgent.ts`                                     | Fetch active task on mount, archive on clear     |
+| `apps/web/src/components/code-tasks/CodeTaskLogViewer.tsx`              | Replace empty state spinner                      |
 
 ## Key Design Decision
 
-Using localStorage instead of a backend API call (`GET /code/tasks` filters out ask-agent tasks server-side at line 2254 of codeRoutes.ts). localStorage avoids backend changes and naturally enforces "at most one active ask-agent conversation" since the stored taskId is always the latest session.
+Using a backend API query instead of localStorage because the user requires cross-device persistence. The `code_tasks` collection already contains all necessary data — a Firestore query on `(userId, agentType='ask_agent', status IN NON_ARCHIVED_STATUSES)` ordered by `createdAt DESC LIMIT 1` returns the active conversation. The existing archive endpoint handles `clear()`.
