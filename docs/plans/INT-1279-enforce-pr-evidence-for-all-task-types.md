@@ -43,7 +43,7 @@
 ### Design Decisions
 
 1. **All planning outcomes with `outcome=planned` MUST include a PR URL** — even SIMPLE tasks. The agent creates a no-op evidence PR (e.g., adding a timestamp comment to a plan doc or creating an empty plan stub).
-2. **Debugging tasks routed to planning agent** should NOT be handled as planning — they should exit with `unclear` AND a structured investigation summary. However, the real fix is ensuring the task dispatcher routes debugging to the correct agent type. For now, the planning prompt should handle debugging gracefully with structured output.
+2. **Debugging tasks routed to planning agent** should be handled as planning with `outcome=planned` — they produce investigation document PRs. The planning prompt handles debugging gracefully with structured output (investigation doc + PR).
 3. **Remediation agent** should also enforce PR presence since it pushes code changes.
 4. **The verifier prompt** should instruct Gemini to flag missing PRs as a verification concern.
 
@@ -197,6 +197,28 @@ describe('PLANNING_SCHEMA pr_url validation', () => {
     expect(result.success).toBe(true);
   });
 });
+
+describe('REMEDIATION_SCHEMA gh_pr_url validation', () => {
+  it('rejects empty gh_pr_url when outcome is implemented', () => {
+    const result = REMEDIATION_SCHEMA.safeParse({
+      outcome: 'implemented',
+      gh_pr_url: '',
+      requires_re_review: '0',
+      summary: 'test',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('allows empty gh_pr_url when outcome is already_completed', () => {
+    const result = REMEDIATION_SCHEMA.safeParse({
+      outcome: 'already_completed',
+      gh_pr_url: '',
+      requires_re_review: '0',
+      summary: 'test',
+    });
+    expect(result.success).toBe(true);
+  });
+});
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -339,7 +361,7 @@ if (outcome === 'planned') {
 
 - [ ] **Step 4: Add PR enforcement for remediation (implemented outcome)**
 
-Find the remediation handling section (after `task.agentType === 'review'` block). Add enforcement:
+Add a **new** `if (task.agentType === 'remediation')` enforcement block immediately after the `if (task.agentType === 'review')` block (around line 1083), following the same structural pattern as the execution enforcement block at line 896:
 
 ```typescript
 if (task.agentType === 'remediation') {
@@ -363,7 +385,7 @@ if (task.agentType === 'remediation') {
 }
 ```
 
-Note: Check if remediation handling already exists in the webhook. Read the full remediation section first. The remediation agent's outcome field maps to `execution_outcome_label` in the result (see `buildResultFromVerification` line 1338).
+Note: Remediation handling may not exist yet as a separate block — add it as a new `if (task.agentType === 'remediation')` block following the pattern of other agent type handlers. The remediation agent's outcome field maps to `execution_outcome_label` in the result (see `buildResultFromVerification` line 1338).
 
 - [ ] **Step 5: Run tests to verify they pass**
 
