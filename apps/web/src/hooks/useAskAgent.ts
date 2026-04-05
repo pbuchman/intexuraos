@@ -105,18 +105,11 @@ export function useAskAgent(): AskAgentState {
 
   const sendMessage = useCallback(async (message: string): Promise<void> => {
     if (taskId === null) {
-      // No existing task — start a new one with this message
       await start(message);
       return;
     }
-    if (isSessionIdle) {
-      // Task finished — use --continue via sendMessage
-      await sendMessageFromView(message);
-      return;
-    }
-    // Task is running — queue message
     await sendMessageFromView(message);
-  }, [taskId, isSessionIdle, start, sendMessageFromView]);
+  }, [taskId, start, sendMessageFromView]);
 
   const cancel = useCallback(async (): Promise<void> => {
     await cancelTaskFromView();
