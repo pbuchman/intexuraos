@@ -490,7 +490,9 @@ describe('system-prompt', () => {
     const finalBlock = result.slice(finalBlockStart, finalBlockEnd);
 
     expect(finalBlock).toContain('- execution_memory_ids_used: <comma-separated list or "none">');
-    expect(finalBlock).toContain('- execution_memory_ids_rejected: <comma-separated list or "none">');
+    expect(finalBlock).toContain(
+      '- execution_memory_ids_rejected: <comma-separated list or "none">'
+    );
     expect(finalBlock).toContain('- execution_memory_usage_summary: <brief note, or "none">');
   });
 
