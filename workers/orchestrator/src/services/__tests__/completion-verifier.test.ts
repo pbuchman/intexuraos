@@ -245,6 +245,48 @@ describe('EXECUTION_SCHEMA', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('rejects empty gh_pr_url when outcome is implemented', () => {
+    const result = EXECUTION_SCHEMA.safeParse({
+      outcome: 'implemented',
+      superpowers_subagent_driven_dev: 'used',
+      superpowers_requesting_code_review: 'used',
+      gh_pr_url: '',
+      memory_ids_used: '',
+      memory_ids_rejected: '',
+      memory_usage_summary: '',
+      summary: 'test',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects empty gh_pr_url when outcome is already_completed', () => {
+    const result = EXECUTION_SCHEMA.safeParse({
+      outcome: 'already_completed',
+      superpowers_subagent_driven_dev: 'used',
+      superpowers_requesting_code_review: 'not used',
+      gh_pr_url: '',
+      memory_ids_used: '',
+      memory_ids_rejected: '',
+      memory_usage_summary: '',
+      summary: 'test',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts non-empty gh_pr_url when outcome is already_completed', () => {
+    const result = EXECUTION_SCHEMA.safeParse({
+      outcome: 'already_completed',
+      superpowers_subagent_driven_dev: 'used',
+      superpowers_requesting_code_review: 'not used',
+      gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
+      memory_ids_used: '',
+      memory_ids_rejected: '',
+      memory_usage_summary: '',
+      summary: 'Evidence PR for already-completed work.',
+    });
+    expect(result.success).toBe(true);
+  });
 });
 
 describe('PULL_REQUEST_SCHEMA', () => {
@@ -541,6 +583,12 @@ describe('buildExecutionPrompt', () => {
     expect(prompt).toContain(
       'LLM agent delivers its summary in one of the last assistant messages'
     );
+  });
+
+  it('marks gh_pr_url as REQUIRED for all outcomes', () => {
+    const prompt = buildExecutionPrompt('exec-log');
+    expect(prompt).toContain('REQUIRED for all execution outcomes');
+    expect(prompt).not.toContain('"gh_pr_url":""');
   });
 });
 
@@ -1273,7 +1321,7 @@ describe('verify — fatal exit code pre-check', () => {
           outcome: 'implemented',
           superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'not used',
-          gh_pr_url: '',
+          gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
           memory_ids_used: '',
           memory_ids_rejected: '',
           memory_usage_summary: '',

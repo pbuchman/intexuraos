@@ -135,7 +135,13 @@ export const EXECUTION_SCHEMA = z.object({
   memory_ids_rejected: z.string(),
   memory_usage_summary: z.string(),
   summary: z.string(),
-});
+}).refine(
+  (data) => data.gh_pr_url !== '',
+  {
+    message: 'gh_pr_url is required for all execution outcomes',
+    path: ['gh_pr_url'],
+  }
+);
 
 export const PULL_REQUEST_SCHEMA = z.object({
   gh_pr_url: z.string(),
@@ -259,7 +265,7 @@ export function buildExecutionPrompt(transcript: string): string {
     '- outcome: "implemented" if the agent created a PR with new code, "already_completed" if the agent determined the work was already done/merged',
     '- superpowers_subagent_driven_dev: "used" if the agent invoked the subagent-driven-development skill, "not used" otherwise',
     '- superpowers_requesting_code_review: "used" if the agent invoked the requesting-code-review skill, "not used" otherwise',
-    '- gh_pr_url: the GitHub Pull Request URL (string, empty string if not found)',
+    '- gh_pr_url: the GitHub Pull Request URL — REQUIRED for all execution outcomes (including already_completed). Must not be empty.',
     '- memory_ids_used: comma-separated memory IDs the agent reported using (string, empty string if none)',
     '- memory_ids_rejected: comma-separated memory IDs the agent reported rejecting as stale or not applicable (string, empty string if none)',
     '- memory_usage_summary: one-sentence summary of how the memories helped or why they were rejected (string, empty string if not found)',
@@ -267,7 +273,7 @@ export function buildExecutionPrompt(transcript: string): string {
     '',
     'Example valid responses:',
     '{"outcome":"implemented","superpowers_subagent_driven_dev":"used","superpowers_requesting_code_review":"used","gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","memory_ids_used":"mem_142,mem_155","memory_ids_rejected":"mem_188","memory_usage_summary":"Used the route logging and coverage memories to keep the callback fix aligned with existing verification patterns.","summary":"* Implemented the feature with 3 new API endpoints and updated database schema\\n* CI passed on the first attempt\\n* Created PR targeting the development branch"}',
-    '{"outcome":"already_completed","superpowers_subagent_driven_dev":"used","superpowers_requesting_code_review":"not used","gh_pr_url":"","memory_ids_used":"","memory_ids_rejected":"mem_188","memory_usage_summary":"Rejected the supplied memory because the codebase already matched the current repo state.","summary":"* Discovered the requested work was already implemented and merged into development\\n* Verified all tests pass and the feature is present in the codebase\\n* No PR was needed"}',
+    '{"outcome":"already_completed","superpowers_subagent_driven_dev":"used","superpowers_requesting_code_review":"not used","gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/950","memory_ids_used":"","memory_ids_rejected":"mem_188","memory_usage_summary":"Rejected the supplied memory because the codebase already matched the current repo state.","summary":"* Discovered the requested work was already implemented and merged into development\\n* Verified all tests pass and the feature is present in the codebase\\n* Created evidence PR documenting completion"}',
     '',
     'Transcript (last 50 lines):',
     transcript,
