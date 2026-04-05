@@ -59,7 +59,7 @@ export class OpenApiToolRegistry implements ToolRegistry {
         };
       }),
     );
-    return results;
+    return results.filter((service) => service.tools.length > 0);
   }
 
   async refreshAll(): Promise<void> {
