@@ -40,6 +40,17 @@ describe('deriveAggregateStatusFromSummary', () => {
     ).toBe('active');
   });
 
+  it('does not return active when execution completed with no review but hasMergeReadyLabel is true', () => {
+    expect(
+      deriveAggregateStatusFromSummary({
+        ...base,
+        hasCompletedExecutionAgent: true,
+        latestReviewNeedsRemediation: null,
+        hasMergeReadyLabel: true,
+      }),
+    ).not.toBe('active');
+  });
+
   it('returns active when execution agent completed and review needs remediation (latestReviewNeedsRemediation is true)', () => {
     expect(
       deriveAggregateStatusFromSummary({
@@ -138,7 +149,7 @@ describe('deriveAggregateStatusFromSummary', () => {
     expect(result).not.toBe('needs-action');
   });
 
-  it('does not return needs-action when latestReviewNeedsRemediation is null (no review yet)', () => {
+  it('returns needs-action when PR exists, review not dispatched (null), and merge-ready label present', () => {
     const result = deriveAggregateStatusFromSummary({
       ...base,
       hasCompletedExecution: true,
@@ -146,7 +157,7 @@ describe('deriveAggregateStatusFromSummary', () => {
       latestReviewNeedsRemediation: null,
       hasMergeReadyLabel: true,
     });
-    expect(result).not.toBe('needs-action');
+    expect(result).toBe('needs-action');
   });
 
   it('does not return needs-action when latestReviewNeedsRemediation is true (needs remediation)', () => {
@@ -158,6 +169,18 @@ describe('deriveAggregateStatusFromSummary', () => {
       hasMergeReadyLabel: true,
     });
     expect(result).not.toBe('needs-action');
+  });
+
+  it('returns needs-action when PR exists, review skipped (null), and merge-ready label present (full path)', () => {
+    expect(
+      deriveAggregateStatusFromSummary({
+        ...base,
+        hasCompletedExecutionAgent: true,
+        hasPrUrl: true,
+        latestReviewNeedsRemediation: null,
+        hasMergeReadyLabel: true,
+      }),
+    ).toBe('needs-action');
   });
 
   it('returns failed when latestTaskStatus is failed', () => {
