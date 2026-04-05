@@ -15,7 +15,7 @@ const COLLECTION = 'cron_schedules';
 export class FirestoreScheduleRepository implements ScheduleRepository {
   async create(
     userId: string,
-    input: CreateScheduleInput & { cronExpression: string; nextExecutionAt: string | null },
+    input: CreateScheduleInput & { scheduleSummary: string; cronExpression: string; nextExecutionAt: string | null },
   ): Promise<Result<CronSchedule, ScheduleRepositoryError>> {
     try {
       const db = getFirestore();
@@ -26,7 +26,7 @@ export class FirestoreScheduleRepository implements ScheduleRepository {
         id: docRef.id,
         userId,
         name: input.name,
-        description: input.description,
+        scheduleSummary: input.scheduleSummary,
         cronExpression: input.cronExpression,
         timezone: input.timezone,
         action: input.action,
@@ -53,7 +53,9 @@ export class FirestoreScheduleRepository implements ScheduleRepository {
       if (!doc.exists) {
         return ok(null);
       }
-      return ok(normalizeCronSchedule({ id: doc.id, ...doc.data() } as CronSchedule));
+      const data = doc.data() as Record<string, unknown>;
+      const scheduleSummary = (data['scheduleSummary'] ?? data['description'] ?? '') as string;
+      return ok(normalizeCronSchedule({ id: doc.id, ...data, scheduleSummary } as CronSchedule));
     } catch (error: unknown) {
       return err({ code: 'INTERNAL_ERROR', message: `Failed to find schedule: ${getErrorMessage(error, 'Unknown error')}` });
     }
@@ -85,7 +87,9 @@ export class FirestoreScheduleRepository implements ScheduleRepository {
 
       const schedules: CronSchedule[] = [];
       snapshot.docs.slice(0, options.limit).forEach((doc) => {
-        schedules.push(normalizeCronSchedule({ id: doc.id, ...doc.data() } as CronSchedule));
+        const data = doc.data() as Record<string, unknown>;
+        const scheduleSummary = (data['scheduleSummary'] ?? data['description'] ?? '') as string;
+        schedules.push(normalizeCronSchedule({ id: doc.id, ...data, scheduleSummary } as CronSchedule));
       });
 
       const hasMore = snapshot.docs.length > options.limit;
@@ -111,7 +115,11 @@ export class FirestoreScheduleRepository implements ScheduleRepository {
         .get();
 
       const schedules: CronSchedule[] = snapshot.docs.map(
-        (doc) => normalizeCronSchedule({ id: doc.id, ...doc.data() } as CronSchedule),
+        (doc) => {
+          const data = doc.data() as Record<string, unknown>;
+          const scheduleSummary = (data['scheduleSummary'] ?? data['description'] ?? '') as string;
+          return normalizeCronSchedule({ id: doc.id, ...data, scheduleSummary } as CronSchedule);
+        },
       );
 
       return ok(schedules);
@@ -132,10 +140,12 @@ export class FirestoreScheduleRepository implements ScheduleRepository {
         return err({ code: 'NOT_FOUND', message: `Schedule ${id} not found` });
       }
 
-      const updatedData = { ...updates, updatedAt: new Date().toISOString() };
-      await docRef.update(updatedData);
+      const patchData = { ...updates, updatedAt: new Date().toISOString() };
+      await docRef.update(patchData);
       const updated = await docRef.get();
-      return ok(normalizeCronSchedule({ id: updated.id, ...updated.data() } as CronSchedule));
+      const refreshedData = updated.data() as Record<string, unknown>;
+      const updatedSummary = (refreshedData['scheduleSummary'] ?? refreshedData['description'] ?? '') as string;
+      return ok(normalizeCronSchedule({ id: updated.id, ...refreshedData, scheduleSummary: updatedSummary } as CronSchedule));
     } catch (error: unknown) {
       return err({ code: 'INTERNAL_ERROR', message: `Failed to update schedule: ${getErrorMessage(error, 'Unknown error')}` });
     }
