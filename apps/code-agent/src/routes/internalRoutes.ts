@@ -519,5 +519,87 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
+  // POST /internal/auto-archive-merged-tasks - triggered by Cloud Scheduler daily (INT-1174)
+  fastify.post(
+    '/internal/auto-archive-merged-tasks',
+    {
+      schema: {
+        operationId: 'autoArchiveMergedTasks',
+        summary: 'Archive tasks whose PRs were merged 7+ days ago',
+        description: 'Called by Cloud Scheduler daily. Archives code tasks where the associated PR was merged more than the threshold days ago.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          nullable: true,
+          properties: {
+            mergeDays: { type: 'number', description: 'Days after PR merge before archiving (default: 7)' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Archive completed',
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              totalTasksFetched: { type: 'number' },
+              totalGroupsEvaluated: { type: 'number' },
+              groupsArchived: { type: 'number' },
+              groupsSkippedActive: { type: 'number' },
+              tasksArchived: { type: 'number' },
+              tasksFailed: { type: 'number' },
+              durationMs: { type: 'number' },
+            },
+            required: ['totalTasksFetched', 'totalGroupsEvaluated', 'groupsArchived', 'groupsSkippedActive', 'tasksArchived', 'tasksFailed', 'durationMs'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/auto-archive-merged-tasks',
+      });
+
+      const authResult = authenticateInternalScheduler(request);
+      if (!authResult.authenticated) {
+        request.log.warn('Internal auth failed for auto-archive-merged-tasks');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+      request.log.info({ strategy: authResult.strategy }, 'Authenticated for auto-archive-merged-tasks');
+
+      const { autoArchiveMergedTasks, logger } = getServices();
+
+      const body = request.body as { mergeDays?: number } | null;
+      const mergeDays = body?.mergeDays;
+      const input = mergeDays !== undefined ? { mergeDays } : undefined;
+
+      const result = await autoArchiveMergedTasks(input);
+      if (!result.ok) {
+        logger.error({ error: result.error.message }, 'Auto-archive merged tasks failed');
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      logger.info(result.value, 'Auto-archive merged tasks completed via route');
+
+      // @allow-raw-send: cron endpoint returns archive stats directly
+      return await reply.send(result.value);
+    }
+  );
+
   done();
 };
