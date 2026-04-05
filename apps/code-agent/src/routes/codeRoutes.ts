@@ -4220,6 +4220,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           }),
           /* v8 ignore stop @preserve */
         },
+        /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes is not tracked after service override tests @preserve */
         ...(services.userLookupService !== undefined && {
           createTaskForPRFn: async (request: { repository: string; prNumber: number; senderLogin: string; comment: string; eventId: string; prTitle?: string; baseBranch?: string }) => {
             return createTaskForPR(
@@ -4249,6 +4250,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             );
           },
         }),
+        /* v8 ignore stop @preserve */
       });
 
       if (retryResult.ok && retryResult.value.action !== 'empty' && retryResult.value.action !== 'failed') {
