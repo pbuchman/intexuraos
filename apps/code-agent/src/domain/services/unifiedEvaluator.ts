@@ -208,7 +208,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
         );
 
         // Fail closed for explicit @review commands - do not fallback dispatch
-        /* v8 ignore start -- upstream: FakeEventSource always provides body — cannot simulate undefined body on issue_comment @preserve */
+        /* v8 ignore start -- upstream: isReviewCommandComment('') is always false, so event.body must be truthy when the if-true branch is taken — the ?? '' right side is unreachable in practice @preserve */
         if (event.eventType === 'issue_comment' && isReviewCommandComment(event.body ?? '')) {
           const workerType = extractReviewWorkerType(event.body ?? '');
           /* v8 ignore stop @preserve */
