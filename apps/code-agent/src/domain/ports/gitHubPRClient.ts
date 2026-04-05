@@ -166,7 +166,9 @@ export interface GitHubPRClient {
   ): Promise<Result<{ commentId: number }, GitHubPRClientError>>;
 
   /**
-   * Merge a pull request. Returns 405 if already merged — treat as success.
+   * Merge a pull request.
+   * Returns ok with empty sha when 405 indicates "already merged" (idempotent).
+   * Returns API_ERROR when 405 indicates merge is blocked (failing checks, branch protection).
    */
   mergePullRequest(
     token: string,
