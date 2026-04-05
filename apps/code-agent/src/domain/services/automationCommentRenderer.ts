@@ -370,6 +370,7 @@ function agentTypeLabel(agentType: AgentType): string {
     case 'execution': return 'Implementation';
     case 'planning': return 'Plan';
     case 'pull_request': return 'PR';
+    case 'ask_agent': return 'Ask Agent';
   }
 }
 

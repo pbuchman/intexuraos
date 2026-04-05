@@ -30,6 +30,7 @@ import { generateWebhookSecret } from '../domain/utils/secrets.js';
 import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
 import { loadConfig } from '../config.js';
 import { backLinkPlanningTask } from '../domain/usecases/backLinkPlanningTask.js';
+import { startAskAgent } from '../domain/usecases/startAskAgent.js';
 import { createTaskForPR } from '../domain/usecases/createTaskForPR.js';
 import type { CodeTask } from '../domain/models/codeTask.js';
 
@@ -1873,6 +1874,145 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         codeTaskId: task.id,
       });
     }
+  );
+
+  // POST /code/ask-agent/start - Start an ask-agent task (public, Auth0 JWT)
+  fastify.post<{ Body: { prompt: string } }>(
+    '/code/ask-agent/start',
+    {
+      onRequest: jwtValidator,
+      schema: {
+        operationId: 'startAskAgent',
+        summary: 'Start an ask-agent task',
+        description: 'Creates a new ask-agent task for interactive conversations. Requires Auth0 JWT.',
+        tags: ['public'],
+        body: {
+          type: 'object',
+          required: ['prompt'],
+          properties: {
+            prompt: {
+              type: 'string',
+              minLength: 1,
+              maxLength: 100000,
+            },
+          },
+        },
+        response: {
+          200: {
+            description: 'Task submitted successfully',
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  status: { type: 'string', enum: ['submitted'] },
+                  codeTaskId: { type: 'string' },
+                },
+                required: ['status', 'codeTaskId'],
+              },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          429: {
+            description: 'Rate limit exceeded',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: {
+                    type: 'string',
+                    enum: ['concurrent_limit', 'hourly_limit', 'prompt_too_long'],
+                  },
+                  message: { type: 'string' },
+                  retryAfter: { type: 'string' },
+                },
+              },
+            },
+          },
+          503: {
+            description: 'Service unavailable',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['MISCONFIGURED', 'QUEUE_FULL', 'WORKER_NOT_CONFIGURED'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /code/ask-agent/start',
+        includeParams: true,
+      });
+
+      const { codeTaskRepo, rateLimitService, workerSettingsRepo, taskEnqueueService } = getServices();
+      /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
+      const userId = request.user?.userId ?? 'unknown-user';
+      /* v8 ignore stop @preserve */
+
+      const result = await startAskAgent(
+        { logger: request.log, codeTaskRepo, rateLimitService, workerSettingsRepo, taskEnqueueService },
+        { userId, prompt: request.body.prompt },
+      );
+
+      if (!result.ok) {
+        const { error } = result;
+        if (error.code === 'service_unavailable') return await reply.fail('MISCONFIGURED', error.message);
+        if (error.code === 'rate_limited') return await reply.fail('RATE_LIMITED', error.message);
+        if (error.code === 'worker_not_configured') return await reply.fail('WORKER_NOT_CONFIGURED', error.message);
+        if (error.code === 'duplicate_prompt') return await reply.fail('CONFLICT', error.message);
+        if (error.code === 'queue_full') return await reply.fail('QUEUE_FULL', error.message);
+        return await reply.fail('INTERNAL_ERROR', error.message);
+      }
+
+      return await reply.ok(result.value);
+    },
   );
 
   // GET /code/queue - List currently queued tasks (public, Auth0 JWT) (INT-949)
