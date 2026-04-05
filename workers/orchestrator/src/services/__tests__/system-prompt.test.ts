@@ -1396,4 +1396,14 @@ describe('system-prompt', () => {
     expect(result).not.toContain('Linear Issue:');
     expect(result).toContain('[AGENT:ASK_AGENT]');
   });
+
+  it('ask agent prompt uses worker type fallback when workerType is undefined', () => {
+    const { workerType: _, ...paramsWithoutWorkerType } = baseParams;
+    const result = askAgentPrompt.build({
+      ...paramsWithoutWorkerType,
+      agentType: 'ask_agent',
+      linearIssueLabels: [],
+    });
+    expect(result).toContain(EXPECTED_WORKER_TYPE_FALLBACK);
+  });
 });
