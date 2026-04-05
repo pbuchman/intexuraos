@@ -4,6 +4,7 @@
     "INT-1071": {
       "files": [
         "workers/orchestrator/src/services/isolation/docker-provider.ts",
+        "workers/orchestrator/src/services/task-dispatcher.ts",
         "workers/orchestrator/src/services/worktree-manager.ts",
         "workers/orchestrator/src/start.ts"
       ],
