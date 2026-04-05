@@ -58,12 +58,18 @@ type CountField = 'active' | 'needsAction' | 'done' | 'failed' | 'archived';
 
 function statusToCountField(status: string): CountField {
   switch (status) {
-    case 'active': return 'active';
-    case 'needs-action': return 'needsAction';
-    case 'done': return 'done';
-    case 'failed': return 'failed';
-    case 'archived': return 'archived';
-    default: return 'done';
+    case 'active':
+      return 'active';
+    case 'needs-action':
+      return 'needsAction';
+    case 'done':
+      return 'done';
+    case 'failed':
+      return 'failed';
+    case 'archived':
+      return 'archived';
+    default:
+      return 'done';
   }
 }
 
@@ -76,10 +82,7 @@ async function main(): Promise<void> {
 
   // Step 1: Find all summaries with taskCount=0 that are not archived
   console.log('Querying task_group_summaries where taskCount=0 and aggregateStatus != archived...');
-  const snapshot = await db
-    .collection(SUMMARIES_COLLECTION)
-    .where('taskCount', '==', 0)
-    .get();
+  const snapshot = await db.collection(SUMMARIES_COLLECTION).where('taskCount', '==', 0).get();
 
   const toRepair: Array<{ docId: string; userId: string; oldStatus: string }> = [];
 
@@ -95,7 +98,9 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log(`Found ${toRepair.length} summaries to repair (out of ${snapshot.size} with taskCount=0).`);
+  console.log(
+    `Found ${toRepair.length} summaries to repair (out of ${snapshot.size} with taskCount=0).`
+  );
 
   if (toRepair.length === 0) {
     console.log('Nothing to repair.');
@@ -181,7 +186,9 @@ async function main(): Promise<void> {
     console.log(`  Committed user_group_counts batch for ${chunk.length} users`);
   }
 
-  console.log(`\nRepair complete. Fixed ${repairedCount} summaries across ${userDeltas.size} users.`);
+  console.log(
+    `\nRepair complete. Fixed ${repairedCount} summaries across ${userDeltas.size} users.`
+  );
 }
 
 main().catch((error: unknown) => {
