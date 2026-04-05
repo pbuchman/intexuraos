@@ -493,6 +493,16 @@ describe('system-prompt', () => {
     expect(result).toContain('- Review iterations: <number>');
     expect(result).toContain('- Skill sequence proof:');
     expect(result).not.toContain('- Turn summary:');
+    expect(result).toContain('- PR: <full GitHub PR URL>');
+    expect(result).not.toContain('"N/A"');
+  });
+
+  it('execution prompt requires evidence PR for already_completed', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+
+    expect(result).toContain('Evidence PR (MANDATORY for already_completed)');
+    expect(result).toContain('docs/evidence/');
+    expect(result).not.toContain('Set PR to "N/A"');
   });
 
   it('pins execution final block memory self-report fields', () => {
@@ -1255,8 +1265,8 @@ describe('system-prompt', () => {
     expect(planningPrompt.version).toBe('6.0.0');
   });
 
-  it('execution prompt version is 8.1.0', () => {
-    expect(executionPrompt.version).toBe('8.1.0');
+  it('execution prompt version is 9.0.0', () => {
+    expect(executionPrompt.version).toBe('9.0.0');
   });
 
   it('remediation prompt version is 3.2.0', () => {

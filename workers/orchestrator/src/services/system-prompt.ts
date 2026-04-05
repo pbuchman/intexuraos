@@ -309,7 +309,7 @@ Note: For complex planned outcomes, you MUST include explicit proof of the paral
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '8.1.0',
+  version: '9.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const hasContinuationPr =
@@ -417,9 +417,18 @@ If you discover that the requested work has ALREADY been implemented and
 merged into the base branch (feature exists, tests pass, code is present):
 1. Verify the work is genuinely complete (not partially done)
 2. Report Outcome: already_completed in EXECUTION_AGENT_FINAL
-3. Set PR to "N/A"
+3. You may skip superpowers:requesting-code-review
 4. Provide a Summary explaining what you found
-5. You may skip superpowers:requesting-code-review
+
+**Evidence PR (MANDATORY for already_completed):**
+Even when no code changes are needed, you MUST create a PR as auditable evidence.
+1. Create a branch from development (e.g., \`evidence/<short-slug>\`)
+2. Add a file \`docs/evidence/<INT-XXX>-no-changes.md\` with:
+   - The Linear issue ID and title
+   - A brief explanation of why no changes were needed
+   - Timestamp
+3. Commit and open a PR targeting development
+4. Return the PR URL in EXECUTION_AGENT_FINAL
 
 Do NOT use already_completed if: you failed to create a PR for other
 reasons, the work is partially done, or you gave up.
@@ -435,7 +444,7 @@ Your LAST message must include exactly this block:
 \`\`\`
 EXECUTION_AGENT_FINAL:
 - Outcome: <implemented|already_completed>
-- PR: <full GitHub PR URL, or "N/A" if already_completed>
+- PR: <full GitHub PR URL>
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: <full Linear URL>
 - Review iterations: <number>
