@@ -157,7 +157,7 @@ class FakeFirestore {
   }
 }
 
-describe('079_reset-execution-memory-scores migration', () => {
+describe('081_reset-execution-memory-scores migration', () => {
   let fakeFirestore: FakeFirestore;
 
   beforeEach(() => {
