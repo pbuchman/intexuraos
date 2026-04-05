@@ -4,7 +4,6 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
-  Loader2,
 } from 'lucide-react';
 import type { MessageStatus } from '@/hooks';
 import type { LogLine } from '@/hooks/useCodeTaskLogs.js';
@@ -325,9 +324,10 @@ export function CodeTaskLogViewer({
         >
           {logs.length === 0 ? (
             <div className="flex min-h-[180px] flex-col items-center justify-center gap-2 text-center">
-              <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                {isActive ? 'Waiting for logs...' : 'No logs available for this task.'}
+                {agentType === 'ask_agent'
+                  ? 'Your conversation will appear here when available'
+                  : 'Execution logs will appear here when available'}
               </p>
             </div>
           ) : (

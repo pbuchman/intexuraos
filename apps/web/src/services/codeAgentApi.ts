@@ -282,3 +282,16 @@ export async function startAskAgent(
     body: request,
   });
 }
+
+/**
+ * Get the user's active ask-agent conversation (for cross-device persistence)
+ */
+export async function getActiveAskAgent(
+  accessToken: string,
+): Promise<{ task: CodeTask | null }> {
+  return await apiRequest<{ task: CodeTask | null }>(
+    config.codeAgentUrl,
+    '/code/ask-agent/active',
+    accessToken,
+  );
+}
