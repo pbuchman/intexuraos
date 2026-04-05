@@ -18,7 +18,7 @@ const testSchedule: CronSchedule = {
   id: 'schedule-1',
   userId: 'user-1',
   name: 'Test',
-  description: 'Every minute',
+  scheduleSummary: 'Every minute',
   cronExpression: '* * * * *',
   timezone: 'UTC',
   action: { services: ['code-agent'], instruction: 'do something', preferredTools: [] },
@@ -111,7 +111,7 @@ describe('createScheduleManager', () => {
 
     const result = await manager.create('user-1', {
       name: 'Test',
-      description: 'Every minute',
+      schedule: 'Every minute',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       timezone: 'UTC',
     });
@@ -138,7 +138,7 @@ describe('createScheduleManager', () => {
 
     const result = await manager.create('user-1', {
       name: 'One too many',
-      description: 'Every hour',
+      schedule: 'Every hour',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       timezone: 'UTC',
     });
@@ -164,7 +164,7 @@ describe('createScheduleManager', () => {
 
     const result = await manager.create('user-1', {
       name: 'Test',
-      description: 'Every minute',
+      schedule: 'Every minute',
       action: { services: ['unknown-service'], instruction: 'test', preferredTools: [] },
       timezone: 'UTC',
     });
@@ -197,7 +197,7 @@ describe('createScheduleManager', () => {
 
     const result = await manager.create('user-1', {
       name: 'Test',
-      description: 'Every minute',
+      schedule: 'Every minute',
       action: {
         services: ['code-agent'],
         instruction: 'test',
@@ -222,7 +222,7 @@ describe('createScheduleManager', () => {
 
     const result = await manager.create('user-1', {
       name: 'Test',
-      description: 'Every minute',
+      schedule: 'Every minute',
       action: {
         services: ['code-agent'],
         instruction: 'test',
@@ -390,7 +390,7 @@ describe('createScheduleManager', () => {
 
     const result = await manager.create('user-1', {
       name: 'Test',
-      description: 'invalid schedule description',
+      schedule: 'invalid schedule description',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       timezone: 'UTC',
     });
@@ -418,7 +418,7 @@ describe('createScheduleManager', () => {
 
     const result = await manager.create('user-1', {
       name: 'Test',
-      description: 'every minute',
+      schedule: 'every minute',
       action: { services: ['code-agent'], instruction: 'test', preferredTools: [] },
       timezone: 'UTC',
     });
@@ -516,7 +516,7 @@ describe('createScheduleManager', () => {
     expect(result.error.code).toBe('INTERNAL_ERROR');
   });
 
-  it('updates schedule description and re-parses cron', async () => {
+  it('updates schedule and re-parses cron', async () => {
     const manager = createScheduleManager({
       logger: createTestLogger(),
       scheduleRepo: createFakeScheduleRepo(),
@@ -526,15 +526,15 @@ describe('createScheduleManager', () => {
     });
 
     const result = await manager.update('user-1', 'schedule-1', {
-      description: 'every 5 minutes',
+      schedule: 'every 5 minutes',
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.description).toBe('every 5 minutes');
+    expect(result.value.scheduleSummary).toBe('Every 5 minutes');
     expect(result.value.cronExpression).toBe('*/5 * * * *');
   });
 
-  it('returns PARSE_FAILED when description update parse fails', async () => {
+  it('returns PARSE_FAILED when schedule update parse fails', async () => {
     const manager = createScheduleManager({
       logger: createTestLogger(),
       scheduleRepo: createFakeScheduleRepo(),
@@ -559,7 +559,7 @@ describe('createScheduleManager', () => {
     });
 
     const result = await manager.update('user-1', 'schedule-1', {
-      description: 'bad description',
+      schedule: 'bad description',
     });
     expect(result.ok).toBe(false);
     if (result.ok) return;

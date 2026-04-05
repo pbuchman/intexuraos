@@ -7,7 +7,7 @@ export interface ScheduleRepositoryError {
 }
 
 export interface ScheduleRepository {
-  create(userId: string, input: CreateScheduleInput & { cronExpression: string; nextExecutionAt: string | null }): Promise<Result<CronSchedule, ScheduleRepositoryError>>;
+  create(userId: string, input: CreateScheduleInput & { scheduleSummary: string; cronExpression: string; nextExecutionAt: string | null }): Promise<Result<CronSchedule, ScheduleRepositoryError>>;
   findById(id: string): Promise<Result<CronSchedule | null, ScheduleRepositoryError>>;
   findByUserId(userId: string, options: ListOptions): Promise<Result<ListSchedulesResponse, ScheduleRepositoryError>>;
   findDueSchedules(now: Date): Promise<Result<CronSchedule[], ScheduleRepositoryError>>;
