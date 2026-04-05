@@ -53,6 +53,7 @@ function createMockLinearIssueService(): LinearIssueService {
     async markTodo(): Promise<void> { return; },
     async markQa(): Promise<void> { return; },
     async removeLabel(): Promise<void> { return; },
+    async addLabel(): Promise<void> { return; },
   };
 }
 
