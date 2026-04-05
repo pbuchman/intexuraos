@@ -12,6 +12,19 @@ function webhookReceivedEvent(eventType: string, action: string): AutomationEven
   };
 }
 
+describe('renderEvent task_dispatched', () => {
+  it('labels ask_agent task as "Ask Agent"', () => {
+    const event: AutomationEvent = {
+      type: 'task_dispatched',
+      taskId: 'task_123',
+      workerType: 'opus',
+      agentType: 'ask_agent',
+    };
+    const result = renderEvent(event);
+    expect(result).toContain('Ask Agent');
+  });
+});
+
 describe('renderEvent webhook_received', () => {
   it('labels pull_request.synchronize as "Commits pushed"', () => {
     const result = renderEvent(webhookReceivedEvent('pull_request', 'synchronize'));

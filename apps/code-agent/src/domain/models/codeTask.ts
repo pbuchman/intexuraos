@@ -15,7 +15,7 @@ export type WorkerType = CodeTaskWorkerType;
  */
 export type WorkerLocation = string;
 
-export type AgentType = 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
+export type AgentType = 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent';
 
 /** System prompt hash for auto-triggered merge-conflict resolution tasks. */
 export const MERGE_CONFLICT_SYSTEM_PROMPT_HASH = 'pr-merge-conflict-auto';
