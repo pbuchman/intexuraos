@@ -208,10 +208,8 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
         );
 
         // Fail closed for explicit @review commands - do not fallback dispatch
-        /* v8 ignore start -- upstream: Cannot verify workerType extraction on LLM failure with @review body — early return prevents assertion on extracted value @preserve */
         if (event.eventType === 'issue_comment' && isReviewCommandComment(event.body ?? '')) {
           const workerType = extractReviewWorkerType(event.body ?? '');
-          /* v8 ignore stop @preserve */
 
           // Record automation log: triage_failed for @review
           const userId = await resolveUserId(event);
