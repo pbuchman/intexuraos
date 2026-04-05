@@ -317,7 +317,7 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     expect(body.error?.code).toBe('INTERNAL_ERROR');
   });
 
-  it('skips models without pricing in catalog and uses fallback', async () => {
+  it('skips non-allowlisted models without pricing from catalog', async () => {
     fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-or-key' });
 
     // Catalog includes a model without pricing field — it should be skipped
