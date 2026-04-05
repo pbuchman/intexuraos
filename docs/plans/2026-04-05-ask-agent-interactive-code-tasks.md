@@ -161,7 +161,7 @@ git commit -m "feat(web): add startAskAgent API client function"
 
 - [ ] **Step 1: Add menu item**
 
-Open `apps/web/src/components/Sidebar.tsx`. Find the `codeTasksItems` array (around line 83). Add the `MessageCircle` icon to the lucide-react imports at the top of the file. Then add a new item to the array:
+Open `apps/web/src/components/Sidebar.tsx`. Find the `codeTasksItems` array (around line 83). Add the `Bot` icon to the lucide-react imports at the top of the file. Then add a new item to the array:
 
 ```typescript
 // Before (lines 83-89):
@@ -177,7 +177,7 @@ const codeTasksItems: NavItem[] = [
 const codeTasksItems: NavItem[] = [
   { to: '/code-tasks', label: 'Battlefield', icon: List },
   { to: '/code-tasks/new', label: 'New Task', icon: Plus },
-  { to: '/code-tasks/ask-agent', label: 'Ask Agent', icon: MessageCircle },
+  { to: '/code-tasks/ask-agent', label: 'Ask Agent', icon: Bot },
   { to: '/code-tasks/dispatch-queue', label: 'Dispatch Queue', icon: Clock },
   { to: '/code-tasks/pr-events', label: 'GitHub Event Log', icon: RadioTower },
   { to: '/code-tasks/merge-queue', label: 'Merge Queue', icon: GitMerge },
@@ -210,7 +210,7 @@ Create `apps/web/src/hooks/useAskAgent.ts`:
 ```typescript
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/context';
-import { startAskAgent, getCodeTask, cancelCodeTask } from '@/services/codeAgentApi';
+import { startAskAgent } from '@/services/codeAgentApi';
 import { useTaskView } from './useTaskView.js';
 import type { CodeTask } from '@/types';
 
@@ -1158,8 +1158,56 @@ Add a test that verifies ask_agent tasks are excluded from the task list:
 
 ```typescript
 it('excludes ask_agent tasks from GET /code/tasks', async () => {
-  // Create an ask_agent task first
-  // Then list tasks and verify it's not in the response
+  const repo = createFirestoreCodeTaskRepository({
+    firestore: fakeFirestore as unknown as Firestore,
+    logger,
+  });
+
+  // Create an ask_agent task
+  const askAgentTask = await repo.create({
+    userId: 'test-user-id',
+    prompt: 'Ask me anything',
+    sanitizedPrompt: 'ask me anything',
+    systemPromptHash: 'ask-agent-auto',
+    workerType: 'opus',
+    workerLocation: 'vm',
+    repository: 'test/repo',
+    baseBranch: 'main',
+    traceId: 'trace-ask-agent-filter',
+    agentType: 'ask_agent',
+  });
+  expect(askAgentTask.ok).toBe(true);
+  if (!askAgentTask.ok) return;
+
+  // Create a regular planning task for comparison
+  const planningTask = await repo.create({
+    userId: 'test-user-id',
+    prompt: 'Plan something',
+    sanitizedPrompt: 'plan something',
+    systemPromptHash: 'planning-auto',
+    workerType: 'opus',
+    workerLocation: 'vm',
+    repository: 'test/repo',
+    baseBranch: 'main',
+    traceId: 'trace-planning-filter',
+    agentType: 'planning',
+  });
+  expect(planningTask.ok).toBe(true);
+
+  const response = await server.inject({
+    method: 'GET',
+    url: '/code/tasks',
+    headers: { authorization: 'Bearer test-token' },
+  });
+
+  expect(response.statusCode).toBe(200);
+  const body = JSON.parse(response.body) as { success: boolean; data: { tasks: { id: string }[] } };
+  expect(body.success).toBe(true);
+
+  // Only the planning task should be in the response
+  const taskIds = body.data.tasks.map((t) => t.id);
+  expect(taskIds).toContain(planningTask.value.id);
+  expect(taskIds).not.toContain(askAgentTask.value.id);
 });
 ```
 
@@ -1584,7 +1632,7 @@ const completionAgentType: CompletionAgentType = isPullRequestTask
 
 - [ ] **Step 6: Handle ask_agent in result enrichment**
 
-In `task-dispatcher.ts`, find the `enrichResult` method (around line 1287). Add a case for ask_agent at the end:
+In `task-dispatcher.ts`, find the `enrichResultForResumedTask` method (around line 1353). Add a case for ask_agent at the end:
 
 ```typescript
 // After the existing agentData type checks (around line 1337):
@@ -1598,10 +1646,10 @@ In `task-dispatcher.ts`, find the `enrichResult` method (around line 1287). Add 
 
 In `task-dispatcher.ts`, find `finalizeTaskWithResult` (around line 1412). The existing code checks for specific agent types. Ensure ask_agent falls through to the default success path. No explicit case is needed — the method already calls `finalizeTask` with 'completed' status for non-special cases.
 
-However, we should ensure ask_agent tasks also skip the completion verification retry logic. In `onWorkerAttemptFinished`, add a fast-path for ask_agent right after the `completionAgentType` determination:
+However, we should ensure ask_agent tasks also skip the completion verification retry logic. In `onWorkerAttemptFinished`, add a fast-path for ask_agent right after `rawLogs` is obtained (around line 953):
 
 ```typescript
-// ADD after completionAgentType is determined (around line 925):
+// ADD after rawLogs is obtained (around line 953):
 if (completionAgentType === 'ask_agent') {
   // ask_agent has no structured completion block — skip verification entirely
   const summaryLines = rawLogs.split('\n').filter(l => l.startsWith('[claude]')).slice(-5);
