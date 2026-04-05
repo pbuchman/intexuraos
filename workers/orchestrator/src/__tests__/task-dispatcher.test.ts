@@ -2100,6 +2100,71 @@ describe('TaskDispatcher', () => {
         })
       );
     });
+
+    it('buildResultFromVerification returns base result when agentData is undefined', () => {
+      const internal = agentDispatcher as unknown as {
+        buildResultFromVerification: (
+          task: Task,
+          gitResult: TaskResult | undefined,
+          verification: {
+            agentData: undefined;
+            passed: boolean;
+            missingFields: string[];
+            verifierFailure: boolean;
+            trace: { transcript: string; prompt: string; response: string };
+          }
+        ) => TaskResult;
+      };
+      const fakeTask = { taskId: 'undef-agentdata', linearIssueLabels: [] } as unknown as Task;
+      const gitResult: TaskResult = { branch: 'feat/test' };
+      const result = internal.buildResultFromVerification(fakeTask, gitResult, {
+        agentData: undefined,
+        passed: true,
+        missingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+      });
+      expect(result).toEqual(gitResult);
+    });
+
+    it('finalizeTask skips lifecycle event when finalStatus is not completed/failed/interrupted', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'lifecycle-cancelled-test',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const state = agentDispatcher as unknown as {
+        statePersistence: StatePersistence;
+      };
+      const savedState = await state.statePersistence.load();
+      const task = savedState.tasks['lifecycle-cancelled-test'];
+      if (task === undefined) throw new Error('Task not found');
+      task.status = 'running';
+      await state.statePersistence.save(savedState);
+
+      const internalFinalizeTask = agentDispatcher as unknown as {
+        finalizeTask: (
+          task: Task,
+          status: string,
+          payload: Record<string, unknown>,
+          keepLogOpen?: boolean
+        ) => Promise<void>;
+      };
+      await internalFinalizeTask.finalizeTask(task, 'cancelled', {});
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({ status: 'cancelled' }),
+        })
+      );
+    });
   });
 
   describe('agentType priority', () => {
@@ -7854,6 +7919,93 @@ describe('TaskDispatcher', () => {
         mockIsolationProvider as Required<IsolationProvider>
       ).isResumeAvailable.mockResolvedValueOnce(false);
       const result = await dispatcher.sendMessage('msg-stale-container-task', 'Follow-up');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('not_found');
+      }
+    });
+
+    it('queues long message (>200 chars) with truncated log entry', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-long-queue-task',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const longMessage = 'A'.repeat(250);
+      const result = await dispatcher.sendMessage('msg-long-queue-task', longMessage);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({
+          action: 'queued',
+          pendingMessages: [longMessage],
+        });
+      }
+    });
+
+    it('resumes completed task with long message (>200 chars)', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-long-resume-task',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const state = await statePersistence.load();
+      const task = state.tasks['msg-long-resume-task'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      await statePersistence.save(state);
+
+      const longMessage = 'B'.repeat(250);
+      const result = await dispatcher.sendMessage('msg-long-resume-task', longMessage);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'resumed' });
+      }
+    });
+
+    it('returns not_found when isResumeAvailable is not implemented on provider', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-no-resume-check-task',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const state = await statePersistence.load();
+      const task = state.tasks['msg-no-resume-check-task'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      await statePersistence.save(state);
+
+      // Remove isResumeAvailable so optional chaining returns undefined → ?? false → not available
+      const providerWithoutCheck = mockIsolationProvider as Required<IsolationProvider>;
+      const original = providerWithoutCheck.isResumeAvailable;
+      providerWithoutCheck.isResumeAvailable = undefined as unknown as typeof original;
+
+      const result = await dispatcher.sendMessage('msg-no-resume-check-task', 'Follow-up');
+
+      providerWithoutCheck.isResumeAvailable = original;
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
