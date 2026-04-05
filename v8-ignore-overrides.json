@@ -12,7 +12,6 @@
     },
     "INT-1011": {
       "files": [
-        "apps/research-agent/src/routes/openRouterRoutes.ts",
         "apps/research-agent/src/routes/internalRoutes.ts",
         "packages/infra-openrouter/src/client.ts"
       ],

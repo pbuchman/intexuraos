@@ -71,13 +71,11 @@ async function fetchOpenRouterCatalog(
 
     const catalogMap = new Map<string, CatalogEntry>();
     for (const model of data.data) {
-      /* v8 ignore start -- ts-type: cannot simulate API response missing pricing data in unit tests @preserve */
+      // pricing is optional in the API response type; skip models without it
       if (model.pricing === undefined) {
         continue;
       }
-      /* v8 ignore stop @preserve */
 
-      /* v8 ignore start -- ts-type: parseFloat nullish coalescing defaults are unreachable in unit tests @preserve */
       catalogMap.set(model.id, {
         pricing: {
           inputPricePerMillion: parseFloat(model.pricing.prompt ?? '0') * 1_000_000,
@@ -85,7 +83,6 @@ async function fetchOpenRouterCatalog(
         },
         contextLength: model.context_length ?? 102400,
       });
-      /* v8 ignore stop @preserve */
     }
 
     return catalogMap;
@@ -105,7 +102,7 @@ export const openRouterRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
     });
 
     const user = await requireAuth(request, reply);
-    /* v8 ignore start -- test-infra: FakeAuthPlugin always returns valid user, cannot simulate null auth @preserve */
+    /* v8 ignore start -- test-infra: requireAuth always returns valid user in test environment, cannot simulate null auth @preserve */
     if (user === null) return;
     /* v8 ignore stop @preserve */
 
@@ -113,11 +110,9 @@ export const openRouterRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
 
     // Fetch user's API keys to check if OpenRouter key is configured
     const keysResult = await userServiceClient.getApiKeys(user.userId);
-    /* v8 ignore start -- test-infra: FakeUserServiceClient cannot simulate getApiKeys failure @preserve */
     if (!keysResult.ok) {
       return await reply.fail('INTERNAL_ERROR', 'Failed to fetch user API keys');
     }
-    /* v8 ignore stop @preserve */
 
     const apiKey = keysResult.value.openrouter;
     if (apiKey === undefined || apiKey === '') {

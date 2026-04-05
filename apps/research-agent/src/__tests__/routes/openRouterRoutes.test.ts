@@ -299,4 +299,153 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     };
     expect(body.data.models[0]?.contextLength).toBe(600_000);
   });
+
+  it('returns INTERNAL_ERROR when getApiKeys fails', async () => {
+    fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-or-key' });
+    fakeUserServiceClient.setFailNextGetApiKeys(true);
+
+    const token = await generateJwt(TEST_USER_ID);
+    const response = await app.inject({
+      method: 'GET',
+      url: '/research/openrouter/models',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error?: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error?.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('skips non-allowlisted models without pricing from catalog', async () => {
+    fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-or-key' });
+
+    // Catalog includes a model without pricing field — it should be skipped
+    const catalogData = [
+      ...OPENROUTER_ALLOWED_MODELS.map((m) => ({
+        id: m.id,
+        pricing: { prompt: '0.000001', completion: '0.000005' },
+        context_length: 500_000,
+      })),
+      // Extra model not in allowlist, without pricing — should be skipped
+      { id: 'unknown/model-without-pricing', context_length: 100_000 },
+    ];
+
+    nock('https://openrouter.ai')
+      .get('/api/v1/models')
+      .reply(200, { data: catalogData });
+
+    const token = await generateJwt(TEST_USER_ID);
+    const response = await app.inject({
+      method: 'GET',
+      url: '/research/openrouter/models',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: { models: { id: string }[] };
+    };
+    expect(body.success).toBe(true);
+    // All 14 allowlisted models are returned (unknown model is skipped)
+    expect(body.data.models).toHaveLength(14);
+  });
+
+  it('uses parseFloat fallback when prompt is null', async () => {
+    fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-or-key' });
+
+    // Catalog has a model with null prompt — parseFloat fallback should use 0
+    const catalogData = OPENROUTER_ALLOWED_MODELS.map((m, i) => ({
+      id: m.id,
+      pricing: i === 0 ? { prompt: null, completion: '0.000005' } : { prompt: '0.000001', completion: '0.000005' },
+      context_length: 500_000,
+    }));
+
+    nock('https://openrouter.ai')
+      .get('/api/v1/models')
+      .reply(200, { data: catalogData });
+
+    const token = await generateJwt(TEST_USER_ID);
+    const response = await app.inject({
+      method: 'GET',
+      url: '/research/openrouter/models',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: { models: { id: string; pricing: { inputPricePerMillion: number } }[] };
+    };
+    expect(body.success).toBe(true);
+    // First model uses fallback pricing (0) since prompt was null
+    const firstModel = body.data.models.find((m) => m.id === OPENROUTER_ALLOWED_MODELS[0]?.id);
+    expect(firstModel?.pricing.inputPricePerMillion).toBe(0);
+  });
+
+  it('uses parseFloat fallback when completion is null', async () => {
+    fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-or-key' });
+
+    // Catalog has a model with null completion — parseFloat fallback should use 0
+    const catalogData = OPENROUTER_ALLOWED_MODELS.map((m, i) => ({
+      id: m.id,
+      pricing: i === 0 ? { prompt: '0.000001', completion: null } : { prompt: '0.000001', completion: '0.000005' },
+      context_length: 500_000,
+    }));
+
+    nock('https://openrouter.ai')
+      .get('/api/v1/models')
+      .reply(200, { data: catalogData });
+
+    const token = await generateJwt(TEST_USER_ID);
+    const response = await app.inject({
+      method: 'GET',
+      url: '/research/openrouter/models',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: { models: { id: string; pricing: { outputPricePerMillion: number } }[] };
+    };
+    expect(body.success).toBe(true);
+    // First model uses fallback pricing (0) since completion was null
+    const firstModel = body.data.models.find((m) => m.id === OPENROUTER_ALLOWED_MODELS[0]?.id);
+    expect(firstModel?.pricing.outputPricePerMillion).toBe(0);
+  });
+
+  it('uses context_length fallback when catalog entry has no context_length', async () => {
+    fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-or-key' });
+
+    // Catalog returns models without context_length — fallback to 102400
+    const catalogData = OPENROUTER_ALLOWED_MODELS.map((m) => ({
+      id: m.id,
+      pricing: { prompt: '0.000001', completion: '0.000005' },
+      // context_length is intentionally omitted to test the ?? 102400 fallback
+    }));
+
+    nock('https://openrouter.ai')
+      .get('/api/v1/models')
+      .reply(200, { data: catalogData });
+
+    const token = await generateJwt(TEST_USER_ID);
+    const response = await app.inject({
+      method: 'GET',
+      url: '/research/openrouter/models',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: { models: { id: string; contextLength: number }[] };
+    };
+    expect(body.success).toBe(true);
+    // All models should use fallback context length of 102400
+    for (const model of body.data.models) {
+      expect(model.contextLength).toBe(102400);
+    }
+  });
 });
