@@ -8101,6 +8101,7 @@ describe('TaskDispatcher', () => {
       await dispatcher.submitTask(request);
       await flushAsync();
 
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
       const longMessage = 'A'.repeat(250);
       const result = await dispatcher.sendMessage('msg-long-queue-task', longMessage);
 
@@ -8111,6 +8112,16 @@ describe('TaskDispatcher', () => {
           pendingMessages: [longMessage],
         });
       }
+
+      // Verify the log entry was truncated at 200 chars with ellipsis (the >200 ternary branch)
+      const logCalls = vi.mocked(mockLogForwarder.appendChunk).mock.calls;
+      const queuedLog = logCalls.find(
+        (call) => typeof call[1] === 'string' && (call[1] as string).includes('Message queued')
+      );
+      expect(queuedLog).toBeDefined();
+      const logEntry = queuedLog?.[1] as string;
+      expect(logEntry).toContain('\u2026'); // ellipsis = truncation occurred
+      expect(logEntry).not.toContain('A'.repeat(250)); // full message not present
     });
 
     it('resumes completed task with long message (>200 chars)', async () => {
@@ -8132,6 +8143,7 @@ describe('TaskDispatcher', () => {
       task.status = 'completed';
       await statePersistence.save(state);
 
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
       const longMessage = 'B'.repeat(250);
       const result = await dispatcher.sendMessage('msg-long-resume-task', longMessage);
 
@@ -8139,6 +8151,16 @@ describe('TaskDispatcher', () => {
       if (result.ok) {
         expect(result.value).toEqual({ action: 'resumed' });
       }
+
+      // Verify the prompt log entry was truncated at 200 chars with ellipsis (the >200 ternary branch)
+      const logCalls = vi.mocked(mockLogForwarder.appendChunk).mock.calls;
+      const promptLog = logCalls.find(
+        (call) => typeof call[1] === 'string' && (call[1] as string).includes('[prompt]')
+      );
+      expect(promptLog).toBeDefined();
+      const promptEntry = promptLog?.[1] as string;
+      expect(promptEntry).toContain('\u2026'); // ellipsis = truncation occurred
+      expect(promptEntry).not.toContain('B'.repeat(250)); // full message not present
     });
 
     it('returns not_found when isResumeAvailable is not implemented on provider', async () => {
@@ -8165,9 +8187,13 @@ describe('TaskDispatcher', () => {
       const original = providerWithoutCheck.isResumeAvailable;
       providerWithoutCheck.isResumeAvailable = undefined as unknown as typeof original;
 
-      const result = await dispatcher.sendMessage('msg-no-resume-check-task', 'Follow-up');
-
-      providerWithoutCheck.isResumeAvailable = original;
+      let result: Awaited<ReturnType<typeof dispatcher.sendMessage>>;
+      try {
+        result = await dispatcher.sendMessage('msg-no-resume-check-task', 'Follow-up');
+      } finally {
+        // Restore even if sendMessage throws, to avoid polluting other tests
+        providerWithoutCheck.isResumeAvailable = original;
+      }
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -8527,11 +8553,16 @@ describe('TaskDispatcher', () => {
       task.status = 'completed';
       await earlyReturnState.save(state);
 
-      // Advance past kill timeout — early return should prevent any decrement
+      // Manually set runningCount to 0 to simulate the race where finalization already
+      // decremented it before the kill timer fires. This is the key guard scenario.
+      (earlyReturnDispatcher as unknown as { runningCount: number }).runningCount = 0;
+
+      // Advance past kill timeout — early return (task not running) prevents the decrement
       await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
 
-      // runningCount still 1 because early return prevented the decrement path
-      expect(earlyReturnDispatcher.getRunningCount()).toBe(1);
+      // runningCount stays at 0 (not -1) because the early return at `task?.status !== 'running'`
+      // fires before reaching the `if (this.runningCount > 0) this.runningCount--` guard
+      expect(earlyReturnDispatcher.getRunningCount()).toBe(0);
 
       vi.useRealTimers();
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
