@@ -53,6 +53,9 @@ vi.mock('jose', () => ({
 
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 
+// Note: mockedJwtVerify is declared for compatibility with vi.mock('jose', ...) which is
+// required because the server imports jose at module level. Internal auth does not use JWT.
+
 import { buildServer } from '../../server.js';
 import { resetServices, setServices } from '../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
@@ -255,10 +258,10 @@ it('passes optional workerType and linearIssueId', async () => {
 });
 ```
 
-**Test 7: returns 503 when user has no workers configured**
+**Test 7: returns 424 when user has no workers configured**
 
 ```typescript
-it('returns error when user has no workers configured', async () => {
+it('returns 424 when user has no workers configured', async () => {
   // Seed worker settings with no enabled workers
   const workerSettingsCollection = fakeFirestore.collection('worker_settings');
   await workerSettingsCollection.doc('test-user-id').set({
@@ -278,7 +281,7 @@ it('returns error when user has no workers configured', async () => {
     },
   });
 
-  expect(response.statusCode).not.toBe(200);
+  expect(response.statusCode).toBe(424);
   const body = JSON.parse(response.payload);
   expect(body.success).toBe(false);
 });
@@ -403,7 +406,23 @@ Insert the following route definition after the `POST /internal/code/process` ro
                 type: 'object',
                 required: ['code', 'message'],
                 properties: {
-                  code: { type: 'string', enum: ['MISCONFIGURED', 'WORKER_NOT_CONFIGURED'] },
+                  code: { type: 'string', enum: ['MISCONFIGURED'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          424: {
+            description: 'Worker not configured',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['WORKER_NOT_CONFIGURED'] },
                   message: { type: 'string' },
                 },
               },
@@ -419,7 +438,7 @@ Insert the following route definition after the `POST /internal/code/process` ro
                 type: 'object',
                 required: ['code', 'message'],
                 properties: {
-                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+                  code: { type: 'string', enum: ['INTERNAL_ERROR', 'QUEUE_FULL', 'QUEUE_TIMEOUT'] },
                   message: { type: 'string' },
                 },
               },
@@ -529,11 +548,19 @@ Insert the following route definition after the `POST /internal/code/process` ro
         }
 
         if (error.code === 'worker_not_configured') {
-          return await reply.fail('WORKER_NOT_CONFIGURED', error.message);
+          return await reply.fail(424, error.message);
         }
 
         if (error.code === 'validation_error') {
           return await reply.fail('INVALID_REQUEST', error.message);
+        }
+
+        if (error.code === 'queue_full') {
+          return await reply.fail('QUEUE_FULL', error.message);
+        }
+
+        if (error.code === 'queue_timeout') {
+          return await reply.fail('QUEUE_TIMEOUT', error.message);
         }
 
         return await reply.fail('INTERNAL_ERROR', error.message);
