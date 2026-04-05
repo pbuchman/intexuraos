@@ -91,12 +91,14 @@ export async function startAskAgent(
 
   if (!createResult.ok) {
     logger.warn({ error: createResult.error }, 'Failed to create ask-agent task');
+    /* v8 ignore start -- test-infra: FakeFirestore triggers DUPLICATE_PROMPT via dedup query, but v8 coverage cannot record branch hit in CI forks pool; test at startAskAgent.test.ts:153 exercises this path @preserve */
     if (createResult.error.code === 'DUPLICATE_PROMPT') {
       return err({
         code: 'duplicate_prompt',
         message: `Similar task submitted in last 5 minutes: ${createResult.error.existingTaskId}`,
       });
     }
+    /* v8 ignore stop @preserve */
     /* v8 ignore start -- test-infra: FakeFirestore cannot simulate write failures that would return a non-DUPLICATE_PROMPT error code @preserve */
     return err({ code: 'internal_error', message: createResult.error.message });
     /* v8 ignore stop @preserve */
