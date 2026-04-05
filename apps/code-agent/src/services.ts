@@ -88,6 +88,7 @@ import { createTaskEnqueueService } from './infra/services/taskEnqueueServiceImp
 import type { MergeQueueWatchRepository } from './domain/repositories/mergeQueueWatchRepository.js';
 import { createFirestoreMergeQueueWatchRepository } from './infra/firestore/mergeQueueWatchRepository.js';
 import { createUnauthorizedSenderCommentHandler } from './domain/services/unauthorizedSenderCommentHandler.js';
+import { createOnReviewSkippedCallback } from './domain/services/onReviewSkippedCallback.js';
 import type { TaskGroupSummaryRepository } from './domain/ports/taskGroupSummaryRepository.js';
 import { createTaskGroupSummaryFirestoreRepository } from './infra/firestore/taskGroupSummaryFirestoreRepository.js';
 import { withGroupUpdates } from './infra/repositories/codeTaskRepositoryWithGroupUpdates.js';
@@ -559,6 +560,13 @@ export function initServices(config: ServiceConfig): void {
     },
     allowedBots: ALLOWED_BOTS,
     codeTaskRepo,
+    onReviewSkipped: createOnReviewSkippedCallback({
+      codeTaskRepo,
+      linearAgentClient,
+      automationLog,
+      groupSummaryRepo,
+      logger,
+    }),
     onUnauthorizedSender: createUnauthorizedSenderCommentHandler({ gitHubPRClient, userServiceClient, logger }),
   });
 
