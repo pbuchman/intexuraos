@@ -92,11 +92,9 @@ export function createOnReviewSkippedCallback(deps: OnReviewSkippedDeps): (args:
 
       // Best-effort: recompute group summary so cached aggregateStatus reflects actionable state
       const baseLabels = issueValidation.value.labels.map((l) => ({ id: '', name: l }));
-      /* v8 ignore start -- source-map: ternary type guards have source map alignment issues @preserve */
       const updatedLabels = issueValidation.value.labels.includes('ready-to-merge')
         ? baseLabels
         : [...baseLabels, { id: '', name: 'ready-to-merge' }];
-      /* v8 ignore stop @preserve */
       void groupSummaryRepo.recomputeWithLabels(
         origin.userId, origin.linearIssueId, updatedLabels, new Date().toISOString(),
       ).catch((recomputeErr: unknown) => {
