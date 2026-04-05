@@ -71,6 +71,11 @@ export interface LinearIssueService {
    * Remove a label from an issue by name. Best-effort: logs and swallows errors.
    */
   removeLabel(userId: string, linearIssueId: string, labelName: string): Promise<void>;
+
+  /**
+   * Add a label to an issue by name. Best-effort: logs and swallows errors.
+   */
+  addLabel(userId: string, linearIssueId: string, labelName: string): Promise<void>;
 }
 
 export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIssueService {
@@ -228,6 +233,22 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
 
       if (!result.ok) {
         logger.warn({ linearIssueId, labelName, error: result.error }, 'Failed to remove label from Linear issue');
+      }
+    },
+
+    async addLabel(userId: string, linearIssueId: string, labelName: string): Promise<void> {
+      if (!linearIssueId) {
+        return;
+      }
+
+      const result = await linearAgentClient.updateIssueMetadata({
+        userId,
+        issueId: linearIssueId,
+        addLabels: [labelName],
+      });
+
+      if (!result.ok) {
+        logger.warn({ linearIssueId, labelName, error: result.error }, 'Failed to add label to Linear issue');
       }
     },
   };
