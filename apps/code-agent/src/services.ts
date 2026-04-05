@@ -624,10 +624,10 @@ export function initServices(config: ServiceConfig): void {
         });
 
         // Best-effort: recompute group summary so cached aggregateStatus reflects actionable state
-        const updatedLabels = [
-          ...issueValidation.value.labels.map((l) => ({ id: '', name: l })),
-          { id: '', name: 'ready-to-merge' },
-        ];
+        const baseLabels = issueValidation.value.labels.map((l) => ({ id: '', name: l }));
+        const updatedLabels = issueValidation.value.labels.includes('ready-to-merge')
+          ? baseLabels
+          : [...baseLabels, { id: '', name: 'ready-to-merge' }];
         void groupSummaryRepo.recomputeWithLabels(
           origin.userId, origin.linearIssueId, updatedLabels, new Date().toISOString(),
         ).catch((recomputeErr: unknown) => {
