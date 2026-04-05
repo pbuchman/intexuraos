@@ -989,8 +989,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         }
 
         if (error.code === 'active_task_exists') {
-          /* v8 ignore start -- upstream: firestoreCodeTaskRepository always provides existingTaskId for active_task_exists; fallback is defensive @preserve */
-          return await reply.fail('CONFLICT', `Active task already exists for this Linear issue: ${error.existingTaskId ?? ''}`);
+          // firestoreCodeTaskRepository always provides existingTaskId for active_task_exists
+          const existingTaskId = error.existingTaskId;
+          /* v8 ignore start -- ts-type: firestoreCodeTaskRepository always provides existingTaskId; fallback unreachable @preserve */
+          return await reply.fail('CONFLICT', `Active task already exists for this Linear issue: ${existingTaskId ?? ''}`);
           /* v8 ignore stop @preserve */
         }
 
@@ -1006,7 +1008,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           return await reply.fail('QUEUE_FULL', error.message);
         }
 
-        /* v8 ignore start -- upstream: queue_timeout is never triggered by processCodeAction; EnqueueError type excludes this code @preserve */
+        /* v8 ignore start -- ts-type: queue_timeout is not in EnqueueError code union; codeRoutes.ts handler is defensive only @preserve */
         if (error.code === 'queue_timeout') {
           // Note: QUEUE_TIMEOUT is not in ErrorCode union; map to INTERNAL_ERROR.
           // TODO: Consider adding QUEUE_TIMEOUT to common-core/src/errors.ts if needed.

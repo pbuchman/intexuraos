@@ -314,6 +314,8 @@ describe('POST /internal/code/submit', () => {
     });
 
     expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.payload);
+    expect(body.success).toBe(false);
   });
 
   it('rejects requests missing prompt', async () => {
@@ -329,6 +331,8 @@ describe('POST /internal/code/submit', () => {
     });
 
     expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.payload);
+    expect(body.success).toBe(false);
   });
 
   it('successfully creates a code task with valid internal auth', async () => {
@@ -428,6 +432,7 @@ describe('POST /internal/code/submit', () => {
     expect(response.statusCode).toBe(424);
     const body = JSON.parse(response.payload);
     expect(body.success).toBe(false);
+    expect(body.error.code).toBe('WORKER_NOT_CONFIGURED');
   });
 
   it('returns 409 for duplicate_prompt when same prompt is submitted twice', async () => {
