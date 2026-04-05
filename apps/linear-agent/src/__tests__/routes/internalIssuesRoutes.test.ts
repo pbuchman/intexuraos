@@ -31,6 +31,7 @@ describe('internalIssuesRoutes', () => {
   let fakeLinearClient: FakeLinearApiClient;
   let fakeIssueRepo: FakeLinearIssueRepository;
   let fakeCommentRepo: FakeLinearCommentRepository;
+  let fakeCodeAgentClient: FakeCodeAgentClient;
 
   const testUserId = 'user-123';
   const testApiKey = 'linear-api-key-test';
@@ -50,6 +51,7 @@ describe('internalIssuesRoutes', () => {
     fakeLinearClient = new FakeLinearApiClient();
     fakeIssueRepo = new FakeLinearIssueRepository();
     fakeCommentRepo = new FakeLinearCommentRepository();
+    fakeCodeAgentClient = new FakeCodeAgentClient();
 
     setServices({
       connectionRepository: fakeConnectionRepo,
@@ -60,7 +62,7 @@ describe('internalIssuesRoutes', () => {
       issueRepository: fakeIssueRepo,
       userServiceClient: new FakeUserServiceClient(),
       commentRepository: fakeCommentRepo,
-      codeAgentClient: new FakeCodeAgentClient(),
+      codeAgentClient: fakeCodeAgentClient,
       issuePruningClassifier: {
         classifyCandidates: async () => ({ ok: true, value: [] }),
       },
@@ -1185,6 +1187,180 @@ describe('internalIssuesRoutes', () => {
         payload: { removeLabels: ['ready-to-merge'] },
       });
 
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { labels: { name: string }[] } };
+      expect(body.success).toBe(true);
+      expect(body.data.labels).toStrictEqual([]);
+    });
+
+    it('should write-through updated labels to Firestore cache after successful update', async () => {
+      fakeIssueRepo.seedIssue({
+        id: 'uuid-wt-1',
+        identifier: 'INT-1286',
+        title: 'Write-through Test',
+        description: null,
+        state: 'In Review',
+        stateType: 'started',
+        priority: 2,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [{ id: 'label-rtm', name: 'ready-to-merge', color: '#00ff00' }],
+        url: 'https://linear.app/test/INT-1286',
+        userId: testUserId,
+        createdAt: '2024-01-15T10:00:00.000Z',
+        updatedAt: '2024-01-16T12:30:00.000Z',
+        syncedAt: '2024-01-16T12:30:00.000Z',
+        teamId: 'team-1',
+        parentId: null,
+      });
+
+      fakeLinearClient.setLabels([
+        { id: 'label-rtm', name: 'ready-to-merge', color: '#00ff00' },
+        { id: 'label-bug', name: 'bug', color: '#ff0000' },
+      ]);
+
+      fakeLinearClient.seedIssue({
+        id: 'uuid-wt-1',
+        identifier: 'INT-1286',
+        title: 'Write-through Test',
+        description: null,
+        priority: 2,
+        state: { id: 'state-1', name: 'In Review', type: 'started' },
+        url: 'https://linear.app/test/INT-1286',
+        createdAt: '2024-01-15T10:00:00.000Z',
+        updatedAt: '2024-01-16T12:30:00.000Z',
+        completedAt: null,
+        childCount: 0,
+        children: [],
+        labels: [{ id: 'label-rtm', name: 'ready-to-merge', color: '#00ff00' }],
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/linear/issues/uuid-wt-1/metadata',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+        payload: { removeLabels: ['ready-to-merge'] },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const cached = await fakeIssueRepo.findById('uuid-wt-1');
+      expect(cached.ok).toBe(true);
+      if (cached.ok) {
+        expect(cached.value?.labels).toStrictEqual([]);
+      }
+    });
+
+    it('should notify code-agent to recompute group summary after label update', async () => {
+      fakeIssueRepo.seedIssue({
+        id: 'uuid-wt-2',
+        identifier: 'INT-1287',
+        title: 'Notify Test',
+        description: null,
+        state: 'In Review',
+        stateType: 'started',
+        priority: 2,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [{ id: 'label-rtm', name: 'ready-to-merge', color: '#00ff00' }],
+        url: 'https://linear.app/test/INT-1287',
+        userId: testUserId,
+        createdAt: '2024-01-15T10:00:00.000Z',
+        updatedAt: '2024-01-16T12:30:00.000Z',
+        syncedAt: '2024-01-16T12:30:00.000Z',
+        teamId: 'team-1',
+        parentId: null,
+      });
+
+      fakeLinearClient.setLabels([
+        { id: 'label-rtm', name: 'ready-to-merge', color: '#00ff00' },
+        { id: 'label-bug', name: 'bug', color: '#ff0000' },
+      ]);
+
+      fakeLinearClient.seedIssue({
+        id: 'uuid-wt-2',
+        identifier: 'INT-1287',
+        title: 'Notify Test',
+        description: null,
+        priority: 2,
+        state: { id: 'state-1', name: 'In Review', type: 'started' },
+        url: 'https://linear.app/test/INT-1287',
+        createdAt: '2024-01-15T10:00:00.000Z',
+        updatedAt: '2024-01-16T12:30:00.000Z',
+        completedAt: null,
+        childCount: 0,
+        children: [],
+        labels: [{ id: 'label-rtm', name: 'ready-to-merge', color: '#00ff00' }],
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/linear/issues/uuid-wt-2/metadata',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+        payload: { removeLabels: ['ready-to-merge'] },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const calls = fakeCodeAgentClient.getRecomputeCalls();
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.userId).toBe(testUserId);
+      expect(calls[0]?.linearIssueId).toBe('INT-1287');
+      expect(calls[0]?.labels).toStrictEqual([]);
+    });
+
+    it('should still return 200 when write-through cache save fails (best-effort)', async () => {
+      fakeIssueRepo.seedIssue({
+        id: 'uuid-wt-3',
+        identifier: 'INT-1288',
+        title: 'Save Failure Test',
+        description: null,
+        state: 'In Review',
+        stateType: 'started',
+        priority: 2,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [{ id: 'label-rtm', name: 'ready-to-merge', color: '#00ff00' }],
+        url: 'https://linear.app/test/INT-1288',
+        userId: testUserId,
+        createdAt: '2024-01-15T10:00:00.000Z',
+        updatedAt: '2024-01-16T12:30:00.000Z',
+        syncedAt: '2024-01-16T12:30:00.000Z',
+        teamId: 'team-1',
+        parentId: null,
+      });
+
+      fakeLinearClient.setLabels([
+        { id: 'label-rtm', name: 'ready-to-merge', color: '#00ff00' },
+      ]);
+
+      fakeLinearClient.seedIssue({
+        id: 'uuid-wt-3',
+        identifier: 'INT-1288',
+        title: 'Save Failure Test',
+        description: null,
+        priority: 2,
+        state: { id: 'state-1', name: 'In Review', type: 'started' },
+        url: 'https://linear.app/test/INT-1288',
+        createdAt: '2024-01-15T10:00:00.000Z',
+        updatedAt: '2024-01-16T12:30:00.000Z',
+        completedAt: null,
+        childCount: 0,
+        children: [],
+        labels: [{ id: 'label-rtm', name: 'ready-to-merge', color: '#00ff00' }],
+      });
+
+      // Make save fail after the issue is seeded
+      fakeIssueRepo.setSaveFailure(true, { code: 'INTERNAL_ERROR', message: 'Firestore write failed' });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/linear/issues/uuid-wt-3/metadata',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+        payload: { removeLabels: ['ready-to-merge'] },
+      });
+
+      // Should still return 200 — cache update is best-effort
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as { success: boolean; data: { labels: { name: string }[] } };
       expect(body.success).toBe(true);
