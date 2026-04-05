@@ -1300,6 +1300,10 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
     findAllNonArchived: async (): Promise<Result<CodeTask[], RepositoryError>> => {
       try {
+        // Uses != 'archived' (not 'in NON_ARCHIVED_STATUSES') deliberately:
+        // this approach is future-proof — any new status added later is automatically
+        // included, ensuring the hasActive safety check in the use case always sees
+        // the complete picture. listAllNonArchivedGlobal uses 'in' for backward compat.
         const snapshot = await collection
           .where('status', '!=', 'archived')
           .get();

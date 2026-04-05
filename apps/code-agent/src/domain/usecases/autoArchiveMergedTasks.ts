@@ -107,6 +107,7 @@ export function createAutoArchiveMergedTasksUseCase(
         'Archiving group with expired merged PR'
       );
 
+      let groupHadSuccess = false;
       for (const task of expiredTasks) {
         try {
           const updateResult = await codeTaskRepository.update(task.id, { status: 'archived' });
@@ -122,6 +123,7 @@ export function createAutoArchiveMergedTasksUseCase(
               'Archived task with merged PR'
             );
             tasksArchived++;
+            groupHadSuccess = true;
           }
         } catch (error) {
           const message = getErrorMessage(error);
@@ -130,7 +132,9 @@ export function createAutoArchiveMergedTasksUseCase(
         }
       }
 
-      groupsArchived++;
+      if (groupHadSuccess) {
+        groupsArchived++;
+      }
     }
 
     const durationMs = Date.now() - startTime;
