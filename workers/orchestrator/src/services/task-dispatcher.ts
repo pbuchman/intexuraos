@@ -723,7 +723,7 @@ export class TaskDispatcher {
 
   private async resumeTaskWithUserMessage(task: Task): Promise<void> {
     const prompt = task.pendingResumeStart?.prompt;
-    /* v8 ignore start -- upstream: sendMessage and recoverPendingResumeTask always set pendingResumeStart.prompt before invoking this helper; guards against unexpected in-flight mutation @preserve */
+    /* v8 ignore start -- source-map: direct invocation via as-cast in test bypasses v8 branch instrumentation for the undefined prompt guard @preserve */
     if (prompt === undefined) {
       await this.failAcceptedResume(
         task,
@@ -1965,7 +1965,7 @@ export class TaskDispatcher {
     }
 
     if (shouldPreserve && task.agentType === 'pull_request' && task.prNumber !== undefined) {
-      /* v8 ignore start -- ts-type: optional chaining on listPreservedWorkers and nullish coalescing to default empty array @preserve */
+      /* v8 ignore start -- source-map: optional chaining on listPreservedWorkers and nullish coalescing to default empty array @preserve */
       const preserved = (await this.isolation.provider.listPreservedWorkers?.()) ?? [];
       /* v8 ignore stop @preserve */
       if (preserved.length > 0) {

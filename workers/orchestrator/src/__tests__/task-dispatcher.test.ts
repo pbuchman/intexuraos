@@ -7399,13 +7399,14 @@ describe('TaskDispatcher', () => {
     });
 
     it('double-decrement prevention: outer catch guard leaves runningCount at zero when inner guard already decremented', async () => {
-      // createWorktree throws → inner guard at worktree catch decrements runningCount from 1 to 0
-      // webhookClient.send throws → exception propagates to outer catch at executeTaskSetup
-      // outer catch guard sees runningCount=0 → FALSE branch → stays at 0 (not -1)
-      vi.mocked(mockWorktreeManager.createWorktree).mockRejectedValueOnce(
-        new Error('Worktree fail')
-      );
-      vi.mocked(mockWebhookClient.send).mockRejectedValueOnce(new Error('Webhook send failed'));
+      // createWorktree SUCCEEDS (inner catch does not fire)
+      // runningCount is manually set to 0 to simulate it already being decremented
+      // logForwarder.registerTask throws → exception escapes inner try-catch, reaches outer catch
+      // outer catch guard sees runningCount=0 → FALSE branch exercised → stays at 0 (not -1)
+      (dispatcher as unknown as { runningCount: number }).runningCount = 0;
+      vi.mocked(mockLogForwarder.registerTask).mockImplementationOnce(() => {
+        throw new Error('registerTask failed');
+      });
 
       const request: CreateTaskRequest = {
         taskId: 'double-decrement-test',
