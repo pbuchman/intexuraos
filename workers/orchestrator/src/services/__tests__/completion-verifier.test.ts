@@ -16,6 +16,7 @@ const {
   EXECUTION_SCHEMA,
   PULL_REQUEST_SCHEMA,
   REVIEW_SCHEMA,
+  REMEDIATION_SCHEMA,
   RESUME_SUMMARY_SCHEMA,
   buildPlanningPrompt,
   buildExecutionPrompt,
@@ -71,7 +72,7 @@ describe('PLANNING_SCHEMA', () => {
       is_complex: '0',
       has_plan_doc: '0',
       subtask_urls: '',
-      pr_url: '',
+      pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
       summary: 'Planned the task.',
       unclear_clarification: '',
     });
@@ -117,7 +118,7 @@ describe('PLANNING_SCHEMA', () => {
       has_plan_doc: '1',
       subtask_urls:
         'https://linear.app/pbuchman/issue/INT-632/subtask-one,https://linear.app/pbuchman/issue/INT-633/subtask-two',
-      pr_url: '',
+      pr_url: 'https://github.com/pbuchman/intexuraos/pull/631',
       summary: 'Planned with subtasks.',
       unclear_clarification: '',
     });
@@ -156,7 +157,7 @@ describe('PLANNING_SCHEMA', () => {
       is_complex: '0',
       has_plan_doc: '0',
       subtask_urls: '',
-      pr_url: '',
+      pr_url: 'https://github.com/pbuchman/intexuraos/pull/640',
       summary: 'Simple task planned.',
       unclear_clarification: '',
     });
@@ -184,6 +185,36 @@ describe('PLANNING_SCHEMA', () => {
   it('rejects missing fields', () => {
     const result = PLANNING_SCHEMA.safeParse({ outcome: 'planned' });
     expect(result.success).toBe(false);
+  });
+
+  it('rejects empty pr_url when outcome is planned', () => {
+    const result = PLANNING_SCHEMA.safeParse({
+      outcome: 'planned',
+      superpowers_writing_plans: 'used',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-100/test',
+      is_complex: '0',
+      has_plan_doc: '0',
+      subtask_urls: '',
+      pr_url: '',
+      summary: 'test',
+      unclear_clarification: '',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('allows empty pr_url when outcome is unclear', () => {
+    const result = PLANNING_SCHEMA.safeParse({
+      outcome: 'unclear',
+      superpowers_writing_plans: 'used',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-100/test',
+      is_complex: '0',
+      has_plan_doc: '0',
+      subtask_urls: '',
+      pr_url: '',
+      summary: 'test',
+      unclear_clarification: 'Not enough info',
+    });
+    expect(result.success).toBe(true);
   });
 });
 
@@ -428,6 +459,38 @@ describe('REVIEW_SCHEMA', () => {
   });
 });
 
+describe('REMEDIATION_SCHEMA', () => {
+  it('rejects empty gh_pr_url when outcome is implemented', () => {
+    const result = REMEDIATION_SCHEMA.safeParse({
+      outcome: 'implemented',
+      gh_pr_url: '',
+      requires_re_review: '0',
+      summary: 'test',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('allows empty gh_pr_url when outcome is already_completed', () => {
+    const result = REMEDIATION_SCHEMA.safeParse({
+      outcome: 'already_completed',
+      gh_pr_url: '',
+      requires_re_review: '0',
+      summary: 'test',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts valid remediation data with gh_pr_url', () => {
+    const result = REMEDIATION_SCHEMA.safeParse({
+      outcome: 'implemented',
+      gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/901',
+      requires_re_review: '1',
+      summary: 'Fixed review findings.',
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Prompt Builders
 // ---------------------------------------------------------------------------
@@ -593,7 +656,7 @@ describe('OrchestratorCompletionVerifier', () => {
       is_complex: '0',
       has_plan_doc: '0',
       subtask_urls: '',
-      pr_url: '',
+      pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
       summary: 'The agent planned successfully.',
       unclear_clarification: '',
     });
@@ -625,7 +688,7 @@ describe('OrchestratorCompletionVerifier', () => {
         is_complex: '0',
         has_plan_doc: '0',
         subtask_urls: '',
-        pr_url: '',
+        pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
         summary: 'The agent planned successfully.',
         unclear_clarification: '',
       });
@@ -986,7 +1049,7 @@ describe('OrchestratorCompletionVerifier', () => {
       is_complex: '0',
       has_plan_doc: '0',
       subtask_urls: '',
-      pr_url: '',
+      pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
       summary: 'Planned.',
       unclear_clarification: '',
     });
@@ -1076,7 +1139,7 @@ describe('OrchestratorCompletionVerifier', () => {
         is_complex: '0',
         has_plan_doc: '0',
         subtask_urls: '',
-        pr_url: '',
+        pr_url: 'https://github.com/pbuchman/intexuraos/pull/50',
         summary: 'Planned.',
         unclear_clarification: '',
       })}\nDone.`;
@@ -1183,7 +1246,7 @@ describe('verify — fatal exit code pre-check', () => {
           is_complex: '0',
           has_plan_doc: '0',
           subtask_urls: '',
-          pr_url: '',
+          pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
           summary: 'Planned.',
           unclear_clarification: '',
         }),
