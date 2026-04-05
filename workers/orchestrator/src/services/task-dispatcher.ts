@@ -29,6 +29,7 @@ import {
   type CompletionVerifier,
   type CompletionVerifierVerdict,
   getLast50Lines,
+  getLast50ClaudeLines,
 } from './completion-verifier.js';
 import { getRuntime, type RuntimeEvent, type WorkerRuntime } from './runtime/index.js';
 import type { TurnMetricsCollector } from './turn-metrics-collector.js';
@@ -941,7 +942,7 @@ export class TaskDispatcher {
         );
       }
       const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
-      const summary = getLast50Lines(rawLogs);
+      const summary = getLast50ClaudeLines(rawLogs);
       this.appendOrchestratorTaskLog(
         task.taskId,
         `Ask agent completed — skipping structured verification`
