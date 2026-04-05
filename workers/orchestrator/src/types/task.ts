@@ -50,7 +50,7 @@ export interface Task {
    */
   retriedFrom?: string;
   /** Agent type from code-agent. When set, used instead of recalculating from labels. */
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent';
   /** Prompt-ready execution memory context prepared by code-agent retrieval. */
   executionMemoryContext?: ExecutionMemoryPromptContext;
   /** Existing PR tracking comment to reuse instead of creating a new one. */
