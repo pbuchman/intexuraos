@@ -30,8 +30,8 @@ This plan splits into two independently-executable subtasks by service boundary:
 | File                                                                                 | Action   | Responsibility                                                                          |
 | ------------------------------------------------------------------------------------ | -------- | --------------------------------------------------------------------------------------- |
 | `apps/code-agent/src/domain/models/codeTask.ts`                                      | Modify   | Add `prMergedAt?: Timestamp` field to `CodeTask` interface                              |
-| `apps/code-agent/src/domain/repositories/codeTaskRepository.ts`                      | Modify   | Add `findTasksWithMergedPrBefore()` method to interface                                 |
-| `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts`              | Modify   | Implement `findTasksWithMergedPrBefore()` + handle `prMergedAt` in update               |
+| `apps/code-agent/src/domain/repositories/codeTaskRepository.ts`                      | Modify   | Add `findAllNonArchived()` method to interface                                          |
+| `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts`              | Modify   | Implement `findAllNonArchived()` + handle `prMergedAt` in update                        |
 | `apps/code-agent/src/domain/usecases/autoArchiveMergedTasks.ts`                      | Create   | New use case: query merged tasks > N days, group by issue, archive                      |
 | `apps/code-agent/src/domain/usecases/handlePrClose.ts`                               | Modify   | Set `prMergedAt` on tasks when `isMerged: true`                                         |
 | `apps/code-agent/src/routes/internalRoutes.ts`                                       | Modify   | Add `POST /internal/auto-archive-merged-tasks` endpoint                                 |
@@ -215,25 +215,21 @@ git commit -m "feat(code-agent): set prMergedAt on tasks when PR is merged (INT-
 - Modify: `apps/code-agent/src/domain/repositories/codeTaskRepository.ts`
 - Modify: `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts`
 
+> **Architecture note (INT-1174 review):** The repository method `findTasksWithMergedPrBefore` returns ALL non-archived tasks (including active ones). The `prMergedAt < cutoffDate` filtering happens in-memory in the use case. This ensures the `hasActive` safety check correctly sees all sibling tasks for a given `linearIssueId`, matching the `archiveStaleGroups` pattern.
+
 - [ ] **Step 1: Add method to repository interface**
 
 In `apps/code-agent/src/domain/repositories/codeTaskRepository.ts`, add after `listAllNonArchivedGlobal()`:
 
 ```typescript
   /**
-   * Find tasks with merged PRs older than cutoff date.
-   * Returns all non-archived tasks where prMergedAt < cutoffDate.
-   * Used by the auto-archive-merged-tasks scheduler (INT-1174).
-   *
-   * NOTE: This method returns ALL non-archived tasks (including active ones)
+   * Find all non-archived tasks.
+   * Returns ALL non-archived tasks (including active ones with no prMergedAt)
    * so that the caller can properly check for active siblings before archiving.
-   * The hasActive check in autoArchiveMergedTasks requires seeing all tasks
-   * for a given linearIssueId to avoid archiving a task while its sibling
-   * is still running.
+   * The prMergedAt < cutoffDate filtering happens in-memory in the use case.
+   * Used by auto-archive-merged-tasks scheduler (INT-1174).
    */
-  findTasksWithMergedPrBefore(
-    cutoffDate: Date
-  ): Promise<Result<CodeTask[], RepositoryError>>;
+  findAllNonArchived(): Promise<Result<CodeTask[], RepositoryError>>;
 ```
 
 - [ ] **Step 2: Implement in Firestore repository**
@@ -241,14 +237,13 @@ In `apps/code-agent/src/domain/repositories/codeTaskRepository.ts`, add after `l
 In `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts`, add near `listAllNonArchivedGlobal`:
 
 ```typescript
-findTasksWithMergedPrBefore: async (cutoffDate: Date): Promise<Result<CodeTask[], RepositoryError>> => {
+findAllNonArchived: async (): Promise<Result<CodeTask[], RepositoryError>> => {
   try {
-    const cutoffTimestamp = Timestamp.fromDate(cutoffDate);
-    // Query ALL non-archived tasks (including active ones) so the caller
-    // can properly check for active siblings before archiving a group.
-    // The hasActive safety check requires seeing all tasks for a given issue.
+    // Return ALL non-archived tasks (including active ones with no prMergedAt).
+    // The hasActive safety check requires seeing all tasks for a given issue,
+    // so this method intentionally does NOT filter by prMergedAt.
+    // The prMergedAt < cutoffDate filtering happens in-memory in the use case.
     const snapshot = await collection
-      .where('prMergedAt', '<', cutoffTimestamp)
       .where('status', '!=', 'archived')
       .get();
 
@@ -258,7 +253,7 @@ findTasksWithMergedPrBefore: async (cutoffDate: Date): Promise<Result<CodeTask[]
 
     return ok(tasks);
   } catch (error) {
-    logger.error({ error }, 'Failed to find tasks with merged PR before cutoff');
+    logger.error({ error }, 'Failed to find all non-archived tasks');
     return err({
       code: 'FIRESTORE_ERROR',
       message: `Firestore error: ${getErrorMessage(error)}`,
@@ -271,7 +266,7 @@ findTasksWithMergedPrBefore: async (cutoffDate: Date): Promise<Result<CodeTask[]
 
 ```bash
 git add apps/code-agent/src/domain/repositories/codeTaskRepository.ts apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts
-git commit -m "feat(code-agent): add findTasksWithMergedPrBefore repository method (INT-1174)"
+git commit -m "feat(code-agent): add findAllNonArchived repository method (INT-1174)"
 ```
 
 ### Task 4: Create `autoArchiveMergedTasks` use case
@@ -370,18 +365,20 @@ export function createAutoArchiveMergedTasksUseCase(
 
     logger.info({ mergeDays, cutoffDate }, 'Starting auto-archive of merged tasks');
 
-    const findResult = await codeTaskRepository.findTasksWithMergedPrBefore(cutoffDate);
+    // Fetch ALL non-archived tasks (including active ones with no prMergedAt).
+    // This ensures the hasActive safety check correctly sees all sibling tasks.
+    const findResult = await codeTaskRepository.findAllNonArchived();
     if (!findResult.ok) {
-      logger.error({ error: findResult.error.message }, 'Failed to find tasks with merged PRs');
+      logger.error({ error: findResult.error.message }, 'Failed to find non-archived tasks');
       return err(new Error(findResult.error.message));
     }
 
-    const tasks = findResult.value;
-    const totalTasksFetched = tasks.length;
+    const allTasks = findResult.value;
+    const totalTasksFetched = allTasks.length;
 
     if (totalTasksFetched === 0) {
       const durationMs = Date.now() - startTime;
-      logger.info({ durationMs }, 'No tasks with expired merged PRs found');
+      logger.info({ durationMs }, 'No non-archived tasks found');
       return ok({
         totalTasksFetched: 0,
         totalGroupsEvaluated: 0,
@@ -393,9 +390,9 @@ export function createAutoArchiveMergedTasksUseCase(
       });
     }
 
-    // Group by linearIssueId (or task.id if no issue)
-    const groups = new Map<string, typeof tasks>();
-    for (const task of tasks) {
+    // Group all tasks by linearIssueId first (including active ones)
+    const groups = new Map<string, typeof allTasks>();
+    for (const task of allTasks) {
       const groupKey = task.linearIssueId ?? task.id;
       const existing = groups.get(groupKey) ?? [];
       existing.push(task);
@@ -409,7 +406,8 @@ export function createAutoArchiveMergedTasksUseCase(
     let tasksFailed = 0;
 
     for (const [groupKey, groupTasks] of groups) {
-      // Safety: skip groups that somehow contain active tasks
+      // Safety: skip groups that have active tasks (running/dispatched/queued).
+      // This check must see ALL tasks in the group, including those without prMergedAt.
       const hasActive = groupTasks.some((t) => ACTIVE_STATUSES.has(t.status));
       if (hasActive) {
         logger.info(
@@ -420,12 +418,22 @@ export function createAutoArchiveMergedTasksUseCase(
         continue;
       }
 
+      // Filter to only tasks with prMergedAt < cutoffDate (archived candidates)
+      const expiredTasks = groupTasks.filter(
+        (t) => t.prMergedAt && t.prMergedAt.toDate() < cutoffDate
+      );
+
+      // If no expired tasks in this group, skip
+      if (expiredTasks.length === 0) {
+        continue;
+      }
+
       logger.info(
-        { groupKey, taskCount: groupTasks.length },
+        { groupKey, taskCount: expiredTasks.length },
         'Archiving group with expired merged PR'
       );
 
-      for (const task of groupTasks) {
+      for (const task of expiredTasks) {
         try {
           const updateResult = await codeTaskRepository.update(task.id, { status: 'archived' });
           if (!updateResult.ok) {
