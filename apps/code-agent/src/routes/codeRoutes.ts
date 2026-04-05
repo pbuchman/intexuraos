@@ -823,8 +823,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               },
             },
           },
-          503: {
-            description: 'Worker unavailable or queue full',
+          400: {
+            description: 'Invalid request - prompt failed injection sanitization',
             type: 'object',
             required: ['success', 'error'],
             properties: {
@@ -833,7 +833,23 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                 type: 'object',
                 required: ['code', 'message'],
                 properties: {
-                  code: { type: 'string', enum: ['MISCONFIGURED', 'QUEUE_FULL'] },
+                  code: { type: 'string', enum: ['INVALID_REQUEST'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          503: {
+            description: 'Queue full',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['QUEUE_FULL'] },
                   message: { type: 'string' },
                 },
               },
