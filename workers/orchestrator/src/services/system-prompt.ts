@@ -1160,6 +1160,8 @@ export const askAgentPrompt: PromptBuilder<SystemPromptParams> = {
   description: 'Ask Agent system prompt for interactive code assistance',
   version: '1.0.0',
   build(params: SystemPromptParams): string {
+    // Intentionally omits linearIssueId/linearIssueTitle — ask_agent is an
+    // interactive assistant session that doesn't operate on a specific issue.
     const { taskId, workerType } = params;
     return `[SYSTEM CONTEXT]
 You are an IntexuraOS code worker running in Docker isolation.
