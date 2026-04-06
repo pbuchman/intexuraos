@@ -600,6 +600,114 @@ describe('prepareExecutionMemoryContext', () => {
     expect(reranked[0]?.rerankScore).toBeCloseTo(0.75, 2);
   });
 
+  it('logs top-3 reranked candidates with score breakdowns even when none pass the threshold', async () => {
+    queryClient.generate.mockResolvedValue(ok({
+      content: JSON.stringify({
+        semanticQuery: 'unrelated topic query',
+        components: ['unrelated'],
+        riskFlags: [],
+        verificationGoals: [],
+        labelHints: [],
+        summary: 'Unrelated topic',
+      }),
+      usage: { model: LlmModels.Gemini25Flash },
+    }));
+
+    embeddingClient.embed.mockResolvedValue(ok([0.1, 0.2, 0.3]));
+    executionMemoryRepo.findNearest.mockResolvedValue(ok([
+      createMatch('mem-near-miss', {
+        vectorScore: 0.70,
+        componentHints: [],
+        labelHints: [],
+        applicationCount: 0,
+        positiveCount: 0,
+      }),
+    ]));
+    executionMemoryApplicationRepo.create.mockResolvedValue(ok({ id: 'app-near' }));
+
+    await prepareExecutionMemoryContext({
+      task: createTask(),
+      linearIssueLabels: [],
+      logger,
+      linearAgentClient: linearAgentClient as never,
+      queryClient: queryClient as never,
+      embeddingClient: embeddingClient as never,
+      executionMemoryRepo: executionMemoryRepo as never,
+      executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+    });
+
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task-123',
+        candidateCount: 1,
+        matchedCount: 0,
+        topCandidates: expect.arrayContaining([
+          expect.objectContaining({
+            memoryId: 'mem-near-miss',
+            rerankScore: expect.any(Number),
+            vectorScore: 0.70,
+            passedThreshold: false,
+          }),
+        ]),
+      }),
+      expect.stringContaining('Execution memory reranking complete')
+    );
+  });
+
+  it('logs top-3 reranked candidates with score breakdowns when memories ARE matched', async () => {
+    queryClient.generate.mockResolvedValue(ok({
+      content: JSON.stringify({
+        semanticQuery: 'auth route logging verification',
+        components: ['auth', 'route', 'logging', 'verification'],
+        riskFlags: [],
+        verificationGoals: [],
+        labelHints: ['bug'],
+        summary: 'Auth route logging verification',
+      }),
+      usage: { model: LlmModels.Gemini25Flash },
+    }));
+
+    embeddingClient.embed.mockResolvedValue(ok([0.1, 0.2, 0.3]));
+    executionMemoryRepo.findNearest.mockResolvedValue(ok([
+      createMatch('mem-match', {
+        vectorScore: 0.95,
+        componentHints: ['auth', 'route', 'logging', 'verification'],
+        labelHints: ['bug', 'backend'],
+        applicationCount: 2,
+        positiveCount: 2,
+      }),
+    ]));
+    executionMemoryApplicationRepo.create.mockResolvedValue(ok({ id: 'app-match' }));
+
+    await prepareExecutionMemoryContext({
+      task: createTask(),
+      linearIssueLabels: ['backend', 'bug'],
+      logger,
+      linearAgentClient: linearAgentClient as never,
+      queryClient: queryClient as never,
+      embeddingClient: embeddingClient as never,
+      executionMemoryRepo: executionMemoryRepo as never,
+      executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+    });
+
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task-123',
+        candidateCount: 1,
+        matchedCount: 1,
+        topCandidates: expect.arrayContaining([
+          expect.objectContaining({
+            memoryId: 'mem-match',
+            rerankScore: expect.any(Number),
+            vectorScore: 0.95,
+            passedThreshold: true,
+          }),
+        ]),
+      }),
+      expect.stringContaining('Execution memory reranking complete')
+    );
+  });
+
   describe('parseJsonObject', () => {
     it('strips markdown code fences before extracting JSON', () => {
       const fenced = '```json\n{"key": "value"}\n```';
