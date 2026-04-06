@@ -41,8 +41,8 @@
    +--------+           +-----------+           +-----------+
    | active |  -------> | preserved | --------> | destroyed |
 | (workers Map) | (preservedWorkers | (removed) |
-|  |
-| +-----------+ |
+|               |
+| ------------- |
 | ^             |
        +---------------------------------------------+
                   destroyWorker() direct
@@ -101,9 +101,9 @@ resumeTaskWithUserMessage(task)  // async, creates fresh container
 createWorker({ continueSession: true })
 |  |  |
 |  |
-    +--- preservedWorkers? ---> restore
-    +--- Docker orphan? ---> reuse if running, remove+recreate if stopped
-    +--- Nothing? ---> create fresh container from worktree
+|  |
+|  |
+|  |
 ```
 
 ### `createWorker` Orphan Detection (handles missing containers)
@@ -161,13 +161,12 @@ Have the code-agent detect the 404 and automatically create a new task. Rejected
 
 ## File Structure
 
-| File                                                                            | Action   | Responsibility                                                           |
-| ------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------ |
-| `workers/orchestrator/src/services/task-dispatcher.ts`                          | Modify   | Replace `isResumeAvailable` check with worktree existence check          |
-| `workers/orchestrator/src/services/isolation/docker-provider.ts`                | Modify   | Add `isWorktreeAvailable(taskId)` method (or expose worktree path check) |
-| `workers/orchestrator/src/services/worktree-manager.ts`                         | Modify   | Add `hasWorktree(taskId)` method                                         |
-| `workers/orchestrator/src/__tests__/task-dispatcher.test.ts`                    | Modify   | Update tests for new resume behavior                                     |
-| `workers/orchestrator/src/__tests__/services/isolation/docker-provider.test.ts` | Modify   | Add test for `isWorktreeAvailable`                                       |
+| File                                                               | Action   | Responsibility                                              |
+| ------------------------------------------------------------------ | -------- | ----------------------------------------------------------- |
+| `workers/orchestrator/src/services/task-dispatcher.ts`             | Modify   | Replace `isResumeAvailable` check with worktree existence   |
+| `workers/orchestrator/src/__tests__/task-dispatcher.test.ts`       | Modify   | Update tests for new resume behavior                        |
+
+**Note:** This plan uses the existing `worktreeManager.worktreeExists(taskId)` method (already exists in `worktree-manager.ts:204`) and calls it directly via the already-injected `worktreeManager` in `TaskDispatcher`. No new methods, no interface changes, no docker-provider changes needed.
 
 ## Endpoint Changes
 
@@ -178,120 +177,7 @@ Have the code-agent detect the 404 and automatically create a new task. Rejected
 
 ---
 
-### Task 1: Add `hasWorktree` method to WorktreeManager
-
-**Files:**
-- Modify: `workers/orchestrator/src/services/worktree-manager.ts`
-- Modify: `workers/orchestrator/src/__tests__/services/worktree-manager.test.ts` (if exists, otherwise create)
-
-- [ ] **Step 1: Read the WorktreeManager to understand worktree path construction**
-
-Read `workers/orchestrator/src/services/worktree-manager.ts` and find how worktree paths are computed. The path is typically `{worktreeBasePath}/{taskId}`.
-
-- [ ] **Step 2: Write the failing test for `hasWorktree`**
-
-Add a test that calls `hasWorktree(taskId)` and expects `true` when the worktree directory exists, `false` when it doesn't:
-
-```typescript
-describe('hasWorktree', () => {
-  it('returns true when worktree directory exists', async () => {
-    // Create a fake worktree directory
-    await fs.mkdir(path.join(worktreeBasePath, 'task_exists'), { recursive: true });
-
-    const result = await worktreeManager.hasWorktree('task_exists');
-    expect(result).toBe(true);
-  });
-
-  it('returns false when worktree directory does not exist', async () => {
-    const result = await worktreeManager.hasWorktree('task_nonexistent');
-    expect(result).toBe(false);
-  });
-});
-```
-
-- [ ] **Step 3: Run test to verify it fails**
-
-Run: `cd /repo && pnpm vitest run workers/orchestrator/src/__tests__/services/worktree-manager.test.ts`
-
-Expected: FAIL — `hasWorktree is not a function`
-
-- [ ] **Step 4: Implement `hasWorktree` method**
-
-In `worktree-manager.ts`, add:
-
-```typescript
-async hasWorktree(taskId: string): Promise<boolean> {
-  const worktreePath = path.join(this.worktreeBasePath, taskId);
-  try {
-    await fs.access(worktreePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-```
-
-- [ ] **Step 5: Run test to verify it passes**
-
-Run: `cd /repo && pnpm vitest run workers/orchestrator/src/__tests__/services/worktree-manager.test.ts`
-
-Expected: PASS
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add workers/orchestrator/src/services/worktree-manager.ts workers/orchestrator/src/__tests__/services/worktree-manager.test.ts
-git commit -m "feat(orchestrator): add hasWorktree method to WorktreeManager"
-```
-
----
-
-### Task 2: Expose worktree check via IsolationProvider interface
-
-**Files:**
-- Modify: `workers/orchestrator/src/services/isolation/docker-provider.ts`
-- Read: `workers/orchestrator/src/services/task-dispatcher.ts` (to understand isolation interface)
-
-The `task-dispatcher.ts` accesses isolation via `this.isolation.provider` (IsolationProvider interface). We need to expose the worktree check through this interface.
-
-- [ ] **Step 1: Read the IsolationProvider interface definition**
-
-Search for the `IsolationProvider` type/interface in the orchestrator code to understand what methods it exposes. The `isolation` object is passed to `TaskDispatcher` and contains `provider` + other fields.
-
-- [ ] **Step 2: Add `isResumeWorktreeAvailable` to the provider interface**
-
-Add the method to whatever interface/type defines the provider. This method delegates to `worktreeManager.hasWorktree()`:
-
-```typescript
-isResumeWorktreeAvailable?(taskId: string): Promise<boolean>;
-```
-
-Note: Use optional method (`?`) to maintain backward compatibility with any other provider implementations.
-
-- [ ] **Step 3: Implement `isResumeWorktreeAvailable` in DockerProvider**
-
-```typescript
-async isResumeWorktreeAvailable(taskId: string): Promise<boolean> {
-  return await this.worktreeManager.hasWorktree(taskId);
-}
-```
-
-- [ ] **Step 4: Run existing tests to verify no regressions**
-
-Run: `cd /repo && pnpm vitest run workers/orchestrator/src/__tests__/services/isolation/docker-provider.test.ts`
-
-Expected: PASS (no existing tests break)
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add workers/orchestrator/src/services/isolation/docker-provider.ts
-git commit -m "feat(orchestrator): expose isResumeWorktreeAvailable on DockerProvider"
-```
-
----
-
-### Task 3: Replace `isResumeAvailable` with worktree check in `sendMessage`
+### Task 1: Replace `isResumeAvailable` with worktree check in `sendMessage`
 
 **Files:**
 - Modify: `workers/orchestrator/src/services/task-dispatcher.ts`
@@ -321,7 +207,7 @@ it('resumes task when container is gone but worktree exists', async () => {
 
   // Container is gone but worktree exists
   mockProvider.isResumeAvailable.mockResolvedValue(false);
-  mockProvider.isResumeWorktreeAvailable.mockResolvedValue(true);
+  mockWorktreeManager.worktreeExists.mockResolvedValue(true);
 
   const result = await dispatcher.sendMessage('msg-worktree-resume-task', 'Resume please');
 
@@ -358,21 +244,16 @@ if (!isAvailable) {
 // Check if the worktree exists — a container can be recreated, but a worktree cannot.
 // If the container is gone but worktree exists, createWorker(continueSession=true) will
 // create a fresh container. If the worktree is also gone, reject — user must retry.
-const hasWorktree = (await this.isolation.provider.isResumeWorktreeAvailable?.(taskId)) ?? false;
+const hasWorktree = await this.worktreeManager.worktreeExists(taskId);
 if (!hasWorktree) {
-  // Also check isResumeAvailable as fallback — container might exist without worktree
-  // (e.g., preserved containers that still have bind-mounted worktree)
-  const hasContainer = (await this.isolation.provider.isResumeAvailable?.(taskId)) ?? false;
-  if (!hasContainer) {
-    return {
-      ok: false,
-      error: { type: 'not_found', message: 'Worker container and worktree no longer available for resume' },
-    };
-  }
+  return {
+    ok: false,
+    error: { type: 'not_found', message: 'Worker container and worktree no longer available for resume' },
+  };
 }
 ```
 
-This logic: if worktree exists → proceed (container will be created). If worktree is gone → check if container exists (preserved with bind mount). If neither → reject.
+This logic: if worktree exists → proceed (container will be created). If worktree is gone → reject (user must retry).
 
 - [ ] **Step 4: Run the new test to verify it passes**
 
@@ -382,41 +263,21 @@ Expected: PASS
 
 - [ ] **Step 5: Update the existing not_found test**
 
-The existing test `'returns not_found when container is no longer available for resume'` needs to also mock `isResumeWorktreeAvailable` returning `false`:
+The existing test `'returns not_found when container is no longer available for resume'` needs to mock `worktreeManager.worktreeExists` returning `false`:
 
 ```typescript
-mockProvider.isResumeAvailable.mockResolvedValue(false);
-mockProvider.isResumeWorktreeAvailable.mockResolvedValue(false);
+mockWorktreeManager.worktreeExists.mockResolvedValue(false);
 ```
 
 And update the expected error message to match the new text: `'Worker container and worktree no longer available for resume'`.
 
-- [ ] **Step 6: Add test — resume fails when both container and worktree are gone**
-
-```typescript
-it('returns not_found when both container and worktree are gone', async () => {
-  // ... setup task in terminal state ...
-
-  mockProvider.isResumeAvailable.mockResolvedValue(false);
-  mockProvider.isResumeWorktreeAvailable.mockResolvedValue(false);
-
-  const result = await dispatcher.sendMessage('task-id', 'Resume');
-
-  expect(result.ok).toBe(false);
-  if (!result.ok) {
-    expect(result.error.type).toBe('not_found');
-    expect(result.error.message).toContain('no longer available for resume');
-  }
-});
-```
-
-- [ ] **Step 7: Run all sendMessage tests**
+- [ ] **Step 6: Run all sendMessage tests**
 
 Run: `cd /repo && pnpm vitest run workers/orchestrator/src/__tests__/task-dispatcher.test.ts`
 
 Expected: All pass
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add workers/orchestrator/src/services/task-dispatcher.ts workers/orchestrator/src/__tests__/task-dispatcher.test.ts
@@ -424,45 +285,14 @@ git commit -m "fix(orchestrator): allow resume when container expired but worktr
 
 The isResumeAvailable pre-check rejected resumes when the Docker container was
 gone, even though createWorker(continueSession=true) can create a fresh container
-from the existing worktree. Now checks for worktree existence first, falling back
-to container check only when worktree is gone.
+from the existing worktree. Now checks worktree existence directly via
+worktreeManager.worktreeExists(taskId) — if worktree exists, proceed; otherwise
+reject with not_found.
 
 Fixes INT-1304"
 ```
 
----
-
-### Task 4: Update mock provider in all test files
-
-**Files:**
-- Modify: Any test files that mock the `IsolationProvider` (search for `isResumeAvailable` mock)
-
-The new `isResumeWorktreeAvailable` method needs to be added to all mock providers to avoid TypeScript errors.
-
-- [ ] **Step 1: Search for all mock provider setups**
-
-Run: `rg "isResumeAvailable" workers/orchestrator/src/__tests__/ --files-with-matches`
-
-- [ ] **Step 2: Add `isResumeWorktreeAvailable` mock to each file**
-
-For each file found, add `isResumeWorktreeAvailable: vi.fn(async () => true)` next to the existing `isResumeAvailable` mock. Default to `true` so existing tests (which assume resume is available) continue to pass.
-
-- [ ] **Step 3: Run full orchestrator test suite**
-
-Run: `cd /repo && pnpm vitest run workers/orchestrator/`
-
-Expected: All pass
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add workers/orchestrator/src/__tests__/
-git commit -m "test(orchestrator): add isResumeWorktreeAvailable mock to all test providers"
-```
-
----
-
-### Task 5: Run full CI and verify
+### Task 2: Run full CI and verify
 
 - [ ] **Step 1: Build all packages**
 
