@@ -12,9 +12,9 @@ import type { ExecutionMemoryRepository } from '../repositories/executionMemoryR
 import type { ExecutionMemoryApplicationRepository } from '../repositories/executionMemoryApplicationRepository.js';
 import type { ExecutionMemoryEmbeddingClient } from './prepareExecutionMemoryContext.js';
 
-const DISTILLATION_VERSION = 'execution-memory-distiller@2.0.0';
-const PLANNING_DISTILLATION_VERSION = 'planning-memory-distiller@1.0.0';
-const REVIEW_DISTILLATION_VERSION = 'review-memory-distiller@1.0.0';
+const DISTILLATION_VERSION = 'execution-memory-distiller@2.1.0';
+const PLANNING_DISTILLATION_VERSION = 'planning-memory-distiller@1.1.0';
+const REVIEW_DISTILLATION_VERSION = 'review-memory-distiller@1.1.0';
 const EVALUATION_VERSION = 'execution-memory-evaluator@1.0.0';
 const MAX_LOG_LINES = 350;
 const MAX_EVALUATION_LOG_LINES = 200;
@@ -528,18 +528,28 @@ const DISTILLATION_SCHEMA_BLOCK = [
   '      "evidenceSummary": "string (evidence from this task)",',
   '      "retrievalText": "string (text used for semantic search matching)",',
   '      "keywords": ["string"],',
-  '      "labelHints": ["string"],',
-  '      "componentHints": ["string"],',
+  '      "labelHints": ["string (Linear issue labels this applies to, e.g. bug, backend, frontend)"],',
+  '      "componentHints": ["string (canonical service/module names this applies to)"],',
   '      "confidence": 0.0 to 1.0',
   '    }',
   '  ]',
   '}',
   '',
+  'componentHints guidance:',
+  '- Use canonical service and module names from the codebase: code-agent, orchestrator, web-app,',
+  '  task-router, auth, firestore, pubsub, linear, llm-factory, common-core, infra-firestore.',
+  '- Use concise single-word or hyphenated identifiers, NOT multi-word phrases.',
+  '- Include both the specific service (e.g. "code-agent") and the domain area (e.g. "testing",',
+  '  "routing", "memory", "prompt", "ci", "migration", "schema").',
+  '- Aim for 3-6 hints per memory. More hints = higher chance of matching future queries.',
+  '- BAD: ["testing"] (too generic), ["code-agent service execution memory"] (too long).',
+  '- GOOD: ["code-agent", "memory", "retrieval", "firestore", "testing"].',
+  '',
   'Example (skip):',
   '{"decision":"skip","skipReason":"no_reusable_lesson","evidenceSummary":"Task was a trivial typo fix with no reusable pattern.","memories":[]}',
   '',
   'Example (create):',
-  '{"decision":"create","evidenceSummary":"Discovered that route handlers need serialization tests.","memories":[{"memoryType":"verification_pattern","title":"Verify route serialization","appliesWhen":"Modifying route handlers","action":"Add app.inject tests for response shape","avoid":"Skipping serialization checks","verification":"Run route tests and check response schema","evidenceSummary":"Route handler returned wrong shape without test coverage","retrievalText":"route handler serialization verification test coverage","keywords":["route","serialization"],"labelHints":["testing"],"componentHints":["api"],"confidence":0.85}]}',
+  '{"decision":"create","evidenceSummary":"Discovered that route handlers need serialization tests.","memories":[{"memoryType":"verification_pattern","title":"Verify route serialization","appliesWhen":"Modifying route handlers","action":"Add app.inject tests for response shape","avoid":"Skipping serialization checks","verification":"Run route tests and check response schema","evidenceSummary":"Route handler returned wrong shape without test coverage","retrievalText":"route handler serialization verification test coverage","keywords":["route","serialization"],"labelHints":["testing","backend"],"componentHints":["code-agent","routing","testing","fastify"],"confidence":0.85}]}',
 ].join('\n');
 
 const EVALUATION_SCHEMA_BLOCK = [

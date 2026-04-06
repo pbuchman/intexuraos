@@ -1058,7 +1058,7 @@ describe('processExecutionMemoryBacklog', () => {
         'task-1',
         undefined,
         'execution',
-        'execution-memory-distiller@2.0.0'
+        'execution-memory-distiller@2.1.0'
       )
     ).resolves.toBe('mem-existing');
 
@@ -1107,7 +1107,7 @@ describe('processExecutionMemoryBacklog', () => {
         'task-1',
         'INT-1098',
         'execution',
-        'execution-memory-distiller@2.0.0'
+        'execution-memory-distiller@2.1.0'
       )
     ).rejects.toThrow('update failed');
   });
@@ -1588,7 +1588,7 @@ describe('processExecutionMemoryBacklog', () => {
         }
       );
       const version = capturedPrompt[0] ?? '';
-      expect(version).toContain('execution-memory-distiller@2.0.0');
+      expect(version).toContain('execution-memory-distiller@2.1.0');
     });
   });
 
@@ -1840,7 +1840,7 @@ describe('processExecutionMemoryBacklog', () => {
     expect(result.generatedMemoryIds).toEqual(['mem-plan']);
     expect(executionMemoryRepo.create).toHaveBeenCalledWith(expect.objectContaining({
       sourceAgentType: 'planning',
-      distillationVersion: 'planning-memory-distiller@1.0.0',
+      distillationVersion: 'planning-memory-distiller@1.1.0',
       memoryType: 'decomposition_pattern',
     }));
   });
@@ -1903,7 +1903,7 @@ describe('processExecutionMemoryBacklog', () => {
     expect(result.generatedMemoryIds).toEqual(['mem-rev']);
     expect(executionMemoryRepo.create).toHaveBeenCalledWith(expect.objectContaining({
       sourceAgentType: 'review',
-      distillationVersion: 'review-memory-distiller@1.0.0',
+      distillationVersion: 'review-memory-distiller@1.1.0',
       memoryType: 'review_finding',
     }));
   });
@@ -1958,7 +1958,7 @@ describe('processExecutionMemoryBacklog', () => {
     expect(result.generatedMemoryIds).toEqual(['mem-exact-plan']);
     expect(executionMemoryRepo.update).toHaveBeenCalledWith('mem-exact-plan', expect.objectContaining({
       sourceAgentType: 'planning',
-      distillationVersion: 'planning-memory-distiller@1.0.0',
+      distillationVersion: 'planning-memory-distiller@1.1.0',
     }));
   });
 
@@ -2085,7 +2085,7 @@ describe('processExecutionMemoryBacklog', () => {
   });
 
   describe('buildDistillationPrompt router', () => {
-    it('routes planning agent type to planning-memory-distiller@1.0.0', () => {
+    it('routes planning agent type to planning-memory-distiller@1.1.0', () => {
       const task = createTask({
         agentType: 'planning',
         status: 'planned',
@@ -2094,10 +2094,10 @@ describe('processExecutionMemoryBacklog', () => {
       const prompt = processExecutionMemoryBacklogTestables.buildDistillationPrompt(
         task, [{ text: 'log' }], [], { description: 'issue', comments: [] }
       );
-      expect(prompt).toContain('planning-memory-distiller@1.0.0');
+      expect(prompt).toContain('planning-memory-distiller@1.1.0');
     });
 
-    it('routes review agent type to review-memory-distiller@1.0.0', () => {
+    it('routes review agent type to review-memory-distiller@1.1.0', () => {
       const task = createTask({
         agentType: 'review',
         status: 'reviewed',
@@ -2106,21 +2106,40 @@ describe('processExecutionMemoryBacklog', () => {
       const prompt = processExecutionMemoryBacklogTestables.buildDistillationPrompt(
         task, [{ text: 'log' }], [], { description: 'issue', comments: [] }
       );
-      expect(prompt).toContain('review-memory-distiller@1.0.0');
+      expect(prompt).toContain('review-memory-distiller@1.1.0');
     });
 
-    it('routes execution and undefined agent type to execution-memory-distiller@2.0.0', () => {
+    it('routes execution and undefined agent type to execution-memory-distiller@2.1.0', () => {
       const executionTask = createTask({ agentType: 'execution' });
       const prompt = processExecutionMemoryBacklogTestables.buildDistillationPrompt(
         executionTask, [{ text: 'log' }], [], { description: null, comments: [] }
       );
-      expect(prompt).toContain('execution-memory-distiller@2.0.0');
+      expect(prompt).toContain('execution-memory-distiller@2.1.0');
 
       const undefinedTask = createTask({ agentType: undefined } as never);
       const prompt2 = processExecutionMemoryBacklogTestables.buildDistillationPrompt(
         undefinedTask, [{ text: 'log' }], [], { description: null, comments: [] }
       );
-      expect(prompt2).toContain('execution-memory-distiller@2.0.0');
+      expect(prompt2).toContain('execution-memory-distiller@2.1.0');
+    });
+  });
+
+  describe('componentHints guidance in distillation prompts', () => {
+    it('includes componentHints guidance in distillation prompts', () => {
+      // The buildDistillationPrompt function (for execution tasks) includes DISTILLATION_SCHEMA_BLOCK
+      // which should contain componentHints guidance
+      const prompt = processExecutionMemoryBacklogTestables.buildDistillationPrompt(
+        createTask({ status: 'implemented', agentType: 'execution' }),
+        [{ text: 'log line' }],
+        [],
+        { description: null, comments: [] }
+      );
+
+      expect(prompt).toContain('componentHints guidance:');
+      expect(prompt).toContain('Use canonical service and module names');
+      expect(prompt).toContain('code-agent, orchestrator, web-app');
+      expect(prompt).toContain('BAD:');
+      expect(prompt).toContain('GOOD:');
     });
   });
 
