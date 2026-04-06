@@ -2078,7 +2078,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
-      const task = result.value.task;
+      const task = result.value.task; // @allow-result-access -- narrowed by !result.ok guard above
       return await reply.ok({
         task: task !== null ? taskToApiResponse(task) : null,
       });
