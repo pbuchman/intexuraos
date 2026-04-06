@@ -213,6 +213,66 @@ cd /repo && pnpm vitest run apps/code-agent/src/__tests__/domain/useCases/prepar
 
 Expected: FAIL — no `logger.info` call with reranking details exists yet.
 
+- [ ] **Step 1b: Write a failing test for observability logging on the match path**
+
+Add a test that asserts `logger.info` is called with a structured log entry when candidates DO pass the threshold. This verifies the logging works on the success path, not just the no-match path.
+
+```typescript
+it('logs top-3 reranked candidates with score breakdowns when memories ARE matched', async () => {
+  queryClient.generate.mockResolvedValue(ok({
+    content: JSON.stringify({
+      semanticQuery: 'auth route logging verification',
+      components: ['auth', 'route', 'logging', 'verification'],
+      riskFlags: [],
+      verificationGoals: [],
+      labelHints: ['bug'],
+      summary: 'Auth route logging verification',
+    }),
+    usage: { model: LlmModels.Gemini25Flash },
+  }));
+
+  embeddingClient.embed.mockResolvedValue(ok([0.1, 0.2, 0.3]));
+  executionMemoryRepo.findNearest.mockResolvedValue(ok([
+    createMatch('mem-match', {
+      vectorScore: 0.95,
+      componentHints: ['auth', 'route', 'logging', 'verification'],
+      labelHints: ['bug', 'backend'],
+      applicationCount: 2,
+      positiveCount: 2,
+    }),
+  ]));
+  executionMemoryApplicationRepo.create.mockResolvedValue(ok({ id: 'app-match' }));
+
+  await prepareExecutionMemoryContext({
+    task: createTask(),
+    linearIssueLabels: ['backend', 'bug'],
+    logger,
+    linearAgentClient: linearAgentClient as never,
+    queryClient: queryClient as never,
+    embeddingClient: embeddingClient as never,
+    executionMemoryRepo: executionMemoryRepo as never,
+    executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+  });
+
+  expect(logger.info).toHaveBeenCalledWith(
+    expect.objectContaining({
+      taskId: 'task-123',
+      candidateCount: 1,
+      matchedCount: 1,
+      topCandidates: expect.arrayContaining([
+        expect.objectContaining({
+          memoryId: 'mem-match',
+          rerankScore: expect.any(Number),
+          vectorScore: 0.95,
+          passedThreshold: true,
+        }),
+      ]),
+    }),
+    expect.stringContaining('Execution memory reranking complete')
+  );
+});
+```
+
 - [ ] **Step 3: Add observability logging after reranking**
 
 In `apps/code-agent/src/domain/usecases/prepareExecutionMemoryContext.ts`, after line 177 (after filtering by `MIN_RERANK_SCORE`), add logging:
