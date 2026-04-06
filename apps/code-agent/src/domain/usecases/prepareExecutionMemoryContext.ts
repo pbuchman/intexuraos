@@ -16,6 +16,7 @@ const MAX_COMMENT_LENGTH = 800;
 const MAX_TOTAL_CONTEXT_LENGTH = 5000;
 const MAX_MATCHES = 3;
 const MIN_RERANK_SCORE = 0.55;
+const TOP_LOG_CANDIDATES = 3;
 const CANDIDATE_LIMIT = 20;
 
 const QueryNormalizationSchema = z.object({
@@ -179,7 +180,7 @@ export async function prepareExecutionMemoryContext(
   // Observability: log top candidates with score breakdowns
   const queryComponents = dedupeLower(normalization.components);
   const queryLabels = dedupeLower([...linearIssueLabels, ...normalization.labelHints]);
-  const topCandidates = reranked.slice(0, MAX_MATCHES).map((candidate) => ({
+  const topCandidates = reranked.slice(0, TOP_LOG_CANDIDATES).map((candidate) => ({
     memoryId: candidate.memory.id,
     title: candidate.memory.title,
     rerankScore: roundScore(candidate.rerankScore),
