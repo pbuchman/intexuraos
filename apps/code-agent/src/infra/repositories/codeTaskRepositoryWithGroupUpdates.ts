@@ -20,7 +20,7 @@ export function withGroupUpdates(
 
     create: async (input, options): ReturnType<CodeTaskRepository['create']> => {
       const result = await inner.create(input, options);
-      if (result.ok) {
+      if (result.ok && result.value.agentType !== 'ask_agent') {
         void groupSummaryRepo.updateAfterCreate(result.value).catch((error: unknown) => {
           logger.warn({ error }, 'Group summary update failed after create');
         });
@@ -38,7 +38,7 @@ export function withGroupUpdates(
 
       const result = await inner.update(taskId, input);
 
-      if (result.ok && input.status !== undefined && oldTaskResult?.ok === true) {
+      if (result.ok && input.status !== undefined && oldTaskResult?.ok === true && result.value.agentType !== 'ask_agent') {
         void groupSummaryRepo.updateAfterStatusChange(oldTaskResult.value, result.value).catch((error: unknown) => {
           logger.warn({ error, taskId }, 'Group summary update failed after status change');
         });
@@ -50,7 +50,7 @@ export function withGroupUpdates(
       const oldTaskResult = await inner.findByIdForUser(taskId, userId);
       const result = await inner.deleteTask(taskId, userId);
 
-      if (result.ok && oldTaskResult.ok) {
+      if (result.ok && oldTaskResult.ok && oldTaskResult.value.agentType !== 'ask_agent') {
         void groupSummaryRepo.updateAfterDelete(oldTaskResult.value).catch((error: unknown) => {
           logger.warn({ error, taskId }, 'Group summary update failed after delete');
         });

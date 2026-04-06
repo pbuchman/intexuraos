@@ -52,6 +52,21 @@ function makeTask(overrides: Partial<CodeTask> = {}): CodeTask {
 const NOT_FOUND_ERROR = { code: 'NOT_FOUND' as const, message: 'task not found' };
 const FIRESTORE_ERROR = { code: 'FIRESTORE_ERROR' as const, message: 'firestore blew up' };
 
+function makeCreateInput(overrides: Partial<CreateTaskInput> = {}): CreateTaskInput {
+  return {
+    userId: 'user-1',
+    prompt: 'Fix bug',
+    sanitizedPrompt: 'fix bug',
+    systemPromptHash: 'abc',
+    workerType: 'opus',
+    workerLocation: 'home-mac',
+    repository: 'test/repo',
+    baseBranch: 'main',
+    traceId: 'trace-1',
+    ...overrides,
+  };
+}
+
 /**
  * Minimal fake inner CodeTaskRepository.
  * All methods are vi.fn() stubs that can be configured per test.
@@ -124,7 +139,7 @@ describe('withGroupUpdates decorator', () => {
   // -------------------------------------------------------------------------
 
   describe('create()', () => {
-    const input: CreateTaskInput = {
+    const baseInput: CreateTaskInput = {
       userId: 'user-1',
       prompt: 'Fix bug',
       sanitizedPrompt: 'fix bug',
@@ -141,10 +156,10 @@ describe('withGroupUpdates decorator', () => {
       vi.mocked(inner.create).mockResolvedValue(ok(task));
       const updateAfterCreateSpy = vi.spyOn(groupSummaryRepo, 'updateAfterCreate');
 
-      const result = await decorated.create(input);
+      const result = await decorated.create(baseInput);
 
       expect(result).toEqual(ok(task));
-      expect(inner.create).toHaveBeenCalledWith(input, undefined);
+      expect(inner.create).toHaveBeenCalledWith(baseInput, undefined);
       // fire-and-forget: flush microtasks so the void promise runs
       await Promise.resolve();
       expect(updateAfterCreateSpy).toHaveBeenCalledWith(task);
@@ -154,7 +169,7 @@ describe('withGroupUpdates decorator', () => {
       vi.mocked(inner.create).mockResolvedValue(err(NOT_FOUND_ERROR));
       const updateAfterCreateSpy = vi.spyOn(groupSummaryRepo, 'updateAfterCreate');
 
-      const result = await decorated.create(input);
+      const result = await decorated.create(baseInput);
 
       expect(result.ok).toBe(false);
       await Promise.resolve();
@@ -166,7 +181,7 @@ describe('withGroupUpdates decorator', () => {
       vi.mocked(inner.create).mockResolvedValue(ok(task));
       vi.spyOn(groupSummaryRepo, 'updateAfterCreate').mockRejectedValue(new Error('Firestore unavailable'));
 
-      const result = await decorated.create(input);
+      const result = await decorated.create(baseInput);
 
       expect(result).toEqual(ok(task));
       // Let the fire-and-forget rejection settle; decorator should not propagate it
@@ -175,6 +190,17 @@ describe('withGroupUpdates decorator', () => {
         expect.objectContaining({ error: expect.any(Error) }),
         'Group summary update failed after create',
       );
+    });
+
+    it('does NOT call updateAfterCreate for ask_agent tasks', async () => {
+      const askTask = makeTask({ agentType: 'ask_agent' });
+      vi.mocked(inner.create).mockResolvedValue(ok(askTask));
+      const updateAfterCreateSpy = vi.spyOn(groupSummaryRepo, 'updateAfterCreate');
+
+      await decorated.create(makeCreateInput({ agentType: 'ask_agent' }));
+
+      await Promise.resolve();
+      expect(updateAfterCreateSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -240,6 +266,19 @@ describe('withGroupUpdates decorator', () => {
         expect.objectContaining({ error: expect.any(Error), taskId: 'task-1' }),
         'Group summary update failed after status change',
       );
+    });
+
+    it('does NOT call updateAfterStatusChange for ask_agent tasks', async () => {
+      const oldTask = makeTask({ agentType: 'ask_agent', status: 'running' });
+      const newTask = makeTask({ agentType: 'ask_agent', status: 'reviewed' });
+      vi.mocked(inner.findById).mockResolvedValue(ok(oldTask));
+      vi.mocked(inner.update).mockResolvedValue(ok(newTask));
+      const updateAfterStatusChangeSpy = vi.spyOn(groupSummaryRepo, 'updateAfterStatusChange');
+
+      await decorated.update('task-1', { status: 'reviewed' });
+
+      await Promise.resolve();
+      expect(updateAfterStatusChangeSpy).not.toHaveBeenCalled();
     });
   });
 

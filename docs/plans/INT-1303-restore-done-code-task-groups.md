@@ -35,7 +35,6 @@
 | File                                                                                          | Responsibility                                                              |
 | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | `apps/code-agent/src/routes/code/issueGroupRoutes.ts`                                         | Adjust returned counts to match actual displayable groups                   |
-| `apps/code-agent/src/infra/firestore/taskGroupSummaryFirestoreRepository.ts`                  | Skip `ask_agent` tasks in `updateAfterCreate` and `updateAfterStatusChange` |
 | `apps/code-agent/src/infra/repositories/codeTaskRepositoryWithGroupUpdates.ts`                | Skip group summary updates for `ask_agent` tasks                            |
 | `apps/code-agent/src/__tests__/routes/code/issueGroups.test.ts`                               | New test cases for phantom group handling                                   |
 | `apps/code-agent/src/__tests__/infra/repositories/codeTaskRepositoryWithGroupUpdates.test.ts` | Test `ask_agent` exclusion                                                  |
