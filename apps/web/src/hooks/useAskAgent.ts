@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/context';
 import { startAskAgent, getActiveAskAgent, archiveCodeTask } from '@/services/codeAgentApi';
 import { useTaskView } from './useTaskView.js';
@@ -65,16 +65,17 @@ export function useAskAgent(): AskAgentState {
   const [taskId, setTaskId] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const userStartedRef = useRef(false);
 
   // Restore active ask-agent session from backend (cross-device persistence)
-  useEffect(() => {
+  useEffect((): (() => void) => {
     let cancelled = false;
 
     async function restore(): Promise<void> {
       try {
         const token = await getAccessToken();
         const response = await getActiveAskAgent(token);
-        if (!cancelled && response.task !== null) {
+        if (!cancelled && !userStartedRef.current && response.task !== null) {
           setTaskId(response.task.id);
         }
       } catch {
@@ -112,6 +113,7 @@ export function useAskAgent(): AskAgentState {
   const canClear = isSessionIdle && !starting;
 
   const start = useCallback(async (prompt: string): Promise<void> => {
+    userStartedRef.current = true;
     setStarting(true);
     setStartError(null);
     try {

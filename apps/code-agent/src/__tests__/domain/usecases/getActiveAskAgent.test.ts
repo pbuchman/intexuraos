@@ -158,8 +158,8 @@ describe('getActiveAskAgent', () => {
     // Create a mock repository that returns an error
     const failingRepo = {
       findLatestAskAgentTask: async () => ({
-        ok: false,
-        error: new Error('Database connection failed'),
+        ok: false as const,
+        error: { code: 'FIRESTORE_ERROR' as const, message: 'Database connection failed' },
       }),
     } as unknown as CodeTaskRepository;
 
