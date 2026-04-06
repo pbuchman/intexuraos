@@ -8216,13 +8216,17 @@ describe('TaskDispatcher', () => {
       task.status = 'completed';
       await statePersistence.save(state);
 
-      vi.mocked(mockWorktreeManager as Required<WorktreeManager>).worktreeExists.mockResolvedValueOnce(false);
+      vi.mocked(
+        mockWorktreeManager as Required<WorktreeManager>
+      ).worktreeExists.mockResolvedValueOnce(false);
       const result = await dispatcher.sendMessage('msg-stale-container-task', 'Follow-up');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.type).toBe('not_found');
-        expect(result.error.message).toBe('Worker container and worktree no longer available for resume');
+        expect(result.error.message).toBe(
+          'Worker container and worktree no longer available for resume'
+        );
       }
     });
 
@@ -8246,9 +8250,8 @@ describe('TaskDispatcher', () => {
       await statePersistence.save(state);
 
       vi.mocked(
-        mockIsolationProvider as Required<IsolationProvider>
-      ).isResumeAvailable.mockResolvedValueOnce(false);
-      vi.mocked(mockWorktreeManager as Required<WorktreeManager>).worktreeExists.mockResolvedValueOnce(true);
+        mockWorktreeManager as Required<WorktreeManager>
+      ).worktreeExists.mockResolvedValueOnce(true);
 
       const result = await dispatcher.sendMessage('msg-worktree-resume-task', 'Resume please');
 
@@ -8332,7 +8335,6 @@ describe('TaskDispatcher', () => {
       expect(promptEntry).toContain('\u2026'); // ellipsis = truncation occurred
       expect(promptEntry).not.toContain('B'.repeat(250)); // full message not present
     });
-
   });
 
   describe('resumeTaskWithUserMessage pendingResumeStart guard', () => {
