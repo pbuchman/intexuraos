@@ -301,21 +301,46 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
         const unsortedGroups = groupByLinearIssue(allPageTasks);
         const paginatedGroups = sortIssueGroups(unsortedGroups, sortBy);
 
-        // 6. Compute totalGroups from counts
+        // 5b. Detect phantom summaries: summaries returned by the query that
+        // produced zero displayable tasks (all tasks archived or ask_agent).
+        // Their status must be subtracted from the precomputed counts so the
+        // filter badges match what the user actually sees.
+        const displayedGroupKeys = new Set(
+          paginatedGroups.map((g) => g.linearIssueId ?? g.latestTask.id),
+        );
+        const phantomStatusDeltas: Record<string, number> = {};
+        for (const summary of summaries) {
+          const summaryKey = summary.linearIssueId ?? summary.groupKey.replace(/^standalone_/, '');
+          if (!displayedGroupKeys.has(summaryKey)) {
+            const status = summary.aggregateStatus;
+            phantomStatusDeltas[status] = (phantomStatusDeltas[status] ?? 0) + 1;
+          }
+        }
+
+        // 6. Compute corrected counts
+        const correctedCounts = {
+          active: Math.max(0, countsValue.active - (phantomStatusDeltas['active'] ?? 0)),
+          'needs-action': Math.max(0, countsValue.needsAction - (phantomStatusDeltas['needs-action'] ?? 0)),
+          done: Math.max(0, countsValue.done - (phantomStatusDeltas['done'] ?? 0)),
+          failed: Math.max(0, countsValue.failed - (phantomStatusDeltas['failed'] ?? 0)),
+          archived: Math.max(0, countsValue.archived - (phantomStatusDeltas['archived'] ?? 0)),
+        };
+
         let totalGroups: number;
         if (statusFilter !== undefined) {
-          const countMap: Record<string, number> = {
-            active: countsValue.active,
-            'needs-action': countsValue.needsAction,
-            done: countsValue.done,
-            failed: countsValue.failed,
-            archived: countsValue.archived,
-          };
+          const countMap: Record<string, number> = correctedCounts;
           /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes countMap[s] typed as number | undefined; statusFilter values are always valid GroupStatus keys present in countMap, so undefined branch is unreachable @preserve */
           totalGroups = statusFilter.reduce((sum, s) => sum + (countMap[s] ?? 0), 0);
           /* v8 ignore stop @preserve */
         } else {
-          totalGroups = countsValue.totalGroups;
+          totalGroups = Object.values(correctedCounts).reduce((sum, n) => sum + n, 0);
+        }
+
+        if (Object.keys(phantomStatusDeltas).length > 0) {
+          request.log.warn(
+            { phantomStatusDeltas, summaryCount: summaries.length, displayedCount: paginatedGroups.length },
+            'Detected phantom summaries with no displayable tasks — counts corrected',
+          );
         }
 
         request.log.info(
@@ -325,13 +350,7 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
 
         return await reply.ok({
           groups: paginatedGroups,
-          counts: {
-            active: countsValue.active,
-            'needs-action': countsValue.needsAction,
-            done: countsValue.done,
-            failed: countsValue.failed,
-            archived: countsValue.archived,
-          },
+          counts: correctedCounts,
           totalGroups,
           ...(summariesNextCursor !== undefined && { nextCursor: summariesNextCursor }),
         });
