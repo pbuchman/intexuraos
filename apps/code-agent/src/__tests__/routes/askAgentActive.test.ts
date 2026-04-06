@@ -13,6 +13,7 @@ vi.mock('jose', () => ({
 
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 
+import { err } from '@intexuraos/common-core';
 import { buildServer } from '../../server.js';
 import { getServices, resetServices, setServices } from '../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
@@ -312,5 +313,23 @@ describe('GET /code/ask-agent/active', () => {
     expect(body.success).toBe(true);
     expect(body.data.task).not.toBeNull();
     expect(body.data.task.id).toBe('task_active_1');
+  });
+
+  it('returns 500 when repository fails', async () => {
+    const services = getServices();
+    vi.spyOn(services.codeTaskRepo, 'findLatestAskAgentTask').mockResolvedValueOnce(
+      err({ code: 'FIRESTORE_ERROR', message: 'Connection lost' }),
+    );
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/code/ask-agent/active',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
   });
 });
