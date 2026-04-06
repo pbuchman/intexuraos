@@ -159,7 +159,7 @@ describe('prepareExecutionMemoryContext', () => {
     expect(result).toMatchObject({
       status: 'matched',
       applicationId: 'app-123',
-      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      retrievalVersion: 'execution-memory-retrieval@2.0.0',
       querySummary: 'Auth callback route changes with logging and route verification work',
       matchedMemories: [
         expect.objectContaining({ memoryId: 'mem-1' }),
@@ -207,7 +207,7 @@ describe('prepareExecutionMemoryContext', () => {
     expect(result).toEqual({
       status: 'none',
       applicationId: 'app-no-match',
-      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      retrievalVersion: 'execution-memory-retrieval@2.0.0',
       querySummary: expect.stringContaining('Fix the Auth0 callback route'),
     });
     expect(executionMemoryApplicationRepo.create).toHaveBeenCalledWith(expect.objectContaining({
@@ -244,7 +244,7 @@ describe('prepareExecutionMemoryContext', () => {
     expect(result).toEqual({
       status: 'error',
       applicationId: 'app-error',
-      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      retrievalVersion: 'execution-memory-retrieval@2.0.0',
       querySummary: 'Auth callback logging work',
       errorCode: 'embedding_unavailable',
       errorMessage: 'Execution memory embedding client is not configured',
@@ -271,7 +271,7 @@ describe('prepareExecutionMemoryContext', () => {
 
     expect(result).toEqual({
       status: 'error',
-      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      retrievalVersion: 'execution-memory-retrieval@2.0.0',
       querySummary: expect.stringContaining('Fix the Auth0 callback route'),
       errorCode: 'application_repo_unavailable',
       errorMessage: 'Execution memory application repository is not configured',
@@ -296,7 +296,7 @@ describe('prepareExecutionMemoryContext', () => {
     expect(result).toEqual({
       status: 'error',
       applicationId: 'app-memory-repo',
-      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      retrievalVersion: 'execution-memory-retrieval@2.0.0',
       querySummary: expect.stringContaining('Fix the Auth0 callback route'),
       errorCode: 'memory_repo_unavailable',
       errorMessage: 'Execution memory repository is not configured',
@@ -331,7 +331,7 @@ describe('prepareExecutionMemoryContext', () => {
 
     expect(result).toEqual({
       status: 'error',
-      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      retrievalVersion: 'execution-memory-retrieval@2.0.0',
       querySummary: 'Auth callback logging work',
       errorCode: 'embedding_failed',
       errorMessage: 'embedding failed',
@@ -367,7 +367,7 @@ describe('prepareExecutionMemoryContext', () => {
     expect(result).toEqual({
       status: 'error',
       applicationId: 'app-embedding-error',
-      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      retrievalVersion: 'execution-memory-retrieval@2.0.0',
       querySummary: 'Auth callback logging work',
       errorCode: 'embedding_failed',
       errorMessage: 'embedding failed',
@@ -393,7 +393,7 @@ describe('prepareExecutionMemoryContext', () => {
     expect(result).toEqual({
       status: 'error',
       applicationId: 'app-vector-error',
-      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      retrievalVersion: 'execution-memory-retrieval@2.0.0',
       querySummary: expect.stringContaining('Fix the Auth0 callback route'),
       errorCode: 'vector_search_failed',
       errorMessage: 'vector search unavailable',
@@ -427,7 +427,7 @@ describe('prepareExecutionMemoryContext', () => {
     expect(result).toEqual({
       status: 'none',
       applicationId: 'app-invalid-json',
-      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      retrievalVersion: 'execution-memory-retrieval@2.0.0',
       querySummary: expect.stringContaining('Fix the Auth0 callback route'),
     });
     expect(logger.warn).toHaveBeenCalledTimes(2);
@@ -438,7 +438,7 @@ describe('prepareExecutionMemoryContext', () => {
     expect(toDispatchExecutionMemoryContext({ status: 'none' })).toBeUndefined();
     expect(toDispatchExecutionMemoryContext({
       status: 'matched',
-      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      retrievalVersion: 'execution-memory-retrieval@2.0.0',
       querySummary: 'summary',
       matchedMemories: [],
     })).toBeUndefined();
@@ -446,7 +446,7 @@ describe('prepareExecutionMemoryContext', () => {
     expect(toDispatchExecutionMemoryContext({
       status: 'matched',
       applicationId: 'app-123',
-      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      retrievalVersion: 'execution-memory-retrieval@2.0.0',
       querySummary: 'summary',
       matchedMemories: [
         {
@@ -462,7 +462,7 @@ describe('prepareExecutionMemoryContext', () => {
       ],
     })).toEqual({
       applicationId: 'app-123',
-      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      retrievalVersion: 'execution-memory-retrieval@2.0.0',
       querySummary: 'summary',
       matchedMemories: [
         {
@@ -571,6 +571,147 @@ describe('prepareExecutionMemoryContext', () => {
 
     expect(prepareExecutionMemoryContextTestables.truncate('short', 10)).toBe('short');
     expect(prepareExecutionMemoryContextTestables.truncate('truncate-me', 5)).toBe('trunc');
+  });
+
+  it('scores candidates using rebalanced weights that increase component and label influence', () => {
+    const reranked = prepareExecutionMemoryContextTestables.rerankMemories(
+      [
+        createMatch('mem-moderate', {
+          vectorScore: 0.75,
+          componentHints: ['auth', 'route', 'logging'],
+          labelHints: ['bug', 'backend'],
+          applicationCount: 0,
+          positiveCount: 0,
+        }),
+      ],
+      {
+        semanticQuery: 'auth route logging verification',
+        components: ['auth', 'route', 'logging', 'verification'],
+        riskFlags: [],
+        verificationGoals: [],
+        labelHints: ['bug'],
+        summary: 'summary',
+      },
+      ['backend', 'bug']
+    );
+
+    // New weights: 0.50*0.75 + 0.20*(3/4) + 0.15*(2/2) + 0.15*((0+1)/(0+2))
+    // = 0.375 + 0.15 + 0.15 + 0.075 = 0.75
+    expect(reranked[0]?.rerankScore).toBeCloseTo(0.75, 2);
+  });
+
+  it('logs top-3 reranked candidates with score breakdowns even when none pass the threshold', async () => {
+    queryClient.generate.mockResolvedValue(ok({
+      content: JSON.stringify({
+        semanticQuery: 'unrelated topic query',
+        components: ['unrelated'],
+        riskFlags: [],
+        verificationGoals: [],
+        labelHints: [],
+        summary: 'Unrelated topic',
+      }),
+      usage: { model: LlmModels.Gemini25Flash },
+    }));
+
+    embeddingClient.embed.mockResolvedValue(ok([0.1, 0.2, 0.3]));
+    executionMemoryRepo.findNearest.mockResolvedValue(ok([
+      createMatch('mem-near-miss', {
+        vectorScore: 0.70,
+        componentHints: [],
+        labelHints: [],
+        applicationCount: 0,
+        positiveCount: 0,
+      }),
+    ]));
+    executionMemoryApplicationRepo.create.mockResolvedValue(ok({ id: 'app-near' }));
+
+    await prepareExecutionMemoryContext({
+      task: createTask(),
+      linearIssueLabels: [],
+      logger,
+      linearAgentClient: linearAgentClient as never,
+      queryClient: queryClient as never,
+      embeddingClient: embeddingClient as never,
+      executionMemoryRepo: executionMemoryRepo as never,
+      executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+    });
+
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task-123',
+        candidateCount: 1,
+        matchedCount: 0,
+        topCandidates: expect.arrayContaining([
+          expect.objectContaining({
+            memoryId: 'mem-near-miss',
+            rerankScore: expect.any(Number),
+            vectorScore: 0.70,
+            componentOverlap: 0,
+            labelOverlap: 0,
+            effectiveness: expect.any(Number),
+            passedThreshold: false,
+          }),
+        ]),
+      }),
+      expect.stringContaining('Execution memory reranking complete')
+    );
+  });
+
+  it('logs top-3 reranked candidates with score breakdowns when memories ARE matched', async () => {
+    queryClient.generate.mockResolvedValue(ok({
+      content: JSON.stringify({
+        semanticQuery: 'auth route logging verification',
+        components: ['auth', 'route', 'logging', 'verification'],
+        riskFlags: [],
+        verificationGoals: [],
+        labelHints: ['bug'],
+        summary: 'Auth route logging verification',
+      }),
+      usage: { model: LlmModels.Gemini25Flash },
+    }));
+
+    embeddingClient.embed.mockResolvedValue(ok([0.1, 0.2, 0.3]));
+    executionMemoryRepo.findNearest.mockResolvedValue(ok([
+      createMatch('mem-match', {
+        vectorScore: 0.95,
+        componentHints: ['auth', 'route', 'logging', 'verification'],
+        labelHints: ['bug', 'backend'],
+        applicationCount: 2,
+        positiveCount: 2,
+      }),
+    ]));
+    executionMemoryApplicationRepo.create.mockResolvedValue(ok({ id: 'app-match' }));
+
+    await prepareExecutionMemoryContext({
+      task: createTask(),
+      linearIssueLabels: ['backend', 'bug'],
+      logger,
+      linearAgentClient: linearAgentClient as never,
+      queryClient: queryClient as never,
+      embeddingClient: embeddingClient as never,
+      executionMemoryRepo: executionMemoryRepo as never,
+      executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+    });
+
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task-123',
+        candidateCount: 1,
+        matchedCount: 1,
+        topCandidates: expect.arrayContaining([
+          expect.objectContaining({
+            memoryId: 'mem-match',
+            rerankScore: expect.any(Number),
+            vectorScore: 0.95,
+            componentOverlap: 1,
+            labelOverlap: 1,
+            effectiveness: 0.75,
+            passedThreshold: true,
+          }),
+        ]),
+      }),
+      expect.stringContaining('Execution memory reranking complete')
+    );
   });
 
   describe('parseJsonObject', () => {
