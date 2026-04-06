@@ -177,22 +177,20 @@ export async function prepareExecutionMemoryContext(
     .slice(0, MAX_MATCHES);
 
   // Observability: log top candidates with score breakdowns
-  const topCandidates = reranked.slice(0, MAX_MATCHES).map((candidate) => {
-    const queryComponents = dedupeLower(normalization.components);
-    const queryLabels = dedupeLower([...linearIssueLabels, ...normalization.labelHints]);
-    return {
-      memoryId: candidate.memory.id,
-      title: candidate.memory.title,
-      rerankScore: roundScore(candidate.rerankScore),
-      vectorScore: candidate.memory.vectorScore,
-      componentOverlap: roundScore(overlapRatio(queryComponents, candidate.memory.componentHints)),
-      labelOverlap: roundScore(overlapRatio(queryLabels, candidate.memory.labelHints)),
-      effectiveness: roundScore(
-        (candidate.memory.positiveCount + 1) / (candidate.memory.applicationCount + 2)
-      ),
-      passedThreshold: candidate.rerankScore >= MIN_RERANK_SCORE,
-    };
-  });
+  const queryComponents = dedupeLower(normalization.components);
+  const queryLabels = dedupeLower([...linearIssueLabels, ...normalization.labelHints]);
+  const topCandidates = reranked.slice(0, MAX_MATCHES).map((candidate) => ({
+    memoryId: candidate.memory.id,
+    title: candidate.memory.title,
+    rerankScore: roundScore(candidate.rerankScore),
+    vectorScore: candidate.memory.vectorScore,
+    componentOverlap: roundScore(overlapRatio(queryComponents, candidate.memory.componentHints)),
+    labelOverlap: roundScore(overlapRatio(queryLabels, candidate.memory.labelHints)),
+    effectiveness: roundScore(
+      (candidate.memory.positiveCount + 1) / (candidate.memory.applicationCount + 2)
+    ),
+    passedThreshold: candidate.rerankScore >= MIN_RERANK_SCORE,
+  }));
 
   logger.info(
     {
