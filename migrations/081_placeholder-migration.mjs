@@ -1,17 +1,25 @@
 /**
- * Migration 081: Placeholder to maintain sequential migration IDs
+ * Migration 081: No-op placeholder retained to preserve history.
  *
- * Originally 079_placeholder-migration.mjs on development. Renumbered to 081
- * because the real migration 079_reset-execution-memory-scores.mjs now occupies
- * ID 079, and 080 is already taken. This fills the gap at 081.
+ * Originally committed as 079_placeholder-migration.mjs on the assumption
+ * that migration ID 079 was free. That assumption was wrong — 079 was
+ * already claimed by 079_reset-execution-memory-scores.mjs (merged earlier
+ * via commit 79a65ea7e, already applied to Firestore).
  *
- * No-op: this migration does nothing.
+ * Two files sharing id 079 broke both scripts/verify-migrations.mjs
+ * (sequential-ID check) and scripts/migrate.mjs (checksum check — one
+ * stored checksum can't match two distinct files). Deleting the placeholder
+ * was declined because the file was already merged to development history;
+ * renaming to the next free id 081 is the additive fix.
+ *
+ * No-op: this migration does nothing. Its only purpose is to keep the
+ * commit that introduced it reachable in git history.
  */
 
 export const metadata = {
   id: '081',
   name: 'placeholder-migration',
-  description: 'Placeholder to fill migration ID gap at 081',
+  description: 'No-op placeholder retained after rename from duplicate id 079',
   createdAt: '2026-04-05',
 };
 
