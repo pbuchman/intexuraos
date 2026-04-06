@@ -189,6 +189,7 @@ describe('TaskDispatcher', () => {
   const mockWorktreeManager = {
     createWorktree: vi.fn(async () => '/tmp/worktrees/test-task'),
     deleteWorktree: vi.fn(async () => ({ ok: true, value: undefined })),
+    worktreeExists: vi.fn(async () => true),
   } as unknown as WorktreeManager;
 
   // Mock IsolationProvider
@@ -8216,13 +8217,47 @@ describe('TaskDispatcher', () => {
       await statePersistence.save(state);
 
       vi.mocked(
-        mockIsolationProvider as Required<IsolationProvider>
-      ).isResumeAvailable.mockResolvedValueOnce(false);
+        mockWorktreeManager as Required<WorktreeManager>
+      ).worktreeExists.mockResolvedValueOnce(false);
       const result = await dispatcher.sendMessage('msg-stale-container-task', 'Follow-up');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.type).toBe('not_found');
+        expect(result.error.message).toBe(
+          'Worker container and worktree no longer available for resume'
+        );
+      }
+    });
+
+    it('resumes task when container is gone but worktree exists', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-worktree-resume-task',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const state = await statePersistence.load();
+      const task = state.tasks['msg-worktree-resume-task'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      await statePersistence.save(state);
+
+      vi.mocked(
+        mockWorktreeManager as Required<WorktreeManager>
+      ).worktreeExists.mockResolvedValueOnce(true);
+
+      const result = await dispatcher.sendMessage('msg-worktree-resume-task', 'Resume please');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'resumed' });
       }
     });
 
@@ -8299,44 +8334,6 @@ describe('TaskDispatcher', () => {
       const promptEntry = promptLog?.[1] as string;
       expect(promptEntry).toContain('\u2026'); // ellipsis = truncation occurred
       expect(promptEntry).not.toContain('B'.repeat(250)); // full message not present
-    });
-
-    it('returns not_found when isResumeAvailable is not implemented on provider', async () => {
-      const request: CreateTaskRequest = {
-        taskId: 'msg-no-resume-check-task',
-        workerType: 'auto',
-        prompt: 'Test',
-        webhookUrl: 'https://example.com/webhook',
-        webhookSecret: 'secret',
-        linearIssueLabels: [],
-        hasChildren: false,
-      };
-      await dispatcher.submitTask(request);
-      await flushAsync();
-
-      const state = await statePersistence.load();
-      const task = state.tasks['msg-no-resume-check-task'];
-      if (!task) throw new Error('Task not found');
-      task.status = 'completed';
-      await statePersistence.save(state);
-
-      // Remove isResumeAvailable so optional chaining returns undefined → ?? false → not available
-      const providerWithoutCheck = mockIsolationProvider as Required<IsolationProvider>;
-      const original = providerWithoutCheck.isResumeAvailable;
-      providerWithoutCheck.isResumeAvailable = undefined as unknown as typeof original;
-
-      let result: Awaited<ReturnType<typeof dispatcher.sendMessage>>;
-      try {
-        result = await dispatcher.sendMessage('msg-no-resume-check-task', 'Follow-up');
-      } finally {
-        // Restore even if sendMessage throws, to avoid polluting other tests
-        providerWithoutCheck.isResumeAvailable = original;
-      }
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.type).toBe('not_found');
-      }
     });
   });
 
