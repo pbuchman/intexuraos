@@ -78,6 +78,51 @@ describe('getActiveAskAgent', () => {
     expect(result.value.task.id).toBe('task_ask_1');
   });
 
+  it('returns the most recent task when multiple non-archived ask-agent tasks exist', async () => {
+    // Create older task first
+    await codeTaskRepo.create({
+      id: 'task_older',
+      userId: 'test-user-id',
+      prompt: 'Older conversation',
+      sanitizedPrompt: 'Older conversation',
+      systemPromptHash: 'ask-agent',
+      workerType: 'opus',
+      workerLocation: 'pending',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_older',
+      agentType: 'ask_agent',
+    });
+
+    // Create newer task
+    await codeTaskRepo.create({
+      id: 'task_newer',
+      userId: 'test-user-id',
+      prompt: 'Newer conversation',
+      sanitizedPrompt: 'Newer conversation',
+      systemPromptHash: 'ask-agent',
+      workerType: 'opus',
+      workerLocation: 'pending',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_newer',
+      agentType: 'ask_agent',
+    });
+
+    const result = await getActiveAskAgent(
+      { logger, codeTaskRepo },
+      { userId: 'test-user-id' },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    if (result.value.task === null) {
+      throw new Error('Expected a task');
+    }
+    // Must return the most recent one (task_newer), not task_older
+    expect(result.value.task.id).toBe('task_newer');
+  });
+
   it('does not return archived ask-agent tasks', async () => {
     await codeTaskRepo.create({
       id: 'task_ask_archived',
