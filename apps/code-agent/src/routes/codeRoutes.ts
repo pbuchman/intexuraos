@@ -31,6 +31,7 @@ import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
 import { loadConfig } from '../config.js';
 import { backLinkPlanningTask } from '../domain/usecases/backLinkPlanningTask.js';
 import { startAskAgent } from '../domain/usecases/startAskAgent.js';
+import { getActiveAskAgent } from '../domain/usecases/getActiveAskAgent.js';
 import { createTaskForPR } from '../domain/usecases/createTaskForPR.js';
 import type { CodeTask } from '../domain/models/codeTask.js';
 
@@ -2012,6 +2013,75 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
 
       return await reply.ok(result.value);
+    },
+  );
+
+  // GET /code/ask-agent/active - Get user's active ask-agent task (public, Auth0 JWT)
+  fastify.get(
+    '/code/ask-agent/active',
+    {
+      onRequest: jwtValidator,
+      schema: {
+        operationId: 'getActiveAskAgent',
+        summary: 'Get the active ask-agent conversation',
+        description: 'Returns the user\'s most recent non-archived ask-agent task for cross-device conversation restoration. Requires Auth0 JWT.',
+        tags: ['public'],
+        response: {
+          200: {
+            description: 'Active ask-agent task or null',
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  task: {
+                    oneOf: [
+                      { type: 'null' },
+                      {
+                        type: 'object',
+                        properties: {
+                          id: { type: 'string' },
+                          status: { type: 'string' },
+                          agentType: { type: 'string' },
+                          prompt: { type: 'string' },
+                          createdAt: { type: 'string' },
+                        },
+                      },
+                    ],
+                  },
+                },
+                required: ['task'],
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to GET /code/ask-agent/active',
+      });
+
+      const { codeTaskRepo } = getServices();
+      /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
+      const userId = request.user?.userId ?? 'unknown-user';
+      /* v8 ignore stop @preserve */
+
+      const result = await getActiveAskAgent(
+        { logger: request.log, codeTaskRepo },
+        { userId },
+      );
+
+      if (!result.ok) {
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      const task = result.value.task; // @allow-result-access -- narrowed by !result.ok guard above
+      return await reply.ok({
+        task: task !== null ? taskToApiResponse(task) : null,
+      });
     },
   );
 

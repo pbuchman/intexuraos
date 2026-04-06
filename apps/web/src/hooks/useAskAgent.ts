@@ -1,6 +1,6 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/context';
-import { startAskAgent } from '@/services/codeAgentApi';
+import { startAskAgent, getActiveAskAgent, archiveCodeTask } from '@/services/codeAgentApi';
 import { useTaskView } from './useTaskView.js';
 import type { CodeTask } from '@/types';
 
@@ -65,6 +65,30 @@ export function useAskAgent(): AskAgentState {
   const [taskId, setTaskId] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const userStartedRef = useRef(false);
+
+  // Restore active ask-agent session from backend (cross-device persistence)
+  useEffect((): (() => void) => {
+    let cancelled = false;
+
+    async function restore(): Promise<void> {
+      try {
+        const token = await getAccessToken();
+        const response = await getActiveAskAgent(token);
+        if (!cancelled && !userStartedRef.current && response.task !== null) {
+          setTaskId(response.task.id);
+        }
+      } catch {
+        // Silently ignore — user will see fresh start view
+      }
+    }
+
+    void restore();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getAccessToken]);
 
   // useTaskView handles real-time log streaming, task polling, messaging, and cancellation
   const {
@@ -89,6 +113,7 @@ export function useAskAgent(): AskAgentState {
   const canClear = isSessionIdle && !starting;
 
   const start = useCallback(async (prompt: string): Promise<void> => {
+    userStartedRef.current = true;
     setStarting(true);
     setStartError(null);
     try {
@@ -116,9 +141,15 @@ export function useAskAgent(): AskAgentState {
   }, [cancelTaskFromView]);
 
   const clear = useCallback((): void => {
+    if (taskId !== null) {
+      // Archive the task so it won't be returned by GET /code/ask-agent/active
+      void getAccessToken().then((token) => {
+        void archiveCodeTask(token, taskId);
+      });
+    }
     setTaskId(null);
     setStartError(null);
-  }, []);
+  }, [taskId, getAccessToken]);
 
   const workerOnline = true; // Simplified for MVP — worker status handled by useTaskView
   const workerName = task?.workerLocation ?? '';

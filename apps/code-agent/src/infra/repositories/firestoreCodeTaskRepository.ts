@@ -904,6 +904,32 @@ export const createFirestoreCodeTaskRepository = (deps: {
       }
     },
 
+    findLatestAskAgentTask: async (userId: string): Promise<Result<CodeTask | null, RepositoryError>> => {
+      try {
+        const query = collection
+          .where('userId', '==', userId)
+          .where('agentType', '==', 'ask_agent')
+          .where('status', 'in', NON_ARCHIVED_STATUSES)
+          .orderBy('createdAt', 'desc')
+          .limit(1);
+
+        const snapshot = await query.get();
+
+        if (snapshot.empty) {
+          return ok(null);
+        }
+
+        const doc = snapshot.docs[0]!;
+        return ok(toCodeTask(doc as unknown as { id: string; data(): Record<string, unknown> }));
+      } catch (error) {
+        logger.error({ error, userId }, 'Failed to find latest ask-agent task');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
     deleteTask: async (taskId: string, userId: string): Promise<Result<void, RepositoryError>> => {
       try {
         const doc = await collection.doc(taskId).get();
