@@ -1737,4 +1737,113 @@ describe('GET /code/issue-groups', () => {
     // No group produced because tasks returned empty array (fetch failed)
     expect(body.data.groups).toHaveLength(0);
   });
+
+  describe('phantom group count correction', () => {
+    it('adjusts done count when summary exists but all tasks are archived', async () => {
+      const phantomSummary = makeSummary({
+        linearIssueId: 'INT-PHANTOM',
+        aggregateStatus: 'done',
+        taskCount: 1,
+      });
+      const realSummary = makeSummary({
+        linearIssueId: 'INT-REAL',
+        aggregateStatus: 'done',
+        taskCount: 1,
+      });
+
+      mockSummaries = [phantomSummary, realSummary];
+      mockCounts = {
+        ...mockCounts,
+        done: 2,
+        totalGroups: 2,
+      };
+
+      // Create a real task for INT-REAL (status=reviewed, visible)
+      const realInput = makeTaskInput({
+        linearIssueId: 'INT-REAL',
+        agentType: 'planning',
+      });
+      const realCreateResult = await codeTaskRepo.create(realInput);
+      expect(realCreateResult.ok).toBe(true);
+      if (realCreateResult.ok) {
+        await codeTaskRepo.update(realCreateResult.value.id, { status: 'planned' });
+      }
+
+      // Create an archived task for INT-PHANTOM (not visible when includeArchived=false)
+      const phantomInput = makeTaskInput({
+        linearIssueId: 'INT-PHANTOM',
+        agentType: 'planning',
+      });
+      const phantomCreateResult = await codeTaskRepo.create(phantomInput);
+      expect(phantomCreateResult.ok).toBe(true);
+      if (phantomCreateResult.ok) {
+        await codeTaskRepo.update(phantomCreateResult.value.id, { status: 'archived' });
+      }
+
+      setServices(makeBaseServices({
+        groupSummaryRepo: makeGroupSummaryRepo({
+          getUserGroupCounts: async () => ok(mockCounts),
+          listGroupSummaries: async () => ok({ summaries: mockSummaries }),
+        }),
+      }));
+      await server.close();
+      server = await buildServer();
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/issue-groups?groupStatus=done',
+        headers: { authorization: 'Bearer test-jwt' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload) as { data: { groups: unknown[]; counts: Record<string, number>; totalGroups: number } };
+      // Should have 1 displayable group, not 2
+      expect(body.data.groups).toHaveLength(1);
+      // Counts should be corrected: done reduced by 1 phantom
+      expect(body.data.counts['done']).toBe(1);
+      expect(body.data.totalGroups).toBe(1);
+    });
+
+    it('adjusts count when summary exists but all tasks are ask_agent', async () => {
+      const askAgentSummary = makeSummary({
+        linearIssueId: 'INT-ASK',
+        aggregateStatus: 'done',
+        taskCount: 1,
+      });
+      mockSummaries = [askAgentSummary];
+      mockCounts = { ...mockCounts, done: 1, totalGroups: 1 };
+
+      // Create an ask_agent task (filtered out by display logic)
+      const askInput = makeTaskInput({
+        linearIssueId: 'INT-ASK',
+        agentType: 'ask_agent',
+      });
+      const createResult = await codeTaskRepo.create(askInput);
+      expect(createResult.ok).toBe(true);
+      if (createResult.ok) {
+        await codeTaskRepo.update(createResult.value.id, { status: 'reviewed' });
+      }
+
+      setServices(makeBaseServices({
+        groupSummaryRepo: makeGroupSummaryRepo({
+          getUserGroupCounts: async () => ok(mockCounts),
+          listGroupSummaries: async () => ok({ summaries: mockSummaries }),
+        }),
+      }));
+      await server.close();
+      server = await buildServer();
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/issue-groups?groupStatus=done',
+        headers: { authorization: 'Bearer test-jwt' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload) as { data: { groups: unknown[]; counts: Record<string, number>; totalGroups: number } };
+      expect(body.data.groups).toHaveLength(0);
+      expect(body.data.counts['done']).toBe(0);
+      expect(body.data.totalGroups).toBe(0);
+    });
+  });
 });
