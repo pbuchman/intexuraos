@@ -10,12 +10,13 @@ import type { ExecutionMemoryApplicationRepository } from '../repositories/execu
 import type { ExecutionMemoryPromptContext } from '../services/taskDispatcher.js';
 
 const QUERY_NORMALIZER_VERSION = 'execution-memory-query-normalizer@1.0.0';
-const RETRIEVAL_VERSION = 'execution-memory-retrieval@1.0.0';
+const RETRIEVAL_VERSION = 'execution-memory-retrieval@2.0.0';
 const MAX_DESCRIPTION_LENGTH = 2500;
 const MAX_COMMENT_LENGTH = 800;
 const MAX_TOTAL_CONTEXT_LENGTH = 5000;
 const MAX_MATCHES = 3;
-const MIN_RERANK_SCORE = 0.68;
+const MIN_RERANK_SCORE = 0.55;
+const TOP_LOG_CANDIDATES = 3;
 const CANDIDATE_LIMIT = 20;
 
 const QueryNormalizationSchema = z.object({
@@ -175,6 +176,33 @@ export async function prepareExecutionMemoryContext(
   const matchedMemories = reranked
     .filter((candidate) => candidate.rerankScore >= MIN_RERANK_SCORE)
     .slice(0, MAX_MATCHES);
+
+  // Observability: log top candidates with score breakdowns
+  const queryComponents = dedupeLower(normalization.components);
+  const queryLabels = dedupeLower([...linearIssueLabels, ...normalization.labelHints]);
+  const topCandidates = reranked.slice(0, TOP_LOG_CANDIDATES).map((candidate) => ({
+    memoryId: candidate.memory.id,
+    title: candidate.memory.title,
+    rerankScore: roundScore(candidate.rerankScore),
+    vectorScore: candidate.memory.vectorScore,
+    componentOverlap: roundScore(overlapRatio(queryComponents, candidate.memory.componentHints)),
+    labelOverlap: roundScore(overlapRatio(queryLabels, candidate.memory.labelHints)),
+    effectiveness: roundScore(
+      (candidate.memory.positiveCount + 1) / (candidate.memory.applicationCount + 2)
+    ),
+    passedThreshold: candidate.rerankScore >= MIN_RERANK_SCORE,
+  }));
+
+  logger.info(
+    {
+      taskId: task.id,
+      candidateCount: reranked.length,
+      matchedCount: matchedMemories.length,
+      minRerankScore: MIN_RERANK_SCORE,
+      topCandidates,
+    },
+    'Execution memory reranking complete'
+  );
 
   const applicationId = await createApplication({
     executionMemoryApplicationRepo,
@@ -389,10 +417,10 @@ function rerankMemories(
       const labelOverlap = overlapRatio(queryLabels, memory.labelHints);
       const effectiveness = (memory.positiveCount + 1) / (memory.applicationCount + 2);
       const rerankScore =
-        (0.65 * memory.vectorScore)
-        + (0.15 * componentOverlap)
-        + (0.10 * labelOverlap)
-        + (0.10 * effectiveness);
+        (0.50 * memory.vectorScore)
+        + (0.20 * componentOverlap)
+        + (0.15 * labelOverlap)
+        + (0.15 * effectiveness);
 
       return { memory, rerankScore };
     })
