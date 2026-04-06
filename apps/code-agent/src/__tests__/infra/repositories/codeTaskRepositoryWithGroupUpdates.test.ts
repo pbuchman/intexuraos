@@ -315,6 +315,19 @@ describe('withGroupUpdates decorator', () => {
         'Group summary update failed after delete',
       );
     });
+
+    it('does NOT call updateAfterDelete for ask_agent tasks', async () => {
+      const askTask = makeTask({ agentType: 'ask_agent' });
+      vi.mocked(inner.findByIdForUser).mockResolvedValue(ok(askTask));
+      vi.mocked(inner.deleteTask).mockResolvedValue(ok(undefined));
+      const updateAfterDeleteSpy = vi.spyOn(groupSummaryRepo, 'updateAfterDelete');
+
+      const result = await decorated.deleteTask('task-1', 'user-1');
+
+      expect(result).toEqual(ok(undefined));
+      await Promise.resolve();
+      expect(updateAfterDeleteSpy).not.toHaveBeenCalled();
+    });
   });
 
   // -------------------------------------------------------------------------
