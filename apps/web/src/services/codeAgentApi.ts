@@ -16,6 +16,15 @@ import type {
   WorkersStatusResponse,
 } from '@/types';
 
+/**
+ * Response shape for getActiveAskAgent.
+ * Backend only serializes a subset of CodeTask fields (id, status, agentType, prompt, createdAt).
+ * Using Pick<> ensures type accuracy and prevents runtime undefined access.
+ */
+export interface ActiveAskAgentTaskResponse {
+  task: Pick<CodeTask, 'id' | 'status' | 'agentType' | 'prompt' | 'createdAt'> | null;
+}
+
 export interface QueuedTask {
   id: string;
   prompt: string;
@@ -281,4 +290,17 @@ export async function startAskAgent(
     method: 'POST',
     body: request,
   });
+}
+
+/**
+ * Get the user's active ask-agent conversation (for cross-device persistence)
+ */
+export async function getActiveAskAgent(
+  accessToken: string,
+): Promise<ActiveAskAgentTaskResponse> {
+  return await apiRequest<ActiveAskAgentTaskResponse>(
+    config.codeAgentUrl,
+    '/code/ask-agent/active',
+    accessToken,
+  );
 }
