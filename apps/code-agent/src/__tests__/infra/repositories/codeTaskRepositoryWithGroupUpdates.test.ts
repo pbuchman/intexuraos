@@ -52,21 +52,6 @@ function makeTask(overrides: Partial<CodeTask> = {}): CodeTask {
 const NOT_FOUND_ERROR = { code: 'NOT_FOUND' as const, message: 'task not found' };
 const FIRESTORE_ERROR = { code: 'FIRESTORE_ERROR' as const, message: 'firestore blew up' };
 
-function makeCreateInput(overrides: Partial<CreateTaskInput> = {}): CreateTaskInput {
-  return {
-    userId: 'user-1',
-    prompt: 'Fix bug',
-    sanitizedPrompt: 'fix bug',
-    systemPromptHash: 'abc',
-    workerType: 'opus',
-    workerLocation: 'home-mac',
-    repository: 'test/repo',
-    baseBranch: 'main',
-    traceId: 'trace-1',
-    ...overrides,
-  };
-}
-
 /**
  * Minimal fake inner CodeTaskRepository.
  * All methods are vi.fn() stubs that can be configured per test.
@@ -197,7 +182,7 @@ describe('withGroupUpdates decorator', () => {
       vi.mocked(inner.create).mockResolvedValue(ok(askTask));
       const updateAfterCreateSpy = vi.spyOn(groupSummaryRepo, 'updateAfterCreate');
 
-      await decorated.create(makeCreateInput({ agentType: 'ask_agent' }));
+      await decorated.create(baseInput);
 
       await Promise.resolve();
       expect(updateAfterCreateSpy).not.toHaveBeenCalled();
