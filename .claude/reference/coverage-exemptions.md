@@ -62,10 +62,4 @@ The validation script (Phase B-1) enforces that every v8 ignore explanation cont
 - `schema`: `Zod`, `Fastify schema`, `validation`
 - `regex`: `capture group`, `regex match`
 
-## Override Mechanism
-
-Blocks that fail tightened validation but have planned fixes are tracked in `v8-ignore-overrides.json` at repo root, keyed by Linear task ID. The CI script skips validation for files listed under an override entry. Run `pnpm run verify:v8-ignore -- --no-overrides` for strict auditing.
-
-**Reference:** `.claude/skills/coverage/reference/canonical-categories.md`
-
 Rationalizing? See `.claude/reference/rationalization-traps.md` > V8 Ignore Traps.

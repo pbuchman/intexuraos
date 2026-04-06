@@ -1547,6 +1547,56 @@ describe('TaskDispatcher', () => {
     });
   });
 
+  describe('parseRebaseResultOutput', () => {
+    type ParseRebaseResultOutput = (
+      output: string,
+      taskId: string
+    ) => TaskResult['rebaseResult'] | undefined;
+    const getInternal = (): { parseRebaseResultOutput: ParseRebaseResultOutput } =>
+      dispatcher as unknown as { parseRebaseResultOutput: ParseRebaseResultOutput };
+
+    it('returns parsed rebase result for valid JSON with attempted: true, success: true', () => {
+      const output = JSON.stringify({ attempted: true, success: true });
+      const result = getInternal().parseRebaseResultOutput(output, 'task-1');
+      expect(result).toEqual({ attempted: true, success: true });
+    });
+
+    it('returns parsed rebase result with conflictFiles for valid JSON with attempted: true, success: false, conflictFiles', () => {
+      const output = JSON.stringify({
+        attempted: true,
+        success: false,
+        conflictFiles: ['file-a.ts', 'file-b.ts'],
+      });
+      const result = getInternal().parseRebaseResultOutput(output, 'task-2');
+      expect(result).toEqual({
+        attempted: true,
+        success: false,
+        conflictFiles: ['file-a.ts', 'file-b.ts'],
+      });
+    });
+
+    it('returns undefined for valid JSON without attempted field', () => {
+      const output = JSON.stringify({ success: true });
+      const result = getInternal().parseRebaseResultOutput(output, 'task-3');
+      expect(result).toBeUndefined();
+    });
+
+    it('returns undefined and calls logger.warn for invalid JSON', () => {
+      const result = getInternal().parseRebaseResultOutput('{ invalid json', 'task-4');
+      expect(result).toBeUndefined();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-4' }),
+        'Failed to parse rebase result'
+      );
+    });
+
+    it('returns undefined for valid JSON where success is not a boolean', () => {
+      const output = JSON.stringify({ attempted: true, success: 'yes' });
+      const result = getInternal().parseRebaseResultOutput(output, 'task-5');
+      expect(result).toBeUndefined();
+    });
+  });
+
   describe('agent-type-aware completion', () => {
     let agentDispatcher: TaskDispatcher;
 
