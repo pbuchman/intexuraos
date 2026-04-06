@@ -601,16 +601,14 @@ export class TaskDispatcher {
     }
 
     if (task.status === 'completed' || task.status === 'failed' || task.status === 'interrupted') {
-      // Verify the container is still available before accepting the resume.
-      // isResumeAvailable performs a synchronous Docker inspect so the caller gets a
-      // synchronous 'not_found' error instead of a silent async RESUME_ATTEMPT_FAILED.
-      /* v8 ignore start -- source-map: optional chaining ?. and ?? false branches inside await expression not tracked by v8 even with tests covering both paths @preserve */
-      const isAvailable = (await this.isolation.provider.isResumeAvailable?.(taskId)) ?? false;
-      /* v8 ignore stop @preserve */
-      if (!isAvailable) {
+      // Check if the worktree exists — a container can be recreated, but a worktree cannot.
+      // If the container is gone but worktree exists, createWorker(continueSession=true) will
+      // create a fresh container. If the worktree is also gone, reject — user must retry.
+      const hasWorktree = await this.worktreeManager.worktreeExists(taskId);
+      if (!hasWorktree) {
         return {
           ok: false,
-          error: { type: 'not_found', message: 'Worker container no longer available for resume' },
+          error: { type: 'not_found', message: 'Worker container and worktree no longer available for resume' },
         };
       }
 
