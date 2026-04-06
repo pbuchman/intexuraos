@@ -183,6 +183,29 @@ Have the code-agent detect the 404 and automatically create a new task. Rejected
 - Modify: `workers/orchestrator/src/services/task-dispatcher.ts`
 - Modify: `workers/orchestrator/src/__tests__/task-dispatcher.test.ts`
 
+- [ ] **Step 0 (Prerequisite): Add `worktreeExists` to `mockWorktreeManager`**
+
+Before writing any tests, add `worktreeExists` to the existing `mockWorktreeManager` definition in the test file (around line 189). The current mock only has `createWorktree` and `deleteWorktree`:
+
+```typescript
+const mockWorktreeManager = {
+  createWorktree: vi.fn(async () => '/tmp/worktrees/test-task'),
+  deleteWorktree: vi.fn(async () => ({ ok: true, value: undefined })),
+} as unknown as WorktreeManager;
+```
+
+Add `worktreeExists` to the mock:
+
+```typescript
+const mockWorktreeManager = {
+  createWorktree: vi.fn(async () => '/tmp/worktrees/test-task'),
+  deleteWorktree: vi.fn(async () => ({ ok: true, value: undefined })),
+  worktreeExists: vi.fn(async () => true),  // ADD THIS
+} as unknown as WorktreeManager;
+```
+
+This is required — the new tests (Step 1 and Step 5) mock `mockWorktreeManager.worktreeExists` directly, and calling `.mockResolvedValue()` on `undefined` throws `TypeError: Cannot read properties of undefined (reading 'mockResolvedValue')`.
+
 - [ ] **Step 1: Write failing test — resume succeeds when container is gone but worktree exists**
 
 In the test file, find the existing test `'returns not_found when container is no longer available for resume'` (around line 8199). Add a new test AFTER it:
@@ -261,15 +284,20 @@ Run: `cd /repo && pnpm vitest run workers/orchestrator/src/__tests__/task-dispat
 
 Expected: PASS
 
-- [ ] **Step 5: Update the existing not_found test**
+- [ ] **Step 5: Update the existing not_found test and remove stale test**
 
-The existing test `'returns not_found when container is no longer available for resume'` needs to mock `worktreeManager.worktreeExists` returning `false`:
+**5a. Update existing test:**
+The existing test `'returns not_found when container is no longer available for resume'` (line 8199) needs to mock `worktreeManager.worktreeExists` returning `false` instead of mocking `isResumeAvailable`:
 
 ```typescript
-mockWorktreeManager.worktreeExists.mockResolvedValue(false);
+// Remove: mockIsolationProvider.isResumeAvailable.mockResolvedValueOnce(false);
+mockWorktreeManager.worktreeExists.mockResolvedValueOnce(false);
 ```
 
-And update the expected error message to match the new text: `'Worker container and worktree no longer available for resume'`.
+And update the expected error message to: `'Worker container and worktree no longer available for resume'`.
+
+**5b. Remove stale test:**
+Delete the test at line 8304: `'returns not_found when isResumeAvailable is not implemented on provider'`. This test exercises the optional-chaining fallback (`isResumeAvailable = undefined → ?? false → not_found`) which no longer exists after the fix. The code now calls `worktreeManager.worktreeExists(taskId)` regardless of whether `isResumeAvailable` is defined, so this test would silently pass while testing removed behavior.
 
 - [ ] **Step 6: Run all sendMessage tests**
 
