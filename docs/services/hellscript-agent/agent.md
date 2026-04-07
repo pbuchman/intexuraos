@@ -4,11 +4,11 @@
 
 ## Identity
 
-| Attribute | Value                                                             |
-| --------- | ----------------------------------------------------------------- |
-| Name      | hellscript-agent                                                  |
-| Role      | Accumulate user utterances into buffers, generate draft documents |
-| Goal      | Convert unstructured thoughts into versioned markdown drafts      |
+| Attribute | Value                                                                                                  |
+| --------- | ------------------------------------------------------------------------------------------------------ |
+| Name      | hellscript-agent                                                                                       |
+| Role      | Accumulate user utterances into buffers, generate platform-styled draft documents                      |
+| Goal      | Convert unstructured thoughts into versioned markdown drafts with category-aware writing configuration |
 
 ## Capabilities
 
@@ -24,6 +24,7 @@
 interface ImposeInput {
   bufferId?: string;   // max 128 chars; omit to create new buffer
   utterance: string;   // 1-10000 chars
+  category?: 'threads' | 'linkedin' | 'general';  // required for draft generation
 }
 ```
 
@@ -32,7 +33,7 @@ interface ImposeInput {
 ```typescript
 interface ImposeOutput {
   bufferId: string;
-  action: string;                  // IntentKind or 'update_draft_failed'
+  action: string;                  // IntentKind or 'category_required'
   latestDraftVersionId?: string;   // present when action is 'update_draft'
 }
 ```
@@ -101,7 +102,7 @@ interface BufferWorkspace {
     bufferId: string;
     rawUtterance: string;
     intent: {
-      kind: IntentKind;
+      kind: 'append_thought' | 'delete_thought' | 'reorder_thoughts' | 'update_draft' | 'fallback_append';
       payload: Record<string, unknown>;
       fallbackReason?: string;
     };
@@ -117,11 +118,69 @@ interface BufferWorkspace {
   }>;
   state: {
     thoughts: Array<{ id: string; text: string; addedAt: string }>;
-    writingSamples: string[];
-    styleInstructions: string | null;
-    audience: string | null;
-    contentGoal: string | null;
   } | null;
+}
+```
+
+### Get Writing Config
+
+**Endpoint:** `GET /hellscript/writing-config`
+
+**When to use:** When you need to retrieve the user's style instructions across all categories.
+
+**Output Schema:**
+
+```typescript
+interface WritingStyleConfig {
+  threads: string | null;
+  linkedin: string | null;
+  general: string | null;
+  updatedAt: string;
+}
+```
+
+### Update Style Instructions
+
+**Endpoint:** `PUT /hellscript/writing-config/:category/style`
+
+**When to use:** When setting or updating style instructions for a specific writing category.
+
+**Input Schema:**
+
+```typescript
+interface StyleInput {
+  text: string;  // 1-5000 chars
+}
+```
+
+### Manage Writing Samples
+
+**Endpoints:**
+
+- `GET /hellscript/writing-config/:category/samples` — list samples
+- `POST /hellscript/writing-config/:category/samples` — create sample (max 5 per category)
+- `PUT /hellscript/writing-config/:category/samples/:sampleId` — update sample
+- `DELETE /hellscript/writing-config/:category/samples/:sampleId` — delete sample
+
+**Create/Update Input Schema:**
+
+```typescript
+interface SampleInput {
+  title: string;  // 1-200 chars
+  text: string;   // 1-10000 chars
+}
+```
+
+**Sample Output Schema:**
+
+```typescript
+interface WritingSample {
+  id: string;
+  category: 'threads' | 'linkedin' | 'general';
+  title: string;
+  text: string;
+  createdAt: string;
+  updatedAt: string;
 }
 ```
 
@@ -131,12 +190,15 @@ interface BufferWorkspace {
 
 - Send utterances longer than 10,000 characters
 - Access buffers belonging to other users (returns 404)
-- Assume draft generation always succeeds — check for `update_draft_failed` action
+- Create more than 5 writing samples per category (returns 409 CONFLICT)
+- Assume draft generation always succeeds — check for `category_required` and error responses
+- Use category values other than `threads`, `linkedin`, or `general`
 
 **Requires:**
 
 - Valid Bearer token (JWT) for all endpoints
 - Gemini 2.5 Flash API availability for intent interpretation and draft generation
+- A resolved category (from request body or LLM inference) for draft generation
 
 ## Usage Patterns
 
@@ -146,20 +208,28 @@ interface BufferWorkspace {
 1. POST /hellscript/impose with utterance only (no bufferId) to create buffer
 2. Save returned bufferId
 3. POST /hellscript/impose with bufferId + additional utterances
-4. Repeat step 3 to accumulate thoughts, samples, style, metadata
+4. Repeat step 3 to accumulate thoughts
 ```
 
-### Pattern 2: Generate and Iterate on Drafts
+### Pattern 2: Configure Writing Style
 
 ```
-1. POST /hellscript/impose with utterance like "write the draft"
-2. Check response action — if "update_draft", draft was created
-3. If "update_draft_failed", retry or add more thoughts first
+1. PUT /hellscript/writing-config/:category/style to set style instructions
+2. POST /hellscript/writing-config/:category/samples to add writing samples (up to 5)
+3. Repeat for each category you want to configure
+```
+
+### Pattern 3: Generate and Iterate on Drafts
+
+```
+1. POST /hellscript/impose with utterance like "write the draft" and category field
+2. If action is "category_required", re-send with category field
+3. If action is "update_draft", draft was created — latestDraftVersionId is returned
 4. GET /hellscript/buffers/:id to retrieve draft markdown
 5. Add more thoughts, then request another draft for next version
 ```
 
-### Pattern 3: Workspace Review
+### Pattern 4: Workspace Review
 
 ```
 1. GET /hellscript/buffers to list all user buffers
@@ -169,12 +239,13 @@ interface BufferWorkspace {
 
 ## Error Handling
 
-| Error Code | Meaning               | Recovery Action                          |
-| ---------- | --------------------- | ---------------------------------------- |
-| 400        | Invalid request body  | Check utterance length (1-10000 chars)   |
-| 401        | Unauthorized          | Refresh Bearer token                     |
-| 404        | Buffer not found      | Verify buffer ID and ownership           |
-| 500        | Internal server error | Retry with backoff                       |
+| Error Code | Meaning                 | Recovery Action                              |
+| ---------- | ----------------------- | -------------------------------------------- |
+| 400        | Invalid request body    | Check utterance length, category validity    |
+| 401        | Unauthorized            | Refresh Bearer token                         |
+| 404        | Buffer/sample not found | Verify ID and ownership                      |
+| 409        | Max samples exceeded    | Delete an existing sample before creating    |
+| 500        | Internal server error   | Retry with backoff                           |
 
 ## Events Published
 
@@ -182,8 +253,8 @@ None. Hellscript Agent does not publish Pub/Sub events.
 
 ## Dependencies
 
-| Service          | Why Needed                            | Failure Behavior                               |
-| ---------------- | ------------------------------------- | ---------------------------------------------- |
-| Firestore        | Buffer, event, and draft persistence  | Request fails with 500                         |
-| Gemini 2.5 Flash | Intent interpretation                 | Falls back to `fallback_append`                |
-| Gemini 2.5 Flash | Draft generation                      | Returns `update_draft_failed`; state preserved |
+| Service          | Why Needed                           | Failure Behavior                               |
+| ---------------- | ------------------------------------ | ---------------------------------------------- |
+| Firestore        | Buffer, event, draft, config storage | Request fails with 500                         |
+| Gemini 2.5 Flash | Intent interpretation                | Falls back to `fallback_append`                |
+| Gemini 2.5 Flash | Draft generation                     | Returns `DraftGenerationError`; no draft saved |

@@ -117,7 +117,7 @@ interface Command {
 
 interface CommandClassification {
   type: 'todo' | 'research' | 'note' | 'link' | 'calendar' | 'reminder' | 'linear' | 'code';
-  confidence: number;     // 0--1
+  confidence: number;     // 0–1
   reasoning: string;
   promptVersion: string;  // semver
   classifiedAt: string;

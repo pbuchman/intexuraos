@@ -8217,7 +8217,10 @@ describe('TaskDispatcher', () => {
       task.status = 'completed';
       await statePersistence.save(state);
 
-      const result = await dispatcher.sendMessage('msg-ask-agent-resume', 'What about the filter counts?');
+      const result = await dispatcher.sendMessage(
+        'msg-ask-agent-resume',
+        'What about the filter counts?'
+      );
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value).toEqual({ action: 'resumed' });

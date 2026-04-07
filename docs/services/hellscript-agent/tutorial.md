@@ -1,8 +1,8 @@
 # Hellscript Agent — Tutorial
 
-> **Time:** 15-20 minutes
+> **Time:** 20-25 minutes
 > **Prerequisites:** Node.js 20+, GCP project access, valid JWT token
-> **You'll learn:** How to create a writing buffer, impose thoughts, and generate drafts
+> **You'll learn:** How to create a writing buffer, impose thoughts, configure writing style per platform, and generate categorized drafts
 
 ---
 
@@ -11,8 +11,9 @@
 A working integration that:
 
 - Creates a new writing buffer by sending the first utterance
-- Accumulates thoughts, writing samples, and style preferences
-- Generates a versioned markdown draft from accumulated state
+- Accumulates thoughts through multiple impose operations
+- Configures platform-specific style instructions and writing samples
+- Generates versioned markdown drafts with category-aware styling
 - Retrieves the full buffer workspace
 
 ---
@@ -81,7 +82,7 @@ curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscr
   }"
 ```
 
-### Step 2.2: Set Style Preferences
+### Step 2.2: Add a Third Thought
 
 ```bash
 curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscript/impose \
@@ -89,23 +90,9 @@ curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscr
   -H "Content-Type: application/json" \
   -d "{
     \"bufferId\": \"$BUFFER_ID\",
-    \"utterance\": \"Write in a technical but accessible tone, aimed at senior engineers\"
+    \"utterance\": \"The migration took only two sprints thanks to the adapter pattern\"
   }"
 ```
-
-**Expected response:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "bufferId": "abc123...",
-    "action": "set_style_instructions"
-  }
-}
-```
-
-Notice the action changed to `set_style_instructions` — the LLM recognized this as a style directive rather than a content thought.
 
 ### Step 2.3: Check Your Buffer
 
@@ -114,13 +101,80 @@ curl https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscript/buff
   -H "Authorization: Bearer $TOKEN"
 ```
 
-**Checkpoint:** The response should contain your buffer with `eventCount: 3`, a list of events, and a `state` object showing your thoughts and style instructions.
+**Checkpoint:** The response should contain your buffer with `eventCount: 3`, a list of events, and a `state` object showing your three thoughts.
 
 ---
 
-## Part 3: Generate a Draft (5 minutes)
+## Part 3: Configure Writing Style (5 minutes)
 
-### Step 3.1: Request a Draft
+Before generating a draft, set up platform-specific writing preferences.
+
+### Step 3.1: Set LinkedIn Style Instructions
+
+```bash
+curl -X PUT https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscript/writing-config/linkedin/style \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Professional but conversational tone. Use clear section headers. Target 800-1200 words. Include a hook in the first paragraph."
+  }'
+```
+
+**Expected response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "updated": true
+  }
+}
+```
+
+### Step 3.2: Add a Writing Sample
+
+Upload a sample that represents your desired writing voice:
+
+```bash
+curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscript/writing-config/linkedin/samples \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Previous architecture post",
+    "text": "Last year we migrated our monolith to event-driven microservices. Here is what we learned, and why most migration guides get it wrong.\n\nThe conventional wisdom says start with the edges. We started with the core — and it worked better."
+  }'
+```
+
+**Expected response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "sample-uuid...",
+    "category": "linkedin",
+    "title": "Previous architecture post",
+    "text": "...",
+    "createdAt": "...",
+    "updatedAt": "..."
+  }
+}
+```
+
+### Step 3.3: Verify Your Configuration
+
+```bash
+curl https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscript/writing-config \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+**Checkpoint:** The response shows your LinkedIn style instructions. The `threads` and `general` fields are `null` since you have not configured them.
+
+---
+
+## Part 4: Generate a Draft (5 minutes)
+
+### Step 4.1: Request a LinkedIn Draft
 
 ```bash
 curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscript/impose \
@@ -128,7 +182,8 @@ curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscr
   -H "Content-Type: application/json" \
   -d "{
     \"bufferId\": \"$BUFFER_ID\",
-    \"utterance\": \"Write the draft now\"
+    \"utterance\": \"Write the draft\",
+    \"category\": \"linkedin\"
   }"
 ```
 
@@ -145,7 +200,23 @@ curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscr
 }
 ```
 
-### Step 3.2: View the Draft
+### What If Category Is Missing?
+
+If you request a draft without specifying a category and the LLM cannot infer one from your utterance, you get:
+
+```json
+{
+  "success": true,
+  "data": {
+    "bufferId": "abc123...",
+    "action": "category_required"
+  }
+}
+```
+
+Re-send the impose with the `category` field to resolve this.
+
+### Step 4.2: View the Draft
 
 Retrieve the workspace to see your generated draft:
 
@@ -154,9 +225,9 @@ curl https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscript/buff
   -H "Authorization: Bearer $TOKEN"
 ```
 
-The `draftVersions` array now contains version 1 with the generated markdown.
+The `draftVersions` array now contains version 1 with the generated markdown, styled according to your LinkedIn configuration.
 
-### Step 3.3: Iterate
+### Step 4.3: Iterate
 
 Add another thought and request a new draft — the agent generates version 2, incorporating the new material while building on the previous draft:
 
@@ -166,7 +237,7 @@ curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscr
   -H "Content-Type: application/json" \
   -d "{
     \"bufferId\": \"$BUFFER_ID\",
-    \"utterance\": \"Also mention that the migration took only two sprints\"
+    \"utterance\": \"Also emphasize that we achieved zero downtime during the migration\"
   }"
 
 curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscript/impose \
@@ -174,7 +245,8 @@ curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscr
   -H "Content-Type: application/json" \
   -d "{
     \"bufferId\": \"$BUFFER_ID\",
-    \"utterance\": \"Update the draft\"
+    \"utterance\": \"Update the draft\",
+    \"category\": \"linkedin\"
   }"
 ```
 
@@ -182,46 +254,62 @@ curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscr
 
 ---
 
-## Part 4: List Your Buffers (2 minutes)
+## Part 5: Handle Errors (3 minutes)
 
-```bash
-curl https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscript/buffers \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-**Expected response:**
+### Common Error: Invalid Category
 
 ```json
 {
-  "success": true,
-  "data": [
-    {
-      "id": "abc123...",
-      "userId": "user-xyz",
-      "title": "The key insight is that event sourcing decouples reads from writ...",
-      "eventCount": 6,
-      "latestDraftVersionNumber": 2,
-      "latestDraftVersionId": "draft789...",
-      "createdAt": "2026-03-22T10:00:00.000Z",
-      "updatedAt": "2026-03-22T10:05:00.000Z"
-    }
-  ]
+  "success": false,
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Invalid category. Must be threads, linkedin, or general."
+  }
 }
 ```
 
-Notice the title was automatically derived from your first thought.
+**Solution:** Use one of the three valid categories: `threads`, `linkedin`, or `general`.
+
+### Common Error: Max Samples Exceeded
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "CONFLICT",
+    "message": "Maximum 5 samples per category reached"
+  }
+}
+```
+
+**Solution:** Delete an existing sample before creating a new one.
+
+### Common Error: Buffer Not Found
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Buffer not found"
+  }
+}
+```
+
+**Solution:** Verify the buffer ID is correct and belongs to your authenticated user.
 
 ---
 
 ## Troubleshooting
 
-| Problem                          | Solution                                                           |
-| -------------------------------- | ------------------------------------------------------------------ |
-| `401 Unauthorized`               | Check your Bearer token is valid and not expired                   |
-| `404 Buffer not found`           | Verify the buffer ID is correct and belongs to your user           |
-| `action: "update_draft_failed"`  | Draft generation LLM call failed; your thoughts are still saved    |
-| `action: "fallback_append"`      | The LLM could not interpret intent; utterance was saved as thought |
-| `500 Internal Error`             | Check service health at `/health`; retry with backoff              |
+| Problem                         | Solution                                                           |
+| ------------------------------- | ------------------------------------------------------------------ |
+| `401 Unauthorized`              | Check your Bearer token is valid and not expired                   |
+| `404 Buffer not found`          | Verify the buffer ID is correct and belongs to your user           |
+| `action: "category_required"`   | Re-send the impose with a `category` field                         |
+| `action: "fallback_append"`     | The LLM could not interpret intent; utterance was saved as thought |
+| `CONFLICT` on sample creation   | Delete an existing sample first (max 5 per category)               |
+| `500 Internal Error`            | Check service health at `/health`; retry with backoff              |
 
 ---
 
@@ -231,7 +319,8 @@ Now that you understand the basics:
 
 1. Explore the web UI at `/#/hellscript` for a conversational interface with timeline and draft pane
 2. Read the [Technical Reference](technical.md) for full API and domain model details
-3. Try providing writing samples to influence draft style
+3. Configure different styles for Threads vs LinkedIn and compare the draft output
+4. Try managing writing samples — create, update, and delete to refine your voice
 
 ---
 
@@ -239,21 +328,21 @@ Now that you understand the basics:
 
 Test your understanding:
 
-1. **Easy:** Create a buffer, add 3 thoughts, and list your buffers to verify
-2. **Medium:** Set metadata (audience and content goal) before generating a draft — observe how the draft content changes
-3. **Hard:** Build a buffer with a writing sample, style instructions, audience, content goal, and 5 thoughts, then generate two draft versions and compare them
+1. **Easy:** Create a buffer with 3 thoughts, then list your buffers to verify the title was auto-derived from the first thought
+2. **Medium:** Configure style instructions for two different categories (e.g., linkedin and threads), then generate a draft for each from the same buffer and compare the output
+3. **Hard:** Build a complete writing workflow — create a buffer, add 5 thoughts, configure style instructions and 2 writing samples for a category, generate a draft, add another thought, generate a second draft, then retrieve the workspace and compare both versions
 
 <details>
 <summary>Solutions</summary>
 
-### Exercise 1: Three Thoughts
+### Exercise 1: Three Thoughts and List
 
 ```bash
 # First thought creates the buffer
 RESPONSE=$(curl -s -X POST .../hellscript/impose \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"utterance": "First idea"}')
+  -d '{"utterance": "Remote work increases productivity for deep tasks"}')
 
 BUFFER_ID=$(echo $RESPONSE | jq -r '.data.bufferId')
 
@@ -261,38 +350,50 @@ BUFFER_ID=$(echo $RESPONSE | jq -r '.data.bufferId')
 curl -s -X POST .../hellscript/impose \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"bufferId\": \"$BUFFER_ID\", \"utterance\": \"Second idea\"}"
+  -d "{\"bufferId\": \"$BUFFER_ID\", \"utterance\": \"But collaboration suffers without intentional rituals\"}"
 
 curl -s -X POST .../hellscript/impose \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"bufferId\": \"$BUFFER_ID\", \"utterance\": \"Third idea\"}"
+  -d "{\"bufferId\": \"$BUFFER_ID\", \"utterance\": \"The hybrid model is the pragmatic middle ground\"}"
 
-# Verify
-curl -s .../hellscript/buffers -H "Authorization: Bearer $TOKEN" | jq
+# Verify — title should be "Remote work increases productivity for deep tasks"
+curl -s .../hellscript/buffers -H "Authorization: Bearer $TOKEN" | jq '.data[0].title'
 ```
 
-### Exercise 2: Metadata Before Draft
+### Exercise 2: Cross-Category Drafts
 
 ```bash
-curl -s -X POST .../hellscript/impose \
+# Set LinkedIn style
+curl -s -X PUT .../hellscript/writing-config/linkedin/style \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"bufferId\": \"$BUFFER_ID\", \"utterance\": \"The audience is junior developers\"}"
+  -d '{"text": "Professional, detailed, 1000+ words with section headers"}'
 
-curl -s -X POST .../hellscript/impose \
+# Set Threads style
+curl -s -X PUT .../hellscript/writing-config/threads/style \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"bufferId\": \"$BUFFER_ID\", \"utterance\": \"The goal is a getting-started tutorial\"}"
+  -d '{"text": "Punchy, opinionated, under 500 characters, no headers"}'
 
+# Generate LinkedIn draft
 curl -s -X POST .../hellscript/impose \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"bufferId\": \"$BUFFER_ID\", \"utterance\": \"Write the draft\"}"
+  -d "{\"bufferId\": \"$BUFFER_ID\", \"utterance\": \"Write the draft\", \"category\": \"linkedin\"}"
+
+# Generate Threads draft
+curl -s -X POST .../hellscript/impose \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"bufferId\": \"$BUFFER_ID\", \"utterance\": \"Write the draft\", \"category\": \"threads\"}"
+
+# Compare in workspace
+curl -s .../hellscript/buffers/$BUFFER_ID -H "Authorization: Bearer $TOKEN" | jq '.data.draftVersions'
 ```
 
-### Exercise 3: Full Buffer
+### Exercise 3: Complete Workflow
 
-Build up incrementally using the impose endpoint with different utterance types, then request `update_draft` twice. Compare `draftVersions[0].markdown` with `draftVersions[1].markdown` in the workspace response.
+Build up incrementally: create buffer with 5 impose calls, configure style via PUT to `/writing-config/:category/style`, add 2 samples via POST to `/writing-config/:category/samples`, generate draft twice with the same category, then retrieve the workspace and compare `draftVersions[0].markdown` with `draftVersions[1].markdown`.
 
 </details>

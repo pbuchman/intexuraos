@@ -84,23 +84,23 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Hash       | Description                                                       | Date       |
-| ---------- | ----------------------------------------------------------------- | ---------- |
-| `47b1b9e9` | Remove redundant "Say yes to confirm" from system prompt          | 2026-03-17 |
-| `c4e3a13c` | Release v3.3.0                                                    | 2026-03-15 |
-| `cea26781` | Add tests for v8-ignore blocks in generateResponse and chatClient | 2026-03-13 |
-| `93aeac4a` | Remove ZAI provider and GLM-4.7 models, finalize GLM-5            | 2026-03-12 |
-| `78228bcf` | Migrate GLM worker from Z.ai to DashScope                         | 2026-03-12 |
-| `44ea683a` | Release v3.2.0                                                    | 2026-03-07 |
-| `99febe66` | Wire GitHub OAuth integration, update cross-service mocks         | 2026-03-02 |
-| `b3f34d85` | Release v3.1.0                                                    | 2026-02-22 |
-| `c8a42105` | Release v3.0.0                                                    | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability                   | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration                               | 2026-02-16 |
-| `e60eafc1` | Standardize API key secrets to APP naming convention              | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + Gemini fallback          | 2026-02-15 |
-| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local            | 2026-02-14 |
-| `0f69a74b` | Add default model selector with platform fallback                 | 2026-02-09 |
+| Hash       | Description                                                               | Date       |
+| ---------- | ------------------------------------------------------------------------- | ---------- |
+| `287db2b6` | Add getUserTimezone stub to FakeUserServiceClient (interface conformance) | 2026-03-27 |
+| `47b1b9e9` | Remove redundant "Say yes to confirm" from system prompt                  | 2026-03-17 |
+| `c4e3a13c` | Release v3.3.0                                                            | 2026-03-15 |
+| `cea26781` | Add tests for v8-ignore blocks in generateResponse and chatClient         | 2026-03-13 |
+| `93aeac4a` | Remove ZAI provider and GLM-4.7 models, finalize GLM-5                    | 2026-03-12 |
+| `78228bcf` | Migrate GLM worker from Z.ai to DashScope                                 | 2026-03-12 |
+| `44ea683a` | Release v3.2.0                                                            | 2026-03-07 |
+| `99febe66` | Wire GitHub OAuth integration, update cross-service mocks                 | 2026-03-02 |
+| `b3f34d85` | Release v3.1.0                                                            | 2026-02-22 |
+| `c8a42105` | Release v3.0.0                                                            | 2026-02-19 |
+| `6063175b` | Add dev-mode log formatting for PM2 readability                           | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration                                       | 2026-02-16 |
+| `e60eafc1` | Standardize API key secrets to APP naming convention                      | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + Gemini fallback                  | 2026-02-15 |
+| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local                    | 2026-02-14 |
 
 ## API Endpoints
 

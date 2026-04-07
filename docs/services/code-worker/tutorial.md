@@ -1,10 +1,10 @@
-# Code Worker - Tutorial
+# Code Worker — Tutorial
 
 Getting started with building, testing, and running the code-worker container image.
 
 > **Time:** 30-45 minutes
 > **Prerequisites:** Docker Desktop (or Docker Engine on Linux), access to IntexuraOS repo, `gcloud` CLI authenticated
-> **You'll learn:** How to build, run, test, and debug code-worker containers
+> **You'll learn:** How to build, run, test, and debug code-worker containers with both Claude and Codex runtimes
 
 ---
 
@@ -44,7 +44,7 @@ This pushes a multi-arch manifest (amd64 + arm64) so the image runs natively on 
 
 ## Part 2: Build the Test Image (3 minutes)
 
-The test image replaces the real Claude CLI with a bash stub for E2E testing without API calls.
+The test image replaces the real Claude and Codex CLIs with bash stubs for E2E testing without API calls.
 
 ```bash
 docker build \
@@ -81,7 +81,7 @@ code-worker-net: 172.28.0.0/16
 
 ## Part 4: Run a Container Manually (Legacy Mode) (10 minutes)
 
-For one-shot execution, run Claude once and exit:
+For one-shot execution, run the selected runtime once and exit:
 
 ### Step 4.1: Prepare a test repository
 
@@ -100,7 +100,7 @@ echo "You are a helpful coding assistant." > /tmp/test-secrets/system-prompt.txt
 echo "List the files in the repository." > /tmp/test-secrets/user-prompt.txt
 ```
 
-### Step 4.3: Run the container
+### Step 4.3: Run with Claude runtime (default)
 
 ```bash
 docker run -it --rm \
@@ -109,6 +109,7 @@ docker run -it --rm \
   --memory 8g \
   --cpus 4 \
   -e TASK_ID=manual-test \
+  -e WORKER_RUNTIME=claude \
   -e ANTHROPIC_API_KEY=your-api-key \
   -e ANTHROPIC_BASE_URL=https://api.anthropic.com \
   -e LINEAR_API_KEY=your-linear-key \
@@ -127,7 +128,32 @@ docker run -it --rm \
   europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest
 ```
 
-**Expected startup output:**
+### Step 4.4: Run with Codex runtime
+
+```bash
+docker run -it --rm \
+  --name code-worker-codex \
+  --network code-worker-net \
+  --memory 8g \
+  --cpus 4 \
+  -e TASK_ID=codex-test \
+  -e WORKER_RUNTIME=codex \
+  -e CODEX_REASONING_EFFORT=xhigh \
+  -e GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json \
+  -e GIT_USER_NAME="Test User" \
+  -e GIT_USER_EMAIL="test@example.com" \
+  -v /tmp/test-repo:/repo:rw \
+  -v /tmp/test-secrets:/secrets:ro \
+  --tmpfs /tmp:rw,noexec,nosuid,size=2g \
+  --tmpfs /home/claude:rw,noexec,nosuid,size=500m,uid=1001,gid=1001 \
+  --cap-drop ALL \
+  --cap-add NET_RAW \
+  --security-opt no-new-privileges \
+  --user 1001:1001 \
+  europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest
+```
+
+**Expected startup output (both runtimes):**
 
 ```
 [entrypoint] Code worker starting at Thu Feb 19 12:00:00 UTC 2026
@@ -147,7 +173,15 @@ docker run -it --rm \
 [entrypoint] Dependencies installed
 [entrypoint] Attribution set: Crafted with love by ...
 [entrypoint] Writing readiness marker
-[entrypoint] Starting Claude...
+[entrypoint] Starting Claude in --print mode...
+```
+
+For Codex, the runtime-specific output includes:
+
+```
+[entrypoint] Codex runtime evidence: mode=fresh thread_id=absent reasoning_effort=xhigh
+[entrypoint] Starting Codex in exec mode...
+[entrypoint] Codex reasoning effort: xhigh
 ```
 
 ---
@@ -165,6 +199,7 @@ docker run -d \
   --memory 8g \
   --cpus 4 \
   -e TASK_ID=managed-test \
+  -e WORKER_RUNTIME=claude \
   -e ANTHROPIC_API_KEY=your-api-key \
   -e ANTHROPIC_BASE_URL=https://api.anthropic.com \
   -e WORKER_MANAGED_MODE=1 \
@@ -223,7 +258,7 @@ docker stop code-worker-managed && docker rm code-worker-managed
 
 ## Part 6: Enable Crash Forensics (5 minutes)
 
-To collect diagnostic data when Claude crashes:
+To collect diagnostic data when a runtime crashes:
 
 ### Step 6.1: Run with forensics enabled
 
@@ -236,6 +271,7 @@ docker run -d \
   --memory 8g \
   --cpus 4 \
   -e TASK_ID=forensics-test \
+  -e WORKER_RUNTIME=claude \
   -e ANTHROPIC_API_KEY=your-api-key \
   -e WORKER_MANAGED_MODE=1 \
   -e WORKER_FORENSICS=1 \
@@ -277,7 +313,7 @@ docker stop code-worker-forensics && docker rm code-worker-forensics
 
 ## Part 7: Run E2E Tests (5 minutes)
 
-The E2E test suite verifies container lifecycle, mount permissions, input/output, resource limits, timeout handling, and concurrency enforcement.
+The E2E test suite verifies container lifecycle, mount permissions, input/output, resource limits, timeout handling, and concurrency enforcement for both Claude and Codex runtimes.
 
 ### Step 7.1: Build the test image and create the network
 
@@ -294,20 +330,21 @@ WORKER_IMAGE=code-worker:test WORKER_NETWORK=code-worker-net pnpm --filter orche
 
 **Expected test suites:**
 
-| Suite               | Tests                                     |
-| ------------------- | ----------------------------------------- |
-| Container Lifecycle | Start, destroy, verify logs               |
-| Mount Verification  | /repo writable, /secrets read-only, git   |
-| Input/Output        | run-attempt, exit command, error command  |
-| Resource Limits     | Usage reporting, memory limit enforcement |
-| Timeout Handling    | Force kill after timeout                  |
-| Concurrency         | Max concurrent worker enforcement         |
+| Suite               | Tests                                               |
+| ------------------- | --------------------------------------------------- |
+| Container Lifecycle | Start, destroy, verify logs                         |
+| Mount Verification  | /repo writable, /secrets read-only, git             |
+| Input/Output        | run-attempt, exit command, error command            |
+| Resource Limits     | Usage reporting, memory limit enforcement           |
+| Timeout Handling    | Force kill after timeout                            |
+| Concurrency         | Max concurrent worker enforcement                   |
+| Codex Runtime       | Codex exec, resume, streaming, reasoning effort     |
 
 ---
 
-## Part 8: Using the Claude Stub (Reference)
+## Part 8: Using the CLI Stubs (Reference)
 
-The test stub at `test-fixtures/claude-stub.sh` supports these commands for E2E verification:
+### Claude Stub (`test-fixtures/claude-stub.sh`)
 
 | Command         | Behavior                                                  |
 | --------------- | --------------------------------------------------------- |
@@ -320,6 +357,17 @@ The test stub at `test-fixtures/claude-stub.sh` supports these commands for E2E 
 | Any other text  | Echoes "Acknowledged" + "Task completed successfully"     |
 
 The stub supports both interactive stdin mode and `--print` mode (reads from stdin redirect). It detects `--print` in its arguments to match the entrypoint's actual Claude invocation.
+
+### Codex Stub (`test-fixtures/codex-stub.sh`)
+
+| Input                   | Behavior                                          |
+| ----------------------- | ------------------------------------------------- |
+| `codex exec - < prompt` | Reads prompt from stdin, echoes completion        |
+| `codex exec resume`     | Accepts thread ID, simulates resumed session      |
+| `-c` flag               | Accepts and ignores reasoning effort config       |
+| `CODEX_STUB_EXIT_CODE`  | Set env var to control exit code (default 0)      |
+
+The stub streams output line-by-line to match real Codex behavior.
 
 ---
 
@@ -338,6 +386,8 @@ The stub supports both interactive stdin mode and `--print` mode (reads from std
 | Token not refreshing        | Stale GitHub token after 1 hour                            | Orchestrator's TokenRefresher must be running                |
 | run-attempt fails instantly | `[entrypoint] ERROR: Worker not ready`                     | Wait for `/tmp/worker-ready` before calling run-attempt      |
 | run-attempt prompt errors   | `[entrypoint] ERROR: /secrets/system-prompt.txt not found` | Write prompt files to secrets dir before calling run-attempt |
+| Codex resume fails          | `CODEX_THREAD_ID is required for resumed Codex attempts`   | Set `CODEX_THREAD_ID` env var when using `WORKER_CONTINUE=1` |
+| Unknown runtime             | `Unsupported worker runtime`                               | Set `WORKER_RUNTIME` to `claude` or `codex`                  |
 
 ---
 
@@ -353,7 +403,7 @@ The stub supports both interactive stdin mode and `--print` mode (reads from std
 
 1. **Easy:** Build the test image and run the `file-test` command to verify mount permissions
 2. **Medium:** Start a managed-mode container, run two consecutive attempts (second with `--continue`), and verify session continuity in the logs
-3. **Hard:** Enable forensics mode, trigger a simulated crash via the test stub's `error` command, and inspect the forensics output directory
+3. **Hard:** Start a managed-mode container with `WORKER_RUNTIME=codex`, run an attempt, then resume with `WORKER_CONTINUE=1` and a `CODEX_THREAD_ID`, verifying the Codex runtime evidence log lines
 
 <details>
 <summary>Solutions</summary>
@@ -381,12 +431,13 @@ docker run --rm \
 
 Expected: `/repo: WRITABLE`, `/secrets: READ-ONLY (good)`, `/tmp: WRITABLE`
 
-### Exercise 2: Session Continuity
+### Exercise 2: Session Continuity (Claude)
 
 ```bash
 # Start managed container (use test image)
 docker run -d --name continuity-test \
   -e TASK_ID=continuity -e WORKER_MANAGED_MODE=1 \
+  -e WORKER_RUNTIME=claude \
   -e GIT_USER_NAME="Test" -e GIT_USER_EMAIL="test@test.com" \
   -v /tmp/test-repo:/repo:rw -v /tmp/test-secrets:/secrets:ro \
   --tmpfs /tmp:rw,noexec,nosuid,size=100m \
@@ -410,30 +461,40 @@ docker logs continuity-test | grep "run-attempt\|Resuming"
 docker stop continuity-test && docker rm continuity-test
 ```
 
-### Exercise 3: Forensics
+### Exercise 3: Codex Runtime with Resume
 
 ```bash
-mkdir -p /tmp/forensics
-docker run -d --name forensics-test \
-  -e TASK_ID=forensics -e WORKER_MANAGED_MODE=1 \
-  -e WORKER_FORENSICS=1 -e WORKER_FORENSICS_DIR=/var/crash \
+# Start managed container with Codex runtime
+docker run -d --name codex-resume-test \
+  -e TASK_ID=codex-resume -e WORKER_MANAGED_MODE=1 \
+  -e WORKER_RUNTIME=codex \
   -e GIT_USER_NAME="Test" -e GIT_USER_EMAIL="test@test.com" \
   -v /tmp/test-repo:/repo:rw -v /tmp/test-secrets:/secrets:ro \
-  -v /tmp/forensics:/var/crash:rw \
   --tmpfs /tmp:rw,noexec,nosuid,size=100m \
   --tmpfs /home/claude:rw,noexec,nosuid,size=100m,uid=1001,gid=1001 \
   --user 1001:1001 code-worker:test
 
-until docker exec forensics-test test -f /tmp/worker-ready; do sleep 1; done
+# Wait for ready
+until docker exec codex-resume-test test -f /tmp/worker-ready; do sleep 1; done
 
-echo "error" > /tmp/test-secrets/user-prompt.txt
-docker exec forensics-test /entrypoint.sh run-attempt || true
+# First attempt
+echo "Implement a hello world function" > /tmp/test-secrets/user-prompt.txt
+docker exec codex-resume-test /entrypoint.sh run-attempt
 
-# Inspect forensics
-ls /tmp/forensics/attempt-*/
-cat /tmp/forensics/attempt-*/claude-exit-code.txt  # Should show "1"
+# Verify Codex evidence in logs
+docker logs codex-resume-test | grep "Codex runtime evidence"
+# Expected: mode=fresh thread_id=absent reasoning_effort=default
 
-docker stop forensics-test && docker rm forensics-test
+# Resume with thread ID
+echo "Add tests for the function" > /tmp/test-secrets/user-prompt.txt
+docker exec -e WORKER_CONTINUE=1 -e CODEX_THREAD_ID=thread_abc123 \
+  codex-resume-test /entrypoint.sh run-attempt
+
+# Verify resume evidence
+docker logs codex-resume-test | grep "Codex runtime evidence"
+# Expected: mode=resume thread_id=present reasoning_effort=default
+
+docker stop codex-resume-test && docker rm codex-resume-test
 ```
 
 </details>

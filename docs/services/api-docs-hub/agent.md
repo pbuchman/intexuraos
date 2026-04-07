@@ -9,7 +9,7 @@
 | **Name**    | api-docs-hub                                                            |
 | **Role**    | Aggregates OpenAPI specs from 20 services into a single Swagger UI      |
 | **Goal**    | Provide a unified documentation portal for all IntexuraOS service APIs  |
-| **Version** | 3.4.0 (package) / 0.0.5 (OpenAPI spec)                                  |
+| **Version** | 3.5.0 (package) / 0.0.5 (OpenAPI spec)                                  |
 
 ---
 
@@ -155,7 +155,7 @@ To programmatically access a service's OpenAPI spec, bypass the hub entirely and
 | Dependency                    | Why Needed                     | Failure Behavior          |
 | ----------------------------- | ------------------------------ | ------------------------- |
 | `@fastify/swagger-ui`         | Serves Swagger UI interface    | Service cannot start      |
-| `@intexuraos/common-core`     | Shared internal API catalog    | Build fails               |
+| `@intexuraos/common-http`     | Fastify plugin and logging     | Service cannot start      |
 | `@intexuraos/infra-sentry`    | Error tracking and log streams | Degrades gracefully       |
 | `@intexuraos/infra-otel`      | Dash0 log forwarding           | Optional; no-op if absent |
 
@@ -172,4 +172,4 @@ The hub serves Swagger UI HTML to the browser. The browser then fetches OpenAPI 
 
 ---
 
-**Last updated:** 2026-03-22
+**Last updated:** 2026-04-07

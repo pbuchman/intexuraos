@@ -1,7 +1,7 @@
 # VM Lifecycle Worker — Technical Debt
 
-**Last Updated:** 2026-03-07
-**Analysis Run:** [2026-03-07 entry](../../documentation-runs.md)
+**Last Updated:** 2026-04-07
+**Analysis Run:** [2026-04-07 entry](../../documentation-runs.md)
 
 ---
 

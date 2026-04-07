@@ -1,4 +1,4 @@
-# app-settings-service -- Agent Interface
+# app-settings-service — Agent Interface
 
 > Machine-readable specification for AI agent integration
 
@@ -184,7 +184,7 @@ interface CallTypeCost {
     "totalInputTokens": 1450000,
     "totalOutputTokens": 320000,
     "monthlyBreakdown": [
-      { "month": "2026-02", "costUsd": 5.20, "calls": 60, "inputTokens": 620000, "outputTokens": 140000, "percentage": 42 }
+      { "month": "2026-04", "costUsd": 5.20, "calls": 60, "inputTokens": 620000, "outputTokens": 140000, "percentage": 42 }
     ],
     "byModel": [
       { "model": "gemini-2.5-flash", "costUsd": 8.10, "calls": 95, "percentage": 65 }
@@ -246,7 +246,7 @@ interface CallTypeCost {
 | ---------- | -------------------------- | ---------------------------------------------------- |
 | 400        | Invalid days parameter     | Use integer between 1 and 365                        |
 | 401        | Unauthorized               | Refresh Bearer token or check internal auth header   |
-| 500        | Missing provider pricing   | Contact admin -- Firestore pricing migration needed  |
+| 500        | Missing provider pricing   | Contact admin — Firestore pricing migration needed   |
 
 ## Dependencies
 
@@ -265,4 +265,4 @@ interface CallTypeCost {
 
 ---
 
-**Last updated:** 2026-02-22
+**Last updated:** 2026-04-07

@@ -6,11 +6,11 @@
 
 ## Identity
 
-| Field    | Value                                                                                                                  |
-| -------- | ---------------------------------------------------------------------------------------------------------------------- |
-| **Name** | orchestrator                                                                                                           |
-| **Role** | Code Task Orchestration Engine                                                                                         |
-| **Goal** | Receive code tasks from code-agent, execute them in isolated Docker containers, and report results via signed webhooks |
+| Field    | Value                                                                                                                                      |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Name** | orchestrator                                                                                                                               |
+| **Role** | Code Task Orchestration Engine                                                                                                             |
+| **Goal** | Receive code tasks from code-agent, execute them in isolated Docker containers via Claude or Codex, and report results via signed webhooks |
 
 ---
 
@@ -23,7 +23,7 @@ interface OrchestratorTools {
   // Submit a new code task for execution
   submitTask(params: {
     taskId: string;
-    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi' | 'codex';
+    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi' | 'codex' | 'codex-xhigh' | 'openrouter-free';
     prompt: string;
     repository?: string;
     baseBranch?: string;
@@ -31,8 +31,10 @@ interface OrchestratorTools {
     linearIssueTitle?: string;
     linearIssueLabels: string[];
     hasChildren: boolean;
-    agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+    agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent';
+    executionMemoryContext?: ExecutionMemoryPromptContext;
     trackingCommentId?: string;
+    prNumber?: number;
     continuationPrNumber?: number;
     continuationPrBranch?: string;
     reviewTypes?: ('code_quality' | 'security' | 'architecture' | 'plan_review')[];
@@ -42,7 +44,7 @@ interface OrchestratorTools {
     actionId?: string;
   }): Promise<{ taskId: string; status: 'accepted' }>;
   // Auth: HMAC-signed (X-Dispatch-Timestamp + X-Dispatch-Nonce + X-Dispatch-Signature)
-  // Errors: 400 (validation), 401 (auth), 503 (at capacity or docker unavailable)
+  // Errors: 400 (validation), 401 (auth), 503 (at capacity, docker unavailable, or auth unavailable)
 
   // Get current task status
   getTask(params: { taskId: string }): Promise<Task | null>;
@@ -57,22 +59,18 @@ interface OrchestratorTools {
   // Send a follow-up message to a task
   // - Running task: message is queued and delivered when the current attempt finishes
   // - Completed/failed/interrupted task: task is resumed with a new worker session
+  // - Review/remediation tasks: rejected with 409
+  // - Ask agent tasks: message delivered directly without resume preamble
   sendMessage(params: {
     taskId: string;
     message: string; // max 20000 chars
   }): Promise<SendMessageResult>;
   // Auth: HMAC-signed
-  // Errors: 400 (validation), 404 (not found), 409 (invalid status, e.g. cancelled)
+  // Errors: 400 (validation), 404 (not found), 409 (invalid status or agent type)
 
   // Check service health and capacity
   getHealth(): Promise<{
-    status:
-      | 'ready'
-      | 'initializing'
-      | 'recovering'
-      | 'degraded'
-      | 'auth_degraded'
-      | 'shutting_down';
+    status: 'ready' | 'initializing' | 'recovering' | 'degraded' | 'auth_degraded' | 'shutting_down';
     capacity: number;
     running: number;
     available: number;
@@ -127,7 +125,9 @@ interface OrchestratorResources {
 ```typescript
 interface Task {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi' | 'codex';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi' | 'codex' | 'codex-xhigh' | 'openrouter-free';
+  runtime?: 'claude' | 'codex';
+  runtimeSessionId?: string;
   prompt: string;
   repository: string;
   baseBranch: string;
@@ -140,8 +140,10 @@ interface Task {
   webhookSecret: string;
   actionId?: string;
   retriedFrom?: string;
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent';
+  executionMemoryContext?: ExecutionMemoryPromptContext;
   trackingCommentId?: string;
+  prNumber?: number;
   continuationPrNumber?: number;
   continuationPrBranch?: string;
   reviewTypes?: ('code_quality' | 'security' | 'architecture' | 'plan_review')[];
@@ -173,6 +175,28 @@ interface PendingResumeStart {
 }
 ```
 
+### ExecutionMemoryPromptContext
+
+```typescript
+interface ExecutionMemoryPromptContext {
+  applicationId: string;
+  retrievalVersion: string;
+  querySummary: string;
+  matchedMemories: ExecutionMemoryPromptMemory[];
+}
+
+interface ExecutionMemoryPromptMemory {
+  memoryId: string;
+  title: string;
+  memoryType: 'implementation_pattern' | 'verification_pattern' | 'pitfall_pattern' | 'decomposition_pattern' | 'planning_decision' | 'review_finding';
+  score: number;
+  appliesWhen: string;
+  action: string;
+  avoid: string;
+  verification: string;
+}
+```
+
 ### SendMessageResult
 
 ```typescript
@@ -197,16 +221,26 @@ interface TaskResult {
   planning_superpowers_writing_plans_used?: '0' | '1';
   planning_linear_url?: string;
   planning_is_complex?: '0' | '1';
+  planning_has_plan_doc?: '0' | '1';
   planning_subtask_urls?: string;
   planning_pr_url?: string;
   planning_unclear_clarification?: string;
   execution_outcome_label?: 'implemented' | 'already_completed';
-  execution_superpowers_executing_plans_used?: '0' | '1';
+  execution_superpowers_subagent_driven_dev_used?: '0' | '1';
   execution_superpowers_requesting_code_review_used?: '0' | '1';
+  execution_memory_ids_used?: string;
+  execution_memory_ids_rejected?: string;
+  execution_memory_usage_summary?: string;
   execution_linear_issue_url?: string;
   review_comments_posted?: string;
+  review_id?: string;
   review_types?: string;
   requirements_tracker_updated?: string;
+  gh_actions_status?: string;
+  needs_remediation?: string;
+  review_body?: string;
+  review_inline_comments?: string;
+  requires_re_review?: string;
   rebaseResult?: {
     attempted: boolean;
     success: boolean;
@@ -246,14 +280,17 @@ Planning Agent note:
 
 - `planned` outcome is sent as `status='completed'`
 - `unclear` outcome is sent as `status='failed'` with `error.code='PLANNING_AGENT_UNCLEAR'`
+- All planned outcomes (including SIMPLE tasks) require an evidence PR
 - Deterministic Linear label/state/comment normalization is performed by `code-agent`, not orchestrator
 
 Execution Agent note:
 
 - `implemented` is sent as `status='completed'`
 - `already_completed` is sent as `status='completed'` with `execution_outcome_label='already_completed'`
+- All execution outcomes require `gh_pr_url` evidence
 - Orchestrator verification is Gemini semantic validation of worker responses (latest response first)
 - Orchestrator flattens execution verifier metadata into `execution_*` fields on `result`
+- Memory usage is reported via `execution_memory_ids_used`, `execution_memory_ids_rejected`, `execution_memory_usage_summary`
 - Worker owns GitHub execution (code/tests/CI/PR/review loop); PR descriptions include mandatory `Worker Type` and `Model` lines
 - `code-agent` owns deterministic Linear enforcement for successful execution callbacks (executed issue only)
 
@@ -264,6 +301,20 @@ Review Agent note:
 - Review Agent does not push code changes — read-only PR review only
 - `reviewTypes` controls which review scopes are included: `code_quality`, `security`, `architecture`, `plan_review`
 - `plan_review` mode cross-references implementation against the original plan document
+- `needs_remediation` signals whether a Remediation Agent should be dispatched
+
+Remediation Agent note:
+
+- Works on existing PR branch — implements fixes for review findings
+- `requires_re_review` signals whether the changes warrant another review pass
+- Messages via `sendMessage()` are rejected with `409`
+
+Ask Agent note:
+
+- No PR creation, no Linear issue management
+- Messages delivered directly without resume preamble
+- Completion contract is lighter — no PR URL or outcome label required
+- `AskUserQuestion` tool is prohibited in the prompt
 
 ### TurnMetrics (sent to code-agent after task completion)
 
@@ -303,6 +354,39 @@ type WorkerAuthState = {
   lastRefreshAt?: string;
   subscriptionType?: string;
 };
+```
+
+### AgentComplianceReport (posted on PR)
+
+```typescript
+interface AgentComplianceReport {
+  claimVerification: {
+    ciTrackedCalled: { called: boolean; exitCode: number; msgRef: string };
+    prCreated: { created: boolean; url: string; msgRef: string };
+    commitCount: number;
+    summaryAccurate: boolean;
+    summaryContradictions: string[];
+  };
+  contractCompliance: {
+    subagentDrivenDevInvoked: { invoked: boolean; msgRef: string };
+    requestingCodeReviewInvoked: { invoked: boolean; msgRef: string };
+    codeReviewerDispatched: { dispatched: boolean; msgRef: string };
+    correctOrder: boolean;
+    skillViolations: string[];
+  };
+  anomalies: Array<{
+    type: 'fabrication' | 'hallucination' | 'protocol_violation' | 'other';
+    severity: 'critical' | 'warning' | 'minor' | 'pass';
+    msgRef: string;
+    description: string;
+  }>;
+  executionMetrics: {
+    totalMessages: number;
+    hookViolationCount: number;
+    toolErrorCount: number;
+    subagentDispatchCount: number;
+  };
+}
 ```
 
 ---
@@ -374,30 +458,32 @@ Headers: X-Request-Timestamp, X-Request-Signature, X-Internal-Auth
 ### Task Submission
 
 1. Check Docker health gate — reject with `503` if unhealthy
-2. Validate request body against Zod schema
-3. Check capacity (atomic via mutex)
-4. Return `202 Accepted` immediately (async execution)
-5. If at capacity, return `503 Service Unavailable`
+2. Check worker auth availability for target runtime — reject with `503` if not ready
+3. Validate request body against Zod schema
+4. Check capacity (atomic via mutex)
+5. Return `202 Accepted` immediately (async execution)
+6. If at capacity, return `503 Service Unavailable`
 
 ### Task Execution Flow
 
 1. Create git worktree from `origin/{baseBranch}` (base branch fetched from origin first)
 2. If `continuationPrBranch` is set, checkout existing PR branch for retried tasks
 3. Validate API key for the target model provider (cached 5 minutes)
-4. Build system prompt (agent-specific: planning/execution/pull_request/review via labels + `agentType`)
+4. Build system prompt (agent-specific via `agentType`, with execution memory injection)
 5. Pull worker image (15-minute timeout, separated from container creation)
 6. Spawn a code-worker container for the selected runtime (2-minute creation timeout)
 7. Write system prompt to container stdin
 8. Stream logs to code-agent via LogForwarder
 9. Monitor container exit (30s polling)
 10. On exit: flush logs, check for PR via `gh pr list` + `gh pr checks`
-11. Detect fatal exit codes (137/139) — skip Gemini verification, trigger immediate retry
-12. Run completion verification (Gemini semantic validation of worker responses with agent-specific Zod schemas)
+11. Detect fatal exit codes (137/139) from tail of raw logs — skip Gemini verification, trigger immediate retry
+12. Run completion verification (Gemini semantic validation with agent-specific Zod schemas)
 13. If verification **fails** and `attempt < maxAttempts`: resume session with follow-up prompt listing missing criteria
-14. If verification **passes**: run deep validation for execution tasks (full transcript analysis via code-agent Linear proxy, post PR comment), collect turn metrics, send webhook with result or error
+14. If verification **passes**: run Agent Compliance Validation for execution tasks, collect turn metrics, send webhook
 15. If max attempts reached without passing: send webhook with `TASK_COMPLETION_VERIFICATION_FAILED` error
 16. Clean up token refresher, log forwarder, and task timers
 17. If any queued messages arrived during execution: deliver them immediately as a new session
+18. For ask_agent: check pending messages and flush task logs before teardown
 
 ### Startup Recovery
 
@@ -439,7 +525,10 @@ On startup, the orchestrator:
 | `INTEXURAOS_GEMINI_APP_API_KEY`           | Yes      | -                                  |
 | `INTEXURAOS_MINIMAX_APP_API_KEY`          | Yes      | -                                  |
 | `INTEXURAOS_DASHSCOPE_APP_API_KEY`        | Yes      | -                                  |
+| `INTEXURAOS_ZAI_APP_API_KEY`              | Yes      | -                                  |
 | `GOOGLE_APPLICATION_CREDENTIALS`          | Yes      | -                                  |
+| `INTEXURAOS_OPENROUTER_APP_API_KEY`       | No       | (empty — disables compliance)      |
+| `INTEXURAOS_COMPLIANCE_MODEL`             | No       | `xiaomi/mimo-v2-pro`               |
 | `INTEXURAOS_REPOSITORY_PATH`              | No       | `~/.code-orchestrator/repo`        |
 | `INTEXURAOS_WORKER_CAPACITY`              | No       | `2`                                |
 | `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`      | No       | `3`                                |
@@ -468,6 +557,7 @@ On startup, the orchestrator:
 | `not_found`                           | 404  | Task ID does not exist                                         |
 | `already_completed`                   | 409  | Task already finished (cannot cancel)                          |
 | `invalid_status`                      | 409  | Message sent to task with status that does not accept messages |
+| `invalid_agent_type`                  | 409  | Message sent to review/remediation task (not supported)        |
 | `NO_PR_CREATED`                       | -    | Task completed but no PR was found                             |
 | `TASK_COMPLETION_VERIFICATION_FAILED` | -    | Max attempts reached without passing completion verification   |
 | `TASK_COMPLETION_VERIFIER_FAILED`     | -    | Gemini verifier unreachable or returned invalid JSON           |
@@ -498,9 +588,13 @@ On startup, the orchestrator:
 - Turn metrics: non-fatal; zero values returned when cgroup path unavailable (macOS)
 - Completion verifier: required; verifier failure marks task `failed` (no false positives)
 - Container adoption timeout: 60 seconds on startup
-- Worker types: 7 (opus, auto, sonnet for Anthropic; minimax for MiniMax; glm, qwen, kimi for DashScope)
-- Deep validation: fire-and-forget; does not affect task outcome or webhook delivery
-- Deep validation max transcript: 200,000 characters
+- Worker types: 10 (auto, opus, sonnet for Anthropic; minimax for MiniMax; glm, qwen, kimi for DashScope; codex, codex-xhigh for Codex; openrouter-free for OpenRouter)
+- Worker runtimes: 2 (claude, codex)
+- Agent Compliance Validation: requires OpenRouter API key; skipped when not configured
+- Agent Compliance Validator transcript limit: 720,000 characters
 - GitHub comment size limit: 65,536 characters (split across multiple comments if needed)
-- Container preservation: selective by agent type (execution and planning preserved; review and PR cleaned up)
-- Linear issue context: fetched via code-agent proxy, not direct GraphQL
+- Container preservation: selective by agent type (execution and planning preserved; review, PR, and remediation cleaned up); one preserved container per PR
+- Linear issue context: fetched via code-agent proxy only
+- Evidence PR required for all execution outcomes and all planned outcomes (including SIMPLE tasks)
+- Review/remediation agent types reject `sendMessage()` with 409
+- Ask agent tasks skip PR resume preamble and prohibit `AskUserQuestion`

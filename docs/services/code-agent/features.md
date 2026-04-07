@@ -28,6 +28,34 @@ You run a SaaS product and your morning is already full. This is what happens wh
 
 ## How It Helps
 
+### Execution Memory Graph — The Agent Learns From Its Work
+
+Every task the agent completes feeds a learning loop. After a run finishes, an independent evaluator reads the execution logs, extracts reusable lessons — implementation patterns, verification strategies, pitfalls to avoid — and stores them as structured memories with vector embeddings. The next time a similar task arrives, the system retrieves the most relevant memories and injects them into the agent's context before it starts writing code.
+
+The pipeline runs in three stages: data collection (capturing structured evidence from completed tasks), distillation (an LLM extracts actionable memories from the evidence), and retrieval (vector search surfaces the most relevant memories for the current task). Each memory carries a quality score, application count, and positive/negative feedback — so memories that prove useful rise to the top, and those that mislead get suppressed.
+
+This is an alpha capability focused on data collection and RAG pipeline tuning. The memory types include implementation patterns, verification patterns, pitfall patterns, decomposition patterns, planning decisions, and review findings — each stored with component hints, keywords, and confidence scores.
+
+**Example:** The agent built a pagination feature last week and discovered that the repository's Firestore queries require composite indexes for multi-field sorting. This lesson was distilled into a pitfall pattern. When a new task arrives to add filtering to another endpoint, the agent retrieves the memory and includes the composite index requirement in its plan — avoiding the CI failure that happened the first time.
+
+### Remediation Agent — Autonomous Auto-Improvement Loop
+
+When the review agent finds issues in a pull request, the system can autonomously create a follow-up remediation task to fix the findings. The remediation agent reads the review feedback, pushes fixes to the same PR branch, and the review cycle restarts. This creates an event-sourced improvement loop: review, fix, re-review — running without human intervention until the PR is clean.
+
+The remediation pipeline uses cross-LLM verification: Claude writes the code, Gemini evaluates whether the review findings were addressed. The decision to remediate is recorded in the PR automation log with full audit trail — you can see exactly which findings triggered remediation, what the agent changed, and whether the re-review passed.
+
+The loop enforces guardrails: remediation tasks can only address findings from the preceding review, the agent cannot expand scope beyond the review feedback, and all changes push to the existing PR branch rather than creating new PRs. If the remediation fails or the re-review still finds issues, the system escalates to the dashboard for human attention.
+
+**Example:** The review agent posts three findings on a PR: a missing null check, an unused import, and an inconsistent error message. The system creates a remediation task that addresses all three. After fixing the code, a fresh review confirms the findings are resolved and sets the `ready-to-merge` label on the Linear issue — all without you opening the PR.
+
+### Ask Agent — Interactive Claude Code Sessions
+
+Open a conversation with Claude Code directly from the web dashboard. Unlike regular code tasks that follow a design-then-build workflow, Ask Agent sessions are interactive, back-and-forth conversations for exploring ideas, debugging issues, or asking questions about your codebase.
+
+Sessions use the Opus model and run on your configured workers, inheriting the same security and infrastructure controls as regular code tasks. The conversation persists across devices — start a session on your desktop, continue it from your phone.
+
+**Example:** You are reviewing a PR and want to understand the implications of a type change. You open an Ask Agent session, paste the type definition, and ask "What callers would break if I change this field from optional to required?" The agent searches the codebase on your machine and gives you a concrete list of affected files with the exact lines that need updating.
+
 ### Queue and Auto-Merge Pull Requests
 
 When multiple bot-authored PRs target the same branch, merging them one-by-one invites conflicts. The merge queue watches a base branch, checks each PR's CI status and mergeability, and merges the oldest eligible PR automatically on every tick — driven by Cloud Scheduler. You create a watch from the dashboard, and the system drains PRs in order without conflicts.
@@ -54,6 +82,22 @@ The design phase also creates a paper trail. Every task has a Linear issue, a pl
 
 **Example:** You ask the agent to add date filtering to the activity dashboard. The design comes back proposing to filter the data after loading everything into the browser. You know the dataset will grow to millions of rows, so you reply: "Filter in the database query instead — do not load everything first." The agent revises its plan. When the execution phase runs, it builds the right solution on the first attempt.
 
+### Code Tasks Grouped by Linear Issue
+
+Tasks are no longer a flat list. The dashboard groups tasks by the Linear issue they belong to, showing each issue as a single row with aggregated status, pipeline progress, and action states. You see at a glance which issues have tasks in progress, which need your attention, which are done, and which have failed — all with server-side pagination and sorting.
+
+Each group displays its pipeline steps (planned, implemented, reviewed, remediated) and a consolidated status badge: active, needs-action, done, failed, or archived. Filter by status to focus on what matters — "needs-action" shows groups waiting for your approval or review, while "archived" hides completed work from your daily view.
+
+Batch archiving lets you select multiple groups and archive them in a single action.
+
+**Example:** You have twelve Linear issues with active code tasks. Instead of scrolling through thirty individual tasks, you see twelve rows. The `INT-445` row shows "needs-action" because the planning task finished and the implementation is waiting for your approval. You tap the row, review the plan, and approve — all without losing context.
+
+### Auto-Archive Merged Code Tasks
+
+Tasks whose pull requests have been merged are archived automatically after seven days. A daily Cloud Scheduler job scans for non-archived tasks with a `prMergedAt` timestamp older than the threshold, groups them by Linear issue, and archives entire groups where all tasks are in terminal states with merged PRs. Active tasks in the same group prevent archival — the system never archives a group with in-progress work.
+
+**Example:** You merged three PRs last week. Without lifting a finger, the tasks that produced those PRs are now archived and out of your active view. Your task dashboard shows only the work that still needs attention.
+
 ### Independent Verification — Two AIs, Two Providers
 
 The agent does not grade its own homework. Claude writes the code inside an isolated container on your machine. When the task finishes, a separate Gemini 2.5 Flash model — running on Google's infrastructure, with no shared context — independently verifies the result. Gemini extracts structured data from the agent's execution logs and performs deep semantic validation, reading up to 200,000 characters of transcript to confirm that the task was actually completed, not just attempted.
@@ -70,7 +114,7 @@ Every line of code the agent writes is produced inside an isolated environment r
 
 You name your workers, order them by priority, and the system handles the rest. If the primary worker is occupied, the agent routes to the next available one. Health checks confirm each worker is reachable before dispatching, so you know immediately if something is misconfigured. If all workers are busy, tasks enter a queue and dispatch automatically when capacity opens. Worker credentials — the keys that connect the agent to your machines — are encrypted with AES-256-GCM at rest and masked in every API response.
 
-Multiple worker types are available across several AI providers — you pick the model that fits the task, or let the agent choose automatically.
+Multiple worker types are available across several AI providers — you pick the model that fits the task, or let the agent choose automatically. Different agent types (planning, execution, review, remediation) can be tuned to use different worker types independently.
 
 **Example:** You set up a high-spec desktop as your primary worker and a cloud VM as your backup. During a busy afternoon, you submit three tasks in quick succession. The first runs on your desktop, the second routes to the cloud VM, and the third queues until a slot opens — all without you making a single routing decision.
 
@@ -85,6 +129,12 @@ Mid-task communication works the same way. While a task is running, you can send
 If a task fails or produces a result that is close but not quite right, you retry it with additional guidance. Retried tasks inherit the open PR branch, so work is not lost. The original task is archived, keeping your task list focused on what is active.
 
 **Example:** The agent opens a PR for a new API endpoint. Your co-founder reviews it and comments: "Add rate limiting to this endpoint." The agent picks up the comment, creates a Linear issue, and pushes an update to the same PR — all without you intervening.
+
+### CI Failure Auto-Handling
+
+When CI checks fail on a bot-authored PR, the system detects the failure through the GitHub webhook pipeline and can retry or escalate without user intervention. Failed checks on agent PRs are evaluated through the same two-tier pipeline (hard rules then LLM triage) — the system decides whether to dispatch a fix task, skip, or escalate to the dashboard.
+
+**Example:** The agent opens a PR and CI fails because a snapshot test needs updating. The system detects the failure, creates a follow-up task to update the snapshot, and the fix is pushed to the same branch — all before you check the dashboard.
 
 ### Guardrails and Cost Control
 
@@ -112,12 +162,17 @@ Connect a worker machine, link your Linear and GitHub accounts through the dashb
 
 ## Key Benefits
 
+- **Execution memory makes the agent smarter over time** — Lessons from previous runs are retrieved and injected into future tasks, reducing repeated mistakes
+- **Autonomous remediation closes the review loop** — Review findings trigger automatic fix tasks, running without human intervention until the PR is clean
+- **Ask Agent for interactive exploration** — Back-and-forth conversations with Claude Code directly from the dashboard, with persistent sessions across devices
 - **Merge queue eliminates manual PR coordination** — Bot-authored PRs merge in order, automatically, with CI checks verified before each merge
 - **Merge conflict resolution runs unattended** — Conflicts are detected by a dedicated cron job and dispatched for resolution without blocking the webhook pipeline
 - **Design before code** — You approve the plan before a single line is written, so no compute is wasted on wrong assumptions
 - **Independent two-provider verification** — Claude writes the code, Gemini independently verifies the result, so no single model grades its own work
 - **Voice note to pull request** — Record a WhatsApp voice note about a bug, and the system transcribes, classifies, designs, codes, tests, and opens a pull request without you touching a keyboard
 - **Your machines, your code** — Source code stays on infrastructure you own, using your own AI subscriptions, with credentials encrypted at rest
+- **Issue-grouped task dashboard** — Tasks grouped by Linear issue with aggregated status, pipeline progress, and batch operations
+- **Auto-archive keeps the dashboard clean** — Merged tasks are archived automatically after seven days, and stale groups are cleaned up hourly
 - **PR comments become tasks** — Review feedback on a pull request automatically creates or resumes a task with full context, keeping the loop inside GitHub
 - **Predictable spend** — Per-user limits on concurrency, hourly rate, and monthly cost are enforced before the work begins, not after
 - **Full audit trail** — Live logs, per-task metrics, cost breakdowns, narrative summaries, expandable webhook payloads, and a unified PR automation log give you complete visibility
@@ -131,6 +186,7 @@ Connect a worker machine, link your Linear and GitHub accounts through the dashb
 - **Retry cooling period** — After a task fails, a mandatory wait prevents runaway retry loops
 - **Planning requires explicit labeling** — Autonomous planning only runs on Linear issues tagged with the designated label
 - **Merge queue watches the `main` branch with a blocked flag** — The `main` branch appears in the branch list for visibility but cannot be used as a merge queue base branch
+- **Execution memory is in alpha** — The memory graph is focused on data collection and RAG pipeline tuning; memory retrieval quality is being actively adjusted
 
 ---
 

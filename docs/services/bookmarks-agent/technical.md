@@ -104,6 +104,8 @@ sequenceDiagram
 
 | Commit     | Description                                                                 | Date       |
 | ---------- | --------------------------------------------------------------------------- | ---------- |
+| `af79b3ea` | Pass title/description hints to web-agent summary request                   | 2026-04-02 |
+| `e6896a97` | Downgrade expected operational warnings from warn to info level             | 2026-03-27 |
 | `46245ea8` | Fix infra/summary/index.ts exports — use barrel import (INT-913)            | 2026-03-19 |
 | `d10a0a66` | Standardize v8-ignore to permanent ts-type (INT-986)                        | 2026-03-19 |
 | `bd7f1fa1` | Deduplicate PubSub auth/decode into pubsubHelpers (INT-911)                 | 2026-03-17 |
@@ -112,8 +114,6 @@ sequenceDiagram
 | `f9dafc9f` | Move enrich publishing into createBookmark use-case (INT-909)               | 2026-03-16 |
 | `8f554243` | Extract image proxy into port/adapter pattern (INT-908)                     | 2026-03-16 |
 | `ef82a60c` | Add tests for server.ts buildServer + health check (INT-877)                | 2026-03-15 |
-| `810a5274` | Add tests for internalRoutes.ts enrichPublisher + bookmark status (INT-878) | 2026-03-15 |
-| `b07f4750` | Add tests for pubsubRoutes.ts auth + error classification                   | 2026-03-15 |
 
 ## API Endpoints
 
@@ -317,6 +317,7 @@ All required env vars are validated at startup via `validateRequiredEnv()` in `i
 - **Force refresh always fetches** — Unlike enrichment, force-refresh ignores `processed` status and always re-fetches
 - **Transient vs permanent errors** — Only transient errors (429, timeout, network) trigger Pub/Sub retry; permanent errors (NO_CONTENT, 400) result in graceful degradation with HTTP 200
 - **Legacy bookmarks have no status field** — Firestore repository defaults to `'active'` for documents missing the `status` field
+- **Summary requests include content hints** — The `webAgentSummaryClient` passes the bookmark's title and description (when available and non-empty) as hint parameters in the summary request to web-agent, improving AI focus on relevant content
 - **Logging requires Sentry integration** — All loggers use `createAppLogger()` from `@intexuraos/infra-sentry`; never use `pino()` directly
 - **Image proxy has 10-second timeout** — Requests to fetch external images abort after 10 seconds
 - **Image proxy validates content type** — Returns 400 if the proxied URL does not return an `image/*` content type

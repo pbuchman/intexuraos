@@ -28,9 +28,9 @@ The hub does not store copies of each specification. When you select a service, 
 
 A developer's first visit to the docs hub reveals the full surface area of IntexuraOS in one glance. The dropdown lists every service by name — User Service, Research Agent, Code Agent, Cron Agent, Hellscript Agent, and fifteen more. For someone new to the platform, this is the fastest way to understand what exists and where to start.
 
-### Shared Service Catalog
+### Self-Contained Configuration
 
-The hub's configuration now draws from a shared internal API catalog defined in `@intexuraos/common-core`. When a new service is added to the catalog, every consumer — including the docs hub — picks it up automatically. This replaced 70+ lines of hardcoded environment variable mappings with a single import, eliminating the risk of the docs hub falling out of sync when services are added or removed.
+The hub maintains its own service catalog directly in `config.ts` via the `OPEN_API_SOURCE_CATALOG` constant. Each entry maps a display name to its environment variable, making it straightforward to add, remove, or reorder services without touching shared packages or coordinating cross-service changes.
 
 ## Key Benefits
 
@@ -38,14 +38,14 @@ The hub's configuration now draws from a shared internal API catalog defined in 
 - **Live specifications** — Fetched directly from running services, so docs are never stale
 - **Full platform map** — The dropdown doubles as a directory of every API in the system
 - **Zero learning curve** — Built on Swagger UI, so any developer who has used API documentation before already knows how to navigate, test requests, and inspect schemas
-- **Catalog-driven** — Service list is maintained in one shared catalog, keeping the hub in sync with the rest of the platform
+- **Self-contained** — Service catalog is defined locally, so changes to the hub's configuration do not require cross-package coordination
 
 ## Limitations
 
 - **Service must be running** — If a service is down, its specification will not load in the dropdown
 - **No version history** — The hub always shows the current spec; there is no way to view a previous version
 - **No built-in authentication** — To test authenticated endpoints through Swagger UI, you must manually provide a token
-- **Static configuration** — Adding or removing a service from the hub requires a redeployment (though adding to the shared catalog is the only code change needed)
+- **Static configuration** — Adding or removing a service from the hub requires a redeployment with the new environment variable
 
 ---
 

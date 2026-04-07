@@ -1,4 +1,4 @@
-# research-agent — Agent Interface
+# research-agent -- Agent Interface
 
 > **Machine-readable specification for AI agent integration**
 
@@ -25,7 +25,7 @@
 ```typescript
 interface SubmitResearchInput {
   prompt: string;                  // Research question (min 1 char)
-  selectedModels: ResearchModel[]; // Models to use for research
+  selectedModels: ResearchModel[]; // Models to use for research (native or or:-prefixed OpenRouter)
   synthesisModel: ResearchModel;   // Model to use for synthesis
   inputContexts?: {
     content: string;               // Max 60,000 chars per context
@@ -57,7 +57,7 @@ interface SubmitResearchOutput {
 // Request
 {
   "prompt": "Compare PostgreSQL vs MongoDB for a SaaS product",
-  "selectedModels": ["gemini-2.5-pro", "claude-sonnet-4-5"],
+  "selectedModels": ["gemini-2.5-pro", "claude-sonnet-4-5", "or:x-ai/grok-4.20-beta"],
   "synthesisModel": "gemini-2.5-pro"
 }
 
@@ -68,10 +68,11 @@ interface SubmitResearchOutput {
     "id": "res_abc123",
     "status": "pending",
     "title": "",
-    "selectedModels": ["gemini-2.5-pro", "claude-sonnet-4-5"],
+    "selectedModels": ["gemini-2.5-pro", "claude-sonnet-4-5", "or:x-ai/grok-4.20-beta"],
     "llmResults": [
       { "model": "gemini-2.5-pro", "status": "pending" },
-      { "model": "claude-sonnet-4-5", "status": "pending" }
+      { "model": "claude-sonnet-4-5", "status": "pending" },
+      { "model": "or:x-ai/grok-4.20-beta", "status": "pending" }
     ],
     "startedAt": "2026-03-15T10:00:00.000Z"
   }
@@ -124,7 +125,7 @@ type ResearchStatus =
   | 'failed';
 
 interface LlmResult {
-  provider: string;
+  provider: string;       // google, openai, anthropic, perplexity, openrouter
   model: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   result?: string;
@@ -140,13 +141,85 @@ interface LlmResult {
 
 ---
 
+### List Researches
+
+**Endpoint:** `GET /research`
+
+**Auth:** Bearer JWT
+
+**When to use:** Retrieve a paginated list of the user's researches as lightweight summaries.
+
+**Query Parameters:**
+
+```typescript
+interface ListResearchesQuery {
+  limit?: number;   // Page size
+  cursor?: string;  // Pagination cursor from previous response
+}
+```
+
+**Output Schema:**
+
+```typescript
+interface ListResearchesOutput {
+  items: ResearchSummary[];
+  nextCursor?: string;
+}
+
+interface ResearchSummary {
+  id: string;
+  userId: string;
+  title: string;
+  status: ResearchStatus;
+  selectedModels: string[];
+  synthesisModel: string;
+  startedAt: string;
+  completedAt?: string;
+  favourite?: boolean;
+  llmResultStatuses: { provider: string; model: string; status: string }[];
+  totalCostUsd?: number;
+  partialFailure?: PartialFailure;
+}
+```
+
+---
+
+### Validate Input
+
+**Endpoint:** `POST /research/validate-input`
+
+**Auth:** Bearer JWT
+
+**When to use:** Before submitting a research, to check prompt quality and optionally get an improved version.
+
+**Input Schema:**
+
+```typescript
+interface ValidateInputBody {
+  prompt: string;
+  includeImprovement?: boolean;  // If true and quality is weak, returns improved prompt
+}
+```
+
+**Output Schema:**
+
+```typescript
+interface ValidateInputOutput {
+  quality: number;               // 0 = invalid, 1 = weak but valid, 2 = good
+  reason: string;
+  improvedPrompt: string | null; // Present when includeImprovement=true and quality=1
+}
+```
+
+---
+
 ### Confirm Partial Failure
 
 **Endpoint:** `POST /research/:id/confirm`
 
 **Auth:** Bearer JWT
 
-**When to use:** When research status is `awaiting_confirmation` — one or more models failed while others succeeded.
+**When to use:** When research status is `awaiting_confirmation` -- one or more models failed while others succeeded.
 
 **Input Schema:**
 
@@ -192,6 +265,41 @@ interface EnhanceResearchInput {
 
 ---
 
+### Browse OpenRouter Models
+
+**Endpoint:** `GET /research/openrouter/models`
+
+**Auth:** Bearer JWT
+
+**When to use:** To discover available OpenRouter models and their live pricing before submitting research.
+
+**Output Schema:**
+
+```typescript
+interface OpenRouterModelsOutput {
+  models: OpenRouterModelInfo[];
+  cachedAt: string;                // ISO 8601, cache TTL is 5 minutes
+}
+
+interface OpenRouterModelInfo {
+  id: string;                      // e.g., "qwen/qwen3.5-plus-02-15"
+  name: string;                    // e.g., "Qwen 3.5 Plus"
+  provider: string;                // e.g., "Qwen"
+  contextLength: number;
+  pricing: {
+    inputPricePerMillion: number;
+    outputPricePerMillion: number;
+    useProviderCost?: boolean;     // true when live pricing used
+  };
+  inputModalities: string[];
+  outputModalities: string[];
+}
+```
+
+**Note:** OpenRouter models are prefixed with `or:` when used in `selectedModels` (e.g., `or:qwen/qwen3.5-plus-02-15`). The endpoint returns raw model IDs without the prefix.
+
+---
+
 ### Create Draft Research (Internal)
 
 **Endpoint:** `POST /internal/research/draft`
@@ -234,11 +342,13 @@ interface ServiceFeedback {
 - Submit more than 5 input contexts or any context exceeding 60,000 characters
 - Expect `synthesizedResult` to be populated until `status === 'completed'`
 - Retry a research that is not in `failed` status
+- Use OpenRouter model IDs without the `or:` prefix in `selectedModels`
 
 **Requires:**
 
 - User must have LLM API keys configured in user-service for the selected models
-- Synthesis model API key must be present — missing key causes immediate `failed` status
+- OpenRouter models require an OpenRouter API key configured in user-service
+- Synthesis model API key must be present -- missing key causes immediate `failed` status
 - Notion export requires `POST /research/settings/notion` to be configured first
 
 ## Usage Patterns
@@ -255,7 +365,16 @@ interface ServiceFeedback {
 5. Read synthesizedResult and shareInfo.shareUrl
 ```
 
-### Pattern 2: Internal Draft Creation (from another service)
+### Pattern 2: Validate Then Submit
+
+```
+1. POST /research/validate-input with { prompt, includeImprovement: true }
+2. If quality === 0: reject, prompt is invalid
+3. If quality === 1 and improvedPrompt is present: offer improved version to user
+4. POST /research with final prompt
+```
+
+### Pattern 3: Internal Draft Creation (from another service)
 
 ```
 1. POST /internal/research/draft with userId, title, prompt, originalMessage
@@ -264,13 +383,21 @@ interface ServiceFeedback {
 4. Research moves to pending -> processing -> completed
 ```
 
-### Pattern 3: Incremental Enhancement
+### Pattern 4: Incremental Enhancement
 
 ```
 1. Ensure source research status === 'completed'
 2. POST /research/:sourceId/enhance with additionalModels and/or additionalContexts
 3. Poll new research ID to completion
 4. Compare totalCostUsd vs sourceLlmCostUsd to see incremental spend
+```
+
+### Pattern 5: OpenRouter Model Discovery
+
+```
+1. GET /research/openrouter/models -> list of 14 curated models with pricing
+2. Select models by id, prefix with 'or:' for selectedModels array
+3. POST /research with or:-prefixed model IDs alongside native models
 ```
 
 ## Error Handling
@@ -280,7 +407,7 @@ interface ServiceFeedback {
 | 400         | Invalid input (missing fields, bad model name, context limit) | Fix request payload                       |
 | 401         | Missing or expired JWT / invalid internal auth token          | Refresh token or check X-Internal-Auth    |
 | 403         | Research belongs to a different user                          | Verify userId matches token               |
-| 404         | Research not found                                            | Verify ID exists                          |
+| 404         | Research not found / OpenRouter key not configured            | Verify ID exists or configure API key     |
 | 409         | Status conflict (e.g., enhance on non-completed)              | Check status before calling               |
 | 500         | Internal error                                                | Retry with backoff; check Sentry          |
 
@@ -298,8 +425,9 @@ interface ServiceFeedback {
 | -------------------- | ----------------------------------------------------- | ---------------------------------------------- |
 | user-service         | Fetch API keys; report LLM success analytics          | Research fails if keys unavailable             |
 | app-settings-service | Load LLM pricing at startup                           | Service fails to start if unreachable          |
-| image-service        | Generate cover image for share page                   | Skipped gracefully; research still completes   |
+| image-service        | Generate cover image for share page                   | Skipped with provider failover; graceful       |
 | notion-service       | Validate Notion page IDs; execute Notion export       | Export skipped if unavailable; fire-and-forget |
 | whatsapp-service     | Send completion and failure notifications via Pub/Sub | Notification dropped; research unaffected      |
+| OpenRouter API       | Route LLM calls; fetch live pricing catalog           | Call fails; pricing falls back to allowlist    |
 | Cloud Pub/Sub        | Fan-out LLM calls; trigger processing pipeline        | Research stuck in pending/processing if down   |
 | GCS                  | Upload shareable HTML page                            | Share URL absent from completed research       |

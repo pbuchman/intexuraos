@@ -91,22 +91,20 @@ sequenceDiagram
 
 ## Recent Changes
 
-### v3.4.0 (since v3.3.0)
+### v3.5.0 (since v3.4.0)
+
+| Commit     | Description                                                                       | Date       |
+| ---------- | --------------------------------------------------------------------------------- | ---------- |
+| `287db2b6` | Add `getUserTimezone` to UserServiceClient (test mock updates only)               | 2026-03-27 |
+| `613ac528` | Replace v8 ignore override blocks with real tests — refactored `reorderTodoItems` | 2026-03-23 |
+
+**Summary:** Two changes touched todos-agent in this release. The `reorderTodoItems` use case was refactored (INT-1072) to eliminate a v8-ignore workaround by switching from a separate validation pass plus `.map()` with a never-throwing fallback to a single `Map`-based iteration loop that returns early on missing items. The `getUserTimezone` method was added to the `UserServiceClient` interface, requiring test mock updates in `testUtils.ts` and `todoItemExtractionService.test.ts`.
+
+### v3.4.0 (previous release)
 
 | Commit     | Description                                                   | Date       |
 | ---------- | ------------------------------------------------------------- | ---------- |
 | `da00218e` | Standardize PENDING v8-ignore to permanent ts-type (INT-987)  | 2026-03-19 |
-
-**Summary:** The only change touching todos-agent in this release was a codebase-wide v8-ignore standardization (INT-987). Previously PENDING v8-ignore comments were converted to permanent `ts-type` category annotations, reflecting that these TypeScript narrowing guards are structurally untestable rather than temporarily deferred.
-
-### v3.3.0 (previous release)
-
-| Commit     | Description                                               | Date       |
-| ---------- | --------------------------------------------------------- | ---------- |
-| `c4e3a13c` | Release v3.3.0                                            | 2026-03-15 |
-| `93aeac4a` | Remove ZAI provider and GLM-4.7 models, finalize GLM-5    | 2026-03-12 |
-| `4ab46156` | Fix v8 ignore comments for test-infra category            | 2026-03-11 |
-| `752fd017` | Add tests for v8-ignore blocks (INT-796)                  | 2026-03-11 |
 
 ## API Endpoints
 

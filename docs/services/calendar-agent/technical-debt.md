@@ -1,7 +1,7 @@
 # Calendar Agent — Technical Debt
 
-**Last Updated:** 2026-03-22
-**Analysis Run:** post v3.3.0 (INT-896 route split, INT-897 internal route dedup)
+**Last Updated:** 2026-04-07
+**Analysis Run:** v3.5.0 (from v3.4.0 — minor package-level updates only)
 
 ---
 
@@ -14,6 +14,15 @@
 | Type Issues | 0     | -        |
 | TODOs       | 0     | -        |
 | **Total**   | **1** | Low      |
+
+---
+
+## Recent Improvements (v3.4.0 to v3.5.0)
+
+No service-level changes. Two package-level updates touched calendar-agent test files:
+
+- `UserServiceClient` interface gained a `getUserTimezone()` method (from `@intexuraos/internal-clients`). Test fakes and mocks were updated to implement the new method.
+- v8 ignore comment wording in `calendarPreviewRepository.ts` was tightened to satisfy stricter blocker-keyword validation rules.
 
 ---
 
