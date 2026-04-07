@@ -4,7 +4,9 @@
 
 **Goal:** Make cover image generation resilient to provider failures by adding provider failover. When the preferred provider fails (at any step — prompt or image generation), try the alternate provider. If both providers fail, generate HTML without a cover image and log the specific reason.
 
-**Architecture:** The fix is contained entirely within the `generateCoverImage` function in research-agent. No new packages, no new utilities, no retry logic. The existing `selectImageModel` function picks a preferred provider based on synthesis model and API keys. The new logic wraps the full pipeline (prompt generation + image generation) in a try-with-fallback: if the preferred provider's pipeline fails, try the alternate provider's pipeline. Both providers have a prompt model (text LLM) and an image model.
+**Architecture:** The fix is contained entirely within the `generateCoverImage` function in research-agent. No new packages, no new utilities. The existing `selectImageModel` function picks a preferred provider based on synthesis model and API keys. The new logic wraps the full pipeline (prompt generation + image generation) in a try-with-fallback: if the preferred provider's pipeline fails, try the alternate provider's pipeline. Both providers have a prompt model (text LLM) and an image model.
+
+**Why provider failover instead of retry-with-backoff:** Retry-with-backoff was considered but rejected in favour of immediate provider failover. When a provider returns a 503 (high demand), retrying immediately with the same provider is unlikely to succeed — failover achieves the same resilience goal without the latency penalty of exponential back-off.
 
 **Provider pipelines:**
 | Provider   | Prompt Model (text LLM)  | Image Model              |
@@ -330,6 +332,10 @@ Apply the changes described above:
 1. Add `ProviderPipeline` interface
 2. Replace `selectImageModel` with `getAvailableProviderPipelines`
 3. Rewrite `generateCoverImage` with the failover loop
+4. Add import for `PromptModel` type:
+   ```typescript
+   import type { PromptModel } from '../../../infra/image/index.js';
+   ```
 
 - [ ] **Step 6: Run tests to verify they pass**
 
