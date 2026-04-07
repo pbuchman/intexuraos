@@ -377,7 +377,6 @@ export async function drainTaskQueue(
     ) {
       taskExecutionMemoryContext = await prepareExecutionMemoryContext({
         task,
-        linearIssueLabels: dispatchLabels,
         logger,
         linearAgentClient,
         queryClient: deps.executionMemory?.queryClient,
