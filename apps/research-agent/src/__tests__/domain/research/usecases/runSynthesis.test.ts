@@ -1299,7 +1299,7 @@ describe('runSynthesis', () => {
     });
 
     it('prefers OpenAI for image generation when synthesis model is OpenAI-based', async () => {
-      // Covers selectImageModel line 386: preferOpenAi=true && hasOpenAiKey=true
+      // Covers getAvailableProviderPipelines: preferOpenAi=true → OpenAI pipeline first
       const research = createTestResearch({
         synthesisModel: LlmModels.GPT52, // GPT model (starts with 'gpt-')
       });
@@ -1342,7 +1342,7 @@ describe('runSynthesis', () => {
     });
 
     it('falls back to Google for image generation when synthesis model is OpenAI-based but no OpenAI key', async () => {
-      // Covers selectImageModel line 387: preferOpenAi=true && !hasOpenAiKey && hasGoogleKey
+      // Covers getAvailableProviderPipelines: preferOpenAi=true but only Google key → Google pipeline
       const research = createTestResearch({
         synthesisModel: LlmModels.GPT52, // GPT model (starts with 'gpt-')
       });
