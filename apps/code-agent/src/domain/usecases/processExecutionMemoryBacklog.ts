@@ -46,7 +46,7 @@ const DistillationSchema = z.object({
     evidenceSummary: z.string().min(1),
     retrievalText: z.string().min(1),
     keywords: z.array(z.string()).default([]),
-        componentHints: z.array(z.string()).default([]),
+    componentHints: z.array(z.string()).default([]),
     confidence: z.number().min(0).max(1),
   })).default([]),
 });

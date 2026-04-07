@@ -38,7 +38,6 @@ describe('firestoreExecutionMemoryRepository', () => {
     evidenceSummary: string;
     retrievalText: string;
     keywords: string[];
-    labelHints: string[];
     componentHints: string[];
     embedding: number[];
     embeddingModel: 'text-embedding-3-small';
@@ -63,7 +62,6 @@ describe('firestoreExecutionMemoryRepository', () => {
     evidenceSummary: 'A previous task regressed the task detail view because route and web types diverged.',
     retrievalText: 'route schema api client web types task detail serialization',
     keywords: ['route schema', 'task detail', 'serialization'],
-    labelHints: ['backend'],
     componentHints: ['codeRoutes', 'CodeTaskViewPageV2'],
     embedding: Array.from({ length: 1536 }, () => 0.5),
     embeddingModel: 'text-embedding-3-small' as const,

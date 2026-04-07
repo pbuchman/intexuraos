@@ -130,7 +130,7 @@ describe('prepareExecutionMemoryContext', () => {
         components: ['auth', 'route', 'logging', 'verification'],
         riskFlags: ['env_propagation'],
         verificationGoals: ['cover callback route', 'verify task detail serialization'],
-                summary: 'Auth callback route changes with logging and route verification work',
+        summary: 'Auth callback route changes with logging and route verification work',
       }),
       usage: { model: LlmModels.Gemini25Flash },
     }));
@@ -145,7 +145,7 @@ describe('prepareExecutionMemoryContext', () => {
 
     const result = await prepareExecutionMemoryContext({
       task: createTask(),
-            logger,
+      logger,
       linearAgentClient: linearAgentClient as never,
       queryClient: queryClient as never,
       embeddingClient: embeddingClient as never,
@@ -185,13 +185,13 @@ describe('prepareExecutionMemoryContext', () => {
         vectorScore: 0.51,
         qualityScore: 0.2,
         componentHints: ['unrelated'],
-              }),
+      }),
     ]));
     executionMemoryApplicationRepo.create.mockResolvedValue(ok({ id: 'app-no-match' }));
 
     const result = await prepareExecutionMemoryContext({
       task: createTask(),
-            logger,
+      logger,
       linearAgentClient: linearAgentClient as never,
       queryClient: queryClient as never,
       embeddingClient: embeddingClient as never,
@@ -218,7 +218,7 @@ describe('prepareExecutionMemoryContext', () => {
         components: ['auth', 'logging'],
         riskFlags: ['env'],
         verificationGoals: ['route coverage'],
-                summary: 'Auth callback logging work',
+        summary: 'Auth callback logging work',
       }),
       usage: { model: LlmModels.Gemini25Flash },
     }));
@@ -226,7 +226,7 @@ describe('prepareExecutionMemoryContext', () => {
 
     const result = await prepareExecutionMemoryContext({
       task: createTask(),
-            logger,
+      logger,
       linearAgentClient: linearAgentClient as never,
       queryClient: queryClient as never,
       embeddingClient: undefined,
@@ -253,7 +253,7 @@ describe('prepareExecutionMemoryContext', () => {
   it('returns an error immediately when the application repository is not configured', async () => {
     const result = await prepareExecutionMemoryContext({
       task: createTask(),
-            logger,
+      logger,
       linearAgentClient: linearAgentClient as never,
       queryClient: undefined,
       embeddingClient: embeddingClient as never,
@@ -276,7 +276,7 @@ describe('prepareExecutionMemoryContext', () => {
 
     const result = await prepareExecutionMemoryContext({
       task: createTask(),
-            logger,
+      logger,
       linearAgentClient: linearAgentClient as never,
       queryClient: undefined,
       embeddingClient: embeddingClient as never,
@@ -301,7 +301,7 @@ describe('prepareExecutionMemoryContext', () => {
         components: ['auth'],
         riskFlags: [],
         verificationGoals: [],
-                summary: 'Auth callback logging work',
+        summary: 'Auth callback logging work',
       }),
       usage: { model: LlmModels.Gemini25Flash },
     }));
@@ -310,7 +310,7 @@ describe('prepareExecutionMemoryContext', () => {
 
     const result = await prepareExecutionMemoryContext({
       task: createTask(),
-            logger,
+      logger,
       linearAgentClient: linearAgentClient as never,
       queryClient: queryClient as never,
       embeddingClient: embeddingClient as never,
@@ -334,7 +334,7 @@ describe('prepareExecutionMemoryContext', () => {
         components: ['auth'],
         riskFlags: [],
         verificationGoals: [],
-                summary: 'Auth callback logging work',
+        summary: 'Auth callback logging work',
       }),
       usage: { model: LlmModels.Gemini25Flash },
     }));
@@ -343,7 +343,7 @@ describe('prepareExecutionMemoryContext', () => {
 
     const result = await prepareExecutionMemoryContext({
       task: createTask(),
-            logger,
+      logger,
       linearAgentClient: linearAgentClient as never,
       queryClient: queryClient as never,
       embeddingClient: embeddingClient as never,
@@ -368,7 +368,7 @@ describe('prepareExecutionMemoryContext', () => {
 
     const result = await prepareExecutionMemoryContext({
       task: createTask(),
-            logger,
+      logger,
       linearAgentClient: linearAgentClient as never,
       queryClient: undefined,
       embeddingClient: embeddingClient as never,
@@ -400,7 +400,7 @@ describe('prepareExecutionMemoryContext', () => {
 
     const result = await prepareExecutionMemoryContext({
       task: createTask(),
-            logger,
+      logger,
       linearAgentClient: linearAgentClient as never,
       queryClient: queryClient as never,
       embeddingClient: embeddingClient as never,
@@ -552,7 +552,7 @@ describe('prepareExecutionMemoryContext', () => {
     expect(prepareExecutionMemoryContextTestables.truncate('truncate-me', 5)).toBe('trunc');
   });
 
-  it('scores candidates using rebalanced weights that increase component and label influence', () => {
+  it('scores candidates using rebalanced weights without label signal', () => {
     const reranked = prepareExecutionMemoryContextTestables.rerankMemories(
       [
         createMatch('mem-moderate', {
@@ -583,7 +583,7 @@ describe('prepareExecutionMemoryContext', () => {
         components: ['unrelated'],
         riskFlags: [],
         verificationGoals: [],
-                summary: 'Unrelated topic',
+        summary: 'Unrelated topic',
       }),
       usage: { model: LlmModels.Gemini25Flash },
     }));
@@ -593,7 +593,7 @@ describe('prepareExecutionMemoryContext', () => {
       createMatch('mem-near-miss', {
         vectorScore: 0.70,
         componentHints: [],
-                applicationCount: 0,
+        applicationCount: 0,
         positiveCount: 0,
       }),
     ]));
@@ -636,7 +636,7 @@ describe('prepareExecutionMemoryContext', () => {
         components: ['auth', 'route', 'logging', 'verification'],
         riskFlags: [],
         verificationGoals: [],
-                summary: 'Auth route logging verification',
+        summary: 'Auth route logging verification',
       }),
       usage: { model: LlmModels.Gemini25Flash },
     }));
@@ -646,7 +646,7 @@ describe('prepareExecutionMemoryContext', () => {
       createMatch('mem-match', {
         vectorScore: 0.95,
         componentHints: ['auth', 'route', 'logging', 'verification'],
-                applicationCount: 2,
+        applicationCount: 2,
         positiveCount: 2,
       }),
     ]));
