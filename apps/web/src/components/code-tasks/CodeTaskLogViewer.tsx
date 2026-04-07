@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type React from 'react';
 import {
   CheckCircle2,
   ChevronDown,
@@ -8,6 +9,7 @@ import {
 import type { MessageStatus } from '@/hooks';
 import type { LogLine } from '@/hooks/useCodeTaskLogs.js';
 import type { CodeTaskStatus } from '@/types';
+import { parseLogLine, formatUrlForDisplay } from '@/utils/logLinkUtils.js';
 import { MessageInput } from './MessageInput.js';
 
 const TAG_RE = /^(?:\d{2}:\d{2}:\d{2}\.\d{3} )?\[(\w+)\]/;
@@ -60,6 +62,26 @@ function getLogLineClass(text: string): string {
 function isBodyLine(text: string): boolean {
   const stripped = text.replace(TIMESTAMP_PREFIX_RE, '');
   return stripped.startsWith('  \u2192 ') || stripped.startsWith('  \u2717 ') || stripped.startsWith('    ');
+}
+
+function renderLogContent(text: string): React.ReactNode {
+  const segments = parseLogLine(text);
+  return segments.map((segment, i) => {
+    if (typeof segment === 'object') {
+      return (
+        <a
+          key={i}
+          href={segment.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 dark:text-blue-400 underline hover:text-blue-800 dark:hover:text-blue-300"
+        >
+          {formatUrlForDisplay(segment.url)}
+        </a>
+      );
+    }
+    return <span key={i}>{segment}</span>;
+  });
 }
 
 function countVisualLines(logs: LogLine[], start: number, end: number): number {
@@ -368,7 +390,7 @@ export function CodeTaskLogViewer({
                       <span className="w-4 shrink-0" />
                     )}
                     <pre className={`min-w-0 ${claudeFilter ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'} ${getLogLineClass(line.text)}`}>
-                      {line.text}
+                      {renderLogContent(line.text)}
                     </pre>
                   </div>
 
@@ -388,7 +410,7 @@ export function CodeTaskLogViewer({
                     logs.slice(block.bodyStart, block.bodyEnd).map((bodyLine, bodyIndex) => (
                       <div key={`${String(bodyLine.sequence)}-${String(bodyIndex)}-body`} className="pl-6">
                         <pre className={`whitespace-pre rounded px-2 py-0.5 ${getLogLineClass(bodyLine.text)}`}>
-                          {bodyLine.text}
+                          {renderLogContent(bodyLine.text)}
                         </pre>
                       </div>
                     ))
