@@ -8197,6 +8197,72 @@ describe('TaskDispatcher', () => {
       }
     });
 
+    it('uses ask-agent-specific resume preamble without PR instructions for ask_agent tasks', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-ask-agent-resume',
+        workerType: 'auto',
+        prompt: 'Initial ask',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'ask_agent',
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const state = await statePersistence.load();
+      const task = state.tasks['msg-ask-agent-resume'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      await statePersistence.save(state);
+
+      const result = await dispatcher.sendMessage('msg-ask-agent-resume', 'What about the filter counts?');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'resumed' });
+      }
+
+      await flushAsync();
+
+      const createWorkerCalls = vi.mocked(mockIsolationProvider.createWorker).mock.calls;
+      const lastCall = createWorkerCalls[createWorkerCalls.length - 1];
+      const workerConfig = lastCall?.[0];
+      expect(workerConfig?.prompt).not.toContain('RESUME PRE-FLIGHT');
+      expect(workerConfig?.prompt).not.toContain('gh pr view');
+      expect(workerConfig?.prompt).not.toContain('git checkout -b followup');
+      expect(workerConfig?.prompt).toContain('What about the filter counts?');
+    });
+
+    it('does not inject ACTIVE GOAL section for ask_agent resume', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-ask-agent-no-goal',
+        workerType: 'auto',
+        prompt: 'Initial',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'ask_agent',
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const state = await statePersistence.load();
+      const task = state.tasks['msg-ask-agent-no-goal'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      await statePersistence.save(state);
+
+      await dispatcher.sendMessage('msg-ask-agent-no-goal', 'Continue from where we left off');
+      await flushAsync();
+
+      const createWorkerCalls = vi.mocked(mockIsolationProvider.createWorker).mock.calls;
+      const lastCall = createWorkerCalls[createWorkerCalls.length - 1];
+      const workerConfig = lastCall?.[0];
+      expect(workerConfig?.systemPrompt).not.toContain('ACTIVE GOAL');
+    });
+
     it('returns not_found when container is no longer available for resume', async () => {
       const request: CreateTaskRequest = {
         taskId: 'msg-stale-container-task',
