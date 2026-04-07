@@ -629,7 +629,9 @@ export class TaskDispatcher {
       );
       /* v8 ignore stop @preserve */
 
-      const prompt = this.buildResumePreamble(task) + message;
+      const prompt = task.agentType === 'ask_agent'
+        ? message
+        : this.buildResumePreamble(task) + message;
       task.status = 'running';
       task.containerId = '';
       task.startedAt = new Date().toISOString();
@@ -740,7 +742,7 @@ export class TaskDispatcher {
       const resumeResult = await this.startWorkerAttempt(task, {
         prompt,
         continueSession: true,
-        injectActiveGoal: true,
+        injectActiveGoal: task.agentType !== 'ask_agent',
       });
 
       if (!resumeResult.ok) {
