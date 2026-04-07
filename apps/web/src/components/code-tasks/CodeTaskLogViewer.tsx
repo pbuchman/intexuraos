@@ -9,6 +9,7 @@ import type { MessageStatus } from '@/hooks';
 import type { LogLine } from '@/hooks/useCodeTaskLogs.js';
 import type { CodeTaskStatus } from '@/types';
 import { MessageInput } from './MessageInput.js';
+import { parseLogLine, formatUrlForDisplay } from '@/utils/logLinkUtils.js';
 
 const TAG_RE = /^(?:\d{2}:\d{2}:\d{2}\.\d{3} )?\[(\w+)\]/;
 const TIMESTAMP_PREFIX_RE = /^\d{2}:\d{2}:\d{2}\.\d{3} /;
@@ -71,6 +72,29 @@ function countVisualLines(logs: LogLine[], start: number, end: number): number {
     }
   }
   return count;
+}
+
+function renderLogContent(text: string): React.ReactNode {
+  const segments = parseLogLine(text);
+  if (segments.length === 1 && typeof segments[0] === 'string') {
+    return text;
+  }
+  return segments.map((segment, i) => {
+    if (typeof segment === 'string') {
+      return <span key={i}>{segment}</span>;
+    }
+    return (
+      <a
+        key={i}
+        href={segment.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-600 dark:text-blue-400 underline hover:text-blue-800 dark:hover:text-blue-300"
+      >
+        {formatUrlForDisplay(segment.url)}
+      </a>
+    );
+  });
 }
 
 export interface CodeTaskLogViewerProps {
@@ -368,7 +392,7 @@ export function CodeTaskLogViewer({
                       <span className="w-4 shrink-0" />
                     )}
                     <pre className={`min-w-0 ${claudeFilter ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'} ${getLogLineClass(line.text)}`}>
-                      {line.text}
+                      {renderLogContent(line.text)}
                     </pre>
                   </div>
 
@@ -388,7 +412,7 @@ export function CodeTaskLogViewer({
                     logs.slice(block.bodyStart, block.bodyEnd).map((bodyLine, bodyIndex) => (
                       <div key={`${String(bodyLine.sequence)}-${String(bodyIndex)}-body`} className="pl-6">
                         <pre className={`whitespace-pre rounded px-2 py-0.5 ${getLogLineClass(bodyLine.text)}`}>
-                          {bodyLine.text}
+                          {renderLogContent(bodyLine.text)}
                         </pre>
                       </div>
                     ))

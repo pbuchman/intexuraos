@@ -2,6 +2,9 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'node:path';
 
+// Ensure React development build is used in tests (React.act requires dev build)
+process.env.NODE_ENV = 'test';
+
 // Set up environment variables for tests
 process.env.INTEXURAOS_AUTH0_DOMAIN = 'test-domain';
 process.env.INTEXURAOS_AUTH0_SPA_CLIENT_ID = 'test-client-id';
