@@ -1930,7 +1930,12 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       expect(fakeImageClient.generatePrompt).toHaveBeenCalledTimes(2);
       expect(fakeImageClient.generateImage).not.toHaveBeenCalled();
       expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.objectContaining({ errors: expect.any(Array) }),
+        expect.objectContaining({
+          errors: expect.arrayContaining([
+            expect.objectContaining({ provider: 'Google' }),
+            expect.objectContaining({ provider: 'OpenAI' }),
+          ]),
+        }),
         expect.stringContaining('all 2 provider(s) exhausted')
       );
     });

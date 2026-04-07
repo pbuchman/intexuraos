@@ -458,7 +458,7 @@ function getAvailableProviderPipelines(
 
   const openAiPipeline: ProviderPipeline = {
     name: 'OpenAI',
-    promptModel: 'gpt-4.1' as PromptModel,
+    promptModel: 'gpt-4.1',
     imageModel: LlmModels.GPTImage1,
   };
 
