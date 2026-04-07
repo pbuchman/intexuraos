@@ -4,6 +4,7 @@
 
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { CodeTaskLogViewer } from '../CodeTaskLogViewer.js';
 import type { LogLine } from '@/hooks/useCodeTaskLogs.js';
 
@@ -27,6 +28,33 @@ describe('CodeTaskLogViewer link rendering', () => {
     listenerHealthy: true,
     taskStatus: 'implemented' as const,
   };
+
+  it('renders URLs in expanded tool body', async () => {
+    // Tool block header + 4 body lines (minimum for collapsible)
+    const logs = [
+      makeLine('[tool] SomeTool executed'),
+      makeLine('  → https://url-in-body.com', 1),
+      makeLine('  → line 2', 2),
+      makeLine('  → line 3', 3),
+      makeLine('  → line 4', 4),
+    ];
+    const user = userEvent.setup();
+    render(<CodeTaskLogViewer {...baseProps} logs={logs} />);
+
+    // Block should be collapsed initially - URL not visible
+    expect(screen.queryByRole('link', { name: /url-in-body\.com/ })).toBeNull();
+
+    // Click expand button
+    const expandButton = screen.getByRole('button', { name: 'Expand tool output' });
+    await user.click(expandButton);
+
+    // URL should now be visible in expanded body (renderLogContent at line 415)
+    expect(screen.getByRole('link', { name: /url-in-body\.com/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /url-in-body\.com/ })).toHaveAttribute(
+      'href',
+      'https://url-in-body.com',
+    );
+  });
 
   it('renders a single URL as a clickable link', () => {
     const logs = [makeLine('[claude] See https://github.com/org/repo')];

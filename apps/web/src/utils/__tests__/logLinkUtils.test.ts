@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { parseLogLine, formatUrlForDisplay } from '../logLinkUtils.js';
-import type { URLSegment } from '../logLinkUtils.js';
 
 describe('parseLogLine', () => {
   it('returns plain text when no URL is present', () => {
@@ -73,7 +72,11 @@ describe('parseLogLine', () => {
   it('handles URL followed by punctuation that is not part of URL', () => {
     const result = parseLogLine('See https://example.com.');
     expect(result).toHaveLength(2);
-    const urlSegment = result[1] as URLSegment;
+    expect(result[0]).toBe('See ');
+    const urlSegment = result[1];
+    if (typeof urlSegment === 'string' || urlSegment.type !== 'url') {
+      throw new Error('expected URLSegment');
+    }
     expect(urlSegment.type).toBe('url');
     expect(urlSegment.url).toBe('https://example.com');
   });
@@ -90,7 +93,10 @@ describe('parseLogLine', () => {
     const result = parseLogLine('(see https://example.com)');
     expect(result).toHaveLength(3);
     expect(result[0]).toBe('(see ');
-    const urlSegment = result[1] as URLSegment;
+    const urlSegment = result[1];
+    if (typeof urlSegment === 'string' || urlSegment.type !== 'url') {
+      throw new Error('expected URLSegment');
+    }
     expect(urlSegment.type).toBe('url');
     expect(urlSegment.url).toBe('https://example.com');
     expect(result[2]).toBe(')');
