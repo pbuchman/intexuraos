@@ -608,7 +608,10 @@ export class TaskDispatcher {
       if (!hasWorktree) {
         return {
           ok: false,
-          error: { type: 'not_found', message: 'Worker container and worktree no longer available for resume' },
+          error: {
+            type: 'not_found',
+            message: 'Worker container and worktree no longer available for resume',
+          },
         };
       }
 
