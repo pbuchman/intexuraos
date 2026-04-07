@@ -8,7 +8,7 @@
     <img src="https://img.shields.io/badge/Coverage-100%25-success?style=flat-square&logo=codecov" alt="Coverage">
     <img src="https://img.shields.io/badge/TypeScript-5.7-blue?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
     <img src="https://img.shields.io/badge/AI_Models-14-purple?style=flat-square" alt="AI Models">
-    <img src="https://img.shields.io/badge/Components-50-orange?style=flat-square" alt="Components">
+    <img src="https://img.shields.io/badge/Components-52-orange?style=flat-square" alt="Components">
     <img src="https://img.shields.io/badge/Hooks-26-green?style=flat-square" alt="Hooks">
     <img src="https://img.shields.io/badge/CI_Scripts-27-green?style=flat-square" alt="CI Scripts">
     <img src="https://img.shields.io/badge/Infrastructure-Terraform-623CE4?style=flat-square&logo=terraform&logoColor=white" alt="Terraform">
@@ -322,13 +322,21 @@ You submit tasks while walking, while commuting, while thinking of something els
 
 #### v3.5.0
 
-| Improvement                         | Impact                                                                                    |
-| ----------------------------------- | ----------------------------------------------------------------------------------------- |
-| **Hellscript Categorized Writing**  | AI-powered writing following user style and preferences                                   |
-| **Codex Runtime Support**           | OpenAI Codex as an execution backend with auth, log processing, and worker types          |
-| **Execution Memory Graph**          | Visual representation of agent decision-making patterns for RAG tuning                    |
-| **Remediation Agent & Review Loop** | Autonomous auto-improvement loop with cross-LLM checks and event sourcing                 |
-| **OpenRouter Integration**          | Route tasks through OpenRouter models with backend infra, frontend selection, and pricing |
+| Improvement                  | Impact                                                                                         |
+| ---------------------------- | ---------------------------------------------------------------------------------------------- |
+| **Hellscript Agent**         | AI-powered writing following user style and preferences with categorized writing configuration |
+| **Codex Runtime**            | OpenAI Codex as a full execution backend with authentication, log processing, and worker types |
+| **Execution Memory**         | Data collection pipeline with vector retrieval and post-run distillation for smarter agents    |
+| **Remediation Agent**        | Autonomous auto-improvement loop with cross-LLM checks and event-sourcing                      |
+| **OpenRouter Integration**   | Route tasks through OpenRouter models with backend infrastructure and pricing display          |
+| **Ask Agent**                | Interactive back-and-forth Claude Code sessions directly from the UI                           |
+| **Code Task Groups**         | Backend grouping and pagination of code tasks by Linear issue representation                   |
+| **Cron Agent**               | Internal API integration for executing user tasks on schedule with security validation         |
+| **Cloudflare Web Research**  | Replaced Crawl4AI with Cloudflare Browser Rendering for JS-rendered pages                      |
+| **Auto-Archive**             | Merged code tasks archived automatically — batch archive and loading UX improvements           |
+| **Linear Issue Cleanup**     | AI-powered stale issue detection with review UI and scheduled pruning                          |
+| **CI Failure Auto-Handling** | Failed checks on agent PRs retried or escalated without user intervention                      |
+| **Worker Settings**          | Per-agent-type worker settings for independent performance and cost tuning                     |
 
 #### v3.4.0
 

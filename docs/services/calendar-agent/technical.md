@@ -117,6 +117,8 @@ sequenceDiagram
 
 | Commit      | Description                                                         | Date       |
 | ----------- | ------------------------------------------------------------------- | ---------- |
+| `287db2b62` | Add getUserTimezone to UserServiceClient (package-level)            | 2026-03-27 |
+| `549c9698`  | Enforce strict v8 ignore validation with blocker keyword checks     | 2026-03-24 |
 | `f3c35d4f1` | Deduplicate internalRoutes.ts handlers (INT-897)                    | 2026-03-17 |
 | `9cee58adc` | Split calendarRoutes.ts into focused route files (INT-896)          | 2026-03-16 |
 | `93aeac4a`  | Remove ZAI provider and GLM-4.7 models, finalize GLM-5 (INT-836)    | 2026-03-12 |
@@ -130,8 +132,6 @@ sequenceDiagram
 | `a52a6bbc`  | Add Dash0 OpenTelemetry integration                                 | 2026-02-16 |
 | `e60eafc1`  | Standardize API key secrets to APP naming convention                | 2026-02-15 |
 | `c72b7c53`  | Switch default LLM to Gemini 2.5 Flash + add fallbacks              | 2026-02-15 |
-| `0f69a74b`  | Add default model selector with platform fallback                   | 2026-02-08 |
-| `5aa3e1bd`  | Enable strict 100% coverage enforcement (Phase 3)                   | 2026-01-31 |
 
 ## API Endpoints
 
@@ -401,4 +401,4 @@ apps/calendar-agent/src/
 
 ---
 
-**Last updated:** 2026-03-22
+**Last updated:** 2026-04-07

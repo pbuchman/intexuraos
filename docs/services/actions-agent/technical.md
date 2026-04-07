@@ -45,50 +45,25 @@ graph TB
 
 ## Recent Changes
 
-| Commit      | Description                                                                | Date       |
-| ----------- | -------------------------------------------------------------------------- | ---------- |
-| `62870df9`  | Address PR review comments for worker type detection                       | 2026-03-21 |
-| `784de2ab`  | Detect worker type from message keywords in code actions                   | 2026-03-21 |
-| `fe7b7244`  | Inject logger in commandsAgentHttpClient and fix blank lines               | 2026-03-18 |
-| `1f5d1cad`  | Audit sibling HTTP clients for same optional-logger pattern                | 2026-03-18 |
-| `4fb483d3`  | Make logger required in LinearAgentHttpClientConfig                        | 2026-03-18 |
-| `ab3c016f`  | Condense handleAction template to meet 80-line acceptance criteria         | 2026-03-18 |
-| `fac2d792`  | Address code review feedback for handleAction template                     | 2026-03-18 |
-| `882aa91f`  | Fix leaky abstraction in handleActionTemplate                              | 2026-03-18 |
-| `22018d1b`  | Extract shared handleAction template (INT-887)                             | 2026-03-18 |
-| `eb94ab98`  | Extract auth middleware from internalRoutes.ts (INT-888)                   | 2026-03-17 |
-| `72887a79`  | Add v8 ignore comments for uncovered template branches                     | 2026-03-16 |
-| `0839daab`  | Extract shared executeAction template (INT-885)                            | 2026-03-16 |
-| `a6325fe0`  | Split handleApprovalReply.ts into approval/ modules (INT-884)              | 2026-03-16 |
-| `295a0485`  | Extract PATCH handler business logic to updateActionUseCase (INT-914)      | 2026-03-16 |
+| Commit      | Description                                                   | Date       |
+| ----------- | ------------------------------------------------------------- | ---------- |
+| `e003737c`  | Add test for absolute URL and remove invalid v8 ignore        | 2026-04-04 |
+| `d1d3cfb8`  | Standardize code task WhatsApp notification format (CTA)      | 2026-04-04 |
+| `9d48e9bd`  | Remove emoji from WhatsApp CTA URL displayText (INT-1259)     | 2026-04-04 |
+| `b3da4353`  | Add prefix collision regression tests for workerTypeDetection | 2026-03-28 |
+| `19f7b8e4`  | Add codex-xhigh worker type preset (INT-1109)                 | 2026-03-28 |
 
-### Shared handleAction Template (INT-887)
+### Code Task CTA Button Notifications (INT-1260)
 
-Extracted common logic (logging, auto-execution, WhatsApp approval notification) from all 7 `handle*Action` use cases into `handleActionTemplate.ts`. Each handler now provides only a `buildMessage` function and optional `extraButtons`/`preProcess`/`onAutoExecuteSuccess` callbacks. Template is under 80 lines. Eliminates duplicated auto-execution gating, WhatsApp publishing, and correlation ID construction.
+Changed code task completion WhatsApp notifications from embedding the URL in message text to using CTA button pattern (matching calendar events). The message is now a clean "Code Task Created" with a tappable "View Progress" button. Also detects absolute URLs (same pattern as `executeCalendarAction`) to avoid prepending `webAppUrl`.
 
-### Shared executeAction Template (INT-885)
+### WhatsApp CTA Emoji Fix (INT-1259)
 
-Extracted common workflow (get action, null check, idempotency for completed actions, status validation, update to processing, call service, handle failure/success, send WhatsApp notification) into `executeActionTemplate.ts`. Used by executeResearchAction, executeTodoAction, executeNoteAction, executeCalendarAction, and executeLinearAction. executeLinkAction and executeCodeAction are not migrated due to significant deviations (URL extraction logic in link, special error handling in code).
+Removed emoji characters from WhatsApp CTA URL `displayText` field. WhatsApp's interactive message CTA does not support emoji in the display text, causing characters like the calendar emoji to render as "?" on the recipient's device.
 
-### Auth Middleware Extraction (INT-888)
+### codex-xhigh Worker Type (INT-1109)
 
-Extracted `validatePubSubOrInternalAuth` into `pubsubAuth.ts` and `decodePubSubMessage` into `decodePubSubMessage.ts`. Removes repeated auth/decode patterns from internalRoutes.ts.
-
-### updateAction Use Case (INT-914)
-
-Extracted PATCH `/actions/:actionId` business logic (action lookup, ownership check, type change delegation, status update) from the route handler into `updateAction.ts` use case. The route handler now calls `updateActionUseCase` and returns its result.
-
-### Approval Module Decomposition (INT-884)
-
-Split `handleApprovalReply.ts` from a single large file into `approval/` submodules: `types.ts`, `handleButtonResponse.ts`, `handleCancelTaskButton.ts`, `handleProceedToImplementationButton.ts`, `executeActionByType.ts`, `executeRejection.ts`. The main file now orchestrates these modules.
-
-### Logger Injection in HTTP Clients (INT-889)
-
-All HTTP client configurations (`commandsAgentHttpClient`, `linearAgentHttpClient`, `calendarServiceHttpClient`, `codeAgentHttpClient`) now require a `logger` parameter. Previously optional or absent.
-
-### Worker Type Detection from Keywords
-
-Added `detectWorkerTypeFromMessage` in `domain/utils/workerTypeDetection.ts`. Scans the user's message for patterns like "use opus", "use sonnet", etc. Automatically builds rules from the `CODE_TASK_WORKER_TYPES` array — adding a new worker type to the array requires no code change in the detection logic. Returns `undefined` if zero or multiple matches (ambiguous).
+Added `codex-xhigh` to `CODE_TASK_WORKER_TYPES` as a high-effort Codex preset. The `workerTypeDetection` utility automatically supports it via dynamic rule generation from the shared `CODE_TASK_WORKER_TYPES` array — no code change was needed in actions-agent's detection logic. Word-boundary regex prevents false positives when "codex" is a prefix of "codex-xhigh".
 
 ## Data Flow
 
@@ -284,14 +259,14 @@ sequenceDiagram
 
 ### CodeActionPayload
 
-| Field              | Type               | Description                                                         |
-| ------------------ | ------------------ | ------------------------------------------------------------------- |
-| `prompt`           | string             | User's request (what they want Claude to do)                        |
-| `workerType`       | CodeTaskWorkerType | Which model to use: auto, opus, sonnet, minimax, glm, qwen, or kimi |
-| `linearIssueId`    | string (optional)  | Existing Linear issue to work on                                    |
-| `linearIssueTitle` | string (optional)  | Title of the Linear issue                                           |
-| `approvalEventId`  | string (optional)  | UUID for idempotency (set on approval)                              |
-| `resource_url`     | string (optional)  | URL of created code task (set by code-agent)                        |
+| Field              | Type               | Description                                                                                           |
+| ------------------ | ------------------ | ----------------------------------------------------------------------------------------------------- |
+| `prompt`           | string             | User's request (what they want Claude to do)                                                          |
+| `workerType`       | CodeTaskWorkerType | Which model to use: auto, opus, sonnet, minimax, glm, qwen, kimi, codex, codex-xhigh, openrouter-free |
+| `linearIssueId`    | string (optional)  | Existing Linear issue to work on                                                                      |
+| `linearIssueTitle` | string (optional)  | Title of the Linear issue                                                                             |
+| `approvalEventId`  | string (optional)  | UUID for idempotency (set on approval)                                                                |
+| `resource_url`     | string (optional)  | URL of created code task (set by code-agent)                                                          |
 
 ### ActionTransition
 
@@ -331,7 +306,7 @@ Each handler provides a `buildMessage` function and optional hooks. The template
 
 Shared template for execute use cases. Handles the common workflow: get action by ID, null check, idempotency for completed actions, status validation, update to processing, call service, handle failure, handle success, send WhatsApp notification if `resourceUrl` exists.
 
-**Not migrated:** `executeLinkAction` (URL extraction logic) and `executeCodeAction` (WORKER_UNAVAILABLE/DUPLICATE error handling) due to significant deviations.
+**Not migrated:** `executeLinkAction` (URL extraction logic) and `executeCodeAction` (WORKER_UNAVAILABLE/DUPLICATE error handling, CTA button notifications) due to significant deviations.
 
 ### handleApprovalReply
 
@@ -401,13 +376,26 @@ Executes calendar actions by delegating to calendar-agent.
 6. Format rich completion message via `formatCalendarCompletionMessage` (event title, date, time, duration, location)
 7. Send WhatsApp notification with CTA button ("View in Calendar" linking to the event URL)
 
+### executeCodeAction
+
+Executes code actions by delegating to code-agent. Not migrated to `executeActionTemplate` due to special error handling.
+
+**Flow:**
+
+1. Retrieve action, validate status, update to processing
+2. Generate `approvalEventId` (UUID) for idempotency
+3. Detect worker type from message text via `detectWorkerTypeFromMessage`
+4. Call `codeAgentClient.submitTask` with payload
+5. Handle `WORKER_UNAVAILABLE` and `DUPLICATE` error codes specifically
+6. On success: store `resource_url` and send WhatsApp CTA button notification ("View Progress")
+
 ### shouldAutoExecute
 
 Determines whether an action should be auto-executed based on classification confidence. The threshold is 90% (`>= 0.9`). This function is type-agnostic — any action type can auto-execute. However, auto-execution only occurs when the handler injects an `executeAction` dependency. All types except `linear` and `reminder` support auto-execution.
 
 ### detectWorkerTypeFromMessage
 
-Scans user message text for "use {workerType}" patterns. Dynamically builds regex rules from the `CODE_TASK_WORKER_TYPES` constant — new worker types are automatically supported with no code change. Returns `undefined` if zero matches or ambiguous (multiple matches).
+Scans user message text for "use {workerType}" patterns. Dynamically builds regex rules from the `CODE_TASK_WORKER_TYPES` constant — new worker types are automatically supported with no code change. Uses word-boundary matching to prevent false positives when one type name is a prefix of another (e.g., "codex" vs "codex-xhigh"). Returns `undefined` if zero matches or ambiguous (multiple matches).
 
 ### changeActionType
 
@@ -524,6 +512,10 @@ const handler = registerActionHandler(createHandleXxxActionUseCase, deps);
 
 **Calendar preview fetch ordering**: The `executeCalendarAction` use case fetches the preview BEFORE calling `processAction`. This is necessary because calendar-agent deletes the preview from Firestore after creating the event.
 
+**Calendar CTA emoji restriction (INT-1259)**: WhatsApp CTA URL `displayText` does not support emoji characters. Emoji in `displayText` renders as "?" on the recipient's device. The "View in Calendar" button text is plain text only.
+
+**Code task CTA button notifications (INT-1260)**: Code task completion notifications use CTA button pattern (same as calendar). Message is "Code Task Created" with a "View Progress" tappable button linking to the code task page. Absolute URLs from code-agent are detected and passed through without prepending `webAppUrl`.
+
 **Approval reply idempotency**: The `updateStatusIf` method uses Firestore transactions to atomically check and update status. If the status does not match expectations, the operation is a no-op, preventing race conditions when multiple Pub/Sub messages arrive concurrently.
 
 **Text replies re-send buttons**: When a user sends a text reply to an approval message (no buttonId), the system re-sends fresh interactive buttons. There is no LLM fallback — approval is button-only.
@@ -534,9 +526,9 @@ const handler = registerActionHandler(createHandleXxxActionUseCase, deps);
 
 **Proceed-implementation button (INT-628)**: The `proceed-implementation:{taskId}` button submits a task to phase 2 implementation via `codeAgentClient.submitToPhase2`. Error codes include `TASK_NOT_FOUND`, `INVALID_STATUS`, `NO_LINEAR_ISSUE`, `LABEL_NOT_READY`, `ALREADY_IMPLEMENTED`, `ACTIVE_TASK_EXISTS`, `WORKER_NOT_CONFIGURED`, and `NETWORK_ERROR`.
 
-**Worker type detection**: `detectWorkerTypeFromMessage` uses word-boundary regex (`\buse {type}\b`) to prevent false positives. If multiple worker types are mentioned, the function returns `undefined` (ambiguous), falling back to `auto`. Rules are built dynamically from `CODE_TASK_WORKER_TYPES`.
+**Worker type detection**: `detectWorkerTypeFromMessage` uses word-boundary regex to prevent false positives when one type name is a prefix of another (e.g., "codex" vs "codex-xhigh"). If multiple worker types are mentioned, the function returns `undefined` (ambiguous), falling back to `auto`. Rules are built dynamically from `CODE_TASK_WORKER_TYPES`.
 
-**Worker types**: Code action payload `workerType` supports: `auto`, `opus`, `sonnet`, `minimax`, `glm`, `qwen`, and `kimi`.
+**Worker types**: Code action payload `workerType` supports: `auto`, `opus`, `sonnet`, `minimax`, `glm`, `qwen`, `kimi`, `codex`, `codex-xhigh`, `openrouter-free`.
 
 **Create action endpoint no longer publishes events**: The `POST /internal/actions` endpoint only creates the action record. Event publishing is the caller's responsibility (commands-agent) to prevent duplicate events.
 

@@ -2,9 +2,9 @@
 
 ## Overview
 
-Web Agent extracts web content and generates AI summaries. It uses Cloudflare Browser Rendering for headless browser content extraction, Cheerio for OpenGraph parsing, and the user's configured LLM (with a platform Gemini 2.5 Flash fallback) for summarization with automatic response repair.
+Web Agent extracts web content and generates AI summaries. It uses Cloudflare Browser Rendering for headless browser content extraction (returning Markdown), Cheerio for OpenGraph parsing, and the user's configured LLM (with a platform Gemini 2.5 Flash fallback) for summarization with automatic response repair.
 
-Runs on Cloud Run with auto-scaling (0–1 instances). Port 8127 on local/dev. Distributed tracing via Dash0 OpenTelemetry (transparent preload).
+Runs on Cloud Run with auto-scaling (0–1 instances). Port 8127 on dev (PM2). Distributed tracing via Dash0 OpenTelemetry (transparent preload).
 
 ## Architecture
 
@@ -42,11 +42,10 @@ graph TB
     Routes --> PCF
     Routes --> OGF
 
-    PCF -->|crawl| CF
-    CF -->|fetch| Target
+    PCF -->|POST /markdown| CF
+    CF -->|render + extract| Target
 
     Routes --> LLM
-    LLM -->|get user keys + fallback| US
     LLM -->|generate| UserLLM
     LLM -->|fallback| PlatformLLM
     LLM --> Parser
@@ -56,6 +55,7 @@ graph TB
     OGF -->|fetch HTML| Target
     OGF -->|parse| Cheerio[Cheerio]
 
+    US -.->|getLlmClient per request| Routes
     AS -.->|pricing at startup| Routes
 
     classDef service fill:#e1f5ff
@@ -78,15 +78,15 @@ sequenceDiagram
     participant UserService as user-service
     participant LLM as LLM (user's or platform)
 
-    Caller->>+WebAgent: POST /internal/page-summaries<br/>{url, userId}
-    WebAgent->>Cloudflare: Crawl URL (browser strategy)
+    Caller->>+WebAgent: POST /internal/page-summaries<br/>{url, userId, title?, description?}
+    WebAgent->>Cloudflare: POST /markdown {url, rejectResourceTypes}
     Cloudflare-->>WebAgent: markdown content
     WebAgent->>UserService: getLlmClient(userId)
-    UserService-->>WebAgent: LLM client (user key → Gemini fallback)
-    WebAgent->>LLM: Generate summary
-    LLM-->>WebAgent: "Here is the summary: {...}"
+    UserService-->>WebAgent: LLM client (user key or Gemini fallback)
+    WebAgent->>LLM: Generate summary (with content focus + language preservation)
+    LLM-->>WebAgent: prose text or invalid format
     WebAgent->>WebAgent: parseSummaryResponse()
-    alt Response is JSON
+    alt Response is JSON or invalid
         WebAgent->>LLM: Repair prompt
         LLM-->>WebAgent: Clean prose
     end
@@ -95,22 +95,16 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                  | Date       |
-| ---------- | ------------------------------------------------------------ | ---------- |
-| `c4e3a13c` | Release v3.3.0                                               | 2026-03-13 |
-| `93aeac4a` | Remove ZAI provider and GLM-4.7 models (INT-836)             | 2026-03-12 |
-| `a6afbb28` | Write tests for v8-ignore blocks (INT-798)                   | 2026-03-09 |
-| `44ea683a` | Release v3.2.0                                               | 2026-03-07 |
-| `99febe66` | Fix GitHub OAuth integration and cross-service mocks         | 2026-03-02 |
-| `b3f34d85` | Release v3.1.0                                               | 2026-02-22 |
-| `c8a42105` | Release v3.0.0                                               | 2026-02-19 |
-| `884bc168` | Add semver `version` field to PromptBuilder (1.0.0)          | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability              | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration (transparent preload)    | 2026-02-16 |
-| `e60eafc1` | Rename `CRAWL4AI_API_KEY` to `CRAWL4AI_APP_API_KEY`          | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add Gemini fallback | 2026-02-15 |
-| `0f69a74b` | Add platform fallback for users without API keys             | 2026-02-09 |
-| `3a5d9380` | INT-533 Add content focus instructions to summary prompt     | 2026-02-07 |
+| Commit     | Description                                                            | Date       |
+| ---------- | ---------------------------------------------------------------------- | ---------- |
+| `20aa37c4` | Fix page summary prompt review findings                                | 2026-04-02 |
+| `af79b3ea` | Improve page summary prompt focus (INT-1206)                           | 2026-04-02 |
+| `9755f9d4` | Address PR review comments for INT-1153                                | 2026-03-29 |
+| `dc4b3e98` | Extract constants and remove redundant logging                         | 2026-03-29 |
+| `cf614640` | Replace Crawl4AI with Cloudflare Browser Rendering markdown client     | 2026-03-29 |
+| `287db2b6` | Add getUserTimezone to UserServiceClient                               | 2026-03-27 |
+| `e6896a97` | Downgrade expected operational warnings from warn to info level        | 2026-03-27 |
+| `549c9698` | Enforce strict v8 ignore validation with blocker keyword checks        | 2026-03-24 |
 
 ## API Endpoints
 
@@ -158,6 +152,8 @@ interface FetchLinkPreviewsResponse {
 interface SummarizePageBody {
   url: string; // URL to summarize
   userId: string; // User ID for LLM key lookup
+  title?: string; // Optional title hint from metadata
+  description?: string; // Optional description hint from metadata
   maxSentences?: number; // 1-50 (default: 20)
   maxReadingMinutes?: number; // 1-10 (default: 3)
 }
@@ -185,24 +181,24 @@ interface PageSummary {
 
 ### LinkPreview
 
-| Field         | Type                | Description                  |
-| ------------- | ------------------- | ---------------------------- |
-| `url`         | `string`            | Original URL                 |
-| `title`       | `string \           | undefined`                   | og:title or HTML title |
-| `description` | `string \           | undefined`                   | og:description or meta desc |
-| `image`       | `string \           | undefined`                   | Resolved absolute og:image |
-| `favicon`     | `string \           | undefined`                   | Favicon URL |
-| `siteName`    | `string \           | undefined`                   | og:site_name |
+| Field         | Type                  | Description                    |
+| ------------- | --------------------- | ------------------------------ |
+| `url`         | `string`              | Original URL                   |
+| `title`       | `string \             | undefined`                     | og:title or HTML title |
+| `description` | `string \             | undefined`                     | og:description or meta desc |
+| `image`       | `string \             | undefined`                     | Resolved absolute og:image URL |
+| `favicon`     | `string \             | undefined`                     | Favicon URL |
+| `siteName`    | `string \             | undefined`                     | og:site_name |
 
 ### LinkPreviewError
 
-| Code            | Meaning                                  |
-| --------------- | ---------------------------------------- |
-| `FETCH_FAILED`  | HTTP errors or network issues            |
-| `TIMEOUT`       | Request exceeded timeout                 |
-| `TOO_LARGE`     | Response over 2 MB                       |
-| `INVALID_URL`   | Malformed URL or unsupported protocol    |
-| `ACCESS_DENIED` | HTTP 403 — website blocked the request   |
+| Code            | Meaning                                |
+| --------------- | -------------------------------------- |
+| `FETCH_FAILED`  | HTTP errors or network issues          |
+| `TIMEOUT`       | Request exceeded timeout               |
+| `TOO_LARGE`     | Response over 2 MB                     |
+| `INVALID_URL`   | Malformed URL or unsupported protocol  |
+| `ACCESS_DENIED` | HTTP 403 — website blocked the request |
 
 ### PageSummaryError
 
@@ -218,20 +214,20 @@ interface PageSummary {
 
 ## Key Components
 
-### PageContentFetcher
+### PageContentFetcher (Cloudflare Browser Rendering)
 
-Extracts page content via Cloudflare Browser Rendering `/markdown` endpoint without LLM extraction.
+Extracts page content via Cloudflare Browser Rendering `/markdown` endpoint. Sends a POST request with the target URL and rejected resource types (images, media, fonts, stylesheets). Returns clean Markdown text.
 
 **Configuration:**
 
-| Setting      | Default                      | Description             |
-| ------------ | ---------------------------- | ----------------------- |
-| `baseUrl`    | `https://api.cloudflare.com` | Cloudflare API endpoint |
-| `accountId`  | (required)                   | Cloudflare account ID   |
-| `apiToken`   | (required)                   | Cloudflare API token    |
-| `timeoutMs`  | 60000                        | Request timeout         |
+| Setting     | Default                      | Description             |
+| ----------- | ---------------------------- | ----------------------- |
+| `baseUrl`   | `https://api.cloudflare.com` | Cloudflare API endpoint |
+| `accountId` | (required)                   | Cloudflare account ID   |
+| `apiToken`  | (required)                   | Cloudflare API token    |
+| `timeoutMs` | 60000                        | Request timeout         |
 
-**Strategy:** Uses Cloudflare headless browser for JavaScript rendering.
+**Strategy:** Uses Cloudflare's headless browser to render JavaScript, then extracts page content as Markdown. The `rejectResourceTypes` parameter filters out images, media, fonts, and stylesheets to reduce processing time and return text-only content.
 
 ### LlmSummarizer
 
@@ -239,17 +235,18 @@ Generates prose summaries with automatic repair on parse failures.
 
 **Flow:**
 
-1. Build prompt with language preservation and content focus instructions
-2. Send to user's LLM via `llm-factory` (or platform fallback)
+1. Build prompt with language preservation, content focus, and main content selection instructions
+2. Send to user's LLM via `llm-factory` (or platform Gemini 2.5 Flash fallback)
 3. Parse response with `parseSummaryResponse()`
-4. If JSON detected, send repair prompt and retry once
+4. If JSON or invalid format detected, send repair prompt and retry once
 5. Return `PageSummary` or error
 
 **Key features:**
 
 - Prompt includes "Write in SAME LANGUAGE as original content" instruction
 - Content focus section guides LLM to summarize actual page content, not platform descriptions (INT-533)
-- Both `summaryPrompt` and `summaryRepairPrompt` implement `PromptBuilder` with `version: '1.0.0'`
+- Main content selection uses URL, title, and description hints to identify the primary content block and skip site chrome (INT-1206)
+- Both `summaryPrompt` and `summaryRepairPrompt` implement `PromptBuilder` with `version: '2.0.0'`
 
 ### parseSummaryResponse
 
@@ -266,14 +263,14 @@ Validates LLM output is clean prose.
 
 ### OpenGraphFetcher
 
-Fetches and parses OpenGraph metadata.
+Fetches and parses OpenGraph metadata via direct HTTP with browser-like headers.
 
 **Browser-like headers:**
 
 ```typescript
 {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ...',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,...',
   'Accept-Language': 'en-US,en;q=0.9',
   'Accept-Encoding': 'gzip, deflate, br',
   'Cache-Control': 'no-cache',
@@ -342,21 +339,21 @@ All required vars are validated at startup via `validateRequiredEnv()`. `INTEXUR
 
 **Language preservation** — Summary prompt explicitly instructs "Write in SAME LANGUAGE as original content" to prevent English summaries of non-English articles.
 
+**Content focus prompting** — Summary prompts include a CONTENT FOCUS section that prevents the LLM from describing the platform instead of the actual content (e.g., avoids "LinkedIn is a professional network" preambles).
+
+**Main content selection** — The prompt guides the LLM to identify the primary content block using URL, title, and description hints, skipping cookie banners, navigation, login prompts, and other site chrome (INT-1206).
+
 **403 handling** — Returns `ACCESS_DENIED` error code specifically for 403 responses, distinct from general `FETCH_FAILED`.
 
 **Browser-like headers** — OpenGraphFetcher sends Chrome-like headers including Sec-Fetch-* to bypass basic bot detection.
 
 **User LLM client** — Summaries use the user's API key from user-service when available; pricing is tracked per-user regardless of which key is used.
 
-**Empty response handling** — `nonEmpty()` helper treats empty strings the same as undefined for fallback logic.
-
 **Concurrent link previews** — All URLs fetched in parallel via Promise.all. One timeout does not affect others.
 
 **Rate limiting (429)** — Cloudflare 429 responses return `RATE_LIMITED` error code, distinct from general `API_ERROR`.
 
-**Content focus prompting** — Summary prompts include a CONTENT FOCUS section that prevents the LLM from describing the platform instead of the actual content (e.g., avoids "LinkedIn is a professional network" preambles).
-
-**PromptBuilder versioning** — Both `summaryPrompt` and `summaryRepairPrompt` use the `PromptBuilder` interface with semver `version: '1.0.0'`. Bump the version when changing prompt content.
+**PromptBuilder versioning** — Both `summaryPrompt` and `summaryRepairPrompt` use the `PromptBuilder` interface with semver `version: '2.0.0'`. Bump the version when changing prompt content.
 
 **Sentry logging** — Uses `createAppLogger()` from `@intexuraos/infra-sentry` for automatic error forwarding to Sentry.
 
@@ -367,6 +364,8 @@ All required vars are validated at startup via `validateRequiredEnv()`. `INTEXUR
 **No Firestore** — This service is stateless. It does not own any Firestore collections.
 
 **Pricing at startup** — The service fetches LLM pricing from app-settings-service at startup and passes it to the user service client for cost tracking.
+
+**Cloudflare resource filtering** — The Cloudflare request uses `rejectResourceTypes: ['image', 'media', 'font', 'stylesheet']` to skip non-text resources, reducing page load time and focusing on content.
 
 ## File Structure
 
@@ -387,11 +386,10 @@ apps/web-agent/src/
     linkpreview/
       openGraphFetcher.ts        # Cheerio-based OG extraction
     pagesummary/
-      pageContentFetcher.ts      # Cloudflare Browser Rendering client (with RATE_LIMITED handling)
+      cloudflareMarkdownClient.ts # Cloudflare Browser Rendering client (with RATE_LIMITED handling)
       llmSummarizer.ts           # User's LLM summarization (with platform fallback)
-      crawl4aiClient.ts          # Legacy combined client (deprecated)
       parseSummaryResponse.ts    # Response validation
-      buildSummaryRepairPrompt.ts # PromptBuilder prompts v1.0.0 (with content focus section)
+      buildSummaryRepairPrompt.ts # PromptBuilder prompts v2.0.0 (with content focus + main content selection)
   routes/
     internalRoutes.ts            # /internal/* endpoints
     schemas/
@@ -411,7 +409,3 @@ apps/web-agent/src/
 - `@intexuraos/llm-prompts` — PromptBuilder interface with semver versioning
 - `@intexuraos/llm-utils` — `createDetailedParseErrorMessage()` for structured LLM parse error context
 - `cheerio` — HTML parsing for OpenGraph metadata extraction
-
-## Setup Guide
-
-See [Cloudflare Browser Rendering Setup Guide](../../guides/cloudflare-browser-rendering-setup.md) for account creation, API token configuration, and troubleshooting.

@@ -25,6 +25,14 @@ A team lead who wants a complex feature implemented by morning — without babys
 
 ## How It Helps
 
+### Runs Claude and Codex in the Same Container — Choose Your Runtime Per Task
+
+The same worker image ships with both Claude Code and OpenAI Codex CLIs. The orchestrator selects the runtime at dispatch time via a single `WORKER_RUNTIME` environment variable. Both runtimes share the same toolchain, the same security controls, the same session continuity model, and the same log streaming pipeline. Switching between Claude and Codex is a task-level decision, not an infrastructure change.
+
+Codex tasks support configurable reasoning effort (`codex-xhigh` for complex problems, default effort for routine work) and thread-based session resumption across attempts. Codex output streams live to the dashboard — each line appears as it is produced, not buffered until completion.
+
+**Example:** A team runs routine dependency updates on the default Codex runtime and reserves Claude Opus for complex architecture tasks. Both use the same worker image, the same security perimeter, and the same retry infrastructure. No separate deployment, no separate configuration.
+
 ### Recovers Instead of Restarting — Session Continuity Across Failures
 
 Most retry systems are amnesiacs. When an attempt fails — a test breaks, a timeout hits, the approach needs rethinking — they tear everything down and start from scratch. The agent reinstalls dependencies, re-reads the codebase, re-discovers the same dead ends, and burns through the same forty minutes of setup before it can try something new.
@@ -45,7 +53,7 @@ This is not a philosophical preference. It is a structural advantage that cloud-
 
 ### Arrives Fully Equipped — Zero Setup, Zero Delay
 
-Every environment ships with a complete developer toolchain: version control, package management, fast code search, infrastructure validation, browser automation for running end-to-end tests, the GitHub CLI for pull request workflows, and cloud authentication. Claude Code plugins and Codex skill tooling are pre-installed and configured before the agent writes its first line of code.
+Every environment ships with a complete developer toolchain: version control, package management, fast code search, infrastructure validation, browser automation for running end-to-end tests, the GitHub CLI for pull request workflows, and cloud authentication. Claude Code plugins (including Superpowers, Context7, Playwright, and Frontend Design) and Codex Superpowers skills are pre-installed and configured before the agent writes its first line of code.
 
 Project dependencies install automatically at startup. A shared package store means the first environment pays the installation cost once; every subsequent environment reuses the cached packages. Environment variables sync from a cloud secret store and load automatically, so the agent has access to every service credential without manual configuration. A task that would take twenty minutes to set up by hand is ready in seconds.
 
@@ -75,6 +83,7 @@ Code Worker runs as part of the IntexuraOS platform. When you assign a coding ta
 
 ## Key Benefits
 
+- **Multi-runtime by design** — Claude Code and Codex run in the same container image with the same toolchain. Choose your runtime per task, not per deployment. Codex tasks stream output live and support configurable reasoning effort levels.
 - **Self-hosted by design** — the agent runs on your machine, under your API keys, behind your firewall. Source code never leaves your infrastructure. Cloud-hosted competitors cannot offer this without a fundamental architectural change.
 - **Session continuity across retries** — when an attempt fails, the next one inherits the full session history, installed packages, and prior reasoning rather than starting cold. The agent accumulates knowledge instead of amnesia.
 - **Ready from the first command** — the environment arrives with every tool, plugin, credential, and dependency pre-installed. No setup scripts, no interactive prompts, no waiting.

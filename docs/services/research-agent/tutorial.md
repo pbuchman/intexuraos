@@ -1,8 +1,8 @@
-# Research Agent — Tutorial
+# Research Agent -- Tutorial
 
 > **Time:** 20-30 minutes
 > **Prerequisites:** Node.js 20+, valid Auth0 access token, at least one LLM provider API key configured in user-service
-> **You'll learn:** How to submit research, poll for completion, understand partial failures, and enhance existing results
+> **You'll learn:** How to submit research, poll for completion, understand partial failures, use OpenRouter models, and enhance existing results
 
 ---
 
@@ -13,6 +13,7 @@ A working integration that:
 - Submits a multi-model research prompt and receives a synthesized report
 - Polls research status and handles the full lifecycle
 - Handles partial failures with user confirmation
+- Browses available OpenRouter models with live pricing
 - Enhances a completed research with additional context
 
 ---
@@ -79,7 +80,7 @@ export RESEARCH_ID="res_abc123"
 
 ### What Just Happened?
 
-Research Agent saved the research to Firestore with status `pending` and published a `research.process` event to Pub/Sub. The processing runs asynchronously — the response comes back immediately without waiting for LLM calls. During processing, the service infers a structured research context from your prompt (domain, answer style, source preferences) and uses it to build tailored prompts for each model.
+Research Agent saved the research to Firestore with status `pending` and published a `research.process` event to Pub/Sub. The processing runs asynchronously -- the response comes back immediately without waiting for LLM calls. During processing, the service infers a structured research context from your prompt (domain, answer style, source preferences) and uses it to build tailored prompts for each model.
 
 ---
 
@@ -185,11 +186,60 @@ After `proceed`, the research moves to `synthesizing` and completes normally usi
 
 ---
 
-## Part 4: Enhance an Existing Research (10 minutes)
+## Part 4: Browse OpenRouter Models (5 minutes)
+
+If you have an OpenRouter API key configured, you can access 14 curated frontier models from 10 providers.
+
+### Step 4.1: List Available Models
+
+```bash
+curl -s "$BASE_URL/research/openrouter/models" \
+  -H "Authorization: Bearer $TOKEN" | jq '.data.models[] | {id, name, provider, contextLength}'
+```
+
+**Expected response (partial):**
+
+```json
+{
+  "id": "qwen/qwen3.5-plus-02-15",
+  "name": "Qwen 3.5 Plus",
+  "provider": "Qwen",
+  "contextLength": 1000000
+}
+{
+  "id": "x-ai/grok-4.20-beta",
+  "name": "Grok 4.20 Beta",
+  "provider": "xAI",
+  "contextLength": 2000000
+}
+```
+
+### Step 4.2: Submit Research with OpenRouter Models
+
+OpenRouter models use the `or:` prefix in the selectedModels array:
+
+```bash
+curl -s -X POST "$BASE_URL/research" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Compare React Server Components vs traditional SSR approaches",
+    "selectedModels": ["gemini-2.5-pro", "or:x-ai/grok-4.20-beta", "or:qwen/qwen3.5-plus-02-15"],
+    "synthesisModel": "gemini-2.5-pro"
+  }' | jq .
+```
+
+### What Just Happened?
+
+The research was submitted with a mix of native (Gemini) and OpenRouter (Grok, Qwen) models. All three run in parallel through the same pipeline. OpenRouter model IDs are validated against the curated allowlist at execution time.
+
+---
+
+## Part 5: Enhance an Existing Research (10 minutes)
 
 Enhancement lets you expand a completed research without re-running models that already succeeded.
 
-### Step 4.1: Add a New Model and Context
+### Step 5.1: Add a New Model and Context
 
 ```bash
 curl -s -X POST "$BASE_URL/research/$RESEARCH_ID/enhance" \
@@ -213,9 +263,9 @@ curl -s -X POST "$BASE_URL/research/$RESEARCH_ID/enhance" \
 - Re-synthesizes with all results combined
 - Tracks source costs separately in `sourceLlmCostUsd`
 
-### Step 4.2: Poll and Read the Enhanced Result
+### Step 5.2: Poll and Read the Enhanced Result
 
-Use the new research ID from Step 4.1:
+Use the new research ID from Step 5.1:
 
 ```bash
 export ENHANCED_ID="res_enhanced456"
@@ -248,12 +298,14 @@ curl -s "$BASE_URL/research/$ENHANCED_ID" \
 
 | Problem                          | Solution                                                                                                           |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `401 Unauthorized`               | Your bearer token is expired — refresh it via the web app login flow                                               |
+| `401 Unauthorized`               | Your bearer token is expired -- refresh it via the web app login flow                                              |
 | `404 Not Found`                  | The research ID does not exist or belongs to a different user                                                      |
-| Status stuck at `processing`     | Check Pub/Sub subscription delivery — the LLM call topic may be backlogged                                         |
-| Status `failed`, all models down | At least one API key is missing or invalid — check user-service keys                                               |
+| Status stuck at `processing`     | Check Pub/Sub subscription delivery -- the LLM call topic may be backlogged                                        |
+| Status `failed`, all models down | At least one API key is missing or invalid -- check user-service keys                                              |
 | `enhance` returns `NO_CHANGES`   | You must provide at least one of: additionalModels, additionalContexts, synthesisModel change, or removeContextIds |
 | Notion export not appearing      | Confirm `POST /research/settings/notion` was called with a valid page ID                                           |
+| OpenRouter models endpoint 404   | OpenRouter API key not configured in user-service -- add one first                                                 |
+| OpenRouter model rejected        | The model ID is not on the curated allowlist -- check `GET /research/openrouter/models` for valid IDs              |
 
 ---
 
@@ -262,9 +314,10 @@ curl -s "$BASE_URL/research/$ENHANCED_ID" \
 Now that you understand the basics:
 
 1. Configure Notion export via `POST /research/settings/notion` to get automatic research archiving
-2. Explore the draft workflow — use `POST /research/draft` to create a review-before-run flow
-3. Read the [Technical Reference](technical.md) for full API schemas and the complete status lifecycle
-4. See how [actions-agent](../actions-agent/technical.md) triggers draft research from natural language commands
+2. Explore the draft workflow -- use `POST /research/draft` to create a review-before-run flow
+3. Use `POST /research/validate-input` to check prompt quality before submitting
+4. Read the [Technical Reference](technical.md) for full API schemas and the complete status lifecycle
+5. See how [actions-agent](../actions-agent/technical.md) triggers draft research from natural language commands
 
 ---
 
@@ -273,8 +326,8 @@ Now that you understand the basics:
 Test your understanding:
 
 1. **Easy:** List all your researches and find the one with the highest `totalCostUsd`
-2. **Medium:** Submit a research with `skipSynthesis: true` — observe what status it reaches and why the result differs from a normal research
-3. **Hard:** Submit a research, wait for `awaiting_confirmation` (you can simulate by providing an invalid API key for one model), then test all three confirmation decisions — `proceed`, `retry`, and `cancel` — and observe the resulting status transitions
+2. **Medium:** Submit a research with `skipSynthesis: true` -- observe what status it reaches and why the result differs from a normal research
+3. **Hard:** Submit a research mixing native and OpenRouter models, wait for `awaiting_confirmation` (you can simulate by providing an invalid API key for one model), then test all three confirmation decisions -- `proceed`, `retry`, and `cancel` -- and observe the resulting status transitions
 
 <details>
 <summary>Solutions</summary>
@@ -284,7 +337,7 @@ Test your understanding:
 ```bash
 curl -s "$BASE_URL/research" \
   -H "Authorization: Bearer $TOKEN" \
-  | jq '[.data[]] | sort_by(.totalCostUsd // 0) | reverse | first | {id, title, totalCostUsd}'
+  | jq '[.data.items[]] | sort_by(.totalCostUsd // 0) | reverse | first | {id, title, totalCostUsd}'
 ```
 
 ### Exercise 2: Skip Synthesis
@@ -303,11 +356,11 @@ curl -s -X POST "$BASE_URL/research" \
 
 With `skipSynthesis: true`, the research reaches `completed` after the single model call, with no `synthesizedResult`. The single LLM result is directly accessible in `llmResults[0].result`.
 
-### Exercise 3: Partial Failure Decisions
+### Exercise 3: Mixed Models with Partial Failure
 
-Configure one model with no API key by temporarily removing it from user-service. Submit a two-model research. When `awaiting_confirmation` appears, test:
+Configure one model with no API key by temporarily removing it from user-service. Submit a three-model research mixing native and OpenRouter models. When `awaiting_confirmation` appears, test:
 
-- `"decision": "proceed"` -> synthesizes with the successful model
+- `"decision": "proceed"` -> synthesizes with the successful models
 - `"decision": "retry"` -> re-queues the failed model; status goes to `retrying`
 - `"decision": "cancel"` -> status transitions to `failed`
 

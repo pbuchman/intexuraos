@@ -268,7 +268,7 @@ interface AddCommentOutput {
 
 **Endpoint:** `PATCH /internal/linear/issues/:issueId/metadata`
 
-**When to use:** To set the assignee or modify labels on an issue.
+**When to use:** To set the assignee or modify labels on an issue. Accepts both Linear UUIDs and human-readable identifiers (e.g., "INT-123") as the `:issueId` parameter.
 
 **Required headers:** `X-Internal-Auth`, `X-User-Id`
 
@@ -289,8 +289,11 @@ interface UpdateMetadataOutput {
   id: string;
   labels: { id: string; name: string; color: string }[];
   assignee: { id: string; name: string } | null;
+  droppedLabels: string[]; // Label names not found in workspace
 }
 ```
+
+**Side effects:** Updates Firestore label cache (write-through) and notifies code-agent to recompute group summaries.
 
 ---
 
@@ -308,6 +311,7 @@ interface UpdateMetadataOutput {
 interface GetIssueOutput {
   id: string;
   identifier: string;
+  parentIdentifier: string | null;
   title: string;
   description: string | null;
   state: { name: string; type: 'backlog' | 'unstarted' | 'started' | 'completed' | 'cancelled' };
@@ -391,6 +395,7 @@ interface DisplayBatchOutput {
     url: string;
     commentCount: number;
     lastCommentAt: string | null;
+    parentIdentifier: string | null;
   }[];
 }
 ```
@@ -430,6 +435,30 @@ interface IssueTreeOutput {
     state: string;
   }[];
 }
+```
+
+---
+
+### Get Direct Children from Linear
+
+**Endpoint:** `GET /internal/linear/issues/:issueId/direct-children`
+
+**When to use:** When you need the live direct children of an issue from the Linear API (not from local cache). Useful when local sync may not have the latest children.
+
+**Required headers:** `X-Internal-Auth`, `X-User-Id`
+
+**Output Schema:**
+
+```typescript
+type DirectChildrenOutput = {
+  id: string;
+  identifier: string;
+  url: string;
+  parentId: string | null;
+  labels: string[];         // Label names
+  assigneeId: string | null;
+  state: string;
+}[];
 ```
 
 ---
@@ -515,7 +544,7 @@ interface SyncOutput {
 1. Collect identifiers needed for display (e.g., ["INT-100", "INT-101"])
 2. Call POST /internal/linear/issues/display-batch with identifiers array
 3. Use returned issues array for display — missing identifiers are silently omitted
-4. Note: results preserve the input identifier order
+4. Note: results preserve the input identifier order; sub-tasks include parentIdentifier
 ```
 
 ### Pattern 5: Hierarchy Navigation
@@ -534,6 +563,14 @@ interface SyncOutput {
 2. Use description + comments array to build context for validation or analysis
 3. Comments are newest-first, capped at 100, empty bodies already filtered
 4. No X-User-Id needed — designed for service-to-service calls
+```
+
+### Pattern 7: Live Children Lookup
+
+```
+1. Call GET /internal/linear/issues/:issueId/direct-children with X-Internal-Auth + X-User-Id
+2. Returns live data from Linear API (not from local cache)
+3. Use when you need guaranteed-fresh child issue data
 ```
 
 ## Error Handling
@@ -558,6 +595,7 @@ Linear sends issue and comment events to `POST /linear/webhook`. The service:
 1. Validates HMAC-SHA256 signature using per-team webhook secret
 2. Fans out issue changes to all connected users for that team
 3. Auto-triggers a code task when an issue with `planning-task` or `code-task` label is assigned for the first time
+4. Notifies code-agent to recompute group summaries on label changes
 
 ## Dependencies
 
@@ -566,5 +604,7 @@ Linear sends issue and comment events to `POST /linear/webhook`. The service:
 | user-service         | LLM API key for extraction     | Returns `NOT_CONNECTED` on failure   |
 | app-settings-service | LLM pricing context at startup | Startup fails if unreachable         |
 | code-agent           | Auto-trigger on assignment     | Logged and dropped (fire-and-forget) |
+| code-agent           | Group summary recomputes       | Logged and dropped (best-effort)     |
 | Linear API           | Issue CRUD, team data          | Returns error to caller              |
+| Gemini API           | Issue pruning classification   | Pruning fails gracefully             |
 | Firestore            | Local issue/comment storage    | Returns `INTERNAL_ERROR`             |

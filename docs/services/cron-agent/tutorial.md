@@ -49,8 +49,8 @@ curl -X GET https://dev.intexuraos.cloud/api/cron-agent/cron/services \
         "name": "Notes Agent",
         "tools": [
           {
-            "name": "notes_agent__createNote",
-            "description": "Create note - Create a new note for the authenticated user.",
+            "name": "notes_agent__createNoteInternal",
+            "description": "Create note internal - Create a new note for the specified user.",
             "parameters": { "type": "object", "properties": { "body": { "..." } } }
           }
         ]
@@ -62,7 +62,7 @@ curl -X GET https://dev.intexuraos.cloud/api/cron-agent/cron/services \
 
 ### What Just Happened?
 
-The cron-agent fetched OpenAPI specs from all configured target services, extracted their `/internal/*` endpoints, and returned them as available tools. These are the tools the agent can use when executing your schedules.
+The cron-agent fetched OpenAPI specs from all configured target services, extracted their `/internal/*` endpoints, filtered them against per-service operation allowlists, and returned the permitted tools. Services that produce zero tools after filtering are excluded from the response.
 
 ---
 
@@ -70,7 +70,7 @@ The cron-agent fetched OpenAPI specs from all configured target services, extrac
 
 ### Step 2.1: Prepare the Schedule
 
-Choose a target service and an instruction. The `description` field is the natural language schedule — the LLM converts this to a cron expression.
+Choose a target service and an instruction. The `schedule` field is the natural language schedule — the LLM converts this to a cron expression and produces a `scheduleSummary`.
 
 ### Step 2.2: Create the Schedule
 
@@ -80,7 +80,7 @@ curl -X POST https://dev.intexuraos.cloud/api/cron-agent/cron/schedules \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Daily Note Reminder",
-    "description": "every weekday at 9am",
+    "schedule": "every weekday at 9am",
     "action": {
       "services": ["notes-agent"],
       "instruction": "Create a note titled Daily Standup Prep with the current date."
@@ -98,7 +98,7 @@ curl -X POST https://dev.intexuraos.cloud/api/cron-agent/cron/schedules \
     "id": "abc123def456",
     "userId": "auth0|...",
     "name": "Daily Note Reminder",
-    "description": "every weekday at 9am",
+    "scheduleSummary": "Every weekday (Monday through Friday) at 9:00 AM",
     "cronExpression": "0 9 * * 1-5",
     "timezone": "Europe/Warsaw",
     "action": {
@@ -119,7 +119,7 @@ curl -X POST https://dev.intexuraos.cloud/api/cron-agent/cron/schedules \
 
 ### What Just Happened?
 
-The service sent your description ("every weekday at 9am") to Gemini 2.5 Flash, which returned the cron expression `0 9 * * 1-5`. The service validated the expression, computed the next execution time in your timezone, and stored everything in Firestore.
+The service sent your schedule description ("every weekday at 9am") to Gemini 2.5 Flash, which returned the cron expression `0 9 * * 1-5` and a human-readable summary. The service validated the expression, computed the next execution time in your timezone, and stored everything in Firestore.
 
 ### Step 2.3: Verify the Schedule
 
@@ -159,7 +159,7 @@ curl -X POST https://dev.intexuraos.cloud/api/cron-agent/cron/schedules/abc123de
     "durationMs": 3200,
     "toolCalls": [
       {
-        "toolName": "notes_agent__createNote",
+        "toolName": "notes_agent__createNoteInternal",
         "args": { "body": { "title": "Daily Standup Prep", "content": "..." } },
         "result": "{\"success\":true,\"data\":{...}}",
         "durationMs": 1500
@@ -252,7 +252,7 @@ Test your understanding:
 
 1. **Easy:** Create a schedule that runs every Sunday at midnight UTC
 2. **Medium:** Create a schedule targeting two services with preferred tools specified
-3. **Hard:** Create a schedule, trigger it, inspect the execution, then update the description to change the frequency and verify the cron expression changed
+3. **Hard:** Create a schedule, trigger it, inspect the execution, then update the schedule to change the frequency and verify the cron expression changed
 
 <details>
 <summary>Solutions</summary>
@@ -265,7 +265,7 @@ curl -X POST https://dev.intexuraos.cloud/api/cron-agent/cron/schedules \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Weekly Cleanup",
-    "description": "every Sunday at midnight",
+    "schedule": "every Sunday at midnight",
     "action": {
       "services": ["notes-agent"],
       "instruction": "Archive all notes older than 30 days."
@@ -281,11 +281,11 @@ curl -X POST https://dev.intexuraos.cloud/api/cron-agent/cron/schedules \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Sprint Summary",
-    "description": "every Friday at 5pm",
+    "schedule": "every Friday at 5pm",
     "action": {
       "services": ["linear-agent", "notes-agent"],
       "instruction": "Get completed issues this week and create a summary note.",
-      "preferredTools": ["linear_agent__listIssues"]
+      "preferredTools": ["linear_agent__processLinearAction"]
     },
     "timezone": "Europe/Warsaw"
   }'
@@ -303,11 +303,11 @@ curl -X POST .../cron/schedules/$SCHEDULE_ID/trigger -H "Authorization: Bearer $
 # 3. List executions
 curl -X GET ".../cron/executions?scheduleId=$SCHEDULE_ID" -H "Authorization: Bearer $TOKEN"
 
-# 4. Update description (re-parses cron expression)
+# 4. Update schedule (re-parses cron expression)
 curl -X PATCH .../cron/schedules/$SCHEDULE_ID \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"description": "every other Monday at 10am"}'
+  -d '{"schedule": "every other Monday at 10am"}'
 
 # 5. Verify new cron expression
 curl -X GET .../cron/schedules/$SCHEDULE_ID -H "Authorization: Bearer $TOKEN"

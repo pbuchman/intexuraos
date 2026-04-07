@@ -2,7 +2,7 @@
 
 ## Overview
 
-Code Worker is a Docker container image that provides an isolated execution environment for Claude Code and Codex sessions. It is not a standalone service with HTTP endpoints; instead, the orchestrator manages its lifecycle via the Docker API (dockerode). The image bundles both CLIs, a full developer toolchain (including Playwright/Chromium and pre-installed worker tooling), and a bash entrypoint that handles authentication, secret syncing, dependency installation, and runtime-specific execution. Two image variants exist: a production image (`Dockerfile`) and a test image (`Dockerfile.test`) that substitutes a bash stub for the Claude CLI path used in container tests. The image is stored at `europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest` and is rebuilt daily at 4 AM UTC via Cloud Build.
+Code Worker is a Docker container image that provides an isolated execution environment for Claude Code and Codex sessions. It is not a standalone service with HTTP endpoints; instead, the orchestrator manages its lifecycle via the Docker API (dockerode). The image bundles both CLIs, a full developer toolchain (including Playwright/Chromium and pre-installed worker tooling), and a bash entrypoint that handles authentication, secret syncing, dependency installation, and runtime-specific execution. Two image variants exist: a production image (`Dockerfile`) and a test image (`Dockerfile.test`) that substitutes bash stubs for the Claude and Codex CLI paths used in container tests. The image is stored at `europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest` and is rebuilt daily at 4 AM UTC via Cloud Build.
 
 ## Architecture
 
@@ -16,7 +16,9 @@ graph TB
 
             subgraph "Container: code-worker-{taskId}"
                 Entrypoint[entrypoint.sh]
-                Runtime[Claude CLI or Codex CLI]
+                RuntimeSwitch{"WORKER_RUNTIME?"}
+                ClaudeRuntime[Claude CLI<br/>--print --stream-json]
+                CodexRuntime[Codex CLI<br/>exec --json]
                 Tooling[Pre-installed Tooling<br/>Plugins, MCP, Skills]
                 Repo["/repo (rw)<br/>Git Worktree"]
                 Secrets["/secrets (ro)<br/>GCP SA + GitHub Token<br/>+ Prompt Files"]
@@ -34,39 +36,81 @@ graph TB
     Orchestrator -->|writes prompt files| SecretsDir
     Worktrees -->|"bind mount rw"| Repo
     SecretsDir -->|"bind mount ro"| Secrets
-    Network --> Runtime
-    Entrypoint --> Runtime
-    Runtime --> Tooling
+    Network --> ClaudeRuntime
+    Network --> CodexRuntime
+    Entrypoint --> RuntimeSwitch
+    RuntimeSwitch -->|claude| ClaudeRuntime
+    RuntimeSwitch -->|codex| CodexRuntime
+    ClaudeRuntime --> Tooling
+    CodexRuntime --> Tooling
 
-    Runtime -->|"Public Internet"| APIs[Anthropic / OpenAI / GitHub / npm]
+    ClaudeRuntime -->|"Public Internet"| APIs[Anthropic / OpenAI / GitHub / npm]
+    CodexRuntime -->|"Public Internet"| APIs
     Entrypoint -->|"on crash (exit 139)"| ForensicsDir
+
+    classDef service fill:#e1f5ff
+    classDef storage fill:#fff4e6
+    classDef external fill:#f0f0f0
+    classDef decision fill:#ffe6e6
+
+    class Entrypoint,ClaudeRuntime,CodexRuntime,Tooling service
+    class Repo,Secrets,Home,Tmp storage
+    class APIs,Orchestrator external
+    class RuntimeSwitch decision
+```
+
+## Data Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant O as Orchestrator
+    participant E as entrypoint.sh
+    participant R as Runtime (Claude/Codex)
+    participant GH as GitHub
+    participant GCP as GCP Secret Manager
+
+    O->>E: docker exec run-attempt
+    E->>E: Verify /tmp/worker-ready
+    E->>E: Setup git identity + GitHub token
+    E->>E: Load prompt files from /secrets/
+    E->>R: Launch runtime (claude --print / codex exec)
+    R-->>O: Stream JSON output (live)
+    R->>GH: git push, gh pr create
+    Note over E,R: On WORKER_CONTINUE=1: Claude passes --continue, Codex passes exec resume <threadId>
+    R-->>E: Exit code
+    E->>E: Cleanup child processes (SIGTERM/SIGKILL)
+    E-->>O: Return exit code
 ```
 
 ## Recent Changes
 
-| Commit      | Description                                                  | Date       |
-| ----------- | ------------------------------------------------------------ | ---------- |
-| `5e1fdda3`  | Docker cache busting for Claude CLI + add Codex CLI          | 2026-03-15 |
-| `191488b4`  | Enable tasks env var in code-worker settings                 | 2026-03-13 |
-| `393fbbde`  | Clean up orphaned child processes after Claude attempt exits | 2026-03-10 |
-| `57354c70`  | Read GitHub token from file instead of stale env var         | 2026-03-06 |
-| `c8c09941`  | Move secret sync from orchestrator to container entrypoint   | 2026-03-03 |
-| `2a75b75a`  | Fix container.envrc mount failure, add direnv                | 2026-03-02 |
-| `afc1cb24`  | Build multi-arch image for amd64+arm64                       | 2026-02-26 |
-| `36bca370`  | Add code-worker crash forensics mode                         | 2026-02-26 |
-| `98caac48`  | Pre-install Claude Code plugins in image                     | 2026-02-25 |
+| Commit      | Description                                                               | Date       |
+| ----------- | ------------------------------------------------------------------------- | ---------- |
+| `10d395d5`  | Add Codex streaming regression tests                                      | 2026-04-04 |
+| `3e06904a`  | Stream Codex output live instead of buffering to temp file                | 2026-04-04 |
+| `2ad29f77`  | Remove process-level timeout from Codex entrypoint                        | 2026-04-04 |
+| `2f1bf669`  | Use BusyBox-compatible timeout flags in Codex entrypoint                  | 2026-04-04 |
+| `2130968f`  | Code-worker enforcement for Linear MCP timeout (INT-1205)                 | 2026-04-03 |
+| `adbd37d2`  | Add Codex session automation parity evidence (INT-1108)                   | 2026-03-29 |
+| `19f7b8e4`  | Add codex-xhigh worker type preset for high-effort Codex tasks (INT-1109) | 2026-03-28 |
+| `1b525d1e`  | Generalize code worker auth and image naming (INT-1104)                   | 2026-03-27 |
 
-### Docker Cache Busting and Codex CLI (5e1fdda3)
+### Rename from claude-worker to code-worker (1b525d1e)
 
-Added a `CACHE_BUST` build arg (set to the commit SHA by the build script) that invalidates Docker layer cache after the gcloud SDK install, ensuring the Claude CLI is always re-downloaded with the latest version rather than served from a stale cached layer. Also installs `@openai/codex` globally for A/B evaluation of alternative AI coding agent backends within the same worker infrastructure.
+Renamed the service from `claude-worker` to `code-worker` to reflect its runtime-agnostic design. Generalized all Claude-specific environment variable names (`CLAUDE_CONTINUE` to `WORKER_CONTINUE`, `CLAUDE_FORENSICS` to `WORKER_FORENSICS`) and added the `WORKER_RUNTIME` dispatch mechanism that routes to either the Claude or Codex attempt handler.
 
-### Tasks Env Var (191488b4)
+### Codex Runtime Support (adbd37d2, 19f7b8e4)
 
-Enabled `CLAUDE_CODE_ENABLE_TASKS=1` in the settings.local.json config defaults, activating the Claude Code tasks feature within the worker container.
+Added a full `run_codex_attempt()` handler that invokes `codex exec --json` with stdin-based prompt delivery, thread-based session resumption (`codex exec resume <threadId>`), and configurable reasoning effort (`CODEX_REASONING_EFFORT`). The `codex-xhigh` worker type sets effort to `xhigh` for complex tasks. Bootstrap evidence logging tracks Codex skill discovery, GCP auth, and envrc loading state.
 
-### Orphaned Child Process Cleanup (393fbbde)
+### Codex Live Streaming (3e06904a)
 
-After each Claude attempt exits, the entrypoint now sends SIGTERM to all child processes (MCP servers, background tools), waits 0.5 seconds, then sends SIGKILL to any survivors. This prevents lingering processes from holding Docker exec file descriptors open, which could cause container cleanup issues.
+Replaced the temp-file buffering approach for Codex output with direct stdout streaming. Codex output now flows live to the orchestrator's log pipeline — each line appears as it is produced. This matches the Claude runtime's existing stream-json behavior and enables real-time dashboard updates for Codex tasks.
+
+### Linear MCP Timeout Enforcement (2130968f)
+
+Added timeout enforcement for the Linear MCP server integration to prevent hung MCP connections from stalling worker attempts indefinitely.
 
 ## Container Configuration
 
@@ -125,19 +169,21 @@ Network: `code-worker-net` (bridge driver, subnet `172.28.0.0/16`, IP masquerade
 | Variable                              | Source           | Description                                                                              |
 | ------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------- |
 | `TASK_ID`                             | Orchestrator     | Unique task identifier                                                                   |
+| `WORKER_RUNTIME`                      | Orchestrator     | `claude` or `codex` — selects which CLI to invoke                                        |
 | `ANTHROPIC_API_KEY`                   | Orchestrator env | API key for Anthropic (opus/auto/sonnet types); omitted when shared credentials are used |
 | `ANTHROPIC_BASE_URL`                  | Worker type map  | API endpoint URL; omitted when shared credentials are used                               |
 | `ANTHROPIC_MODEL`                     | Worker type map  | Model override (set per worker type when defined)                                        |
+| `CODEX_HOME`                          | Orchestrator     | `/home/claude/.codex` for Codex runtime                                                  |
+| `CODEX_SQLITE_HOME`                   | Orchestrator     | `/home/claude/.codex` for Codex thread persistence                                       |
+| `CODEX_THREAD_ID`                     | Orchestrator     | Thread ID for resumed Codex attempts (required when `WORKER_CONTINUE=1`)                 |
+| `CODEX_REASONING_EFFORT`              | Orchestrator     | Reasoning effort level for Codex runtime (e.g., `xhigh`)                                 |
 | `LINEAR_API_KEY`                      | Orchestrator env | Linear integration key                                                                   |
 | `SENTRY_AUTH_TOKEN`                   | Orchestrator env | Sentry error tracking token                                                              |
 | `GOOGLE_APPLICATION_CREDENTIALS`      | Fixed            | `/secrets/gcp-sa.json`                                                                   |
-| `WORKER_RUNTIME`                      | Orchestrator     | `claude` or `codex`                                                                      |
 | `CLAUDE_PROJECT_DIR`                  | Fixed            | `/repo`                                                                                  |
-| `CODEX_HOME`                          | Orchestrator     | `/home/claude/.codex` for Codex runtime                                                  |
-| `CODEX_SQLITE_HOME`                   | Orchestrator     | `/home/claude/.codex` for Codex thread persistence                                       |
 | `CODE_WORKER_MODE`                    | Fixed            | `1` — identifies this as an automated worker process                                     |
 | `WORKER_MANAGED_MODE`                 | Orchestrator     | `1` = stay alive, accept `run-attempt` via docker exec                                   |
-| `WORKER_CONTINUE`                     | Orchestrator     | `1` = pass `--continue` to resume previous session                                       |
+| `WORKER_CONTINUE`                     | Orchestrator     | `1` = pass `--continue` (Claude) or `exec resume` (Codex) to resume previous session     |
 | `WORKER_FORENSICS`                    | Orchestrator     | `1` = enable crash forensics collection                                                  |
 | `WORKER_FORENSICS_DIR`                | Orchestrator     | Base directory for forensics output (default: `/var/crash`)                              |
 | `GIT_USER_NAME`                       | Orchestrator env | Git commit author name                                                                   |
@@ -150,18 +196,22 @@ Network: `code-worker-net` (bridge driver, subnet `172.28.0.0/16`, IP masquerade
 
 ## Worker Types
 
-| Type      | API Base URL                                                | API Key Env Var     | Model Override  |
-| --------- | ----------------------------------------------------------- | ------------------- | --------------- |
-| `auto`    | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY` | None            |
-| `opus`    | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY` | `opus`          |
-| `sonnet`  | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY` | `sonnet`        |
-| `minimax` | `https://api.minimax.io/anthropic`                          | `MINIMAX_API_KEY`   | `MiniMax-M2.7`  |
-| `glm`     | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY` | `glm-5`         |
-| `qwen`    | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY` | `qwen3.5-plus`  |
-| `kimi`    | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY` | `kimi-k2.5`     |
-| `codex`   | runtime-managed                                             | shared `auth.json`  | runtime default |
+| Type              | Runtime  | API Base URL                                                | API Key Env Var       | Model Override           | Effort  |
+| ----------------- | -------- | ----------------------------------------------------------- | --------------------- | ------------------------ | ------- |
+| `auto`            | claude   | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY`   | None                     | —       |
+| `opus`            | claude   | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY`   | `opus`                   | high    |
+| `sonnet`          | claude   | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY`   | `sonnet`                 | —       |
+| `minimax`         | claude   | `https://api.minimax.io/anthropic`                          | `MINIMAX_API_KEY`     | `MiniMax-M2.7`           | —       |
+| `glm`             | claude   | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY`   | `glm-5`                  | —       |
+| `qwen`            | claude   | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY`   | `qwen3.5-plus`           | —       |
+| `kimi`            | claude   | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY`   | `kimi-k2.5`              | —       |
+| `codex`           | codex    | `https://api.openai.com`                                    | shared `auth.json`    | runtime default          | —       |
+| `codex-xhigh`     | codex    | `https://api.openai.com`                                    | shared `auth.json`    | runtime default          | xhigh   |
+| `openrouter-free` | claude   | `https://openrouter.ai/api`                                 | `OPENROUTER_API_KEY`  | `qwen/qwen3.6-plus:free` | high    |
 
 GLM-5, Qwen, and Kimi are Chinese LLMs accessed via the unified Alibaba Cloud Model Studio (DashScope) integration. All three share the same API base URL and `DASHSCOPE_API_KEY`, with models differentiated by the model override parameter.
+
+The `openrouter-free` type routes through OpenRouter's free tier with experimental betas disabled.
 
 ## Entrypoint Flow
 
@@ -171,7 +221,7 @@ The `entrypoint.sh` script supports two invocation modes:
 
 1. **Root check** — Exits with error if running as UID 0
 2. **Network verification** — Background check that cloud metadata server (169.254.169.254) is unreachable
-3. **Directory creation** — Creates `/home/claude/.config/gcloud`, `/home/claude/.claude`, `/home/claude/.codex`, and `/home/claude/.agents` (tmpfs wipes image-time directories)
+3. **Directory creation** — Creates `/home/claude/.config/gcloud`, `/home/claude/.claude`, and `/home/claude/.agents/skills` (tmpfs wipes image-time directories)
 4. **Config restoration** — Copies baked-in Claude defaults from `/opt/claude-defaults/` to `/home/claude/`
 5. **Plugin restoration** — Copies pre-installed Claude Code plugins from `/opt/claude-plugins/.claude/plugins/` to `/home/claude/.claude/plugins/`, rewriting staging paths to match the runtime HOME directory
 6. **Codex skill restoration** — Copies pre-staged Codex Superpowers skills from `/opt/codex-home/.agents/` to `/home/claude/.agents/`
@@ -181,7 +231,7 @@ The `entrypoint.sh` script supports two invocation modes:
 10. **Environment loading** — Sources `/repo/.envrc` and runs `direnv allow /repo` so env vars auto-load for all subsequent commands
 11. **Git identity setup** — Configures `user.name` / `user.email` from `GIT_USER_NAME` / `GIT_USER_EMAIL` env vars at both global and repo level
 12. **GitHub token setup** — Reads token from `/secrets/github-token`; configures git credential helper to read the token file directly on each git operation
-13. **Token freshness** — No background watcher needed. The git credential helper re-reads `/secrets/github-token` on every git operation, and the `gh` CLI wrapper (`/usr/local/bin/gh`) re-reads it before each invocation. The orchestrator's `TokenRefresher` updates the bind-mounted file every 30 minutes.
+13. **Bootstrap evidence** — Emits `[entrypoint] Bootstrap evidence:` log line showing status of codex_skills, github_token, gcp_auth, secret_sync, and envrc
 14. **pnpm configuration** — Configures pnpm to use `/home/claude/pnpm-store` as the persistent store directory
 15. **pnpm install** — If `/repo/pnpm-lock.yaml` exists, runs `pnpm install --frozen-lockfile` with `CI=true`
 16. **Attribution config** — Picks a random verb from 25 options and writes `{ attribution: { commit, pr } }` to `/repo/.claude/settings.local.json`
@@ -198,15 +248,22 @@ docker exec <container> /entrypoint.sh run-attempt
 The `run-attempt` handler:
 
 1. Verifies `/tmp/worker-ready` exists
-2. Checks `/secrets/system-prompt.txt` and `/secrets/user-prompt.txt` are present
-3. Sets up git identity and GitHub token for this attempt
-4. If `WORKER_FORENSICS=1`: enables core dumps (`ulimit -c unlimited`), creates a timestamped forensics directory, and writes attempt metadata
-5. Dispatches to the selected runtime:
-   - Claude: `claude --print --verbose --output-format stream-json --dangerously-skip-permissions --system-prompt <content> < /secrets/user-prompt.txt`
-   - Codex: `codex exec --json --skip-git-repo-check - < /tmp/codex-prompt.*`
-6. If `WORKER_CONTINUE=1`: passes the runtime-specific resume mode (`--continue` for Claude, `exec resume <threadId>` for Codex)
-7. If forensics enabled and exit code is 139 (segfault): captures crash forensics (core dumps, GDB backtraces, debug logs, session state, shell snapshots)
-8. If forensics enabled: tees runtime output to `claude-stream.log` or `codex-stream.log` in the forensics directory
+2. Dispatches to the selected runtime based on `WORKER_RUNTIME`:
+   - `claude`: calls `run_claude_attempt()`
+   - `codex`: calls `run_codex_attempt()`
+3. Checks `/secrets/system-prompt.txt` and `/secrets/user-prompt.txt` are present
+4. Sets up git identity and GitHub token for this attempt
+5. If `WORKER_FORENSICS=1`: enables core dumps (`ulimit -c unlimited`), creates a timestamped forensics directory, and writes attempt metadata
+6. Invokes the runtime:
+   - **Claude:** `claude --print --verbose --output-format stream-json --dangerously-skip-permissions --system-prompt <content> < /secrets/user-prompt.txt`
+   - **Codex:** Merges system + user prompts into a temp file, then `codex exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox [-c model_reasoning_effort=<effort>] - < /tmp/codex-prompt.*`
+7. If `WORKER_CONTINUE=1`:
+   - Claude: passes `--continue` to resume the previous session
+   - Codex: passes `exec resume <CODEX_THREAD_ID>` (requires `CODEX_THREAD_ID` to be set)
+8. Codex output streams directly to stdout (live, not buffered)
+9. If forensics enabled and exit code is 139 (segfault): captures crash forensics (core dumps, GDB backtraces, debug logs, session state, shell snapshots)
+10. If forensics enabled: tees runtime output to `claude-stream.log` or `codex-stream.log` in the forensics directory
+11. Terminates lingering child processes (SIGTERM, wait 0.5s, SIGKILL) to prevent Docker exec file descriptor leaks
 
 ### Codex Automation Parity Evidence
 
@@ -216,8 +273,6 @@ Codex does not run `.claude/hooks/*.sh` inside the worker. The retained non-inte
   Shows whether Codex skill discovery, GitHub token setup, GCP auth, secret sync, and `.envrc` loading all executed during worker startup.
 - `[entrypoint] Codex runtime evidence: ...`
   Shows whether the attempt is fresh vs resume, whether a thread id was available, and which reasoning effort mode is being used.
-
-Those log lines are the observable proof for the retained bootstrap/runtime slice. Completion/ownership/evidence enforcement remains orchestrator-owned through the execution prompt, completion verifier, and deep validator.
 
 ### Legacy Mode (default, `WORKER_MANAGED_MODE` unset)
 
@@ -231,8 +286,10 @@ When `WORKER_FORENSICS=1` is set, the entrypoint collects diagnostic artifacts o
 | -------------------------- | ---------------------------------- | ----------------------------------------------- |
 | `crash-summary.txt`        | Root                               | Task ID, user, system info, Claude binary info  |
 | `claude-exit-code.txt`     | Root                               | Numeric exit code                               |
+| `codex-exit-code.txt`      | Root                               | Numeric exit code (Codex runtime)               |
 | `claude-stream.log`        | Root                               | Full Claude stdout/stderr output                |
-| `attempt-meta.txt`         | Root                               | Start time, task ID, continue flag              |
+| `codex-stream.log`         | Root                               | Full Codex stdout/stderr output                 |
+| `attempt-meta.txt`         | Root                               | Start time, task ID, runtime, continue flag     |
 | `claude-cmd-timing`        | `claude-cmd-timing/`               | Command timing data from `/tmp`                 |
 | `claude-debug`             | `claude-debug/`                    | Claude debug directory contents                 |
 | `claude-projects-repo`     | `claude-projects-repo/`            | Claude project state for `/repo`                |
@@ -256,6 +313,10 @@ Plugins are installed at image build time into `/opt/claude-plugins/.claude/plug
 | pr-review-toolkit     | claude-plugins-official         | PR review automation           |
 | playwright            | claude-plugins-official         | Browser automation via MCP     |
 | frontend-design       | claude-plugins-official         | Frontend design assistance     |
+
+## Pre-installed Codex Skills
+
+Codex discovers skills from `~/.agents/skills`. The Superpowers skill set is cloned at build time from `github.com/obra/superpowers` into `/opt/codex-superpowers/` and symlinked into `/opt/codex-home/.agents/skills/superpowers`. At container start, the entrypoint copies this into the runtime home directory.
 
 ## Config Defaults
 
@@ -329,7 +390,8 @@ If `/repo/.claude/settings.local.json` already exists, the entrypoint merges the
 | @upstash/context7-mcp | npm global             | Context7 MCP server                                        |
 | @sentry/mcp-server    | npm global             | Sentry MCP server                                          |
 | @playwright/mcp       | npm global             | Playwright MCP server (uses system Chromium)               |
-| @openai/codex         | npm global             | Codex CLI (A/B evaluation of alternative AI coding agents) |
+| @openai/codex         | npm global             | Codex CLI (AI coding agent runtime)                        |
+| claude                | Anthropic installer    | Claude Code CLI (AI coding agent runtime)                  |
 
 ## Build and CI
 
@@ -351,7 +413,7 @@ The image is built and pushed via Cloud Build using `workers/code-worker/cloudbu
 
 ### Daily Rebuild
 
-A Cloud Scheduler job (`code-worker-daily-rebuild-{env}`) triggers the Cloud Build at 4 AM UTC daily. This ensures the image picks up the latest Claude CLI and Codex CLI releases. The schedule targets the window after Anthropic's peak release hours (3–6 PM PST / 23:00–02:00 UTC).
+A Cloud Scheduler job (`code-worker-daily-rebuild-{env}`) triggers the Cloud Build at 4 AM UTC daily. This ensures the image picks up the latest Claude CLI and Codex CLI releases. The schedule targets the window after Anthropic's peak release hours (3-6 PM PST / 23:00-02:00 UTC).
 
 ### Image Registry
 
@@ -381,6 +443,7 @@ The `DockerProvider` class in the orchestrator manages the full container lifecy
 | List preserved      | `listPreservedWorkers()`        | Active preserved (not-yet-destroyed) worker entries                       |
 | List containers     | `listWorkerContainers()`        | Discover all code-worker containers on the Docker engine                  |
 | Image info          | `getImageInfo()`                | Configured image ref, last pulled digest, pull policy                     |
+| Pull image          | `pullImage(taskId, onProgress)` | Pull image and return resolved digest reference                           |
 
 ### Shared Credentials Mode
 
@@ -399,21 +462,26 @@ After `container.start()`, the orchestrator polls for the `/tmp/worker-ready` ma
 ```
 workers/code-worker/
   Dockerfile                          # Production image (multi-arch: amd64+arm64)
-  Dockerfile.test                     # Test image (stub CLI)
+  Dockerfile.test                     # Test image (Claude + Codex stubs)
   entrypoint.sh                       # Container entrypoint script
   cloudbuild.yaml                     # Cloud Build config (build+push only)
   config-defaults/
     claude.json                       # Pre-baked Claude onboarding state
     settings.local.json               # Dev reference (not baked into image)
   test-fixtures/
-    claude-stub.sh                    # Bash stub for E2E testing
+    claude-stub.sh                    # Bash stub for Claude CLI E2E testing
+    codex-stub.sh                     # Bash stub for Codex CLI E2E testing
 ```
 
 ## Gotchas
 
-**Managed mode vs. legacy mode** — If `WORKER_MANAGED_MODE=1` is not set, the container runs Claude once and exits. The orchestrator must set this flag if it wants to reuse the container across multiple attempts or resume sessions.
+**Managed mode vs. legacy mode** — If `WORKER_MANAGED_MODE=1` is not set, the container runs the selected runtime once and exits. The orchestrator must set this flag if it wants to reuse the container across multiple attempts or resume sessions.
 
-**Readiness marker before run-attempt** — The `run-attempt` handler checks for `/tmp/worker-ready` and exits with error if it's missing. The orchestrator must wait for this marker before calling `docker exec run-attempt`, or the attempt will fail silently.
+**Readiness marker before run-attempt** — The `run-attempt` handler checks for `/tmp/worker-ready` and exits with error if it is missing. The orchestrator must wait for this marker before calling `docker exec run-attempt`, or the attempt will fail silently.
+
+**Codex resume requires thread ID** — When `WORKER_CONTINUE=1` is set for a Codex runtime attempt, the `CODEX_THREAD_ID` environment variable must also be set. Without it, the entrypoint exits with an error. Claude resume does not require a thread ID — it uses session state from the `.claude` directory.
+
+**Codex prompt delivery differs from Claude** — Claude receives the system prompt via `--system-prompt` argument and user prompt via stdin redirect. Codex receives both merged into a single temp file (`/tmp/codex-prompt.*`) with `[SYSTEM PROMPT]` and `[USER PROMPT]` markers, piped to `codex exec` via stdin.
 
 **Worktree git mounts** — Git worktrees use a `.git` file (not directory) pointing to the main repo's `.git/worktrees/` directory. The DockerProvider detects this and bind-mounts the main `.git` directory so that git operations (commit, push) work inside the container.
 

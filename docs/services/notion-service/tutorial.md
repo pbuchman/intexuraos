@@ -349,7 +349,7 @@ curl -X POST http://localhost:8112/notion/connect \
   -H "Content-Type: application/json" \
   -d '{"notionToken": "secret_new_token"}'
 
-# Check status -- createdAt should be the original timestamp
+# Check status — createdAt should be the original timestamp
 curl -X GET http://localhost:8112/notion/status \
   -H "Authorization: Bearer $AUTH_TOKEN"
 ```

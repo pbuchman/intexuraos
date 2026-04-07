@@ -2,7 +2,7 @@
 
 > **Time:** 20–30 minutes
 > **Prerequisites:** Node.js 20+, IntexuraOS dev environment, Auth0 tenant
-> **You'll learn:** How to authenticate, manage LLM API keys, set default models, connect Google and GitHub OAuth, and configure transcription preferences
+> **You'll learn:** How to authenticate, manage LLM API keys (including OpenRouter), set default models, connect Google and GitHub OAuth, configure transcription preferences, and set timezone
 
 ---
 
@@ -11,10 +11,11 @@
 A working integration that:
 
 - Authenticates via the device code flow
-- Stores and validates LLM API keys
+- Stores and validates LLM API keys (5 providers including OpenRouter)
 - Tests keys with real provider calls
 - Sets a default LLM model for all agents
 - Configures transcription preferences
+- Sets timezone preferences
 - Connects Google and GitHub accounts
 - Accesses internal endpoints for service-to-service communication
 
@@ -27,7 +28,7 @@ Before starting, ensure you have:
 - [ ] IntexuraOS development environment running
 - [ ] Auth0 tenant configured
 - [ ] Encryption key generated (32 bytes hex)
-- [ ] At least one LLM API key (Google, OpenAI, Anthropic, or Perplexity)
+- [ ] At least one LLM API key (Google, OpenAI, Anthropic, Perplexity, or OpenRouter)
 
 ---
 
@@ -186,19 +187,33 @@ The service validates the key by making a test call to OpenAI before storing it.
 }
 ```
 
-**Validation failure (rate limit):**
+### Step 3.2: Add an OpenRouter key (zero-cost validation)
+
+```bash
+curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "provider": "openrouter",
+    "apiKey": "sk-or-v1-XXXXXXXXXXXXXXXXXXXX"
+  }'
+```
+
+Unlike other providers, OpenRouter validation uses a lightweight `/api/v1/key` endpoint that costs zero tokens.
+
+**Success response:**
 
 ```json
 {
-  "success": false,
-  "error": {
-    "code": "INVALID_REQUEST",
-    "message": "Rate limit exceeded. Please try again later."
+  "success": true,
+  "data": {
+    "provider": "openrouter",
+    "masked": "sk-o...XXXX"
   }
 }
 ```
 
-### Step 3.2: Verify the key is stored
+### Step 3.3: Verify the keys are stored
 
 ```bash
 curl https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys \
@@ -216,11 +231,13 @@ curl https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys \
     "openai": "sk-p...XXXX",
     "anthropic": null,
     "perplexity": null,
+    "openrouter": "sk-o...XXXX",
     "testResults": {
       "google": null,
       "openai": null,
       "anthropic": null,
-      "perplexity": null
+      "perplexity": null,
+      "openrouter": null
     }
   }
 }
@@ -228,7 +245,7 @@ curl https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys \
 
 ### Checkpoint
 
-Your API key is encrypted and stored. The masked preview shows it was saved correctly.
+Your API keys are encrypted and stored. The masked preview shows they were saved correctly.
 
 ---
 
@@ -376,11 +393,55 @@ Voice notes from WhatsApp are now processed through Speechmatics.
 
 ---
 
-## Part 8: Connect Google OAuth (5 minutes)
+## Part 8: Set Timezone Preference (2 minutes)
+
+Set your timezone so all time-aware features use it.
+
+### Step 8.1: Set timezone
+
+```bash
+curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/timezone \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "timezone": "Europe/Berlin"
+  }'
+```
+
+**Success response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "timezone": "Europe/Berlin"
+  }
+}
+```
+
+**Invalid timezone:**
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Invalid timezone: Mars/Olympus"
+  }
+}
+```
+
+### Checkpoint
+
+All time-aware features across the platform now use your local timezone.
+
+---
+
+## Part 9: Connect Google OAuth (5 minutes)
 
 Connect a Google account for calendar integration.
 
-### Step 8.1: Initiate OAuth flow
+### Step 9.1: Initiate OAuth flow
 
 ```bash
 curl -X POST https://user-service.intexuraos.com/oauth/connections/google/initiate \
@@ -398,14 +459,14 @@ curl -X POST https://user-service.intexuraos.com/oauth/connections/google/initia
 }
 ```
 
-### Step 8.2: Complete OAuth flow
+### Step 9.2: Complete OAuth flow
 
 1. Redirect user to `authorizationUrl`
 2. User grants calendar permissions
 3. Google redirects back to callback URL
 4. Service stores encrypted tokens
 
-### Step 8.3: Check connection status
+### Step 9.3: Check connection status
 
 ```bash
 curl https://user-service.intexuraos.com/oauth/connections/google/status \
@@ -433,11 +494,11 @@ Google account is connected. Calendar-agent can now access the user's calendar t
 
 ---
 
-## Part 9: Connect GitHub OAuth (5 minutes)
+## Part 10: Connect GitHub OAuth (5 minutes)
 
 Connect a GitHub account for code automation.
 
-### Step 9.1: Initiate GitHub OAuth flow
+### Step 10.1: Initiate GitHub OAuth flow
 
 ```bash
 curl -X POST https://user-service.intexuraos.com/oauth/connections/github/initiate \
@@ -455,14 +516,14 @@ curl -X POST https://user-service.intexuraos.com/oauth/connections/github/initia
 }
 ```
 
-### Step 9.2: Complete OAuth flow
+### Step 10.2: Complete OAuth flow
 
 1. Redirect user to `authorizationUrl`
 2. User authorizes the GitHub app
 3. GitHub redirects back to callback URL
 4. Service stores the access token (no refresh token for GitHub)
 
-### Step 9.3: Check connection status
+### Step 10.3: Check connection status
 
 ```bash
 curl https://user-service.intexuraos.com/oauth/connections/github/status \
@@ -490,11 +551,11 @@ GitHub account is connected. Code-agent can now create branches and pull request
 
 ---
 
-## Part 10: Internal Service Access (Service-to-Service) (5 minutes)
+## Part 11: Internal Service Access (Service-to-Service) (5 minutes)
 
 Simulate how another service (like research-agent) accesses API keys.
 
-### Step 10.1: Internal request with shared secret
+### Step 11.1: Internal request with shared secret
 
 ```bash
 curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/llm-keys \
@@ -510,12 +571,13 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/llm-keys \
     "google": "AIzaSyD1XXXXXXXXXXXXXXXXXXXXXXXXXX",
     "openai": "sk-proj-XXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     "anthropic": null,
-    "perplexity": null
+    "perplexity": null,
+    "openrouter": "sk-or-v1-XXXXXXXXXXXXXXXXXXXXXXXXXXXX"
   }
 }
 ```
 
-### Step 10.2: Get Google OAuth token (for calendar-agent)
+### Step 11.2: Get Google OAuth token (for calendar-agent)
 
 ```bash
 curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/oauth/google/token \
@@ -536,7 +598,7 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/oauth/googl
 
 This automatically refreshes the token if expired.
 
-### Step 10.3: Get GitHub OAuth token (for code-agent)
+### Step 11.3: Get GitHub OAuth token (for code-agent)
 
 ```bash
 curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/oauth/github/token \
@@ -555,7 +617,7 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/oauth/githu
 }
 ```
 
-### Step 10.4: Find user by GitHub username
+### Step 11.4: Find user by GitHub username
 
 ```bash
 curl https://user-service.intexuraos.com/internal/users/by-github-username/octocat \
@@ -574,7 +636,7 @@ curl https://user-service.intexuraos.com/internal/users/by-github-username/octoc
 }
 ```
 
-### Step 10.5: Get user preferences
+### Step 11.5: Get user preferences (includes timezone)
 
 ```bash
 curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
@@ -592,14 +654,15 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
     },
     "transcriptionPreferences": {
       "provider": "speechmatics"
-    }
+    },
+    "timezone": "Europe/Berlin"
   }
 }
 ```
 
 ---
 
-## Part 11: Handle Errors (3 minutes)
+## Part 12: Handle Errors (3 minutes)
 
 ### Error: Invalid API key format
 
@@ -614,6 +677,20 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
 ```
 
 **Solution:** Verify the key format. OpenAI keys start with `sk-`.
+
+### Error: Invalid OpenRouter API key
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Invalid OpenRouter API key"
+  }
+}
+```
+
+**Solution:** Verify the key format. OpenRouter keys typically start with `sk-or-`.
 
 ### Error: No API key for default model provider
 
@@ -685,22 +762,38 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
 
 **Solution:** Only `speechmatics` is currently supported as a transcription provider.
 
+### Error: Invalid timezone
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Invalid timezone: UTC+1"
+  }
+}
+```
+
+**Solution:** Use a valid IANA timezone string (e.g., `Europe/Berlin`, `America/New_York`), not UTC offsets.
+
 ---
 
 ## Troubleshooting
 
-| Issue                   | Symptom                         | Solution                                                         |
-| ----------------------- | ------------------------------- | ---------------------------------------------------------------- |
-| Device code expires     | Polling never succeeds          | Device codes expire in 15 minutes; user must restart flow        |
-| Encryption key errors   | Keys fail to save               | Verify 64-character hex string for encryption key                |
-| Auth0 errors            | 401 Unauthorized                | Verify Auth0 client ID/secret are correct                        |
-| OAuth not configured    | Google/GitHub OAuth returns 503 | Set OAuth client ID and secret env vars                          |
-| Token refresh fails     | Access token expired            | User may have revoked access; re-authentication required         |
-| Rate limit misdiagnosed | "Invalid API key" for 429 error | Rate limits are correctly identified — ensure service is current |
-| Test costs money        | Charges on provider account     | Test endpoint makes real API calls; use sparingly                |
-| Pricing fetch fails     | Service fails to start          | Ensure app-settings-service is running and accessible            |
-| Default model rejected  | 400 INVALID_REQUEST             | Model must pass `isFastModel()` AND have API key set             |
-| GitHub token not found  | 404 NOT_FOUND                   | User must connect GitHub account first                           |
+| Issue                    | Symptom                         | Solution                                                         |
+| ------------------------ | ------------------------------- | ---------------------------------------------------------------- |
+| Device code expires      | Polling never succeeds          | Device codes expire in 15 minutes; user must restart flow        |
+| Encryption key errors    | Keys fail to save               | Verify 64-character hex string for encryption key                |
+| Auth0 errors             | 401 Unauthorized                | Verify Auth0 client ID/secret are correct                        |
+| OAuth not configured     | Google/GitHub OAuth returns 503 | Set OAuth client ID and secret env vars                          |
+| Token refresh fails      | Access token expired            | User may have revoked access; re-authentication required         |
+| Rate limit misdiagnosed  | "Invalid API key" for 429 error | Rate limits are correctly identified — ensure service is current |
+| Test costs money         | Charges on provider account     | Test endpoint makes real API calls; use sparingly                |
+| Pricing fetch fails      | Service fails to start          | Ensure app-settings-service is running and accessible            |
+| Default model rejected   | 400 INVALID_REQUEST             | Model must pass `isFastModel()` AND have API key set             |
+| GitHub token not found   | 404 NOT_FOUND                   | User must connect GitHub account first                           |
+| OpenRouter key rejected  | 400 INVALID_REQUEST             | Verify key starts with `sk-or-` and is active on OpenRouter      |
+| Invalid timezone         | 400 INVALID_REQUEST             | Use IANA timezone strings, not UTC offsets or abbreviations      |
 
 ---
 
@@ -719,7 +812,7 @@ Now that you understand the basics:
 ### Easy
 
 1. Get the Auth configuration
-2. List your LLM API key status
+2. List your LLM API key status (now includes OpenRouter)
 3. Check Google and GitHub OAuth connection status
 
 ### Medium
@@ -729,11 +822,12 @@ Now that you understand the basics:
 3. Test an API key and verify the result is stored
 4. Set a default model and read it back via the internal endpoint
 5. Set a transcription provider preference
+6. Set a timezone preference and verify via internal settings endpoint
 
 ### Hard
 
 1. Build a CLI client that completes device code flow
-2. Implement a service that fetches internal API keys
+2. Implement a service that fetches internal API keys (including OpenRouter)
 3. Create a full OAuth flow handler for calendar integration
 4. Connect GitHub and use the internal endpoint to find a user by username
 
@@ -760,7 +854,21 @@ curl -X POST https://user-service.intexuraos.com/users/$UID/settings/llm-keys/op
   -H "Authorization: Bearer $TOKEN"
 ```
 
-### Exercise 3: Hard — CLI Device Code Flow
+### Exercise 3: Medium — Set Timezone
+
+```bash
+# Set timezone
+curl -X PATCH https://user-service.intexuraos.com/users/$UID/settings/timezone \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"timezone": "Europe/Berlin"}'
+
+# Verify via internal endpoint
+curl https://user-service.intexuraos.com/internal/users/$UID/settings \
+  -H "X-Internal-Auth: $INTERNAL_AUTH_TOKEN"
+```
+
+### Exercise 4: Hard — CLI Device Code Flow
 
 ```typescript
 async function deviceLogin(): Promise<string> {
@@ -795,7 +903,7 @@ async function deviceLogin(): Promise<string> {
 }
 ```
 
-### Exercise 4: Hard — Find User by GitHub Username
+### Exercise 5: Hard — Find User by GitHub Username
 
 ```bash
 # Connect GitHub first (via OAuth flow in browser)

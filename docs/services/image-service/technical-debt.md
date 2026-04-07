@@ -1,6 +1,6 @@
 # Image Service — Technical Debt
 
-**Last Updated:** 2026-03-22
+**Last Updated:** 2026-04-07
 **Analysis Run:** [documentation-runs.md](../../documentation-runs.md)
 
 ---
@@ -10,13 +10,13 @@
 | Category            | Count | Severity |
 | ------------------- | ----- | -------- |
 | Code Smells         | 1     | Medium   |
-| TODO/FIXME Comments | 0     | —        |
-| Test Coverage Gaps  | 0     | —        |
-| TypeScript Issues   | 0     | —        |
-| SRP Violations      | 0     | —        |
+| TODO/FIXME Comments | 0     | --       |
+| Test Coverage Gaps  | 0     | --       |
+| TypeScript Issues   | 0     | --       |
+| SRP Violations      | 0     | --       |
 | Code Duplicates     | 1     | Low      |
-| Deprecations        | 0     | —        |
-| **Total**           | **2** | —        |
+| Deprecations        | 0     | --       |
+| **Total**           | **2** | --       |
 
 ---
 
@@ -70,8 +70,9 @@ Comprehensive test coverage achieved. All adapters, routes, use cases, and infra
 - Models: Validation functions and configuration objects tested
 - Parser: INT-605 contract alignment verified with explicit tests confirming stale fields are excluded
 - Slugify: Edge cases including unicode, special characters, and max length tested
+- Service factory: Env var fallback branches now covered by real tests (v8 ignore blocks removed in v3.5.0 via INT-1072)
 
-v8 ignore comments present only in `serviceFactory.ts` (env var fallbacks — `module-init` category) and `internalRoutes.ts` (DeleteImageUseCase error type is `never` — `test-infra` category).
+v8 ignore comments present only in `internalRoutes.ts` (DeleteImageUseCase error type is `never` — `test-infra` category).
 
 ---
 
@@ -119,6 +120,15 @@ No deprecated APIs or dependencies in use.
 ---
 
 ## Resolved Issues
+
+### 2026-03-25: v3.5.0 v8 Ignore Block Removal (INT-1072)
+
+**Issue:** `serviceFactory.ts` had v8 ignore blocks for `process.env` fallback branches that could not be reached in tests.
+
+**Resolution:**
+- Real test added that deletes env vars before calling `initializeServices` to exercise fallback branches
+- v8 ignore blocks removed from `serviceFactory.ts`
+- Coverage now achieved through actual test execution rather than exemptions
 
 ### 2026-03-16: v3.4.0 Application Layer Extraction (INT-898, INT-899, INT-900)
 

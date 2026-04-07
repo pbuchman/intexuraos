@@ -108,6 +108,21 @@ sequenceDiagram
 
 ## Recent Changes
 
+### v3.5.0 (since v3.4.0)
+
+Minor maintenance changes only — no new features or architectural changes to image-service itself. The headline change affecting this service (INT-1310 provider failover for cover image generation) is implemented in **research-agent**, the primary caller.
+
+| Commit      | Description                                                                        | Date       |
+| ----------- | ---------------------------------------------------------------------------------- | ---------- |
+| `613ac528`  | Replace v8 ignore override blocks with real tests for env var fallbacks (INT-1072) | 2026-03-25 |
+| `287db2b6`  | Add `getUserTimezone` to `FakeUserServiceClient` (interface conformance)           | 2026-03-27 |
+
+**Key changes:**
+- v8 ignore blocks removed from `serviceFactory.ts` — env var fallback branches now covered by a real test that deletes env vars and verifies `initializeServices` still succeeds
+- `FakeUserServiceClient` updated to conform to new `getUserTimezone` method added to `UserServiceClient` interface in `@intexuraos/internal-clients`
+
+**Caller-side change (INT-1310):** research-agent now implements provider failover when calling image-service endpoints. If the primary provider (e.g., OpenAI) fails, research-agent retries with the alternate provider (e.g., Google) automatically. This does not change image-service behavior — the failover logic lives entirely in the caller.
+
 ### v3.4.0 (since v3.3.0)
 
 The primary focus of this release was an architectural refactoring — extracting business logic from route handlers into a clean application layer with use cases and port/adapter patterns.
@@ -305,6 +320,8 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 
 **ZAI provider removed (v3.3.0)**: The ZAI provider and GLM-4.7 models were removed from the LLM contract in v3.3.0. The single line removed from `services.ts` was the ZAI pricing fetch. Platform fallback now uses Gemini exclusively via `INTEXURAOS_GEMINI_APP_API_KEY`.
 
+**Provider failover is caller-side (INT-1310)**: research-agent implements provider failover when calling image-service. If one provider fails, research-agent retries with the alternate provider. Image-service itself has no failover logic — it processes each request against a single model as specified by the caller.
+
 ## File Structure
 
 ```
@@ -351,6 +368,12 @@ apps/image-service/src/
 ```
 
 ## Migration Notes
+
+### v3.5.0: Test Coverage Improvements (2026-03-25)
+
+- v8 ignore blocks removed from `serviceFactory.ts` — replaced with real test that exercises env var fallback branches (INT-1072)
+- `FakeUserServiceClient` updated with `getUserTimezone()` stub for interface conformance
+- No functional changes to image-service behavior
 
 ### v3.4.0: Application Layer Extraction (2026-03-16)
 

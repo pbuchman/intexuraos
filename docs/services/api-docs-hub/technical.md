@@ -4,7 +4,7 @@
 
 API Docs Hub is a lightweight Fastify server that aggregates OpenAPI specifications from all 20 IntexuraOS services into a single Swagger UI instance. It runs on Cloud Run with zero minimum instances and fetches specs client-side from each service's `/openapi.json` endpoint. The service has no database, no domain logic, and no Pub/Sub integration — it exists solely to serve a configured Swagger UI.
 
-**Versions:** Package `3.4.0` / OpenAPI spec `0.0.5`
+**Versions:** Package `3.5.0` / OpenAPI spec `0.0.5`
 
 ## Architecture
 
@@ -40,14 +40,14 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit      | Description                                                        | Date       |
-| ----------- | ------------------------------------------------------------------ | ---------- |
-| `fff14842`  | Address Opus code review findings for shared catalog               | 2026-03-20 |
-| `0fc320f9`  | Improve cron tool selection authoring                              | 2026-03-20 |
-| `4c9e4003`  | Implement LLM-driven recurring schedule backend (cron-agent added) | 2026-03-18 |
-| `969f43fa`  | Merge PR #1232 — fix PR automation log race condition              | 2026-03-15 |
+| Commit      | Description                                                                        | Date       |
+| ----------- | ---------------------------------------------------------------------------------- | ---------- |
+| `4c899442`  | Reverted to local `OPEN_API_SOURCE_CATALOG` in config.ts; added `config.test.ts`   | 2026-03-26 |
+| `7dc46e30`  | Restored shared `buildInternalApiOpenApiSources` from common-core (intermediate)   | 2026-03-25 |
+| `fff14842`  | Address Opus code review findings for shared catalog                               | 2026-03-20 |
+| `4c9e4003`  | Implement LLM-driven recurring schedule backend (cron-agent added)                 | 2026-03-18 |
 
-**v3.4.0 summary:** The hardcoded 18-service configuration was replaced with a shared internal API catalog from `@intexuraos/common-core`. This refactoring added `@intexuraos/common-core` as a dependency, deleted ~70 lines of duplicated environment variable definitions from `config.ts`, and introduced `buildInternalApiOpenApiSources()` to construct the source list dynamically. Two new services were added to the catalog: Cron Agent and Hellscript Agent, bringing the total from 18 to 20. Tests were also added for the first time (`server.test.ts`).
+**v3.5.0 summary:** The shared `INTERNAL_API_SERVICE_CATALOG` import from `@intexuraos/common-core` was removed from `config.ts`. The service now maintains its own local `OPEN_API_SOURCE_CATALOG` constant with inline display names and environment variable mappings for all 20 services. A new `config.test.ts` was added covering env var validation and URL trimming. The `buildOpenApiSources()` function is now defined locally rather than imported. Despite this, `@intexuraos/common-core` remains a package.json dependency (unused in source).
 
 ## API Endpoints
 
@@ -75,7 +75,7 @@ interface OpenApiSource {
 interface Config {
   port: number;
   host: string;
-  openApiSources: OpenApiSource[];  // Built from shared INTERNAL_API_SERVICE_CATALOG
+  openApiSources: OpenApiSource[];  // Built from local OPEN_API_SOURCE_CATALOG
 }
 ```
 
@@ -116,11 +116,12 @@ None. This service does not publish or subscribe to any Pub/Sub topics.
 | ---------------------------- | --------------------------------------------------- |
 | `@fastify/swagger`           | OpenAPI 3.1.1 spec generation                       |
 | `@fastify/swagger-ui`        | Swagger UI with multi-spec `urls` support           |
-| `@intexuraos/common-core`    | Shared internal API service catalog                 |
 | `@intexuraos/common-http`    | `intexuraFastifyPlugin`, quiet health check logging |
 | `@intexuraos/http-server`    | `buildHealthResponse`, `HealthCheck` types          |
 | `@intexuraos/infra-sentry`   | Sentry error capture, `createLogStream()`           |
 | `@intexuraos/infra-otel`     | Dash0 OpenTelemetry log forwarding (optional)       |
+
+Note: `@intexuraos/common-core` is listed in `package.json` but is no longer imported in source code.
 
 ### External Services
 
@@ -189,6 +190,7 @@ Health check routes are excluded from request logging via `registerQuietHealthCh
 - **Health endpoint uses raw reply.send()** — The `/health` endpoint bypasses the `reply.ok()` / `reply.fail()` response contract. This is intentional for infrastructure monitoring stability.
 - **Not in ecosystem.config.cjs** — This service is not listed in `ecosystem.config.cjs` for local PM2 development. It must be run manually via `pnpm --filter api-docs-hub start:local`.
 - **Max scale 1** — Terraform limits this service to a single Cloud Run instance (min_scale=0, max_scale=1), which is appropriate for a documentation-only service.
+- **Unused common-core dependency** — `@intexuraos/common-core` remains in `package.json` but is no longer imported. It can be removed to clean up the dependency graph.
 
 ## Terraform Configuration
 
@@ -216,11 +218,12 @@ The Terraform module uses `depends_on` for all 20 upstream services to ensure th
 
 ```
 apps/api-docs-hub/src/
-  config.ts         # OpenApiSource[] config via shared catalog + env var validation
+  config.ts         # OPEN_API_SOURCE_CATALOG, env var validation, buildOpenApiSources()
   server.ts         # Fastify server, Swagger UI registration, health endpoint
   index.ts          # Entry point: Sentry init, loadConfig(), listen
   __tests__/
     server.test.ts  # Health check and Swagger UI integration tests
+    config.test.ts  # Environment validation and URL trimming tests
 ```
 
-This is one of the simplest services in the monorepo — three source files with no domain logic, plus a test file.
+This is one of the simplest services in the monorepo — three source files with no domain logic, plus two test files.

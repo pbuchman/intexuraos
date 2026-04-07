@@ -306,6 +306,15 @@ Audio messages follow an event-driven flow:
 
 Subscribe to `command.ingest` events with `sourceType: 'whatsapp_voice'` to receive the final text. No other integration needed.
 
+### Scenario E: Transient vs Permanent Send Failures
+
+When sending messages via Pub/Sub, whatsapp-service classifies errors:
+
+- **Permanent errors** (4xx except 429): Acknowledged without retry — the message is dropped
+- **Transient errors** (5xx, 429, network failures): Returned as 500, triggering Pub/Sub retry with exponential backoff
+
+If your service needs to know about delivery failures, monitor the send-message handler logs. WhatsApp API errors are logged with `SKIP_SENTRY_KEY` to avoid Sentry quota exhaustion.
+
 ---
 
 ## Troubleshooting

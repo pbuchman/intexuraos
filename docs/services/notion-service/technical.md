@@ -70,23 +70,23 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                        | Date       |
-| ---------- | -------------------------------------------------- | ---------- |
-| `a7f5fa98` | INT-794: Write tests for v8-ignore blocks          | 2026-03-13 |
-| `c4e3a13c` | Release v3.3.0                                     | 2026-03-15 |
-| `44ea683a` | Release v3.2.0                                     | 2026-03-07 |
-| `b3f34d85` | Release v3.1.0                                     | 2026-02-22 |
-| `c8a42105` | Release v3.0.0                                     | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability    | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration (#803)         | 2026-02-16 |
-| `d5fbb354` | Fix start:local to use tsx (not node strip-types)  | 2026-02-14 |
-| `45f001c1` | Switch PM2 ecosystem to pnpm --filter start:local  | 2026-02-14 |
-| `5aa3e1bd` | INT-427: Enable strict 100% coverage enforcement   | 2026-01-31 |
-| `9723dc24` | Standardize DELETE endpoint response               | 2026-01-31 |
-| `c3198407` | Fix response contract violations (reply.ok/fail)   | 2026-01-30 |
-| `dfd702f1` | Migrate from pino to createAppLogger (Sentry)      | 2026-01-30 |
-| `3a25d55e` | Add Notion page validation for Research Export     | 2026-01-29 |
-| `7c5e9153` | INT-319: Remove PromptVault, keep Notion connector | 2026-01-26 |
+| Commit      | Description                                                     | Date       |
+| ----------- | --------------------------------------------------------------- | ---------- |
+| `549c9698`  | Enforce strict v8 ignore validation with blocker keyword checks | 2026-03-24 |
+| `c6659005`  | Release v3.4.0                                                  | 2026-03-22 |
+| `c4e3a13c`  | Release v3.3.0                                                  | 2026-03-15 |
+| `a7f5fa98`  | INT-794: Write tests for v8-ignore blocks                       | 2026-03-13 |
+| `44ea683a`  | Release v3.2.0                                                  | 2026-03-07 |
+| `b3f34d85`  | Release v3.1.0                                                  | 2026-02-22 |
+| `c8a42105`  | Release v3.0.0                                                  | 2026-02-19 |
+| `6063175b`  | Add dev-mode log formatting for PM2 readability                 | 2026-02-16 |
+| `a52a6bbc`  | Add Dash0 OpenTelemetry integration (#803)                      | 2026-02-16 |
+| `d5fbb354`  | Fix start:local to use tsx (not node strip-types)               | 2026-02-14 |
+| `45f001c1`  | Switch PM2 ecosystem to pnpm --filter start:local               | 2026-02-14 |
+| `5aa3e1bd`  | INT-427: Enable strict 100% coverage enforcement                | 2026-01-31 |
+| `9723dc24`  | Standardize DELETE endpoint response                            | 2026-01-31 |
+| `c3198407`  | Fix response contract violations (reply.ok/fail)                | 2026-01-30 |
+| `dfd702f1`  | Migrate from pino to createAppLogger (Sentry)                   | 2026-01-30 |
 
 ## API Endpoints
 
@@ -258,7 +258,7 @@ sequenceDiagram
 ### connectNotion
 
 1. Validate token against Notion API (`validateToken`)
-2. Map Notion error codes to domain errors (`UNAUTHORIZED` → `INVALID_TOKEN`, others → `DOWNSTREAM_ERROR`)
+2. Map Notion error codes to domain errors (`UNAUTHORIZED` -> `INVALID_TOKEN`, others -> `DOWNSTREAM_ERROR`)
 3. Save connection to Firestore via `connectionRepository.saveConnection`
 4. Return public connection data
 

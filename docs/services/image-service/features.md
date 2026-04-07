@@ -34,6 +34,10 @@ If you have configured your own provider API keys, the service uses them — kee
 
 When a title is provided, the generated image receives a readable file name derived from the content rather than a meaningless identifier. This keeps storage organized and debuggable.
 
+### Resilient Multi-Provider Generation
+
+The calling service (research-agent) can fail over between OpenAI and Google providers when generating cover images. If one provider rejects the request or is unavailable, generation retries with the alternate provider automatically — increasing the success rate for cover image creation without user intervention.
+
 ## Key Benefits
 
 - **Context-aware generation** — Understands your text and produces a matching image without manual prompt writing
@@ -42,6 +46,7 @@ When a title is provided, the generated image receives a readable file name deri
 - **Automatic cleanup** — Unsharing removes both storage and database records, preventing orphans
 - **Zero-configuration start** — Platform Gemini fallback key means image generation works before users add their own API keys
 - **User-controlled costs** — When users bring their own keys, their keys are used
+- **Multi-provider resilience** — Callers can fail over between OpenAI and Google when one provider is unavailable
 
 ## Limitations
 

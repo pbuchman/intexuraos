@@ -1,8 +1,8 @@
 # Linear Agent — Tutorial
 
-> **Time:** 40-50 minutes
+> **Time:** 45-55 minutes
 > **Prerequisites:** Node.js 20+, Linear account with API key, IntexuraOS running locally
-> **You'll learn:** How to connect Linear, create issues via AI, view issues with parent-child support, read comments, configure webhooks, sync issues, use the internal API, fetch issue context, and observe auto-triggered code tasks
+> **You'll learn:** How to connect Linear, create issues via AI, view issues with parent-child support, read comments, configure webhooks, sync issues, use the internal API, fetch issue context, observe auto-triggered code tasks, and review AI-classified prune candidates
 
 ---
 
@@ -19,6 +19,7 @@ A working integration that:
 - Manages issues programmatically via the internal API (create, state, comments, labels, tree)
 - Fetches issue context (description + comments) for cross-service use
 - Observes auto-triggered code tasks on issue assignment
+- Reviews and confirms AI-classified prune candidates
 - Handles errors and reviews failed extractions
 
 ---
@@ -388,7 +389,7 @@ curl -X PATCH http://localhost:3000/internal/linear/issues/ISSUE_ID/metadata \
   }'
 ```
 
-Labels are resolved by name. Unknown label names are silently dropped — verify labels exist in your Linear workspace.
+Labels are resolved by name. Unknown label names are silently dropped — verify labels exist in your Linear workspace. The endpoint also performs a write-through cache update and notifies code-agent to recompute group summaries.
 
 ### Step 5.7: Batch Fetch Issues for Display
 
@@ -402,7 +403,7 @@ curl -X POST http://localhost:3000/internal/linear/issues/display-batch \
   -d '{"identifiers": ["ENG-100", "ENG-101", "ENG-102"]}'
 ```
 
-Missing identifiers are omitted from the response. Results preserve the input order.
+Missing identifiers are omitted from the response. Results preserve the input order. Sub-tasks include `parentIdentifier` for breadcrumb navigation.
 
 ### Step 5.8: Get Issue Tree
 
@@ -414,7 +415,7 @@ curl http://localhost:3000/internal/issues/ISSUE_ID/tree \
   -H "X-User-Id: YOUR_USER_ID"
 ```
 
-### Step 5.9: Fetch Issue Context (New in v3.4.0)
+### Step 5.9: Fetch Issue Context
 
 Retrieve an issue's description and comments for cross-service use — no `X-User-Id` required.
 
@@ -440,7 +441,17 @@ curl http://localhost:3000/internal/linear/issues/ENG-100/context \
 
 Comments are sorted newest-first, capped at 100, with empty bodies filtered. This endpoint does not require user scoping — it is designed for service-to-service calls.
 
-**Checkpoint:** You can create issues, generate titles, validate identifiers, move through the workflow, add comments, update metadata, fetch batches, traverse trees, and retrieve issue context using the internal API.
+### Step 5.10: Get Direct Children from Linear
+
+Fetch live direct children of an issue from the Linear API (not from local cache).
+
+```bash
+curl http://localhost:3000/internal/linear/issues/ISSUE_ID/direct-children \
+  -H "X-Internal-Auth: your-internal-secret" \
+  -H "X-User-Id: YOUR_USER_ID"
+```
+
+**Checkpoint:** You can create issues, generate titles, validate identifiers, move through the workflow, add comments, update metadata, fetch batches, traverse trees, retrieve issue context, and get live children using the internal API.
 
 ---
 
@@ -475,7 +486,55 @@ Both prompts instruct the code agent to read the full issue and all its comments
 
 ---
 
-## Part 7: Handle Errors (5 minutes)
+## Part 7: Review and Delete Prune Candidates (5 minutes)
+
+When your board grows past 200 active issues, the Linear Agent classifies deletion candidates using Gemini.
+
+### Step 7.1: Trigger Pruning Manually (Testing)
+
+```bash
+curl -X POST http://localhost:3000/internal/linear/prune-issues \
+  -H "X-Internal-Auth: your-internal-secret"
+```
+
+If you have more than 200 issues, you will receive a response with `storedCandidates`. If below threshold, you will see `"skipped": true`.
+
+### Step 7.2: Review Candidates
+
+```bash
+curl http://localhost:3000/linear/prune-candidates \
+  -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
+```
+
+Each candidate includes `identifier`, `title`, `score` (0-100), `reason`, and `category` (cancelled, duplicate, sub-issue, simple-fix, review-only, or other).
+
+### Step 7.3: Confirm Deletion
+
+```bash
+curl -X DELETE http://localhost:3000/linear/prune-candidates \
+  -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
+```
+
+**Expected response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "deleted": 12,
+    "failedDeletions": [],
+    "durationMs": 3456
+  }
+}
+```
+
+Issues are soft-deleted from Linear (recoverable) and removed from all connected users' local Firestore copies.
+
+**Checkpoint:** Prune candidates are classified by AI, presented for review, and deleted only after explicit confirmation.
+
+---
+
+## Part 8: Handle Errors (5 minutes)
 
 ### Error: Not Connected
 
@@ -512,19 +571,21 @@ curl -X DELETE http://localhost:3000/linear/failed-issues/FAILED_ID \
 
 ## Troubleshooting
 
-| Symptom                       | Likely Cause                 | Solution                                                            |
-| ----------------------------- | ---------------------------- | ------------------------------------------------------------------- |
-| "Linear not connected"        | No saved connection for user | POST `/linear/connection` with credentials                          |
-| "Invalid API key"             | Expired or revoked key       | Generate new key in Linear settings                                 |
-| Extraction returns null title | Input too vague              | Provide more specific issue description                             |
-| Webhook not syncing           | Missing webhook secret       | POST `/linear/webhook-config` with secret                           |
-| Webhook 401 errors            | Wrong secret                 | Reconfigure secret in Linear and IntexuraOS                         |
-| Dashboard shows stale data    | Firestore not populated      | POST `/linear/sync` to run full sync                                |
-| Title generation returns 500  | LLM failed after 2 attempts  | Retry request or use a manual title                                 |
-| No child issues on dashboard  | Not synced yet               | Run full sync to populate parent-child data                         |
-| Other user missing updates    | Old single-user routing      | Ensure webhook configured; fan-out is default                       |
-| Internal endpoint returns 401 | Missing header               | Both `X-Internal-Auth` and `X-User-Id` required for issue endpoints |
-| Context endpoint returns 404  | Issue not synced             | Run a full sync before querying context                             |
+| Symptom                         | Likely Cause                 | Solution                                                            |
+| ------------------------------- | ---------------------------- | ------------------------------------------------------------------- |
+| "Linear not connected"          | No saved connection for user | POST `/linear/connection` with credentials                          |
+| "Invalid API key"               | Expired or revoked key       | Generate new key in Linear settings                                 |
+| Extraction returns null title   | Input too vague              | Provide more specific issue description                             |
+| Webhook not syncing             | Missing webhook secret       | POST `/linear/webhook-config` with secret                           |
+| Webhook 401 errors              | Wrong secret                 | Reconfigure secret in Linear and IntexuraOS                         |
+| Dashboard shows stale data      | Firestore not populated      | POST `/linear/sync` to run full sync                                |
+| Title generation returns 500    | LLM failed after 2 attempts  | Retry request or use a manual title                                 |
+| No child issues on dashboard    | Not synced yet               | Run full sync to populate parent-child data                         |
+| Other user missing updates      | Old single-user routing      | Ensure webhook configured; fan-out is default                       |
+| Internal endpoint returns 401   | Missing header               | Both `X-Internal-Auth` and `X-User-Id` required for issue endpoints |
+| Context endpoint returns 404    | Issue not synced             | Run a full sync before querying context                             |
+| Pruning skipped                 | Below 200 issues             | Threshold is 200 active issues — expected behavior                  |
+| Prune candidate still in Linear | Deletion not confirmed       | Call `DELETE /linear/prune-candidates` to confirm                   |
 
 ---
 
@@ -543,12 +604,13 @@ curl -X DELETE http://localhost:3000/linear/failed-issues/FAILED_ID \
 6. Send vague input ("fix bug") — find it in the failed-issues queue, then delete it.
 7. Use the batch display endpoint to fetch three issues with their comment counts in one call.
 8. Use the context endpoint to fetch an issue's description and comments.
+9. Review prune candidates (if above threshold) and confirm deletion.
 
 ### Hard
 
-9. Simulate the full code-agent workflow: create an issue with `POST /internal/issues`, move it to `in_progress`, add a comment, update a label, then move it to `done`.
-10. Create a parent issue in Linear, create two sub-issues, run a full sync, then verify the tree structure with `GET /internal/issues/:issueId/tree`.
-11. Test the auto-trigger: create an issue with a `planning-task` label, assign it, and trace the log output to confirm the code agent receives the task.
+10. Simulate the full code-agent workflow: create an issue with `POST /internal/issues`, move it to `in_progress`, add a comment, update a label, then move it to `done`.
+11. Create a parent issue in Linear, create two sub-issues, run a full sync, then verify the tree structure with `GET /internal/issues/:issueId/tree`.
+12. Test the auto-trigger: create an issue with a `planning-task` label, assign it, and trace the log output to confirm the code agent receives the task.
 
 <details>
 <summary>Solutions</summary>
@@ -590,7 +652,19 @@ curl http://localhost:3000/internal/linear/issues/ENG-100/context \
 
 Verify the response contains `description` (string or null) and `comments` array sorted newest-first.
 
-### Exercise 9: Full Code-Agent Workflow
+### Exercise 9: Review Prune Candidates
+
+```bash
+# List candidates
+curl http://localhost:3000/linear/prune-candidates \
+  -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
+
+# Confirm deletion
+curl -X DELETE http://localhost:3000/linear/prune-candidates \
+  -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
+```
+
+### Exercise 10: Full Code-Agent Workflow
 
 ```bash
 # 1. Create issue
@@ -644,4 +718,4 @@ Now that you understand the basics:
 
 ---
 
-**Last updated:** 2026-03-22
+**Last updated:** 2026-04-07

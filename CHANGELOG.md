@@ -4,38 +4,63 @@
 
 ### Added
 
-- Hellscript Categorized Writing Config — AI-powered writing following user style and preferences (INT-1064)
-- Codex Runtime Support — OpenAI Codex as an execution backend with auth, log processing, and worker types
-- Execution Memory Graph — Visual representation of agent decision-making patterns for RAG tuning (INT-1098)
-- Remediation Agent & Review Loop — Autonomous auto-improvement with cross-LLM checks and event sourcing
-- OpenRouter Integration — Route tasks through OpenRouter models with backend infra, frontend selection, and pricing (INT-1011, INT-1012)
-- Code Tasks V3 Server-Side Grouping — Backend grouping of code tasks for better performance at scale (INT-1173, INT-1184)
-- Batch Archive & V3 Loading UX improvements
-- Cloudflare Browser Rendering — Replaced Crawl4AI for more reliable JS-rendered page handling (INT-1121, INT-1153)
-- Per-Agent-Type Worker Settings — Different agent types tuned independently for performance and cost
-- Ask Agent — Interactive Claude Code Sessions with back-and-forth conversations from the UI (INT-1291)
-- CI Failure Auto-Handling — Failed checks on agent PRs retried or escalated without user intervention
-- Auto-Archive Merged Code Tasks — Task list stays clean with automatic archiving when PRs merge (INT-1276, INT-1174)
-- AI-Powered Linear Issue Cleanup — Stale/duplicate issues surfaced and removed automatically (INT-1168, INT-1169)
-- Cron Agent Security & Config hardening with enhanced authentication and validation (INT-1288)
-- Interactive links in code task logs for easier navigation (INT-1306)
+- Hellscript Agent with AI-powered writing following user style and preferences via categorized writing configuration (INT-1064)
+- Codex runtime support with authentication, log processing, and worker types for OpenAI Codex execution backend (INT-1104)
+- Execution Memory data collection pipeline with vector retrieval and post-run distillation (INT-1098)
+- Remediation Agent with autonomous auto-improvement loop, cross-LLM checks, and event-sourcing for AI-native improvements (INT-1087)
+- OpenRouter integration with backend infrastructure, frontend model selection, and pricing display (INT-1011)
+- Code task backend pagination and group-level Firestore aggregation for Linear issue representation (INT-1173, INT-1184)
+- Batch archive selection and V3 loading UX for code tasks (INT-1166, INT-1218)
+- Cron Agent utilizing internal APIs to handle user tasks on schedule with security validation (INT-1288)
+- Cloudflare Browser Rendering for web-agent, replacing Crawl4AI for JS-rendered pages (INT-1153)
+- Per-agent-type worker settings for independent performance and cost tuning (INT-1124)
+- Ask Agent for interactive back-and-forth Claude Code sessions from the UI (INT-1293)
+- Automatic CI failure handling on agent-created PRs (INT-853)
+- Auto-archive background job for merged code tasks (INT-1276)
+- AI-powered Linear issue cleanup with review UI and scheduled pruning (INT-1168)
+- Merge queue PR exclusion checkboxes (INT-1094)
+- LLM-generated titles for review task Linear issues (INT-1128)
+- `test_quality` review type and GitHub Actions bot detection (INT-1081)
+- `PLAN-DOC` tier to planning agent classification (INT-1246)
+- `POST /internal/code/submit` endpoint for internal task creation (INT-1287)
+- Subtask parent breadcrumbs on code task detail pages (INT-1157)
+- Clickable links in code task log output (INT-1306)
+- Comment-Driven Decision Log in agent system prompts (INT-1084)
+- Claude message filtering in code task log viewer (INT-1249)
+- Cover image generation provider failover (INT-1310)
+- `construction_building` domain for research agent (INT-1100)
+- Review-outcome merge labels and Merge button pipeline (INT-1132, INT-1167)
+- Queue PR-lock self-healing with TTL reset and completion-triggered drain (INT-1190)
+- Sender authorization enforcement in webhook dispatch pipeline (INT-1086)
+- Automatic conflict resolution from reconcile cron for born-conflicting PRs (INT-1076)
 
-### Improved
+### Changed
 
-- Memory retrieval accuracy for better agent context awareness (INT-1302)
-- Memory scoring accuracy by removing Linear label influence (INT-1309)
-- Task completion verification by requiring PR evidence across all task types (INT-1279, INT-1292)
-- Plan reviews now require explicit approval before execution (INT-1255)
+- Plan PRs now merge before execution dispatch (INT-1149)
+- Plan-only PRs transition Linear issues to Todo instead of QA (INT-1099)
+- Linear issues automatically move to QA on PR merge (INT-1079)
+- `/implement` resolves to planning task from any group member (INT-1175)
+- Implement button gated on `ready-to-implement` label (INT-1097)
+- Agent dispatch refactored with `@worker` routing and improved container lifecycle (INT-1130)
+- Linear issue retention extended from 7 to 60 days (INT-963)
+- Thinking effort set to high for Opus workers (INT-1088)
+- Removed deprecated V1 code tasks and normalized all task URLs (INT-1198)
+- Standardized Code Tasks UI naming — removed V2/V3 prefixes (INT-1240)
+- PR evidence enforced for all execution and non-planning task types (INT-1279, INT-1292)
+- v8 ignore blocks replaced with real tests across code-agent and orchestrator (INT-1071, INT-1237)
 
 ### Fixed
 
-- Ask-agent losing conversation context unexpectedly (INT-1308)
-- Container restart failures when execution containers expired (INT-1304)
-- Merge action buttons remaining visible after PR was already merged (INT-1286)
-- Status not updating correctly when reviews are skipped (INT-1284)
-- Group status incorrectly deactivating before all tasks completed (INT-1243)
-- Transaction errors in fan-out operations (INT-1220)
-- PR comments being lost during task message retry operations (INT-1283)
+- Plan reviews auto-advancing to execution without user control (INT-1255)
+- Drain queue deadlock under concurrent load (INT-1131)
+- Fan-out Firestore transaction read-after-write race condition (INT-1220)
+- Approximately 80 additional minor fixes across UI polish, migration corrections, animation timing, and mobile layout
+
+### Improved
+
+- Automation log clarity with timezone-aware timestamps (INT-1126)
+- Nitpick Nuker now includes fix reasoning in replies (INT-1215)
+- Code task notification content and routing standardization (INT-1260)
 
 ## 3.4.0
 

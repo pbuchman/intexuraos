@@ -164,6 +164,7 @@ sequenceDiagram
 
 | Commit      | Description                                                      | Date       |
 | ----------- | ---------------------------------------------------------------- | ---------- |
+| `287db2b62` | Add getUserTimezone to UserServiceClient (test fakes updated)    | 2026-03-27 |
 | `473a7e193` | Add JSDoc to UserServiceError domain port (INT-894)              | 2026-03-20 |
 | `436dfb5d7` | Define domain port for user service (INT-894)                    | 2026-03-19 |
 | `75ec965bd` | Deduplicate retryPendingCommands with processCommand (INT-893)   | 2026-03-19 |
@@ -173,7 +174,6 @@ sequenceDiagram
 | `e9ddcec50` | Extract PubSub handling from internalRoutes (INT-891)            | 2026-03-17 |
 | `af267af6c` | Extract repository calls from commandsRoutes into use-cases      | 2026-03-16 |
 | `34fde5ee`  | Add tests for commandsRoutes.ts owner auth + status (INT-867)    | 2026-03-15 |
-| `a5a59aaf`  | Remove override entry and improve test assertions (INT-790)      | 2026-03-13 |
 
 ## API Endpoints
 
@@ -219,19 +219,19 @@ sequenceDiagram
 | Field           | Type          | Description                                                                  |
 | --------------- | ------------- | ---------------------------------------------------------------------------- |
 | `type`          | `CommandType` | `todo`, `research`, `note`, `link`, `calendar`, `linear`, `reminder`, `code` |
-| `confidence`    | `number`      | 0--1 confidence score                                                        |
+| `confidence`    | `number`      | 0–1 confidence score                                                         |
 | `reasoning`     | `string`      | LLM explanation for classification                                           |
 | `promptVersion` | `string`      | Semver version of the prompt that produced this result                       |
 | `classifiedAt`  | `string`      | ISO 8601 classification timestamp                                            |
 
 ### Confidence Semantics
 
-| Range      | Meaning                                         |
-| ---------- | ----------------------------------------------- |
-| 0.90+      | Clear match (explicit prefix, multiple signals) |
-| 0.70--0.90 | Strong match (single clear signal)              |
-| 0.50--0.70 | Choosing between 2--3 plausible categories      |
-| <0.50      | Genuinely uncertain, defaults to `note`         |
+| Range     | Meaning                                         |
+| --------- | ----------------------------------------------- |
+| 0.90+     | Clear match (explicit prefix, multiple signals) |
+| 0.70–0.90 | Strong match (single clear signal)              |
+| 0.50–0.70 | Choosing between 2–3 plausible categories       |
+| <0.50     | Genuinely uncertain, defaults to `note`         |
 
 ## Status Enums
 
