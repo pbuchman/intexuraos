@@ -106,7 +106,6 @@ describe('prepareExecutionMemoryContext', () => {
       evidenceSummary: 'Prior regression fixed by adding route coverage and request logging',
       retrievalText: 'fastify route schema request logging app inject serialization',
       keywords: ['fastify', 'route', 'logging'],
-      labelHints: ['bug', 'backend'],
       componentHints: ['route', 'logging', 'verification'],
       embeddingModel: 'text-embedding-3-small',
       fingerprint: `fp-${id}`,
@@ -131,7 +130,6 @@ describe('prepareExecutionMemoryContext', () => {
         components: ['auth', 'route', 'logging', 'verification'],
         riskFlags: ['env_propagation'],
         verificationGoals: ['cover callback route', 'verify task detail serialization'],
-        labelHints: ['bug', 'backend'],
         summary: 'Auth callback route changes with logging and route verification work',
       }),
       usage: { model: LlmModels.Gemini25Flash },
@@ -147,7 +145,6 @@ describe('prepareExecutionMemoryContext', () => {
 
     const result = await prepareExecutionMemoryContext({
       task: createTask(),
-      linearIssueLabels: ['backend', 'bug'],
       logger,
       linearAgentClient: linearAgentClient as never,
       queryClient: queryClient as never,
@@ -159,7 +156,7 @@ describe('prepareExecutionMemoryContext', () => {
     expect(result).toMatchObject({
       status: 'matched',
       applicationId: 'app-123',
-      retrievalVersion: 'execution-memory-retrieval@2.0.0',
+      retrievalVersion: 'execution-memory-retrieval@3.0.0',
       querySummary: 'Auth callback route changes with logging and route verification work',
       matchedMemories: [
         expect.objectContaining({ memoryId: 'mem-1' }),
@@ -188,14 +185,12 @@ describe('prepareExecutionMemoryContext', () => {
         vectorScore: 0.51,
         qualityScore: 0.2,
         componentHints: ['unrelated'],
-        labelHints: ['frontend'],
       }),
     ]));
     executionMemoryApplicationRepo.create.mockResolvedValue(ok({ id: 'app-no-match' }));
 
     const result = await prepareExecutionMemoryContext({
       task: createTask(),
-      linearIssueLabels: ['backend', 'bug'],
       logger,
       linearAgentClient: linearAgentClient as never,
       queryClient: queryClient as never,
@@ -207,7 +202,7 @@ describe('prepareExecutionMemoryContext', () => {
     expect(result).toEqual({
       status: 'none',
       applicationId: 'app-no-match',
-      retrievalVersion: 'execution-memory-retrieval@2.0.0',
+      retrievalVersion: 'execution-memory-retrieval@3.0.0',
       querySummary: expect.stringContaining('Fix the Auth0 callback route'),
     });
     expect(executionMemoryApplicationRepo.create).toHaveBeenCalledWith(expect.objectContaining({
@@ -223,7 +218,6 @@ describe('prepareExecutionMemoryContext', () => {
         components: ['auth', 'logging'],
         riskFlags: ['env'],
         verificationGoals: ['route coverage'],
-        labelHints: ['bug'],
         summary: 'Auth callback logging work',
       }),
       usage: { model: LlmModels.Gemini25Flash },
@@ -232,7 +226,6 @@ describe('prepareExecutionMemoryContext', () => {
 
     const result = await prepareExecutionMemoryContext({
       task: createTask(),
-      linearIssueLabels: ['backend'],
       logger,
       linearAgentClient: linearAgentClient as never,
       queryClient: queryClient as never,
@@ -244,7 +237,7 @@ describe('prepareExecutionMemoryContext', () => {
     expect(result).toEqual({
       status: 'error',
       applicationId: 'app-error',
-      retrievalVersion: 'execution-memory-retrieval@2.0.0',
+      retrievalVersion: 'execution-memory-retrieval@3.0.0',
       querySummary: 'Auth callback logging work',
       errorCode: 'embedding_unavailable',
       errorMessage: 'Execution memory embedding client is not configured',
@@ -260,7 +253,6 @@ describe('prepareExecutionMemoryContext', () => {
   it('returns an error immediately when the application repository is not configured', async () => {
     const result = await prepareExecutionMemoryContext({
       task: createTask(),
-      linearIssueLabels: ['backend'],
       logger,
       linearAgentClient: linearAgentClient as never,
       queryClient: undefined,
@@ -271,7 +263,7 @@ describe('prepareExecutionMemoryContext', () => {
 
     expect(result).toEqual({
       status: 'error',
-      retrievalVersion: 'execution-memory-retrieval@2.0.0',
+      retrievalVersion: 'execution-memory-retrieval@3.0.0',
       querySummary: expect.stringContaining('Fix the Auth0 callback route'),
       errorCode: 'application_repo_unavailable',
       errorMessage: 'Execution memory application repository is not configured',
@@ -284,7 +276,6 @@ describe('prepareExecutionMemoryContext', () => {
 
     const result = await prepareExecutionMemoryContext({
       task: createTask(),
-      linearIssueLabels: ['backend'],
       logger,
       linearAgentClient: linearAgentClient as never,
       queryClient: undefined,
@@ -296,7 +287,7 @@ describe('prepareExecutionMemoryContext', () => {
     expect(result).toEqual({
       status: 'error',
       applicationId: 'app-memory-repo',
-      retrievalVersion: 'execution-memory-retrieval@2.0.0',
+      retrievalVersion: 'execution-memory-retrieval@3.0.0',
       querySummary: expect.stringContaining('Fix the Auth0 callback route'),
       errorCode: 'memory_repo_unavailable',
       errorMessage: 'Execution memory repository is not configured',
@@ -310,7 +301,6 @@ describe('prepareExecutionMemoryContext', () => {
         components: ['auth'],
         riskFlags: [],
         verificationGoals: [],
-        labelHints: [],
         summary: 'Auth callback logging work',
       }),
       usage: { model: LlmModels.Gemini25Flash },
@@ -320,7 +310,6 @@ describe('prepareExecutionMemoryContext', () => {
 
     const result = await prepareExecutionMemoryContext({
       task: createTask(),
-      linearIssueLabels: ['backend'],
       logger,
       linearAgentClient: linearAgentClient as never,
       queryClient: queryClient as never,
@@ -331,7 +320,7 @@ describe('prepareExecutionMemoryContext', () => {
 
     expect(result).toEqual({
       status: 'error',
-      retrievalVersion: 'execution-memory-retrieval@2.0.0',
+      retrievalVersion: 'execution-memory-retrieval@3.0.0',
       querySummary: 'Auth callback logging work',
       errorCode: 'embedding_failed',
       errorMessage: 'embedding failed',
@@ -345,7 +334,6 @@ describe('prepareExecutionMemoryContext', () => {
         components: ['auth'],
         riskFlags: [],
         verificationGoals: [],
-        labelHints: [],
         summary: 'Auth callback logging work',
       }),
       usage: { model: LlmModels.Gemini25Flash },
@@ -355,7 +343,6 @@ describe('prepareExecutionMemoryContext', () => {
 
     const result = await prepareExecutionMemoryContext({
       task: createTask(),
-      linearIssueLabels: ['backend'],
       logger,
       linearAgentClient: linearAgentClient as never,
       queryClient: queryClient as never,
@@ -367,7 +354,7 @@ describe('prepareExecutionMemoryContext', () => {
     expect(result).toEqual({
       status: 'error',
       applicationId: 'app-embedding-error',
-      retrievalVersion: 'execution-memory-retrieval@2.0.0',
+      retrievalVersion: 'execution-memory-retrieval@3.0.0',
       querySummary: 'Auth callback logging work',
       errorCode: 'embedding_failed',
       errorMessage: 'embedding failed',
@@ -381,7 +368,6 @@ describe('prepareExecutionMemoryContext', () => {
 
     const result = await prepareExecutionMemoryContext({
       task: createTask(),
-      linearIssueLabels: ['backend'],
       logger,
       linearAgentClient: linearAgentClient as never,
       queryClient: undefined,
@@ -393,7 +379,7 @@ describe('prepareExecutionMemoryContext', () => {
     expect(result).toEqual({
       status: 'error',
       applicationId: 'app-vector-error',
-      retrievalVersion: 'execution-memory-retrieval@2.0.0',
+      retrievalVersion: 'execution-memory-retrieval@3.0.0',
       querySummary: expect.stringContaining('Fix the Auth0 callback route'),
       errorCode: 'vector_search_failed',
       errorMessage: 'vector search unavailable',
@@ -408,14 +394,12 @@ describe('prepareExecutionMemoryContext', () => {
       createMatch('mem-low', {
         vectorScore: 0.6,
         componentHints: [],
-        labelHints: [],
-      }),
+              }),
     ]));
     executionMemoryApplicationRepo.create.mockResolvedValue(ok({ id: 'app-invalid-json' }));
 
     const result = await prepareExecutionMemoryContext({
       task: createTask(),
-      linearIssueLabels: ['backend'],
       logger,
       linearAgentClient: linearAgentClient as never,
       queryClient: queryClient as never,
@@ -427,7 +411,7 @@ describe('prepareExecutionMemoryContext', () => {
     expect(result).toEqual({
       status: 'none',
       applicationId: 'app-invalid-json',
-      retrievalVersion: 'execution-memory-retrieval@2.0.0',
+      retrievalVersion: 'execution-memory-retrieval@3.0.0',
       querySummary: expect.stringContaining('Fix the Auth0 callback route'),
     });
     expect(logger.warn).toHaveBeenCalledTimes(2);
@@ -438,7 +422,7 @@ describe('prepareExecutionMemoryContext', () => {
     expect(toDispatchExecutionMemoryContext({ status: 'none' })).toBeUndefined();
     expect(toDispatchExecutionMemoryContext({
       status: 'matched',
-      retrievalVersion: 'execution-memory-retrieval@2.0.0',
+      retrievalVersion: 'execution-memory-retrieval@3.0.0',
       querySummary: 'summary',
       matchedMemories: [],
     })).toBeUndefined();
@@ -446,7 +430,7 @@ describe('prepareExecutionMemoryContext', () => {
     expect(toDispatchExecutionMemoryContext({
       status: 'matched',
       applicationId: 'app-123',
-      retrievalVersion: 'execution-memory-retrieval@2.0.0',
+      retrievalVersion: 'execution-memory-retrieval@3.0.0',
       querySummary: 'summary',
       matchedMemories: [
         {
@@ -462,7 +446,7 @@ describe('prepareExecutionMemoryContext', () => {
       ],
     })).toEqual({
       applicationId: 'app-123',
-      retrievalVersion: 'execution-memory-retrieval@2.0.0',
+      retrievalVersion: 'execution-memory-retrieval@3.0.0',
       querySummary: 'summary',
       matchedMemories: [
         {
@@ -485,15 +469,13 @@ describe('prepareExecutionMemoryContext', () => {
         prompt: '  Prompt fallback  ',
         sanitizedPrompt: '   ',
       },
-      { description: null, comments: [] },
-      [' Backend ', 'backend', '']
+      { description: null, comments: [] }
     );
     expect(fallback).toEqual({
       semanticQuery: 'Prompt fallback',
       components: [],
       riskFlags: [],
       verificationGoals: [],
-      labelHints: ['backend'],
       summary: 'Prompt fallback',
     });
 
@@ -503,7 +485,6 @@ describe('prepareExecutionMemoryContext', () => {
         sanitizedPrompt: 'Prompt fallback',
       },
       issueContext: { description: null, comments: [] },
-      linearIssueLabels: ['backend'],
       logger,
       queryClient: {
         generate: vi.fn().mockResolvedValue(ok({ content: 'missing braces' })),
@@ -554,18 +535,16 @@ describe('prepareExecutionMemoryContext', () => {
 
     const reranked = prepareExecutionMemoryContextTestables.rerankMemories(
       [
-        createMatch('mem-1', { vectorScore: 0.9, componentHints: [], labelHints: [] }),
-        createMatch('mem-2', { vectorScore: 0.7, componentHints: ['route'], labelHints: ['backend'] }),
+        createMatch('mem-1', { vectorScore: 0.9, componentHints: [] }),
+        createMatch('mem-2', { vectorScore: 0.7, componentHints: ['route'] }),
       ],
       {
         semanticQuery: 'route verification',
         components: [],
         riskFlags: [],
         verificationGoals: [],
-        labelHints: [],
         summary: 'summary',
-      },
-      []
+      }
     );
     expect(reranked[0]?.memory.id).toBe('mem-1');
 
@@ -573,13 +552,12 @@ describe('prepareExecutionMemoryContext', () => {
     expect(prepareExecutionMemoryContextTestables.truncate('truncate-me', 5)).toBe('trunc');
   });
 
-  it('scores candidates using rebalanced weights that increase component and label influence', () => {
+  it('scores candidates using rebalanced weights without label signal', () => {
     const reranked = prepareExecutionMemoryContextTestables.rerankMemories(
       [
         createMatch('mem-moderate', {
           vectorScore: 0.75,
           componentHints: ['auth', 'route', 'logging'],
-          labelHints: ['bug', 'backend'],
           applicationCount: 0,
           positiveCount: 0,
         }),
@@ -589,15 +567,13 @@ describe('prepareExecutionMemoryContext', () => {
         components: ['auth', 'route', 'logging', 'verification'],
         riskFlags: [],
         verificationGoals: [],
-        labelHints: ['bug'],
         summary: 'summary',
-      },
-      ['backend', 'bug']
+      }
     );
 
-    // New weights: 0.50*0.75 + 0.20*(3/4) + 0.15*(2/2) + 0.15*((0+1)/(0+2))
-    // = 0.375 + 0.15 + 0.15 + 0.075 = 0.75
-    expect(reranked[0]?.rerankScore).toBeCloseTo(0.75, 2);
+    // New weights: 0.55*0.75 + 0.25*(3/4) + 0.20*((0+1)/(0+2))
+    // = 0.4125 + 0.1875 + 0.10 = 0.70
+    expect(reranked[0]?.rerankScore).toBeCloseTo(0.70, 2);
   });
 
   it('logs top-3 reranked candidates with score breakdowns even when none pass the threshold', async () => {
@@ -607,7 +583,6 @@ describe('prepareExecutionMemoryContext', () => {
         components: ['unrelated'],
         riskFlags: [],
         verificationGoals: [],
-        labelHints: [],
         summary: 'Unrelated topic',
       }),
       usage: { model: LlmModels.Gemini25Flash },
@@ -618,7 +593,6 @@ describe('prepareExecutionMemoryContext', () => {
       createMatch('mem-near-miss', {
         vectorScore: 0.70,
         componentHints: [],
-        labelHints: [],
         applicationCount: 0,
         positiveCount: 0,
       }),
@@ -627,8 +601,7 @@ describe('prepareExecutionMemoryContext', () => {
 
     await prepareExecutionMemoryContext({
       task: createTask(),
-      linearIssueLabels: [],
-      logger,
+            logger,
       linearAgentClient: linearAgentClient as never,
       queryClient: queryClient as never,
       embeddingClient: embeddingClient as never,
@@ -647,7 +620,6 @@ describe('prepareExecutionMemoryContext', () => {
             rerankScore: expect.any(Number),
             vectorScore: 0.70,
             componentOverlap: 0,
-            labelOverlap: 0,
             effectiveness: expect.any(Number),
             passedThreshold: false,
           }),
@@ -664,7 +636,6 @@ describe('prepareExecutionMemoryContext', () => {
         components: ['auth', 'route', 'logging', 'verification'],
         riskFlags: [],
         verificationGoals: [],
-        labelHints: ['bug'],
         summary: 'Auth route logging verification',
       }),
       usage: { model: LlmModels.Gemini25Flash },
@@ -675,7 +646,6 @@ describe('prepareExecutionMemoryContext', () => {
       createMatch('mem-match', {
         vectorScore: 0.95,
         componentHints: ['auth', 'route', 'logging', 'verification'],
-        labelHints: ['bug', 'backend'],
         applicationCount: 2,
         positiveCount: 2,
       }),
@@ -684,8 +654,7 @@ describe('prepareExecutionMemoryContext', () => {
 
     await prepareExecutionMemoryContext({
       task: createTask(),
-      linearIssueLabels: ['backend', 'bug'],
-      logger,
+            logger,
       linearAgentClient: linearAgentClient as never,
       queryClient: queryClient as never,
       embeddingClient: embeddingClient as never,
@@ -704,7 +673,6 @@ describe('prepareExecutionMemoryContext', () => {
             rerankScore: expect.any(Number),
             vectorScore: 0.95,
             componentOverlap: 1,
-            labelOverlap: 1,
             effectiveness: 0.75,
             passedThreshold: true,
           }),
