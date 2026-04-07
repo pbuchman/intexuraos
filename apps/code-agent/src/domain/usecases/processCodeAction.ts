@@ -162,9 +162,15 @@ export async function processCodeAction(
     hasChildren,
   } = issueResult;
 
-  // Derive worker type from labels (single match only, otherwise fall back to request's workerType)
+  // Resolution chain: Linear label > request workerType > user setting > 'auto'
   const labelWorkerType = getWorkerTypeFromLabels(linearIssueLabels);
-  const effectiveWorkerType = labelWorkerType ?? workerType;
+  let effectiveWorkerType: WorkerType = labelWorkerType ?? workerType;
+  if (effectiveWorkerType === 'auto') {
+    if (settings?.defaultPlanningWorkerType !== undefined) {
+      effectiveWorkerType = settings.defaultPlanningWorkerType;
+      logger.info({ userId, defaultPlanningWorkerType: effectiveWorkerType }, 'Using user default planning worker type');
+    }
+  }
 
   logger.info(
     {
@@ -197,7 +203,7 @@ export async function processCodeAction(
       sanitizedPrompt: sanitizedPromptText,
       systemPromptHash: SYSTEM_PROMPT_HASH_PLACEHOLDER,
       workerType: effectiveWorkerType,
-      /* v8 ignore start -- ts-type: nullish coalescing fallback (enabledWorkers[0] always exists after length check) @preserve */
+      /* v8 ignore start -- ts-type: Array filter always returns dense array — cannot produce sparse result @preserve */
       workerLocation: enabledWorkers[0]?.name ?? 'unknown',
       /* v8 ignore stop @preserve */
       repository: repository ?? 'pbuchman/intexuraos',
@@ -234,20 +240,42 @@ export async function processCodeAction(
 
     const parentTask = parentCreateResult.value;
 
-    const fanOutResult = await fanOutChildTasks(
-      {
-        logger,
-        codeTaskRepo,
-        linearAgentClient: deps.linearAgentClient,
-        taskEnqueueService: deps.taskEnqueueService,
-        orchestratorSecret: deps.orchestratorSecret,
-      },
-      {
-        parentTask,
-        userId,
-        linearIssueId: finalLinearIssueId,
-      },
-    );
+    const validateResult = await deps.linearAgentClient.validateIssue({
+      userId,
+      identifier: finalLinearIssueId,
+    });
+
+    const fanOutResult = validateResult.ok
+      ? await deps.linearAgentClient.fetchDirectChildrenLive({
+          userId,
+          issueId: validateResult.value.id,
+        }).then(async (directChildrenResult) => {
+          if (!directChildrenResult.ok) {
+            return err({
+              code: 'internal_error' as const,
+              message: directChildrenResult.error.message,
+            });
+          }
+
+          return await fanOutChildTasks(
+            {
+              logger,
+              codeTaskRepo,
+              taskEnqueueService: deps.taskEnqueueService,
+              orchestratorSecret: deps.orchestratorSecret,
+            },
+            {
+              planningTask: parentTask,
+              userId,
+              childIssues: directChildrenResult.value.filter((child) => child.parentId === validateResult.value.id),
+              workerType: effectiveWorkerType,
+            },
+          );
+        })
+      : err({
+          code: 'internal_error' as const,
+          message: validateResult.error.message,
+        });
 
     // Fan-out failed — fall back to normal dispatch regardless of error type.
     // The parent task was already created; enqueue it for dispatch.
@@ -275,6 +303,24 @@ export async function processCodeAction(
         }
         return err({ code: 'internal_error', message: enqueueResult.error.message });
       }
+    } else {
+      const cancelParentResult = await codeTaskRepo.update(parentTask.id, {
+        status: 'cancelled',
+        completedAt: new Date(),
+        error: {
+          code: 'fan_out_parent_cancelled',
+          message: 'Parent complex task replaced by direct child execution tasks',
+        },
+      });
+      if (!cancelParentResult.ok) {
+        logger.warn({ taskId: parentTask.id, error: cancelParentResult.error }, 'Failed to cancel parent task after successful fan-out');
+      }
+
+      return ok({
+        codeTaskId: fanOutResult.value.primaryChildTaskId,
+        resourceUrl: `/#/code-tasks/${fanOutResult.value.primaryChildTaskId}`,
+        workerLocation: 'queued' as WorkerLocation,
+      });
     }
 
     // Fan-out succeeded or fell back to normal enqueue — return the parent task ID
@@ -313,7 +359,7 @@ export async function processCodeAction(
     sanitizedPrompt: sanitizedPromptText,
     systemPromptHash: SYSTEM_PROMPT_HASH_PLACEHOLDER,
     workerType: effectiveWorkerType,
-    /* v8 ignore start -- ts-type: nullish coalescing fallback (enabledWorkers[0] always exists after length check) @preserve */
+    /* v8 ignore start -- ts-type: Array filter always returns dense array — cannot produce sparse result @preserve */
     workerLocation: enabledWorkers[0]?.name ?? 'unknown', // Use first worker as default
     /* v8 ignore stop @preserve */
     repository: repository ?? 'pbuchman/intexuraos',

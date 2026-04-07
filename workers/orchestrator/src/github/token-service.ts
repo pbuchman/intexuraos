@@ -76,11 +76,9 @@ export class GitHubTokenService {
 
     // Try to refresh
     const result = await this.refreshToken();
-    /* v8 ignore start -- upstream: Token refresh failure path depends on external GitHub API @preserve */
     if (result.ok) {
       return result.value;
     }
-    /* v8 ignore stop @preserve */
 
     return null;
   }
@@ -90,35 +88,27 @@ export class GitHubTokenService {
   }
 
   isExpired(): boolean {
-    /* v8 ignore start -- ts-type: Early return for null expiresAt is type narrowing @preserve */
     if (!this.expiresAt) return true;
-    /* v8 ignore stop @preserve */
     return new Date() >= this.expiresAt;
   }
 
   isExpiringSoon(withinMinutes = 15): boolean {
-    /* v8 ignore start -- ts-type: Early return for null expiresAt is type narrowing @preserve */
     if (!this.expiresAt) return true;
-    /* v8 ignore stop @preserve */
     const expiryThreshold = new Date(Date.now() + withinMinutes * 60 * 1000);
     return this.expiresAt <= expiryThreshold;
   }
 
   startBackgroundRefresh(intervalMinutes = 5): void {
-    /* v8 ignore start -- ts-type: Guard clause for null refreshTimer is type narrowing @preserve */
     if (this.refreshTimer) {
       this.stopBackgroundRefresh();
     }
-    /* v8 ignore stop @preserve */
 
-    /* v8 ignore start -- test-infra: setInterval callback with timing condition requires fake timers to test @preserve */
     this.refreshTimer = setInterval(
       () => {
         if (this.isExpiringSoon()) {
           void this.refreshToken();
         }
       },
-      /* v8 ignore stop @preserve */
       intervalMinutes * 60 * 1000
     );
   }

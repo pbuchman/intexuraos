@@ -5,11 +5,13 @@
 
 import { FieldValue, getFirestore } from '@intexuraos/infra-firestore';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import type {
-  LlmResult,
-  RepositoryError,
-  Research,
-  ResearchRepository,
+import {
+  toResearchSummary,
+  type LlmResult,
+  type RepositoryError,
+  type Research,
+  type ResearchRepository,
+  type ResearchSummary,
 } from '../../domain/research/index.js';
 
 export class FirestoreResearchRepository implements ResearchRepository {
@@ -150,6 +152,59 @@ export class FirestoreResearchRepository implements ResearchRepository {
       return err({
         code: 'FIRESTORE_ERROR',
         message: getErrorMessage(error, 'Failed to list researches'),
+      });
+    }
+  }
+
+  async findSummariesByUserId(
+    userId: string,
+    options?: { limit?: number; cursor?: string }
+  ): Promise<Result<{ items: ResearchSummary[]; nextCursor?: string }, RepositoryError>> {
+    try {
+      const db = getFirestore();
+      const collection = db.collection(this.collectionName);
+      const limit = options?.limit ?? 50;
+
+      // Single unified query: favourites first (DESC), then by startedAt DESC
+      // Uses composite index: (userId ASC, favourite DESC, startedAt DESC)
+      let query = collection
+        .where('userId', '==', userId)
+        .orderBy('favourite', 'desc')
+        .orderBy('startedAt', 'desc')
+        .select(
+          'id', 'userId', 'title', 'status', 'selectedModels', 'synthesisModel',
+          'startedAt', 'completedAt', 'favourite', 'llmResults', 'totalCostUsd',
+          'partialFailure'
+        )
+        .limit(limit + 1);
+
+      if (options?.cursor !== undefined && options.cursor !== '') {
+        const startDoc = await collection.doc(options.cursor).get();
+        /* v8 ignore start -- upstream: cursor !== undefined guard ensures doc ID is valid; startDoc.exists false branch is defensive @preserve */
+        if (startDoc.exists) {
+        /* v8 ignore stop @preserve */
+          query = query.startAfter(startDoc);
+        }
+      }
+
+      const snapshot = await query.get();
+      const docs = snapshot.docs.map((doc) =>
+        toResearchSummary(doc.data() as Research)
+      );
+
+      const items = docs.slice(0, limit);
+      const lastItem = items[items.length - 1];
+      const nextCursor = docs.length > limit && lastItem !== undefined
+        ? lastItem.id
+        : undefined;
+
+      return nextCursor !== undefined
+        ? ok({ items, nextCursor })
+        : ok({ items });
+    } catch (error) {
+      return err({
+        code: 'FIRESTORE_ERROR',
+        message: getErrorMessage(error, 'Failed to list research summaries'),
       });
     }
   }

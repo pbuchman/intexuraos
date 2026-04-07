@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ==============================================================================
-# Setup Docker Network for Claude Workers
+# Setup Docker Network for Code Workers
 # ==============================================================================
 # Creates an isolated Docker network for worker containers.
 # Network isolation rules block access to:
@@ -11,11 +11,11 @@ set -euo pipefail
 #   - Private IP ranges
 # ==============================================================================
 
-NETWORK_NAME="${NETWORK_NAME:-claude-worker-net}"
+NETWORK_NAME="${NETWORK_NAME:-code-worker-net}"
 SUBNET="${SUBNET:-172.28.0.0/16}"
 
 echo "========================================"
-echo "Setting up Claude worker network"
+echo "Setting up Code worker network"
 echo "========================================"
 echo "Network: $NETWORK_NAME"
 echo "Subnet: $SUBNET"

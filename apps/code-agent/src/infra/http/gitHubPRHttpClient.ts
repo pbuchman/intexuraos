@@ -515,9 +515,15 @@ export function createGitHubPRHttpClient(
           return ok({ sha: data.sha, merged: data.merged });
         }
 
-        // 405 = already merged (idempotent)
+        // 405 = merge blocked (required checks failing, required reviews, branch protection, or already merged)
+        // Parse the response body to distinguish "already merged" from genuinely blocked.
         if (response.status === 405) {
-          return ok({ sha: '', merged: true });
+          const body = await response.text();
+          const isAlreadyMerged = body.toLowerCase().includes('already merged');
+          if (isAlreadyMerged) {
+            return ok({ sha: '', merged: true });
+          }
+          return err({ code: 'API_ERROR', message: `PR #${String(pullNumber)} merge blocked: ${body}` });
         }
 
         // 409 = merge conflict at merge time

@@ -20,6 +20,7 @@ import type {
   GeneratedTitle,
   AddCommentRequest,
   AddCommentResponse,
+  IssueTreeNode,
   IssueTreeResponse,
   LinearAgentError,
   LinearIssueForDisplay,
@@ -393,13 +394,44 @@ export function createLinearAgentHttpClient(
       }
     },
 
+    async fetchDirectChildrenLive(request): Promise<Result<IssueTreeNode[], LinearAgentError>> {
+      const url = `${baseUrl}/internal/linear/issues/${encodeURIComponent(request.issueId)}/direct-children`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'X-Internal-Auth': internalAuthToken,
+            'X-User-Id': request.userId,
+          },
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          return err({ code: response.status === 404 ? 'NOT_FOUND' : 'UNAVAILABLE', message: errorText });
+        }
+        const body = await response.json() as { success: boolean; data?: IssueTreeNode[] };
+        if (!body.success || body.data === undefined) {
+          return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
+        }
+        return ok(body.data);
+      } catch (error) {
+        return err({ code: 'UNKNOWN', message: String(error) });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    },
+
     async updateIssueMetadata(request: {
       userId: string;
       issueId: string;
       assigneeId?: string | null;
       addLabels?: string[];
       removeLabels?: string[];
-    }): Promise<Result<void, LinearAgentError>> {
+    }): Promise<Result<{ droppedLabels: string[] }, LinearAgentError>> {
       const url = `${baseUrl}/internal/linear/issues/${encodeURIComponent(request.issueId)}/metadata`;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
@@ -424,9 +456,9 @@ export function createLinearAgentHttpClient(
           const errorText = await response.text();
           return err({ code: response.status === 404 ? 'NOT_FOUND' : 'UNAVAILABLE', message: errorText });
         }
-        const body = await response.json() as { success: boolean };
+        const body = await response.json() as { success: boolean; data?: { droppedLabels?: string[] } };
         if (!body.success) return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
-        return ok(undefined);
+        return ok({ droppedLabels: body.data?.droppedLabels ?? [] });
       } catch (error) {
         return err({ code: 'UNKNOWN', message: String(error) });
       } finally {
@@ -465,6 +497,7 @@ export function createLinearAgentHttpClient(
           data?: {
             id: string;
             identifier: string;
+            parentIdentifier: string | null;
             title: string;
             description: string | null;
             state: { name: string; type: string };
@@ -486,6 +519,7 @@ export function createLinearAgentHttpClient(
 
         return ok({
           identifier: body.data.identifier,
+          parentIdentifier: body.data.parentIdentifier,
           title: body.data.title,
           state: body.data.state,
           priority: body.data.priority,
@@ -587,7 +621,7 @@ export function createLinearAgentHttpClient(
 
         if (!response.ok) {
           const errorText = await response.text();
-          logger.warn({ status: response.status, error: errorText }, 'linear-agent getIssueDescription failed');
+          logger.info({ status: response.status, error: errorText }, 'linear-agent getIssueDescription failed');
           return err({ code: 'UNAVAILABLE', message: errorText });
         }
 

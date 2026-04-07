@@ -13,6 +13,7 @@
  */
 
 import type { Logger } from '@intexuraos/common-core';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { AutomationLog, PRRef, AutomationEvent } from '../../domain/ports/automationLog.js';
 import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
 import type { PRAutomationCommentRepository } from '../../domain/ports/prAutomationCommentRepository.js';
@@ -23,16 +24,26 @@ export interface GitHubPRAutomationLogDeps {
   gitHubPRClient: GitHubPRClient;
   prAutomationCommentRepo: PRAutomationCommentRepository;
   resolveOAuthToken: (userId: string) => Promise<string | null>;
+  userServiceClient: UserServiceClient;
   logger: Logger;
 }
 
 export function createGitHubPRAutomationLog(deps: GitHubPRAutomationLogDeps): AutomationLog {
-  const { gitHubPRClient, prAutomationCommentRepo, resolveOAuthToken, logger } = deps;
+  const { gitHubPRClient, prAutomationCommentRepo, resolveOAuthToken, userServiceClient, logger } = deps;
   const pending = new Map<string, Promise<void>>();
+  const TIMEZONE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  const timezoneCache = new Map<string, { value: string | undefined; expiresAt: number }>();
+
+  async function resolveTimezone(userId: string): Promise<string | undefined> {
+    const cached = timezoneCache.get(userId);
+    if (cached !== undefined && Date.now() < cached.expiresAt) return cached.value;
+    const tz = await userServiceClient.getUserTimezone(userId);
+    timezoneCache.set(userId, { value: tz, expiresAt: Date.now() + TIMEZONE_CACHE_TTL_MS });
+    return tz;
+  }
 
   async function doRecord(prRef: PRRef, event: AutomationEvent, tokenUserId?: string): Promise<void> {
     try {
-      // For existing comments, use stored tokenUserId; for new comments, require caller-provided tokenUserId
       const existing = await prAutomationCommentRepo.get(prRef.repository, prRef.prNumber);
       const effectiveUserId = existing?.tokenUserId ?? tokenUserId;
 
@@ -62,19 +73,18 @@ export function createGitHubPRAutomationLog(deps: GitHubPRAutomationLogDeps): Au
         return;
       }
       const { owner, repo } = parsed;
-      const eventLine = renderEvent(event, { repository: prRef.repository });
+      const timezone = await resolveTimezone(effectiveUserId);
+      const timestamp = new Date().toISOString();
+      const eventLine = renderEvent(event, { repository: prRef.repository, timezone, timestamp });
 
-      // Filtered events (e.g., deterministic skips) return null — skip recording entirely
       if (eventLine === null) {
         return;
       }
 
-      const now = new Date().toISOString();
-
       if (existing === undefined) {
-        await createNewComment(token, owner, repo, prRef, eventLine, now, effectiveUserId);
+        await createNewComment(token, owner, repo, prRef, eventLine, timestamp, effectiveUserId);
       } else {
-        await appendToExistingComment(token, owner, repo, existing.commentId, eventLine, prRef, existing.eventCount, now);
+        await appendToExistingComment(token, owner, repo, existing.commentId, eventLine, prRef, existing.eventCount, timestamp);
       }
     } catch (error: unknown) {
       logger.warn(

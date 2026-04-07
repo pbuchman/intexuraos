@@ -1,5 +1,6 @@
 import type { Logger } from '@intexuraos/common-core';
 import type { DocumentReference } from '@google-cloud/firestore';
+import { MERGE_CONFLICT_SYSTEM_PROMPT_HASH } from '../models/codeTask.js';
 
 export interface LockCleanupInfo { repository: string; prNumber: number }
 
@@ -12,8 +13,18 @@ export function buildLockDocPath(repository: string, prNumber: number): string {
  * Only original lock-owning tasks (no parentTaskId) with a prNumber qualify.
  * Returns an array so callers can spread into accumulated cleanups.
  */
-export function buildLockCleanups(task: { repository: string; prNumber?: number; parentTaskId?: string }): LockCleanupInfo[] {
-  if (task.prNumber !== undefined && task.parentTaskId === undefined) {
+export function buildLockCleanups(task: {
+  repository: string;
+  prNumber?: number;
+  parentTaskId?: string;
+  followUpReason?: string;
+  systemPromptHash?: string;
+}): LockCleanupInfo[] {
+  const isMergeConflictTask =
+    task.followUpReason === 'merge_conflict' ||
+    task.systemPromptHash === MERGE_CONFLICT_SYSTEM_PROMPT_HASH;
+
+  if (task.prNumber !== undefined && task.parentTaskId === undefined && !isMergeConflictTask) {
     return [{ repository: task.repository, prNumber: task.prNumber }];
   }
   return [];

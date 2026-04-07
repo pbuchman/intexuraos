@@ -29,6 +29,18 @@ describe('infra-gemini costCalculator', () => {
       // No grounding cost added: just input + output
       expect(calculateTextCost(usage, minimalPricing)).toBeCloseTo(0.0003, 6);
     });
+
+    it('includes thinking tokens at output rate', () => {
+      const usage = { inputTokens: 1000, outputTokens: 500, thinkingTokens: 300 };
+      // input: 1000 * 0.1 = 100, output: 500 * 0.4 = 200, thinking: 300 * 0.4 = 120
+      // total scaled = 420, / 1_000_000 = 0.00042
+      expect(calculateTextCost(usage, basePricing)).toBeCloseTo(0.00042, 6);
+    });
+
+    it('treats undefined thinkingTokens as zero', () => {
+      const usage = { inputTokens: 1000, outputTokens: 500 };
+      expect(calculateTextCost(usage, basePricing)).toBeCloseTo(0.0003, 6);
+    });
   });
 
   describe('calculateImageCost', () => {
@@ -80,6 +92,28 @@ describe('infra-gemini costCalculator', () => {
         costUsd: expect.closeTo(0.0003, 6),
       });
       expect(result.groundingEnabled).toBeUndefined();
+    });
+
+    it('includes thinkingTokens in cost and exposes on result', () => {
+      const result = normalizeUsage(1000, 500, false, basePricing, 300);
+      expect(result).toEqual({
+        inputTokens: 1000,
+        outputTokens: 500,
+        totalTokens: 1500,
+        costUsd: expect.closeTo(0.00042, 6),
+        thinkingTokens: 300,
+      });
+    });
+
+    it('omits thinkingTokens from result when zero', () => {
+      const result = normalizeUsage(1000, 500, false, basePricing, 0);
+      expect(result.thinkingTokens).toBeUndefined();
+      expect(result.costUsd).toBeCloseTo(0.0003, 6);
+    });
+
+    it('omits thinkingTokens from result when undefined', () => {
+      const result = normalizeUsage(1000, 500, false, basePricing);
+      expect(result.thinkingTokens).toBeUndefined();
     });
   });
 });

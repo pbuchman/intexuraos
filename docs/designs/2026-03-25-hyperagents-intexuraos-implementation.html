@@ -1,0 +1,1620 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HyperAgents for IntexuraOS - Detailed Implementation Map</title>
+    <style>
+      :root {
+        --bg: #09111f;
+        --bg-elevated: #0f1b2d;
+        --surface: #13233a;
+        --surface-strong: #182d4a;
+        --border: #27415f;
+        --text: #edf4ff;
+        --text-muted: #9eb4d0;
+        --text-soft: #7991af;
+        --cyan: #52d6ff;
+        --cyan-soft: rgba(82, 214, 255, 0.14);
+        --green: #63e6be;
+        --green-soft: rgba(99, 230, 190, 0.12);
+        --amber: #ffd166;
+        --amber-soft: rgba(255, 209, 102, 0.12);
+        --red: #ff7b7b;
+        --red-soft: rgba(255, 123, 123, 0.12);
+        --blue: #8ec5ff;
+        --blue-soft: rgba(142, 197, 255, 0.14);
+        --shadow: 0 24px 60px rgba(0, 0, 0, 0.32);
+        --radius-xl: 24px;
+        --radius-lg: 18px;
+        --radius-md: 14px;
+        --radius-sm: 10px;
+        --content-width: 1480px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+        background:
+          radial-gradient(circle at top left, rgba(82, 214, 255, 0.12), transparent 22%),
+          radial-gradient(circle at top right, rgba(99, 230, 190, 0.08), transparent 20%),
+          linear-gradient(180deg, #07101d 0%, #0a1322 35%, #09111f 100%);
+        color: var(--text);
+        line-height: 1.55;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      code {
+        font-family: "IBM Plex Mono", "SFMono-Regular", ui-monospace, monospace;
+        font-size: 0.92em;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
+        padding: 0.16rem 0.42rem;
+      }
+
+      .page {
+        max-width: var(--content-width);
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+      }
+
+      .hero {
+        position: relative;
+        overflow: hidden;
+        background:
+          linear-gradient(135deg, rgba(82, 214, 255, 0.13), rgba(142, 197, 255, 0.08)),
+          linear-gradient(180deg, rgba(19, 35, 58, 0.94), rgba(9, 17, 31, 0.94));
+        border: 1px solid rgba(82, 214, 255, 0.18);
+        border-radius: 28px;
+        box-shadow: var(--shadow);
+        padding: 36px;
+        margin-bottom: 28px;
+      }
+
+      .hero::after {
+        content: "";
+        position: absolute;
+        inset: auto -8% -32% auto;
+        width: 340px;
+        height: 340px;
+        background: radial-gradient(circle, rgba(99, 230, 190, 0.15), transparent 70%);
+        pointer-events: none;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        margin: 0 0 14px;
+        color: var(--cyan);
+        font-size: 0.82rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .eyebrow::before {
+        content: "";
+        width: 36px;
+        height: 1px;
+        background: currentColor;
+      }
+
+      h1 {
+        margin: 0;
+        max-width: 980px;
+        font-size: clamp(2.25rem, 4vw, 4rem);
+        line-height: 1.04;
+        letter-spacing: -0.04em;
+      }
+
+      .hero-grid {
+        margin-top: 24px;
+        display: grid;
+        grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.9fr);
+        gap: 24px;
+        align-items: start;
+      }
+
+      .lede {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 1.04rem;
+        max-width: 900px;
+      }
+
+      .hero-panel,
+      .card,
+      .toc,
+      .section,
+      .panel,
+      .flow-node,
+      .step,
+      .example-card,
+      .legend-card {
+        backdrop-filter: blur(10px);
+      }
+
+      .hero-panel {
+        background: rgba(10, 19, 34, 0.66);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: var(--radius-lg);
+        padding: 18px 18px 16px;
+      }
+
+      .hero-panel h2 {
+        margin: 0 0 12px;
+        font-size: 0.95rem;
+        color: var(--blue);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .hero-panel p,
+      .hero-panel li {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 0.94rem;
+      }
+
+      .hero-panel ul {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 22px;
+      }
+
+      .stat {
+        background: rgba(10, 19, 34, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: var(--radius-md);
+        padding: 16px;
+      }
+
+      .stat-label {
+        color: var(--text-soft);
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .stat-value {
+        margin-top: 8px;
+        font-size: 1.65rem;
+        font-weight: 700;
+        letter-spacing: -0.04em;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 290px minmax(0, 1fr);
+        gap: 24px;
+        align-items: start;
+      }
+
+      .toc {
+        position: sticky;
+        top: 16px;
+        background: rgba(15, 27, 45, 0.88);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: var(--radius-lg);
+        padding: 20px;
+      }
+
+      .toc h2 {
+        margin: 0 0 16px;
+        font-size: 0.95rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--cyan);
+      }
+
+      .toc a {
+        display: block;
+        padding: 10px 12px;
+        margin-bottom: 8px;
+        border-radius: 10px;
+        text-decoration: none;
+        color: var(--text-muted);
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid transparent;
+        transition:
+          transform 0.16s ease,
+          border-color 0.16s ease,
+          color 0.16s ease,
+          background 0.16s ease;
+      }
+
+      .toc a:hover {
+        transform: translateX(4px);
+        color: var(--text);
+        border-color: rgba(82, 214, 255, 0.22);
+        background: rgba(82, 214, 255, 0.08);
+      }
+
+      .toc small {
+        display: block;
+        color: var(--text-soft);
+        margin-top: 3px;
+      }
+
+      .content {
+        display: grid;
+        gap: 22px;
+      }
+
+      .section {
+        background: rgba(15, 27, 45, 0.82);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: var(--radius-xl);
+        padding: 28px;
+      }
+
+      .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 18px;
+        margin-bottom: 20px;
+      }
+
+      .section-header h2 {
+        margin: 0;
+        font-size: 1.65rem;
+        letter-spacing: -0.03em;
+      }
+
+      .section-header p {
+        margin: 8px 0 0;
+        color: var(--text-muted);
+        max-width: 860px;
+      }
+
+      .badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: 999px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .badge-cyan {
+        background: var(--cyan-soft);
+        color: var(--cyan);
+      }
+
+      .badge-green {
+        background: var(--green-soft);
+        color: var(--green);
+      }
+
+      .badge-amber {
+        background: var(--amber-soft);
+        color: var(--amber);
+      }
+
+      .badge-red {
+        background: var(--red-soft);
+        color: var(--red);
+      }
+
+      .overview-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .card {
+        background: rgba(9, 17, 31, 0.66);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: var(--radius-lg);
+        padding: 18px;
+      }
+
+      .card h3 {
+        margin: 0 0 10px;
+        font-size: 1rem;
+        color: var(--blue);
+      }
+
+      .card p,
+      .card li {
+        color: var(--text-muted);
+        margin: 0;
+        font-size: 0.93rem;
+      }
+
+      .card ul {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .service-bars {
+        display: grid;
+        gap: 10px;
+        margin-top: 8px;
+      }
+
+      .service-bar {
+        display: grid;
+        grid-template-columns: 170px minmax(0, 1fr) 130px;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .service-bar strong {
+        font-size: 0.92rem;
+      }
+
+      .track {
+        height: 10px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+      }
+
+      .fill {
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--cyan), var(--green));
+      }
+
+      .service-bar span {
+        color: var(--text-soft);
+        font-size: 0.84rem;
+        text-align: right;
+      }
+
+      .flow {
+        display: grid;
+        gap: 10px;
+        margin: 20px 0;
+      }
+
+      .flow-row {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 10px;
+        align-items: stretch;
+      }
+
+      .flow-node {
+        position: relative;
+        background: rgba(9, 17, 31, 0.74);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 16px;
+        padding: 14px 14px 16px;
+        min-height: 126px;
+      }
+
+      .flow-node::after {
+        content: "->";
+        position: absolute;
+        right: -16px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-soft);
+        font-weight: 700;
+      }
+
+      .flow-row .flow-node:last-child::after {
+        display: none;
+      }
+
+      .flow-node strong {
+        display: block;
+        font-size: 0.9rem;
+        margin-bottom: 8px;
+      }
+
+      .flow-node p {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 0.86rem;
+      }
+
+      .flow-node small {
+        display: block;
+        margin-top: 10px;
+        color: var(--text-soft);
+        font-size: 0.77rem;
+      }
+
+      .node-input {
+        border-color: rgba(82, 214, 255, 0.22);
+        background: linear-gradient(180deg, rgba(82, 214, 255, 0.09), rgba(9, 17, 31, 0.74));
+      }
+
+      .node-memory {
+        border-color: rgba(99, 230, 190, 0.22);
+        background: linear-gradient(180deg, rgba(99, 230, 190, 0.09), rgba(9, 17, 31, 0.74));
+      }
+
+      .node-control {
+        border-color: rgba(255, 209, 102, 0.22);
+        background: linear-gradient(180deg, rgba(255, 209, 102, 0.09), rgba(9, 17, 31, 0.74));
+      }
+
+      .node-risk {
+        border-color: rgba(255, 123, 123, 0.22);
+        background: linear-gradient(180deg, rgba(255, 123, 123, 0.08), rgba(9, 17, 31, 0.74));
+      }
+
+      .data-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 18px;
+      }
+
+      .data-tag {
+        padding: 7px 10px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--text-muted);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        font-size: 0.8rem;
+        font-weight: 600;
+      }
+
+      .two-col {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .panel {
+        background: rgba(9, 17, 31, 0.68);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: var(--radius-lg);
+        padding: 18px;
+      }
+
+      .panel h3 {
+        margin: 0 0 12px;
+        font-size: 0.96rem;
+        color: var(--cyan);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.88rem;
+      }
+
+      th,
+      td {
+        text-align: left;
+        vertical-align: top;
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      th {
+        color: var(--text-soft);
+        font-size: 0.76rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      td {
+        color: var(--text-muted);
+      }
+
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 18px;
+      }
+
+      .step {
+        position: relative;
+        background: rgba(9, 17, 31, 0.68);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: var(--radius-lg);
+        padding: 18px 16px 16px;
+      }
+
+      .step-index {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        border-radius: 999px;
+        background: rgba(82, 214, 255, 0.14);
+        color: var(--cyan);
+        font-weight: 800;
+        margin-bottom: 10px;
+      }
+
+      .step strong {
+        display: block;
+        margin-bottom: 8px;
+      }
+
+      .step p {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 0.88rem;
+      }
+
+      .example-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        margin-top: 18px;
+      }
+
+      .example-card {
+        background: rgba(9, 17, 31, 0.7);
+        border-radius: var(--radius-lg);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 18px;
+      }
+
+      .example-card h3 {
+        margin: 0 0 12px;
+        font-size: 1rem;
+      }
+
+      .example-card.before h3 {
+        color: var(--amber);
+      }
+
+      .example-card.after h3 {
+        color: var(--green);
+      }
+
+      .example-card p {
+        margin: 0 0 12px;
+        color: var(--text-muted);
+        font-size: 0.92rem;
+      }
+
+      .example-card ul {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .legend {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .legend-card {
+        background: rgba(9, 17, 31, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: var(--radius-lg);
+        padding: 16px;
+      }
+
+      .legend-card h3 {
+        margin: 0 0 10px;
+        font-size: 0.9rem;
+      }
+
+      .legend-card p {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 0.86rem;
+      }
+
+      .footer-note {
+        margin-top: 18px;
+        padding: 16px 18px;
+        border-radius: 14px;
+        border: 1px solid rgba(82, 214, 255, 0.14);
+        background: rgba(82, 214, 255, 0.07);
+        color: var(--text-muted);
+        font-size: 0.92rem;
+      }
+
+      @media (max-width: 1320px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+
+        .toc {
+          position: static;
+        }
+      }
+
+      @media (max-width: 1120px) {
+        .hero-grid,
+        .overview-grid,
+        .two-col,
+        .example-grid,
+        .legend,
+        .steps,
+        .flow-row,
+        .stats-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .service-bar {
+          grid-template-columns: 1fr;
+          gap: 8px;
+        }
+
+        .flow-node::after {
+          content: "v";
+          right: auto;
+          left: 50%;
+          top: auto;
+          bottom: -18px;
+          transform: translateX(-50%);
+        }
+
+        .flow-row .flow-node:last-child::after {
+          display: none;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .page {
+          padding: 18px 14px 36px;
+        }
+
+        .hero,
+        .section {
+          padding: 22px 18px;
+        }
+
+        .section-header {
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <p class="eyebrow">IntexuraOS x HyperAgents</p>
+        <h1>Detailed implementation map for turning the current agent stack into a self-improving control plane</h1>
+        <div class="hero-grid">
+          <div>
+            <p class="lede">
+              This page translates the HyperAgents paper into concrete IntexuraOS changes. The focus is not "add more agents". The focus is
+              to make the existing task and meta layers reusable, measurable, and improvable across runs: memory, performance tracking,
+              archive-based exploration, and transfer across coding and research domains.
+            </p>
+            <div class="stats-grid">
+              <div class="stat">
+                <div class="stat-label">Documented Services</div>
+                <div class="stat-value">27</div>
+              </div>
+              <div class="stat">
+                <div class="stat-label">Primary Agent Apps</div>
+                <div class="stat-value">14</div>
+              </div>
+              <div class="stat">
+                <div class="stat-label">Key Worker Surfaces</div>
+                <div class="stat-value">6</div>
+              </div>
+              <div class="stat">
+                <div class="stat-label">Top Leverage Loop</div>
+                <div class="stat-value">Code -> Orchestrator</div>
+              </div>
+            </div>
+          </div>
+          <aside class="hero-panel">
+            <h2>Current Translation</h2>
+            <ul>
+              <li><code>task agent</code> -> planning, execution, review, research, synthesis, and data-analysis workers.</li>
+              <li><code>meta agent</code> -> routing, prompt shaping, verification, retries, fan-out, and review policy.</li>
+              <li><code>persistent memory</code> already has raw ingredients: transcripts, metrics, verifier outputs, issue context.</li>
+              <li><code>archive</code> exists only partially today: planning PRs, task lineage, retry chains, enhanced research, child tasks.</li>
+              <li><code>transfer</code> is mostly missing: lessons do not yet change future dispatch or verification behavior.</li>
+            </ul>
+          </aside>
+        </div>
+      </header>
+
+      <div class="layout">
+        <nav class="toc">
+          <h2>Sections</h2>
+          <a href="#substrate">1. Existing Substrate<small>Where the leverage already exists in code</small></a>
+          <a href="#improvement-1">2. Execution Memory Graph<small>Turn transcripts into reusable lessons</small></a>
+          <a href="#improvement-2">3. Adaptive Dispatch Policy<small>Replace static routing with learned routing</small></a>
+          <a href="#improvement-3">4. Plan Archive for Complex Issues<small>Generate and score multiple plan variants</small></a>
+          <a href="#improvement-4">5. Self-Tuning Verifier Contracts<small>Improve the meta-layer safely</small></a>
+          <a href="#improvement-5">6. Research Domain Memory<small>Transfer the pattern beyond coding</small></a>
+          <a href="#roadmap">7. Rollout Roadmap<small>Recommended build order and safety gates</small></a>
+        </nav>
+
+        <main class="content">
+          <section id="substrate" class="section">
+            <div class="section-header">
+              <div>
+                <h2>Existing substrate in the repo</h2>
+                <p>
+                  The right implementation strategy is to land the first HyperAgent-style improvements where IntexuraOS is already large,
+                  active, and instrumented: <code>code-agent</code>, <code>workers/orchestrator</code>, <code>actions-agent</code>,
+                  <code>research-agent</code>, <code>linear-agent</code>, and <code>apps/web</code>.
+                </p>
+              </div>
+            </div>
+
+            <div class="overview-grid">
+              <div class="card">
+                <h3>Where task execution already lives</h3>
+                <ul>
+                  <li><code>apps/code-agent/src/domain/usecases/fanOutChildTasks.ts</code></li>
+                  <li><code>apps/code-agent/src/domain/usecases/submitToExecutionAgent.ts</code></li>
+                  <li><code>apps/linear-agent/src/domain/useCases/triggerCodeTaskFromAssignment.ts</code></li>
+                  <li><code>workers/orchestrator/src/services/task-dispatcher.ts</code></li>
+                </ul>
+              </div>
+              <div class="card">
+                <h3>Where meta-control already lives</h3>
+                <ul>
+                  <li><code>workers/orchestrator/src/services/completion-verifier.ts</code></li>
+                  <li><code>workers/orchestrator/src/services/execution-deep-validator.ts</code></li>
+                  <li><code>workers/orchestrator/src/services/prompt-builder.ts</code></li>
+                  <li><code>apps/actions-agent/src/domain/usecases/executeCodeAction.ts</code></li>
+                </ul>
+              </div>
+              <div class="card">
+                <h3>Where reusable evidence already exists</h3>
+                <ul>
+                  <li><code>workers/orchestrator/src/services/turn-metrics-collector.ts</code></li>
+                  <li><code>workers/orchestrator/src/services/transcript-reader.ts</code></li>
+                  <li><code>apps/code-agent/src/routes/webhookRoutes.ts</code></li>
+                  <li><code>apps/research-agent/src/domain/research/usecases/runSynthesis.ts</code></li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="card" style="margin-top: 16px;">
+              <h3>Codebase size and active-development concentration</h3>
+              <div class="service-bars">
+                <div class="service-bar">
+                  <strong>code-agent</strong>
+                  <div class="track"><div class="fill" style="width: 100%;"></div></div>
+                  <span>114k lines, 3219 recent touches</span>
+                </div>
+                <div class="service-bar">
+                  <strong>web</strong>
+                  <div class="track"><div class="fill" style="width: 50.4%;"></div></div>
+                  <span>57.6k lines, 2738 recent touches</span>
+                </div>
+                <div class="service-bar">
+                  <strong>orchestrator</strong>
+                  <div class="track"><div class="fill" style="width: 36.1%;"></div></div>
+                  <span>41.3k lines, 1400 recent touches</span>
+                </div>
+                <div class="service-bar">
+                  <strong>research-agent</strong>
+                  <div class="track"><div class="fill" style="width: 29.9%;"></div></div>
+                  <span>34.2k lines, 808 recent touches</span>
+                </div>
+                <div class="service-bar">
+                  <strong>actions-agent</strong>
+                  <div class="track"><div class="fill" style="width: 28.7%;"></div></div>
+                  <span>32.9k lines, 1232 recent touches</span>
+                </div>
+                <div class="service-bar">
+                  <strong>linear-agent</strong>
+                  <div class="track"><div class="fill" style="width: 23.2%;"></div></div>
+                  <span>26.5k lines, 541 recent touches</span>
+                </div>
+                <div class="service-bar">
+                  <strong>data-insights-agent</strong>
+                  <div class="track"><div class="fill" style="width: 15.3%;"></div></div>
+                  <span>17.6k lines, 555 recent touches</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="legend" style="margin-top: 16px;">
+              <div class="legend-card">
+                <h3>Task layer</h3>
+                <p>Planning, execution, review, research, synthesis, chart analysis, and web summarization are already separate task layers.</p>
+              </div>
+              <div class="legend-card">
+                <h3>Meta layer</h3>
+                <p>Dispatch, verification, retries, plan enforcement, and model selection are the first places to make self-improving.</p>
+              </div>
+              <div class="legend-card">
+                <h3>Archive gap</h3>
+                <p>Past runs are observable but not reused systematically. That is the biggest opportunity.</p>
+              </div>
+              <div class="legend-card">
+                <h3>UI leverage</h3>
+                <p><code>apps/web</code> already has code task, research, and data-insight views that can expose memory and policy decisions.</p>
+              </div>
+            </div>
+
+            <div class="two-col" style="margin-top: 16px;">
+              <div class="panel">
+                <h3>Shared foundation changes before any single proposal ships</h3>
+                <table>
+                  <thead>
+                    <tr><th>Shared need</th><th>Primary file</th><th>Why it matters</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>Stable task metadata</td><td><code>apps/code-agent/src/domain/models/codeTask.ts</code></td><td>Every proposal needs durable versioned metadata on tasks: memory hits, routing decision, plan variant, verifier version, or strategy pack.</td></tr>
+                    <tr><td>Prompt manifest versioning</td><td><code>workers/orchestrator/src/services/prompt-builder.ts</code></td><td>Memory-aware prompts, plan-variant prompts, and verifier versions should all share the same manifest pattern.</td></tr>
+                    <tr><td>Terminal-task writeback</td><td><code>apps/code-agent/src/routes/webhookRoutes.ts</code></td><td>This is the safest point to convert raw execution evidence into durable memory, scores, and policy feedback.</td></tr>
+                    <tr><td>Visible meta decisions</td><td><code>apps/web/src/pages/CodeTaskViewPageV2.tsx</code>, <code>apps/web/src/pages/ResearchDetailPage.tsx</code></td><td>If users cannot see why the system routed, recalled, or verified something, the meta-layer will not be trusted.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="panel">
+                <h3>Phase 0 implementation checklist</h3>
+                <ul>
+                  <li>Define a shared <code>versioned decision envelope</code> structure for memory, routing, plan, verifier, and research strategy outputs.</li>
+                  <li>Store every meta-decision with <code>source task</code>, <code>policy version</code>, <code>confidence</code>, and <code>result outcome</code> fields.</li>
+                  <li>Add thin repository interfaces first, then pick Firestore document shapes per proposal instead of hardwiring storage inside use cases.</li>
+                  <li>Keep all self-improving behavior recommendation-first until outcome tracking is stable enough for stronger automation.</li>
+                  <li>Expose decisions in UI as compact cards: what was applied, why it was chosen, and whether it helped.</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <section id="improvement-1" class="section">
+            <div class="section-header">
+              <div>
+                <h2>1. Execution Memory Graph</h2>
+                <p>
+                  Persist reusable execution lessons from every attempt, then inject the most relevant lessons into future planning,
+                  execution, review, and the code-task UI. This is the most direct HyperAgent implementation because it converts
+                  evidence from one run into an improved improvement mechanism for later runs.
+                </p>
+              </div>
+              <div class="badges">
+                <span class="badge badge-amber">Complexity 6/10</span>
+                <span class="badge badge-green">Delivered Value 9/10</span>
+                <span class="badge badge-cyan">Future Potential 10/10</span>
+              </div>
+            </div>
+
+            <div class="data-tags">
+              <span class="data-tag">New collections: <code>execution_memories</code>, <code>execution_memory_hits</code></span>
+              <span class="data-tag">Prompt input: <code>matchedMemories[]</code></span>
+              <span class="data-tag">UI output: memory hits, confidence, applied lessons</span>
+            </div>
+
+            <div class="flow">
+              <div class="flow-row">
+                <div class="flow-node node-input">
+                  <strong>1. Task finishes</strong>
+                  <p>Execution, review, or planning attempt completes with transcript, metrics, verifier result, and Linear context.</p>
+                  <small>Existing evidence already exists in orchestrator and code-agent.</small>
+                </div>
+                <div class="flow-node node-control">
+                  <strong>2. Memory distillation</strong>
+                  <p>A new distiller extracts failure mode, touched files, issue shape, winning commands, and verification blockers.</p>
+                  <small>Best run after webhook finalization, not inside the worker.</small>
+                </div>
+                <div class="flow-node node-memory">
+                  <strong>3. Memory graph write</strong>
+                  <p>Store typed lessons plus embeddings or keyed facets by repo, label, file area, review type, and outcome.</p>
+                  <small>Needs a repository and similarity lookup strategy.</small>
+                </div>
+                <div class="flow-node node-control">
+                  <strong>4. Future task retrieval</strong>
+                  <p>Before planning or execution dispatch, fetch top matching memories and rank them by recency, similarity, and trust.</p>
+                  <small>Dispatch becomes memory-aware.</small>
+                </div>
+                <div class="flow-node node-input">
+                  <strong>5. Prompt injection</strong>
+                  <p>Add "relevant prior lessons" into planning, execution, and review system prompts with provenance tags.</p>
+                  <small>Only inject the few highest-signal memories.</small>
+                </div>
+                <div class="flow-node node-memory">
+                  <strong>6. UI feedback loop</strong>
+                  <p>Show which lessons were used, whether they helped, and let later validation vote them up or down.</p>
+                  <small>Turns memory quality into a measurable asset.</small>
+                </div>
+              </div>
+            </div>
+
+            <div class="two-col">
+              <div class="panel">
+                <h3>Code touchpoints to edit</h3>
+                <table>
+                  <thead>
+                    <tr><th>Area</th><th>File</th><th>Change</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>Metrics input</td><td><code>workers/orchestrator/src/services/turn-metrics-collector.ts</code></td><td>Publish richer structured attempt features, not only final numeric metrics.</td></tr>
+                    <tr><td>Transcript input</td><td><code>workers/orchestrator/src/services/transcript-reader.ts</code></td><td>Add extraction helper for normalized task evidence blocks.</td></tr>
+                    <tr><td>Verifier input</td><td><code>workers/orchestrator/src/services/completion-verifier.ts</code></td><td>Emit stable machine-readable claim and contract outcome fields for memory distillation.</td></tr>
+                    <tr><td>Deep validation input</td><td><code>workers/orchestrator/src/services/execution-deep-validator.ts</code></td><td>Expose issue/plan mismatches as typed findings for memory reuse.</td></tr>
+                    <tr><td>Task finalization</td><td><code>apps/code-agent/src/routes/webhookRoutes.ts</code></td><td>Trigger the distiller after completion and store hit quality back on follow-up tasks.</td></tr>
+                    <tr><td>Task model</td><td><code>apps/code-agent/src/domain/models/codeTask.ts</code></td><td>Add memory-hit references and memory effectiveness summary.</td></tr>
+                    <tr><td>Web UI</td><td><code>apps/web/src/components/code-tasks/v2/V2TaskHeader.tsx</code>, <code>apps/web/src/components/code-tasks/CodeTaskLogViewer.tsx</code></td><td>Show which memories were injected and whether they prevented repeat errors.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="panel">
+                <h3>New modules to add</h3>
+                <table>
+                  <thead>
+                    <tr><th>Module</th><th>Suggested path</th><th>Purpose</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>Memory distiller</td><td><code>apps/code-agent/src/domain/services/executionMemoryDistiller.ts</code></td><td>Create stable lesson objects from metrics, transcript, and verifier data.</td></tr>
+                    <tr><td>Memory repository</td><td><code>apps/code-agent/src/infra/repositories/firestoreExecutionMemoryRepository.ts</code></td><td>Persist memories and retrieval indexes.</td></tr>
+                    <tr><td>Memory selector</td><td><code>apps/code-agent/src/domain/services/executionMemoryService.ts</code></td><td>Find the best prior lessons for a new task.</td></tr>
+                    <tr><td>Prompt adapter</td><td><code>workers/orchestrator/src/services/memory-aware-prompt-builder.ts</code></td><td>Inject lessons into system/user prompt frames without bloating them.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="steps">
+              <div class="step">
+                <div class="step-index">1</div>
+                <strong>Instrument</strong>
+                <p>Create a typed lesson schema first: issue shape, touched areas, failure causes, useful commands, and final outcome.</p>
+              </div>
+              <div class="step">
+                <div class="step-index">2</div>
+                <strong>Distill</strong>
+                <p>Run distillation only on terminal tasks, and only after final webhook enforcement has written stable result fields.</p>
+              </div>
+              <div class="step">
+                <div class="step-index">3</div>
+                <strong>Retrieve</strong>
+                <p>Rank candidate lessons with simple heuristics first: same repo, same label family, overlapping files, same verifier failure type.</p>
+              </div>
+              <div class="step">
+                <div class="step-index">4</div>
+                <strong>Close loop</strong>
+                <p>When later runs succeed or fail, score the injected memories so weak lessons stop dominating future prompts.</p>
+              </div>
+            </div>
+
+            <div class="example-grid">
+              <div class="example-card before">
+                <h3>System behavior today</h3>
+                <p>An auth-route task fails because the worker forgets <code>logIncomingRequest()</code> and misses an env-var triple update.</p>
+                <ul>
+                  <li>The task transcript contains the evidence.</li>
+                  <li>The verifier flags the miss.</li>
+                  <li>The next similar task starts from scratch and repeats the same pattern.</li>
+                </ul>
+              </div>
+              <div class="example-card after">
+                <h3>System behavior after the change</h3>
+                <p>The next auth-route task starts with two injected lessons: "always add <code>logIncomingRequest()</code>" and "update env vars in 3 locations".</p>
+                <ul>
+                  <li>The execution prompt includes both lessons with task provenance.</li>
+                  <li>The task header shows "2 prior lessons applied".</li>
+                  <li>Deep validation scores both lessons as useful, improving future ranking.</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <section id="improvement-2" class="section">
+            <div class="section-header">
+              <div>
+                <h2>2. Adaptive Dispatch Policy</h2>
+                <p>
+                  Replace simple rule-based worker selection and fixed review routing with a policy layer that learns from task outcomes,
+                  machine health, cost, latency, and issue shape. This upgrades the current meta-agent from "route by static rules"
+                  to "route by learned evidence".
+                </p>
+              </div>
+              <div class="badges">
+                <span class="badge badge-amber">Complexity 5/10</span>
+                <span class="badge badge-green">Delivered Value 8/10</span>
+                <span class="badge badge-cyan">Future Potential 9/10</span>
+              </div>
+            </div>
+
+            <div class="data-tags">
+              <span class="data-tag">New collection: <code>dispatch_policy_stats</code></span>
+              <span class="data-tag">Output fields: chosen worker, retry budget, review set, confidence</span>
+              <span class="data-tag">UI surface: inbox action review and code-task header</span>
+            </div>
+
+            <div class="flow">
+              <div class="flow-row">
+                <div class="flow-node node-input">
+                  <strong>1. Action or issue arrives</strong>
+                  <p>Input comes from WhatsApp, inbox execution, or Linear auto-trigger.</p>
+                  <small>Current path is mostly explicit worker preference or <code>auto</code>.</small>
+                </div>
+                <div class="flow-node node-control">
+                  <strong>2. Feature extraction</strong>
+                  <p>Build a task profile from labels, repo, service area, estimated file count, urgency, and active-worker health.</p>
+                  <small>Keep the first feature set deterministic.</small>
+                </div>
+                <div class="flow-node node-memory">
+                  <strong>3. Policy scoring</strong>
+                  <p>Use prior outcomes to score worker type, review depth, queue priority, and retry budget.</p>
+                  <small>This is the meta-layer decision point.</small>
+                </div>
+                <div class="flow-node node-control">
+                  <strong>4. Dispatch plan</strong>
+                  <p>Create a routing decision object with rationale, confidence, fallback worker, and review types.</p>
+                  <small>Persist the decision for later evaluation.</small>
+                </div>
+                <div class="flow-node node-input">
+                  <strong>5. Execution and review</strong>
+                  <p>Worker runs with policy-selected settings. Review types and queue behavior are no longer static.</p>
+                  <small>Low-risk UI tasks can be cheaper; high-risk backend tasks can be stricter.</small>
+                </div>
+                <div class="flow-node node-memory">
+                  <strong>6. Feedback writeback</strong>
+                  <p>Store cost, duration, verifier failures, and PR outcome back into policy stats to improve future decisions.</p>
+                  <small>Needed for transfer and policy correction.</small>
+                </div>
+              </div>
+            </div>
+
+            <div class="two-col">
+              <div class="panel">
+                <h3>Existing files to edit</h3>
+                <table>
+                  <thead>
+                    <tr><th>Area</th><th>File</th><th>Change</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>Initial routing</td><td><code>apps/actions-agent/src/domain/usecases/executeCodeAction.ts</code></td><td>Call a dispatch policy service instead of using <code>workerTypeRaw ?? detectedType ?? "auto"</code>.</td></tr>
+                    <tr><td>Worker hinting</td><td><code>apps/actions-agent/src/domain/utils/workerTypeDetection.ts</code></td><td>Keep explicit "use X" as an override, not as the full routing strategy.</td></tr>
+                    <tr><td>Task submission</td><td><code>apps/code-agent/src/domain/usecases/processCodeAction.ts</code></td><td>Persist routingDecision metadata onto tasks.</td></tr>
+                    <tr><td>Execution follow-up</td><td><code>apps/code-agent/src/domain/usecases/submitToExecutionAgent.ts</code></td><td>Use the same policy layer when selecting implementation worker and review types.</td></tr>
+                    <tr><td>Outcome feedback</td><td><code>apps/code-agent/src/routes/webhookRoutes.ts</code></td><td>Feed task outcome and verifier data back into dispatch policy stats.</td></tr>
+                    <tr><td>Task UI</td><td><code>apps/web/src/components/code-tasks/v2/V2TaskHeader.tsx</code>, <code>apps/web/src/pages/InboxPage.tsx</code></td><td>Show why the system picked a given worker and policy confidence.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="panel">
+                <h3>New modules to add</h3>
+                <table>
+                  <thead>
+                    <tr><th>Module</th><th>Suggested path</th><th>Purpose</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>Policy service</td><td><code>apps/code-agent/src/domain/services/dispatchPolicyService.ts</code></td><td>Score worker choice, retry count, queue priority, and review set.</td></tr>
+                    <tr><td>Policy repository</td><td><code>apps/code-agent/src/infra/repositories/firestoreDispatchPolicyRepository.ts</code></td><td>Store aggregate outcome statistics and policy features.</td></tr>
+                    <tr><td>Decision model</td><td><code>apps/code-agent/src/domain/models/routingDecision.ts</code></td><td>Stable object for rationale, confidence, fallback, and policy version.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="steps">
+              <div class="step">
+                <div class="step-index">1</div>
+                <strong>Start heuristic-first</strong>
+                <p>Do not begin with a learned model. Use weighted rules from historical outcomes so the decision path stays debuggable.</p>
+              </div>
+              <div class="step">
+                <div class="step-index">2</div>
+                <strong>Add rationale</strong>
+                <p>Every decision should produce a human-readable explanation, because otherwise the policy cannot be trusted or tuned.</p>
+              </div>
+              <div class="step">
+                <div class="step-index">3</div>
+                <strong>Introduce policy versions</strong>
+                <p>Persist a policy version per task so you can compare routing regimes against each other and roll back safely.</p>
+              </div>
+              <div class="step">
+                <div class="step-index">4</div>
+                <strong>Learn later</strong>
+                <p>Only once enough labeled outcomes exist should the policy move from weighted heuristics to a trained scorer.</p>
+              </div>
+            </div>
+
+            <div class="example-grid">
+              <div class="example-card before">
+                <h3>System behavior today</h3>
+                <p>A risky backend auth task and a trivial label-color UI fix both end up on similar paths unless the user explicitly writes "use sonnet" or similar.</p>
+                <ul>
+                  <li>Worker selection is shallow.</li>
+                  <li>Review depth is mostly static.</li>
+                  <li>Latency and failure history do not shape the route.</li>
+                </ul>
+              </div>
+              <div class="example-card after">
+                <h3>System behavior after the change</h3>
+                <p>The auth task gets a stronger worker, higher retry budget, and security plus architecture review. The UI fix gets a cheaper worker and lighter review.</p>
+                <ul>
+                  <li>Inbox shows "routed by policy v2.3: backend auth risk + prior failure rate".</li>
+                  <li>Code task header shows selected worker and fallback worker.</li>
+                  <li>Future outcomes directly improve the next route.</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <section id="improvement-3" class="section">
+            <div class="section-header">
+              <div>
+                <h2>3. Plan Archive for Complex Issues</h2>
+                <p>
+                  Turn planning for <code>complex-task</code> Linear issues into an archive-based exploration loop: produce multiple plan variants,
+                  score them, select the best one for execution, and retain the archive so later complex issues can reuse successful decomposition patterns.
+                </p>
+              </div>
+              <div class="badges">
+                <span class="badge badge-red">Complexity 8/10</span>
+                <span class="badge badge-green">Delivered Value 7/10</span>
+                <span class="badge badge-cyan">Future Potential 10/10</span>
+              </div>
+            </div>
+
+            <div class="data-tags">
+              <span class="data-tag">New collections: <code>plan_variants</code>, <code>plan_variant_scores</code></span>
+              <span class="data-tag">Archive concept: parent issue -> plan set -> selected variant -> execution lineage</span>
+              <span class="data-tag">Safety gate: no multi-variant execution without explicit selection policy</span>
+            </div>
+
+            <div class="flow">
+              <div class="flow-row">
+                <div class="flow-node node-input">
+                  <strong>1. Complex issue enters planning</strong>
+                  <p>A <code>planning-task</code> or <code>complex-task</code> issue with children reaches the planning path.</p>
+                  <small>Current system generally creates one plan and stops.</small>
+                </div>
+                <div class="flow-node node-control">
+                  <strong>2. Variant generation</strong>
+                  <p>Planner creates 2-3 decomposition variants: different subtask splits, branch strategies, or review strategies.</p>
+                  <small>Cap the count to keep cost bounded.</small>
+                </div>
+                <div class="flow-node node-memory">
+                  <strong>3. Variant scoring</strong>
+                  <p>Rank variants using prior archive outcomes, dependency shape, expected conflict risk, and verification burden.</p>
+                  <small>Score both value and execution risk.</small>
+                </div>
+                <div class="flow-node node-control">
+                  <strong>4. Selected plan becomes active</strong>
+                  <p>The winning plan creates the active implementation lineage, child tasks, and planning PR references.</p>
+                  <small>Only one plan proceeds to execution.</small>
+                </div>
+                <div class="flow-node node-input">
+                  <strong>5. Execution feedback</strong>
+                  <p>Task outcomes write back into variant quality: did this decomposition reduce retries, conflicts, and missing requirements?</p>
+                  <small>Archive quality grows over time.</small>
+                </div>
+                <div class="flow-node node-memory">
+                  <strong>6. Reuse on future issues</strong>
+                  <p>Similar future issues can start from an archived decomposition template instead of a blank planning pass.</p>
+                  <small>This is the archive effect from the paper.</small>
+                </div>
+              </div>
+            </div>
+
+            <div class="two-col">
+              <div class="panel">
+                <h3>Existing files to edit</h3>
+                <table>
+                  <thead>
+                    <tr><th>Area</th><th>File</th><th>Change</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>Auto-trigger entry</td><td><code>apps/linear-agent/src/domain/useCases/triggerCodeTaskFromAssignment.ts</code></td><td>Add variant-aware planning mode for complex issues instead of a single planning prompt.</td></tr>
+                    <tr><td>Planning result enforcement</td><td><code>apps/code-agent/src/routes/webhookRoutes.ts</code></td><td>Store multiple plan outputs and persist selected variant metadata.</td></tr>
+                    <tr><td>Fan-out</td><td><code>apps/code-agent/src/domain/usecases/fanOutChildTasks.ts</code></td><td>Use selected plan variant to create child tasks and preserve plan lineage.</td></tr>
+                    <tr><td>Execution start</td><td><code>apps/code-agent/src/domain/usecases/submitToExecutionAgent.ts</code></td><td>Bind execution tasks to a selected plan variant and its planning PR.</td></tr>
+                    <tr><td>Prompt construction</td><td><code>workers/orchestrator/src/services/prompt-builder.ts</code></td><td>Add variant-generation and variant-comparison prompt builders with prompt versioning.</td></tr>
+                    <tr><td>Task UI</td><td><code>apps/web/src/components/code-tasks/v2/V2NextSteps.tsx</code></td><td>Expose selected plan, alternative variants, and reasoning before implementation starts.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="panel">
+                <h3>New modules to add</h3>
+                <table>
+                  <thead>
+                    <tr><th>Module</th><th>Suggested path</th><th>Purpose</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>Plan variant model</td><td><code>apps/code-agent/src/domain/models/planVariant.ts</code></td><td>Represent plan structure, variant score, rationale, and execution lineage.</td></tr>
+                    <tr><td>Plan archive repository</td><td><code>apps/code-agent/src/infra/repositories/firestorePlanVariantRepository.ts</code></td><td>Persist variants and reuse signals.</td></tr>
+                    <tr><td>Plan scorer</td><td><code>apps/code-agent/src/domain/services/planVariantScorer.ts</code></td><td>Compare candidate plans before execution begins.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="steps">
+              <div class="step">
+                <div class="step-index">1</div>
+                <strong>Variant schema first</strong>
+                <p>Define what differs between plan variants: subtask grouping, branch model, review depth, sequencing, and acceptance gates.</p>
+              </div>
+              <div class="step">
+                <div class="step-index">2</div>
+                <strong>Cheap scoring</strong>
+                <p>Use archive heuristics first: estimated subtask count, dependency crossings, plan coverage, and past merge-conflict rates.</p>
+              </div>
+              <div class="step">
+                <div class="step-index">3</div>
+                <strong>Single winner only</strong>
+                <p>Do not execute all variants. Generate multiple, score them, then only the chosen one can mutate downstream state.</p>
+              </div>
+              <div class="step">
+                <div class="step-index">4</div>
+                <strong>Archive decomposition quality</strong>
+                <p>Track whether the chosen plan reduced retries, review findings, and PR conflicts. That becomes the future archive signal.</p>
+              </div>
+            </div>
+
+            <div class="example-grid">
+              <div class="example-card before">
+                <h3>System behavior today</h3>
+                <p>A large issue spanning API, Firestore, UI, and notification changes gets one plan. If the split is weak, the whole execution path inherits the weakness.</p>
+                <ul>
+                  <li>No plan alternatives are retained.</li>
+                  <li>No decomposition quality score exists.</li>
+                  <li>Future similar issues do not reuse the successful split.</li>
+                </ul>
+              </div>
+              <div class="example-card after">
+                <h3>System behavior after the change</h3>
+                <p>The planner proposes three decompositions: service-first, workflow-first, and UI-last. The scorer selects workflow-first because similar archive entries had fewer merge conflicts and cleaner review passes.</p>
+                <ul>
+                  <li>The selected variant creates child tasks and a planning PR.</li>
+                  <li>The rejected variants stay archived for future reference.</li>
+                  <li>The next similar issue can start from the successful pattern instead of rediscovering it.</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <section id="improvement-4" class="section">
+            <div class="section-header">
+              <div>
+                <h2>4. Self-Tuning verifier and review contracts</h2>
+                <p>
+                  The current verifier and deep-validator layer is strong, but mostly fixed. HyperAgent thinking says this meta-layer should
+                  improve too. The safe implementation is offline and approval-gated: analyze old transcripts, generate candidate verifier
+                  prompts and schemas, replay them against a benchmark corpus, and only then promote them.
+                </p>
+              </div>
+              <div class="badges">
+                <span class="badge badge-amber">Complexity 7/10</span>
+                <span class="badge badge-green">Delivered Value 8/10</span>
+                <span class="badge badge-cyan">Future Potential 9/10</span>
+              </div>
+            </div>
+
+            <div class="data-tags">
+              <span class="data-tag">New collections: <code>verification_experiments</code>, <code>verification_corpus</code></span>
+              <span class="data-tag">Active config: prompt version manifest plus benchmark score</span>
+              <span class="data-tag">Safety mode: offline replay only, human promotion required</span>
+            </div>
+
+            <div class="flow">
+              <div class="flow-row">
+                <div class="flow-node node-input">
+                  <strong>1. Build a corpus</strong>
+                  <p>Collect finished task transcripts, final PR outcomes, human review comments, and verifier false-positive cases.</p>
+                  <small>This becomes the benchmark set.</small>
+                </div>
+                <div class="flow-node node-control">
+                  <strong>2. Candidate generation</strong>
+                  <p>A research-style analyzer proposes new verifier prompts, schemas, and section rules from the corpus.</p>
+                  <small>Do this outside the live task path.</small>
+                </div>
+                <div class="flow-node node-memory">
+                  <strong>3. Replay harness</strong>
+                  <p>Run candidate versions against held-out transcripts and compare precision, recall, retry rate, and reviewer agreement.</p>
+                  <small>Needed to reject regressions.</small>
+                </div>
+                <div class="flow-node node-risk">
+                  <strong>4. Human approval gate</strong>
+                  <p>Only promote candidates that beat the current version and stay within guardrails for false positives and false negatives.</p>
+                  <small>No auto-promotion in early phases.</small>
+                </div>
+                <div class="flow-node node-input">
+                  <strong>5. Production use</strong>
+                  <p>Live tasks reference a prompt manifest and attach verifier version metadata to all tasks and PR comments.</p>
+                  <small>Allows comparison across releases.</small>
+                </div>
+                <div class="flow-node node-memory">
+                  <strong>6. Benchmark refresh</strong>
+                  <p>New transcripts and reviewer disagreements expand the benchmark corpus over time.</p>
+                  <small>The meta-layer now learns from itself.</small>
+                </div>
+              </div>
+            </div>
+
+            <div class="two-col">
+              <div class="panel">
+                <h3>Existing files to edit</h3>
+                <table>
+                  <thead>
+                    <tr><th>Area</th><th>File</th><th>Change</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>Prompt versioning</td><td><code>workers/orchestrator/src/services/prompt-builder.ts</code></td><td>Extend prompt-builder usage to verifier and deep-validator manifests.</td></tr>
+                    <tr><td>Completion verifier</td><td><code>workers/orchestrator/src/services/completion-verifier.ts</code></td><td>Load verifier prompt/schema by active version manifest instead of hardwiring only one active prompt.</td></tr>
+                    <tr><td>Deep validator</td><td><code>workers/orchestrator/src/services/execution-deep-validator.ts</code></td><td>Make the deep-validation prompt and section policy versioned and benchmarkable.</td></tr>
+                    <tr><td>Task result model</td><td><code>apps/code-agent/src/domain/models/codeTask.ts</code></td><td>Attach verifierVersion and validatorVersion to task results.</td></tr>
+                    <tr><td>Task UI</td><td><code>apps/web/src/components/code-tasks/v2/V2TaskHeader.tsx</code></td><td>Display which verifier contract version judged the task.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="panel">
+                <h3>New modules to add</h3>
+                <table>
+                  <thead>
+                    <tr><th>Module</th><th>Suggested path</th><th>Purpose</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>Benchmark runner</td><td><code>workers/orchestrator/src/services/verificationBenchmarkRunner.ts</code></td><td>Replay candidate prompts against stored corpus entries.</td></tr>
+                    <tr><td>Corpus repository</td><td><code>apps/code-agent/src/infra/repositories/firestoreVerificationCorpusRepository.ts</code></td><td>Persist transcript samples, expected findings, and reviewer truth data.</td></tr>
+                    <tr><td>Experiment model</td><td><code>apps/code-agent/src/domain/models/verificationExperiment.ts</code></td><td>Record candidate prompt versions and benchmark outcomes.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="steps">
+              <div class="step">
+                <div class="step-index">1</div>
+                <strong>Benchmark before tuning</strong>
+                <p>Create a ground-truth corpus first. Without it, "better verifier" will just mean "different verifier".</p>
+              </div>
+              <div class="step">
+                <div class="step-index">2</div>
+                <strong>Separate candidate generation</strong>
+                <p>Use <code>research-agent</code> or a similar offline analyzer to propose variants. Keep proposal and promotion separate.</p>
+              </div>
+              <div class="step">
+                <div class="step-index">3</div>
+                <strong>Guardrails</strong>
+                <p>Require candidate versions to reduce retry noise without increasing missed requirement rate or fabricated pass rate.</p>
+              </div>
+              <div class="step">
+                <div class="step-index">4</div>
+                <strong>Version everything</strong>
+                <p>Never run a verifier without attaching its version to task history, PR comments, and experiment logs.</p>
+              </div>
+            </div>
+
+            <div class="example-grid">
+              <div class="example-card before">
+                <h3>System behavior today</h3>
+                <p>The verifier flags some missing evidence correctly, but prompt tuning is manual and hard to evaluate across old transcript sets.</p>
+                <ul>
+                  <li>Prompt improvement is manual craftwork.</li>
+                  <li>Regression checking is weak.</li>
+                  <li>False retries are hard to compare across prompt versions.</li>
+                </ul>
+              </div>
+              <div class="example-card after">
+                <h3>System behavior after the change</h3>
+                <p>A candidate verifier prompt generated from the benchmark corpus reduces false retries by 14% while preserving missed-requirement detection, then gets promoted as <code>verifier v4.2</code>.</p>
+                <ul>
+                  <li>Every task records its verifier version.</li>
+                  <li>PR comments can be compared by ruleset version.</li>
+                  <li>The meta-layer improves with evidence instead of intuition.</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <section id="improvement-5" class="section">
+            <div class="section-header">
+              <div>
+                <h2>5. Research Domain Memory</h2>
+                <p>
+                  Extend the HyperAgent pattern beyond coding. Research should remember which provider bundles, synthesis heuristics,
+                  source preferences, and repair patterns worked best per domain, then reuse that strategy memory in future research,
+                  page summarization, and data-insight analysis.
+                </p>
+              </div>
+              <div class="badges">
+                <span class="badge badge-amber">Complexity 6/10</span>
+                <span class="badge badge-green">Delivered Value 7/10</span>
+                <span class="badge badge-cyan">Future Potential 9/10</span>
+              </div>
+            </div>
+
+            <div class="data-tags">
+              <span class="data-tag">New collection: <code>research_strategy_memory</code></span>
+              <span class="data-tag">Reusable outputs: provider bundle, synthesis tone, source priorities, repair hints</span>
+              <span class="data-tag">Consumers: research-agent, web-agent, data-insights-agent</span>
+            </div>
+
+            <div class="flow">
+              <div class="flow-row">
+                <div class="flow-node node-input">
+                  <strong>1. Research starts</strong>
+                  <p>A prompt arrives and the current context inferrer determines domain, time scope, language, and safety mode.</p>
+                  <small>This already exists in research-agent.</small>
+                </div>
+                <div class="flow-node node-memory">
+                  <strong>2. Strategy recall</strong>
+                  <p>Look up domain memory: which models worked well, what source mix helped, and what synthesis repairs were common.</p>
+                  <small>Domain memory becomes the meta-layer.</small>
+                </div>
+                <div class="flow-node node-control">
+                  <strong>3. Bundle selection</strong>
+                  <p>Select or recommend provider combinations, prompt framing, and synthesis model using the recalled strategy memory.</p>
+                  <small>Can be automatic or a recommendation first.</small>
+                </div>
+                <div class="flow-node node-input">
+                  <strong>4. Research and synthesis</strong>
+                  <p>Models run, low-quality responses get flagged, and attribution repair happens as usual.</p>
+                  <small>Existing pipeline stays intact.</small>
+                </div>
+                <div class="flow-node node-control">
+                  <strong>5. Strategy update</strong>
+                  <p>Write back what worked: confidence, low-quality rate, contradiction rate, share success, export success, user retries.</p>
+                  <small>Needed for transfer across runs.</small>
+                </div>
+                <div class="flow-node node-memory">
+                  <strong>6. Cross-domain reuse</strong>
+                  <p>The same strategy memory can inform <code>web-agent</code> summarization and <code>data-insights-agent</code> chart analysis.</p>
+                  <small>This is the cross-domain transfer path.</small>
+                </div>
+              </div>
+            </div>
+
+            <div class="two-col">
+              <div class="panel">
+                <h3>Existing files to edit</h3>
+                <table>
+                  <thead>
+                    <tr><th>Area</th><th>File</th><th>Change</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>Research kickoff</td><td><code>apps/research-agent/src/domain/research/usecases/processResearch.ts</code></td><td>Consult strategy memory before dispatching model calls.</td></tr>
+                    <tr><td>Synthesis</td><td><code>apps/research-agent/src/domain/research/usecases/runSynthesis.ts</code></td><td>Use strategy memory to bias synthesis context and repair behavior.</td></tr>
+                    <tr><td>Completion check</td><td><code>apps/research-agent/src/domain/research/usecases/checkLlmCompletion.ts</code></td><td>Write completion-quality signals back to memory.</td></tr>
+                    <tr><td>Enhancement</td><td><code>apps/research-agent/src/domain/research/usecases/enhanceResearch.ts</code></td><td>Seed enhancement defaults from prior domain memory instead of starting blind.</td></tr>
+                    <tr><td>Web summarization</td><td><code>docs/services/web-agent/features.md</code> plus implementation path in <code>apps/web-agent</code></td><td>Use strategy memory for source-language summary style and source-type heuristics.</td></tr>
+                    <tr><td>Data insights</td><td><code>apps/data-insights-agent/src/domain/dataInsights/usecases/analyzeData.ts</code></td><td>Reuse domain memory for chart-type and explanation strategy hints.</td></tr>
+                    <tr><td>Research UI</td><td><code>apps/web/src/components/research/ResearchHeader.tsx</code>, <code>apps/web/src/components/research/ResearchResults.tsx</code></td><td>Show strategy pack used, recommended models, and adaptation rationale.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="panel">
+                <h3>New modules to add</h3>
+                <table>
+                  <thead>
+                    <tr><th>Module</th><th>Suggested path</th><th>Purpose</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>Strategy memory service</td><td><code>apps/research-agent/src/domain/research/services/strategyMemoryService.ts</code></td><td>Recall and score domain strategies.</td></tr>
+                    <tr><td>Strategy repository</td><td><code>apps/research-agent/src/infra/research/FirestoreStrategyMemoryRepository.ts</code></td><td>Store domain-level research heuristics and outcomes.</td></tr>
+                    <tr><td>Shared strategy model</td><td><code>packages/llm-prompts/src/research/strategyMemory.ts</code></td><td>Stable prompt-facing representation of domain memory.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="steps">
+              <div class="step">
+                <div class="step-index">1</div>
+                <strong>Keep user control</strong>
+                <p>User-selected models still win. Strategy memory should start as recommendation plus defaulting, not hard override.</p>
+              </div>
+              <div class="step">
+                <div class="step-index">2</div>
+                <strong>Define quality signals</strong>
+                <p>Use contradiction rate, low-quality flags, retries, attribution repair frequency, and user enhancement choices as the learning signal.</p>
+              </div>
+              <div class="step">
+                <div class="step-index">3</div>
+                <strong>Transfer deliberately</strong>
+                <p>Only then let strategy memory influence related agents like web summarization and data insights.</p>
+              </div>
+              <div class="step">
+                <div class="step-index">4</div>
+                <strong>Expose rationale in UI</strong>
+                <p>If a strategy pack changed synthesis behavior, users should be able to see and understand that choice.</p>
+              </div>
+            </div>
+
+            <div class="example-grid">
+              <div class="example-card before">
+                <h3>System behavior today</h3>
+                <p>A regulatory research prompt, a product strategy prompt, and a multilingual source-summary job all rely on isolated prompt logic with little memory of what worked before.</p>
+                <ul>
+                  <li>Provider choice is mostly user config.</li>
+                  <li>Repair loops do not accumulate into reusable heuristics.</li>
+                  <li>Cross-domain transfer is weak.</li>
+                </ul>
+              </div>
+              <div class="example-card after">
+                <h3>System behavior after the change</h3>
+                <p>A new EU regulation prompt automatically recommends a provider bundle and source preference pattern that previously produced the highest-quality, lowest-contradiction outputs for official-document research.</p>
+                <ul>
+                  <li>The research header shows "strategy pack: regulation-primary-source-v3".</li>
+                  <li>The same pack helps <code>web-agent</code> summarize linked regulator pages more effectively.</li>
+                  <li><code>data-insights-agent</code> can reuse domain phrasing and evidence handling in its chart explanations.</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <section id="roadmap" class="section">
+            <div class="section-header">
+              <div>
+                <h2>Recommended rollout roadmap</h2>
+                <p>
+                  The right order is the one with the highest leverage and lowest system risk. Start where evidence already exists and where
+                  the web app can expose value immediately. Push archive-style exploration and cross-domain transfer into the second wave.
+                </p>
+              </div>
+            </div>
+
+            <div class="two-col">
+              <div class="panel">
+                <h3>Recommended implementation order</h3>
+                <table>
+                  <thead>
+                    <tr><th>Priority</th><th>Improvement</th><th>Why now</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>1</td><td>Execution Memory Graph</td><td>Highest leverage, strongest fit to existing transcripts and verifier outputs, immediate user-visible payoff.</td></tr>
+                    <tr><td>2</td><td>Adaptive Dispatch Policy</td><td>Low-risk extension of current routing, with direct cost and latency gains.</td></tr>
+                    <tr><td>3</td><td>Self-Tuning verifier and review contracts</td><td>Strong value, but only after a benchmark corpus exists from phases 1 and 2.</td></tr>
+                    <tr><td>4</td><td>Plan Archive for Complex Issues</td><td>High upside, but more invasive across planning, child-task creation, and UI.</td></tr>
+                    <tr><td>5</td><td>Research Domain Memory</td><td>Important second-wave transfer story after the coding loop proves out.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="panel">
+                <h3>Safety and design constraints</h3>
+                <ul>
+                  <li>Do not let live systems self-modify prompt contracts without offline replay and human approval.</li>
+                  <li>Keep user-entered worker hints and model choices as explicit overrides in early versions.</li>
+                  <li>Limit plan-variant exploration to a small bounded count and select only one winner for execution.</li>
+                  <li>Persist version metadata for policies, verifier prompts, and memory injection so regressions remain debuggable.</li>
+                  <li>Expose all meta-decisions in the UI. A hidden meta-layer will not be trusted.</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="footer-note">
+              HyperAgents in this codebase should be implemented as a progression from observable system -> reusable memory -> decision policy ->
+              archive -> transfer. IntexuraOS already has the task agents. The missing layer is durable meta-knowledge that changes how the next
+              task is solved.
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

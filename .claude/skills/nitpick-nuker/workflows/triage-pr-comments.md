@@ -89,7 +89,54 @@ Determine:
 1. Document reason
 2. Track: `{ id, type, author, action: "skipped", reason: "why skipped" }`
 
-### 3d. Mark as Processed
+### 3d. Reply to Comment
+
+**After processing each comment, post a reply explaining the outcome.** This gives comment authors immediate visibility into what was done and why.
+
+Reply format template: `.claude/skills/nitpick-nuker/templates/inline-reply.md`
+
+Build the reply message using this format:
+
+**For FIX:**
+
+```
+## 😄 Action Taken
+
+> _<first ~80 chars of original comment>..._
+
+✅ **Fix Applied**
+
+<description of what was changed>
+
+---
+_Automatically processed by Nitpick Nuker._
+```
+
+**For SKIP:**
+
+```
+## 😄 Action Taken
+
+> _<first ~80 chars of original comment>..._
+
+⏭️ **Skipped**
+
+<reason for skipping>
+
+---
+_Automatically processed by Nitpick Nuker._
+```
+
+Post the reply:
+
+```bash
+# IMPORTANT: Must run from repo root for script path to work
+"$SKILL_DIR/scripts/reply-to-comment.sh" "<comment_type>" "<comment_db_id>" "<pr_number>" "$REPLY_MESSAGE"
+```
+
+**Important:** Post the reply BEFORE adding the 😄 reaction. This ensures the reply is visible before the comment gets marked as processed.
+
+### 3e. Mark as Processed (after reply is posted)
 
 ```bash
 # Add 😄 reaction to mark as processed
@@ -290,7 +337,8 @@ Or for skipped:
 
 After successful run:
 
-1. All processed comments have 😄 reaction
-2. Summary comment posted to PR
-3. CI is green
-4. Report: "Processed X comments (Y fixed, Z skipped). CI passing. ✅"
+1. All processed comments have a reply explaining the action taken
+2. All processed comments have 😄 reaction
+3. Summary comment posted to PR
+4. CI is green
+5. Report: "Processed X comments (Y fixed, Z skipped). CI passing. ✅"

@@ -2,8 +2,8 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { createHmac } from 'node:crypto';
 import type { TaskDispatcher } from './services/task-dispatcher.js';
 import type { GitHubTokenService } from './github/token-service.js';
-import type { CredentialMonitor } from './services/isolation/credential-monitor.js';
 import type { IsolationProvider } from './services/isolation/types.js';
+import type { WorkerAuthRegistry } from './services/worker-auth/index.js';
 import type { OrchestratorStatus } from './types/state.js';
 import type { Logger } from '@intexuraos/common-core';
 import type { CreateTaskRequest } from './types/api.js';
@@ -56,7 +56,7 @@ export function registerRoutes(
   config: { orchestratorSecret: string },
   logger: Logger,
   getStatus?: () => OrchestratorStatus,
-  credentialMonitor?: CredentialMonitor,
+  workerAuthRegistry?: WorkerAuthRegistry,
   isolationProvider?: IsolationProvider
 ): void {
   const nonceCache: NonceCache = {};
@@ -142,7 +142,6 @@ export function registerRoutes(
     }
     const parsed = parseResult.data;
 
-    /* v8 ignore start -- ts-type: spread operators create type-narrowing branches for optional properties @preserve */
     const body: CreateTaskRequest = {
       taskId: parsed.taskId,
       workerType: parsed.workerType,
@@ -152,15 +151,9 @@ export function registerRoutes(
       linearIssueLabels: parsed.linearIssueLabels,
       hasChildren: parsed.hasChildren,
       ...(parsed.repository !== undefined && { repository: parsed.repository }),
-      /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
       ...(parsed.baseBranch !== undefined && { baseBranch: parsed.baseBranch }),
-      /* v8 ignore stop @preserve */
-      /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
       ...(parsed.linearIssueId !== undefined && { linearIssueId: parsed.linearIssueId }),
-      /* v8 ignore stop @preserve */
-      /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
       ...(parsed.linearIssueTitle !== undefined && { linearIssueTitle: parsed.linearIssueTitle }),
-      /* v8 ignore stop @preserve */
       ...(parsed.slug !== undefined && { slug: parsed.slug }),
       ...(parsed.actionId !== undefined && { actionId: parsed.actionId }),
       ...(parsed.agentType !== undefined && { agentType: parsed.agentType }),
@@ -170,10 +163,8 @@ export function registerRoutes(
       ...(parsed.continuationPrBranch !== undefined && {
         continuationPrBranch: parsed.continuationPrBranch,
       }),
-      ...(parsed.planningPrBranch !== undefined && { planningPrBranch: parsed.planningPrBranch }),
-      ...(parsed.planningPrUrl !== undefined && { planningPrUrl: parsed.planningPrUrl }),
+      ...(parsed.prNumber !== undefined && { prNumber: parsed.prNumber }),
     };
-    /* v8 ignore stop @preserve */
 
     logger.info(
       { taskId: body.taskId, workerType: body.workerType, linearIssueId: body.linearIssueId },
@@ -184,7 +175,11 @@ export function registerRoutes(
 
     if (!result.ok) {
       const { error } = result;
-      if (error.type === 'at_capacity' || error.type === 'docker_unavailable') {
+      if (
+        error.type === 'at_capacity' ||
+        error.type === 'docker_unavailable' ||
+        error.type === 'auth_unavailable'
+      ) {
         const errorResponse = { error: error.message };
         logger.warn(
           { taskId: body.taskId, errorType: error.type, status: 503, response: errorResponse },
@@ -284,12 +279,26 @@ export function registerRoutes(
     const running = dispatcher.getRunningCount();
     const capacity = dispatcher.getCapacity();
     const tokenExpiry = tokenService.getExpiresAt();
-    const oauthState = credentialMonitor?.getState() ?? {
-      status: 'not_configured' as const,
-      message: 'Credential monitor not initialized',
+    /* v8 ignore start -- ts-type: nullish coalescing fallback for optional workerAuthRegistry parameter @preserve */
+    const workerAuths = workerAuthRegistry?.getStates() ?? {
+      claude: {
+        status: 'not_configured' as const,
+        authMode: null,
+        refreshSupported: false,
+        message: 'Worker auth registry not initialized',
+      },
+      codex: {
+        status: 'not_configured' as const,
+        authMode: null,
+        refreshSupported: false,
+        message: 'Worker auth registry not initialized',
+      },
     };
+    /* v8 ignore stop @preserve */
 
+    /* v8 ignore start -- ts-type: nullish coalescing fallback for optional isolationProvider parameter @preserve */
     const healthDetails = isolationProvider?.getHealthDetails?.() ?? { docker: true, disk: true };
+    /* v8 ignore stop @preserve */
 
     reply.send({
       status: getStatus?.() ?? 'ready',
@@ -297,7 +306,7 @@ export function registerRoutes(
       running,
       available: capacity - running,
       githubTokenExpiresAt: tokenExpiry?.toISOString() ?? null,
-      anthropicOAuth: oauthState,
+      workerAuths,
       dockerHealthy: healthDetails.docker,
       diskHealthy: healthDetails.disk,
     });

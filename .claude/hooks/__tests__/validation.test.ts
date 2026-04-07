@@ -546,6 +546,129 @@ describe.sequential('Claude Hooks - Validation', () => {
 
       expectAllowed(result);
     });
+
+    it('blocks setting assignee on update_issue', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.linearUpdateIssue('INT-123', { assignee: 'me' }),
+      });
+
+      expectBlocked(result, {
+        pattern: /BLOCKED/i,
+        messageIncludes: 'assign',
+      });
+    });
+
+    it('blocks setting assigneeId on update_issue', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.linearUpdateIssue('INT-123', { assigneeId: 'user-uuid' }),
+      });
+
+      expectBlocked(result, {
+        pattern: /BLOCKED/i,
+        messageIncludes: 'assign',
+      });
+    });
+
+    it('blocks setting delegate on update_issue', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.linearUpdateIssue('INT-123', { delegate: 'agent-1' }),
+      });
+
+      expectBlocked(result, {
+        pattern: /BLOCKED/i,
+        messageIncludes: 'delegat',
+      });
+    });
+
+    it('blocks setting assignee on save_issue', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.linearSaveIssue({ id: 'INT-123', assignee: 'me' }),
+      });
+
+      expectBlocked(result, {
+        pattern: /BLOCKED/i,
+        messageIncludes: 'assign',
+      });
+    });
+
+    it('blocks setting delegate on save_issue', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.linearSaveIssue({ id: 'INT-123', delegate: 'agent-1' }),
+      });
+
+      expectBlocked(result, {
+        pattern: /BLOCKED/i,
+        messageIncludes: 'delegat',
+      });
+    });
+
+    it('blocks setting state to Done on save_issue', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.linearSaveIssue({ id: 'INT-123', state: 'Done' }),
+      });
+
+      expectBlocked(result, {
+        pattern: /BLOCKED/i,
+        messageIncludes: 'Done',
+      });
+    });
+
+    it('allows save_issue with valid state and no assignee', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.linearSaveIssue({ id: 'INT-123', state: 'In Progress' }),
+      });
+
+      expectAllowed(result);
+    });
+
+    it('allows save_issue with no state and no assignee', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.linearSaveIssue({ id: 'INT-123', title: 'Updated title' }),
+      });
+
+      expectAllowed(result);
+    });
+
+    it('blocks setting assignee on server save_issue variant', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.linearServerSaveIssue({ id: 'INT-123', assignee: 'me' }),
+      });
+
+      expectBlocked(result, {
+        pattern: /BLOCKED/i,
+        messageIncludes: 'assign',
+      });
+    });
+
+    it('blocks setting delegate on server save_issue variant', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.linearServerSaveIssue({ id: 'INT-123', delegate: 'agent-1' }),
+      });
+
+      expectBlocked(result, {
+        pattern: /BLOCKED/i,
+        messageIncludes: 'delegat',
+      });
+    });
+
+    it('allows server save_issue variant with valid state and no assignee', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.linearServerSaveIssue({ id: 'INT-123', state: 'In Progress' }),
+      });
+
+      expectAllowed(result);
+    });
   });
 
   describe('validate-terraform.sh', () => {

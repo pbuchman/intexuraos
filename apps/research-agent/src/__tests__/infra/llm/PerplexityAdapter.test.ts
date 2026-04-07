@@ -38,12 +38,20 @@ describe('PerplexityAdapter', () => {
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreatePerplexityClient.mockClear();
-      new PerplexityAdapter('test-key', LlmModels.SonarPro, 'test-user-id', testPricing, mockLogger);
+      new PerplexityAdapter(
+        'test-key',
+        LlmModels.SonarPro,
+        'test-user-id',
+        testPricing,
+        mockLogger,
+        'research-123'
+      );
 
       expect(mockCreatePerplexityClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: LlmModels.SonarPro,
         userId: 'test-user-id',
+        researchId: 'research-123',
         pricing: testPricing,
         logger: mockLogger,
       });

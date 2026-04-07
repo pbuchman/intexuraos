@@ -10,6 +10,9 @@ import type { EventDecisionRepository } from '../../../domain/repositories/event
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import { createUnifiedEvaluator, type UnifiedEvaluatorDeps } from '../../../domain/services/unifiedEvaluator.js';
 import type { GitHubEventLogEntryRepository } from '../../../domain/repositories/gitHubEventLogEntryRepository.js';
+import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
+import { Timestamp } from '@google-cloud/firestore';
+import { LlmModels } from '@intexuraos/llm-contract';
 
 function createFakeLogger(): Logger {
   return {
@@ -156,6 +159,57 @@ describe('UnifiedEvaluator', () => {
         })
       );
       expect(deps.evaluateEvent).not.toHaveBeenCalled();
+    });
+
+    it('calls onUnauthorizedSender when skip reason is SENDER_NOT_WHITELISTED', async () => {
+      const onUnauthorizedSender = vi.fn().mockResolvedValue(undefined);
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'skip', reason: 'SENDER_NOT_WHITELISTED' }),
+        } as unknown as WebhookRulesService,
+        onUnauthorizedSender,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({ senderLogin: 'random-user' });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(onUnauthorizedSender).toHaveBeenCalledWith(event);
+    });
+
+    it('does not call onUnauthorizedSender for other skip reasons', async () => {
+      const onUnauthorizedSender = vi.fn().mockResolvedValue(undefined);
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'skip', reason: 'BOT_NOISE' }),
+        } as unknown as WebhookRulesService,
+        onUnauthorizedSender,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(onUnauthorizedSender).not.toHaveBeenCalled();
+    });
+
+    it('does not fail when onUnauthorizedSender rejects', async () => {
+      const onUnauthorizedSender = vi.fn().mockRejectedValue(new Error('GitHub API error'));
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'skip', reason: 'SENDER_NOT_WHITELISTED' }),
+        } as unknown as WebhookRulesService,
+        onUnauthorizedSender,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({ senderLogin: 'random-user' });
+
+      // Should not throw even when onUnauthorizedSender rejects
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ decision: 'skip', reason: 'SENDER_NOT_WHITELISTED' })
+      );
     });
   });
 
@@ -1126,6 +1180,34 @@ describe('UnifiedEvaluator', () => {
       );
     });
 
+    it('records llmModel when createReviewTask fails and usage.model is defined', async () => {
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'request_review', reviewTypes: ['code_quality'] },
+          usage: { costUsd: 0.002, model: 'claude-opus-4', toolCalls: [] },
+          reasoning: 'Needs review.',
+        })),
+        createReviewTask: vi.fn().mockResolvedValue(
+          err({ code: 'task_creation_failed' as const, message: 'Firestore unavailable' })
+        ),
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({ eventType: 'pull_request', action: 'opened' });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decidedBy: 'github_agent',
+          decision: 'skip',
+          llmModel: 'claude-opus-4',
+        })
+      );
+    });
+
     it('passes llmReasoning to recordDecision on review task failure', async () => {
       const deps = createFakeDeps({
         webhookRules: {
@@ -1476,114 +1558,569 @@ describe('LLM retry for pull_request events', () => {
     );
   });
 
-  describe('enforcement loop cap', () => {
-    it('dispatches CODE_WORKER_REVIEW when no prior enforcement exists', async () => {
+  describe('check_suite CI failure path', () => {
+    function createCheckSuiteEvent(overrides: Partial<GitHubPREvent> = {}): GitHubPREvent {
+      return createFakeEvent({
+        eventType: 'check_suite',
+        action: 'completed',
+        baseBranch: 'task_abc123',
+        ...overrides,
+      });
+    }
+
+    it('dispatches CI failure fix when check_suite matches task branch', async () => {
+      const mockCIDispatch = {
+        dispatchCIFailure: vi.fn().mockResolvedValue({
+          success: true,
+          fixTaskCreated: true,
+          fixTaskId: 'task-fix-1',
+        }),
+      };
       const deps = createFakeDeps({
-        webhookRules: {
-          evaluate: vi.fn().mockReturnValue({
-            action: 'dispatch',
-            reason: 'CODE_WORKER_REVIEW',
-          }),
-        } as unknown as WebhookRulesService,
-        eventDecisionRepo: {
-          save: vi.fn().mockResolvedValue(ok({
-            id: 'ed_evt-1',
-            eventId: 'audit-evt-1',
-            repository: 'intexuraos/intexuraos',
-            pullRequestNumber: 42,
-            eventType: 'pull_request_review',
-            eventAction: 'submitted',
-            senderLogin: 'intexuraos-code-worker[bot]',
-            decidedBy: 'hard_rules',
-            decision: 'dispatch',
-            reason: 'CODE_WORKER_REVIEW',
-            createdAt: new Date(),
-            decisionLatencyMs: 1,
-          })),
-          existsByPRAndReason: vi.fn().mockResolvedValue(ok(false)),
-        } as unknown as EventDecisionRepository,
+        ciFailureDispatchService: mockCIDispatch,
       });
       const evaluator = createUnifiedEvaluator(deps);
-      const event = createFakeEvent({
-        eventType: 'pull_request_review',
-        action: 'submitted',
-        senderLogin: 'intexuraos-code-worker[bot]',
-      });
+      const event = createCheckSuiteEvent();
 
       await evaluator.evaluate(event, logger);
 
-      expect(deps.dispatchService.dispatch).toHaveBeenCalled();
+      expect(mockCIDispatch.dispatchCIFailure).toHaveBeenCalledWith({ event, logger });
       expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({
+          decidedBy: 'hard_rules',
           decision: 'dispatch',
-          reason: 'CODE_WORKER_REVIEW',
+          reason: 'ci_failure_fix_dispatched',
+          dispatchAction: 'create_task',
+          dispatchParams: { taskId: 'task-fix-1' },
+        }),
+      );
+      // Should NOT fall through to normal webhook rules
+      expect(deps.dispatchService.dispatch).not.toHaveBeenCalled();
+    });
+
+    it('records skip decision when CI failure dispatch is skipped', async () => {
+      const mockCIDispatch = {
+        dispatchCIFailure: vi.fn().mockResolvedValue({
+          success: false,
+          fixTaskCreated: false,
+          skipped: true,
+          skipReason: 'no_parent_task',
+        }),
+      };
+      const deps = createFakeDeps({
+        ciFailureDispatchService: mockCIDispatch,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createCheckSuiteEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decidedBy: 'hard_rules',
+          decision: 'skip',
+          reason: 'ci_failure_skipped: no_parent_task',
+        }),
+      );
+      expect(deps.dispatchService.dispatch).not.toHaveBeenCalled();
+    });
+
+    it('records automation log for CI failure skip with headBranch', async () => {
+      const mockCIDispatch = {
+        dispatchCIFailure: vi.fn().mockResolvedValue({
+          success: false,
+          fixTaskCreated: false,
+          skipped: true,
+          skipReason: 'no_parent_task',
+        }),
+      };
+      const deps = createFakeDeps({
+        ciFailureDispatchService: mockCIDispatch,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createCheckSuiteEvent({ baseBranch: 'task_xyz789' });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.automationLog.record).toHaveBeenCalledWith(
+        { repository: 'intexuraos/intexuraos', prNumber: 42 },
+        expect.objectContaining({
+          type: 'ci_failure_skip',
+          reason: 'no_parent_task',
+          headBranch: 'task_xyz789',
+        }),
+        undefined,
+      );
+    });
+
+    it('falls through to normal rules when check_suite has no task branch', async () => {
+      const mockCIDispatch = {
+        dispatchCIFailure: vi.fn(),
+      };
+      const deps = createFakeDeps({
+        ciFailureDispatchService: mockCIDispatch,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createCheckSuiteEvent({ baseBranch: 'feature/some-branch' });
+
+      await evaluator.evaluate(event, logger);
+
+      // CIFailureRule returns skip for non-task branches, so it falls through
+      expect(mockCIDispatch.dispatchCIFailure).not.toHaveBeenCalled();
+      // Normal webhook rules should still run
+      expect(deps.webhookRules.evaluate).toHaveBeenCalled();
+    });
+
+    it('falls through to normal rules when ciFailureDispatchService is not provided', async () => {
+      const deps = createFakeDeps();
+      // Ensure no ciFailureDispatchService
+      delete (deps as unknown as Record<string, unknown>)['ciFailureDispatchService'];
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createCheckSuiteEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      // Should fall through to normal webhook rules
+      expect(deps.webhookRules.evaluate).toHaveBeenCalled();
+    });
+
+    it('records dispatch with error when CI failure dispatch fails', async () => {
+      const mockCIDispatch = {
+        dispatchCIFailure: vi.fn().mockResolvedValue({
+          success: false,
+          fixTaskCreated: false,
+          error: 'Worker unavailable',
+        }),
+      };
+      const deps = createFakeDeps({
+        ciFailureDispatchService: mockCIDispatch,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createCheckSuiteEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decidedBy: 'hard_rules',
+          decision: 'dispatch',
+          reason: 'ci_failure_fix_dispatched',
+          dispatchSuccess: false,
+          dispatchError: 'Worker unavailable',
         }),
       );
     });
 
-    it('skips CODE_WORKER_REVIEW when enforcement already ran for this PR', async () => {
+    it('records dispatch without dispatchParams when fixTaskId is undefined', async () => {
+      const mockCIDispatch = {
+        dispatchCIFailure: vi.fn().mockResolvedValue({
+          success: true,
+          fixTaskCreated: true,
+        }),
+      };
       const deps = createFakeDeps({
-        webhookRules: {
-          evaluate: vi.fn().mockReturnValue({
-            action: 'dispatch',
-            reason: 'CODE_WORKER_REVIEW',
-          }),
-        } as unknown as WebhookRulesService,
-        eventDecisionRepo: {
-          save: vi.fn().mockResolvedValue(ok({
-            id: 'ed_evt-1',
-            eventId: 'audit-evt-1',
-            repository: 'intexuraos/intexuraos',
-            pullRequestNumber: 42,
-            eventType: 'pull_request_review',
-            eventAction: 'submitted',
-            senderLogin: 'intexuraos-code-worker[bot]',
-            decidedBy: 'hard_rules',
-            decision: 'skip',
-            reason: 'ENFORCEMENT_ALREADY_RAN',
-            createdAt: new Date(),
-            decisionLatencyMs: 1,
-          })),
-          existsByPRAndReason: vi.fn().mockResolvedValue(ok(true)),
-        } as unknown as EventDecisionRepository,
+        ciFailureDispatchService: mockCIDispatch,
       });
       const evaluator = createUnifiedEvaluator(deps);
-      const event = createFakeEvent({
-        eventType: 'pull_request_review',
-        action: 'submitted',
-        senderLogin: 'intexuraos-code-worker[bot]',
-      });
+      const event = createCheckSuiteEvent();
 
       await evaluator.evaluate(event, logger);
 
-      expect(deps.dispatchService.dispatch).not.toHaveBeenCalled();
+      const savedInput = vi.mocked(deps.eventDecisionRepo.save).mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+      expect(savedInput).toBeDefined();
+      expect(savedInput?.['decidedBy']).toBe('hard_rules');
+      expect(savedInput?.['decision']).toBe('dispatch');
+      expect(savedInput?.['reason']).toBe('ci_failure_fix_dispatched');
+      expect(savedInput?.['dispatchParams']).toBeUndefined();
+    });
+
+    it('handles check_suite skip with null baseBranch via CIFailureRule', async () => {
+      const mockCIDispatch = {
+        dispatchCIFailure: vi.fn(),
+      };
+      const deps = createFakeDeps({
+        ciFailureDispatchService: mockCIDispatch,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createCheckSuiteEvent({ baseBranch: null });
+
+      await evaluator.evaluate(event, logger);
+
+      // CIFailureRule returns skip for null branch, falls through
+      expect(mockCIDispatch.dispatchCIFailure).not.toHaveBeenCalled();
+      expect(deps.webhookRules.evaluate).toHaveBeenCalled();
+    });
+
+    it('defaults skipReason to unknown when not provided', async () => {
+      const mockCIDispatch = {
+        dispatchCIFailure: vi.fn().mockResolvedValue({
+          success: false,
+          fixTaskCreated: false,
+          skipped: true,
+        }),
+      };
+      const deps = createFakeDeps({
+        ciFailureDispatchService: mockCIDispatch,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createCheckSuiteEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reason: 'ci_failure_skipped: unknown',
+        }),
+      );
+    });
+  });
+
+  describe('synchronize remediation interception', () => {
+    function createSynchronizeEvent(overrides: Partial<GitHubPREvent> = {}): GitHubPREvent {
+      return createFakeEvent({
+        eventType: 'pull_request',
+        action: 'synchronize',
+        repository: 'test/repo',
+        pullRequestNumber: 42,
+        ...overrides,
+      });
+    }
+
+    function createRemediationCodeTaskRepo(task: { status: string; completedAt?: Date; requiresReReview?: boolean } | null): Partial<CodeTaskRepository> {
+      if (task === null) {
+        return {
+          findRecentRemediationForPR: vi.fn().mockResolvedValue(ok(null)),
+        };
+      }
+      return {
+        findRecentRemediationForPR: vi.fn().mockResolvedValue(ok({
+          id: 'task-rem-1',
+          agentType: 'remediation',
+          status: task.status,
+          repository: 'test/repo',
+          prNumber: 42,
+          completedAt: task.completedAt !== undefined ? Timestamp.fromDate(task.completedAt) : undefined,
+          requiresReReview: task.requiresReReview,
+        })),
+      };
+    }
+
+    it('skips review when recent remediation task has requiresReReview=false', async () => {
+      const codeTaskRepo = createRemediationCodeTaskRepo({
+        status: 'reviewed',
+        completedAt: new Date(), // just completed
+        requiresReReview: false,
+      });
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'PR_NEEDS_TRIAGE' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'request_review', reviewTypes: ['code_quality'] },
+          usage: { costUsd: 0.001, toolCalls: [], model: LlmModels.Gemini25Flash },
+          reasoning: 'PR was updated.',
+        })),
+        codeTaskRepo: codeTaskRepo as CodeTaskRepository,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createSynchronizeEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.createReviewTask).not.toHaveBeenCalled();
       expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({
           decision: 'skip',
-          reason: 'ENFORCEMENT_ALREADY_RAN',
+          reason: expect.stringContaining('remediation_no_rereview'),
+          llmModel: LlmModels.Gemini25Flash,
         }),
       );
     });
 
-    it('dispatches normally when existsByPRAndReason is not implemented', async () => {
+    it('triggers review when recent remediation task has requiresReReview=true', async () => {
+      const codeTaskRepo = createRemediationCodeTaskRepo({
+        status: 'reviewed',
+        completedAt: new Date(),
+        requiresReReview: true,
+      });
       const deps = createFakeDeps({
         webhookRules: {
-          evaluate: vi.fn().mockReturnValue({
-            action: 'dispatch',
-            reason: 'CODE_WORKER_REVIEW',
-          }),
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'PR_NEEDS_TRIAGE' }),
         } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'request_review', reviewTypes: ['code_quality'] },
+          usage: { costUsd: 0.001, toolCalls: [] },
+          reasoning: 'PR was updated.',
+        })),
+        createReviewTask: vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-2', workerType: 'opus' })),
+        codeTaskRepo: codeTaskRepo as CodeTaskRepository,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createSynchronizeEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.createReviewTask).toHaveBeenCalled();
+    });
+
+    it('triggers review when recent remediation task has requiresReReview=undefined', async () => {
+      const codeTaskRepo = createRemediationCodeTaskRepo({
+        status: 'reviewed',
+        completedAt: new Date(),
+        // requiresReReview not set yet — fail open to a fresh review
+      });
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'PR_NEEDS_TRIAGE' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'request_review', reviewTypes: ['code_quality'] },
+          usage: { costUsd: 0.001, toolCalls: [] },
+          reasoning: 'PR was updated.',
+        })),
+        createReviewTask: vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-3', workerType: 'opus' })),
+        codeTaskRepo: codeTaskRepo as CodeTaskRepository,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createSynchronizeEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.createReviewTask).toHaveBeenCalled();
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decision: 'request_review',
+          reason: expect.stringContaining('LLM request_review'),
+        }),
+      );
+    });
+
+    it('triggers review when no recent remediation task exists', async () => {
+      const codeTaskRepo = createRemediationCodeTaskRepo(null);
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'PR_NEEDS_TRIAGE' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'request_review', reviewTypes: ['code_quality'] },
+          usage: { costUsd: 0.001, toolCalls: [] },
+          reasoning: 'PR was updated.',
+        })),
+        createReviewTask: vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-4', workerType: 'opus' })),
+        codeTaskRepo: codeTaskRepo as CodeTaskRepository,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createSynchronizeEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.createReviewTask).toHaveBeenCalled();
+    });
+
+    it('treats running remediation task as recent (skips review when requiresReReview=false)', async () => {
+      const codeTaskRepo = createRemediationCodeTaskRepo({
+        status: 'running',
+        requiresReReview: false,
+      });
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'PR_NEEDS_TRIAGE' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'request_review', reviewTypes: ['code_quality'] },
+          usage: { costUsd: 0.001, toolCalls: [] },
+          reasoning: 'PR was updated.',
+        })),
+        codeTaskRepo: codeTaskRepo as CodeTaskRepository,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createSynchronizeEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.createReviewTask).not.toHaveBeenCalled();
+    });
+
+    it('ignores remediation task completed more than 60 minutes ago', async () => {
+      const oldCompletedAt = new Date(Date.now() - 61 * 60 * 1000); // 61 minutes ago
+      const codeTaskRepo = createRemediationCodeTaskRepo({
+        status: 'reviewed',
+        completedAt: oldCompletedAt,
+        requiresReReview: false,
+      });
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'PR_NEEDS_TRIAGE' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'request_review', reviewTypes: ['code_quality'] },
+          usage: { costUsd: 0.001, toolCalls: [] },
+          reasoning: 'PR was updated.',
+        })),
+        createReviewTask: vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-5', workerType: 'opus' })),
+        codeTaskRepo: codeTaskRepo as CodeTaskRepository,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createSynchronizeEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      // Old remediation task should be ignored, review should proceed
+      expect(deps.createReviewTask).toHaveBeenCalled();
+    });
+
+    it('does not intercept non-synchronize pull_request events', async () => {
+      const codeTaskRepo = createRemediationCodeTaskRepo({
+        status: 'reviewed',
+        completedAt: new Date(),
+        requiresReReview: false,
+      });
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'PR_NEEDS_TRIAGE' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'request_review', reviewTypes: ['code_quality'] },
+          usage: { costUsd: 0.001, toolCalls: [] },
+          reasoning: 'PR was opened.',
+        })),
+        createReviewTask: vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-6', workerType: 'opus' })),
+        codeTaskRepo: codeTaskRepo as CodeTaskRepository,
       });
       const evaluator = createUnifiedEvaluator(deps);
       const event = createFakeEvent({
-        eventType: 'pull_request_review',
-        action: 'submitted',
-        senderLogin: 'intexuraos-code-worker[bot]',
+        eventType: 'pull_request',
+        action: 'opened',
       });
 
       await evaluator.evaluate(event, logger);
 
-      expect(deps.dispatchService.dispatch).toHaveBeenCalled();
+      // Should NOT query for remediation tasks on non-synchronize events
+      expect(codeTaskRepo.findRecentRemediationForPR).not.toHaveBeenCalled();
+      expect(deps.createReviewTask).toHaveBeenCalled();
+    });
+
+    it('does not intercept issue_comment events', async () => {
+      const codeTaskRepo = createRemediationCodeTaskRepo({
+        status: 'reviewed',
+        completedAt: new Date(),
+        requiresReReview: false,
+      });
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'PR_NEEDS_TRIAGE' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'request_review', reviewTypes: ['code_quality'] },
+          usage: { costUsd: 0.001, toolCalls: [] },
+          reasoning: 'Comment requested review.',
+        })),
+        createReviewTask: vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-7', workerType: 'opus' })),
+        codeTaskRepo: codeTaskRepo as CodeTaskRepository,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({
+        eventType: 'issue_comment',
+        action: 'created',
+      });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(codeTaskRepo.findRecentRemediationForPR).not.toHaveBeenCalled();
+      expect(deps.createReviewTask).toHaveBeenCalled();
+    });
+
+    it('proceeds with review when codeTaskRepo query fails', async () => {
+      const codeTaskRepo: Partial<CodeTaskRepository> = {
+        findRecentRemediationForPR: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'Connection failed' })),
+      };
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'PR_NEEDS_TRIAGE' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'request_review', reviewTypes: ['code_quality'] },
+          usage: { costUsd: 0.001, toolCalls: [] },
+          reasoning: 'PR was updated.',
+        })),
+        createReviewTask: vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-8', workerType: 'opus' })),
+        codeTaskRepo: codeTaskRepo as CodeTaskRepository,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createSynchronizeEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      // Fail open: review should proceed even when repo query fails
+      expect(deps.createReviewTask).toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ eventId: 'evt-1' }),
+        expect.stringContaining('Failed to check remediation task'),
+      );
+    });
+  });
+
+  describe('onReviewSkipped callback', () => {
+    it('calls onReviewSkipped when LLM triage skips', async () => {
+      const onReviewSkipped = vi.fn().mockResolvedValue(undefined);
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'skip' as const, reason: 'Documentation-only change' },
+          usage: { costUsd: 0.001, toolCalls: [] },
+          reasoning: 'Docs only.',
+        })),
+        onReviewSkipped,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({ repository: 'pbuchman/intexuraos', pullRequestNumber: 42 });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(onReviewSkipped).toHaveBeenCalledWith({
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+      });
+    });
+
+    it('does not call onReviewSkipped when hard rules skip', async () => {
+      const onReviewSkipped = vi.fn().mockResolvedValue(undefined);
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'skip', reason: 'PROTECTED_BASE_BRANCH' }),
+        } as unknown as WebhookRulesService,
+        onReviewSkipped,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(onReviewSkipped).not.toHaveBeenCalled();
+    });
+
+    it('swallows onReviewSkipped errors', async () => {
+      const onReviewSkipped = vi.fn().mockRejectedValue(new Error('boom'));
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'skip' as const, reason: 'No code changes' },
+          usage: { costUsd: 0.001, toolCalls: [] },
+          reasoning: 'No code.',
+        })),
+        onReviewSkipped,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent();
+
+      // Should not throw
+      await evaluator.evaluate(event, logger);
+
+      expect(onReviewSkipped).toHaveBeenCalled();
     });
   });
 });

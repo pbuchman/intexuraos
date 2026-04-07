@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { Timestamp } from '@google-cloud/firestore';
-import { formatLogChunk, createFormatterState } from '../../domain/services/logFormatter.js';
+import {
+  formatLogChunk,
+  createFormatterState,
+  formatLogChunkForRuntime,
+  flushLogChunkFormatterForRuntime,
+} from '../../domain/services/logFormatter.js';
 
 function ts(): Timestamp {
   return Timestamp.now();
@@ -1634,6 +1639,20 @@ describe('formatLogChunk', () => {
       const result = formatLogChunk(toolResult(arr), 0, ts());
       expect(result[0]?.text).toBe('  \u2192 [67 items]');
     });
+
+    it('non-array JSON object (>200 chars) parsed by summarizeJsonArray returns undefined', () => {
+      // JSON.parse succeeds but the result is NOT an array — covers !Array.isArray(arr) branch
+      const obj = JSON.stringify({ key: 'x'.repeat(200) });
+      const result = formatLogChunk(toolResult(obj), 0, ts());
+      // Not summarized as array — falls through to object summarization
+      expect(result[0]?.text).not.toContain('items');
+    });
+
+    it('long array-like string (>200 chars) starting with [ but invalid JSON passes through', () => {
+      const badArray = '[' + 'x'.repeat(250);
+      const result = formatLogChunk(toolResult(badArray), 0, ts());
+      expect(result[0]?.text).toContain('  \u2192 [');
+    });
   });
 
   describe('diff tool result summarization', () => {
@@ -1716,6 +1735,14 @@ describe('formatLogChunk', () => {
       const result = formatLogChunk(toolResult(content), 0, ts());
       expect(result[0]?.text).toContain('diff: 1 file changed (+0, -0)');
       expect(result[0]?.text).toMatch(/M src\/file\.ts$/m);
+    });
+
+    it('shortens deeply nested paths (>6 segments)', () => {
+      // A path with >6 segments triggers shortenPath, which uses parts[parts.length - 1] ?? ''
+      const deepPath = 'a/b/c/d/e/f/g/deep-file.ts';
+      const diff = `diff --git a/${deepPath} b/${deepPath}\n--- a/${deepPath}\n+++ b/${deepPath}\n@@ -1 +1 @@\n-old\n+new`;
+      const result = formatLogChunk(toolResult(diff), 0, ts());
+      expect(result[0]?.text).toContain('a/b/c/d/.../deep-file.ts');
     });
   });
 
@@ -1805,5 +1832,91 @@ describe('formatLogChunk', () => {
       expect(state.lastToolName).toBe('AnotherTool');
       expect(state.toolCallsById.size).toBe(0);
     });
+  });
+});
+
+describe('formatLogChunkForRuntime', () => {
+  it('returns empty array for empty Codex input', () => {
+    expect(formatLogChunkForRuntime('codex', '', 0, ts())).toEqual([]);
+  });
+
+  it('preserves Codex JSON lines exactly', () => {
+    const json = JSON.stringify({
+      type: 'item.completed',
+      item: { type: 'agent_message', text: 'READY' },
+    });
+
+    const result = formatLogChunkForRuntime('codex', `${json}\n`, 0, ts());
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.text).toBe(json);
+  });
+
+  it('does not truncate long Codex JSON payloads', () => {
+    const json = JSON.stringify({
+      type: 'item.completed',
+      item: { type: 'agent_message', text: 'x'.repeat(3000) },
+    });
+
+    const result = formatLogChunkForRuntime('codex', `${json}\n`, 0, ts());
+
+    expect(result[0]?.text).toBe(json);
+    expect(result[0]?.text).not.toContain('[... TRUNCATED');
+  });
+
+  it('reassembles split Codex JSON lines exactly across chunk boundaries', () => {
+    const state = createFormatterState();
+    const json = JSON.stringify({
+      type: 'item.completed',
+      item: { type: 'agent_message', text: 'split-message' },
+    });
+    const splitAt = Math.floor(json.length / 2);
+
+    const result1 = formatLogChunkForRuntime('codex', json.slice(0, splitAt), 0, ts(), state);
+    expect(result1).toEqual([]);
+    expect(state.partialLine).toBe(json.slice(0, splitAt));
+
+    const result2 = formatLogChunkForRuntime('codex', `${json.slice(splitAt)}\n`, 1, ts(), state);
+
+    expect(result2).toHaveLength(1);
+    expect(result2[0]?.text).toBe(json);
+    expect(state.partialLine).toBeUndefined();
+  });
+
+  it('flushes a trailing Codex fragment without a newline', () => {
+    const state = createFormatterState();
+    const json = JSON.stringify({
+      type: 'turn.failed',
+      error: { message: 'boom' },
+    });
+
+    const result1 = formatLogChunkForRuntime('codex', json, 7, ts(), state);
+    expect(result1).toEqual([]);
+
+    const flushed = flushLogChunkFormatterForRuntime('codex', 8, ts(), state);
+    expect(flushed).toHaveLength(1);
+    expect(flushed[0]?.text).toBe(json);
+    expect(state.partialLine).toBeUndefined();
+  });
+
+  it('returns no flushed lines for non-Codex runtimes', () => {
+    const state = createFormatterState();
+    state.partialLine = '{"type":"turn.completed"}';
+
+    expect(flushLogChunkFormatterForRuntime('claude', 8, ts(), state)).toEqual([]);
+    expect(state.partialLine).toBe('{"type":"turn.completed"}');
+  });
+
+  it('returns no flushed lines when there is no pending Codex fragment', () => {
+    const state = createFormatterState();
+    expect(flushLogChunkFormatterForRuntime('codex', 8, ts(), state)).toEqual([]);
+  });
+
+  it('drops whitespace-only trailing Codex fragments on flush', () => {
+    const state = createFormatterState();
+    state.partialLine = '   ';
+
+    expect(flushLogChunkFormatterForRuntime('codex', 8, ts(), state)).toEqual([]);
+    expect(state.partialLine).toBeUndefined();
   });
 });

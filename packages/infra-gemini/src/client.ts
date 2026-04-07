@@ -60,6 +60,8 @@ function createRequestContext(
   method: string,
   model: string,
   prompt: string,
+  userId: string,
+  researchId: string | undefined, // @allow-undefined-type -- function parameter, not a property; ?: syntax is invalid here
   auditSink?: AuditSink
 ): { requestId: string; startTime: Date; auditContext: AuditContext } {
   const requestId = randomUUID();
@@ -71,6 +73,8 @@ function createRequestContext(
       method,
       prompt,
       startedAt: startTime,
+      userId,
+      ...(researchId !== undefined && { researchId }),
     },
     auditSink !== undefined ? { sink: auditSink } : undefined
   );
@@ -79,7 +83,7 @@ function createRequestContext(
 
 export function createGeminiClient(config: GeminiConfig): GeminiClient {
   const ai = new GoogleGenAI({ apiKey: config.apiKey });
-  const { model, userId, pricing, imagePricing, logger, usageSink, auditSink } = config;
+  const { model, userId, researchId, pricing, imagePricing, logger, usageSink, auditSink } = config;
   const usageLogger = createUsageLogger({
     logger,
     ...(usageSink !== undefined && { sink: usageSink }),
@@ -104,7 +108,14 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GeminiError>> {
-      const { auditContext } = createRequestContext('research', model, prompt, auditSink);
+      const { auditContext } = createRequestContext(
+        'research',
+        model,
+        prompt,
+        userId,
+        researchId,
+        auditSink
+      );
 
       try {
         const response = await ai.models.generateContent({
@@ -119,7 +130,14 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         const groundingEnabled = hasGroundingMetadata(response);
         const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
         const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
-        const usage = normalizeUsage(inputTokens, outputTokens, groundingEnabled, pricing);
+        const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
+        const usage = normalizeUsage(
+          inputTokens,
+          outputTokens,
+          groundingEnabled,
+          pricing,
+          thinkingTokens
+        );
 
         await auditContext.success({
           response: text,
@@ -145,14 +163,22 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
     },
 
     async generate(prompt: string): Promise<Result<GenerateResult, GeminiError>> {
-      const { auditContext } = createRequestContext('generate', model, prompt, auditSink);
+      const { auditContext } = createRequestContext(
+        'generate',
+        model,
+        prompt,
+        userId,
+        researchId,
+        auditSink
+      );
 
       try {
         const response = await ai.models.generateContent({ model, contents: prompt });
         const text = response.text ?? '';
         const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
         const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
-        const usage = normalizeUsage(inputTokens, outputTokens, false, pricing);
+        const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
+        const usage = normalizeUsage(inputTokens, outputTokens, false, pricing, thinkingTokens);
 
         await auditContext.success({
           response: text,
@@ -184,6 +210,8 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         'generateImage',
         IMAGE_MODEL,
         prompt,
+        userId,
+        researchId,
         auditSink
       );
 

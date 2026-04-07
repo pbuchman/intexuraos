@@ -789,6 +789,87 @@ describe('Internal Routes', () => {
       };
       expect(body.data.transcriptionPreferences).toBeUndefined();
     });
+
+    it('returns timezone when present', async () => {
+      const userId = 'user-with-timezone';
+      fakeSettingsRepo.setSettings({
+        userId,
+        timezone: 'Europe/Berlin',
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/settings`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          timezone?: string;
+        };
+      };
+      expect(body.data.timezone).toBe('Europe/Berlin');
+    });
+
+    it('returns undefined timezone when not set', async () => {
+      const userId = 'user-no-timezone';
+      fakeSettingsRepo.setSettings({
+        userId,
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/settings`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          timezone?: string;
+        };
+      };
+      expect(body.data.timezone).toBeUndefined();
+    });
+
+    it('returns undefined timezone when repository errors', async () => {
+      const userId = 'user-tz-error';
+      fakeSettingsRepo.setFailNextGet(true);
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/settings`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          timezone?: string;
+        };
+      };
+      expect(body.data.timezone).toBeUndefined();
+    });
   });
 
   describe('GET /internal/users/:uid/oauth/github/token', () => {

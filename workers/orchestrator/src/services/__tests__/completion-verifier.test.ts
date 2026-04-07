@@ -16,6 +16,7 @@ const {
   EXECUTION_SCHEMA,
   PULL_REQUEST_SCHEMA,
   REVIEW_SCHEMA,
+  REMEDIATION_SCHEMA,
   RESUME_SUMMARY_SCHEMA,
   buildPlanningPrompt,
   buildExecutionPrompt,
@@ -23,6 +24,7 @@ const {
   buildReviewPrompt,
   buildResumeSummaryPrompt,
   getLast50Lines,
+  getLast50ClaudeLines,
   getLast20Lines,
   detectFatalExitCode,
 } = await import('../completion-verifier.js');
@@ -69,8 +71,9 @@ describe('PLANNING_SCHEMA', () => {
       superpowers_writing_plans: 'used',
       linear_url: 'https://linear.app/pbuchman/issue/INT-100',
       is_complex: '0',
+      has_plan_doc: '0',
       subtask_urls: '',
-      pr_url: '',
+      pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
       summary: 'Planned the task.',
       unclear_clarification: '',
     });
@@ -83,6 +86,7 @@ describe('PLANNING_SCHEMA', () => {
       superpowers_writing_plans: 'not used',
       linear_url: '',
       is_complex: '0',
+      has_plan_doc: '0',
       subtask_urls: '',
       pr_url: '',
       summary: 'Could not plan.',
@@ -97,6 +101,7 @@ describe('PLANNING_SCHEMA', () => {
       superpowers_writing_plans: 'used',
       linear_url: 'https://linear.app/pbuchman/issue/INT-631',
       is_complex: '1',
+      has_plan_doc: '1',
       subtask_urls: '',
       pr_url: 'https://github.com/pbuchman/intexuraos/pull/950',
       summary: 'Planned and created PR.',
@@ -111,9 +116,10 @@ describe('PLANNING_SCHEMA', () => {
       superpowers_writing_plans: 'used',
       linear_url: 'https://linear.app/pbuchman/issue/INT-631',
       is_complex: '1',
+      has_plan_doc: '1',
       subtask_urls:
         'https://linear.app/pbuchman/issue/INT-632/subtask-one,https://linear.app/pbuchman/issue/INT-633/subtask-two',
-      pr_url: '',
+      pr_url: 'https://github.com/pbuchman/intexuraos/pull/631',
       summary: 'Planned with subtasks.',
       unclear_clarification: '',
     });
@@ -125,14 +131,34 @@ describe('PLANNING_SCHEMA', () => {
     }
   });
 
+  it('accepts plan-doc task with has_plan_doc=1 and is_complex=0', () => {
+    const result = PLANNING_SCHEMA.safeParse({
+      outcome: 'planned',
+      superpowers_writing_plans: 'used',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-700',
+      is_complex: '0',
+      has_plan_doc: '1',
+      subtask_urls: '',
+      pr_url: 'https://github.com/pbuchman/intexuraos/pull/960',
+      summary: 'Plan-doc task planned.',
+      unclear_clarification: '',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.has_plan_doc).toBe('1');
+      expect(result.data.is_complex).toBe('0');
+    }
+  });
+
   it('accepts simple task with empty subtask_urls', () => {
     const result = PLANNING_SCHEMA.safeParse({
       outcome: 'planned',
       superpowers_writing_plans: 'not used',
       linear_url: 'https://linear.app/pbuchman/issue/INT-640',
       is_complex: '0',
+      has_plan_doc: '0',
       subtask_urls: '',
-      pr_url: '',
+      pr_url: 'https://github.com/pbuchman/intexuraos/pull/640',
       summary: 'Simple task planned.',
       unclear_clarification: '',
     });
@@ -148,6 +174,7 @@ describe('PLANNING_SCHEMA', () => {
       superpowers_writing_plans: 'used',
       linear_url: '',
       is_complex: '0',
+      has_plan_doc: '0',
       subtask_urls: '',
       pr_url: '',
       summary: 'x',
@@ -160,15 +187,48 @@ describe('PLANNING_SCHEMA', () => {
     const result = PLANNING_SCHEMA.safeParse({ outcome: 'planned' });
     expect(result.success).toBe(false);
   });
+
+  it('rejects empty pr_url when outcome is planned', () => {
+    const result = PLANNING_SCHEMA.safeParse({
+      outcome: 'planned',
+      superpowers_writing_plans: 'used',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-100/test',
+      is_complex: '0',
+      has_plan_doc: '0',
+      subtask_urls: '',
+      pr_url: '',
+      summary: 'test',
+      unclear_clarification: '',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('allows empty pr_url when outcome is unclear', () => {
+    const result = PLANNING_SCHEMA.safeParse({
+      outcome: 'unclear',
+      superpowers_writing_plans: 'used',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-100/test',
+      is_complex: '0',
+      has_plan_doc: '0',
+      subtask_urls: '',
+      pr_url: '',
+      summary: 'test',
+      unclear_clarification: 'Not enough info',
+    });
+    expect(result.success).toBe(true);
+  });
 });
 
 describe('EXECUTION_SCHEMA', () => {
   it('accepts valid execution data', () => {
     const result = EXECUTION_SCHEMA.safeParse({
       outcome: 'implemented',
-      superpowers_executing_plans: 'used',
+      superpowers_subagent_driven_dev: 'used',
       superpowers_requesting_code_review: 'not used',
       gh_pr_url: 'https://github.com/org/repo/pull/1',
+      memory_ids_used: 'MEM-142,MEM-155',
+      memory_ids_rejected: 'MEM-188',
+      memory_usage_summary: 'Used route logging and route coverage lessons.',
       summary: 'Implemented the feature.',
     });
     expect(result.success).toBe(true);
@@ -176,12 +236,57 @@ describe('EXECUTION_SCHEMA', () => {
 
   it('rejects invalid enum value', () => {
     const result = EXECUTION_SCHEMA.safeParse({
-      superpowers_executing_plans: 'maybe',
+      superpowers_subagent_driven_dev: 'maybe',
       superpowers_requesting_code_review: 'used',
       gh_pr_url: '',
+      memory_ids_used: '',
+      memory_ids_rejected: '',
+      memory_usage_summary: '',
       summary: 'x',
     });
     expect(result.success).toBe(false);
+  });
+
+  it('rejects empty gh_pr_url when outcome is implemented', () => {
+    const result = EXECUTION_SCHEMA.safeParse({
+      outcome: 'implemented',
+      superpowers_subagent_driven_dev: 'used',
+      superpowers_requesting_code_review: 'used',
+      gh_pr_url: '',
+      memory_ids_used: '',
+      memory_ids_rejected: '',
+      memory_usage_summary: '',
+      summary: 'test',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects empty gh_pr_url when outcome is already_completed', () => {
+    const result = EXECUTION_SCHEMA.safeParse({
+      outcome: 'already_completed',
+      superpowers_subagent_driven_dev: 'used',
+      superpowers_requesting_code_review: 'not used',
+      gh_pr_url: '',
+      memory_ids_used: '',
+      memory_ids_rejected: '',
+      memory_usage_summary: '',
+      summary: 'test',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts non-empty gh_pr_url when outcome is already_completed', () => {
+    const result = EXECUTION_SCHEMA.safeParse({
+      outcome: 'already_completed',
+      superpowers_subagent_driven_dev: 'used',
+      superpowers_requesting_code_review: 'not used',
+      gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
+      memory_ids_used: '',
+      memory_ids_rejected: '',
+      memory_usage_summary: '',
+      summary: 'Evidence PR for already-completed work.',
+    });
+    expect(result.success).toBe(true);
   });
 });
 
@@ -230,6 +335,7 @@ describe('REVIEW_SCHEMA', () => {
   it('accepts valid review data', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_id: '123',
       review_comments_posted: '3',
       review_types: 'code_quality,security',
       summary: 'Reviewed the PR for code quality and security issues.',
@@ -237,9 +343,42 @@ describe('REVIEW_SCHEMA', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts review data when review_id is omitted', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_comments_posted: '3',
+      review_types: 'code_quality,security',
+      summary: 'Reviewed the PR for code quality and security issues.',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts review data when review_id is empty string', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_id: '',
+      review_comments_posted: '3',
+      review_types: 'code_quality,security',
+      summary: 'Reviewed the PR for code quality and security issues.',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects non-empty non-numeric review_id', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_id: 'not-a-number',
+      review_comments_posted: '3',
+      review_types: 'code_quality,security',
+      summary: 'Reviewed the PR for code quality and security issues.',
+    });
+    expect(result.success).toBe(false);
+  });
+
   it('accepts review_comments_posted as numeric string', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_id: '123',
       review_comments_posted: '0',
       review_types: 'code_quality',
       summary: 'No issues found.',
@@ -250,6 +389,7 @@ describe('REVIEW_SCHEMA', () => {
   it('rejects empty review_comments_posted', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_id: '123',
       review_comments_posted: '',
       review_types: 'code_quality',
       summary: 'Reviewed.',
@@ -260,6 +400,7 @@ describe('REVIEW_SCHEMA', () => {
   it('rejects non-numeric review_comments_posted', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_id: '123',
       review_comments_posted: 'three',
       review_types: 'code_quality',
       summary: 'Reviewed.',
@@ -270,6 +411,7 @@ describe('REVIEW_SCHEMA', () => {
   it('rejects empty review_types', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_id: '123',
       review_comments_posted: '3',
       review_types: '',
       summary: 'Reviewed.',
@@ -280,6 +422,7 @@ describe('REVIEW_SCHEMA', () => {
   it('rejects whitespace-only review_types', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_id: '123',
       review_comments_posted: '3',
       review_types: '   ',
       summary: 'Reviewed.',
@@ -297,6 +440,7 @@ describe('REVIEW_SCHEMA', () => {
   it('accepts requirements_tracker_updated field', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/901',
+      review_id: '123',
       review_comments_posted: '3',
       review_types: 'code_quality,security',
       requirements_tracker_updated: 'yes',
@@ -308,6 +452,7 @@ describe('REVIEW_SCHEMA', () => {
   it('accepts empty requirements_tracker_updated', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/901',
+      review_id: '123',
       review_comments_posted: '3',
       review_types: 'code_quality,security',
       requirements_tracker_updated: '',
@@ -319,6 +464,7 @@ describe('REVIEW_SCHEMA', () => {
   it('defaults requirements_tracker_updated to empty string when omitted', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/901',
+      review_id: '123',
       review_comments_posted: '3',
       review_types: 'code_quality,security',
       summary: 'Review summary.',
@@ -327,6 +473,64 @@ describe('REVIEW_SCHEMA', () => {
     if (result.success) {
       expect(result.data.requirements_tracker_updated).toBe('');
     }
+  });
+
+  it('accepts gh_actions_status field', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/901',
+      review_id: '123',
+      review_comments_posted: '3',
+      review_types: 'code_quality,security',
+      gh_actions_status: 'all checks passed',
+      summary: 'Review summary.',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('defaults gh_actions_status to empty string when omitted', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/901',
+      review_id: '123',
+      review_comments_posted: '3',
+      review_types: 'code_quality,security',
+      summary: 'Review summary.',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.gh_actions_status).toBe('');
+    }
+  });
+});
+
+describe('REMEDIATION_SCHEMA', () => {
+  it('rejects empty gh_pr_url when outcome is implemented', () => {
+    const result = REMEDIATION_SCHEMA.safeParse({
+      outcome: 'implemented',
+      gh_pr_url: '',
+      requires_re_review: '0',
+      summary: 'test',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('allows empty gh_pr_url when outcome is already_completed', () => {
+    const result = REMEDIATION_SCHEMA.safeParse({
+      outcome: 'already_completed',
+      gh_pr_url: '',
+      requires_re_review: '0',
+      summary: 'test',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts valid remediation data with gh_pr_url', () => {
+    const result = REMEDIATION_SCHEMA.safeParse({
+      outcome: 'implemented',
+      gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/901',
+      requires_re_review: '1',
+      summary: 'Fixed review findings.',
+    });
+    expect(result.success).toBe(true);
   });
 });
 
@@ -342,6 +546,7 @@ describe('buildPlanningPrompt', () => {
     expect(prompt).toContain('superpowers_writing_plans');
     expect(prompt).toContain('linear_url');
     expect(prompt).toContain('is_complex');
+    expect(prompt).toContain('has_plan_doc');
     expect(prompt).toContain('subtask_urls');
     expect(prompt).toContain('pr_url');
     expect(prompt).toContain('unclear_clarification');
@@ -364,9 +569,12 @@ describe('buildExecutionPrompt', () => {
   it('includes transcript and execution-specific fields', () => {
     const prompt = buildExecutionPrompt('exec-log');
     expect(prompt).toContain('Execution Agent');
-    expect(prompt).toContain('superpowers_executing_plans');
+    expect(prompt).toContain('superpowers_subagent_driven_dev');
     expect(prompt).toContain('superpowers_requesting_code_review');
     expect(prompt).toContain('gh_pr_url');
+    expect(prompt).toContain('memory_ids_used');
+    expect(prompt).toContain('memory_ids_rejected');
+    expect(prompt).toContain('memory_usage_summary');
     expect(prompt).toContain('exec-log');
   });
 
@@ -376,6 +584,12 @@ describe('buildExecutionPrompt', () => {
     expect(prompt).toContain(
       'LLM agent delivers its summary in one of the last assistant messages'
     );
+  });
+
+  it('marks gh_pr_url as REQUIRED for all outcomes', () => {
+    const prompt = buildExecutionPrompt('exec-log');
+    expect(prompt).toContain('REQUIRED for all execution outcomes');
+    expect(prompt).not.toContain('"gh_pr_url":""');
   });
 });
 
@@ -444,6 +658,62 @@ describe('getLast50Lines', () => {
 });
 
 // ---------------------------------------------------------------------------
+// getLast50ClaudeLines
+// ---------------------------------------------------------------------------
+
+describe('getLast50ClaudeLines', () => {
+  it('filters to only [claude]-tagged lines and returns last 50', () => {
+    const lines = Array.from({ length: 100 }, (_, i) =>
+      i % 2 === 0 ? `[claude] line-${String(i + 1)}` : `[system] line-${String(i + 1)}`
+    );
+    const result = getLast50ClaudeLines(lines.join('\n'));
+    const resultLines = result.split('\n');
+    // Only 50 [claude] lines (every even index from 100 total)
+    expect(resultLines).toHaveLength(50);
+    // All 50 [claude] lines are returned (50 or fewer filtered, so all included)
+    expect(resultLines[0]).toBe('[claude] line-1'); // First [claude] line
+    expect(resultLines[49]).toBe('[claude] line-99'); // Last [claude] line
+  });
+
+  it('returns all [claude] lines when fewer than 50', () => {
+    const result = getLast50ClaudeLines(
+      `[system] noise\n[claude] hello\n[system] noise\n[claude] world`
+    );
+    expect(result).toBe('[claude] hello\n[claude] world');
+  });
+
+  it('truncates to last 50 [claude] lines when more than 50 exist', () => {
+    // Create 55 [claude] lines (more than 50) mixed with system lines
+    const lines: string[] = [];
+    for (let i = 0; i < 110; i++) {
+      if (i % 2 === 0) {
+        lines.push(`[claude] line-${String(i + 1)}`);
+      } else {
+        lines.push(`[system] line-${String(i + 1)}`);
+      }
+    }
+    const result = getLast50ClaudeLines(lines.join('\n'));
+    const resultLines = result.split('\n');
+    // 110 total lines, 55 are [claude] (every even index), slice(-50) returns last 50
+    expect(resultLines).toHaveLength(50);
+    // First returned should be the 6th [claude] line (line-11, slice(-50) skips first 5 of 55)
+    expect(resultLines[0]).toBe('[claude] line-11');
+    // Last returned should be the 55th [claude] line (line-109)
+    expect(resultLines[49]).toBe('[claude] line-109');
+  });
+
+  it('returns empty string when no [claude] lines', () => {
+    const result = getLast50ClaudeLines('[system] noise\n[system] more');
+    expect(result).toBe('');
+  });
+
+  it('returns empty string for empty input', () => {
+    const result = getLast50ClaudeLines('');
+    expect(result).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // OrchestratorCompletionVerifier — constructor
 // ---------------------------------------------------------------------------
 
@@ -489,8 +759,9 @@ describe('OrchestratorCompletionVerifier', () => {
       superpowers_writing_plans: 'used',
       linear_url: 'https://linear.app/pbuchman/issue/INT-100',
       is_complex: '0',
+      has_plan_doc: '0',
       subtask_urls: '',
-      pr_url: '',
+      pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
       summary: 'The agent planned successfully.',
       unclear_clarification: '',
     });
@@ -520,8 +791,9 @@ describe('OrchestratorCompletionVerifier', () => {
         superpowers_writing_plans: 'used',
         linear_url: 'https://linear.app/pbuchman/issue/INT-100',
         is_complex: '0',
+        has_plan_doc: '0',
         subtask_urls: '',
-        pr_url: '',
+        pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
         summary: 'The agent planned successfully.',
         unclear_clarification: '',
       });
@@ -541,6 +813,7 @@ describe('OrchestratorCompletionVerifier', () => {
             superpowers_writing_plans: 'not used',
             linear_url: '',
             is_complex: '0',
+            has_plan_doc: '0',
             subtask_urls: '',
             pr_url: '',
             summary: 'Could not plan.',
@@ -574,9 +847,12 @@ describe('OrchestratorCompletionVerifier', () => {
   describe('verify — execution agent', () => {
     const validExecutionResponse = JSON.stringify({
       outcome: 'implemented',
-      superpowers_executing_plans: 'used',
+      superpowers_subagent_driven_dev: 'used',
       superpowers_requesting_code_review: 'used',
       gh_pr_url: 'https://github.com/org/repo/pull/901',
+      memory_ids_used: 'mem_142,mem_155',
+      memory_ids_rejected: 'mem_188',
+      memory_usage_summary: 'Used route logging and coverage lessons.',
       summary: 'Implemented the feature.',
     });
 
@@ -600,9 +876,12 @@ describe('OrchestratorCompletionVerifier', () => {
       expect(result.agentData).toEqual({
         agentType: 'execution',
         outcome: 'implemented',
-        superpowers_executing_plans: 'used',
+        superpowers_subagent_driven_dev: 'used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: 'https://github.com/org/repo/pull/901',
+        memory_ids_used: 'mem_142,mem_155',
+        memory_ids_rejected: 'mem_188',
+        memory_usage_summary: 'Used route logging and coverage lessons.',
         summary: 'Implemented the feature.',
       });
       expect(result.trace).toEqual({
@@ -660,6 +939,7 @@ describe('OrchestratorCompletionVerifier', () => {
   describe('verify — review agent', () => {
     const validReviewResponse = JSON.stringify({
       gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_id: '123',
       review_comments_posted: '3',
       review_types: 'code_quality,security',
       summary: 'Reviewed and posted 3 comments.',
@@ -685,10 +965,91 @@ describe('OrchestratorCompletionVerifier', () => {
       expect(result.agentData).toEqual({
         agentType: 'review',
         gh_pr_url: 'https://github.com/org/repo/pull/42',
+        review_id: '123',
         review_comments_posted: '3',
         review_types: 'code_quality,security',
         requirements_tracker_updated: '',
+        gh_actions_status: '',
+        needs_remediation: '1',
+        review_body: '',
+        review_inline_comments: '',
         summary: 'Reviewed and posted 3 comments.',
+      });
+    });
+
+    it('returns passed when review agent response omits review_id', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            gh_pr_url: 'https://github.com/org/repo/pull/42',
+            review_comments_posted: '3',
+            review_types: 'code_quality,security',
+            summary: 'Reviewed and posted 3 comments.',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-4b',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'review',
+        rawLogs: 'review logs',
+      });
+      expect(result.passed).toBe(true);
+      expect(result.agentData).toEqual({
+        agentType: 'review',
+        gh_pr_url: 'https://github.com/org/repo/pull/42',
+        review_comments_posted: '3',
+        review_types: 'code_quality,security',
+        requirements_tracker_updated: '',
+        gh_actions_status: '',
+        needs_remediation: '1',
+        review_body: '',
+        review_inline_comments: '',
+        summary: 'Reviewed and posted 3 comments.',
+      });
+    });
+  });
+
+  describe('verify — remediation agent', () => {
+    const validRemediationResponse = JSON.stringify({
+      outcome: 'implemented',
+      gh_pr_url: 'https://github.com/org/repo/pull/77',
+      requires_re_review: '0',
+      summary: 'Fixed the reported review findings and pushed to the PR branch.',
+    });
+
+    it('returns passed with remediation agentData', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: validRemediationResponse,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-5',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'remediation',
+        rawLogs: 'remediation logs',
+      });
+      expect(result.passed).toBe(true);
+      expect(result.agentData).toEqual({
+        agentType: 'remediation',
+        outcome: 'implemented',
+        gh_pr_url: 'https://github.com/org/repo/pull/77',
+        requires_re_review: '0',
+        summary: 'Fixed the reported review findings and pushed to the PR branch.',
+      });
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: validRemediationResponse,
       });
     });
   });
@@ -791,8 +1152,9 @@ describe('OrchestratorCompletionVerifier', () => {
       superpowers_writing_plans: 'used',
       linear_url: 'https://linear.app/pbuchman/issue/INT-100',
       is_complex: '0',
+      has_plan_doc: '0',
       subtask_urls: '',
-      pr_url: '',
+      pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
       summary: 'Planned.',
       unclear_clarification: '',
     });
@@ -880,8 +1242,9 @@ describe('OrchestratorCompletionVerifier', () => {
         superpowers_writing_plans: 'used',
         linear_url: 'https://linear.app/pbuchman/issue/INT-50',
         is_complex: '0',
+        has_plan_doc: '0',
         subtask_urls: '',
-        pr_url: '',
+        pr_url: 'https://github.com/pbuchman/intexuraos/pull/50',
         summary: 'Planned.',
         unclear_clarification: '',
       })}\nDone.`;
@@ -941,6 +1304,21 @@ describe('detectFatalExitCode', () => {
     const logs = 'just some logs\nno exit code here';
     expect(detectFatalExitCode(logs)).toBeUndefined();
   });
+
+  it('returns undefined when pattern appears mid-stream (outside last 5 lines) but actual exit is 0', () => {
+    // The JSON blob with the embedded 137 pattern is earlier in the logs (more than 5 lines from end).
+    // Only the last 5 lines are searched, so the embedded pattern is not found.
+    const logs = [
+      'some earlier output',
+      '{"type":"result","content":"const logs = \'some output\\n[entrypoint] Claude attempt finished with exit code: 137\\nfinal line\';"}',
+      'line 1',
+      'line 2',
+      'line 3',
+      '[entrypoint] Claude attempt finished with exit code: 0',
+      'final line',
+    ].join('\n');
+    expect(detectFatalExitCode(logs)).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -986,8 +1364,9 @@ describe('verify — fatal exit code pre-check', () => {
           superpowers_writing_plans: 'used',
           linear_url: 'https://linear.app/pbuchman/issue/INT-100',
           is_complex: '0',
+          has_plan_doc: '0',
           subtask_urls: '',
-          pr_url: '',
+          pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
           summary: 'Planned.',
           unclear_clarification: '',
         }),
@@ -1012,9 +1391,12 @@ describe('verify — fatal exit code pre-check', () => {
       value: {
         content: JSON.stringify({
           outcome: 'implemented',
-          superpowers_executing_plans: 'used',
+          superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'not used',
-          gh_pr_url: '',
+          gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
           summary: 'Failed normally.',
         }),
         usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },

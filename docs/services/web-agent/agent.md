@@ -9,8 +9,7 @@
 | Name      | web-agent                                                         |
 | Role      | Web Content Extraction and Summarization Service                  |
 | Goal      | Extract OpenGraph metadata and generate prose summaries from URLs |
-| Port      | 8127 (local/dev), 8080 (production)                               |
-| Version   | 3.3.0                                                             |
+| Port      | 8127 (dev), 8080 (production)                                     |
 
 ## Capabilities
 
@@ -101,6 +100,8 @@ interface FetchLinkPreviewsResponse {
 interface SummarizePageBody {
   url: string; // HTTP/HTTPS URL to summarize
   userId: string; // User ID for LLM key lookup
+  title?: string; // Optional title hint for main content selection
+  description?: string; // Optional description hint for main content selection
   maxSentences?: number; // 1-50 (default: 20)
   maxReadingMinutes?: number; // 1-10 (default: 3)
 }
@@ -143,6 +144,7 @@ interface SummarizePageResponse {
 {
   "url": "https://blog.anthropic.com/article",
   "userId": "user-abc-123",
+  "title": "AI Safety Research Update",
   "maxSentences": 10
 }
 
@@ -196,7 +198,7 @@ interface SummarizePageResponse {
 
 ```
 1. User provides article URL to research-agent
-2. Call POST /internal/page-summaries with url and userId
+2. Call POST /internal/page-summaries with url, userId, and optional title/description hints
 3. If success, include summary in research response
 4. Summary will be in source language (Polish stays Polish)
 5. API_ERROR only if platform fallback keys are also unset
@@ -211,18 +213,27 @@ interface SummarizePageResponse {
 4. Use metadata.successCount to track success rate
 ```
 
+### Pattern 4: Enhanced Summary with Hints
+
+```
+1. Fetch link preview first to get title and description
+2. Pass title and description as hints to page summary request
+3. Hints help the LLM identify main content on cluttered pages (social media, job boards)
+4. Especially useful for LinkedIn, Threads, and similar platform pages
+```
+
 ## Error Handling
 
-| Error Code    | Meaning                     | Recovery Action                             |
-| ------------- | --------------------------- | ------------------------------------------- |
-| INVALID_URL   | Not HTTP/HTTPS or malformed | Validate URL format                         |
-| ACCESS_DENIED | Site returned 403           | Accept no preview available                 |
-| FETCH_FAILED  | Network or HTTP error       | Retry with backoff                          |
-| TIMEOUT       | Request exceeded time limit | Retry or increase timeout                   |
-| TOO_LARGE     | Response over 2 MB          | Cannot process large pages                  |
-| NO_CONTENT    | No text extracted from page | Page may be JS-only or empty                |
-| API_ERROR     | LLM or user-service error   | Check platform fallback keys are configured |
-| RATE_LIMITED  | Crawl4AI returned HTTP 429  | Wait and retry with backoff                 |
+| Error Code    | Meaning                      | Recovery Action                             |
+| ------------- | ---------------------------- | ------------------------------------------- |
+| INVALID_URL   | Not HTTP/HTTPS or malformed  | Validate URL format                         |
+| ACCESS_DENIED | Site returned 403            | Accept no preview available                 |
+| FETCH_FAILED  | Network or HTTP error        | Retry with backoff                          |
+| TIMEOUT       | Request exceeded time limit  | Retry or increase timeout                   |
+| TOO_LARGE     | Response over 2 MB           | Cannot process large pages                  |
+| NO_CONTENT    | No text extracted from page  | Page may be JS-only or empty                |
+| API_ERROR     | LLM or user-service error    | Check platform fallback keys are configured |
+| RATE_LIMITED  | Cloudflare returned HTTP 429 | Wait and retry with backoff                 |
 
 ## Rate Limits
 
@@ -231,18 +242,18 @@ interface SummarizePageResponse {
 | `/internal/link-previews`  | No built-in limit | Caller |
 | `/internal/page-summaries` | No built-in limit | Caller |
 
-**Note:** web-agent has no built-in rate limiting. Callers should implement throttling.
+**Note:** web-agent has no built-in rate limiting. Callers should implement throttling. Cloudflare Browser Rendering has its own rate limits that surface as `RATE_LIMITED` errors.
 
 ## Dependencies
 
-| Service              | Why Needed                            | Failure Behavior    |
-| -------------------- | ------------------------------------- | ------------------- |
-| user-service         | Get user's LLM client (with fallback) | Return API_ERROR    |
-| app-settings-service | LLM pricing context at startup        | Service fails start |
-| Crawl4AI             | Fetch page content                    | Return FETCH_FAILED |
-| User's LLM           | Generate summary (primary)            | Fall back to Gemini |
-| Platform Gemini      | Summary fallback (no user key)        | Return API_ERROR    |
+| Service                      | Why Needed                            | Failure Behavior    |
+| ---------------------------- | ------------------------------------- | ------------------- |
+| user-service                 | Get user's LLM client (with fallback) | Return API_ERROR    |
+| app-settings-service         | LLM pricing context at startup        | Service fails start |
+| Cloudflare Browser Rendering | Fetch page content as Markdown        | Return FETCH_FAILED |
+| User's LLM                   | Generate summary (primary)            | Fall back to Gemini |
+| Platform Gemini              | Summary fallback (no user key)        | Return API_ERROR    |
 
 ---
 
-**Last updated:** 2026-03-15 (v3.3.0 — removed ZAI provider; Chinese LLMs now via Alibaba Cloud Model Studio)
+**Last updated:** 2026-04-07 (v3.5.0 — Cloudflare Browser Rendering replaces Crawl4AI; improved prompt focus with main content selection)

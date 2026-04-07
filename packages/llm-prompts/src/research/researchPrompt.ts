@@ -38,6 +38,8 @@ function buildDomainGuidelines(ctx: ResearchContext): string {
     fitness_sports: 'Include safety guidelines, cite sports science, note individual variation.',
     entertainment_media:
       'Include release dates, cite official sources, note regional availability.',
+    construction_building:
+      'Cite building codes and permits, compare structural and finishing materials, include cost estimation, contractor considerations, and energy efficiency standards.',
     diy_home: 'Include safety warnings, cite building codes, provide step-by-step guidance.',
     outdoor_recreation:
       'Include local conditions, seasonal availability, safety precautions, required equipment, and cite community forums and local guides.',
@@ -242,4 +244,4 @@ Adjust your approach based on the topic:
 
 Write the ENTIRE response in the SAME LANGUAGE as the Research Request (Polish → Polish, Spanish → Spanish, etc.)`;
 }
-// Prompt version: 2.0.0
+// Prompt version: 2.1.0

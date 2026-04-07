@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type React from 'react';
 import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   Copy,
-  Loader2,
 } from 'lucide-react';
 import type { MessageStatus } from '@/hooks';
 import type { LogLine } from '@/hooks/useCodeTaskLogs.js';
 import type { CodeTaskStatus } from '@/types';
-import { V2MessageInput } from './v2/V2MessageInput.js';
+import { parseLogLine, formatUrlForDisplay } from '@/utils/logLinkUtils.js';
+import { MessageInput } from './MessageInput.js';
 
 const TAG_RE = /^(?:\d{2}:\d{2}:\d{2}\.\d{3} )?\[(\w+)\]/;
 const TIMESTAMP_PREFIX_RE = /^\d{2}:\d{2}:\d{2}\.\d{3} /;
@@ -41,6 +42,9 @@ const TAG_STYLES: Record<string, TagStyle> = {
   init:         { text: 'text-cyan-600 dark:text-cyan-300' },
   system:       { text: 'text-slate-500 dark:text-slate-500' },
   orchestrator: { text: 'text-slate-500 dark:text-slate-500' },
+  cmd:          { text: 'text-amber-700 dark:text-yellow-300' },
+  msg:          { text: 'text-blue-700 dark:text-blue-300' },
+  codex:        { text: 'text-cyan-600 dark:text-cyan-300' },
 };
 
 function extractTag(text: string): string | null {
@@ -58,6 +62,26 @@ function getLogLineClass(text: string): string {
 function isBodyLine(text: string): boolean {
   const stripped = text.replace(TIMESTAMP_PREFIX_RE, '');
   return stripped.startsWith('  \u2192 ') || stripped.startsWith('  \u2717 ') || stripped.startsWith('    ');
+}
+
+function renderLogContent(text: string): React.ReactNode {
+  const segments = parseLogLine(text);
+  return segments.map((segment, i) => {
+    if (typeof segment === 'object') {
+      return (
+        <a
+          key={i}
+          href={segment.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 dark:text-blue-400 underline hover:text-blue-800 dark:hover:text-blue-300"
+        >
+          {formatUrlForDisplay(segment.url)}
+        </a>
+      );
+    }
+    return <span key={i}>{segment}</span>;
+  });
 }
 
 function countVisualLines(logs: LogLine[], start: number, end: number): number {
@@ -79,6 +103,7 @@ export interface CodeTaskLogViewerProps {
   workerOnline?: boolean;
   workerName?: string;
   readOnly?: boolean;
+  agentType?: string;
   onSendMessage?: (message: string) => Promise<void>;
   sending?: boolean;
   sendError?: { code: string; message: string } | null;
@@ -93,17 +118,18 @@ export function CodeTaskLogViewer({
   workerOnline = true,
   workerName,
   readOnly = false,
+  agentType,
   onSendMessage,
   sending = false,
   sendError = null,
   messageStatus = 'idle',
 }: CodeTaskLogViewerProps): React.JSX.Element {
-  const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [followLogs, setFollowLogs] = useState(true);
   const [copied, setCopied] = useState(false);
   const [compactMode, setCompactMode] = useState(true);
   const [blockOverrides, setBlockOverrides] = useState<Set<number>>(() => new Set());
+  const [claudeFilter, setClaudeFilter] = useState(false);
   const followRef = useRef(true);
   const prevLogCountRef = useRef(0);
   const isAutoScrollingRef = useRef(false);
@@ -127,7 +153,7 @@ export function CodeTaskLogViewer({
       if (line === undefined) continue;
       const tag = extractTag(line.text);
 
-      if (tag === 'tool') {
+      if (tag === 'tool' || tag === 'cmd') {
         finalizeBlock(index);
         current = { headerIdx: index, bodyStart: index + 1, bodyEnd: index + 1 };
       } else if (tag !== null) {
@@ -154,12 +180,15 @@ export function CodeTaskLogViewer({
 
   useEffect(() => {
     if (logs.length > prevLogCountRef.current && followRef.current) {
-      isAutoScrollingRef.current = true;
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-      clearTimeout(autoScrollTimerRef.current);
-      autoScrollTimerRef.current = setTimeout(() => {
-        isAutoScrollingRef.current = false;
-      }, SMOOTH_SCROLL_GUARD_MS);
+      const el = containerRef.current;
+      if (el !== null) {
+        isAutoScrollingRef.current = true;
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+        clearTimeout(autoScrollTimerRef.current);
+        autoScrollTimerRef.current = setTimeout(() => {
+          isAutoScrollingRef.current = false;
+        }, SMOOTH_SCROLL_GUARD_MS);
+      }
     }
     prevLogCountRef.current = logs.length;
     return (): void => {
@@ -194,12 +223,15 @@ export function CodeTaskLogViewer({
     followRef.current = next;
     setFollowLogs(next);
     if (next) {
-      isAutoScrollingRef.current = true;
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-      clearTimeout(autoScrollTimerRef.current);
-      autoScrollTimerRef.current = setTimeout(() => {
-        isAutoScrollingRef.current = false;
-      }, SMOOTH_SCROLL_GUARD_MS);
+      const el = containerRef.current;
+      if (el !== null) {
+        isAutoScrollingRef.current = true;
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+        clearTimeout(autoScrollTimerRef.current);
+        autoScrollTimerRef.current = setTimeout(() => {
+          isAutoScrollingRef.current = false;
+        }, SMOOTH_SCROLL_GUARD_MS);
+      }
     }
   };
 
@@ -220,6 +252,10 @@ export function CodeTaskLogViewer({
     setBlockOverrides(new Set());
   }, []);
 
+  const toggleClaudeFilter = useCallback((): void => {
+    setClaudeFilter((prev) => !prev);
+  }, []);
+
   const toggleBlock = useCallback((headerIdx: number): void => {
     setBlockOverrides((prev) => {
       const next = new Set(prev);
@@ -232,7 +268,8 @@ export function CodeTaskLogViewer({
     });
   }, []);
 
-  const showMessageInput = !readOnly && taskStatus !== 'cancelled' && onSendMessage !== undefined;
+  const isNonMessagableAgent = agentType === 'review' || agentType === 'remediation';
+  const showMessageInput = !readOnly && taskStatus !== 'cancelled' && onSendMessage !== undefined && !isNonMessagableAgent;
 
   return (
     <div className="mt-6 mb-6">
@@ -243,7 +280,7 @@ export function CodeTaskLogViewer({
             <span className="hidden md:inline">Execution Logs</span>
           </span>
           {isActive && listenerHealthy ? (
-            <span className="flex items-center gap-1.5 rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700 dark:bg-green-900/50 dark:text-green-300">
+            <span className="hidden items-center gap-1.5 rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700 md:flex dark:bg-green-900/50 dark:text-green-300">
               <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
               Live
             </span>
@@ -265,6 +302,18 @@ export function CodeTaskLogViewer({
                 }`}
               >
                 {followLogs ? 'Following' : 'Follow'}
+              </button>
+              <button
+                type="button"
+                onClick={toggleClaudeFilter}
+                aria-pressed={claudeFilter}
+                className={`rounded-md px-2 py-1 text-xs transition-colors ${
+                  claudeFilter
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200'
+                }`}
+              >
+                Claude
               </button>
               <button
                 type="button"
@@ -297,9 +346,10 @@ export function CodeTaskLogViewer({
         >
           {logs.length === 0 ? (
             <div className="flex min-h-[180px] flex-col items-center justify-center gap-2 text-center">
-              <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                {isActive ? 'Waiting for logs...' : 'No logs available for this task.'}
+                {agentType === 'ask_agent'
+                  ? 'Your conversation will appear here when available'
+                  : 'Execution logs will appear here when available'}
               </p>
             </div>
           ) : (
@@ -307,6 +357,10 @@ export function CodeTaskLogViewer({
               const block = bodyLineMap.get(index);
               if (block !== undefined && index > block.headerIdx) {
                 return null;
+              }
+              if (claudeFilter) {
+                const tag = extractTag(line.text);
+                if (tag !== 'claude') return null;
               }
 
               const collapsible = block !== undefined && countVisualLines(logs, block.bodyStart, block.bodyEnd) >= 4;
@@ -335,8 +389,8 @@ export function CodeTaskLogViewer({
                     ) : (
                       <span className="w-4 shrink-0" />
                     )}
-                    <pre className={`min-w-0 whitespace-pre ${getLogLineClass(line.text)}`}>
-                      {line.text}
+                    <pre className={`min-w-0 ${claudeFilter ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'} ${getLogLineClass(line.text)}`}>
+                      {renderLogContent(line.text)}
                     </pre>
                   </div>
 
@@ -356,7 +410,7 @@ export function CodeTaskLogViewer({
                     logs.slice(block.bodyStart, block.bodyEnd).map((bodyLine, bodyIndex) => (
                       <div key={`${String(bodyLine.sequence)}-${String(bodyIndex)}-body`} className="pl-6">
                         <pre className={`whitespace-pre rounded px-2 py-0.5 ${getLogLineClass(bodyLine.text)}`}>
-                          {bodyLine.text}
+                          {renderLogContent(bodyLine.text)}
                         </pre>
                       </div>
                     ))
@@ -365,12 +419,11 @@ export function CodeTaskLogViewer({
               );
             })
           )}
-          <div ref={bottomRef} />
         </div>
 
         {showMessageInput ? (
           <div className="border-t border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
-            <V2MessageInput
+            <MessageInput
               onSendMessage={onSendMessage}
               sending={sending}
               sendError={sendError}
@@ -378,6 +431,11 @@ export function CodeTaskLogViewer({
               workerOnline={workerOnline}
               workerName={workerName ?? ''}
             />
+          </div>
+        ) : null}
+        {isNonMessagableAgent && !readOnly ? (
+          <div className="rounded-b-lg border-t border-slate-200 bg-slate-50 px-3 py-2.5 text-center text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-400">
+            Messages not available for {agentType} tasks
           </div>
         ) : null}
       </div>

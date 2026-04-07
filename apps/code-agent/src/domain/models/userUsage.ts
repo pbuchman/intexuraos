@@ -37,7 +37,6 @@ export const DEFAULT_LIMITS = {
   maxConcurrentTasks: 3,
   maxTasksPerHour: 10,
   maxPromptLength: 10000,
-  monthlyCostCap: 200, // $200
 } as const;
 
 export const ESTIMATED_COST_PER_TASK = 1.17; // $1.17 (see design doc line 2255)

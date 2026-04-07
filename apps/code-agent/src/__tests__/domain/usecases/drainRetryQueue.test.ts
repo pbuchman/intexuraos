@@ -25,11 +25,48 @@ import {
   type DrainRetryQueueDeps,
 } from '../../../domain/usecases/drainRetryQueue.js';
 
+const prepareExecutionMemoryContextMock = vi.fn();
+let mockExecutionMemoryEnabled = false;
+const mockCreateTaskForPRFn = vi.fn();
+
+vi.mock('../../../domain/usecases/prepareExecutionMemoryContext.js', (): {
+  prepareExecutionMemoryContext: (...args: unknown[]) => unknown;
+  toDispatchExecutionMemoryContext: (context: {
+    status?: string;
+    applicationId?: string;
+    retrievalVersion?: string;
+    querySummary?: string;
+    matchedMemories?: unknown[];
+  } | undefined) => unknown;
+} => ({
+  prepareExecutionMemoryContext: (...args: unknown[]): unknown => prepareExecutionMemoryContextMock(...args),
+  toDispatchExecutionMemoryContext: (context: {
+    status?: string;
+    applicationId?: string;
+    retrievalVersion?: string;
+    querySummary?: string;
+    matchedMemories?: unknown[];
+  } | undefined): unknown =>
+    context?.status === 'matched'
+      ? {
+          applicationId: context.applicationId ?? '',
+          retrievalVersion: context.retrievalVersion ?? '',
+          querySummary: context.querySummary ?? '',
+          matchedMemories: context.matchedMemories ?? [],
+        }
+      : undefined,
+}));
+
 // Mock config
 vi.mock('../../../config.js', () => ({
-  loadConfig: (): { retryQueue: { maxAttempts: number; ttlMinutes: number }; serviceUrl: string } => ({
+  loadConfig: (): {
+    retryQueue: { maxAttempts: number; ttlMinutes: number };
+    serviceUrl: string;
+    executionMemoryEnabled: boolean;
+  } => ({
     retryQueue: { maxAttempts: 3, ttlMinutes: 10 },
     serviceUrl: 'https://code-agent.test',
+    executionMemoryEnabled: mockExecutionMemoryEnabled,
   }),
 }));
 
@@ -114,6 +151,17 @@ describe('drainRetryQueue', () => {
     ttlMinutes: 10,
   };
 
+  const sampleTaskMessageRetryWithContext = {
+    ...sampleTaskMessageRetry,
+    prTitle: 'Fix the login bug',
+    baseBranch: 'feature/login',
+  };
+
+  const sampleTaskMessageRetryNullMessage = {
+    ...sampleTaskMessageRetry,
+    message: null,
+  };
+
   const sampleTask = {
     id: 'task_xyz',
     userId: 'user_123',
@@ -140,12 +188,17 @@ describe('drainRetryQueue', () => {
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as DrainRetryQueueDeps['workerSettingsRepo'],
       logLineRepo: mockLogLineRepo as unknown as DrainRetryQueueDeps['logLineRepo'],
       statusMirrorService: mockStatusMirrorService as unknown as DrainRetryQueueDeps['statusMirrorService'],
+      createTaskForPRFn: mockCreateTaskForPRFn,
     };
   }
 
   beforeEach(() => {
     vi.clearAllMocks();
     _resetRetryDrainGuard();
+    prepareExecutionMemoryContextMock.mockReset();
+    mockExecutionMemoryEnabled = false;
+    mockCreateTaskForPRFn.mockReset();
+    mockCreateTaskForPRFn.mockResolvedValue(ok({ taskId: 'task_fallback_new' }));
 
     mockLogger = {
       info: vi.fn(),
@@ -191,6 +244,253 @@ describe('drainRetryQueue', () => {
     mockStatusMirrorService = {
       mirrorStatus: vi.fn().mockResolvedValue(ok(undefined)),
     };
+  });
+
+  it('prepares and threads execution memory context for execution task retries', async () => {
+    mockExecutionMemoryEnabled = true;
+    mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+    mockCodeTaskRepo.findById.mockResolvedValue(ok({
+      ...sampleTask,
+      linearIssueId: 'INT-1098',
+      agentType: 'execution',
+    }));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'matched',
+      applicationId: 'app-456',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'Retry the callback route change with logging verification',
+      matchedMemories: [
+        {
+          memoryId: 'mem-9',
+          title: 'Verify route serialization',
+          memoryType: 'verification_pattern',
+          score: 0.88,
+          appliesWhen: 'Route schema changes',
+          action: 'Update schema and app.inject coverage',
+          avoid: 'Do not patch the handler alone',
+          verification: 'Check route response shape',
+        },
+      ],
+    });
+
+    const result = await drainRetryQueue(buildDeps());
+
+    expect(result.ok).toBe(true);
+    expect(prepareExecutionMemoryContextMock).toHaveBeenCalledOnce();
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({
+      executionMemoryContext: expect.objectContaining({
+        status: 'matched',
+        applicationId: 'app-456',
+      }),
+    }));
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      agentType: 'execution',
+      executionMemoryContext: {
+        applicationId: 'app-456',
+        retrievalVersion: 'execution-memory-retrieval@1.0.0',
+        querySummary: 'Retry the callback route change with logging verification',
+        matchedMemories: [
+          expect.objectContaining({ memoryId: 'mem-9' }),
+        ],
+      },
+    }));
+  });
+
+  it('logs a warning when persisting execution memory context fails but still proceeds with dispatch', async () => {
+    mockExecutionMemoryEnabled = true;
+    mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+    mockCodeTaskRepo.findById.mockResolvedValue(ok({
+      ...sampleTask,
+      linearIssueId: 'INT-1098',
+      agentType: 'execution',
+    }));
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'matched',
+      applicationId: 'app-456',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'Some query',
+      matchedMemories: [],
+    });
+    // First update (memory persistence) fails; subsequent updates (task status) succeed
+    mockCodeTaskRepo.update
+      .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'write failed' }))
+      .mockResolvedValue(ok(sampleTask));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+
+    const result = await drainRetryQueue(buildDeps());
+
+    expect(result.ok).toBe(true);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task_xyz',
+        error: expect.objectContaining({ code: 'FIRESTORE_ERROR' }),
+      }),
+      'Failed to persist execution memory context before dispatch'
+    );
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalled();
+    if (!result.ok) return;
+    expect(result.value.action).toBe('dispatched');
+  });
+
+  it('logs warning when execution memory retrieval returns error status and still dispatches', async () => {
+    mockExecutionMemoryEnabled = true;
+    mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+    mockCodeTaskRepo.findById.mockResolvedValue(ok({
+      ...sampleTask,
+      linearIssueId: 'INT-1098',
+      agentType: 'execution',
+    }));
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'error',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'Some query',
+      errorCode: 'embedding_failed',
+      errorMessage: 'API timeout',
+    });
+    mockCodeTaskRepo.update.mockResolvedValue(ok(sampleTask));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+
+    const result = await drainRetryQueue(buildDeps());
+
+    expect(result.ok).toBe(true);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task_xyz',
+        errorCode: 'embedding_failed',
+        errorMessage: 'API timeout',
+      }),
+      'Execution memory retrieval returned error status'
+    );
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalled();
+    if (!result.ok) return;
+    expect(result.value.action).toBe('dispatched');
+  });
+
+  it('prepares execution memory context for planning task retries', async () => {
+    mockExecutionMemoryEnabled = true;
+    mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+    mockCodeTaskRepo.findById.mockResolvedValue(ok({
+      ...sampleTask,
+      linearIssueId: 'INT-1098',
+      agentType: 'planning',
+    }));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'matched',
+      applicationId: 'app-planning-456',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'Retry planning the callback route change',
+      matchedMemories: [
+        {
+          memoryId: 'mem-plan-9',
+          title: 'Verify route serialization',
+          memoryType: 'verification_pattern',
+          score: 0.86,
+          appliesWhen: 'Planning route schema changes',
+          action: 'Include schema plan in output',
+          avoid: 'Do not patch the handler alone',
+          verification: 'Check route response shape',
+        },
+      ],
+    });
+
+    const result = await drainRetryQueue(buildDeps());
+
+    expect(result.ok).toBe(true);
+    expect(prepareExecutionMemoryContextMock).toHaveBeenCalledOnce();
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({
+      executionMemoryContext: expect.objectContaining({
+        status: 'matched',
+        applicationId: 'app-planning-456',
+      }),
+    }));
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      agentType: 'planning',
+      executionMemoryContext: {
+        applicationId: 'app-planning-456',
+        retrievalVersion: 'execution-memory-retrieval@1.0.0',
+        querySummary: 'Retry planning the callback route change',
+        matchedMemories: [
+          expect.objectContaining({ memoryId: 'mem-plan-9' }),
+        ],
+      },
+    }));
+  });
+
+  it('prepares execution memory context for review task retries', async () => {
+    mockExecutionMemoryEnabled = true;
+    mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+    mockCodeTaskRepo.findById.mockResolvedValue(ok({
+      ...sampleTask,
+      linearIssueId: 'INT-1098',
+      agentType: 'review',
+    }));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'matched',
+      applicationId: 'app-review-456',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'Retry reviewing the callback route change',
+      matchedMemories: [
+        {
+          memoryId: 'mem-review-9',
+          title: 'Check route schema coverage',
+          memoryType: 'verification_pattern',
+          score: 0.89,
+          appliesWhen: 'Reviewing route schema changes',
+          action: 'Verify handler and schema coverage',
+          avoid: 'Do not skip inline comments',
+          verification: 'Check route response shape',
+        },
+      ],
+    });
+
+    const result = await drainRetryQueue(buildDeps());
+
+    expect(result.ok).toBe(true);
+    expect(prepareExecutionMemoryContextMock).toHaveBeenCalledOnce();
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({
+      executionMemoryContext: expect.objectContaining({
+        status: 'matched',
+        applicationId: 'app-review-456',
+      }),
+    }));
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      agentType: 'review',
+      executionMemoryContext: {
+        applicationId: 'app-review-456',
+        retrievalVersion: 'execution-memory-retrieval@1.0.0',
+        querySummary: 'Retry reviewing the callback route change',
+        matchedMemories: [
+          expect.objectContaining({ memoryId: 'mem-review-9' }),
+        ],
+      },
+    }));
+  });
+
+  it('prepares execution memory for pull_request task retries', async () => {
+    mockExecutionMemoryEnabled = true;
+    mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+    mockCodeTaskRepo.findById.mockResolvedValue(ok({
+      ...sampleTask,
+      linearIssueId: 'INT-1098',
+      agentType: 'pull_request',
+    }));
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'no_memories',
+      applicationId: 'app-pr-retry-1',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'PR review retry',
+      matchedMemories: [],
+    });
+    mockCodeTaskRepo.update.mockResolvedValue(ok(sampleTask));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+
+    const result = await drainRetryQueue(buildDeps());
+
+    expect(result.ok).toBe(true);
+    expect(prepareExecutionMemoryContextMock).toHaveBeenCalledOnce();
   });
 
   afterEach(() => {
@@ -269,6 +569,60 @@ describe('drainRetryQueue', () => {
       expect(result.value.action).toBe('dispatched');
       expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_abc');
       expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({ status: 'dispatched' }));
+    });
+
+    it('forwards prNumber in dispatch request when task has prNumber', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(
+        ok({ ...sampleTask, prNumber: 99, agentType: 'review' })
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(ok({ dispatched: true, workerLocation: 'home-mac' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('dispatched');
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ prNumber: 99 })
+      );
+    });
+
+    it('does not include prNumber in dispatch request when task has no prNumber', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockTaskDispatcher.dispatch.mockResolvedValue(ok({ dispatched: true, workerLocation: 'home-mac' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('dispatched');
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.not.objectContaining({ prNumber: expect.anything() })
+      );
+    });
+
+    it('includes reviewTypes in dispatch when task has them', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(
+        ok({
+          ...sampleTask,
+          reviewTypes: ['code_quality', 'architecture'],
+        })
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(ok({ dispatched: true, workerLocation: 'home-mac' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('dispatched');
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reviewTypes: ['code_quality', 'architecture'],
+        })
+      );
     });
 
     it('forwards continuation PR metadata and archives the original task after retry dispatch', async () => {
@@ -770,6 +1124,122 @@ describe('drainRetryQueue', () => {
       if (!result.ok) return;
       expect(result.value.action).toBe('failed');
       expect(result.value.taskId).toBe('task_xyz');
+      expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_def');
+    });
+
+    it('creates new task when message retry fails with stale task error (worker_error + Task not found)', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [workerConfig] }));
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(
+        err({ code: 'worker_error', message: 'Worker returned HTTP 404: Task not found' })
+      );
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('stale_task_fallback');
+      expect(result.value.taskId).toBe('task_fallback_new');
+      expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_def');
+      expect(mockCreateTaskForPRFn).toHaveBeenCalledWith(expect.objectContaining({
+        repository: 'intexuraos/test-repo',
+        prNumber: 10,
+        senderLogin: 'testuser',
+        comment: 'please also fix tests',
+      }));
+    });
+
+    it('creates new task when message retry fails with task_not_found code', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [workerConfig] }));
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(
+        err({ code: 'task_not_found', message: 'Task task_xyz not found' })
+      );
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('stale_task_fallback');
+      expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_def');
+    });
+
+    it('creates new task with prTitle and baseBranch when message retry fails with stale task error', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetryWithContext));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [workerConfig] }));
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(
+        err({ code: 'worker_error', message: 'Worker returned HTTP 404: Task not found' })
+      );
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('stale_task_fallback');
+      expect(mockCreateTaskForPRFn).toHaveBeenCalledWith(expect.objectContaining({
+        prTitle: 'Fix the login bug',
+        baseBranch: 'feature/login',
+      }));
+    });
+
+    it('passes empty string when message is null', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetryNullMessage));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [workerConfig] }));
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(
+        err({ code: 'worker_error', message: 'Worker returned HTTP 404: Task not found' })
+      );
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('stale_task_fallback');
+      expect(mockCreateTaskForPRFn).toHaveBeenCalledWith(expect.objectContaining({
+        comment: '',
+      }));
+    });
+
+    it('returns failed when stale task fallback createTaskForPRFn fails', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [workerConfig] }));
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(
+        err({ code: 'worker_error', message: 'Worker returned HTTP 404: Task not found' })
+      );
+      mockCreateTaskForPRFn.mockResolvedValue(err({ code: 'internal_error', message: 'Linear issue creation failed' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('failed');
+      expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_def');
+    });
+
+    it('falls through to permanent failure when stale but no createTaskForPRFn configured', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [workerConfig] }));
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(
+        err({ code: 'worker_error', message: 'Worker returned HTTP 404: Task not found' })
+      );
+
+      // Build deps WITHOUT createTaskForPRFn
+      const depsWithoutFallback: Omit<DrainRetryQueueDeps, 'createTaskForPRFn'> = {
+        logger: mockLogger,
+        dispatchRetryRepo: mockDispatchRetryRepo as unknown as DrainRetryQueueDeps['dispatchRetryRepo'],
+        codeTaskRepo: mockCodeTaskRepo as unknown as DrainRetryQueueDeps['codeTaskRepo'],
+        taskDispatcher: mockTaskDispatcher as unknown as DrainRetryQueueDeps['taskDispatcher'],
+        linearAgentClient: mockLinearAgentClient as unknown as DrainRetryQueueDeps['linearAgentClient'],
+        whatsappNotifier: mockWhatsappNotifier as unknown as DrainRetryQueueDeps['whatsappNotifier'],
+        workerSettingsRepo: mockWorkerSettingsRepo as unknown as DrainRetryQueueDeps['workerSettingsRepo'],
+        logLineRepo: mockLogLineRepo as unknown as DrainRetryQueueDeps['logLineRepo'],
+        statusMirrorService: mockStatusMirrorService as unknown as DrainRetryQueueDeps['statusMirrorService'],
+      };
+
+      const result = await drainRetryQueue(depsWithoutFallback as DrainRetryQueueDeps);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('failed');
       expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_def');
     });
   });

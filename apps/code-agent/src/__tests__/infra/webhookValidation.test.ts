@@ -461,6 +461,29 @@ describe('validateWebhookSignature', () => {
     });
   });
 
+  describe('orchestrator array header handling', () => {
+    it('accepts valid orchestrator signature when timestamp header is an array', () => {
+      const payload = { taskIds: ['task-123'] };
+      const timestamp = String(Math.floor(Date.now() / 1000));
+
+      const rawBody = JSON.stringify(payload);
+      const message = `${timestamp}.${rawBody}`;
+      const signature = crypto.createHmac('sha256', 'orchestrator-secret').update(message).digest('hex');
+
+      const request = {
+        body: payload,
+        headers: {
+          'x-request-timestamp': [timestamp],
+          'x-request-signature': signature,
+        },
+      } as unknown as FastifyRequest;
+
+      const result = validateOrchestratorSignature(request, { orchestratorSecret: 'orchestrator-secret' });
+
+      expect(result.ok).toBe(true);
+    });
+  });
+
   describe('array header handling', () => {
     it('accepts valid signature when timestamp is an array', async () => {
       const payload = { taskId: 'task-123', status: 'completed' };

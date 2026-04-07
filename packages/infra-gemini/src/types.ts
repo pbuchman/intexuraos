@@ -48,6 +48,8 @@ export interface GeminiConfig {
   model: string;
   /** User ID for usage tracking and analytics */
   userId: string;
+  /** Optional research ID for correlating audit logs to a research run */
+  researchId?: string;
   /** Cost configuration per million tokens for text operations */
   pricing: import('@intexuraos/llm-contract').ModelPricing;
   /** Optional separate pricing for image generation (Gemini 2.5 Flash) */

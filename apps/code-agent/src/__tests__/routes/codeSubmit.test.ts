@@ -46,6 +46,8 @@ import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/g
 import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
+import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
+import { createAutoArchiveMergedTasksUseCase } from '../../domain/usecases/autoArchiveMergedTasks.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
@@ -166,6 +168,8 @@ describe('POST /code/submit', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -219,6 +223,8 @@ describe('POST /code/submit', () => {
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
+      autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerSettingsRepo: WorkerSettingsRepository;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
@@ -505,33 +511,6 @@ describe('POST /code/submit', () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('RATE_LIMITED');
       expect(body.error.message).toContain('concurrent tasks');
-    });
-
-    it('returns 429 when monthly cost limit exceeded', async () => {
-      const { getServices } = await import('../../services.js');
-      const services = getServices();
-
-      vi.spyOn(services.rateLimitService, 'checkLimits').mockResolvedValueOnce({
-        ok: false,
-        error: {
-          code: 'monthly_cost_limit',
-          message: 'Monthly cost limit of $200 reached',
-          retryAfter: 'next month',
-        },
-      });
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/code/submit',
-        headers: { authorization: 'Bearer test-token' },
-        payload: { prompt: 'Test prompt' },
-      });
-
-      expect(response.statusCode).toBe(429);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('RATE_LIMITED');
-      expect(body.error.message).toContain('cost limit');
     });
 
     it('returns 429 when prompt too long', async () => {
@@ -879,7 +858,7 @@ describe('POST /code/submit', () => {
     });
 
     it('accepts valid worker types', async () => {
-      const workerTypes = ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen', 'kimi'] as const;
+      const workerTypes = ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen', 'kimi', 'codex', 'codex-xhigh', 'openrouter-free'] as const;
 
       const linearService = getServices().linearIssueService;
       // Use fallback mode (no linearIssueId) to avoid ACTIVE_TASK_EXISTS conflicts across iterations

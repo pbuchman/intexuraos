@@ -36,6 +36,7 @@ const {
       reportLlmSuccess: vi.fn(),
       getOAuthToken: vi.fn(),
       resolveGitHubUsername: vi.fn().mockResolvedValue({ ok: true, value: null }),
+      getUserTimezone: async (): Promise<string | undefined> => undefined,
     }),
     mockCreateLlmClient: vi.fn().mockReturnValue({ generate: vi.fn() }),
     mockGuestRateLimiter: {},
@@ -144,6 +145,9 @@ describe('chat-agent services', () => {
         },
         async resolveGitHubUsername() {
           return ok(null);
+        },
+        async getUserTimezone() {
+          return undefined;
         },
       };
 

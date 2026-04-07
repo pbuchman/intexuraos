@@ -23,6 +23,8 @@ export interface GitHubPRSummary {
   managedConflictTaskOwnerUserId: string | null;
   lastActivityAt: Date;
   firstSeenAt: Date;
+  lastReviewedCommitSha: string | null;  // HEAD SHA at last review completion
+  lastReviewNeedsRemediation: string | null;  // '0' or '1' from review agent needs_remediation signal
 }
 
 /**
@@ -33,7 +35,7 @@ export interface UpsertGitHubPRSummaryInput {
   repository: string;
   pullRequestNumber: number;
   lastActivityAt: Date;
-  firstSeenAt: Date;
+  firstSeenAt?: Date;
   // Only present for pull_request events (not review/comment events)
   title?: string | null;
   state?: string | null;
@@ -48,4 +50,6 @@ export interface UpsertGitHubPRSummaryInput {
   managedConflictCommentId?: number | null;
   managedConflictTaskId?: string | null;
   managedConflictTaskOwnerUserId?: string | null;
+  lastReviewedCommitSha?: string | null;  // HEAD SHA at last review completion
+  lastReviewNeedsRemediation?: string | null;  // '0' or '1' from review agent needs_remediation signal
 }

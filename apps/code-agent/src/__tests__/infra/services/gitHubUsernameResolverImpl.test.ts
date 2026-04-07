@@ -29,6 +29,9 @@ function createMockUserServiceClient(): UserServiceClient {
     async resolveGitHubUsername(): ReturnType<UserServiceClient['resolveGitHubUsername']> {
       return ok({ userId: 'user-123' });
     },
+    async getUserTimezone(): Promise<string | undefined> {
+      return undefined;
+    },
   };
 }
 

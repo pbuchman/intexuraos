@@ -42,7 +42,7 @@ If a field cannot be determined: synthesis_goals → ["merge"], detected_conflic
 EXPECTED SCHEMA:
 {
   "language": "<string language code>",
-  "domain": "<string: travel|product|technical|legal|medical|financial|security_privacy|business_strategy|marketing_sales|hr_people_ops|education_learning|science_research|history_culture|politics_policy|real_estate|food_nutrition|fitness_sports|entertainment_media|diy_home|outdoor_recreation|fishing|general|unknown>",
+  "domain": "<string: travel|product|technical|legal|medical|financial|security_privacy|business_strategy|marketing_sales|hr_people_ops|education_learning|science_research|history_culture|politics_policy|real_estate|food_nutrition|fitness_sports|entertainment_media|construction_building|diy_home|outdoor_recreation|fishing|general|unknown>",
   "mode": "<string: compact|standard|audit>",
   "synthesis_goals": ["<string: merge|dedupe|conflict_audit|rank_recommendations|summarize>", "..."],
   "missing_sections": ["<string topic not covered>", "..."],
@@ -76,4 +76,4 @@ EXPECTED SCHEMA:
 
 Output the corrected JSON:`;
 }
-// Prompt version: 1.2.0
+// Prompt version: 1.3.0

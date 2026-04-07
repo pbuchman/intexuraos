@@ -6,7 +6,7 @@ export interface CronSchedule {
   id: string;
   userId: string;
   name: string;
-  description: string;
+  scheduleSummary: string;
   cronExpression: string;
   timezone: string;
   action: {
@@ -71,7 +71,7 @@ export interface ListExecutionsResponse {
 
 export interface CreateScheduleRequest {
   name: string;
-  description: string;
+  schedule: string;
   action: CronSchedule['action'];
   timezone?: string;
 }

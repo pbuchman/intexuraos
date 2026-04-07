@@ -69,7 +69,7 @@ export async function updateSchedule(
   return await apiRequest<CronSchedule>(config.cronAgentUrl, `/cron/schedules/${id}`, accessToken, {
     method: 'PATCH',
     body: updates,
-    timeout: 60000, // 60s — description changes may re-parse via LLM
+    timeout: 60000, // 60s — schedule changes may re-parse via LLM
   });
 }
 

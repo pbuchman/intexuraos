@@ -6,6 +6,7 @@ import { clearJwksCache } from '@intexuraos/common-http';
 import { FakeHellscriptRepository } from './fakeHellscriptRepository.js';
 import { FakeIntentInterpreter } from './fakeIntentInterpreter.js';
 import { FakeDraftGenerator } from './fakeDraftGenerator.js';
+import { FakeWritingConfigRepository } from './fakeWritingConfigRepository.js';
 import { resetServices, setServices } from '../services.js';
 import pino from 'pino';
 
@@ -71,6 +72,7 @@ export async function teardownJwksServer(): Promise<void> {
 export interface TestContext {
   app: FastifyInstance;
   hellscriptRepository: FakeHellscriptRepository;
+  writingConfigRepository: FakeWritingConfigRepository;
   intentInterpreter: FakeIntentInterpreter;
   draftGenerator: FakeDraftGenerator;
 }
@@ -79,6 +81,7 @@ export function setupTestContext(): TestContext {
   const context: TestContext = {
     app: null as unknown as FastifyInstance,
     hellscriptRepository: null as unknown as FakeHellscriptRepository,
+    writingConfigRepository: null as unknown as FakeWritingConfigRepository,
     intentInterpreter: null as unknown as FakeIntentInterpreter,
     draftGenerator: null as unknown as FakeDraftGenerator,
   };
@@ -94,10 +97,12 @@ export function setupTestContext(): TestContext {
   beforeEach(async () => {
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
     context.hellscriptRepository = new FakeHellscriptRepository();
+    context.writingConfigRepository = new FakeWritingConfigRepository();
     context.intentInterpreter = new FakeIntentInterpreter();
     context.draftGenerator = new FakeDraftGenerator();
     setServices({
       hellscriptRepository: context.hellscriptRepository,
+      writingConfigRepository: context.writingConfigRepository,
       intentInterpreter: context.intentInterpreter,
       draftGenerator: context.draftGenerator,
       logger,

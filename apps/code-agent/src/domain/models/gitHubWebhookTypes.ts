@@ -7,6 +7,7 @@ export const GITHUB_WEBHOOK_EVENT_TYPES = [
   'issue_comment',
   'push',
   'ping',
+  'check_suite',
   'unknown',
 ] as const;
 
@@ -38,6 +39,7 @@ export const GITHUB_WEBHOOK_ACTIONS = [
   'dismissed',
   'created',
   'deleted',
+  'completed',
   'unknown',
 ] as const;
 

@@ -1,7 +1,7 @@
 # Actions Agent - Technical Debt
 
-**Last Updated:** 2026-03-22
-**Analysis Run:** v3.4.0 documentation refresh (shared templates, approval decomposition, logger injection, worker type detection)
+**Last Updated:** 2026-04-07
+**Analysis Run:** v3.5.0 documentation refresh (code task CTA notifications, CTA emoji fix, codex-xhigh worker type)
 
 ---
 
@@ -43,7 +43,7 @@ The `linear` action type is the only remaining type (besides `reminder`) that do
 
 ### Migrate executeLinkAction and executeCodeAction to Template
 
-`executeLinkAction` and `executeCodeAction` are not migrated to `executeActionTemplate` due to significant deviations (URL extraction logic in link, special error handling like `WORKER_UNAVAILABLE`/`DUPLICATE` in code). They are candidates for future migration if the template is extended to support these patterns.
+`executeLinkAction` and `executeCodeAction` are not migrated to `executeActionTemplate` due to significant deviations (URL extraction logic in link, special error handling like `WORKER_UNAVAILABLE`/`DUPLICATE` in code, CTA button notifications in code). They are candidates for future migration if the template is extended to support these patterns.
 
 **Priority:** Low - Both use cases work correctly; migration is a code quality improvement.
 
@@ -139,7 +139,7 @@ All endpoints and use cases have test coverage. The shared templates (`handleAct
 | Infrastructure     | 100%     | Firestore repos, HTTP clients, and code-agent client                                      |
 | Pub/Sub publishers | 100%     | Event publishing tested                                                                   |
 | Calendar utils     | 100%     | formatCalendarApprovalMessage, formatCalendarCompletionMessage, calendarMessageFormatting |
-| Worker type utils  | 100%     | detectWorkerTypeFromMessage with edge cases (ambiguous, no match)                         |
+| Worker type utils  | 100%     | detectWorkerTypeFromMessage with edge cases (ambiguous, no match, prefix collisions)      |
 | Approval modules   | 100%     | All approval/ submodules tested via handleApprovalReply tests                             |
 
 ---
@@ -153,6 +153,30 @@ No deprecated APIs or dependencies in use.
 ---
 
 ## Resolved Issues
+
+### Code Task CTA Button Notifications (INT-1260)
+
+**Issue:** Code task completion notifications embedded the URL in message text ("View it here: {url}"), inconsistent with calendar events that used CTA buttons.
+
+**Resolution:** Changed to CTA button pattern. Message is now "Code Task Created" with a "View Progress" tappable button. Applied same absolute URL detection as `executeCalendarAction`. Added test for absolute URL path and removed invalid v8 ignore.
+
+**Date Resolved:** 2026-04-04
+
+### WhatsApp CTA Emoji Fix (INT-1259)
+
+**Issue:** Calendar event CTA URL `displayText` included emoji character that rendered as "?" on WhatsApp.
+
+**Resolution:** Removed emoji from CTA URL `displayText`. WhatsApp interactive message CTA does not support emoji in display text.
+
+**Date Resolved:** 2026-04-04
+
+### codex-xhigh Worker Type (INT-1109)
+
+**Issue:** No dedicated worker type preset for high-effort Codex tasks.
+
+**Resolution:** Added `codex-xhigh` to `CODE_TASK_WORKER_TYPES` in `common-core`. Worker type detection in actions-agent automatically supports it via dynamic rule generation. Prefix collision regression tests added to verify "codex" and "codex-xhigh" are distinguished correctly via word-boundary regex.
+
+**Date Resolved:** 2026-03-28
 
 ### Shared handleAction Template Extraction (INT-887)
 
@@ -206,7 +230,7 @@ No deprecated APIs or dependencies in use.
 
 **Issue:** Multiple production source files used v8 ignore coverage exemptions for error paths that could be tested with proper fakes and HTTP client mocking.
 
-**Resolution:** Added real test suites for `approvalMessageRepository`, `calendarServiceHttpClient`, `codeAgentHttpClient`, `notesServiceHttpClient`, `todosServiceHttpClient`, `internalRoutes`, and `publicRoutes`. Removed v8 ignore directives from 7 production files. Remaining 8 directives in `handleApprovalReply.ts` are all `ts-type` category for `noUncheckedIndexedAccess` patterns.
+**Resolution:** Added real test suites for `approvalMessageRepository`, `calendarServiceHttpClient`, `codeAgentHttpClient`, `notesServiceHttpClient`, `todosServiceHttpClient`, `internalRoutes`, and `publicRoutes`. Removed v8 ignore directives from 7 production files. Remaining directives in `handleApprovalReply.ts` are all `ts-type` category for `noUncheckedIndexedAccess` patterns.
 
 **Date Resolved:** 2026-03-13
 
@@ -316,7 +340,7 @@ No deprecated APIs or dependencies in use.
 
 ### v3.0.0 Code Action Type (INT-156)
 
-**Issue:** No support for dispatching code tasks (Claude Code) from the action system.
+**Issue:** No support for dispatching code tasks from the action system.
 
 **Resolution:** Added `code` action type with full lifecycle: `handleCodeAction`, `executeCodeAction`, `CodeAgentClient` port and HTTP client, code task buttons.
 
@@ -393,6 +417,8 @@ The following design decisions were made recently and should be revisited if iss
 4. **Cancel-task nonce retained** - The `cancel-task:{taskId}:{nonce}` button format still uses nonces because task cancellation is irreversible and warrants one-time-use security tokens.
 
 5. **Worker type detection from message text** - Keyword matching ("use opus") is simple but brittle if model names appear as common words. Currently safe because all worker type names are distinctive.
+
+6. **CTA button pattern for completion notifications** - Both calendar and code task completions use CTA buttons instead of inline URLs. This provides a cleaner UX but requires WhatsApp Cloud API support for CTA URL messages.
 
 ## Early Technical Decisions
 

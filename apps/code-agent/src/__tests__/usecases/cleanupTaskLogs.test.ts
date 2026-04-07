@@ -34,6 +34,7 @@ describe('cleanupTaskLogs', () => {
         update: vi.fn(),
         list: vi.fn(),
         hasActiveTaskForLinearIssue: vi.fn(),
+        hasDispatchedOrRunningForPR: vi.fn(),
         findZombieTasks: vi.fn(),
         countByUserToday: vi.fn(),
         findArchivableTasks: findArchivableTasksMock,

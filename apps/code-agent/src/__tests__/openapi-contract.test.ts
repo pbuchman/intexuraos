@@ -41,6 +41,8 @@ import type { StatusMirrorService } from '../infra/services/statusMirrorServiceI
 import { createProcessHeartbeatUseCase } from '../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../domain/usecases/detectZombieTasks.js';
 import { createCleanupTaskLogsUseCase } from '../domain/usecases/cleanupTaskLogs.js';
+import { createArchiveStaleGroupsUseCase } from '../domain/usecases/archiveStaleGroups.js';
+import { createAutoArchiveMergedTasksUseCase } from '../domain/usecases/autoArchiveMergedTasks.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../domain/ports/workerSettingsRepository.js';
@@ -131,6 +133,8 @@ describe('OpenAPI contract', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       linearIssueService: createLinearIssueService({
         linearAgentClient: createLinearAgentHttpClient({
           baseUrl: 'http://linear-agent:8086',
@@ -191,6 +195,8 @@ describe('OpenAPI contract', () => {
       processHeartbeat: import('../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
+      autoArchiveMergedTasks: import('../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;

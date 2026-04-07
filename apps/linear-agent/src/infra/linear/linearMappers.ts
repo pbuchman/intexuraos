@@ -217,6 +217,14 @@ export function mapLinearError(error: unknown): LinearError {
 }
 
 /**
+ * Default retention window for completed/cancelled issues (in days).
+ * 60 days matches a ~2-month planning horizon; the previous 7-day default
+ * caused completed issues to be pruned from Firestore too aggressively,
+ * breaking the sync cycle for recently-closed work.
+ */
+export const DEFAULT_COMPLETED_SINCE_DAYS = 60;
+
+/**
  * Filters issues to exclude old completed/cancelled issues beyond cutoff date.
  * Exported for testing.
  */

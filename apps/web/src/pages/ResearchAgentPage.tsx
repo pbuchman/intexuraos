@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, Loader2, Plus, Sparkles, Trash2 } from 'lucide-react';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders, getOpenRouterRawId, isOpenRouterModel } from '@intexuraos/llm-contract';
 import {
   Button,
   Card,
@@ -9,9 +9,11 @@ import {
   ModelSelector,
   getSelectedModelsList,
   PROVIDER_MODELS,
+  MAX_TOTAL_MODELS,
 } from '@/components';
 import { useAuth } from '@/context';
-import { useLlmKeys } from '@/hooks';
+import { useLlmKeys, useOpenRouterModels } from '@/hooks';
+import { ApiError } from '@/services/apiClient';
 import {
   getResearch,
   improveInput,
@@ -21,6 +23,8 @@ import {
 } from '@/services/researchAgentApi';
 import {
   getProviderForModel,
+  getProviderForStoredModel,
+  isSelectableModel,
   type LlmProvider,
   type SupportedModel,
   type SaveDraftRequest,
@@ -36,6 +40,8 @@ export function ResearchAgentPage(): React.JSX.Element {
   const [searchParams] = useSearchParams();
   const { getAccessToken } = useAuth();
   const { keys, loading: keysLoading } = useLlmKeys();
+  const isOpenRouterConfigured = keys !== null && keys.openrouter !== null;
+  const { models: openRouterModels, loading: openRouterLoading, error: openRouterError } = useOpenRouterModels(isOpenRouterConfigured);
 
   const draftId = searchParams.get('draftId');
   const isEditMode = draftId !== null && draftId !== '';
@@ -45,6 +51,7 @@ export function ResearchAgentPage(): React.JSX.Element {
     () => new Map()
   );
   const [synthesisModel, setSynthesisModel] = useState<SupportedModel | null>(null);
+  const [selectedOpenRouterModels, setSelectedOpenRouterModels] = useState<string[]>([]);
   const [inputContexts, setInputContexts] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -84,7 +91,10 @@ export function ResearchAgentPage(): React.JSX.Element {
   const configuredProviders: LlmProvider[] =
     keysLoading || keys === null
       ? []
-      : PROVIDER_MODELS.filter((p) => keys[p.id] !== null).map((p) => p.id);
+      : [
+          ...PROVIDER_MODELS.filter((p) => keys[p.id] !== null).map((p) => p.id),
+          ...(keys.openrouter !== null ? [LlmProviders.OpenRouter] : []),
+        ];
 
   const failedProviders: Map<LlmProvider, string> = ((): Map<LlmProvider, string> => {
     const map = new Map<LlmProvider, string>();
@@ -98,6 +108,15 @@ export function ResearchAgentPage(): React.JSX.Element {
     }
     return map;
   })();
+
+  // Auto-trim OpenRouter selections when dynamic max decreases below current count
+  useEffect(() => {
+    const regularCount = Array.from(modelSelections.values()).filter((m) => m !== null).length;
+    const maxOR = MAX_TOTAL_MODELS - regularCount;
+    if (selectedOpenRouterModels.length > maxOR) {
+      setSelectedOpenRouterModels((prev) => prev.slice(0, maxOR));
+    }
+  }, [modelSelections, selectedOpenRouterModels.length]);
 
   // Load draft if in edit mode
   useEffect(() => {
@@ -117,16 +136,26 @@ export function ResearchAgentPage(): React.JSX.Element {
         const selections = new Map<LlmProvider, SupportedModel | null>();
         for (const provider of PROVIDER_MODELS) {
           const selectedModel = draft.selectedModels.find(
-            (m) => getProviderForModel(m) === provider.id
+            (m): m is SupportedModel =>
+              isSelectableModel(m) && getProviderForStoredModel(m) === provider.id
           );
           selections.set(provider.id, selectedModel ?? null);
         }
         setModelSelections(selections);
 
+        const orModels = draft.selectedModels
+          .filter((m) => isOpenRouterModel(m))
+          .map((m) => getOpenRouterRawId(m));
+        setSelectedOpenRouterModels(orModels);
+
         // Load synthesis model from draft (validate it's synthesis-capable)
-        const draftSynthesisValid = SYNTHESIS_CAPABLE_MODELS.includes(draft.synthesisModel);
-        if (draftSynthesisValid) {
-          setSynthesisModel(draft.synthesisModel);
+        const draftSynthesisModel =
+          isSelectableModel(draft.synthesisModel) &&
+          SYNTHESIS_CAPABLE_MODELS.includes(draft.synthesisModel)
+            ? draft.synthesisModel
+            : null;
+        if (draftSynthesisModel !== null) {
+          setSynthesisModel(draftSynthesisModel);
         } else {
           // Draft had invalid synthesis model - will be auto-selected when keys load
           setSynthesisModel(null);
@@ -144,8 +173,9 @@ export function ResearchAgentPage(): React.JSX.Element {
         // Track initial saved state for change detection
         lastSavedStateRef.current = {
           modelSelections: selections,
-          synthesisModel: draft.synthesisModel,
+          synthesisModel: draftSynthesisModel,
           inputContexts: loadedContexts,
+          selectedOpenRouterModels: orModels,
         };
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load draft');
@@ -188,7 +218,7 @@ export function ResearchAgentPage(): React.JSX.Element {
     try {
       const token = await getAccessToken();
       const validContexts = inputContexts.filter((ctx) => ctx.trim().length > 0);
-      const selectedModels = getSelectedModelsList(modelSelections);
+      const selectedModels = getSelectedModelsList(modelSelections, selectedOpenRouterModels);
 
       const request: SaveDraftRequest = { prompt };
       if (selectedModels.length > 0) {
@@ -208,6 +238,7 @@ export function ResearchAgentPage(): React.JSX.Element {
         modelSelections,
         synthesisModel,
         inputContexts: validContexts,
+        selectedOpenRouterModels,
       };
       setHasUnsavedChanges(false);
     } catch {
@@ -221,6 +252,7 @@ export function ResearchAgentPage(): React.JSX.Element {
     modelSelections,
     synthesisModel,
     inputContexts,
+    selectedOpenRouterModels,
     getAccessToken,
   ]);
 
@@ -229,15 +261,16 @@ export function ResearchAgentPage(): React.JSX.Element {
     modelSelections: Map<LlmProvider, SupportedModel | null>;
     synthesisModel: SupportedModel | null;
     inputContexts: string[];
-  }>({ modelSelections: new Map(), synthesisModel: null, inputContexts: [] });
+    selectedOpenRouterModels: string[];
+  }>({ modelSelections: new Map(), synthesisModel: null, inputContexts: [], selectedOpenRouterModels: [] });
 
   useEffect(() => {
     if (!isEditMode) return;
 
     const promptChanged = prompt !== lastSavedPromptRef.current;
 
-    const currentModels = getSelectedModelsList(modelSelections);
-    const savedModels = getSelectedModelsList(lastSavedStateRef.current.modelSelections);
+    const currentModels = getSelectedModelsList(modelSelections, selectedOpenRouterModels);
+    const savedModels = getSelectedModelsList(lastSavedStateRef.current.modelSelections, lastSavedStateRef.current.selectedOpenRouterModels);
     const modelsChanged = JSON.stringify(currentModels) !== JSON.stringify(savedModels);
 
     const synthesisChanged = synthesisModel !== lastSavedStateRef.current.synthesisModel;
@@ -247,7 +280,7 @@ export function ResearchAgentPage(): React.JSX.Element {
     if (promptChanged || modelsChanged || synthesisChanged || contextsChanged) {
       setHasUnsavedChanges(true);
     }
-  }, [prompt, modelSelections, synthesisModel, inputContexts, isEditMode]);
+  }, [prompt, modelSelections, synthesisModel, inputContexts, selectedOpenRouterModels, isEditMode]);
 
   // 1-minute autosave interval
   useEffect(() => {
@@ -316,7 +349,7 @@ export function ResearchAgentPage(): React.JSX.Element {
 
   const validContexts = inputContexts.filter((ctx) => ctx.trim().length > 0);
   const hasValidContexts = validContexts.length > 0;
-  const selectedModels = getSelectedModelsList(modelSelections);
+  const selectedModels = getSelectedModelsList(modelSelections, selectedOpenRouterModels);
   const isSingleModelNoContext = selectedModels.length === 1 && !hasValidContexts;
 
   const executeSubmit = async (params?: {
@@ -370,7 +403,24 @@ export function ResearchAgentPage(): React.JSX.Element {
         void navigate(`/research/${research.id}`);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create research');
+      // Parse detailed validation errors if available
+      let errorMessage: string;
+      if (err instanceof ApiError && err.details !== undefined) {
+        // Extract specific validation messages from API error details
+        const { errors: validationErrors } = err.details as {
+          errors?: { path?: string; message?: string }[];
+        };
+        const messages = (validationErrors ?? [])
+          .map((e) => e.message)
+          .filter((m): m is string => m !== undefined);
+        errorMessage =
+          messages.length > 0
+            ? messages.join('; ')
+            : err.message;
+      } else {
+        errorMessage = err instanceof Error ? err.message : 'Failed to create research';
+      }
+      setError(errorMessage);
       setSubmitting(false);
     }
   };
@@ -386,6 +436,14 @@ export function ResearchAgentPage(): React.JSX.Element {
     }
     if (synthesisModel === null) {
       setError('Select a synthesis model');
+      return;
+    }
+    // Pre-submit validation: check max models
+    if (selectedModels.length > MAX_TOTAL_MODELS) {
+      const excess = selectedModels.length - MAX_TOTAL_MODELS;
+      setError(
+        `Maximum ${String(MAX_TOTAL_MODELS)} models allowed. You selected ${String(selectedModels.length)}. Please remove ${String(excess)} model${excess === 1 ? '' : 's'}.`
+      );
       return;
     }
 
@@ -656,6 +714,12 @@ export function ResearchAgentPage(): React.JSX.Element {
             failedProviders={failedProviders}
             loading={keysLoading}
             disabled={submitting || savingDraft}
+            openRouterModels={openRouterModels}
+            selectedOpenRouterModels={selectedOpenRouterModels}
+            onOpenRouterChange={setSelectedOpenRouterModels}
+            openRouterLoading={openRouterLoading}
+            openRouterError={openRouterError}
+            isOpenRouterConfigured={isOpenRouterConfigured}
           />
         </Card>
 

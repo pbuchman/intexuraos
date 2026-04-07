@@ -1,18 +1,15 @@
 export { OpenGraphFetcher, type OpenGraphFetcherConfig } from './linkpreview/index.js';
-export { Crawl4AIClient, createCrawl4AIClient, type Crawl4AIClientConfig } from './pagesummary/index.js';
 export {
-  createPageContentFetcher,
+  createCloudflareMarkdownClient,
+  type CloudflareMarkdownClientConfig,
   type PageContentFetcher,
-  type PageContentFetcherConfig,
   type PageContentError,
-} from './pagesummary/pageContentFetcher.js';
-export {
   createLlmSummarizer,
   type LlmSummarizer,
   type PageSummary,
   type PageSummaryError,
   type SummarizeOptions,
-} from './pagesummary/llmSummarizer.js';
+} from './pagesummary/index.js';
 export {
   createUserServiceClient,
   type UserServiceClient,

@@ -194,7 +194,16 @@ interface DeleteImageOutput {
 7. When research is unshared: DELETE /internal/images/:id
 ```
 
-### Pattern 2: Prompt-Only Workflow
+### Pattern 2: Provider Failover (Caller-Side)
+
+```
+1. Try POST /internal/images/generate with model "gemini-2.5-flash-image"
+2. If DOWNSTREAM_ERROR or INVALID_REQUEST (missing key):
+   Retry with model "gpt-image-1" (or vice versa)
+3. Failover logic lives in the caller (e.g., research-agent), not image-service
+```
+
+### Pattern 3: Prompt-Only Workflow
 
 ```
 1. Caller has text content that needs visualization
@@ -204,7 +213,7 @@ interface DeleteImageOutput {
 5. Image generation is a separate step via POST /internal/images/generate
 ```
 
-### Pattern 3: Direct Image Generation (Skip Prompt Enhancement)
+### Pattern 4: Direct Image Generation (Skip Prompt Enhancement)
 
 ```
 1. Caller already has an optimized prompt
@@ -257,4 +266,4 @@ None. Image-service does not publish Pub/Sub events.
 
 ---
 
-**Last updated:** 2026-03-22
+**Last updated:** 2026-04-07

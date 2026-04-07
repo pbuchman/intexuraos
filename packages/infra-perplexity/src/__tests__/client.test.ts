@@ -27,6 +27,7 @@ vi.mock('@intexuraos/llm-pricing', () => ({
 }));
 
 const { createPerplexityClient } = await import('../client.js');
+const { createAuditContext } = await import('@intexuraos/llm-audit');
 
 const API_BASE_URL = 'https://api.perplexity.ai';
 const TEST_MODEL = LlmModels.SonarPro;
@@ -93,6 +94,79 @@ describe('createPerplexityClient', () => {
   });
 
   describe('research', () => {
+    it('includes userId and researchId in audit context', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions', (body) => body.stream === true)
+        .reply(
+          200,
+          createSSEBody({
+            content: 'Research findings about AI.',
+            usage: {
+              prompt_tokens: 100,
+              completion_tokens: 50,
+              total_tokens: 150,
+            },
+          }),
+          { 'Content-Type': 'text/event-stream' }
+        );
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        researchId: 'research-123',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      await client.research('Tell me about AI');
+
+      expect(vi.mocked(createAuditContext).mock.calls[0]?.[0]).toEqual(
+        expect.objectContaining({
+          provider: LlmProviders.Perplexity,
+          model: TEST_MODEL,
+          method: 'research',
+          prompt: 'Tell me about AI',
+          userId: 'test-user',
+          researchId: 'research-123',
+        })
+      );
+    });
+
+    it('excludes researchId from audit context when undefined', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions', (body) => body.stream === true)
+        .reply(
+          200,
+          createSSEBody({
+            content: 'Research findings about AI.',
+            usage: {
+              prompt_tokens: 100,
+              completion_tokens: 50,
+              total_tokens: 150,
+            },
+          }),
+          { 'Content-Type': 'text/event-stream' }
+        );
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      await client.research('Tell me about AI');
+
+      const auditArgs = vi.mocked(createAuditContext).mock.calls[0]?.[0] as unknown as Record<
+        string,
+        unknown
+      >;
+      expect(auditArgs).not.toHaveProperty('researchId');
+      expect(auditArgs?.['userId']).toBe('test-user');
+    });
+
     it('returns research result with content and usage from pricing (streaming)', async () => {
       nock(API_BASE_URL)
         .post('/chat/completions', (body) => body.stream === true)

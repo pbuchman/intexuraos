@@ -356,17 +356,17 @@ curl -X GET https://actions-agent.intexuraos.com/actions/ACTION_ID/preview \
 
 ## Part 7: Code Actions
 
-Code actions dispatch tasks to code-agent (Claude Code). They use interactive WhatsApp buttons with three options.
+Code actions dispatch tasks to code-agent, which then routes them to the selected code worker runtime. They use interactive WhatsApp buttons with three options.
 
 ### How Code Action Approval Works
 
 1. Send a command: "Fix the authentication bug in the login module"
 2. Receive a WhatsApp message with interactive buttons:
-   - **Approve** (approve and dispatch to Claude Code)
+   - **Approve** (approve and dispatch to the selected code worker)
    - **Reject** (cancel the action)
    - **Convert to Issue** (reject this action but create a Linear issue instead)
 3. Tap **Approve** to dispatch to code-agent
-4. Receive confirmation and later a completion message with PR/branch details
+4. Receive a "View Progress" CTA button linking to the code task detail page
 
 ### Specifying a Worker Type
 
@@ -381,7 +381,7 @@ Bot: "Code task: Refactor the payment module, use opus
       [Approve] [Reject] [Convert to Issue]
 ```
 
-Available worker types: `opus`, `sonnet`, `minimax`, `glm`, `qwen`, `kimi`. If no worker type is specified, `auto` is used.
+Available worker types: `opus`, `sonnet`, `minimax`, `glm`, `qwen`, `kimi`, `codex`, `codex-xhigh`, `openrouter-free`. If no worker type is specified, `auto` is used.
 
 ### Two-Phase Code Tasks (INT-628)
 
@@ -431,6 +431,7 @@ Error codes returned when cancellation fails:
 | Interactive buttons not showing | Plain text message instead of buttons   | WhatsApp client may not support interactive messages                   |
 | Action deleted, approval fails  | WhatsApp message: "no longer available" | Action was deleted or expired; this is handled gracefully              |
 | Proceed implementation fails    | Error message about status/labels       | Task must be in designed status with required Linear labels            |
+| CTA button shows "?"            | Emoji not rendering in button text      | WhatsApp CTA displayText does not support emoji; use plain text only   |
 
 ---
 

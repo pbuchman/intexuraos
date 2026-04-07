@@ -80,8 +80,14 @@ export interface IssueTreeResponse {
   descendants: IssueTreeNode[];
 }
 
+export interface DirectChildrenRequest {
+  userId: string;
+  issueId: string;
+}
+
 export interface LinearIssueForDisplay {
   identifier: string;
+  parentIdentifier: string | null;
   title: string;
   state: { name: string; type: string };
   priority: number;
@@ -143,13 +149,15 @@ export interface LinearAgentClient {
     issueId: string;
   }): Promise<Result<IssueTreeResponse, LinearAgentError>>;
 
+  fetchDirectChildrenLive(request: DirectChildrenRequest): Promise<Result<IssueTreeNode[], LinearAgentError>>;
+
   updateIssueMetadata(request: {
     userId: string;
     issueId: string;
     assigneeId?: string | null;
     addLabels?: string[];
     removeLabels?: string[];
-  }): Promise<Result<void, LinearAgentError>>;
+  }): Promise<Result<{ droppedLabels: string[] }, LinearAgentError>>;
 
   /**
    * Fetch Linear issue data for display in task detail view.

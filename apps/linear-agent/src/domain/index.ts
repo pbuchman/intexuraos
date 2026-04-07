@@ -15,6 +15,8 @@ export type {
   CodeAgentClient,
   CodeAgentError,
   TriggerCodeTaskResponse,
+  IssuePruningClassifier,
+  PruneCandidateRepository,
 } from './ports.js';
 export {
   processLinearAction,
@@ -109,3 +111,11 @@ export {
 export { parseExtractionResponse } from './extractionParser.js';
 export { buildIssueDescription } from './descriptionBuilder.js';
 export { checkProcessedAction, type CheckIdempotencyDeps } from './useCases/checkIdempotency.js';
+export {
+  pruneIssues,
+  type PruneIssuesDeps,
+} from './useCases/pruneIssuesUseCase.js';
+export {
+  confirmPruneDeletion,
+  type ConfirmPruneDeletionDeps,
+} from './useCases/confirmPruneDeletionUseCase.js';

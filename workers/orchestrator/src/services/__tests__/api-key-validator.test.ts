@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ApiKeyValidator } from '../api-key-validator.js';
-import type { CredentialMonitor } from '../isolation/credential-monitor.js';
 import type { Logger } from '@intexuraos/common-core';
 
 /* eslint-disable @typescript-eslint/no-empty-function */
@@ -222,70 +221,5 @@ describe('ApiKeyValidator', () => {
     const result2 = await validator.validate('anthropic');
     expect(result2.valid).toBe(true);
     expect(fetchSpy).toHaveBeenCalledTimes(2);
-  });
-
-  describe('CredentialMonitor-aware validation', () => {
-    it('should return valid when monitor has active token', async () => {
-      const mockMonitor = {
-        getCurrentAccessToken: vi.fn(() => 'sk-ant-oat01-valid'),
-        getState: vi.fn(() => ({
-          status: 'active' as const,
-          expiresAt: '',
-          expiresInMinutes: 60,
-          subscriptionType: 'max',
-        })),
-      } as unknown as CredentialMonitor;
-
-      const validator = new ApiKeyValidator({ ANTHROPIC_API_KEY: '' }, mockLogger);
-      validator.setCredentialMonitor(mockMonitor);
-
-      const result = await validator.validate('anthropic');
-
-      expect(result.valid).toBe(true);
-      expect(fetchSpy).not.toHaveBeenCalled();
-    });
-
-    it('should return invalid when monitor token is null', async () => {
-      const mockMonitor = {
-        getCurrentAccessToken: vi.fn(() => null),
-        getState: vi.fn(() => ({ status: 'not_configured' as const, message: 'not found' })),
-      } as unknown as CredentialMonitor;
-
-      const validator = new ApiKeyValidator({ ANTHROPIC_API_KEY: '' }, mockLogger);
-      validator.setCredentialMonitor(mockMonitor);
-
-      const result = await validator.validate('anthropic');
-
-      expect(result.valid).toBe(false);
-      expect(result.errorMessage).toContain('credentials');
-      expect(fetchSpy).not.toHaveBeenCalled();
-    });
-
-    it('should return invalid when monitor reports expired state', async () => {
-      const mockMonitor = {
-        getCurrentAccessToken: vi.fn(() => 'sk-ant-oat01-expired'),
-        getState: vi.fn(() => ({ status: 'expired' as const, message: 'expired' })),
-      } as unknown as CredentialMonitor;
-
-      const validator = new ApiKeyValidator({ ANTHROPIC_API_KEY: '' }, mockLogger);
-      validator.setCredentialMonitor(mockMonitor);
-
-      const result = await validator.validate('anthropic');
-
-      expect(result.valid).toBe(false);
-      expect(result.errorMessage).toContain('credentials');
-      expect(fetchSpy).not.toHaveBeenCalled();
-    });
-
-    it('should skip monitor and fall through when not set', async () => {
-      fetchSpy.mockResolvedValueOnce(new Response('{}', { status: 200 }));
-
-      const validator = new ApiKeyValidator({ ANTHROPIC_API_KEY: 'sk-ant-test' }, mockLogger);
-
-      const result = await validator.validate('anthropic');
-
-      expect(result.valid).toBe(true);
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
-    });
   });
 });

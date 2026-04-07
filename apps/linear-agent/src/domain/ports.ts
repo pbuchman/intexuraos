@@ -4,6 +4,7 @@
  */
 
 import type { Result, CodeTaskWorkerType } from '@intexuraos/common-core';
+import type { Logger } from 'pino';
 import type {
   LinearConnection,
   LinearConnectionPublic,
@@ -18,6 +19,8 @@ import type {
   SyncedLinearIssue,
   LinearComment,
   CommentSummary,
+  PruneCandidate,
+  StoredPruneCandidate,
 } from './models.js';
 import type { LinearError } from './errors.js';
 
@@ -115,6 +118,12 @@ export interface LinearApiClient {
     identifier: string
   ): Promise<Result<LinearIssueWithTeam | null, LinearError>>;
 
+  /** Get direct children for a parent issue from live Linear API. */
+  getDirectChildren(
+    apiKey: string,
+    issueId: string
+  ): Promise<Result<LinearIssue[] | null, LinearError>>;
+
   /** Update an issue's workflow state */
   updateIssueState(
     apiKey: string,
@@ -151,6 +160,9 @@ export interface LinearApiClient {
     apiKey: string,
     teamId: string
   ): Promise<Result<WorkflowState[], LinearError>>;
+
+  /** Delete (trash) an issue in Linear. This is a soft-delete (recoverable via Linear UI). */
+  deleteIssue(apiKey: string, issueId: string): Promise<Result<void, LinearError>>;
 }
 
 /** Service for extracting issue data from natural language */
@@ -219,6 +231,13 @@ export interface CodeAgentClient {
     actionId: string;
     approvalEventId: string;
   }): Promise<Result<TriggerCodeTaskResponse, CodeAgentError>>;
+
+  notifyGroupSummaryRecompute(request: {
+    userId: string;
+    linearIssueId: string;
+    labels: { id: string; name: string }[];
+    sourceTimestamp: string;
+  }): Promise<Result<void, CodeAgentError>>;
 }
 
 /** Repository for locally synced Linear comments */
@@ -240,4 +259,24 @@ export interface LinearCommentRepository {
 
   /** Delete comment by ID */
   deleteById(id: string): Promise<Result<void, LinearError>>;
+}
+
+/** Classifies synced issues to find deletion candidates using LLM */
+export interface IssuePruningClassifier {
+  /** Score and rank issues for deletion based on configurable criteria */
+  classifyCandidates(
+    issues: SyncedLinearIssue[],
+    targetCount: number,
+    logger: Logger
+  ): Promise<Result<PruneCandidate[], LinearError>>;
+}
+
+/** Repository for storing and retrieving prune candidates for user review */
+export interface PruneCandidateRepository {
+  /** Clear all stored prune candidates */
+  clearAll(): Promise<Result<void, LinearError>>;
+  /** Store multiple prune candidates (replaces any existing) */
+  storeAll(candidates: StoredPruneCandidate[]): Promise<Result<void, LinearError>>;
+  /** List all stored prune candidates (ordered by score descending) */
+  listAll(): Promise<Result<StoredPruneCandidate[], LinearError>>;
 }

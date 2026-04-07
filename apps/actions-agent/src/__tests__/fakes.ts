@@ -756,7 +756,7 @@ export class FakeCodeAgentClient implements CodeAgentClient {
   }[] = [];
   private nextResponse = {
     codeTaskId: 'code-task-123',
-    resourceUrl: 'https://app.intexuraos.com/code-tasks/123',
+    resourceUrl: '/#/code-tasks/code-task-123',
   };
   private nextError: {
     code: 'WORKER_UNAVAILABLE' | 'DUPLICATE' | 'NETWORK_ERROR' | 'UNKNOWN';
@@ -769,7 +769,7 @@ export class FakeCodeAgentClient implements CodeAgentClient {
   private submittedPhase2Tasks: SubmitToPhase2Input[] = [];
   private nextPhase2Response = {
     codeTaskId: 'phase2-task-123',
-    resourceUrl: 'https://app.intexuraos.com/code-tasks/phase2-123',
+    resourceUrl: '/#/code-tasks/phase2-task-123',
     workerLocation: 'us-central1',
     implementationOf: 'task-123',
   };
@@ -1070,7 +1070,7 @@ export function createFakeExecuteCodeActionUseCase(config?: {
       config?.returnResult ?? {
         status: 'completed',
         message: 'Code task created: code-task-123',
-        resourceUrl: 'https://app.intexuraos.com/code-tasks/123',
+        resourceUrl: '/#/code-tasks/code-task-123',
       }
     );
   };
@@ -1094,7 +1094,7 @@ export function createFakeExecuteCodeActionUseCaseWithRepo(
     const result = config?.returnResult ?? {
       status: 'completed',
       message: 'Code task created: code-task-123',
-      resourceUrl: 'https://app.intexuraos.com/code-tasks/123',
+      resourceUrl: '/#/code-tasks/code-task-123',
     };
 
     // Update action in repository
@@ -1267,6 +1267,10 @@ export class FakeUserServiceClient implements UserServiceClient {
 
   async resolveGitHubUsername(): Promise<Result<{ userId: string } | null, UserServiceError>> {
     return ok(null);
+  }
+
+  async getUserTimezone(): Promise<string | undefined> {
+    return undefined;
   }
 }
 

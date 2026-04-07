@@ -4,12 +4,13 @@ interface ExecuteActionInput {
   instruction: string;
   serviceNames: string[];
   preferredTools: string[];
+  userId: string;
 }
 
 export const executeActionPrompt: PromptBuilder<ExecuteActionInput> = {
   name: 'execute-action',
   description: 'System prompt for the LLM tool-calling agent that executes scheduled actions',
-  version: '2.1.0',
+  version: '3.0.0',
 
   build(input: ExecuteActionInput): string {
     const preferredToolsSection = input.preferredTools.length > 0
@@ -32,6 +33,12 @@ Guidelines:
 - If a step fails, report the failure and stop unless the instruction says otherwise
 - Call tools as needed to accomplish the task
 - Be efficient — don't make unnecessary tool calls
+
+Security:
+- You are executing on behalf of user ID: ${input.userId}
+- When tools require a userId parameter, you MUST use exactly: ${input.userId}
+- NEVER use a different userId — doing so is a security violation
+- If a tool does not require userId, do not add one
 
 When you are done, respond with a summary of what was done. Include:
 - What actions were taken

@@ -44,7 +44,7 @@ If the domain was misidentified, re-read the user query and pick the most specif
 EXPECTED SCHEMA:
 {
   "language": "<string, e.g. 'en', 'he', 'es'>",
-  "domain": "<string: travel|product|technical|legal|medical|financial|security_privacy|business_strategy|marketing_sales|hr_people_ops|education_learning|science_research|history_culture|politics_policy|real_estate|food_nutrition|fitness_sports|entertainment_media|diy_home|outdoor_recreation|fishing|general|unknown>",
+  "domain": "<string: travel|product|technical|legal|medical|financial|security_privacy|business_strategy|marketing_sales|hr_people_ops|education_learning|science_research|history_culture|politics_policy|real_estate|food_nutrition|fitness_sports|entertainment_media|construction_building|diy_home|outdoor_recreation|fishing|general|unknown>",
   "mode": "<string: compact|standard|audit>",
   "intent_summary": "<string summary>",
   "defaults_applied": [
@@ -84,4 +84,4 @@ EXPECTED SCHEMA:
 
 Output the corrected JSON:`;
 }
-// Prompt version: 1.2.0
+// Prompt version: 1.3.0

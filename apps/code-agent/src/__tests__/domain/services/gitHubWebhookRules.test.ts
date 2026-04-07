@@ -8,6 +8,7 @@ import {
   BotReviewEditRule,
   CodeWorkerOutputRule,
   GitHubWebhookRules,
+  CIFailureRule,
 } from '../../../domain/services/gitHubWebhookRules.js';
 import { isPlanFile, evaluatePlanFiles } from '../../../domain/utils/planDetection.js';
 
@@ -249,7 +250,7 @@ describe('GitHubWebhookRules', () => {
       });
     });
 
-    it('should pass through for created issue_comment events from non-whitelisted senders', () => {
+    it('should skip created issue_comment events from non-whitelisted senders', () => {
       const event = {
         ...mockEvent,
         senderLogin: 'random-user',
@@ -261,20 +262,56 @@ describe('GitHubWebhookRules', () => {
       const result = rule.evaluate(event);
 
       expect(result).toEqual({
-        action: 'dispatch',
-        reason: 'ISSUE_COMMENT_CREATED_PASS_THROUGH',
+        action: 'skip',
+        reason: 'SENDER_NOT_WHITELISTED',
+        context: {
+          sender: 'random-user',
+          repoOwner: 'test-org',
+          allowedBots: ['bot1', 'bot2'],
+        },
       });
     });
 
-    it('should pass through for pull_request events', () => {
+    it('should skip pull_request events from non-whitelisted senders', () => {
       const event = { ...mockEvent, eventType: 'pull_request' as const, senderLogin: 'random-user' };
       const allowedBots = new Set(['bot1']);
       const rule = new SenderWhitelistRule(allowedBots);
       const result = rule.evaluate(event);
 
       expect(result).toEqual({
+        action: 'skip',
+        reason: 'SENDER_NOT_WHITELISTED',
+        context: {
+          sender: 'random-user',
+          repoOwner: 'test-org',
+          allowedBots: ['bot1'],
+        },
+      });
+    });
+
+    it('should dispatch pull_request events from repo owner', () => {
+      const event = { ...mockEvent, eventType: 'pull_request' as const, senderLogin: 'test-org' };
+      const allowedBots = new Set(['bot1']);
+      const rule = new SenderWhitelistRule(allowedBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({
         action: 'dispatch',
-        reason: 'PR_EVENT_PASS_THROUGH',
+        reason: 'SENDER_IS_REPO_OWNER',
+        context: { sender: 'test-org', repoOwner: 'test-org' },
+      });
+    });
+
+    it('should dispatch pull_request events from allowed bot', () => {
+      const event = { ...mockEvent, eventType: 'pull_request' as const, senderLogin: 'bot1' };
+      const allowedBots = new Set(['bot1']);
+      const rule = new SenderWhitelistRule(allowedBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({
+        action: 'dispatch',
+        reason: 'SENDER_IS_ALLOWED_BOT',
+        context: { sender: 'bot1', allowedBots: ['bot1'] },
       });
     });
 
@@ -536,21 +573,21 @@ describe('GitHubWebhookRules', () => {
       expect(result).toEqual({ action: 'skip', reason: 'CODE_WORKER_NON_PR_EVENT' });
     });
 
-    it('should dispatch pull_request_review.submitted by code worker unconditionally', () => {
+    it('should skip pull_request_review.submitted by code worker (handled by task-complete, INT-1103)', () => {
       const body = '## Code Quality Review\n\n### Suggestions\n\n1. **Hardcoded value** — Extract timeout to a constant.';
       const event = { ...mockEvent, eventType: 'pull_request_review' as const, action: 'submitted' as const, senderLogin: 'intexuraos-code-worker[bot]', body };
       const rule = new CodeWorkerOutputRule(codeWorkerBots);
       const result = rule.evaluate(event);
 
-      expect(result).toEqual({ action: 'dispatch', reason: 'CODE_WORKER_REVIEW' });
+      expect(result).toEqual({ action: 'skip', reason: 'CODE_WORKER_REVIEW_HANDLED_BY_TASK_COMPLETE' });
     });
 
-    it('should dispatch pull_request_review.submitted by code worker with null body', () => {
+    it('should skip pull_request_review.submitted by code worker with null body (handled by task-complete, INT-1103)', () => {
       const event = { ...mockEvent, eventType: 'pull_request_review' as const, action: 'submitted' as const, senderLogin: 'intexuraos-code-worker[bot]', body: null };
       const rule = new CodeWorkerOutputRule(codeWorkerBots);
       const result = rule.evaluate(event);
 
-      expect(result).toEqual({ action: 'dispatch', reason: 'CODE_WORKER_REVIEW' });
+      expect(result).toEqual({ action: 'skip', reason: 'CODE_WORKER_REVIEW_HANDLED_BY_TASK_COMPLETE' });
     });
 
     it('should dispatch pull_request.opened by non-bot sender', () => {
@@ -619,7 +656,7 @@ describe('GitHubWebhookRules', () => {
     });
 
     it('should evaluate rules in order', () => {
-      const event = { ...mockEvent, eventType: 'issue_comment' as const, action: 'created' as const };
+      const event = { ...mockEvent, eventType: 'issue_comment' as const, action: 'created' as const, senderLogin: 'test-org' };
       const allowedRepos = new Set(['test-org/test-repo']);
       const allowedBots = new Set(['random-user']);
       const rules = [
@@ -658,7 +695,7 @@ describe('GitHubWebhookRules', () => {
       });
     });
 
-    it('should let created issue_comment from unauthorized sender reach triage', () => {
+    it('should skip created issue_comment from unauthorized sender before reaching triage', () => {
       const event = {
         ...mockEvent,
         eventType: 'issue_comment' as const,
@@ -676,8 +713,13 @@ describe('GitHubWebhookRules', () => {
       const result = service.evaluate(event);
 
       expect(result).toEqual({
-        action: 'needs_triage',
-        reason: 'TRIAGE_REQUIRED',
+        action: 'skip',
+        reason: 'SENDER_NOT_WHITELISTED',
+        context: {
+          sender: 'random-user',
+          repoOwner: 'test-org',
+          allowedBots: ['claude[bot]'],
+        },
       });
     });
 
@@ -906,6 +948,87 @@ describe('GitHubWebhookRules', () => {
         new SenderWhitelistRule(new Set(['test-user']))
       ]);
       expect(() => service.evaluate(partialEvent)).not.toThrow();
+    });
+  });
+
+  describe('CIFailureRule', () => {
+    it('should dispatch for check_suite event on task_ branch', () => {
+      const event = {
+        ...mockEvent,
+        eventType: 'check_suite' as const,
+        action: 'completed' as const,
+        baseBranch: 'task_abc123',
+      };
+      const rule = new CIFailureRule();
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({
+        action: 'dispatch',
+        reason: 'CHECK_SUITE_TASK_BRANCH',
+        context: { headBranch: 'task_abc123' }
+      });
+    });
+
+    it('should skip check_suite event on non-task branch', () => {
+      const event = {
+        ...mockEvent,
+        eventType: 'check_suite' as const,
+        action: 'completed' as const,
+        baseBranch: 'main',
+      };
+      const rule = new CIFailureRule();
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({
+        action: 'skip',
+        reason: 'CHECK_SUITE_NON_TASK_BRANCH',
+        context: { headBranch: 'main' }
+      });
+    });
+
+    it('should skip check_suite event with null baseBranch', () => {
+      const event = {
+        ...mockEvent,
+        eventType: 'check_suite' as const,
+        action: 'completed' as const,
+        baseBranch: null,
+      };
+      const rule = new CIFailureRule();
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({
+        action: 'skip',
+        reason: 'CHECK_SUITE_NO_BRANCH_INFO'
+      });
+    });
+
+    it('should pass through non-check_suite events', () => {
+      const event = {
+        ...mockEvent,
+        eventType: 'pull_request' as const,
+        action: 'opened' as const,
+      };
+      const rule = new CIFailureRule();
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({
+        action: 'dispatch',
+        reason: 'NOT_A_CHECK_SUITE_EVENT'
+      });
+    });
+
+    it('should dispatch for check_suite on feature branch with task_ prefix', () => {
+      const event = {
+        ...mockEvent,
+        eventType: 'check_suite' as const,
+        action: 'completed' as const,
+        baseBranch: 'task_123-feature-x',
+      };
+      const rule = new CIFailureRule();
+      const result = rule.evaluate(event);
+
+      expect(result.action).toBe('dispatch');
+      expect(result.reason).toBe('CHECK_SUITE_TASK_BRANCH');
     });
   });
 });

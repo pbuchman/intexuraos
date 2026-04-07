@@ -319,14 +319,14 @@ resource "google_storage_bucket_iam_member" "cloud_build_functions_storage" {
 }
 
 # -----------------------------------------------------------------------------
-# claude-worker Docker Image Trigger
+# code-worker Docker Image Trigger
 # -----------------------------------------------------------------------------
-# Individual trigger for claude-worker Docker image (build+push only, no deploy).
+# Individual trigger for code-worker Docker image (build+push only, no deploy).
 # Does not trigger on git push — invoked via GitHub Actions workflow.
 
-resource "google_cloudbuild_trigger" "claude_worker" {
-  name        = "claude-worker"
-  description = "Build and push claude-worker Docker image"
+resource "google_cloudbuild_trigger" "code_worker" {
+  name        = "code-worker"
+  description = "Build and push code-worker Docker image"
   location    = var.region
 
   source_to_build {
@@ -336,7 +336,7 @@ resource "google_cloudbuild_trigger" "claude_worker" {
   }
 
   ignored_files = ["**"]
-  filename      = "workers/claude-worker/cloudbuild.yaml"
+  filename      = "workers/code-worker/cloudbuild.yaml"
 
   substitutions = {
     _REGION                = var.region
@@ -353,22 +353,22 @@ resource "google_cloudbuild_trigger" "claude_worker" {
 }
 
 # -----------------------------------------------------------------------------
-# claude-worker Daily Rebuild Schedule
+# code-worker Daily Rebuild Schedule
 # -----------------------------------------------------------------------------
-# Rebuilds the claude-worker image daily to pick up latest Claude CLI releases.
+# Rebuilds the code-worker image daily to pick up the latest worker CLI releases.
 # Anthropic's peak release window is 3-6 PM PST (23:00-02:00 UTC).
 # Schedule: 4 AM UTC (8 PM PST) — after the release window closes.
 
-resource "google_cloud_scheduler_job" "claude_worker_daily_rebuild" {
-  name        = "claude-worker-daily-rebuild-${var.environment}"
-  description = "Daily rebuild of claude-worker Docker image to pick up latest Claude CLI"
+resource "google_cloud_scheduler_job" "code_worker_daily_rebuild" {
+  name        = "code-worker-daily-rebuild-${var.environment}"
+  description = "Daily rebuild of code-worker Docker image to pick up latest worker CLIs"
   schedule    = "0 4 * * *"
   time_zone   = "UTC"
   region      = var.region
 
   http_target {
     http_method = "POST"
-    uri         = "https://cloudbuild.googleapis.com/v1/projects/${var.project_id}/locations/${var.region}/triggers/${google_cloudbuild_trigger.claude_worker.trigger_id}:run"
+    uri         = "https://cloudbuild.googleapis.com/v1/projects/${var.project_id}/locations/${var.region}/triggers/${google_cloudbuild_trigger.code_worker.trigger_id}:run"
     body = base64encode(jsonencode({
       source = {
         branchName = var.github_branch
@@ -391,7 +391,7 @@ resource "google_cloud_scheduler_job" "claude_worker_daily_rebuild" {
   }
 
   depends_on = [
-    google_cloudbuild_trigger.claude_worker,
+    google_cloudbuild_trigger.code_worker,
     google_project_iam_member.cloud_build_scheduler,
   ]
 }

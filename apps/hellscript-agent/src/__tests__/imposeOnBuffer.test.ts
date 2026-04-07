@@ -3,22 +3,32 @@ import pino from 'pino';
 import { FakeHellscriptRepository } from './fakeHellscriptRepository.js';
 import { FakeIntentInterpreter } from './fakeIntentInterpreter.js';
 import { FakeDraftGenerator } from './fakeDraftGenerator.js';
+import { FakeWritingConfigRepository } from './fakeWritingConfigRepository.js';
 import { imposeOnBuffer } from '../domain/usecases/imposeOnBuffer.js';
+import { BufferNotFoundError, DraftGenerationError } from '../domain/errors.js';
 const logger = pino({ level: 'silent' });
 
 describe('imposeOnBuffer', () => {
   let repository: FakeHellscriptRepository;
+  let writingConfigRepository: FakeWritingConfigRepository;
   let interpreter: FakeIntentInterpreter;
   let draftGenerator: FakeDraftGenerator;
 
   beforeEach(() => {
     repository = new FakeHellscriptRepository();
+    writingConfigRepository = new FakeWritingConfigRepository();
     interpreter = new FakeIntentInterpreter();
     draftGenerator = new FakeDraftGenerator();
   });
 
-  function deps(): { repository: FakeHellscriptRepository; interpreter: FakeIntentInterpreter; draftGenerator: FakeDraftGenerator; logger: typeof logger } {
-    return { repository, interpreter, draftGenerator, logger };
+  function deps(): {
+    repository: FakeHellscriptRepository;
+    writingConfigRepository: FakeWritingConfigRepository;
+    interpreter: FakeIntentInterpreter;
+    draftGenerator: FakeDraftGenerator;
+    logger: typeof logger;
+  } {
+    return { repository, writingConfigRepository, interpreter, draftGenerator, logger };
   }
 
   describe('buffer creation', () => {
@@ -76,6 +86,7 @@ describe('imposeOnBuffer', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
+        expect(result.error).toBeInstanceOf(BufferNotFoundError);
         expect(result.error.message).toBe('Buffer not found');
       }
     });
@@ -191,10 +202,6 @@ describe('imposeOnBuffer', () => {
       }
     });
 
-    // Note: getBufferState is no longer called separately in imposeOnBuffer.
-    // For new buffers, state is emptyState() by definition.
-    // For existing buffers, state comes from getBufferWithState().
-
     it('returns error when updateBufferState fails', async () => {
       repository.simulateMethodError('updateBufferState', new Error('Write failed'));
       interpreter.setNextIntent({
@@ -212,10 +219,10 @@ describe('imposeOnBuffer', () => {
   });
 
   describe('draft generation', () => {
-    it('generates draft for update_draft intent', async () => {
+    it('generates draft for update_draft intent with valid category', async () => {
       interpreter.setNextIntent({
         kind: 'update_draft',
-        payload: { text: 'Write a blog post' },
+        payload: { text: 'Write a blog post', category: 'general' },
       });
       draftGenerator.setNextMarkdown('# My Blog Post\n\nGreat content.');
 
@@ -229,6 +236,183 @@ describe('imposeOnBuffer', () => {
         expect(result.value.action).toBe('update_draft');
         expect(result.value.latestDraftVersionId).toBeDefined();
       }
+    });
+
+    it('returns category_required when category is null', async () => {
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'Write something', category: null },
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'Write something',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('category_required');
+        expect(result.value.latestDraftVersionId).toBeUndefined();
+      }
+    });
+
+    it('does not save event when category_required is returned', async () => {
+      const createResult = await repository.createBuffer('user-1', 'Buffer');
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'Write something', category: null },
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        bufferId: createResult.value.id,
+        utterance: 'Write something',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('category_required');
+      }
+
+      const events = await repository.getEvents(createResult.value.id);
+      expect(events.ok).toBe(true);
+      if (events.ok) {
+        expect(events.value).toHaveLength(0);
+      }
+    });
+
+    it('returns category_required when category is missing', async () => {
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'Write something' },
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'Write something',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('category_required');
+      }
+    });
+
+    it('returns category_required when category is invalid', async () => {
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'Write something', category: 'twitter' },
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'Write something',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('category_required');
+      }
+    });
+
+    it('uses explicit category from input over intent payload', async () => {
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'Write a post', category: null },
+      });
+      draftGenerator.setNextMarkdown('# LinkedIn Post');
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'Write a post',
+        category: 'linkedin',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('update_draft');
+        expect(result.value.latestDraftVersionId).toBeDefined();
+      }
+
+      const calls = draftGenerator.getCalls();
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.category).toBe('linkedin');
+    });
+
+    it('returns error when saveEvent fails in update_draft path', async () => {
+      repository.simulateMethodError('saveEvent', new Error('Write failed'));
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'draft', category: 'general' },
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'draft',
+      });
+
+      expect(result.ok).toBe(false);
+    });
+
+    it('returns error when updateBufferState fails in update_draft path', async () => {
+      repository.simulateMethodError('updateBufferState', new Error('Write failed'));
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'draft', category: 'general' },
+      });
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'draft',
+      });
+
+      expect(result.ok).toBe(false);
+    });
+
+    it('fetches style instructions and samples for the category', async () => {
+      await writingConfigRepository.upsertStyleInstructions('user-1', 'linkedin', 'Be professional');
+      await writingConfigRepository.createSample('user-1', {
+        category: 'linkedin',
+        title: 'Sample 1',
+        text: 'Professional post example',
+      });
+
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'Write a LinkedIn post', category: 'linkedin' },
+      });
+      draftGenerator.setNextMarkdown('# LinkedIn Post');
+
+      await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'Write a LinkedIn post',
+      });
+
+      const calls = draftGenerator.getCalls();
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.styleInstructions).toBe('Be professional');
+      expect(calls[0]?.writingSamples).toEqual(['Professional post example']);
+      expect(calls[0]?.category).toBe('linkedin');
+    });
+
+    it('passes null style and empty samples when config does not exist', async () => {
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'Write a thread', category: 'threads' },
+      });
+      draftGenerator.setNextMarkdown('# Thread');
+
+      await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'Write a thread',
+      });
+
+      const calls = draftGenerator.getCalls();
+      expect(calls[0]?.styleInstructions).toBeNull();
+      expect(calls[0]?.writingSamples).toEqual([]);
     });
 
     it('does not generate draft for non-update_draft intents', async () => {
@@ -258,7 +442,7 @@ describe('imposeOnBuffer', () => {
 
       interpreter.setNextIntent({
         kind: 'update_draft',
-        payload: { text: 'First draft' },
+        payload: { text: 'First draft', category: 'general' },
       });
       draftGenerator.setNextMarkdown('# V1');
 
@@ -270,7 +454,7 @@ describe('imposeOnBuffer', () => {
 
       interpreter.setNextIntent({
         kind: 'update_draft',
-        payload: { text: 'Second draft' },
+        payload: { text: 'Second draft', category: 'general' },
       });
       draftGenerator.setNextMarkdown('# V2');
 
@@ -298,7 +482,7 @@ describe('imposeOnBuffer', () => {
 
       interpreter.setNextIntent({
         kind: 'update_draft',
-        payload: { text: 'First draft' },
+        payload: { text: 'First draft', category: 'general' },
       });
       draftGenerator.setNextMarkdown('# V1');
 
@@ -310,7 +494,7 @@ describe('imposeOnBuffer', () => {
 
       interpreter.setNextIntent({
         kind: 'update_draft',
-        payload: { text: 'Improve it' },
+        payload: { text: 'Improve it', category: 'general' },
       });
       draftGenerator.setNextMarkdown('# V2');
 
@@ -327,10 +511,9 @@ describe('imposeOnBuffer', () => {
     });
 
     it('returns error when getDraftVersion fails on second draft', async () => {
-      // First impose creates buffer + first draft
       interpreter.setNextIntent({
         kind: 'update_draft',
-        payload: { text: 'draft' },
+        payload: { text: 'draft', category: 'general' },
       });
       draftGenerator.setNextMarkdown('# V1');
 
@@ -341,11 +524,10 @@ describe('imposeOnBuffer', () => {
       expect(first.ok).toBe(true);
       if (!first.ok) return;
 
-      // Second impose triggers getDraftVersion which fails
       repository.simulateMethodError('getDraftVersion', new Error('Read failed'));
       interpreter.setNextIntent({
         kind: 'update_draft',
-        payload: { text: 'improve' },
+        payload: { text: 'improve', category: 'general' },
       });
 
       const result = await imposeOnBuffer(deps(), {
@@ -357,10 +539,10 @@ describe('imposeOnBuffer', () => {
       expect(result.ok).toBe(false);
     });
 
-    it('returns update_draft_failed when draft generation fails', async () => {
+    it('returns error when draft generation fails', async () => {
       interpreter.setNextIntent({
         kind: 'update_draft',
-        payload: { text: 'draft' },
+        payload: { text: 'draft', category: 'general' },
       });
       draftGenerator.simulateError(new Error('LLM failed'));
 
@@ -369,10 +551,10 @@ describe('imposeOnBuffer', () => {
         utterance: 'generate draft',
       });
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.action).toBe('update_draft_failed');
-        expect(result.value.latestDraftVersionId).toBeUndefined();
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toBeInstanceOf(DraftGenerationError);
+        expect(result.error.message).toBe('Draft generation failed');
       }
     });
 
@@ -380,7 +562,7 @@ describe('imposeOnBuffer', () => {
       repository.simulateMethodError('saveDraftVersion', new Error('Write failed'));
       interpreter.setNextIntent({
         kind: 'update_draft',
-        payload: { text: 'draft' },
+        payload: { text: 'draft', category: 'general' },
       });
 
       const result = await imposeOnBuffer(deps(), {
@@ -395,7 +577,7 @@ describe('imposeOnBuffer', () => {
       repository.simulateMethodError('updateBufferDraftInfo', new Error('Write failed'));
       interpreter.setNextIntent({
         kind: 'update_draft',
-        payload: { text: 'draft' },
+        payload: { text: 'draft', category: 'general' },
       });
 
       const result = await imposeOnBuffer(deps(), {
@@ -409,7 +591,7 @@ describe('imposeOnBuffer', () => {
     it('uses utterance as requestText when payload text missing', async () => {
       interpreter.setNextIntent({
         kind: 'update_draft',
-        payload: {},
+        payload: { category: 'general' },
       });
       draftGenerator.setNextMarkdown('# Draft');
 
@@ -421,13 +603,38 @@ describe('imposeOnBuffer', () => {
       const calls = draftGenerator.getCalls();
       expect(calls[0]?.requestText).toBe('Generate my draft now');
     });
+
+    it('handles writing config fetch failure gracefully', async () => {
+      writingConfigRepository.simulateMethodError('getStyleConfig', new Error('DB error'));
+      writingConfigRepository.simulateMethodError('listSamples', new Error('DB error'));
+
+      interpreter.setNextIntent({
+        kind: 'update_draft',
+        payload: { text: 'draft', category: 'general' },
+      });
+      draftGenerator.setNextMarkdown('# Draft');
+
+      const result = await imposeOnBuffer(deps(), {
+        userId: 'user-1',
+        utterance: 'draft',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('update_draft');
+      }
+
+      const calls = draftGenerator.getCalls();
+      expect(calls[0]?.styleInstructions).toBeNull();
+      expect(calls[0]?.writingSamples).toEqual([]);
+    });
   });
 
   describe('return value', () => {
     it('returns bufferId and action for non-draft intents', async () => {
       interpreter.setNextIntent({
-        kind: 'set_style_instructions',
-        payload: { instructions: 'Be concise' },
+        kind: 'append_thought',
+        payload: { text: 'Be concise' },
       });
 
       const result = await imposeOnBuffer(deps(), {
@@ -438,7 +645,7 @@ describe('imposeOnBuffer', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.bufferId).toBeDefined();
-        expect(result.value.action).toBe('set_style_instructions');
+        expect(result.value.action).toBe('append_thought');
         expect(result.value.latestDraftVersionId).toBeUndefined();
       }
     });

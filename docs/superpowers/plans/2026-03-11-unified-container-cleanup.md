@@ -86,7 +86,7 @@ describe('periodic cleanup', () => {
     mocks.mockDocker.listContainers.mockResolvedValueOnce([
       {
         Id: handle.containerId,
-        Names: [`/claude-worker-${handle.taskId}`],
+        Names: [`/code-worker-${handle.taskId}`],
         State: 'running',
         Created: Math.floor(Date.now() / 1000) - 5 * 60 * 60, // 5h ago
       },
@@ -117,7 +117,7 @@ describe('periodic cleanup', () => {
     mocks.mockDocker.listContainers.mockResolvedValueOnce([
       {
         Id: handle.containerId,
-        Names: [`/claude-worker-${handle.taskId}`],
+        Names: [`/code-worker-${handle.taskId}`],
         State: 'running',
         Created: Math.floor(Date.now() / 1000) - 60 * 60, // 1h ago
       },
@@ -141,7 +141,7 @@ describe('periodic cleanup', () => {
     mocks.mockDocker.listContainers.mockResolvedValueOnce([
       {
         Id: 'orphan-container-id',
-        Names: ['/claude-worker-orphan-task'],
+        Names: ['/code-worker-orphan-task'],
         State: 'running',
         Created: fourHoursAgo,
       },
@@ -159,7 +159,7 @@ describe('periodic cleanup', () => {
     mocks.mockDocker.listContainers.mockResolvedValueOnce([
       {
         Id: 'recent-orphan-id',
-        Names: ['/claude-worker-recent-task'],
+        Names: ['/code-worker-recent-task'],
         State: 'running',
         Created: oneHourAgo,
       },
@@ -179,7 +179,7 @@ describe('periodic cleanup', () => {
     mocks.mockDocker.listContainers.mockResolvedValueOnce([
       {
         Id: handle.containerId,
-        Names: [`/claude-worker-${handle.taskId}`],
+        Names: [`/code-worker-${handle.taskId}`],
         State: 'running',
         Created: Math.floor(Date.now() / 1000) - 5 * 60 * 60, // 5h ago - old but active
       },
@@ -199,7 +199,7 @@ describe('periodic cleanup', () => {
     mocks.mockDocker.listContainers.mockResolvedValueOnce([
       {
         Id: 'exited-orphan-id',
-        Names: ['/claude-worker-exited-task'],
+        Names: ['/code-worker-exited-task'],
         State: 'exited',
         Created: fourHoursAgo,
       },
@@ -270,7 +270,7 @@ describe('periodic cleanup', () => {
     mocks.mockDocker.listContainers.mockResolvedValueOnce([
       {
         Id: 'orphan-container-id',
-        Names: ['/claude-worker-orphan-task'],
+        Names: ['/code-worker-orphan-task'],
         State: 'exited',
         Created: fourHoursAgo,
       },
@@ -314,7 +314,7 @@ Replace the `cleanupOrphanedContainers` method with:
 ```ts
 /**
  * Run a single cleanup cycle.
- * Scans Docker for claude-worker-* containers and removes those that are:
+ * Scans Docker for code-worker-* containers and removes those that are:
  * - Preserved (in preservedWorkers Map) and older than PRESERVED_MAX_AGE_MS based on preservedAt
  * - Orphaned (not in workers or preservedWorkers Map) and older than PRESERVED_MAX_AGE_MS based on Docker Created timestamp
  * Active containers (in workers Map) are always skipped.
@@ -325,14 +325,14 @@ async runCleanupCycle(): Promise<void> {
   try {
     const containers = await this.docker.listContainers({
       all: true,
-      filters: { name: ['claude-worker-'] },
+      filters: { name: ['code-worker-'] },
     });
 
     // Build a Set of active taskIds for fast lookup
     const activeTaskIds = new Set(this.workers.keys());
 
     for (const containerInfo of containers) {
-      const nameMatch = containerInfo.Names[0]?.replace(/^\/claude-worker-/, '');
+      const nameMatch = containerInfo.Names[0]?.replace(/^\/code-worker-/, '');
       if (nameMatch === undefined) {
         continue;
       }

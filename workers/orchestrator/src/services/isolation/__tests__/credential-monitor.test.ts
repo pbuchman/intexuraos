@@ -53,7 +53,7 @@ describe('CredentialMonitor', () => {
 
     monitor = new CredentialMonitor(
       {
-        credentialsPath: '/home/user/.claude-orchestrator/claude-creds/.credentials.json',
+        credentialsPath: '/home/user/.code-orchestrator/claude-creds/.credentials.json',
         reloadIntervalMs: 60_000,
       },
       mockLogger
@@ -98,6 +98,25 @@ describe('CredentialMonitor', () => {
       expect(result).toBe(false);
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.objectContaining({ error: expect.any(Error) }),
+        expect.stringContaining('parse')
+      );
+    });
+
+    it('wraps non-Error thrown value during parsing', () => {
+      mockExistsSync.mockReturnValue(true);
+      const nonError = 'string-parse-error';
+      mockReadFileSync.mockImplementation(() => {
+        throw nonError;
+      });
+
+      const result = monitor.loadCredentials();
+
+      expect(result).toBe(false);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.objectContaining({ message: 'string-parse-error' }),
+          path: expect.any(String),
+        }),
         expect.stringContaining('parse')
       );
     });

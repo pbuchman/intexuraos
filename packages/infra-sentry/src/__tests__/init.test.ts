@@ -9,6 +9,7 @@ import { initSentry, type SentryConfig } from '../init.js';
 // Mock Sentry
 vi.mock('@sentry/node', () => ({
   init: vi.fn(),
+  setTag: vi.fn(),
   captureException: vi.fn(),
   captureMessage: vi.fn(),
   withScope: vi.fn((callback) => callback({ setTag: vi.fn(), setContext: vi.fn() })),
@@ -17,6 +18,7 @@ vi.mock('@sentry/node', () => ({
 describe('initSentry', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env['INTEXURAOS_RUNTIME'];
   });
 
   it('initializes Sentry with valid config', () => {
@@ -73,5 +75,38 @@ describe('initSentry', () => {
     initSentry(config);
 
     expect(Sentry.init).not.toHaveBeenCalled();
+  });
+
+  it('sets runtime tag when INTEXURAOS_RUNTIME is set', () => {
+    process.env['INTEXURAOS_RUNTIME'] = 'prod';
+
+    initSentry({
+      dsn: 'https://test@sentry.io/123',
+      serviceName: 'test-service',
+    });
+
+    expect(Sentry.setTag).toHaveBeenCalledWith('runtime', 'prod');
+  });
+
+  it('does not set runtime tag when INTEXURAOS_RUNTIME is not set', () => {
+    delete process.env['INTEXURAOS_RUNTIME'];
+
+    initSentry({
+      dsn: 'https://test@sentry.io/123',
+      serviceName: 'test-service',
+    });
+
+    expect(Sentry.setTag).not.toHaveBeenCalled();
+  });
+
+  it('does not set runtime tag when INTEXURAOS_RUNTIME is empty string', () => {
+    process.env['INTEXURAOS_RUNTIME'] = '';
+
+    initSentry({
+      dsn: 'https://test@sentry.io/123',
+      serviceName: 'test-service',
+    });
+
+    expect(Sentry.setTag).not.toHaveBeenCalled();
   });
 });

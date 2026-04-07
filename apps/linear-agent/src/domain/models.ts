@@ -238,3 +238,61 @@ export interface LinearComment {
   updatedAt: string; /* ISO timestamp from Linear */
   syncedAt: string; /* When we last synced this comment */
 }
+
+/** Configuration for the issue pruning system */
+export interface PruneConfig {
+  /** Threshold above which pruning activates */
+  activationThreshold: number;
+  /** Target number of issues to delete per run */
+  targetDeletionCount: number;
+}
+
+/** A candidate issue scored for deletion */
+export interface PruneCandidate {
+  /** Linear issue UUID */
+  id: string;
+  /** Human-readable identifier e.g. "INT-123" */
+  identifier: string;
+  /** Issue title */
+  title: string;
+  /** Deletion priority score (0-100, higher = more deletable) */
+  score: number;
+  /** Human-readable reason for deletion */
+  reason: string;
+  /** Classification category */
+  category: 'cancelled' | 'duplicate' | 'sub-issue' | 'simple-fix' | 'review-only' | 'other';
+}
+
+/** A prune candidate stored in Firestore for user review */
+export interface StoredPruneCandidate extends PruneCandidate {
+  /** When the candidate was classified by Gemini */
+  classifiedAt: string;
+}
+
+/** Stats returned after a pruning run */
+export interface PruneStats {
+  /** Whether pruning was skipped (below threshold) */
+  skipped: boolean;
+  /** Reason for skipping (if applicable) */
+  skipReason?: string;
+  /** Total active issues before pruning */
+  totalActive: number;
+  /** Number of candidates stored for review */
+  stored: number;
+  /** Number of issues remaining after storing candidates */
+  remaining: number;
+  /** Candidates that were stored for user review */
+  storedCandidates: Omit<PruneCandidate, 'id'>[];
+  /** Duration of the pruning run in milliseconds */
+  durationMs: number;
+}
+
+/** Stats returned after confirming deletion of prune candidates */
+export interface PruneDeleteStats {
+  /** Number of issues successfully deleted from Linear */
+  deleted: number;
+  /** Issues that failed to delete */
+  failedDeletions: { identifier: string; error: string }[];
+  /** Duration of the deletion in milliseconds */
+  durationMs: number;
+}

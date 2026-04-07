@@ -5,6 +5,7 @@ import type { HellscriptBuffer } from '../models/hellscriptBuffer.js';
 import type { HellscriptEvent } from '../models/hellscriptEvent.js';
 import type { HellscriptDraftVersion } from '../models/hellscriptDraftVersion.js';
 import type { MaterializedBufferState } from '../models/materializedBufferState.js';
+import { BufferNotFoundError } from '../errors.js';
 
 export interface GetBufferWorkspaceDeps {
   repository: HellscriptRepository;
@@ -31,7 +32,7 @@ export async function getBufferWorkspace(
     return bufferWithStateResult;
   }
   if (bufferWithStateResult.value === null) {
-    return { ok: false, error: new Error('Buffer not found') };
+    return { ok: false, error: new BufferNotFoundError() };
   }
 
   const { buffer, state } = bufferWithStateResult.value;

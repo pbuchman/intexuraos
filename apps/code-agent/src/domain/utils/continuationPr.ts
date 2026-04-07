@@ -26,10 +26,6 @@ export interface ResolveContinuationPrInput {
   limit?: number;
 }
 
-export interface ResolveExecutionContinuationPrInput extends ResolveContinuationPrInput {
-  agentType?: CodeTask['agentType'];
-}
-
 export interface ContinuationPrError {
   code: 'github_token_unavailable' | 'verification_failed';
   message: string;
@@ -291,17 +287,6 @@ export async function resolveContinuationPr(
   }
 
   return ok(null);
-}
-
-export async function resolveExecutionContinuationPr(
-  deps: ResolveContinuationPrDeps,
-  input: ResolveExecutionContinuationPrInput
-): Promise<Result<ContinuationPr | null, ContinuationPrError>> {
-  if (input.agentType !== 'execution') {
-    return ok(null);
-  }
-
-  return await resolveContinuationPr(deps, input);
 }
 
 export async function postContinuationPrComment(

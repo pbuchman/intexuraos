@@ -69,7 +69,7 @@ export async function processResearch(
     const titleResult = await titleGen.generateTitle(research.prompt);
     if (titleResult.ok) {
       await deps.researchRepo.update(researchId, { title: titleResult.value.title });
-      /* v8 ignore start -- ts-type: costUsd should be defined but TypeScript can't prove it @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess nullish coalescing fallback for costUsd @preserve */
       auxiliaryCostUsd += titleResult.value.usage.costUsd ?? 0;
       /* v8 ignore stop @preserve */
       deps.logger.info(
@@ -94,7 +94,7 @@ export async function processResearch(
     const contextResult = await deps.contextInferrer.inferResearchContext(research.prompt);
     if (contextResult.ok) {
       await deps.researchRepo.update(researchId, { researchContext: contextResult.value.context });
-      /* v8 ignore start -- ts-type: costUsd should be defined but TypeScript can't prove it @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess nullish coalescing fallback for costUsd @preserve */
       auxiliaryCostUsd += contextResult.value.usage.costUsd ?? 0;
       /* v8 ignore stop @preserve */
       deps.logger.info(
@@ -105,10 +105,10 @@ export async function processResearch(
         deps.reportLlmSuccess(LlmModels.Gemini25Flash);
       }
     } else {
-      /* v8 ignore start -- ts-type: checking for nested usage property @preserve */
+      /* v8 ignore start -- ts-type: undefined check for optional property on error type @preserve */
       if (contextResult.error.usage !== undefined) {
       /* v8 ignore stop @preserve */
-        /* v8 ignore start -- ts-type: costUsd should be defined but TypeScript can't prove it @preserve */
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess nullish coalescing fallback for costUsd @preserve */
         auxiliaryCostUsd += contextResult.error.usage.costUsd ?? 0;
         /* v8 ignore stop @preserve */
         deps.logger.warn(
@@ -147,7 +147,7 @@ export async function processResearch(
 
   for (let i = 0; i < pendingModels.length; i++) {
     const model = pendingModels[i];
-    /* v8 ignore start -- ts-type: array element access within loop bounds is defined @preserve */
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard for array element within loop bounds @preserve */
     if (model !== undefined) {
     /* v8 ignore stop @preserve */
       deps.logger.info(

@@ -238,6 +238,59 @@ describe('taskDispatcherImpl', () => {
     });
   });
 
+  describe('dispatch includes reviewTypes when provided', () => {
+    it('sends reviewTypes in the dispatch request body', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'default': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 0,
+          available: 2,
+          responseTimeMs: 50,
+        },
+      });
+
+      const service = createTaskDispatcherService(deps);
+
+      let capturedBody: Record<string, unknown> | undefined;
+      nock(WORKER_URL)
+        .post('/tasks', (body: Record<string, unknown>) => {
+          capturedBody = body;
+          return true;
+        })
+        .reply(200, { status: 'accepted' });
+
+      const result = await service.dispatch({
+        taskId: 'task-review-types',
+        prompt: 'Review PR',
+        systemPromptHash: 'hash-123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        workerCredentials: {
+          workers: [{
+            name: 'default',
+            url: WORKER_URL,
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+          }],
+        },
+        reviewTypes: ['code_quality', 'security'],
+      });
+
+      expect(result.ok).toBe(true);
+      expect(capturedBody).toBeDefined();
+      expect(capturedBody?.['reviewTypes']).toEqual(['code_quality', 'security']);
+    });
+  });
+
   describe('cancelOnWorker success path', () => {
     it('completes successfully when worker returns OK status', async () => {
       const service = createTaskDispatcherService(deps);

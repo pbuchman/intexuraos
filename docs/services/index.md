@@ -2,15 +2,29 @@
 
 Complete documentation for all IntexuraOS services, workers, and packages.
 
-**Version 3.4.0** — March 22, 2026
+**Version 3.5.0** — April 7, 2026
 
 ---
 
-## v3.4.0 Highlights
+## v3.5.0 Highlights
+
+| Component            | Key Changes                                                                                                                                                                                                                                                                                 |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **hellscript-agent** | Categorized writing config — platform-specific style instructions and writing samples (threads, linkedin, general)                                                                                                                                                                          |
+| **cron-agent**       | Security & config — per-service operation allowlists, schedule-owner userId injection into tool calls, `description` replaced with `schedule` input and `scheduleSummary` storage, improved tool registry logging                                                                           |
+| **code-agent**       | Execution Memory Graph (alpha data collection + RAG pipeline), Remediation Agent (autonomous review fix loop), Ask Agent (interactive Claude Code sessions), code tasks pagination with issue grouping, auto-archive merged tasks, CI failure auto-handling, per-agent-type worker settings |
+| **orchestrator**     | Codex runtime support (OpenAI Codex as execution backend with auth and log processing), execution memory graph (data collection pipeline, alpha), remediation agent (autonomous auto-improvement with cross-LLM checks and event-sourcing)                                                  |
+| **research-agent**   | OpenRouter integration — route research tasks through OpenRouter models with pricing support                                                                                                                                                                                                |
+| **linear-agent**     | AI-powered Linear issue cleanup with review UI and scheduled pruning                                                                                                                                                                                                                        |
+| **web-agent**        | Cloudflare Browser Rendering replaces Crawl4AI for JS-rendered pages                                                                                                                                                                                                                        |
+| **code-worker**      | Multi-runtime support (Claude + Codex in same container), live Codex output streaming, codex-xhigh worker type, rename from claude-worker, bootstrap evidence logging                                                                                                                       |
+| **Platform**         | `infra-openrouter` package — OpenRouter backend infrastructure and frontend model selection                                                                                                                                                                                                 |
+
+## v3.4.0 Highlights (Previous)
 
 | Component             | Key Changes                                                                                                                                 |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| **hellscript-agent**  | New: Scripting service with backend, web UI, and infrastructure for authoring and running Hellscript tasks                                  |
+| **hellscript-agent**  | New: AI-powered writing assistant with intent interpretation, thought accumulation, and versioned draft generation                          |
 | **cron-agent**        | New: Schedule and execute recurring tasks automatically                                                                                     |
 | **code-agent**        | Merge Queue for ordered auto-merging of PRs, merge conflict cron reconciliation, orchestrator Linear proxy, expandable event log payloads   |
 | **orchestrator**      | Orchestrator Linear Proxy — removed direct Linear dependency via code-agent proxy                                                           |
@@ -48,8 +62,8 @@ Complete documentation for all IntexuraOS services, workers, and packages.
 | ----------------- | ----------------------------------------------------------------------------------- |
 | **chat-agent**    | New: In-app AI assistant with RAG, guest access, command creation                   |
 | **code-agent**    | New: Autonomous code execution with worker dispatch and dedup                       |
-| **orchestrator**  | New: Local worker orchestration for Claude Code sessions via Docker                 |
-| **claude-worker** | New: Docker container image for isolated Claude Code execution                      |
+| **orchestrator**  | New: Local worker orchestration for code-worker sessions via Docker                 |
+| **code-worker**   | New: Docker container image for isolated Claude/Codex execution                     |
 | **log-cleanup**   | New: Cloud Function for scheduled log retention management                          |
 | **vm-lifecycle**  | New: Cloud Functions for GCE VM start/stop lifecycle control                        |
 | **22 packages**   | New: All shared packages documented (common, infra, LLM stack)                      |
@@ -162,9 +176,9 @@ graph TB
 
 ### Writing Assistance
 
-| Service                                                  | AI Models        | Capability                                                    |
-| -------------------------------------------------------- | ---------------- | ------------------------------------------------------------- |
-| [hellscript-agent](hellscript-agent/features.md)         | Gemini 2.5 Flash | Intent interpretation, thought accumulation, draft generation |
+| Service                                                  | AI Models        | Capability                                                                                  |
+| -------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------- |
+| [hellscript-agent](hellscript-agent/features.md)         | Gemini 2.5 Flash | Intent interpretation, thought accumulation, categorized writing config, draft generation   |
 
 ### Voice & Transcription
 
@@ -235,8 +249,8 @@ Cloud Functions and local services that run outside Cloud Run.
 
 | Worker                                     | Type            | Purpose                                                          | Trigger                     |
 | ------------------------------------------ | --------------- | ---------------------------------------------------------------- | --------------------------- |
-| [orchestrator](orchestrator/features.md)   | Local service   | Spawns Claude Code sessions in Docker containers via worktrees   | HTTP (HMAC-signed dispatch) |
-| [claude-worker](claude-worker/features.md) | Docker image    | Isolated Claude Code execution environment with git and tools    | Started by orchestrator     |
+| [orchestrator](orchestrator/features.md)   | Local service   | Spawns code-worker sessions in Docker containers via worktrees   | HTTP (HMAC-signed dispatch) |
+| [code-worker](code-worker/features.md)     | Docker image    | Isolated Claude/Codex execution environment with git and tools   | Started by orchestrator     |
 | [log-cleanup](log-cleanup/features.md)     | Cloud Function  | Deletes old task logs via code-agent cleanup API                 | Pub/Sub (scheduled)         |
 | [vm-lifecycle](vm-lifecycle/features.md)   | Cloud Functions | Starts and stops GCE VM instances with health polling            | HTTP (internal auth)        |
 | [transcription](transcription/features.md) | Cloud Function  | Converts WhatsApp voice notes to text via Speechmatics           | Pub/Sub (audio-stored)      |
@@ -244,9 +258,9 @@ Cloud Functions and local services that run outside Cloud Run.
 
 ### Worker Details
 
-**orchestrator** — Runs on local machines (Mac or VM) behind Cloudflare Tunnel. Receives task dispatch requests from code-agent, creates isolated git worktrees, spawns Claude Code sessions in Docker containers, and reports results via webhooks. Supports 7 worker types across Anthropic (opus, auto, sonnet), MiniMax (minimax/M2.7), and Alibaba Cloud Model Studio (glm/glm-5, qwen/qwen3.5-plus, kimi/kimi-k2.5). Features plan-aware code reviews with requirements tracking, Gemini-based completion verification with agent-specific Zod schemas, execution deep validation with transcript analysis, Linear proxy via code-agent, auto-enforcement of review findings, selective container preservation by agent type, 3-hour task timeout, versioned system prompts via PromptBuilder, planning PR branch merging, forensics mode, and mid-task messaging.
+**orchestrator** — Runs on local machines (Mac or VM) behind Cloudflare Tunnel. Receives task dispatch requests from code-agent, creates isolated git worktrees, spawns code-worker sessions in Docker containers via Claude or Codex runtimes, and reports results via webhooks. Supports 10 worker type presets across Anthropic (opus, auto, sonnet), MiniMax (minimax/M2.7), Alibaba Cloud Model Studio (glm/glm-5, qwen/qwen3.5-plus, kimi/kimi-k2.5), Codex (`codex`, `codex-xhigh`), and OpenRouter (`openrouter-free`). Features 6 agent types (planning, execution, pull_request, review, remediation, ask_agent), Gemini-based completion verification with agent-specific Zod schemas, Agent Compliance Validator (OpenRouter-based transcript audit), Execution Memory Graph for cross-task learning, Remediation Agent for autonomous review finding fixes, Ask Agent for interactive Q&A sessions, selective container preservation by agent type, 3-hour task timeout, versioned system prompts via PromptBuilder, forensics mode, and mid-task messaging.
 
-**claude-worker** -- Docker container (Node.js 22 Alpine) pre-loaded with Claude CLI, git, pnpm, GitHub CLI, ripgrep, terraform, and gcloud. Runs as non-root user with network restrictions. The orchestrator manages its lifecycle.
+**code-worker** -- Docker container (Node.js 22 Alpine) pre-loaded with Claude CLI, Codex CLI, git, pnpm, GitHub CLI, ripgrep, terraform, and gcloud. Runs as non-root user with network restrictions. The orchestrator manages its lifecycle.
 
 **log-cleanup** -- Pub/Sub-triggered Cloud Function that calls the code-agent's internal cleanup API to delete task logs older than the configured retention period (default 90 days).
 
@@ -283,12 +297,13 @@ Shared libraries used across apps and workers.
 
 ### LLM Provider Clients
 
-| Package                                                    | Provider                   | Capabilities                                |
-| ---------------------------------------------------------- | -------------------------- | ------------------------------------------- |
-| [infra-claude](../packages/infra-claude/README.md)         | Anthropic                  | Text generation, web search, prompt caching |
-| [infra-gemini](../packages/infra-gemini/README.md)         | Google                     | Text generation, web search, image gen      |
-| [infra-gpt](../packages/infra-gpt/README.md)               | OpenAI                     | Text generation, web search, DALL-E         |
-| [infra-perplexity](../packages/infra-perplexity/README.md) | Perplexity                 | SSE-streamed research with citations        |
+| Package                                                    | Provider                   | Capabilities                                    |
+| ---------------------------------------------------------- | -------------------------- | ----------------------------------------------- |
+| [infra-claude](../packages/infra-claude/README.md)         | Anthropic                  | Text generation, web search, prompt caching     |
+| [infra-gemini](../packages/infra-gemini/README.md)         | Google                     | Text generation, web search, image gen          |
+| [infra-gpt](../packages/infra-gpt/README.md)               | OpenAI                     | Text generation, web search, DALL-E             |
+| [infra-perplexity](../packages/infra-perplexity/README.md) | Perplexity                 | SSE-streamed research with citations            |
+| [infra-openrouter](../packages/infra-openrouter/README.md) | OpenRouter                 | OpenRouter API client for dynamic model routing |
 
 ### LLM Stack
 
@@ -385,7 +400,7 @@ graph TD
 
     subgraph "Worker Layer"
         ORCH[orchestrator]
-        CW[claude-worker]
+        CW[code-worker]
     end
 
     subgraph "Support"
@@ -430,7 +445,7 @@ graph TD
 | ---------------------- | -------- |
 | Total Apps             | 22       |
 | Total Workers          | 6        |
-| Total Packages         | 22       |
+| Total Packages         | 24       |
 | Apps with features.md  | 22       |
 | Apps with technical.md | 22       |
 | Apps with tutorial.md  | 22       |
@@ -457,6 +472,7 @@ graph TD
 - **Analyze data**: [data-insights-agent](data-insights-agent/features.md)
 - **Schedule events**: [calendar-agent](calendar-agent/features.md)
 - **Manage Linear issues**: [linear-agent](linear-agent/features.md)
+- **Turn thoughts into polished drafts**: [hellscript-agent](hellscript-agent/features.md)
 
 ### By Integration
 
@@ -480,6 +496,6 @@ graph TD
 
 ---
 
-**Last updated:** 2026-03-22
+**Last updated:** 2026-04-07
 
-**Components documented:** 22 apps + 6 workers + 22 packages = 50 total (predev-lifecycle has no docs yet)
+**Components documented:** 22 apps + 6 workers + 24 packages = 52 total (predev-lifecycle has no docs yet)

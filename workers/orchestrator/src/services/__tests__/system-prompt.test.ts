@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
+import { CODE_TASK_WORKER_TYPES } from '@intexuraos/common-core';
 import {
   buildSystemPrompt,
   planningPrompt,
   executionPrompt,
+  remediationPrompt,
   pullRequestPrompt,
   prReviewOverlayPrompt,
   reviewPrompt,
+  askAgentPrompt,
 } from '../system-prompt.js';
+
+const EXPECTED_WORKER_TYPE_FALLBACK = `\`<${CODE_TASK_WORKER_TYPES.join('|')}>\``;
 
 describe('system-prompt', () => {
   const SEMVER_REGEX = /^\d+\.\d+\.\d+$/;
@@ -15,9 +20,11 @@ describe('system-prompt', () => {
     it.each([
       { name: 'planningPrompt', prompt: planningPrompt },
       { name: 'executionPrompt', prompt: executionPrompt },
+      { name: 'remediationPrompt', prompt: remediationPrompt },
       { name: 'pullRequestPrompt', prompt: pullRequestPrompt },
       { name: 'prReviewOverlayPrompt', prompt: prReviewOverlayPrompt },
       { name: 'reviewPrompt', prompt: reviewPrompt },
+      { name: 'askAgentPrompt', prompt: askAgentPrompt },
     ])('$name has valid semver version', ({ prompt }) => {
       expect(prompt.version).toMatch(SEMVER_REGEX);
     });
@@ -25,9 +32,11 @@ describe('system-prompt', () => {
     it.each([
       { name: 'planningPrompt', prompt: planningPrompt },
       { name: 'executionPrompt', prompt: executionPrompt },
+      { name: 'remediationPrompt', prompt: remediationPrompt },
       { name: 'pullRequestPrompt', prompt: pullRequestPrompt },
       { name: 'prReviewOverlayPrompt', prompt: prReviewOverlayPrompt },
       { name: 'reviewPrompt', prompt: reviewPrompt },
+      { name: 'askAgentPrompt', prompt: askAgentPrompt },
     ])('$name has required metadata fields', ({ prompt }) => {
       expect(prompt.name).toBeTruthy();
       expect(prompt.description).toBeTruthy();
@@ -81,7 +90,7 @@ describe('system-prompt', () => {
   it('enforces Plan PR rules in PLANNING_AGENT_FINAL', () => {
     const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
 
-    expect(result).toContain('NEVER for simple tasks, ALWAYS when subtasks are defined');
+    expect(result).toContain('MANDATORY for ALL planned outcomes, including SIMPLE tasks');
   });
 
   it('enforces Clarification message rules in PLANNING_AGENT_FINAL', () => {
@@ -105,7 +114,7 @@ describe('system-prompt', () => {
       '### Complexity Judgment (MANDATORY — NON-NEGOTIABLE, after Reading section above)'
     );
     expect(result).toContain('COMPLEXITY_JUDGMENT:');
-    expect(result).toContain('- Decision: <SIMPLE|COMPLEX>');
+    expect(result).toContain('- Decision: <SIMPLE|PLAN-DOC|COMPLEX>');
     expect(result).toContain(
       'Do NOT edit the issue, create subtasks, write docs, or open PRs until this block is output'
     );
@@ -114,6 +123,52 @@ describe('system-prompt', () => {
     const judgmentIdx = result.indexOf('### Complexity Judgment');
     const simpleComplexIdx = result.indexOf('### Simple vs Complex');
     expect(judgmentIdx).toBeLessThan(simpleComplexIdx);
+  });
+
+  it('includes the PLAN-DOC tier section in the planning prompt', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('PLAN-DOC task (no subtasks, but needs a plan document)');
+  });
+
+  it('includes the Self-Verification section in the planning prompt', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('### Self-Verification (MANDATORY before completion)');
+  });
+
+  it('planning prompt requires evidence PR for SIMPLE tasks', () => {
+    const result = planningPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
+    expect(result).toContain('evidence PR');
+    expect(result).not.toContain('No subtasks, no plan doc, no PR');
+  });
+
+  it('includes debugging/investigation task handling guidance in planning prompt', () => {
+    const result = planningPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
+    expect(result).toContain('### Debugging/Investigation Tasks (routed as planning)');
+    expect(result).toContain('docs/plans/<INT-XXX>-investigation.md');
+  });
+
+  it('includes the strengthened SIMPLE guardrail text in the planning prompt', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('3+ implementation steps');
+  });
+
+  it('places PLAN-DOC section between SIMPLE and COMPLEX sections', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    const simpleIdx = result.indexOf('**SIMPLE task:**');
+    const planDocIdx = result.indexOf('**PLAN-DOC task');
+    const complexIdx = result.indexOf('**COMPLEX task');
+    expect(simpleIdx).toBeLessThan(planDocIdx);
+    expect(planDocIdx).toBeLessThan(complexIdx);
+  });
+
+  it('includes the updated COMPLEX header with descriptive text', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('subtasks + plan doc + PR, all together');
   });
 
   it('includes PR Description Format in planning prompt with Linear link, task URL, worker type, and model', () => {
@@ -143,6 +198,248 @@ describe('system-prompt', () => {
     expect(result).not.toContain('IntexuraOS Code Task');
     expect(result).toContain('- Worker Type: `auto`');
     expect(result).toContain('- Model: `default`');
+  });
+
+  it('planning prompt omits Linear Issue line when linearIssueId is undefined', () => {
+    const { linearIssueId: _, ...paramsWithoutLinear } = baseParams;
+    const result = planningPrompt.build({
+      ...paramsWithoutLinear,
+      linearIssueLabels: ['bug'],
+    });
+
+    expect(result).not.toContain('Linear Issue: INT-123');
+    expect(result).toContain('[AGENT:PLANNING]');
+  });
+
+  it('execution prompt omits Linear Issue line when linearIssueId is undefined', () => {
+    const { linearIssueId: _, ...paramsWithoutLinear } = baseParams;
+    const result = executionPrompt.build({
+      ...paramsWithoutLinear,
+      linearIssueLabels: ['code-task'],
+    });
+
+    expect(result).not.toContain('Linear Issue: INT-123');
+    expect(result).toContain('[AGENT:EXECUTION]');
+  });
+
+  it('execution prompt documents the retained Codex parity evidence', () => {
+    const result = executionPrompt.build({
+      ...baseParams,
+      linearIssueLabels: ['code-task'],
+      workerType: 'codex',
+    });
+
+    expect(result).toContain('### Codex Session Automation Parity');
+    expect(result).toContain('does NOT reproduce Claude hooks one-for-one');
+    expect(result).toContain('[entrypoint] Bootstrap evidence:');
+    expect(result).toContain('[entrypoint] Codex runtime evidence:');
+    expect(result).toContain('completion verifier + deep validator');
+  });
+
+  it('execution prompt omits Codex parity section for non-codex workers', () => {
+    const result = executionPrompt.build({
+      ...baseParams,
+      linearIssueLabels: ['code-task'],
+      workerType: 'sonnet',
+    });
+
+    expect(result).not.toContain('### Codex Session Automation Parity');
+    expect(result).not.toContain('does NOT reproduce Claude hooks one-for-one');
+  });
+
+  it('pull request prompt omits Linear Issue line when linearIssueId is undefined', () => {
+    const { linearIssueId: _, ...paramsWithoutLinear } = baseParams;
+    const result = pullRequestPrompt.build({
+      ...paramsWithoutLinear,
+      linearIssueLabels: ['code-task', 'pr-comment'],
+    });
+
+    expect(result).not.toContain('Linear Issue: INT-123');
+    expect(result).toContain('[AGENT:PULL_REQUEST]');
+  });
+
+  it('review prompt omits Linear Issue line when linearIssueId is undefined', () => {
+    const { linearIssueId: _, ...paramsWithoutLinear } = baseParams;
+    const result = reviewPrompt.build({
+      ...paramsWithoutLinear,
+      agentType: 'review',
+    });
+
+    expect(result).not.toContain('Linear Issue: INT-123');
+    expect(result).toContain('[AGENT:REVIEW]');
+  });
+
+  it('remediation prompt includes remediation-specific completion and pre-push contract', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'remediation',
+      continuationPrNumber: 901,
+      continuationPrBranch: 'fix/remediation-901',
+    });
+
+    expect(result).toContain('[AGENT:REMEDIATION]');
+    expect(result).toContain('requires_re_review');
+    expect(result).toContain('Do NOT open a second PR');
+    expect(result).toContain('REMEDIATION_AGENT_FINAL:');
+    expect(result).toContain('Linear MCP tools');
+    expect(result).not.toContain('superpowers:requesting-code-review');
+  });
+
+  it('does not include subagent-driven-development or receiving-code-review in remediation prompt', () => {
+    const result = remediationPrompt.build({
+      ...baseParams,
+      agentType: 'remediation',
+      continuationPrNumber: 901,
+      continuationPrBranch: 'fix/remediation-901',
+    });
+    expect(result).not.toContain('superpowers:subagent-driven-development');
+    expect(result).not.toContain('superpowers:receiving-code-review');
+  });
+
+  it('includes mandatory nitpick-nuker instruction in remediation prompt', () => {
+    const result = remediationPrompt.build({
+      ...baseParams,
+      agentType: 'remediation',
+      continuationPrNumber: 901,
+      continuationPrBranch: 'fix/remediation-901',
+    });
+    expect(result).toContain('/nitpick-nuker');
+    expect(result).toContain('mandatory execution step');
+  });
+
+  it('does not say system prompt is source of truth in remediation prompt', () => {
+    const result = remediationPrompt.build({
+      ...baseParams,
+      agentType: 'remediation',
+      continuationPrNumber: 901,
+      continuationPrBranch: 'fix/remediation-901',
+    });
+    expect(result).not.toContain('source of truth');
+  });
+
+  it('remediation prompt renders linearIssueTitle in PR Description when provided', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'remediation',
+      linearIssueTitle: 'Fix review follow-up',
+      continuationPrNumber: 901,
+      continuationPrBranch: 'fix/remediation-901',
+    });
+
+    expect(result).toContain('[INT-123 Fix review follow-up]');
+  });
+
+  it('remediation prompt renders fallback PR description values when Linear issue and worker type are absent', () => {
+    const {
+      linearIssueId: _issueId,
+      workerType: _workerType,
+      ...paramsWithoutIssueAndWorker
+    } = baseParams;
+    void _issueId;
+    void _workerType;
+
+    const result = buildSystemPrompt({
+      ...paramsWithoutIssueAndWorker,
+      agentType: 'remediation',
+      continuationPrNumber: 901,
+      continuationPrBranch: 'fix/remediation-901',
+    });
+
+    expect(result).toContain('[INT-XXX]');
+    expect(result).toContain(EXPECTED_WORKER_TYPE_FALLBACK);
+  });
+
+  it('execution prompt renders linearIssueTitle in PR Description when provided', () => {
+    const result = executionPrompt.build({
+      ...baseParams,
+      linearIssueLabels: ['code-task'],
+      linearIssueTitle: 'Fix login bug',
+    });
+
+    expect(result).toContain('[INT-123 Fix login bug]');
+  });
+
+  it('execution prompt uses the real Linear MCP comment tool', () => {
+    const result = executionPrompt.build({
+      ...baseParams,
+      linearIssueLabels: ['code-task'],
+    });
+
+    expect(result).toContain('mcp__linear__save_comment');
+    expect(result).not.toContain('mcp__linear__create_comment');
+  });
+
+  it('pull request prompt renders linearIssueTitle in PR Description when provided', () => {
+    const result = pullRequestPrompt.build({
+      ...baseParams,
+      linearIssueLabels: ['code-task', 'pr-comment'],
+      linearIssueTitle: 'Fix login bug',
+    });
+
+    expect(result).toContain('[INT-123 Fix login bug]');
+  });
+
+  it('planning prompt uses workerType fallback when workerType is undefined', () => {
+    const { workerType: _, ...paramsWithoutWorkerType } = baseParams;
+    const result = planningPrompt.build({
+      ...paramsWithoutWorkerType,
+      linearIssueLabels: ['bug'],
+    });
+
+    expect(result).toContain(EXPECTED_WORKER_TYPE_FALLBACK);
+  });
+
+  it('execution prompt uses workerType fallback when workerType is undefined', () => {
+    const { workerType: _, ...paramsWithoutWorkerType } = baseParams;
+    const result = executionPrompt.build({
+      ...paramsWithoutWorkerType,
+      linearIssueLabels: ['code-task'],
+    });
+
+    expect(result).toContain(EXPECTED_WORKER_TYPE_FALLBACK);
+  });
+
+  it('pull request prompt uses workerType fallback when workerType is undefined', () => {
+    const { workerType: _, ...paramsWithoutWorkerType } = baseParams;
+    const result = pullRequestPrompt.build({
+      ...paramsWithoutWorkerType,
+      linearIssueLabels: ['code-task', 'pr-comment'],
+    });
+
+    expect(result).toContain(EXPECTED_WORKER_TYPE_FALLBACK);
+  });
+
+  it('review prompt renders linearIssueTitle in PR Description when provided', () => {
+    const result = reviewPrompt.build({
+      ...baseParams,
+      agentType: 'review',
+      linearIssueTitle: 'Fix login bug',
+    });
+
+    expect(result).toContain('[INT-123 Fix login bug]');
+  });
+
+  it('review prompt uses workerType fallback when workerType is undefined', () => {
+    const { workerType: _, ...paramsWithoutWorkerType } = baseParams;
+    const result = reviewPrompt.build({
+      ...paramsWithoutWorkerType,
+      agentType: 'review',
+    });
+
+    expect(result).toContain(EXPECTED_WORKER_TYPE_FALLBACK);
+  });
+
+  it('review prompt renders taskUrl in View in IntexuraOS link and code task line', () => {
+    const result = reviewPrompt.build({
+      ...baseParams,
+      agentType: 'review',
+      taskUrl: 'https://intexuraos.cloud/#/code-tasks/task-456',
+    });
+
+    expect(result).toContain(
+      '[View in IntexuraOS](https://intexuraos.cloud/#/code-tasks/task-456)'
+    );
+    expect(result).toContain('[View task](https://intexuraos.cloud/#/code-tasks/task-456)');
   });
 
   it('includes mandatory Worker Type and Model emphasis in all prompt types', () => {
@@ -191,7 +488,7 @@ describe('system-prompt', () => {
     expect(result).toContain('source of truth');
     expect(result).toContain('Linear MCP tools');
     expect(result).toContain('Do NOT use the `/linear` skill');
-    expect(result).toContain('superpowers:executing-plans');
+    expect(result).toContain('superpowers:subagent-driven-development');
     expect(result).toContain('superpowers:requesting-code-review');
     expect(result).toContain('gh pr create');
     expect(result).toContain('EXECUTION_AGENT_FINAL:');
@@ -199,6 +496,29 @@ describe('system-prompt', () => {
     expect(result).toContain('- Review iterations: <number>');
     expect(result).toContain('- Skill sequence proof:');
     expect(result).not.toContain('- Turn summary:');
+    expect(result).toContain('- PR: <full GitHub PR URL>');
+    expect(result).not.toContain('"N/A"');
+  });
+
+  it('execution prompt requires evidence PR for already_completed', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+
+    expect(result).toContain('Evidence PR (MANDATORY for already_completed)');
+    expect(result).toContain('docs/evidence/');
+    expect(result).not.toContain('Set PR to "N/A"');
+  });
+
+  it('pins execution final block memory self-report fields', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+    const finalBlockStart = result.indexOf('EXECUTION_AGENT_FINAL:');
+    const finalBlockEnd = result.indexOf('```', finalBlockStart);
+    const finalBlock = result.slice(finalBlockStart, finalBlockEnd);
+
+    expect(finalBlock).toContain('- execution_memory_ids_used: <comma-separated list or "none">');
+    expect(finalBlock).toContain(
+      '- execution_memory_ids_rejected: <comma-separated list or "none">'
+    );
+    expect(finalBlock).toContain('- execution_memory_usage_summary: <brief note, or "none">');
   });
 
   it('builds execution continuation instructions when an open PR is inherited', () => {
@@ -769,6 +1089,7 @@ describe('system-prompt', () => {
     expect(result).toContain('🔒 Security');
     expect(result).toContain('🏗️ Architecture');
     expect(result).toContain('📐 Plan Review');
+    expect(result).toContain('🧪 Test Quality');
     expect(result).toContain('Verdict:');
   });
 
@@ -779,6 +1100,7 @@ describe('system-prompt', () => {
     expect(result).toContain('🔒 Security');
     expect(result).not.toContain('🏗️ Architecture');
     expect(result).not.toContain('📐 Plan Review');
+    expect(result).not.toContain('🧪 Test Quality');
     expect(result).toContain('code_quality, security');
   });
 
@@ -788,6 +1110,7 @@ describe('system-prompt', () => {
     expect(result).not.toContain('🔍 Code Quality');
     expect(result).not.toContain('🔒 Security');
     expect(result).not.toContain('📐 Plan Review');
+    expect(result).not.toContain('🧪 Test Quality');
   });
 
   it('includes only plan_review section when reviewTypes is ["plan_review"]', () => {
@@ -796,12 +1119,205 @@ describe('system-prompt', () => {
     expect(result).not.toContain('🔍 Code Quality');
     expect(result).not.toContain('🔒 Security');
     expect(result).not.toContain('🏗️ Architecture');
+    expect(result).not.toContain('🧪 Test Quality');
+  });
+
+  it('omits Per-Type Review Structure section when all reviewTypes are unknown', () => {
+    const result = reviewPrompt.build({ ...baseParams, reviewTypes: ['nonexistent_type'] });
+    expect(result).not.toContain('### Per-Type Review Structure (MANDATORY)');
+    expect(result).not.toContain('🔍 Code Quality');
+    expect(result).not.toContain('🔒 Security');
+    expect(result).not.toContain('🏗️ Architecture');
+    expect(result).not.toContain('📐 Plan Review');
+    expect(result).not.toContain('🧪 Test Quality');
+  });
+
+  it('filters out unknown reviewTypes and includes only valid ones', () => {
+    const result = reviewPrompt.build({
+      ...baseParams,
+      reviewTypes: ['nonexistent', 'security', 'also_invalid'],
+    });
+    expect(result).toContain('### Per-Type Review Structure (MANDATORY)');
+    expect(result).toContain('🔒 Security');
+    expect(result).not.toContain('🔍 Code Quality');
+    expect(result).not.toContain('🏗️ Architecture');
+    expect(result).not.toContain('📐 Plan Review');
+    expect(result).not.toContain('🧪 Test Quality');
+  });
+
+  it('includes only test_quality section when reviewTypes is ["test_quality"]', () => {
+    const result = reviewPrompt.build({ ...baseParams, reviewTypes: ['test_quality'] });
+    expect(result).toContain('🧪 Test Quality');
+    expect(result).toContain('Verdict:');
+    expect(result).not.toContain('🔍 Code Quality');
+    expect(result).not.toContain('🔒 Security');
+    expect(result).not.toContain('🏗️ Architecture');
+    expect(result).not.toContain('📐 Plan Review');
+  });
+
+  it('includes both sections when reviewTypes is ["code_quality", "test_quality"]', () => {
+    const result = reviewPrompt.build({
+      ...baseParams,
+      reviewTypes: ['code_quality', 'test_quality'],
+    });
+    expect(result).toContain('🔍 Code Quality');
+    expect(result).toContain('🧪 Test Quality');
+    expect(result).not.toContain('🔒 Security');
+    expect(result).not.toContain('🏗️ Architecture');
+    expect(result).not.toContain('📐 Plan Review');
+    expect(result).toContain('code_quality, test_quality');
+  });
+
+  it('includes all types including test_quality when reviewTypes is undefined', () => {
+    const result = reviewPrompt.build(baseParams);
+    expect(result).toContain('🧪 Test Quality');
+    expect(result).toContain('🔍 Code Quality');
+    expect(result).toContain('🔒 Security');
+    expect(result).toContain('🏗️ Architecture');
+    expect(result).toContain('📐 Plan Review');
+  });
+
+  it('review scope description contains test_quality criteria', () => {
+    const result = reviewPrompt.build(baseParams);
+    expect(result).toContain('**test_quality**');
+    expect(result).toContain('False Positives');
+    expect(result).toContain('v8 Ignore Legitimacy');
+    expect(result).toContain('Mock & Fake Patterns');
+    expect(result).toContain('Test Structure & Naming');
+    expect(result).toContain('TypeScript Strictness in Tests');
   });
 
   it('REVIEW_AGENT_FINAL block includes requirements_tracker_updated field', () => {
     const result = reviewPrompt.build(baseParams);
     expect(result).toContain('requirements_tracker_updated');
     expect(result).toContain('REVIEW_AGENT_FINAL');
+  });
+
+  it('planning prompt includes Comment-Driven Decision Log section after Reading section', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('### Comment-Driven Decision Log (MANDATORY when comments exist)');
+    expect(result).toContain('Track decisions');
+    expect(result).toContain('Post a Linear acknowledgment comment');
+    expect(result).toContain('📋 **Comment-Driven Decisions:**');
+    expect(result).toContain('Decision Log');
+
+    // Must appear after Reading section and before Planning Contract
+    const readingIdx = result.indexOf('### Reading the Linear Issue');
+    const decisionLogIdx = result.indexOf('### Comment-Driven Decision Log');
+    const planningContractIdx = result.indexOf('### Planning Contract');
+    expect(decisionLogIdx).toBeGreaterThan(readingIdx);
+    expect(decisionLogIdx).toBeLessThan(planningContractIdx);
+  });
+
+  it('execution prompt includes Comment-Driven Decision Log section after Reading section', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+
+    expect(result).toContain('### Comment-Driven Decision Log (MANDATORY when comments exist)');
+    expect(result).toContain('Track decisions');
+    expect(result).toContain('Post a Linear acknowledgment comment');
+    expect(result).toContain('📋 **Comment-Driven Decisions:**');
+    expect(result).toContain('Decision Log');
+
+    // Must appear after Reading section and before Mandatory Skill Order
+    const readingIdx = result.indexOf('### Reading the Linear Issue');
+    const decisionLogIdx = result.indexOf('### Comment-Driven Decision Log');
+    const skillOrderIdx = result.indexOf('### Mandatory Skill Order');
+    expect(decisionLogIdx).toBeGreaterThan(readingIdx);
+    expect(decisionLogIdx).toBeLessThan(skillOrderIdx);
+  });
+
+  it('Comment-Driven Decision Log includes skip-when-empty instruction', () => {
+    const planningResult = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const executionResult = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+
+    for (const result of [planningResult, executionResult]) {
+      expect(result).toContain(
+        'If no comments exist or no comments influenced decisions, skip this section entirely'
+      );
+    }
+  });
+
+  it('Comment-Driven Decision Log specifies timing for Linear acknowledgment comment', () => {
+    const planningResult = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const executionResult = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+
+    // Verifies the ack comment has explicit ordering relative to PR creation
+    for (const result of [planningResult, executionResult]) {
+      expect(result).toContain('before creating the PR');
+    }
+  });
+
+  it('Comment-Driven Decision Log is absent from non-planning/non-execution prompts', () => {
+    const prResult = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task', 'pr-comment'],
+    });
+    const reviewResult = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+    });
+    const overlayResult = prReviewOverlayPrompt.build(baseParams);
+
+    for (const result of [prResult, reviewResult, overlayResult]) {
+      expect(result).not.toContain('Comment-Driven Decision Log');
+    }
+  });
+
+  it('planning prompt version is 5.1.0', () => {
+    expect(planningPrompt.version).toBe('6.0.0');
+  });
+
+  it('execution prompt version is 9.0.0', () => {
+    expect(executionPrompt.version).toBe('9.0.0');
+  });
+
+  it('remediation prompt version is 3.2.0', () => {
+    expect(remediationPrompt.version).toBe('3.2.0');
+  });
+
+  it('injects execution memory section only for execution tasks', () => {
+    const executionResult = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task'],
+      executionMemoryContext: {
+        applicationId: 'app_123',
+        retrievalVersion: 'execution-memory-retrieval@1.0.0',
+        querySummary: 'Callback logging, route verification, and env propagation.',
+        matchedMemories: [
+          {
+            memoryId: 'mem_142',
+            title: 'Log incoming requests on callback routes',
+            memoryType: 'pitfall_pattern',
+            score: 0.94,
+            appliesWhen: 'A callback route changes request handling.',
+            action: 'Update request logging with the route change.',
+            avoid: 'Do not copy stale branch names from memories.',
+            verification: 'Add app.inject coverage for the route.',
+          },
+        ],
+      },
+    });
+
+    const planningResult = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['bug'],
+      executionMemoryContext: {
+        applicationId: 'app_ignored',
+        retrievalVersion: 'execution-memory-retrieval@1.0.0',
+        querySummary: 'ignored',
+        matchedMemories: [],
+      },
+    });
+
+    expect(executionResult).toContain('### Execution Memory');
+    expect(executionResult).toContain('Memories are advisory, not authoritative');
+    expect(executionResult).toContain('mem_142');
+    expect(executionResult).toContain('Do not copy stale branch names from memories.');
+    expect(executionResult).toContain('memory_ids_used');
+    expect(executionResult).toContain('memory_ids_rejected');
+    expect(executionResult).toContain('memory_usage_summary');
+    expect(planningResult).not.toContain('### Execution Memory');
   });
 
   it('review agent prompt includes Linear section when linearIssueId is provided', () => {
@@ -813,5 +1329,97 @@ describe('system-prompt', () => {
     expect(result).toContain('MANDATORY FIRST ACTION');
     expect(result).toContain('mcp__linear__get_issue');
     expect(result).toContain('INT-123');
+  });
+
+  it('review agent prompt includes GitHub Actions status check step', () => {
+    const result = reviewPrompt.build(baseParams);
+    expect(result).toContain('Check GitHub Actions Status');
+    expect(result).toContain('gh pr checks');
+    expect(result).toContain('bucket');
+  });
+
+  it('review agent prompt places GH Actions check as last step before posting review', () => {
+    const result = reviewPrompt.build(baseParams);
+    const repoAccessIndex = result.indexOf('Full Repository Access');
+    const ghActionsIndex = result.indexOf('Check GitHub Actions Status');
+    const postingIndex = result.indexOf('Posting Review Comments');
+    expect(repoAccessIndex).toBeLessThan(ghActionsIndex);
+    expect(ghActionsIndex).toBeLessThan(postingIndex);
+  });
+
+  it('review agent prompt includes GH Actions status in review structure template', () => {
+    const result = reviewPrompt.build(baseParams);
+    expect(result).toContain('GitHub Actions Status');
+    expect(result).toContain('gh_actions_status');
+  });
+
+  it('REVIEW_AGENT_FINAL block includes gh_actions_status field', () => {
+    const result = reviewPrompt.build(baseParams);
+    expect(result).toContain('gh_actions_status');
+    expect(result).toContain('REVIEW_AGENT_FINAL');
+  });
+
+  it('routes ask_agent to askAgentPrompt', () => {
+    const result = buildSystemPrompt({ ...baseParams, agentType: 'ask_agent' });
+    expect(result).toContain('[AGENT:ASK_AGENT]');
+    expect(result).toContain('[ASK AGENT MODE]');
+    expect(result).not.toContain('[AGENT:PLANNING]');
+    expect(result).not.toContain('[AGENT:EXECUTION]');
+  });
+
+  it('ask agent prompt contains required markers and instructions', () => {
+    const result = askAgentPrompt.build({ ...baseParams, agentType: 'ask_agent' });
+    expect(result).toContain('[AGENT:ASK_AGENT]');
+    expect(result).toContain('[ASK AGENT MODE]');
+    expect(result).toContain('interactive code assistant');
+    expect(result).toContain(
+      'Do NOT create pull requests or Linear issues unless the user explicitly asks'
+    );
+    expect(result).toContain('Do NOT produce structured completion blocks');
+    expect(result).toContain('Session Continuity');
+    expect(result).toContain('Worker type:');
+    expect(result).toContain('Task ID: task-123');
+  });
+
+  it('ask agent prompt includes worker instructions', () => {
+    const result = askAgentPrompt.build({ ...baseParams, agentType: 'ask_agent' });
+    expect(result).toContain('Git CLI (MANDATORY');
+    expect(result).toContain('GCP Service Account Credentials');
+    expect(result).toContain('Code Task Debugging');
+  });
+
+  it('ask agent prompt omits Linear Issue line when linearIssueId is undefined', () => {
+    const { linearIssueId: _, ...paramsWithoutLinear } = baseParams;
+    const result = askAgentPrompt.build({
+      ...paramsWithoutLinear,
+      agentType: 'ask_agent',
+      linearIssueLabels: [],
+    });
+    expect(result).not.toContain('Linear Issue:');
+    expect(result).toContain('[AGENT:ASK_AGENT]');
+  });
+
+  it('ask agent prompt uses worker type fallback when workerType is undefined', () => {
+    const { workerType: _, ...paramsWithoutWorkerType } = baseParams;
+    const result = askAgentPrompt.build({
+      ...paramsWithoutWorkerType,
+      agentType: 'ask_agent',
+      linearIssueLabels: [],
+    });
+    expect(result).toContain(EXPECTED_WORKER_TYPE_FALLBACK);
+  });
+
+  it('includes non-interactive environment instructions for ask_agent', () => {
+    const result = buildSystemPrompt({
+      taskId: 'task_test',
+      linearIssueLabels: [],
+      workerType: 'opus',
+      taskUrl: 'https://intexuraos.cloud/#/code-tasks/task_test',
+      agentType: 'ask_agent',
+    });
+
+    expect(result).toContain('non-interactive');
+    expect(result).toContain('AskUserQuestion');
+    expect(result).toContain('NEVER use interactive tools');
   });
 });

@@ -1,7 +1,7 @@
 # User Service - Technical Debt
 
-**Last Updated:** 2026-03-22
-**Analysis Run:** [2026-03-22 entry](../../documentation-runs.md)
+**Last Updated:** 2026-04-07
+**Analysis Run:** [2026-04-07 entry](../../documentation-runs.md)
 
 ---
 
@@ -25,31 +25,32 @@
 
 Currently Google and GitHub OAuth are implemented. Planned additions:
 
-1. **Microsoft OAuth** - For calendar/email integration with Outlook
-2. **Notion OAuth** - For notes sync
+1. **Microsoft OAuth** — For calendar/email integration with Outlook
+2. **Notion OAuth** — For notes sync
 
 ### Enhanced API Key Features
 
-1. **Usage analytics** - Track API call volume and costs per user per provider
-2. **Key rotation** - Automatic key expiration warnings and renewal prompts
-3. **Budget alerts** - Warn users when approaching provider spending limits
-4. **Rate limiting** - Per-user or per-key request limits to prevent abuse
+1. **Usage analytics** — Track API call volume and costs per user per provider
+2. **Key rotation** — Automatic key expiration warnings and renewal prompts
+3. **Budget alerts** — Warn users when approaching provider spending limits
+4. **Rate limiting** — Per-user or per-key request limits to prevent abuse
 
 ### Authentication Enhancements
 
-1. **Multi-factor authentication** - Optional 2FA via Auth0
-2. **Session management** - View and revoke active sessions
-3. **Passwordless email magic links** - Alternative to device code flow
+1. **Multi-factor authentication** — Optional 2FA via Auth0
+2. **Session management** — View and revoke active sessions
+3. **Passwordless email magic links** — Alternative to device code flow
 
 ### Error Formatting Improvements
 
-1. **Perplexity-specific parsing** - Currently falls through to generic parser
-2. **Structured error responses** - Include error codes alongside messages
+1. **OpenRouter-specific parsing** — Currently falls through to generic parser; could add OpenRouter-specific error patterns
+2. **Perplexity-specific parsing** — Currently falls through to generic parser
+3. **Structured error responses** — Include error codes alongside messages
 
 ### Transcription Expansion
 
-1. **Additional providers** - Only Speechmatics is supported today; Whisper and other providers could be added
-2. **Per-language preferences** - Allow users to select different providers for different languages
+1. **Additional providers** — Only Speechmatics is supported today; Whisper and other providers could be added
+2. **Per-language preferences** — Allow users to select different providers for different languages
 
 ---
 
@@ -67,11 +68,13 @@ The `llmKeysRoutes.ts` file is large but all routes are cohesive around the LLM 
 
 ### Acknowledged Pattern: LlmValidatorImpl
 
-The `LlmValidatorImpl.ts` contains similar code blocks for each provider (4 providers x 2 methods = 8 similar blocks). This is intentional for:
+The `LlmValidatorImpl.ts` contains similar code blocks for each provider (5 providers x 2 methods = 10 similar blocks). This is intentional for:
 
 - Clear debugging (each provider's logic is isolated)
 - Easy addition of new providers
 - Provider-specific error handling
+
+OpenRouter's `validateKey` method differs from the others (uses `/api/v1/key` instead of `generate()`), which justifies the per-provider approach.
 
 Not considered actionable debt as the pattern is explicit and maintainable.
 
@@ -95,38 +98,40 @@ Comprehensive test coverage across all layers with 100% branch coverage enforcem
 
 - **formatLlmError()**: 100% branch coverage with 35+ test cases
 - **Authentication flows**: Device code, refresh, OAuth fully tested
-- **Settings management**: CRUD operations tested including transcription preferences
+- **Settings management**: CRUD operations tested including transcription and timezone preferences
 - **Encryption**: AES-256-GCM encryption/decryption tested
 - **Internal endpoints**: Auth validation and all 6 endpoints tested
 - **Default model**: Validation, provider key check, and cascade clearing tested
 - **Google OAuth**: Full flow (initiate, callback, status, disconnect) tested
 - **GitHub OAuth**: Full flow (initiate, callback, status, disconnect) tested
+- **OpenRouter**: Key validation and testing routes tested
+- **Timezone**: Setting, validation, and internal endpoint return tested
 
 ### Test Files
 
-| Test File                               | Coverage Area                                 |
-| --------------------------------------- | --------------------------------------------- |
-| `configRoutes.test.ts`                  | Auth0 config endpoint                         |
-| `deviceRoutes.test.ts`                  | Device code flow (start + poll)               |
-| `tokenRoutes.test.ts`                   | Token refresh                                 |
-| `firebaseRoutes.test.ts`                | Firebase token exchange                       |
-| `frontendRoutes.test.ts`                | Login/logout/me endpoints                     |
-| `oauthRoutes.test.ts`                   | OAuth2 token/authorize (ChatGPT Actions)      |
-| `oauthConnectionRoutes.test.ts`         | Google OAuth connection management            |
-| `gitHubOAuthConnectionRoutes.test.ts`   | GitHub OAuth connection management            |
-| `settingsRoutes.test.ts`                | User settings + default model + transcription |
-| `llmKeysRoutes.test.ts`                 | LLM key CRUD + test                           |
-| `internalRoutes.test.ts`                | Service-to-service endpoints (6)              |
-| `formatLlmError.test.ts`                | Provider error parsing                        |
-| `encryption.test.ts`                    | AES-256-GCM encrypt/decrypt                   |
-| `auth0Client.test.ts`                   | Auth0 SDK wrapper                             |
-| `authTokenRepository.test.ts`           | Firestore token storage                       |
-| `userSettingsRepository.test.ts`        | Firestore settings storage                    |
-| `oauthConnectionRepository.test.ts`     | Firestore OAuth storage                       |
-| `googleOAuthClient.test.ts`             | Google OAuth client                           |
-| `gitHubOAuthClient.test.ts`             | GitHub OAuth client                           |
-| `llmValidator.test.ts`                  | LLM key validation (4 providers)              |
-| `maskApiKey.test.ts`                    | Key masking utility                           |
+| Test File                               | Coverage Area                                      |
+| --------------------------------------- | -------------------------------------------------- |
+| `configRoutes.test.ts`                  | Auth0 config endpoint                              |
+| `deviceRoutes.test.ts`                  | Device code flow (start + poll)                    |
+| `tokenRoutes.test.ts`                   | Token refresh                                      |
+| `firebaseRoutes.test.ts`                | Firebase token exchange                            |
+| `frontendRoutes.test.ts`                | Login/logout/me endpoints                          |
+| `oauthRoutes.test.ts`                   | OAuth2 token/authorize (ChatGPT Actions)           |
+| `oauthConnectionRoutes.test.ts`         | Google OAuth connection management                 |
+| `gitHubOAuthConnectionRoutes.test.ts`   | GitHub OAuth connection management                 |
+| `settingsRoutes.test.ts`                | User settings + default model + transcription + tz |
+| `llmKeysRoutes.test.ts`                 | LLM key CRUD + test (5 providers)                  |
+| `internalRoutes.test.ts`                | Service-to-service endpoints (6)                   |
+| `formatLlmError.test.ts`                | Provider error parsing                             |
+| `encryption.test.ts`                    | AES-256-GCM encrypt/decrypt                        |
+| `auth0Client.test.ts`                   | Auth0 SDK wrapper                                  |
+| `authTokenRepository.test.ts`           | Firestore token storage                            |
+| `userSettingsRepository.test.ts`        | Firestore settings storage                         |
+| `oauthConnectionRepository.test.ts`     | Firestore OAuth storage                            |
+| `googleOAuthClient.test.ts`             | Google OAuth client                                |
+| `gitHubOAuthClient.test.ts`             | GitHub OAuth client                                |
+| `llmValidator.test.ts`                  | LLM key validation (5 providers incl. OpenRouter)  |
+| `maskApiKey.test.ts`                    | Key masking utility                                |
 
 ---
 
@@ -155,6 +160,23 @@ No deprecated APIs or dependencies in use.
 ---
 
 ## Recent Changes
+
+### v3.5.0 (2026-04-07)
+
+**Change:** Added OpenRouter as a fifth LLM provider (INT-1011, PRs #1443, #1461). OpenRouter key validation uses a lightweight `/api/v1/key` endpoint instead of a model call, making validation free of token cost. The `or:` prefix on OpenRouter model identifiers is stripped before API calls. All existing key management routes (GET/PATCH/DELETE/test) now support `openrouter` as a provider. Internal `/llm-keys` endpoint returns an additional `openrouter` field.
+
+**Change:** Added timezone preference to user settings (INT-1126). New `PATCH /users/:uid/settings/timezone` endpoint validates IANA timezone strings via `Intl.supportedValuesOf('timeZone')`. Internal `GET /internal/users/:uid/settings` now returns `timezone` alongside existing preferences.
+
+**Files changed:**
+- `apps/user-service/src/infra/llm/LlmValidatorImpl.ts` (OpenRouter validation + testing)
+- `apps/user-service/src/domain/settings/models/UserSettings.ts` (OpenRouter key + timezone field)
+- `apps/user-service/src/routes/llmKeysRoutes.ts` (OpenRouter in key management routes)
+- `apps/user-service/src/routes/internalRoutes.ts` (OpenRouter key + timezone in response)
+- `apps/user-service/src/routes/settingsRoutes.ts` (timezone endpoint)
+- `apps/user-service/src/services.ts` (OpenRouter pricing + validation wiring)
+- `apps/user-service/src/infra/firestore/userSettingsRepository.ts` (OpenRouter + timezone persistence)
+
+---
 
 ### v3.4.0 (2026-03-22)
 

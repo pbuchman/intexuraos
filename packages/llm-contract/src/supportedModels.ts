@@ -14,9 +14,10 @@ export type Google = 'google';
 export type OpenAI = 'openai';
 export type Anthropic = 'anthropic';
 export type Perplexity = 'perplexity';
+export type OpenRouter = 'openrouter';
 
 /** Union of all LLM providers */
-export type LlmProvider = Google | OpenAI | Anthropic | Perplexity;
+export type LlmProvider = Google | OpenAI | Anthropic | Perplexity | OpenRouter;
 
 // =============================================================================
 // Individual Model Types - Google
@@ -73,7 +74,14 @@ export type ResearchModel =
   | GPT52
   | Sonar
   | SonarPro
-  | SonarDeepResearch;
+  | SonarDeepResearch
+  | OpenRouterModelId;
+
+/**
+ * OpenRouter model ID with or: prefix.
+ * This is a branded string type to distinguish OpenRouter models from static LLMModel IDs.
+ */
+export type OpenRouterModelId = string & { readonly __brand: 'OpenRouterModelId' };
 
 /**
  * Models for API key validation (cheap, fast).
@@ -127,6 +135,7 @@ export const LlmProviders = {
   OpenAI: 'openai' as OpenAI,
   Anthropic: 'anthropic' as Anthropic,
   Perplexity: 'perplexity' as Perplexity,
+  OpenRouter: 'openrouter' as OpenRouter,
 } as const;
 
 // =============================================================================
@@ -238,8 +247,37 @@ export const FAST_MODEL_DISPLAY_NAMES: Record<FastModel, string> = {
 /**
  * Get provider for a model.
  */
-export function getProviderForModel(model: LLMModel): LlmProvider {
-  return MODEL_PROVIDER_MAP[model];
+export function getProviderForModel(model: string): LlmProvider {
+  if (isOpenRouterModel(model)) {
+    return LlmProviders.OpenRouter;
+  }
+  // After the OpenRouter guard, model is a static LLMModel
+  return MODEL_PROVIDER_MAP[model as LLMModel];
+}
+
+/**
+ * Check if a string is an OpenRouter model ID (prefixed with 'or:').
+ */
+export function isOpenRouterModel(model: string): model is OpenRouterModelId {
+  return model.startsWith('or:');
+}
+
+/**
+ * Create an OpenRouter model ID by adding the 'or:' prefix.
+ */
+export function createOpenRouterModelId(rawModelId: string): OpenRouterModelId {
+  return `or:${rawModelId}` as OpenRouterModelId;
+}
+
+/**
+ * Strip the 'or:' prefix from an OpenRouter model ID.
+ * Returns the original string for non-OpenRouter models.
+ */
+export function getOpenRouterRawId(model: string): string {
+  if (isOpenRouterModel(model)) {
+    return model.slice(3);
+  }
+  return model;
 }
 
 /**

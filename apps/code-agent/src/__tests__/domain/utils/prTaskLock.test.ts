@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { buildLockDocPath, deletePRTaskLock } from '../../../domain/utils/prTaskLock.js';
+import { buildLockCleanups, buildLockDocPath, deletePRTaskLock } from '../../../domain/utils/prTaskLock.js';
 import type { Logger } from '@intexuraos/common-core';
 
 describe('buildLockDocPath', () => {
@@ -94,5 +94,31 @@ describe('deletePRTaskLock', () => {
 
     expect(mockFirestore.doc).toHaveBeenCalledWith('pr_task_locks/pbuchman_intexuraos_997');
     expect(mockDeleteFn).toHaveBeenCalled();
+  });
+});
+
+describe('buildLockCleanups', () => {
+  it('returns cleanup for original PR task', () => {
+    expect(buildLockCleanups({
+      repository: 'org/repo',
+      prNumber: 42,
+    })).toEqual([{ repository: 'org/repo', prNumber: 42 }]);
+  });
+
+  it('does not return cleanup for merge-conflict follow-up task', () => {
+    expect(buildLockCleanups({
+      repository: 'org/repo',
+      prNumber: 42,
+      parentTaskId: 'task-parent',
+      followUpReason: 'merge_conflict',
+    })).toEqual([]);
+  });
+
+  it('does not return cleanup for legacy merge-conflict task identified by system prompt hash', () => {
+    expect(buildLockCleanups({
+      repository: 'org/repo',
+      prNumber: 42,
+      systemPromptHash: 'pr-merge-conflict-auto',
+    })).toEqual([]);
   });
 });

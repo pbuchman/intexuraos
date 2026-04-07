@@ -238,6 +238,7 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
   private shouldFailUpdateLlmPreferences = false;
   private shouldFailClearLlmPreferences = false;
   private shouldFailUpdateTranscriptionPreferences = false;
+  private shouldFailUpdateTimezone = false;
 
   /**
    * Configure the fake to fail the next getSettings call.
@@ -293,6 +294,13 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
    */
   setFailNextUpdateTranscriptionPreferences(fail: boolean): void {
     this.shouldFailUpdateTranscriptionPreferences = fail;
+  }
+
+  /**
+   * Configure the fake to fail the next updateTimezone call.
+   */
+  setFailNextUpdateTimezone(fail: boolean): void {
+    this.shouldFailUpdateTimezone = fail;
   }
 
   /**
@@ -502,6 +510,35 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
       };
     } else {
       existing.transcriptionPreferences = { provider };
+      existing.updatedAt = new Date().toISOString();
+    }
+
+    this.settings.set(userId, existing);
+    return Promise.resolve(ok(undefined));
+  }
+
+  updateTimezone(userId: string, timezone: string): Promise<Result<void, SettingsError>> {
+    if (this.shouldFailUpdateTimezone) {
+      this.shouldFailUpdateTimezone = false;
+      return Promise.resolve(
+        err({
+          code: 'INTERNAL_ERROR',
+          message: 'Simulated update timezone failure',
+        })
+      );
+    }
+
+    let existing = this.settings.get(userId);
+    if (existing === undefined) {
+      const now = new Date().toISOString();
+      existing = {
+        userId,
+        timezone,
+        createdAt: now,
+        updatedAt: now,
+      };
+    } else {
+      existing.timezone = timezone;
       existing.updatedAt = new Date().toISOString();
     }
 

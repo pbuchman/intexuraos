@@ -6,11 +6,11 @@
 
 ## Identity
 
-| Field    | Value                                                                                                            |
-| -------- | ---------------------------------------------------------------------------------------------------------------- |
-| **Name** | user-service                                                                                                     |
-| **Role** | User Authentication and Settings Service                                                                         |
-| **Goal** | Manage authentication, OAuth connections (Google + GitHub), LLM API keys, user preferences, and error formatting |
+| Field    | Value                                                                                                                          |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **Name** | user-service                                                                                                                   |
+| **Role** | User Authentication and Settings Service                                                                                       |
+| **Goal** | Manage authentication, OAuth connections (Google + GitHub), LLM API keys (5 providers), user preferences, and error formatting |
 
 ---
 
@@ -37,6 +37,10 @@ interface UserServiceTools {
     userId: string,
     params: { provider: TranscriptionProvider }
   ): Promise<{ provider: TranscriptionProvider }>;
+  updateTimezone(
+    userId: string,
+    params: { timezone: string }
+  ): Promise<{ timezone: string }>;
 
   // LLM API Keys
   getLlmApiKeys(userId: string): Promise<LlmKeysStatus>;
@@ -69,6 +73,7 @@ interface UserServiceTools {
   getUserPreferences(userId: string): Promise<ApiResponse<{
     llmPreferences?: LlmPreferences;
     transcriptionPreferences?: TranscriptionPreferences;
+    timezone?: string;
   }>>;
 }
 ```
@@ -76,7 +81,7 @@ interface UserServiceTools {
 ### Types
 
 ```typescript
-type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity';
+type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity' | 'openrouter';
 type OAuthProvider = 'google' | 'github';
 type TranscriptionProvider = 'speechmatics';
 
@@ -121,6 +126,7 @@ interface UserSettings {
   userId: string;
   llmPreferences?: LlmPreferences;
   transcriptionPreferences?: TranscriptionPreferences;
+  timezone?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -139,6 +145,7 @@ interface LlmKeysStatus {
   openai: string | null;
   anthropic: string | null;
   perplexity: string | null;
+  openrouter: string | null;
   testResults: Record<LlmProvider, LlmTestResult | null>;
 }
 
@@ -158,6 +165,7 @@ interface DecryptedLlmKeys {
   openai: string | null;
   anthropic: string | null;
   perplexity: string | null;
+  openrouter: string | null;
 }
 
 interface OAuthConnectionStatus {
@@ -186,7 +194,7 @@ interface GitHubOAuthConnectionStatus {
 | **Self-Access Only**           | Users can only access their own settings                               |
 | **Encrypted Storage**          | API keys encrypted at rest with AES-256-GCM                            |
 | **Key Validation**             | API keys validated with provider before storing                        |
-| **4 Providers**                | Supports Google, OpenAI, Anthropic, Perplexity                         |
+| **5 Providers**                | Supports Google, OpenAI, Anthropic, Perplexity, OpenRouter             |
 | **Rate Limit Precedence**      | Error parser checks rate limits before API key errors                  |
 | **Internal Auth**              | Service-to-service calls require X-Internal-Auth header                |
 | **Model Validation**           | `defaultModel` must pass `isFastModel()` AND have API key for provider |
@@ -194,6 +202,8 @@ interface GitHubOAuthConnectionStatus {
 | **OAuth2 Raw Responses**       | `/auth/oauth/*` routes use flat OAuth2-spec responses                  |
 | **GitHub Tokens Never Expire** | GitHub access tokens stored with far-future expiry (9999-12-31)        |
 | **OAuth State TTL**            | OAuth state parameters expire after 10 minutes                         |
+| **OpenRouter Zero-Cost Valid** | OpenRouter keys validated via `/api/v1/key` (no token cost)            |
+| **IANA Timezone Only**         | Timezone must be a valid IANA string (e.g., `Europe/Berlin`)           |
 
 ---
 
@@ -256,9 +266,11 @@ const updateResult = await updateLlmApiKey(userId, {
 });
 // updateResult.masked shows "sk-p...XXXX"
 
-// If rate limited during validation:
-// Error: "Rate limit exceeded. Please try again later."
-// (v2.0.0 fix: this is NOT shown as "invalid key")
+// Add OpenRouter key (zero-cost validation via /api/v1/key)
+const orResult = await updateLlmApiKey(userId, {
+  provider: 'openrouter',
+  apiKey: 'sk-or-v1-...',
+});
 
 // Test the key with a sample request
 const testResult = await testLlmApiKey(userId, 'openai');
@@ -285,12 +297,21 @@ const result = await updateTranscriptionPreferences(userId, { provider: 'speechm
 // Only 'speechmatics' is currently valid
 ```
 
+### Set Timezone
+
+```typescript
+// Set preferred timezone (IANA string)
+const result = await updateTimezone(userId, { timezone: 'Europe/Berlin' });
+// Fails with INVALID_REQUEST if not a valid IANA timezone
+```
+
 ### Internal Service Access
 
 ```typescript
-// Called by research-agent to get decrypted keys
+// Called by research-agent to get decrypted keys (now includes openrouter)
 const response = await getDecryptedLlmKeys(userId);
 // response.data.openai contains full "sk-proj-..." key
+// response.data.openrouter contains full "sk-or-v1-..." key
 
 // Called by calendar-agent to get Google OAuth token
 const googleOAuth = await getGoogleOAuthToken(userId);
@@ -304,10 +325,11 @@ const githubOAuth = await getGitHubOAuthToken(userId);
 const user = await getUserByGitHubUsername('octocat');
 // user.data.userId -- used for routing GitHub webhooks to the right user
 
-// Called by any service to get user preferences
+// Called by any service to get user preferences (now includes timezone)
 const prefs = await getUserPreferences(userId);
 // prefs.data.llmPreferences?.defaultModel -- user's preferred model
 // prefs.data.transcriptionPreferences?.provider -- user's preferred transcription provider
+// prefs.data.timezone -- user's IANA timezone (e.g., "Europe/Berlin")
 ```
 
 ---
@@ -321,7 +343,7 @@ const prefs = await getUserPreferences(userId);
 | GET    | `/internal/users/:uid/oauth/google/token`           | Get valid Google OAuth token (called by calendar-agent) |
 | GET    | `/internal/users/:uid/oauth/github/token`           | Get GitHub OAuth token (called by code-agent)           |
 | GET    | `/internal/users/by-github-username/:username`      | Find user by GitHub username (called by code-agent)     |
-| GET    | `/internal/users/:uid/settings`                     | Get user preferences (LLM default + transcription)      |
+| GET    | `/internal/users/:uid/settings`                     | Get user preferences (LLM + transcription + timezone)   |
 
 ---
 
@@ -341,7 +363,7 @@ const prefs = await getUserPreferences(userId);
 ## Security Notes
 
 - API keys are encrypted using AES-256-GCM before storage
-- Keys are validated with actual provider API before storage
+- Keys are validated with actual provider API before storage (OpenRouter uses zero-cost key check)
 - Masked previews show only first 4 and last 4 characters
 - Google OAuth tokens refreshed automatically when near expiration (5-minute buffer)
 - GitHub OAuth tokens never expire unless revoked at GitHub
@@ -353,14 +375,15 @@ const prefs = await getUserPreferences(userId);
 
 ## Validation Models
 
-Keys are validated using cheap, fast models to minimize cost:
+Keys are validated using cheap, fast models to minimize cost. OpenRouter uses a dedicated key-check endpoint at zero token cost.
 
-| Provider   | Model            |
-| ---------- | ---------------- |
-| Google     | gemini-2.0-flash |
-| OpenAI     | gpt-4o-mini      |
-| Anthropic  | claude-3.5-haiku |
-| Perplexity | sonar            |
+| Provider   | Validation Method     | Model            |
+| ---------- | --------------------- | ---------------- |
+| Google     | Model call (generate) | gemini-2.0-flash |
+| OpenAI     | Model call (generate) | gpt-4o-mini      |
+| Anthropic  | Model call (generate) | claude-3.5-haiku |
+| Perplexity | Model call (generate) | sonar            |
+| OpenRouter | `/api/v1/key` check   | N/A              |
 
 ---
 
@@ -374,8 +397,8 @@ Keys are validated using cheap, fast models to minimize cost:
 | app-settings-service | LLM pricing at startup     | Service fails to start                  |
 | Firebase Admin SDK   | Custom token generation    | Firebase token endpoint returns 500     |
 | Firestore            | All persistent state       | Endpoints return 500                    |
-| LLM APIs (4)         | Key validation and testing | Validation/test returns formatted error |
+| LLM APIs (5)         | Key validation and testing | Validation/test returns formatted error |
 
 ---
 
-**Last updated:** 2026-03-22
+**Last updated:** 2026-04-07

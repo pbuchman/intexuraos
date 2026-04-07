@@ -86,10 +86,10 @@ function parseInsightLine(
     throw new Error(`Line ${String(lineNumber)}: Title field missing or malformed`);
   }
   const title = titleRaw[1].trim();
-  /* v8 ignore start -- upstream: regex .+ capture group guarantees non-empty string @preserve */
+  /* v8 ignore start -- upstream: regex capture group .+ guarantees non-empty string, never triggered @preserve */
   if (title.length === 0) {
     /* v8 ignore stop @preserve */
-    /* v8 ignore start -- upstream: regex pattern .+ requires at least one character @preserve */
+    /* v8 ignore start -- upstream: unreachable because prior check regex .+ guarantees at least one character @preserve */
     throw new Error(`Line ${String(lineNumber)}: Title cannot be empty`);
     /* v8 ignore stop @preserve */
   }
@@ -99,10 +99,10 @@ function parseInsightLine(
     throw new Error(`Line ${String(lineNumber)}: Description field missing or malformed`);
   }
   const description = descRaw[1].trim();
-  /* v8 ignore start -- upstream: regex .+ capture group guarantees non-empty string @preserve */
+  /* v8 ignore start -- upstream: regex capture group .+ guarantees non-empty string, never triggered @preserve */
   if (description.length === 0) {
     /* v8 ignore stop @preserve */
-    /* v8 ignore start -- upstream: regex pattern .+ requires at least one character @preserve */
+    /* v8 ignore start -- upstream: unreachable because prior check regex .+ guarantees at least one character @preserve */
     throw new Error(`Line ${String(lineNumber)}: Description cannot be empty`);
     /* v8 ignore stop @preserve */
   }
@@ -120,10 +120,10 @@ function parseInsightLine(
     throw new Error(`Line ${String(lineNumber)}: Trackable field missing or malformed`);
   }
   const trackableMetric = trackableRaw[1].trim();
-  /* v8 ignore start -- upstream: regex .+ capture group guarantees non-empty string @preserve */
+  /* v8 ignore start -- upstream: regex capture group .+ guarantees non-empty string, never triggered @preserve */
   if (trackableMetric.length === 0) {
     /* v8 ignore stop @preserve */
-    /* v8 ignore start -- upstream: regex pattern .+ requires at least one character @preserve */
+    /* v8 ignore start -- upstream: unreachable because prior check regex .+ guarantees at least one character @preserve */
     throw new Error(`Line ${String(lineNumber)}: Trackable metric cannot be empty`);
     /* v8 ignore stop @preserve */
   }
@@ -157,10 +157,10 @@ function parseNoInsightsLine(line: string, lineNumber: number): string {
   }
 
   const reason = match[1].trim();
-  /* v8 ignore start -- upstream: regex .+ capture group guarantees non-empty string @preserve */
+  /* v8 ignore start -- upstream: regex capture group .+ guarantees non-empty string, never triggered @preserve */
   if (reason.length === 0) {
     /* v8 ignore stop @preserve */
-    /* v8 ignore start -- upstream: regex pattern .+ requires at least one character @preserve */
+    /* v8 ignore start -- upstream: unreachable because prior check regex .+ guarantees at least one character @preserve */
     throw new Error(`Line ${String(lineNumber)}: Reason cannot be empty`);
     /* v8 ignore stop @preserve */
   }

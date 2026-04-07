@@ -1,7 +1,7 @@
 # Code Agent — Technical Debt
 
-**Last Updated:** 2026-03-22
-**Analysis Run:** [2026-03-22 autonomous run — v3.4.0 release]
+**Last Updated:** 2026-04-07
+**Analysis Run:** [2026-04-07 autonomous run — v3.5.0 release]
 
 ---
 
@@ -11,12 +11,12 @@
 | -------------- | ------ | -------- |
 | TODO comments  | 2      | Medium   |
 | Code smells    | 4      | Low-Med  |
-| Future plans   | 3      | Medium   |
+| Future plans   | 4      | Medium   |
 | TS strictness  | 2      | Low      |
 | SRP violations | 1      | High     |
-| **Total**      | **12** | ---      |
+| **Total**      | **13** | ---      |
 
-> Note: codeRoutes.ts remains a large file. Routing split is an ongoing priority. New routes are correctly added to `routes/code/` and `routes/merge-queue/` as separate files.
+> Note: codeRoutes.ts remains a large file. Routing split is an ongoing priority. New routes are correctly added to `routes/code/` and `routes/merge-queue/` as separate files. The execution memory pipeline is in alpha and under active iteration.
 
 ---
 
@@ -26,7 +26,7 @@
 
 Replace static hash placeholders with computed hashes from the real system prompt template. This enables prompt A/B testing and audit compliance.
 
-**Files:** `processCodeAction.ts:26`, `codeRoutes.ts:1296`
+**Files:** `processCodeAction.ts:26`, `codeRoutes.ts:1796`
 
 ### 2. Route splitting for codeRoutes.ts
 
@@ -35,6 +35,10 @@ Continue the pattern established by `routes/code/` and `routes/merge-queue/` and
 ### 3. Distributed drain queue guard
 
 Replace module-level `isDraining` and `isDrainingRetries` booleans with Firestore-based distributed locks if multi-instance deployment is planned. Currently safe for Cloud Run scale 0-1.
+
+### 4. Execution memory pipeline maturation
+
+The execution memory graph is in alpha. Planned improvements include tuning rerank thresholds and scoring weights, refining distillation prompts for higher-quality memories, expanding component hints guidance, and improving the evaluation pipeline for post-run memory feedback. The `labelHints` signal was recently removed from the scoring pipeline after proving unreliable.
 
 ---
 
@@ -48,7 +52,7 @@ Replace module-level `isDraining` and `isDrainingRetries` booleans with Firestor
 // TODO: Compute from actual system prompt content instead of using a static placeholder.
 ```
 
-**File:** `apps/code-agent/src/routes/codeRoutes.ts:1296`
+**File:** `apps/code-agent/src/routes/codeRoutes.ts:1796`
 
 ```typescript
 systemPromptHash: 'default', // TODO: Use actual system prompt hash
@@ -68,7 +72,7 @@ The `systemPromptHash` field is designed for audit tracking — recording which 
 
 **File:** `apps/code-agent/src/routes/codeRoutes.ts`
 
-This single file contains all internal code task routes AND all public code task routes. It handles task submission, task updates, task listing, task cancellation, heartbeats, zombie detection, log cleanup, retry, feedback, mid-task messaging, execution agent submission, and queue draining. Each route includes inline Fastify schema definitions that contribute significant line count. New routes are added to `routes/code/` and `routes/merge-queue/` as separate files (e.g., `github-pre-events.ts`, `github-pr-summaries.ts`, `github-event-log.ts`, `mergeQueueRoutes.ts`) but the original routes remain consolidated.
+This single file contains all internal code task routes AND all public code task routes, plus the new ask-agent endpoints. It handles task submission, task updates, task listing, task cancellation, heartbeats, zombie detection, log cleanup, retry, feedback, mid-task messaging, execution agent submission, ask-agent start/active, internal submit, and queue draining. Each route includes inline Fastify schema definitions that contribute significant line count. New routes are added to `routes/code/` and `routes/merge-queue/` as separate files (e.g., `issueGroupRoutes.ts`, `github-pr-summaries.ts`, `github-event-log.ts`, `mergeQueueRoutes.ts`) but the original routes remain consolidated.
 
 **Impact:** Difficult to navigate, review, and test. Changes to one route risk unintended effects on others.
 
@@ -79,7 +83,9 @@ This single file contains all internal code task routes AND all public code task
 - `routes/code/retry.ts` (public retry)
 - `routes/code/feedback.ts` (public feedback)
 - `routes/code/messages.ts` (public sendTaskMessage)
+- `routes/code/ask-agent.ts` (ask-agent start/active)
 - `routes/internal/process.ts` (internal code action processing)
+- `routes/internal/submit.ts` (internal code submit)
 - `routes/internal/taskUpdate.ts` (internal task PATCH)
 - `routes/internal/maintenance.ts` (heartbeat, zombies, cleanup, drain)
 
@@ -123,7 +129,7 @@ Module-level mutable state for preventing concurrent drain operations. Works for
 
 ### 1. Firestore Timestamp handling
 
-Throughout the codebase, Firestore `Timestamp` objects require runtime type narrowing when serializing to JSON. The `timestampToIso()` helper handles this but requires `as` casts. This pattern appears in `codeRoutes.ts` and `mergeQueueRoutes.ts` and could benefit from a typed wrapper.
+Throughout the codebase, Firestore `Timestamp` objects require runtime type narrowing when serializing to JSON. The `timestampToIso()` helper handles this but requires `as` casts. This pattern appears in `codeRoutes.ts`, `mergeQueueRoutes.ts`, and `issueGroupRoutes.ts` and could benefit from a typed wrapper.
 
 ### 2. `any` type usage in Firestore queries
 
@@ -149,76 +155,81 @@ The service has 50+ test files covering domain models, use cases, infra adapters
 Common exemption categories in this service:
 
 - `ts-type`: TypeScript type narrowing branches (nullish coalescing, optional chaining)
-- `test-infra`: Paths requiring complex test infrastructure setup
+- `test-infra`: Paths requiring complex test infrastructure setup (e.g., FakeFirestore limitations)
 - `upstream`: Error handling for external service failures
+
+Several v8 ignore blocks were replaced with real tests in this release (INT-1071, INT-1072, INT-1073, INT-1237).
 
 ---
 
 ## Resolved Issues
 
-| Issue    | Description                                       | Resolution                                                                     |
-| -------- | ------------------------------------------------- | ------------------------------------------------------------------------------ |
-| INT-1020 | Merge queue for ordered PR merging                | Merge queue watch + Cloud Scheduler tick + GitHub as source of truth           |
-| INT-1023 | Merge conflict detection blocking webhooks        | Dedicated cron job for reconciliation, decoupled from webhook pipeline         |
-| INT-1040 | Orchestrator direct Linear dependency             | Code-agent proxy endpoint for issue context                                    |
-| INT-1027 | Cannot inspect raw webhook payloads               | Expandable rows + GET /code/github-event-log/:id/payload endpoint              |
-| INT-1025 | GitHub Event Log shows unsupported event types    | Server-side filtering to VISIBLE_EVENT_TYPES                                   |
-| INT-1029 | Task queue capacity too small                     | Queue capacity increased from 10 to 50                                         |
-| INT-1048 | Merge queue reliability issues                    | GitHub as source of truth, Firestore as synchronized cache                     |
-| INT-1043 | Reconciliation processes closed PRs               | Skip closed PRs during reconciliation                                          |
-| INT-1049 | Merge queue tick not scheduled                    | Cloud Scheduler trigger for merge queue tick                                   |
-| INT-1046 | Merge queue sort incorrect                        | Fixed sort by PR number and watchId mapping                                    |
-| INT-1062 | Main branch usable as merge queue base            | Blocked with BLOCKED_BASE_BRANCHES guard and blocked flag in UI                |
-| INT-372  | Zombie task detection                             | Heartbeat + 30-min threshold implemented                                       |
-| INT-379  | WhatsApp cancel button                            | Cancel nonce with 15-min TTL                                                   |
-| INT-413  | Prompt injection sanitization                     | sanitizePromptForInjection() with system keyword/base64/control char rejection |
-| INT-465  | PR comment auto-response                          | Simplified via sendTaskMessage dispatch from webhook handler                   |
-| INT-486  | Unified Linear issue templates                    | Agent-based execution model (planned/implemented statuses)                     |
-| INT-505  | Rich PR activity timeline                         | Clickable links, comment bodies, deduplication                                 |
-| INT-519  | Block agents from QA/Done transitions             | Validate-linear-state hook                                                     |
-| INT-520  | Retry mechanism for failed tasks                  | retryTask use case with cool-off                                               |
-| INT-612  | Prompt sanitization not implemented               | sanitizePrompt() utility applied at all prompt entry points                    |
-| INT-619  | Task queueing when workers busy                   | Queue with TTL, drain via Cloud Scheduler, lock cleanup                        |
-| INT-711  | Retried tasks clutter task list                   | Original task archived to `archived` status on retry                           |
-| INT-725  | Planning tasks not linked to execution            | backLinkPlanningTask sets implementationTaskId on planning task                |
-| INT-738  | WhatsApp notifications lack direct links          | CTA URL buttons with deep links to PR and task dashboard                       |
-| INT-743  | GitHub Agent for PR evaluation                    | Gemini tool-calling agent with unified evaluator pipeline                      |
-| INT-744  | Unified webhook evaluator                         | Two-tier evaluation: hard rules then LLM triage with audit trail               |
-| INT-773  | Already-completed execution outcome               | `already_completed` execution outcome label added                              |
-| INT-780  | v8 coverage gaps in codeRoutes.ts                 | Refactored and added tests for uncovered branches                              |
-| INT-807  | Tasks created as dispatched before confirmed      | Tasks created as `queued`, transitioned to `dispatched` on confirmed dispatch  |
-| INT-810  | Silent dispatch failures                          | Fixed nested transaction and propagated dispatch errors                        |
-| INT-823  | Failed webhook dispatch retry                     | Dispatch retry queue with bounded attempts and TTL                             |
-| INT-824  | PR branch lost on retry                           | Task retries inherit open PR branches via continuationPr utility               |
-| INT-825  | Duplicate review tasks                            | Review task dedup with active-task semantics                                   |
-| INT-826  | Dispatch acks not restart-safe                    | Tasks start as `queued`, only move to `dispatched` after worker ACK            |
-| INT-829  | @review issue comment triage                      | LLM-selected worker routing for @review commands                               |
-| INT-830  | No visibility into dispatch rejections            | Explicit PR comments for review skips, dispatch rejections, and outcomes       |
-| INT-834  | Unreliable review agent dispatch                  | Fresh-start retry logic, notification deduplication                            |
-| INT-839  | Triage produces unreliable output                 | Structured output validation with Zod schemas and repair prompts               |
-| INT-846  | Noisy "Review Completed" PR notifications         | Removed redundant automated review completed notification                      |
-| INT-847  | Merge conflicts on bot PRs undetected             | Merge conflict detection for bot-authored PRs with owner remapping             |
-| INT-852  | PR automation scattered across comments           | Unified PR automation log as single append-only GitHub comment                 |
-| INT-854  | Gemini triage failures                            | Enforced tool-call mode, retry with corrective context on LLM failure          |
-| INT-860  | Flaky automationLogFlows test                     | Mock both LLM retry attempts to stabilize test                                 |
-| INT-916  | Fixed-delay test waits cause flakiness            | Replaced fixed delays with poll-based test helpers                             |
-| INT-918  | PR event log too noisy                            | Filtered redundant events, added context fields to remaining entries           |
-| INT-921  | Review tasks not queued when busy                 | Queue support for review tasks when workers at capacity                        |
-| INT-924  | Redundant triage PR comments                      | Removed redundant "Automated Code Review Triage Decision" comments             |
-| ---      | Duplicate PR body in synchronize events           | deduplicatePRBody() pass in GET /code/github-pr-events                         |
-| ---      | Edited comment creates duplicate timeline entry   | deduplicateCommentEvents() keeps first position, latest body                   |
-| ---      | Turn-end metrics not collected                    | TurnMetrics subcollection + FirestoreTurnMetricsRepository                     |
-| ---      | No way to send mid-task messages or resume        | sendTaskMessage use case + POST /code/tasks/:id/messages                       |
-| ---      | PR list view requires O(events) query             | github-pr-summaries collection + GET /code/github-pr-summaries                 |
-| ---      | Webhook dedup used shared actionId                | Unique per-submission actionId + propagated dedup errors                       |
-| ---      | Sender whitelist for webhook dispatch             | Replaced scattered filters with ALLOWED_BOTS Set + owner check                 |
-| ---      | Linear not transitioned on completion             | markInReview called on task-complete webhook when PR exists                    |
-| ---      | CPU cores hardcoded in metrics                    | Dynamic cgroup-based core count from orchestrator                              |
-| ---      | Cloudflare errors not retryable                   | 520-530 status codes treated as retryable infrastructure errors                |
-| ---      | Linear data stale in task list                    | Live hydration of Linear issue data via linearAgentClient                      |
-| ---      | No PR comment task creation without existing task | createTaskForPR use case with lock guard and user lookup                       |
-| ---      | Linear labels not persisted on tasks              | linearIssueLabels field added to CodeTask model                                |
-| ---      | Gemini tool calling loop in PR triage             | Fixed loop exit condition and Firestore automation log path                    |
+| Issue    | Description                                    | Resolution                                                                             |
+| -------- | ---------------------------------------------- | -------------------------------------------------------------------------------------- |
+| INT-1098 | Execution memory retrieval pipeline            | Pre-run vector retrieval with query normalization, reranking, and application tracking |
+| INT-1257 | Execution memory distillation pipeline         | Post-run LLM distillation with evaluation, fingerprinting, and deduplication           |
+| INT-1087 | Remediation agent for review findings          | Autonomous remediation tasks with cross-LLM verification                               |
+| INT-1132 | Review-outcome merge labels                    | Ready-to-merge label set on review skip; merge pipeline wired                          |
+| INT-1279 | PR evidence enforcement                        | PR presence enforced for planning and remediation outcomes                             |
+| INT-1292 | PR evidence for all task types                 | Enforcement extended to all task types, not just execution                             |
+| INT-1287 | Internal code submit endpoint                  | POST /internal/code/submit for internal task creation                                  |
+| INT-1291 | Ask Agent sessions                             | Interactive Claude Code sessions from web UI                                           |
+| INT-1173 | Issue group aggregation                        | Server-side grouping with TaskGroupSummary and UserGroupCounts                         |
+| INT-1276 | Auto-archive merged tasks                      | Daily cron archives tasks with PRs merged 7+ days ago                                  |
+| INT-1166 | Batch archive                                  | Archive multiple groups in a single operation                                          |
+| INT-1086 | Sender authorization                           | Unauthorized senders receive GitHub comment explaining rejection                       |
+| INT-1131 | Drain queue deadlock                           | Per-PR guard prevents deadlock; stale task fallback                                    |
+| INT-1190 | Queue PR-lock self-healing                     | Self-healing for stale PR-task locks in drain queue                                    |
+| INT-853  | CI failure auto-handling                       | Failed CI checks on agent PRs detected and retried/escalated                           |
+| INT-1124 | Per-agent-type worker settings                 | Different agent types independently tuned for worker type                              |
+| INT-1071 | V8 ignore blocks replaced                      | Real tests added for previously exempted branches                                      |
+| INT-1020 | Merge queue for ordered PR merging             | Merge queue watch + Cloud Scheduler tick + GitHub as source of truth                   |
+| INT-1023 | Merge conflict detection blocking webhooks     | Dedicated cron job for reconciliation, decoupled from webhook pipeline                 |
+| INT-1040 | Orchestrator direct Linear dependency          | Code-agent proxy endpoint for issue context                                            |
+| INT-1027 | Cannot inspect raw webhook payloads            | Expandable rows + GET /code/github-event-log/:id/payload endpoint                      |
+| INT-1025 | GitHub Event Log shows unsupported event types | Server-side filtering to VISIBLE_EVENT_TYPES                                           |
+| INT-1029 | Task queue capacity too small                  | Queue capacity increased from 10 to 50                                                 |
+| INT-1048 | Merge queue reliability issues                 | GitHub as source of truth, Firestore as synchronized cache                             |
+| INT-1043 | Reconciliation processes closed PRs            | Skip closed PRs during reconciliation                                                  |
+| INT-1049 | Merge queue tick not scheduled                 | Cloud Scheduler trigger for merge queue tick                                           |
+| INT-1046 | Merge queue sort incorrect                     | Fixed sort by PR number and watchId mapping                                            |
+| INT-1062 | Main branch usable as merge queue base         | Blocked with BLOCKED_BASE_BRANCHES guard and blocked flag in UI                        |
+| INT-372  | Zombie task detection                          | Heartbeat + 30-min threshold implemented                                               |
+| INT-379  | WhatsApp cancel button                         | Cancel nonce with 15-min TTL                                                           |
+| INT-413  | Prompt injection sanitization                  | sanitizePromptForInjection() with system keyword/base64/control char rejection         |
+| INT-465  | PR comment auto-response                       | Simplified via sendTaskMessage dispatch from webhook handler                           |
+| INT-486  | Unified Linear issue templates                 | Agent-based execution model (planned/implemented statuses)                             |
+| INT-505  | Rich PR activity timeline                      | Clickable links, comment bodies, deduplication                                         |
+| INT-519  | Block agents from QA/Done transitions          | Validate-linear-state hook                                                             |
+| INT-520  | Retry mechanism for failed tasks               | retryTask use case with cool-off                                                       |
+| INT-612  | Prompt sanitization not implemented            | sanitizePrompt() utility applied at all prompt entry points                            |
+| INT-619  | Task queueing when workers busy                | Queue with TTL, drain via Cloud Scheduler, lock cleanup                                |
+| INT-711  | Retried tasks clutter task list                | Original task archived to `archived` status on retry                                   |
+| INT-725  | Planning tasks not linked to execution         | backLinkPlanningTask sets implementationTaskId on planning task                        |
+| INT-738  | WhatsApp notifications lack direct links       | CTA URL buttons with deep links to PR and task dashboard                               |
+| INT-743  | GitHub Agent for PR evaluation                 | Gemini tool-calling agent with unified evaluator pipeline                              |
+| INT-744  | Unified webhook evaluator                      | Two-tier evaluation: hard rules then LLM triage with audit trail                       |
+| INT-773  | Already-completed execution outcome            | `already_completed` execution outcome label added                                      |
+| INT-780  | v8 coverage gaps in codeRoutes.ts              | Refactored and added tests for uncovered branches                                      |
+| INT-807  | Tasks created as dispatched before confirmed   | Tasks created as `queued`, transitioned to `dispatched` on confirmed dispatch          |
+| INT-810  | Silent dispatch failures                       | Fixed nested transaction and propagated dispatch errors                                |
+| INT-823  | Failed webhook dispatch retry                  | Dispatch retry queue with bounded attempts and TTL                                     |
+| INT-824  | PR branch lost on retry                        | Task retries inherit open PR branches via continuationPr utility                       |
+| INT-825  | Duplicate review tasks                         | Review task dedup with active-task semantics                                           |
+| INT-826  | Dispatch acks not restart-safe                 | Tasks start as `queued`, only move to `dispatched` after worker ACK                    |
+| INT-829  | @review issue comment triage                   | LLM-selected worker routing for @review commands                                       |
+| INT-830  | No visibility into dispatch rejections         | Explicit PR comments for review skips, dispatch rejections, and outcomes               |
+| INT-834  | Unreliable review agent dispatch               | Fresh-start retry logic, notification deduplication                                    |
+| INT-839  | Triage produces unreliable output              | Structured output validation with Zod schemas and repair prompts                       |
+| INT-846  | Noisy "Review Completed" PR notifications      | Removed redundant automated review completed notification                              |
+| INT-847  | Merge conflicts on bot PRs undetected          | Merge conflict detection for bot-authored PRs with owner remapping                     |
+| INT-852  | PR automation scattered across comments        | Unified PR automation log as single append-only GitHub comment                         |
+| INT-854  | Gemini triage failures                         | Enforced tool-call mode, retry with corrective context on LLM failure                  |
+| INT-860  | Flaky automationLogFlows test                  | Mock both LLM retry attempts to stabilize test                                         |
+| INT-916  | Fixed-delay test waits cause flakiness         | Replaced fixed delays with poll-based test helpers                                     |
+| INT-918  | PR event log too noisy                         | Filtered redundant events, added context fields to remaining entries                   |
+| INT-921  | Review tasks not queued when busy              | Queue support for review tasks when workers at capacity                                |
+| INT-924  | Redundant triage PR comments                   | Removed redundant "Automated Code Review Triage Decision" comments                     |
 
 ---
 

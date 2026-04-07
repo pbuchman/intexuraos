@@ -139,7 +139,7 @@ export const verificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
 
       const parseResult = sendRequestSchema.safeParse(request.body);
       
-      /* v8 ignore start -- test-infra: schema validation happens first @preserve */
+      /* v8 ignore start -- test-infra: cannot send invalid body past Fastify schema validation in app.inject() @preserve */
       if (!parseResult.success) {
         const errors = parseResult.error.errors.map((e) => ({
           path: e.path.join('.'),
@@ -337,8 +337,8 @@ export const verificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
       }
 
       const parseResult = confirmRequestSchema.safeParse(request.body);
-      /* v8 ignore start -- test-infra: schema validation happens first @preserve */
-      
+      /* v8 ignore start -- test-infra: cannot send invalid body past Fastify schema validation in app.inject() @preserve */
+
       if (!parseResult.success) {
         const errors = parseResult.error.errors.map((e) => ({
           path: e.path.join('.'),

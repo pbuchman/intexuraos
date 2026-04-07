@@ -44,6 +44,8 @@ import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHear
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
+import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
+import { createAutoArchiveMergedTasksUseCase } from '../../domain/usecases/autoArchiveMergedTasks.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
@@ -195,10 +197,12 @@ describe('codeRoutes', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-cleanupTaskLogs: createCleanupTaskLogsUseCase({
+      cleanupTaskLogs: createCleanupTaskLogsUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -257,6 +261,8 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
+      autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerSettingsRepo: WorkerSettingsRepository;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
@@ -1002,6 +1008,50 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.data.task.status).toBe('planned');
     });
 
+    it('accepts implemented status for ask_agent tasks', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a task with agentType ask_agent and status running
+      const created = await repo.create({
+        userId: 'user-123',
+        prompt: 'Ask agent question',
+        sanitizedPrompt: 'ask agent question',
+        systemPromptHash: 'abc123',
+        workerType: 'opus',
+        workerLocation: 'vm',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-123',
+        agentType: 'ask_agent',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, { status: 'running' });
+
+      const response = await server.inject({
+        method: 'PATCH',
+        url: `/internal/code-tasks/${created.value.id}`,
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {
+          status: 'implemented',
+          result: {
+            summary: 'Agent answered the question',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.task.status).toBe('implemented');
+    });
+
     it('returns 404 when task not found', async () => {
       const response = await server.inject({
         method: 'PATCH',
@@ -1545,85 +1595,6 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       mockGetSettings.mockRestore();
     });
 
-    it('returns INVALID_WORKER when requested workerLocation not configured', async () => {
-      const response = await server.inject({
-        method: 'POST',
-        url: '/code/submit',
-        headers: {
-          authorization: 'Bearer test-token',
-        },
-        payload: {
-          prompt: 'Fix the login bug',
-          workerLocation: 'nonexistent-worker',
-        },
-      });
-
-      expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INVALID_WORKER');
-      expect(body.error.message).toContain('nonexistent-worker');
-    });
-
-    it('accepts valid workerLocation and reorders workers', async () => {
-      const services = getServices();
-      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
-        ok({
-          userId: 'test-user-id',
-          workers: [
-            {
-              name: 'first-worker',
-              url: 'http://first-worker:3000',
-              enabled: true,
-              cfAccessClientId: 'cf-client-id-1',
-              cfAccessClientSecret: 'cf-client-secret-1',
-              dispatchSigningSecret: 'secret-1',
-            },
-            {
-              name: 'second-worker',
-              url: 'http://second-worker:3000',
-              enabled: true,
-              cfAccessClientId: 'cf-client-id-2',
-              cfAccessClientSecret: 'cf-client-secret-2',
-              dispatchSigningSecret: 'secret-2',
-            },
-          ],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        })
-      );
-
-      const mockDispatch = vi.fn().mockResolvedValue({
-        ok: true,
-        value: { taskId: 'task-123', workerName: 'second-worker' },
-      });
-
-      setServices({
-        ...services,
-        taskDispatcher: {
-          dispatch: mockDispatch,
-          cancelOnWorker: vi.fn(),
-          sendMessageToWorker: vi.fn().mockResolvedValue(ok({ action: 'queued' })),
-        },
-      });
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/code/submit',
-        headers: {
-          authorization: 'Bearer test-token',
-        },
-        payload: {
-          prompt: 'Fix the login bug',
-          workerLocation: 'second-worker',
-        },
-      });
-
-      // Should succeed (200 or 503 if workers unavailable)
-      expect([200, 503]).toContain(response.statusCode);
-
-      mockGetSettings.mockRestore();
-    });
   });
 
   describe('POST /code/cancel', () => {
@@ -4002,6 +3973,82 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.error.code).toBe('NOT_FOUND');
     });
 
+    it('returns 403 when sending message to review task', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create({
+        userId: 'test-user-id',
+        prompt: 'Review PR',
+        sanitizedPrompt: 'review pr',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-review-msg',
+        agentType: 'review',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const response = await server.inject({
+        method: 'POST',
+        url: `/code/tasks/${created.value.id}/messages`,
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          message: 'Please check again',
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('returns 403 when sending message to remediation task', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create({
+        userId: 'test-user-id',
+        prompt: 'Fix review findings',
+        sanitizedPrompt: 'fix review findings',
+        systemPromptHash: 'remediation-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-remediation-msg',
+        agentType: 'remediation',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const response = await server.inject({
+        method: 'POST',
+        url: `/code/tasks/${created.value.id}/messages`,
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          message: 'Please try again',
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
   });
 
   describe('POST /code/tasks/:taskId/implement', () => {
@@ -4325,6 +4372,31 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
     });
 
     it('returns 200 with drain result on success', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/drain-queue',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+    });
+
+    it('returns 200 when execution-memory services are not configured', async () => {
+      const services = getServices();
+      const {
+        executionMemoryQueryClient: _queryClient,
+        executionMemoryEmbeddingClient: _embeddingClient,
+        executionMemoryRepo: _executionMemoryRepo,
+        executionMemoryApplicationRepo: _executionMemoryApplicationRepo,
+        ...servicesWithoutExecutionMemory
+      } = services;
+      setServices(servicesWithoutExecutionMemory);
+
       const response = await server.inject({
         method: 'POST',
         url: '/internal/drain-queue',

@@ -10,7 +10,7 @@ import type {
   DeleteWorkerResponse,
   ReorderWorkersResponse,
   TestWorkerConnectivityResponse,
-  UpdateDefaultReviewWorkerTypeResponse,
+  UpdateDefaultWorkerTypeResponse,
 } from './workerSettingsApi.types.js';
 
 /**
@@ -110,15 +110,16 @@ export async function testWorkerConnectivity(
 }
 
 /**
- * Update default review worker type.
+ * Update default worker type for a given category.
  */
-export async function updateDefaultReviewWorkerType(
+export async function updateDefaultWorkerType(
   accessToken: string,
+  category: 'review' | 'remediation' | 'execution' | 'planning' | 'pull-request',
   workerType: string,
-): Promise<UpdateDefaultReviewWorkerTypeResponse> {
-  return await apiRequest<UpdateDefaultReviewWorkerTypeResponse>(
+): Promise<UpdateDefaultWorkerTypeResponse> {
+  return await apiRequest<UpdateDefaultWorkerTypeResponse>(
     config.codeAgentUrl,
-    '/code/worker-settings/default-review-worker-type',
+    `/code/worker-settings/default-${category}-worker-type`,
     accessToken,
     { method: 'PATCH', body: { workerType } },
   );
@@ -135,5 +136,5 @@ export type {
   DeleteWorkerResponse,
   ReorderWorkersResponse,
   TestWorkerConnectivityResponse,
-  UpdateDefaultReviewWorkerTypeResponse,
+  UpdateDefaultWorkerTypeResponse,
 } from './workerSettingsApi.types.js';

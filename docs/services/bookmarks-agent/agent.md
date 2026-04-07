@@ -9,7 +9,7 @@
 | Attribute | Value                                                                                             |
 | --------- | ------------------------------------------------------------------------------------------------- |
 | Name      | bookmarks-agent                                                                                   |
-| Version   | 3.4.0                                                                                             |
+| Version   | 3.5.0                                                                                             |
 | Port      | 8124                                                                                              |
 | Role      | Link Intelligence Service                                                                         |
 | Goal      | Save, enrich, and organize bookmarks with OpenGraph metadata, AI summaries, and WhatsApp delivery |
@@ -385,4 +385,4 @@ The title line is omitted if no title is available. `correlationId` is `bookmark
 
 ---
 
-**Last updated:** 2026-03-22 (v3.4.0 documentation refresh)
+**Last updated:** 2026-04-07 (v3.5.0 documentation refresh)

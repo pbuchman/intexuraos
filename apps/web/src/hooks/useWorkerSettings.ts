@@ -11,7 +11,7 @@ import {
   deleteWorker as deleteWorkerApi,
   testWorkerConnectivity,
   reorderWorkers as reorderWorkersApi,
-  updateDefaultReviewWorkerType as updateDefaultReviewWorkerTypeApi,
+  updateDefaultWorkerType as updateDefaultWorkerTypeApi,
 } from '@/services/workerSettingsApi';
 import type {
   WorkerSettingsResponse,
@@ -30,7 +30,7 @@ interface UseWorkerSettingsResult {
   deleteWorker: (workerName: string) => Promise<void>;
   testConnectivity: (workerName: string) => Promise<TestWorkerConnectivityResponse>;
   reorderWorkers: (workerNames: string[]) => Promise<void>;
-  updateDefaultReviewWorkerType: (workerType: string) => Promise<void>;
+  updateDefaultWorkerType: (category: 'review' | 'remediation' | 'execution' | 'planning' | 'pull-request', workerType: string) => Promise<void>;
   refresh: (showLoading?: boolean) => Promise<void>;
 }
 
@@ -163,17 +163,15 @@ export function useWorkerSettings(): UseWorkerSettingsResult {
     [user?.sub, getAccessToken]
   );
 
-  const handleUpdateDefaultReviewWorkerType = useCallback(
-    async (workerType: string): Promise<void> => {
-      const userId = user?.sub;
-      if (userId === undefined) return;
-
+  const handleUpdateDefaultWorkerType = useCallback(
+    async (category: 'review' | 'remediation' | 'execution' | 'planning' | 'pull-request', workerType: string): Promise<void> => {
+      if (user?.sub === undefined) return;
       try {
         const token = await getAccessToken();
-        await updateDefaultReviewWorkerTypeApi(token, workerType);
+        await updateDefaultWorkerTypeApi(token, category, workerType);
         await refresh(false);
       } catch (err) {
-        setError(getErrorMessage(err, 'Failed to update default review worker type'));
+        setError(getErrorMessage(err, `Failed to update default ${category} worker type`));
         throw err;
       }
     },
@@ -207,7 +205,7 @@ export function useWorkerSettings(): UseWorkerSettingsResult {
     deleteWorker: handleDeleteWorker,
     testConnectivity,
     reorderWorkers: handleReorderWorkers,
-    updateDefaultReviewWorkerType: handleUpdateDefaultReviewWorkerType,
+    updateDefaultWorkerType: handleUpdateDefaultWorkerType,
     refresh,
   };
 }

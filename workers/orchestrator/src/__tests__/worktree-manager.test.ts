@@ -4,6 +4,20 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Logger } from '@intexuraos/common-core';
 
+// Hook mechanism to override fs/promises functions for specific tests
+let fsPromisesReadFileOverride: (() => Promise<string>) | null = null;
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    readFile: async (path: string, options?: BufferEncoding): Promise<string> => {
+      if (fsPromisesReadFileOverride) return fsPromisesReadFileOverride();
+      return actual.readFile(path, { encoding: options ?? 'utf-8' });
+    },
+  };
+});
+
 const mockLogger: Logger = {
   info: () => undefined,
   warn: () => undefined,
@@ -17,6 +31,11 @@ const defaultExecAsync = async (
   _options: { cwd?: string; timeout?: number }
 ): Promise<{ stdout: string; stderr: string }> => {
   if (command.includes('git worktree add')) {
+    // Simulate git creating the worktree directory (real git does this)
+    const match = /git worktree add -[bB] "[^"]*" "([^"]*)"/.exec(command);
+    if (match?.[1] !== undefined) {
+      mkdirSync(match[1], { recursive: true });
+    }
     return { stdout: '', stderr: 'Preparing worktree' };
   }
   if (command.includes('git worktree remove')) {
@@ -56,12 +75,10 @@ describe('WorktreeManager', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'worktree-test-'));
   const repoPath = join(tempDir, 'repo');
   const worktreeBasePath = join(tempDir, 'worktrees');
-  const mcpConfigTemplatePath = join(tempDir, 'mcp-template.json');
 
   const mockConfig = {
     repositoryPath: repoPath,
     worktreeBasePath,
-    mcpConfigTemplatePath,
   };
 
   beforeEach(async () => {
@@ -71,13 +88,6 @@ describe('WorktreeManager', () => {
     // Ensure temp directory exists
     mkdirSync(tempDir, { recursive: true });
     mkdirSync(repoPath, { recursive: true });
-
-    // Create MCP config template with placeholders
-    const template = JSON.stringify({
-      linear: { apiKey: '{{LINEAR_API_KEY}}' },
-      sentry: { authToken: '{{SENTRY_AUTH_TOKEN}}' },
-    });
-    writeFileSync(mcpConfigTemplatePath, template, 'utf-8');
   });
 
   afterEach(() => {
@@ -144,12 +154,17 @@ describe('WorktreeManager', () => {
       const fetchIndex = calls.findIndex(
         (c) => c.command === 'git fetch origin "development" --force'
       );
+      const branchSyncIndex = calls.findIndex(
+        (c) => c.command === 'git branch -f "development" "origin/development"'
+      );
       const worktreeAddIndex = calls.findIndex((c) => c.command.includes('git worktree add'));
 
       expect(fetchIndex).toBeGreaterThanOrEqual(0);
       expect(calls[fetchIndex]?.cwd).toBe(repoPath);
+      expect(branchSyncIndex).toBeGreaterThan(fetchIndex);
+      expect(calls[branchSyncIndex]?.cwd).toBe(repoPath);
       expect(worktreeAddIndex).toBeGreaterThanOrEqual(0);
-      expect(fetchIndex).toBeLessThan(worktreeAddIndex);
+      expect(branchSyncIndex).toBeLessThan(worktreeAddIndex);
     });
 
     it('should proceed with worktree creation when fetch fails', async () => {
@@ -230,6 +245,7 @@ describe('WorktreeManager', () => {
       await manager.createWorktree('task-cont-fetch', 'development', 'task_existing_branch');
 
       expect(commands).toContain('git fetch origin "development" --force');
+      expect(commands).toContain('git branch -f "development" "origin/development"');
       expect(commands).toContain('git fetch origin "task_existing_branch"');
     });
 
@@ -273,38 +289,6 @@ describe('WorktreeManager', () => {
       await expect(manager.createWorktree('task-789', 'feature-branch')).rejects.toThrow(
         'already exists'
       );
-    });
-
-    it('should copy MCP config template with env var substitution', async () => {
-      process.env['INTEXURAOS_LINEAR_API_KEY'] = 'test-linear-key';
-      process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'] = 'test-sentry-token';
-
-      const WM = await loadWorktreeManager();
-      const manager = new WM(mockConfig, mockLogger);
-
-      await manager.createWorktree('task-mcp', 'feature-branch');
-
-      const mcpConfigPath = join(worktreeBasePath, 'task-mcp', '.mcp.json');
-      expect(existsSync(mcpConfigPath)).toBe(true);
-
-      const config = JSON.parse(readFileSync(mcpConfigPath, 'utf-8'));
-      expect(config.linear.apiKey).toBe('test-linear-key');
-      expect(config.sentry.authToken).toBe('test-sentry-token');
-
-      delete process.env['INTEXURAOS_LINEAR_API_KEY'];
-      delete process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
-    });
-
-    it('should handle missing env vars gracefully', async () => {
-      const WM = await loadWorktreeManager();
-      const manager = new WM(mockConfig, mockLogger);
-
-      await manager.createWorktree('task-no-env', 'feature-branch');
-
-      const mcpConfigPath = join(worktreeBasePath, 'task-no-env', '.mcp.json');
-      const config = JSON.parse(readFileSync(mcpConfigPath, 'utf-8'));
-      expect(config.linear.apiKey).toBe('');
-      expect(config.sentry.authToken).toBe('');
     });
 
     it('should copy settings.local.json template into worktree', async () => {
@@ -382,36 +366,6 @@ describe('WorktreeManager', () => {
         'settings.local.json template path configured but file not found on disk'
       );
       warnSpy.mockRestore();
-    });
-
-    it('should skip MCP config if template does not exist', async () => {
-      const WM = await loadWorktreeManager();
-      const manager = new WM(
-        {
-          ...mockConfig,
-          mcpConfigTemplatePath: join(tempDir, 'non-existent.json'),
-        },
-        mockLogger
-      );
-
-      // Should not throw
-      await manager.createWorktree('task-no-template', 'feature-branch');
-    });
-
-    it('should handle missing env vars with warning', async () => {
-      // Clear env vars
-      delete process.env['INTEXURAOS_LINEAR_API_KEY'];
-      delete process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
-
-      const warnSpy = vi.spyOn(mockLogger, 'warn');
-
-      const WM = await loadWorktreeManager();
-      const manager = new WM(mockConfig, mockLogger);
-
-      await manager.createWorktree('task-missing-env', 'feature-branch');
-
-      // Should have warned about missing keys twice (linear + sentry)
-      expect(warnSpy).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -525,31 +479,6 @@ describe('WorktreeManager', () => {
     });
   });
 
-  describe('copyMcpConfig error handling', () => {
-    it('should handle non-Error objects thrown during MCP config copy', async () => {
-      process.env['INTEXURAOS_LINEAR_API_KEY'] = 'test-key';
-      process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'] = 'test-token';
-
-      const WM = await loadWorktreeManager();
-      // Create a worktree without MCP config template to test error path
-      const managerWithoutTemplate = new WM(
-        {
-          ...mockConfig,
-          mcpConfigTemplatePath: join(tempDir, 'non-existent.json'),
-        },
-        mockLogger
-      );
-
-      // This should succeed (template is optional)
-      await expect(
-        managerWithoutTemplate.createWorktree('task-no-template', 'feature-branch')
-      ).resolves.toBe(join(worktreeBasePath, 'task-no-template'));
-
-      delete process.env['INTEXURAOS_LINEAR_API_KEY'];
-      delete process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
-    });
-  });
-
   describe('list worktrees error handling', () => {
     it('should return empty array when git command fails', async () => {
       const WM = await loadWorktreeManager();
@@ -572,138 +501,6 @@ describe('WorktreeManager', () => {
       expect(Array.isArray(worktrees)).toBe(true);
     });
   });
-
-  describe('mergePlanningBranch', () => {
-    it('should fetch and merge the planning branch successfully', async () => {
-      const WM = await loadWorktreeManager();
-      const manager = new WM(mockConfig, mockLogger);
-
-      await manager.createWorktree('task-merge', 'development');
-
-      const result = await manager.mergePlanningBranch(
-        join(worktreeBasePath, 'task-merge'),
-        'plan/my-feature'
-      );
-
-      expect(result.ok).toBe(true);
-    });
-
-    it('should return error when merge conflicts occur', async () => {
-      mockExecAsyncImpl = async (
-        command: string,
-        _options: { cwd?: string; timeout?: number }
-      ): Promise<{ stdout: string; stderr: string }> => {
-        if (command.includes('git merge')) {
-          throw new Error('CONFLICT (content): Merge conflict in file.ts');
-        }
-        if (command.includes('git worktree add')) {
-          return { stdout: '', stderr: 'Preparing worktree' };
-        }
-        return { stdout: '', stderr: '' };
-      };
-
-      vi.resetModules();
-      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
-      const manager = new WM(mockConfig, mockLogger);
-
-      mkdirSync(join(worktreeBasePath, 'task-conflict'), { recursive: true });
-
-      const result = await manager.mergePlanningBranch(
-        join(worktreeBasePath, 'task-conflict'),
-        'plan/conflicting'
-      );
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toContain('CONFLICT');
-      }
-    });
-
-    it('should reject invalid planning branch names before running git commands', async () => {
-      const commands: string[] = [];
-      mockExecAsyncImpl = async (
-        command: string,
-        _options: { cwd?: string; timeout?: number }
-      ): Promise<{ stdout: string; stderr: string }> => {
-        commands.push(command);
-        return { stdout: '', stderr: '' };
-      };
-
-      vi.resetModules();
-      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
-      const manager = new WM(mockConfig, mockLogger);
-
-      const result = await manager.mergePlanningBranch('/tmp/worktree', 'plan$(bad)');
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toContain('Invalid planning branch name');
-      }
-      expect(commands).toEqual([]);
-    });
-
-    it('should return error when branch does not exist', async () => {
-      mockExecAsyncImpl = async (
-        command: string,
-        _options: { cwd?: string; timeout?: number }
-      ): Promise<{ stdout: string; stderr: string }> => {
-        if (command.includes('git fetch')) {
-          throw new Error("fatal: couldn't find remote ref plan/nonexistent");
-        }
-        if (command.includes('git worktree add')) {
-          return { stdout: '', stderr: 'Preparing worktree' };
-        }
-        return { stdout: '', stderr: '' };
-      };
-
-      vi.resetModules();
-      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
-      const manager = new WM(mockConfig, mockLogger);
-
-      mkdirSync(join(worktreeBasePath, 'task-no-branch'), { recursive: true });
-
-      const result = await manager.mergePlanningBranch(
-        join(worktreeBasePath, 'task-no-branch'),
-        'plan/nonexistent'
-      );
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toContain('nonexistent');
-      }
-    });
-
-    it('should return Unknown error when a non-Error is thrown', async () => {
-      mockExecAsyncImpl = async (
-        command: string,
-        _options: { cwd?: string; timeout?: number }
-      ): Promise<{ stdout: string; stderr: string }> => {
-        if (command.includes('git fetch') || command.includes('git merge')) {
-          throw 'some string error';
-        }
-        if (command.includes('git worktree add')) {
-          return { stdout: '', stderr: 'Preparing worktree' };
-        }
-        return { stdout: '', stderr: '' };
-      };
-
-      vi.resetModules();
-      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
-      const manager = new WM(mockConfig, mockLogger);
-
-      mkdirSync(join(worktreeBasePath, 'task-non-error'), { recursive: true });
-
-      const result = await manager.mergePlanningBranch(
-        join(worktreeBasePath, 'task-non-error'),
-        'plan/throws-string'
-      );
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toBe('Unknown error');
-      }
-    });
-  });
 });
 
 // Separate test suite for git stderr error handling with custom mock
@@ -711,25 +508,16 @@ describe('WorktreeManager - git stderr error handling', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'worktree-error-test-'));
   const repoPath = join(tempDir, 'repo');
   const worktreeBasePath = join(tempDir, 'worktrees');
-  const mcpConfigTemplatePath = join(tempDir, 'mcp-template.json');
 
   const mockConfig = {
     repositoryPath: repoPath,
     worktreeBasePath,
-    mcpConfigTemplatePath,
   };
 
   beforeEach(async () => {
     // Ensure temp directory exists
     mkdirSync(tempDir, { recursive: true });
     mkdirSync(repoPath, { recursive: true });
-
-    // Create MCP config template
-    const template = JSON.stringify({
-      linear: { apiKey: '{{LINEAR_API_KEY}}' },
-      sentry: { authToken: '{{SENTRY_AUTH_TOKEN}}' },
-    });
-    writeFileSync(mcpConfigTemplatePath, template, 'utf-8');
   });
 
   afterEach(() => {
@@ -902,35 +690,6 @@ describe('WorktreeManager - git stderr error handling', () => {
     expect(worktrees).toEqual([`${worktreeBasePath}/task-a`, `${worktreeBasePath}/task-c`]);
   });
 
-  it('should handle non-Error thrown during copyMcpConfig', async () => {
-    // We need to make readFile throw a non-Error inside copyMcpConfig
-    // The easiest way is to make the template file unreadable by corrupting the mock
-    mockExecAsyncImpl = async (
-      command: string,
-      _options: { cwd?: string; timeout?: number }
-    ): Promise<{ stdout: string; stderr: string }> => {
-      if (command.includes('git worktree add')) {
-        return { stdout: '', stderr: 'Preparing worktree' };
-      }
-      return { stdout: '', stderr: '' };
-    };
-
-    vi.resetModules();
-    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
-
-    // Point to a template that exists but will cause copyMcpConfig to fail
-    // We'll use a template path that triggers an error during processing
-    const badTemplatePath = join(tempDir, 'bad-template.json');
-    // Create a directory at the template path so readFile fails with EISDIR
-    mkdirSync(badTemplatePath, { recursive: true });
-
-    const manager = new WM({ ...mockConfig, mcpConfigTemplatePath: badTemplatePath }, mockLogger);
-
-    await expect(manager.createWorktree('task-mcp-error', 'feature-branch')).rejects.toThrow(
-      'Failed to create worktree'
-    );
-  });
-
   it('should handle non-Error thrown during copySettingsLocal', async () => {
     mockExecAsyncImpl = async (
       command: string,
@@ -952,7 +711,6 @@ describe('WorktreeManager - git stderr error handling', () => {
     const manager = new WM(
       {
         ...mockConfig,
-        mcpConfigTemplatePath: join(tempDir, 'non-existent-mcp.json'), // skip MCP config
         settingsLocalTemplatePath: badSettingsPath,
       },
       mockLogger
@@ -982,5 +740,46 @@ describe('WorktreeManager - git stderr error handling', () => {
 
     // Should not throw - empty stderr is acceptable
     await expect(manager.removeWorktree('task-remove-empty')).resolves.toBeUndefined();
+  });
+
+  it('should surface Unknown error when copySettingsLocal catch receives a non-Error', async () => {
+    const settingsTemplatePath = join(tempDir, 'settings.non-error.json');
+    writeFileSync(settingsTemplatePath, '{}', 'utf-8');
+
+    // Set readFile to throw a number (non-Error)
+    fsPromisesReadFileOverride = async (): Promise<string> => {
+      throw 999;
+    };
+
+    mockExecAsyncImpl = async (
+      command: string,
+      _options: { cwd?: string; timeout?: number }
+    ): Promise<{ stdout: string; stderr: string }> => {
+      if (command.includes('git worktree add')) {
+        return { stdout: '', stderr: 'Preparing worktree' };
+      }
+      return { stdout: '', stderr: '' };
+    };
+
+    vi.resetModules();
+    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+
+    const manager = new WM(
+      {
+        ...mockConfig,
+        settingsLocalTemplatePath: settingsTemplatePath,
+      },
+      mockLogger
+    );
+
+    try {
+      await expect(
+        manager.createWorktree('task-settings-non-error', 'feature-branch')
+      ).rejects.toThrow(
+        'Failed to create worktree: Failed to copy settings.local.json: Unknown error'
+      );
+    } finally {
+      fsPromisesReadFileOverride = null;
+    }
   });
 });

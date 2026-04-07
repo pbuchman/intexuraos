@@ -70,6 +70,14 @@ export interface UserWorkerSettings {
   updatedAt: string;
   /** Default worker type for review tasks (when not explicitly specified) */
   defaultReviewWorkerType?: CodeTaskWorkerType;
+  /** Default worker type for remediation tasks (when not explicitly specified) */
+  defaultRemediationWorkerType?: CodeTaskWorkerType;
+  /** Default worker type for execution tasks (when not explicitly specified) */
+  defaultExecutionWorkerType?: CodeTaskWorkerType;
+  /** Default worker type for planning tasks (when not explicitly specified) */
+  defaultPlanningWorkerType?: CodeTaskWorkerType;
+  /** Default worker type for pull request tasks (when not explicitly specified) */
+  defaultPullRequestWorkerType?: CodeTaskWorkerType;
   /** Cached health statuses for workers (name -> status) */
   workerHealthStatuses?: Record<string, WorkerHealthStatus>;
 }
@@ -120,6 +128,10 @@ export interface MaskedWorkerConfig {
 export interface UserWorkerSettingsResponse {
   workers: MaskedWorkerConfig[];
   defaultReviewWorkerType?: CodeTaskWorkerType;
+  defaultRemediationWorkerType?: CodeTaskWorkerType;
+  defaultExecutionWorkerType?: CodeTaskWorkerType;
+  defaultPlanningWorkerType?: CodeTaskWorkerType;
+  defaultPullRequestWorkerType?: CodeTaskWorkerType;
 }
 
 /**

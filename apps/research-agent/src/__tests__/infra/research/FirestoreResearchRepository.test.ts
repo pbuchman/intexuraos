@@ -577,6 +577,323 @@ describe('FirestoreResearchRepository', () => {
     });
   });
 
+  describe('findSummariesByUserId', () => {
+    it('returns summary projections with llmResultStatuses', async () => {
+      const research: Research = {
+        id: 'research-1',
+        userId: 'user-1',
+        title: 'Test Research',
+        prompt: 'Test prompt',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
+        status: 'completed',
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
+            status: 'completed',
+            result: 'Full result text that should not appear in summary',
+            durationMs: 1000,
+            inputTokens: 100,
+            outputTokens: 200,
+            costUsd: 0.01,
+          },
+        ],
+        startedAt: '2024-01-01T00:00:00Z',
+        completedAt: '2024-01-01T00:05:00Z',
+        favourite: true,
+        totalCostUsd: 0.01,
+        synthesizedResult: 'Huge synthesis text that should not appear',
+      };
+
+      const mockSelect = vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          get: vi.fn().mockResolvedValue({
+            docs: [{ id: research.id, data: (): Research => research }],
+          }),
+        }),
+      });
+
+      const mockOrderByStartedAt = vi.fn().mockReturnValue({
+        select: mockSelect,
+      });
+
+      const mockOrderByFavourite = vi.fn().mockReturnValue({
+        orderBy: mockOrderByStartedAt,
+      });
+
+      mockWhere.mockReturnValue({
+        orderBy: mockOrderByFavourite,
+      });
+
+      const result = await repository.findSummariesByUserId('user-1');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const { items } = result.value;
+        expect(items).toHaveLength(1);
+        const item = items[0];
+        expect(item).toBeDefined();
+        if (item === undefined) return;
+        expect(item.id).toBe('research-1');
+        expect(item.title).toBe('Test Research');
+        expect(item.status).toBe('completed');
+        expect(item.completedAt).toBe('2024-01-01T00:05:00Z');
+        expect(item.favourite).toBe(true);
+        expect(item.totalCostUsd).toBe(0.01);
+        expect(item.llmResultStatuses).toEqual([
+          { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'completed' },
+        ]);
+        // Verify summary does NOT contain full document fields
+        expect('synthesizedResult' in item).toBe(false);
+        expect('prompt' in item).toBe(false);
+        expect('llmResults' in item).toBe(false);
+      }
+
+      // Verify .select() was called with correct fields
+      expect(mockSelect).toHaveBeenCalledWith(
+        'id', 'userId', 'title', 'status', 'selectedModels', 'synthesisModel',
+        'startedAt', 'completedAt', 'favourite', 'llmResults', 'totalCostUsd',
+        'partialFailure'
+      );
+    });
+
+    it('returns favourites first using single query ordering', async () => {
+      const favourite: Research = {
+        id: 'research-fav',
+        userId: 'user-1',
+        title: 'Favourite Research',
+        prompt: 'Test',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
+        status: 'completed',
+        llmResults: [{ provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'completed' }],
+        startedAt: '2024-01-02T00:00:00Z',
+        favourite: true,
+      };
+      const nonFavourite: Research = {
+        id: 'research-non',
+        userId: 'user-1',
+        title: 'Normal Research',
+        prompt: 'Test',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
+        status: 'pending',
+        llmResults: [{ provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' }],
+        startedAt: '2024-01-01T00:00:00Z',
+        favourite: false,
+      };
+
+      const mockSelect = vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          get: vi.fn().mockResolvedValue({
+            docs: [
+              { id: favourite.id, data: (): Research => favourite },
+              { id: nonFavourite.id, data: (): Research => nonFavourite },
+            ],
+          }),
+        }),
+      });
+
+      mockWhere.mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({
+          orderBy: vi.fn().mockReturnValue({
+            select: mockSelect,
+          }),
+        }),
+      });
+
+      const result = await repository.findSummariesByUserId('user-1');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.items).toHaveLength(2);
+        expect(result.value.items[0]?.id).toBe('research-fav');
+        expect(result.value.items[0]?.favourite).toBe(true);
+        expect(result.value.items[1]?.id).toBe('research-non');
+        expect(result.value.items[1]?.favourite).toBe(false);
+        expect(result.value.nextCursor).toBeUndefined();
+      }
+    });
+
+    it('returns nextCursor when more items available', async () => {
+      const items: Research[] = Array.from({ length: 6 }, (_, i) => ({
+        id: `res-${i}`,
+        userId: 'user-1',
+        title: `Research ${i}`,
+        prompt: 'Test',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
+        status: 'completed' as const,
+        llmResults: [{ provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'completed' as const }],
+        startedAt: '2024-01-01T00:00:00Z',
+        favourite: false,
+      }));
+
+      const mockSelect = vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          get: vi.fn().mockResolvedValue({
+            docs: items.map((r) => ({ id: r.id, data: (): Research => r })),
+          }),
+        }),
+      });
+
+      mockWhere.mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({
+          orderBy: vi.fn().mockReturnValue({
+            select: mockSelect,
+          }),
+        }),
+      });
+
+      const result = await repository.findSummariesByUserId('user-1', { limit: 5 });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.items).toHaveLength(5);
+        expect(result.value.nextCursor).toBe('res-4');
+      }
+    });
+
+    it('handles cursor-based pagination', async () => {
+      const items: Research[] = [
+        {
+          id: 'res-5',
+          userId: 'user-1',
+          title: 'Research 5',
+          prompt: 'Test',
+          selectedModels: [LlmModels.Gemini25Pro],
+          synthesisModel: LlmModels.Gemini25Pro,
+          status: 'completed',
+          llmResults: [{ provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'completed' }],
+          startedAt: '2024-01-01T00:00:00Z',
+          favourite: false,
+        },
+      ];
+
+      const startDoc = { id: 'res-4', exists: true };
+      mockDocGet.mockResolvedValue(startDoc);
+
+      const mockStartAfter = vi.fn().mockReturnValue({
+        get: vi.fn().mockResolvedValue({
+          docs: items.map((r) => ({ id: r.id, data: (): Research => r })),
+        }),
+      });
+
+      const mockSelect = vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          startAfter: mockStartAfter,
+        }),
+      });
+
+      mockWhere.mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({
+          orderBy: vi.fn().mockReturnValue({
+            select: mockSelect,
+          }),
+        }),
+      });
+
+      const result = await repository.findSummariesByUserId('user-1', { cursor: 'res-4', limit: 5 });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.items).toHaveLength(1);
+        expect(result.value.items[0]?.id).toBe('res-5');
+        expect(result.value.nextCursor).toBeUndefined();
+      }
+      expect(mockDoc).toHaveBeenCalledWith('res-4');
+      expect(mockStartAfter).toHaveBeenCalledWith(startDoc);
+    });
+
+    it('returns empty list when no results', async () => {
+      const mockSelect = vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          get: vi.fn().mockResolvedValue({ docs: [] }),
+        }),
+      });
+
+      mockWhere.mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({
+          orderBy: vi.fn().mockReturnValue({
+            select: mockSelect,
+          }),
+        }),
+      });
+
+      const result = await repository.findSummariesByUserId('user-1');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.items).toHaveLength(0);
+        expect(result.value.nextCursor).toBeUndefined();
+      }
+    });
+
+    it('returns error on Firestore failure', async () => {
+      const mockSelect = vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          get: vi.fn().mockRejectedValue(new Error('Query failed')),
+        }),
+      });
+
+      mockWhere.mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({
+          orderBy: vi.fn().mockReturnValue({
+            select: mockSelect,
+          }),
+        }),
+      });
+
+      const result = await repository.findSummariesByUserId('user-1');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('FIRESTORE_ERROR');
+      }
+    });
+
+    it('omits completedAt when undefined', async () => {
+      const research: Research = {
+        id: 'research-pending',
+        userId: 'user-1',
+        title: 'Pending Research',
+        prompt: 'Test',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
+        status: 'pending',
+        llmResults: [{ provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' }],
+        startedAt: '2024-01-01T00:00:00Z',
+        favourite: false,
+      };
+
+      const mockSelect = vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          get: vi.fn().mockResolvedValue({
+            docs: [{ id: research.id, data: (): Research => research }],
+          }),
+        }),
+      });
+
+      mockWhere.mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({
+          orderBy: vi.fn().mockReturnValue({
+            select: mockSelect,
+          }),
+        }),
+      });
+
+      const result = await repository.findSummariesByUserId('user-1');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.items[0]?.completedAt).toBeUndefined();
+        // Verify key is not present (exactOptionalPropertyTypes compliance)
+        expect('completedAt' in (result.value.items[0] ?? {})).toBe(false);
+      }
+    });
+  });
+
   describe('update', () => {
     it('updates research in Firestore', async () => {
       const updatedResearch: Research = {

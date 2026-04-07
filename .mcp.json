@@ -1,11 +1,12 @@
 {
   "mcpServers": {
     "linear": {
-      "type": "http",
-      "url": "https://mcp.linear.app/mcp",
+      "type": "sse",
+      "url": "https://mcp.linear.app/sse",
       "headers": {
         "Authorization": "Bearer ${LINEAR_API_KEY}"
-      }
+      },
+      "timeoutMs": 60000
     },
     "sentry": {
       "command": "npx",

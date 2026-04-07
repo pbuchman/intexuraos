@@ -9,6 +9,12 @@ import type { PromptBuilder, PromptDeps } from '@intexuraos/llm-prompts';
  * Input for the initial summary prompt.
  */
 export interface SummaryPromptInput {
+  /** URL of the page being summarized */
+  url?: string;
+  /** Optional title hint from page metadata */
+  title?: string | null;
+  /** Optional description hint from page metadata */
+  description?: string | null;
   /** Maximum number of sentences in the summary */
   maxSentences: number;
   /** Maximum reading time in minutes */
@@ -33,6 +39,12 @@ export interface SummaryRepairPromptInput {
   invalidResponse: string;
   /** Error message explaining why the response was invalid */
   errorMessage: string;
+  /** URL of the page being summarized */
+  url?: string;
+  /** Optional title hint from page metadata */
+  title?: string | null;
+  /** Optional description hint from page metadata */
+  description?: string | null;
 }
 
 /**
@@ -58,6 +70,61 @@ function formatContentFocus(): string {
 - Do NOT describe what the platform is or how it works (e.g., don't explain "LinkedIn is a professional network" or "Threads is a social media app")
 - Do NOT include platform structural information (usernames, profile details, navigation elements)
 - Summarize WHAT is being said, not WHO said it or WHERE it was posted`;
+}
+
+function normalizeHint(value?: string | null): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed === undefined || trimmed.length === 0 ? undefined : trimmed;
+}
+
+function formatHintSection(
+  input: Pick<SummaryPromptInput, 'url' | 'title' | 'description'>
+): string {
+  const hints: string[] = [];
+
+  const url = normalizeHint(input.url);
+  const title = normalizeHint(input.title);
+  const description = normalizeHint(input.description);
+
+  if (url !== undefined) {
+    hints.push(`- URL: ${url}`);
+  }
+  if (title !== undefined) {
+    hints.push(`- Title hint: ${title}`);
+  }
+  if (description !== undefined) {
+    hints.push(`- Description hint: ${description}`);
+  }
+
+  if (hints.length === 0) {
+    return '';
+  }
+
+  return `Use these hints to identify the main content:
+${hints.join('\n')}`;
+}
+
+function formatMainContentSelection(
+  input: Pick<SummaryPromptInput, 'url' | 'title' | 'description'>
+): string {
+  const hintSection = formatHintSection(input);
+
+  return `## MAIN CONTENT SELECTION
+First, silently identify the single primary content block of the page.
+Then summarize only that primary content block.
+- Do NOT assume the first paragraphs are the main content
+- The extraction may begin with irrelevant site chrome
+- Ignore completely: cookie/privacy banners, login/signup prompts, navigation, menus, headers, footers, app download prompts, ads, share widgets, and related or recommended sections
+- Prefer the longest contiguous section whose topic matches the URL/title/description hints
+- For job pages, summarize the actual job posting and role details, not the platform UI
+- If multiple sections exist, choose the most information-dense section and ignore the rest
+${hintSection.length > 0 ? `\n${hintSection}` : ''}
+
+## BAD OUTPUT EXAMPLE
+Bad: "LinkedIn uses cookies and asks you to sign in."
+
+## GOOD OUTPUT EXAMPLE
+Good: "SEEKR is hiring an AI Engineer in London with responsibilities across applied AI systems."`;
 }
 
 /**
@@ -96,7 +163,7 @@ CRITICAL: Output ONLY plain prose text
 export const summaryPrompt: PromptBuilder<SummaryPromptInput, SummaryPromptDeps> = {
   name: 'page-summary-generation',
   description: 'Generates concise prose summaries from web page content',
-  version: '1.0.0',
+  version: '2.0.0',
 
   build(input: SummaryPromptInput, deps?: SummaryPromptDeps): string {
     const wordsPerMinute = deps?.wordsPerMinute ?? 200;
@@ -106,6 +173,8 @@ export const summaryPrompt: PromptBuilder<SummaryPromptInput, SummaryPromptDeps>
 Summarize the following web page content.
 
 ${formatContentFocus()}
+
+${formatMainContentSelection(input)}
 
 ${formatRequirements(input.maxSentences, maxWords)}
 
@@ -127,7 +196,7 @@ export const summaryRepairPrompt: PromptBuilder<
 > = {
   name: 'page-summary-repair',
   description: 'Requests LLM to fix invalid summary response format',
-  version: '1.0.0',
+  version: '2.0.0',
 
   build(input: SummaryRepairPromptInput, deps?: SummaryRepairPromptDeps): string {
     const contentMaxLength = deps?.contentMaxLength ?? 5000;
@@ -158,6 +227,8 @@ ${truncatedInvalid}
 
 ${formatContentFocus()}
 
+${formatMainContentSelection(input)}
+
 ${formatRequirements(maxSentences, maxWords)}
 
 ${formatOutputFormat()}
@@ -167,6 +238,7 @@ ${formatOutputFormat()}
 ## Original Content to Summarize
 """
 ${truncatedContent}
+"""
 ---
 
 Provide ONLY the corrected summary text:`;

@@ -31,19 +31,49 @@ The Profile serves as the event trigger.
 1. **Create Profile:** Open Tasker → **Profiles** → **+** → **Event** → **Plugin** → **AutoNotification** → **Intercept**.
 2. **Configuration:**
    - **Action Type:** Set to `Created` to trigger only on new incoming notifications.
-   - **Apps:** Filter to your desired apps (e.g., Zen, Revolut, WhatsApp).
+   - **Apps:** Filter to your desired apps (e.g., Zen, Revolut, WhatsApp). **Do NOT leave this empty** — an empty list captures ALL apps, including system services that emit rapid-fire updates (see Section 2.1).
    - **Event Behaviour:** Enabled (True).
 3. **Variable Names:** The plugin automatically populates local variables like `%antitle`, `%antext`, `%anpackage`, and `%ankey`.
 
 See [08-tasker-configuration.jpg](08-tasker-configuration.jpg) for a visual reference of the configuration screen.
 
+### 2.1. Excluded Apps (Important)
+
+The following system packages produce persistent or rapidly-updating notifications (progress bars, connection status) that trigger hundreds of duplicate events per minute. They **must NOT** be included in the Apps filter above:
+
+| Package                                  | Description  | Why excluded                                                                                                |
+| ---------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------- |
+| `com.google.android.projection.gearhead` | Android Auto | Emits a pulsating "Connecting to Android Auto" progress notification that fires continuous `Created` events |
+| `com.android.systemui`                   | System UI    | System-level notifications (volume, brightness) that update rapidly                                         |
+
+If you use a broad app filter or discover a new noisy package, add it to this table and to the Task-level exclusion (Section 3.1).
+
 ---
 
-## 3. Data Sanitization (Variable Search Replace)
+## 3. Task-Level Package Exclusion (Required)
 
-These actions **must be placed at the beginning of the Task** to prevent JSON syntax errors caused by special characters in notification content.
+Even with a correct AutoNotification app filter, a **Stop** action at the top of the Tasker Task acts as a safety net against noisy packages. This prevents HTTP requests from being sent if a system notification slips through the profile filter.
 
-### 3.1. Remove Newlines from Key
+### 3.1. Stop Action for Excluded Packages
+
+Add this as **Action 1** in the Task (before everything else, including the Write File log action):
+
+- **Action:** `Task` → `Stop`
+- **If:** `%anpackage` **Matches Regex** `com\.google\.android\.projection\.gearhead|com\.android\.systemui`
+
+This immediately exits the task for any excluded package — no HTTP request is sent, no log entry is written, and no server resources are consumed.
+
+**To exclude additional packages**, append `|com.example.package` to the regex pattern.
+
+> **Why this matters:** Persistent notifications with progress bars (like Android Auto's "Connecting" animation) fire continuous `Created` events in AutoNotification. Combined with the timestamp-based `notification_id` format (`%ankey_%TIMES`), each event generates a unique ID that bypasses server-side deduplication, flooding IntexuraOS with hundreds of identical entries per minute.
+
+---
+
+## 4. Data Sanitization (Variable Search Replace)
+
+These actions **must be placed after the package exclusion (Section 3) and before the HTTP request** to prevent JSON syntax errors caused by special characters in notification content.
+
+### 4.1. Remove Newlines from Key
 
 - **Action:** Variable Search Replace
 - **Variable:** `%ankey`
@@ -52,7 +82,7 @@ These actions **must be placed at the beginning of the Task** to prevent JSON sy
 - **Replace Matches:** Enabled
 - **Replace With:** _(leave empty)_
 
-### 3.2. Escape Quotes in Title
+### 4.2. Escape Quotes in Title
 
 - **Action:** Variable Search Replace
 - **Variable:** `%antitle`
@@ -60,7 +90,7 @@ These actions **must be placed at the beginning of the Task** to prevent JSON sy
 - **Replace Matches:** Enabled
 - **Replace With:** `\"`
 
-### 3.3. Escape Quotes in Text
+### 4.3. Escape Quotes in Text
 
 - **Action:** Variable Search Replace
 - **Variable:** `%antext`
@@ -70,25 +100,26 @@ These actions **must be placed at the beginning of the Task** to prevent JSON sy
 
 ---
 
-## 4. Tasker Task: Unique ID & Retry Flow
+## 5. Tasker Task: Unique ID & Retry Flow
 
 This task handles data transmission to the backend with error handling and local logging.
 
 ![Tasker Configuration](08-tasker-configuration.jpg)
 
-### 4.1. Flow Logic (Action by Action)
+### 5.1. Flow Logic (Action by Action)
 
-1. **Write File:** Append the initial event data to `Documents/tasker_full_log.txt`.
-2. **Variable Search Replace (x3):** Sanitization actions from Step 3.
-3. **Variable Set:** Initialize `%attempts` to `0`.
-4. **Anchor (retry_loop):** A label for the Goto loop.
-5. **HTTP Request:** POST request with the JSON payload.
-6. **Write File:** Append the server response (code and content) to the log file.
-7. **Wait:** 5 Minutes (Condition: If `%http_response_code` != 200).
-8. **Variable Add:** Increment `%attempts` by 1 (Condition: If code != 200).
-9. **Goto:** Jump to `retry_loop` (Condition: If code != 200 AND `%attempts` < 100).
+1. **Stop:** Exit task if `%anpackage` matches excluded packages (Section 3).
+2. **Write File:** Append the initial event data to `Documents/tasker_full_log.txt`.
+3. **Variable Search Replace (x3):** Sanitization actions from Section 4.
+4. **Variable Set:** Initialize `%attempts` to `0`.
+5. **Anchor (retry_loop):** A label for the Goto loop.
+6. **HTTP Request:** POST request with the JSON payload.
+7. **Write File:** Append the server response (code and content) to the log file.
+8. **Wait:** 5 Minutes (Condition: If `%http_response_code` != 200).
+9. **Variable Add:** Increment `%attempts` by 1 (Condition: If code != 200).
+10. **Goto:** Jump to `retry_loop` (Condition: If code != 200 AND `%attempts` < 100).
 
-### 4.2. HTTP Request Configuration
+### 5.2. HTTP Request Configuration
 
 - **Method:** `POST`
 - **URL:** `https://YOUR_SERVICE_URL/mobile-notifications/webhooks`
@@ -96,7 +127,7 @@ This task handles data transmission to the backend with error handling and local
   - `Content-Type: application/json`
   - `X-Mobile-Notifications-Signature: YOUR_SIGNATURE`
 
-### 4.3. JSON Payload (Body)
+### 5.3. JSON Payload (Body)
 
 To prevent WhatsApp updates from being treated as duplicates, the `notification_id` combines the system key with the exact post timestamp:
 
@@ -126,13 +157,13 @@ To prevent WhatsApp updates from being treated as duplicates, the `notification_
 
 ---
 
-## 5. Debugging & System Behavior
+## 6. Debugging & System Behavior
 
-### 5.1. "No active profiles" Status
+### 6.1. "No active profiles" Status
 
 The notification "No active profiles (1 of 1 enabled)" is **normal**. Event triggers are instantaneous and do not stay "active" in the UI like State-based profiles.
 
-### 5.2. Analyzing Log Errors
+### 6.2. Analyzing Log Errors
 
 | Response Code | Meaning                                             |
 | ------------- | --------------------------------------------------- |
@@ -141,13 +172,13 @@ The notification "No active profiles (1 of 1 enabled)" is **normal**. Event trig
 | `400`         | Bad request - verify JSON payload structure         |
 | `5xx`         | Server error - retry will handle this automatically |
 
-### 5.3. Variable Issues
+### 6.3. Variable Issues
 
 - **Empty Variables:** Ensure variables are written in lowercase (e.g., `%antitle`). Uppercase variables like `%ANTITLE` are treated as global and may remain empty.
 - **Raw `%http_response_content`:** If this appears in logs, the server returned an empty body (typical for 401 errors).
 - **JSON Parse Errors:** If you see "Body is not valid JSON" errors, ensure the sanitization actions are configured correctly.
 
-### 5.4. Persistence
+### 6.4. Persistence
 
 To ensure the service remains alive on HyperOS:
 
@@ -157,7 +188,7 @@ To ensure the service remains alive on HyperOS:
 
 ---
 
-## 6. Getting Your Signature
+## 7. Getting Your Signature
 
 1. Log in to IntexuraOS web app.
 2. Navigate to **Mobile Notifications** in the sidebar.
@@ -168,19 +199,20 @@ To ensure the service remains alive on HyperOS:
 
 ---
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
-| Issue                            | Solution                                                       |
-| -------------------------------- | -------------------------------------------------------------- |
-| Notifications not being captured | Check AutoNotification has Notification Access permission      |
-| 401 Unauthorized errors          | Verify your signature is correct and hasn't been regenerated   |
-| Tasker killed in background      | Enable autostart and disable battery optimization              |
-| Variables empty in payload       | Use lowercase variable names (e.g., `%antitle` not `%ANTITLE`) |
-| JSON parse errors (400)          | Ensure sanitization actions escape quotes and remove newlines  |
+| Issue                            | Solution                                                                                                                           |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Notifications not being captured | Check AutoNotification has Notification Access permission                                                                          |
+| 401 Unauthorized errors          | Verify your signature is correct and hasn't been regenerated                                                                       |
+| Tasker killed in background      | Enable autostart and disable battery optimization                                                                                  |
+| Variables empty in payload       | Use lowercase variable names (e.g., `%antitle` not `%ANTITLE`)                                                                     |
+| JSON parse errors (400)          | Ensure sanitization actions escape quotes and remove newlines                                                                      |
+| Flood of duplicate notifications | A system app (e.g., Android Auto) is sending rapid-fire updates. Add its package to the exclusion list (Section 2.1 + Section 3.1) |
 
 ---
 
-## 8. Reference
+## 9. Reference
 
 - [Tasker Configuration Screenshot](08-tasker-configuration.jpg)
 - [WhatsApp Business Cloud API Setup](./07-whatsapp-business-cloud-api.md)

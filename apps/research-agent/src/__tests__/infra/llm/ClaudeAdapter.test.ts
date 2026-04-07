@@ -41,12 +41,20 @@ describe('ClaudeAdapter', () => {
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreateClaudeClient.mockClear();
-      new ClaudeAdapter('test-key', LlmModels.ClaudeOpus45, 'test-user-id', testPricing, mockLogger);
+      new ClaudeAdapter(
+        'test-key',
+        LlmModels.ClaudeOpus45,
+        'test-user-id',
+        testPricing,
+        mockLogger,
+        'research-123'
+      );
 
       expect(mockCreateClaudeClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: LlmModels.ClaudeOpus45,
         userId: 'test-user-id',
+        researchId: 'research-123',
         pricing: testPricing,
         logger: mockLogger,
       });

@@ -68,7 +68,7 @@ When sending a code task, you can specify which AI model to use directly in your
 
 When an action finishes, you receive a detailed WhatsApp notification — not just "task completed" but a message tailored to the action type.
 
-Calendar events show the event title, date, time, duration, and location in a formatted message, with a "View in Calendar" button that opens the event directly in Google Calendar. Code tasks show the task ID and a link to the code task detail page. Research, to-dos, notes, and bookmarks each include a link to the created resource.
+Calendar events show the event title, date, time, duration, and location in a formatted message, with a "View in Calendar" button that opens the event directly in Google Calendar. Code tasks show a "View Progress" button linking to the code task detail page. Research, to-dos, notes, and bookmarks each include a link to the created resource.
 
 **Example:** You approved a calendar event for "Team Standup" tomorrow at 9 AM. When it completes, you receive a WhatsApp message showing the event title in bold, the date and time, the 30-minute duration, and a tappable "View in Calendar" button that opens Google Calendar.
 
@@ -103,7 +103,7 @@ Every message you send through IntexuraOS is already routed through the actions 
 - **Instant execution for high-confidence actions** — At ninety percent confidence or above, actions execute immediately with no approval step and no delay
 - **Mandatory approval where mistakes are costly** — Project tracking issues always ask first, regardless of confidence
 - **One-tap approval via WhatsApp** — Approve or Reject with a single button tap; code actions show estimated cost and time upfront
-- **Rich WhatsApp notifications** — Calendar completions show event details with a "View in Calendar" button; each action type delivers context-specific completion messages
+- **Rich WhatsApp notifications** — Calendar completions show event details with a "View in Calendar" button; code task completions show a "View Progress" button; each action type delivers context-specific completion messages
 - **Multi-phase engineering task control** — Approve, proceed to implementation, cancel, or view code tasks at each stage from WhatsApp
 - **Seven specialized agents, one dispatcher** — Research, to-dos, notes, bookmarks, calendar, project tracking, and engineering tasks each have a dedicated service
 - **Natural language worker selection** — Say "use opus" or "use sonnet" in code task messages to select the AI model

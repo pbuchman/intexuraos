@@ -12,6 +12,7 @@ export interface ApiKeyStore {
   openai?: string;
   anthropic?: string;
   perplexity?: string;
+  openrouter?: string;
 }
 
 /**

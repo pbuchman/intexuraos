@@ -83,7 +83,7 @@
         ]
       },
       {
-        "matcher": "mcp__linear__update_issue|mcp__linear-server__update_issue",
+        "matcher": "mcp__linear__update_issue|mcp__linear-server__update_issue|mcp__linear__save_issue|mcp__linear-server__save_issue",
         "hooks": [
           {
             "type": "command",

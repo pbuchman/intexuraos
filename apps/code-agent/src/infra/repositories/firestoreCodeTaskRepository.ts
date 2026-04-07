@@ -3,11 +3,6 @@
  */
 
 /* eslint-disable */
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 
 import type { Firestore, QueryDocumentSnapshot, Transaction as FirestoreTransaction } from '@google-cloud/firestore';
 import { FieldValue, Timestamp } from '@google-cloud/firestore';
@@ -24,10 +19,14 @@ import type {
   ListTasksOutput,
   RepositoryError,
 } from '../../domain/repositories/codeTaskRepository.js';
+import { NON_ARCHIVED_STATUSES } from '../../domain/issueGrouping/constants.js';
 
 const DEDUP_WINDOW_MS = 5 * 60 * 1000; // 5 minutes (design line 1544)
 const DEDUP_CANDIDATE_LIMIT = 5; // Fetch up to 5 candidates for app-level active-status filtering
 const ACTIVE_TASK_STATUSES = ['queued', 'dispatched', 'running'] as const;
+
+/** Statuses representing tasks actively consuming worker capacity (excludes queued). */
+const DISPATCHED_OR_RUNNING_STATUSES = ['dispatched', 'running'] as const;
 
 function stripLegacyLinearFields(data: Record<string, unknown>): Record<string, unknown> {
   const {
@@ -52,6 +51,61 @@ function toCodeTask(doc: { id: string; data(): Record<string, unknown> }): CodeT
   } as CodeTask;
 }
 
+function toTimestamp(value: unknown): Timestamp | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value instanceof Timestamp) {
+    return value;
+  }
+  if (value instanceof Date) {
+    return Timestamp.fromDate(value);
+  }
+  return undefined;
+}
+
+function serializeExecutionMemoryContext(
+  input: CodeTask['executionMemoryContext']
+): CodeTask['executionMemoryContext'] {
+  /* v8 ignore start -- upstream: prior check guarantees serializer input is defined; private helper is not unit-testable @preserve */
+  if (input === undefined) {
+    return undefined;
+  }
+  /* v8 ignore stop @preserve */
+
+  const { matchedAt: _matchedAt, ...rest } = input;
+  const matchedAt = toTimestamp(input.matchedAt);
+
+  return {
+    ...rest,
+    ...(matchedAt !== undefined && { matchedAt }),
+  };
+}
+
+function serializeExecutionMemoryPostRun(
+  input: CodeTask['executionMemoryPostRun']
+): CodeTask['executionMemoryPostRun'] {
+  /* v8 ignore start -- upstream: prior check guarantees serializer input is defined; private helper is not unit-testable @preserve */
+  if (input === undefined) {
+    return undefined;
+  }
+  /* v8 ignore stop @preserve */
+
+  const {
+    lastAttemptAt: _lastAttemptAt,
+    completedAt: _completedAt,
+    ...rest
+  } = input;
+  const lastAttemptAt = toTimestamp(input.lastAttemptAt);
+  const completedAt = toTimestamp(input.completedAt);
+
+  return {
+    ...rest,
+    ...(lastAttemptAt !== undefined && { lastAttemptAt }),
+    ...(completedAt !== undefined && { completedAt }),
+  };
+}
+
 function generateDedupKey(userId: string, prompt: string, linearIssueId?: string): string {
   // Normalize prompt: trim, collapse spaces, lowercase (design lines 1542-1547)
   const normalized = prompt.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -62,6 +116,10 @@ function generateDedupKey(userId: string, prompt: string, linearIssueId?: string
     : userId + normalized;
   const hash = createHash('sha256').update(input).digest('hex');
   return hash.substring(0, 16);
+}
+
+function isMergeConflictTaskData(data: Record<string, unknown>): boolean {
+  return data['followUpReason'] === 'merge_conflict' || data['systemPromptHash'] === MERGE_CONFLICT_SYSTEM_PROMPT_HASH;
 }
 
 export const createFirestoreCodeTaskRepository = (deps: {
@@ -216,7 +274,6 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.webhookSecret !== undefined) {
           taskData.webhookSecret = input.webhookSecret;
         }
-        /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
         if (input.retriedFrom !== undefined) {
           taskData.retriedFrom = input.retriedFrom;
         }
@@ -247,7 +304,26 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.reviewTypes !== undefined) {
           taskData.reviewTypes = input.reviewTypes;
         }
-        /* v8 ignore stop @preserve */
+        if (input.executionMemoryContext !== undefined) {
+          const serializedExecutionMemoryContext = serializeExecutionMemoryContext(
+            input.executionMemoryContext
+          );
+          /* v8 ignore start -- upstream: prior check guarantees serializer output is defined after guarded input; false branch is not reachable @preserve */
+          if (serializedExecutionMemoryContext !== undefined) {
+            taskData.executionMemoryContext = serializedExecutionMemoryContext;
+          }
+          /* v8 ignore stop @preserve */
+        }
+        if (input.executionMemoryPostRun !== undefined) {
+          const serializedExecutionMemoryPostRun = serializeExecutionMemoryPostRun(
+            input.executionMemoryPostRun
+          );
+          /* v8 ignore start -- upstream: prior check guarantees serializer output is defined after guarded input; false branch is not reachable @preserve */
+          if (serializedExecutionMemoryPostRun !== undefined) {
+            taskData.executionMemoryPostRun = serializedExecutionMemoryPostRun;
+          }
+          /* v8 ignore stop @preserve */
+        }
 
         const docRef = collection.doc(taskId);
         transaction.set(docRef, taskData);
@@ -335,11 +411,14 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
     update: async (
       taskId: string,
-      input: UpdateTaskInput
+      input: UpdateTaskInput,
+      options?: { transaction?: FirebaseFirestore.Transaction }
     ): Promise<Result<CodeTask, RepositoryError>> => {
       try {
         const docRef = collection.doc(taskId);
-        const doc = await docRef.get();
+        const doc = options?.transaction !== undefined
+          ? await options.transaction.get(docRef)
+          : await docRef.get();
 
         if (!doc.exists) {
           return err({
@@ -371,11 +450,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.statusSummary !== undefined) {
           updateData['statusSummary'] = input.statusSummary;
         }
-        /* v8 ignore start -- test-infra: workerLocation set by drainTaskQueue which mocks CodeTaskRepository @preserve */
         if (input.workerLocation !== undefined) {
           updateData['workerLocation'] = input.workerLocation;
         }
-        /* v8 ignore stop @preserve */
         if (input.callbackReceived !== undefined) {
           updateData['callbackReceived'] = input.callbackReceived;
         }
@@ -391,11 +468,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.logChunksDropped !== undefined) {
           updateData['logChunksDropped'] = input.logChunksDropped;
         }
-        /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
         if (input.lastHeartbeat !== undefined) {
           updateData['lastHeartbeat'] = Timestamp.fromDate(input.lastHeartbeat);
         }
-        /* v8 ignore stop @preserve */
         if (input.cancelNonce !== undefined) {
           updateData['cancelNonce'] = input.cancelNonce === null
             ? FieldValue.delete()
@@ -414,16 +489,61 @@ export const createFirestoreCodeTaskRepository = (deps: {
             ? FieldValue.delete()
             : input.implementationTaskId;
         }
+        if (input.fanOutChildTaskIds !== undefined) {
+          updateData['fanOutChildTaskIds'] = input.fanOutChildTaskIds === null
+            ? FieldValue.delete()
+            : input.fanOutChildTaskIds;
+        }
         if (input.prNumber !== undefined) {
           updateData['prNumber'] = input.prNumber;
         }
         if (input.prBranch !== undefined) {
           updateData['prBranch'] = input.prBranch;
         }
+        if (input.prMergedAt !== undefined) {
+          updateData['prMergedAt'] = Timestamp.fromDate(input.prMergedAt);
+        }
+        if (input.executionMemoryContext !== undefined) {
+          const serializedExecutionMemoryContext = serializeExecutionMemoryContext(
+            input.executionMemoryContext
+          );
+          /* v8 ignore start -- upstream: prior check guarantees serializer output is defined after guarded input; false branch is not reachable @preserve */
+          if (serializedExecutionMemoryContext !== undefined) {
+            updateData['executionMemoryContext'] = serializedExecutionMemoryContext;
+          }
+          /* v8 ignore stop @preserve */
+        }
+        if (input.executionMemoryPostRun !== undefined) {
+          const serializedExecutionMemoryPostRun = serializeExecutionMemoryPostRun(
+            input.executionMemoryPostRun
+          );
+          /* v8 ignore start -- upstream: prior check guarantees serializer output is defined after guarded input; false branch is not reachable @preserve */
+          if (serializedExecutionMemoryPostRun !== undefined) {
+            updateData['executionMemoryPostRun'] = serializedExecutionMemoryPostRun;
+          }
+          /* v8 ignore stop @preserve */
+        }
+        if (input.requiresReReview !== undefined) {
+          updateData['requiresReReview'] = input.requiresReReview;
+        }
+
+        if (options?.transaction !== undefined) {
+          options.transaction.update(docRef, updateData);
+          // Inside an external transaction, avoid read-after-write by merging
+          // the known updates into the already-read doc data in memory.
+          // Important: strip FieldValue.delete() sentinels — spread would leave
+          // delete-sentinel objects in the merged result instead of omitting the
+          // field. Filter them out so the returned CodeTask has a clean shape.
+          const mergedData = { ...doc.data(), ...updateData };
+          for (const [key, value] of Object.entries(mergedData)) {
+            if (value instanceof FieldValue) {
+              delete mergedData[key];
+            }
+          }
+          return ok(toCodeTask({ id: taskId, data: () => mergedData } as { id: string; data(): Record<string, unknown> }));
+        }
 
         await docRef.update(updateData);
-
-        // Fetch updated document
         const updatedDoc = await docRef.get();
         return ok(toCodeTask(updatedDoc as { id: string; data(): Record<string, unknown> }));
       } catch (error) {
@@ -475,12 +595,12 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
         // Only set nextCursor when there are actually more results
         if (hasMore && resultDocs.length > 0) {
-          /* v8 ignore start -- ts-type: array last element check @preserve */
           const lastDoc = resultDocs[resultDocs.length - 1];
+          /* v8 ignore start -- ts-type: FakeFirestore always returns non-sparse arrays from queries @preserve */
           if (lastDoc !== undefined) {
-          /* v8 ignore stop @preserve */
             output.nextCursor = lastDoc.id;
           }
+          /* v8 ignore stop @preserve */
         }
 
         return ok(output);
@@ -529,7 +649,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
         const snapshot = await collection
           // Note: 'queued' excluded — queued tasks don't heartbeat (no updatedAt changes),
           // so they'd be false positives. Queue TTL expiry in drainTaskQueue handles them.
-          .where('status', 'in', ['running', 'dispatched'])
+          .where('status', 'in', DISPATCHED_OR_RUNNING_STATUSES)
           .where('updatedAt', '<', Timestamp.fromDate(staleThreshold))
           .get();
 
@@ -626,11 +746,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
             }
           }
 
-          /* v8 ignore start -- test-infra: FakeFirestore batch commit not tracked by v8 coverage @preserve */
           if (batchCount > 0) {
             await batch.commit();
           }
-          /* v8 ignore stop @preserve */
         }
 
         const logLinesRef = taskRef.collection('log_lines');
@@ -651,11 +769,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
             }
           }
 
-          /* v8 ignore start -- test-infra: FakeFirestore batch commit not tracked by v8 coverage @preserve */
           if (linesBatchCount > 0) {
             await linesBatch.commit();
           }
-          /* v8 ignore stop @preserve */
         }
 
         const logEntriesRef = taskRef.collection('log_entries');
@@ -676,11 +792,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
             }
           }
 
-          /* v8 ignore start -- test-infra: FakeFirestore batch commit not tracked by v8 coverage @preserve */
           if (entriesBatchCount > 0) {
             await entriesBatch.commit();
           }
-          /* v8 ignore stop @preserve */
         }
 
         const turnMetricsRef = taskRef.collection('turn_metrics');
@@ -701,11 +815,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
             }
           }
 
-          /* v8 ignore start -- test-infra: FakeFirestore batch commit not tracked by v8 coverage @preserve */
           if (metricsBatchCount > 0) {
             await metricsBatch.commit();
           }
-          /* v8 ignore stop @preserve */
         }
 
         const totalLogCount = logCount + logLinesSnapshot.docs.length + logEntriesSnapshot.docs.length + turnMetricsSnapshot.docs.length;
@@ -720,6 +832,97 @@ export const createFirestoreCodeTaskRepository = (deps: {
         return ok({ logCount: totalLogCount, archivedAt });
       } catch (error) {
         logger.error({ error, taskId }, 'Failed to archive task logs');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    findRecentRemediationForPR: async (
+      repository: string,
+      prNumber: number
+    ): Promise<Result<CodeTask | null, RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('repository', '==', repository)
+          .where('prNumber', '==', prNumber)
+          .where('agentType', '==', 'remediation')
+          .orderBy('createdAt', 'desc')
+          .limit(1)
+          .get();
+
+        if (snapshot.empty) {
+          return ok(null);
+        }
+
+        const doc = snapshot.docs[0]!;
+        return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
+      } catch (error) {
+        logger.error({ error, repository, prNumber }, 'Failed to find recent remediation task for PR');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    findPreservedPullRequestTask: async (
+      repository: string,
+      prNumber: number,
+    ): Promise<Result<{ id: string; workerLocation: string; userId: string } | null, RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('repository', '==', repository)
+          .where('prNumber', '==', prNumber)
+          .where('agentType', '==', 'pull_request')
+          .where('status', '==', 'implemented')
+          .orderBy('completedAt', 'desc')
+          .limit(50)
+          .get();
+
+        for (const doc of snapshot.docs) {
+          const data = doc.data();
+          if (!isMergeConflictTaskData(data)) {
+            return ok({
+              id: doc.id,
+              /* v8 ignore start -- upstream: FakeFirestore always returns complete documents, cannot simulate missing Firestore fields @preserve */
+              workerLocation: String(data['workerLocation'] ?? ''),
+              userId: String(data['userId'] ?? ''),
+              /* v8 ignore stop @preserve */
+            });
+          }
+        }
+
+        return ok(null);
+      } catch (error) {
+        logger.error({ error, repository, prNumber }, 'Failed to find preserved pull_request task');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    findLatestAskAgentTask: async (userId: string): Promise<Result<CodeTask | null, RepositoryError>> => {
+      try {
+        const query = collection
+          .where('userId', '==', userId)
+          .where('agentType', '==', 'ask_agent')
+          .where('status', 'in', NON_ARCHIVED_STATUSES)
+          .orderBy('createdAt', 'desc')
+          .limit(1);
+
+        const snapshot = await query.get();
+
+        if (snapshot.empty) {
+          return ok(null);
+        }
+
+        const doc = snapshot.docs[0]!;
+        return ok(toCodeTask(doc as unknown as { id: string; data(): Record<string, unknown> }));
+      } catch (error) {
+        logger.error({ error, userId }, 'Failed to find latest ask-agent task');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,
@@ -822,14 +1025,52 @@ export const createFirestoreCodeTaskRepository = (deps: {
         const doc = snapshot.docs[0]!;
         const task = toCodeTask(doc as { id: string; data(): Record<string, unknown> });
 
-        // Only return if implementationTaskId is not already set
-        if (task.implementationTaskId !== undefined) {
+        // Only return if implementation has not already been launched
+        if (
+          task.implementationTaskId !== undefined ||
+          (task.fanOutChildTaskIds !== undefined && task.fanOutChildTaskIds.length > 0)
+        ) {
           return ok(null);
         }
 
         return ok(task);
       } catch (error) {
         logger.error({ error, linearIssueId }, 'Failed to find planned task by Linear issue');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    runInTransaction: async <T>(
+      operation: (transaction: FirebaseFirestore.Transaction) => Promise<Result<T, RepositoryError>>
+    ): Promise<Result<T, RepositoryError>> => {
+      try {
+        return await firestore.runTransaction(async (transaction) => await operation(transaction));
+      } catch (error) {
+        logger.error({ error }, 'Failed to run repository transaction');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    listPendingExecutionMemoryPostRun: async (limit: number): Promise<Result<CodeTask[], RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('agentType', 'in', ['execution', 'planning', 'review', 'remediation', 'pull_request'])
+          .where('executionMemoryPostRun.status', '==', 'pending')
+          .orderBy('completedAt', 'asc')
+          .limit(limit)
+          .get();
+
+        return ok(snapshot.docs.map((doc) =>
+          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
+        ));
+      } catch (error) {
+        logger.error({ error, limit }, 'Failed to list pending execution memory post-run tasks');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,
@@ -846,23 +1087,17 @@ export const createFirestoreCodeTaskRepository = (deps: {
           .where('repository', '==', repository)
           .where('prNumber', '==', prNumber)
           .orderBy('createdAt', 'desc')
-          .limit(1)
+          .limit(50)
           .get();
 
-        if (snapshot.empty) {
-          return ok(null);
+        for (const doc of snapshot.docs) {
+          const data = doc.data();
+          if (!isMergeConflictTaskData(data)) {
+            return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
+          }
         }
 
-        const doc = snapshot.docs[0]!;
-        const data = doc.data();
-        const task: CodeTask = {
-          ...data,
-          id: doc.id,
-          createdAt: data['createdAt'],
-          updatedAt: data['updatedAt'],
-        } as CodeTask;
-
-        return ok(task);
+        return ok(null);
       } catch (error) {
         logger.error({ error, repository, prNumber }, 'Failed to find task by PR');
         return err({
@@ -900,7 +1135,34 @@ export const createFirestoreCodeTaskRepository = (deps: {
       }
     },
 
-    findLatestNonReviewTaskByPR: async (
+    hasDispatchedOrRunningForPR: async (
+      repository: string,
+      prNumber: number
+    ): Promise<Result<{ hasActive: boolean; taskId?: string }, RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('repository', '==', repository)
+          .where('prNumber', '==', prNumber)
+          .where('status', 'in', DISPATCHED_OR_RUNNING_STATUSES)
+          .limit(1)
+          .get();
+
+        if (snapshot.empty) {
+          return ok({ hasActive: false });
+        }
+
+        const doc = snapshot.docs[0]!;
+        return ok({ hasActive: true, taskId: doc.id });
+      } catch (error) {
+        logger.error({ error, repository, prNumber }, 'Failed to check dispatched/running task for PR');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    findLatestExecutionTaskByPR: async (
       repository: string,
       prNumber: number
     ): Promise<Result<CodeTask | null, RepositoryError>> => {
@@ -917,28 +1179,76 @@ export const createFirestoreCodeTaskRepository = (deps: {
           .limit(50)
           .get();
 
-        // Find the first non-review task (agentType !== 'review' or missing)
+        // Find the first execution-eligible task.
+        // Excludes review, remediation, and merge-conflict follow-up tasks.
         for (const doc of snapshot.docs) {
           const data = doc.data();
           const agentType = data['agentType'] as string | undefined;
-          // Treat missing agentType as non-review (backward compatibility)
-          if (agentType !== 'review') {
+          // Treat missing agentType as execution-eligible (backward compatibility)
+          if (agentType !== 'review' && agentType !== 'remediation' && !isMergeConflictTaskData(data)) {
             return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
           }
         }
 
-        /* v8 ignore start -- test-infra: FakeFirestore limit(50) requires inserting 50 documents to trigger this observability warning @preserve */
         if (snapshot.docs.length === 50) {
           logger.warn(
             { repository, prNumber, docsScanned: 50 },
-            'findLatestNonReviewTaskByPR exhausted 50-doc window without finding a non-review task',
+            'findLatestExecutionTaskByPR exhausted 50-doc window without finding a non-review task',
           );
         }
-        /* v8 ignore stop @preserve */
 
         return ok(null);
       } catch (error) {
-        logger.error({ error, repository, prNumber }, 'Failed to find latest non-review task by PR');
+        logger.error({ error, repository, prNumber }, 'Failed to find latest execution task by PR');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    findOriginTaskByPR: async (
+      repository: string,
+      prNumber: number
+    ): Promise<Result<CodeTask | null, RepositoryError>> => {
+      try {
+        // Query the newest 50 tasks for this PR and filter in-memory.
+        // Uses limit(50) instead of a Firestore inequality filter on agentType
+        // to avoid a composite index.
+        const snapshot = await collection
+          .where('repository', '==', repository)
+          .where('prNumber', '==', prNumber)
+          .orderBy('createdAt', 'desc')
+          .limit(50)
+          .get();
+
+        // Find the origin task: planning/execution preferred, pull_request as fallback
+        let pullRequestFallback: FirebaseFirestore.QueryDocumentSnapshot | null = null;
+        for (const doc of snapshot.docs) {
+          const data = doc.data();
+          const agentType = data['agentType'] as string | undefined;
+          if (agentType === 'planning' || agentType === 'execution') {
+            return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
+          }
+          if (agentType === 'pull_request' && pullRequestFallback === null) {
+            pullRequestFallback = doc;
+          }
+        }
+
+        if (snapshot.docs.length === 50) {
+          logger.warn(
+            { repository, prNumber, docsScanned: 50 },
+            'findOriginTaskByPR exhausted 50-doc window without finding an origin task',
+          );
+        }
+
+        return ok(
+          pullRequestFallback !== null
+            ? toCodeTask(pullRequestFallback as { id: string; data(): Record<string, unknown> })
+            : null
+        );
+      } catch (error) {
+        logger.error({ error, repository, prNumber }, 'Failed to find origin task by PR');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,
@@ -970,14 +1280,81 @@ export const createFirestoreCodeTaskRepository = (deps: {
         });
       }
     },
+
+    listAllNonArchived: async (userId: string): Promise<Result<CodeTask[], RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('userId', '==', userId)
+          .where('status', 'in', NON_ARCHIVED_STATUSES)
+          .orderBy('createdAt', 'desc')
+          .get();
+
+        const tasks = snapshot.docs.map((doc: QueryDocumentSnapshot) =>
+          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
+        );
+
+        return ok(tasks);
+      } catch (error) {
+        logger.error({ error, userId }, 'Failed to list all non-archived tasks');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    listAllNonArchivedGlobal: async (): Promise<Result<CodeTask[], RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('status', 'in', NON_ARCHIVED_STATUSES)
+          .orderBy('updatedAt', 'asc')
+          .get();
+
+        const tasks = snapshot.docs.map((doc: QueryDocumentSnapshot) =>
+          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
+        );
+
+        return ok(tasks);
+      } catch (error) {
+        logger.error({ error }, 'Failed to list all non-archived tasks globally');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    findAllNonArchived: async (): Promise<Result<CodeTask[], RepositoryError>> => {
+      try {
+        // Uses != 'archived' (not 'in NON_ARCHIVED_STATUSES') deliberately:
+        // this approach is future-proof — any new status added later is automatically
+        // included, ensuring the hasActive safety check in the use case always sees
+        // the complete picture. listAllNonArchivedGlobal uses 'in' for backward compat.
+        const snapshot = await collection
+          .where('status', '!=', 'archived')
+          .get();
+
+        const tasks = snapshot.docs.map((doc: QueryDocumentSnapshot) =>
+          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
+        );
+
+        return ok(tasks);
+      } catch (error) {
+        logger.error({ error }, 'Failed to find all non-archived tasks');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
   };
 };
 
 function getErrorMessage(error: unknown): string {
-  /* v8 ignore start -- ts-type: instanceof check creates type narrowing branch @preserve */
+  /* v8 ignore start -- ts-type: defensive type narrowing -- catch blocks always throw Error instances so non-Error branch is unreachable @preserve */
   if (error instanceof Error) {
     return error.message;
   }
-  /* v8 ignore stop @preserve */
   return String(error);
+  /* v8 ignore stop @preserve */
 }

@@ -7,7 +7,7 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import type { Logger } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
-import type { LinearError } from '../domain/errors.js';
+import { handleLinearError } from './routeUtils.js';
 import {
   STATE_NAME_MAP,
   findStateId,
@@ -49,18 +49,6 @@ interface IssueResponse {
   identifier: string;
   title: string;
   url: string;
-}
-
-async function handleLinearError(
-  error: LinearError,
-  reply: FastifyReply
-): Promise<unknown> {
-  if (error.code === 'NOT_CONNECTED') {
-    reply.status(403);
-    return await reply.fail('FORBIDDEN', error.message);
-  }
-  reply.status(500);
-  return await reply.fail('DOWNSTREAM_ERROR', error.message);
 }
 
 export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -268,13 +256,19 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
 
       const { issueId } = request.params;
       const services = getServices();
-      const issueResult = await services.issueRepository.findById(issueId);
+      let issueResult = await services.issueRepository.findById(issueId);
       if (!issueResult.ok) return await handleLinearError(issueResult.error, reply);
+
+      if (issueResult.value === null) {
+        issueResult = await services.issueRepository.findByIdentifier(issueId, userId);
+        if (!issueResult.ok) return await handleLinearError(issueResult.error, reply);
+      }
+
       if (issueResult.value === null) {
         reply.status(404);
         return await reply.fail('NOT_FOUND', `Issue ${issueId} not found`);
       }
-      const syncedIssue = issueResult.value; // @allow-result-access -- guarded by if (!issueResult.ok) and null check above
+      const syncedIssue = issueResult.value; // @allow-result-access -- guarded by findById/findByIdentifier !ok checks and null check above
 
       // Ownership check: return 404 (not 403) to prevent information leakage
       if (syncedIssue.userId !== userId) {
@@ -293,7 +287,7 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
 
       const availableLabels = labelsResult.value; // @allow-result-access -- guarded by if (!labelsResult.ok) above
       /* v8 ignore start -- schema: Fastify schema validates addLabels/removeLabels as optional arrays; ?? [] fallback unreachable when schema-validated request provides them @preserve */
-      const desiredLabelIds = resolveDesiredLabelIds(
+      const { labelIds: desiredLabelIds, droppedLabels } = resolveDesiredLabelIds(
         syncedIssue.labels,
         request.body.addLabels ?? [],
         request.body.removeLabels ?? [],
@@ -301,16 +295,55 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
       );
       /* v8 ignore stop @preserve */
 
-      const updateResult = await services.linearApiClient.updateIssue(apiKeyResult.value, issueId, { // @allow-result-access -- guarded by if (!apiKeyResult.ok) and null check above
+      if (droppedLabels.length > 0) {
+        request.log.warn({ issueId, droppedLabels }, 'Requested labels not found in team — dropped');
+      }
+
+      const updateResult = await services.linearApiClient.updateIssue(apiKeyResult.value, syncedIssue.id, { // @allow-result-access -- guarded by if (!apiKeyResult.ok) and null check above
         ...(request.body.assigneeId !== undefined && { assigneeId: request.body.assigneeId }),
         labelIds: desiredLabelIds,
       });
       if (!updateResult.ok) return await handleLinearError(updateResult.error, reply);
 
+      // Write-through: update the Firestore cache with the actual labels from Linear.
+      // This prevents stale label data from being served by fetchIssuesForDisplay
+      // until the next Linear webhook arrives.
+      const updatedLabels = updateResult.value.labels.map((l) => ({ // @allow-result-access -- guarded by if (!updateResult.ok) above
+        id: l.id,
+        name: l.name,
+        color: l.color,
+      }));
+      const saveResult = await services.issueRepository.save({
+        ...syncedIssue,
+        labels: updatedLabels,
+        syncedAt: new Date().toISOString(),
+      });
+      if (!saveResult.ok) {
+        request.log.warn(
+          { issueId, error: saveResult.error },
+          'updateIssueMetadata: write-through cache update failed (best-effort)'
+        );
+      }
+
+      // Best-effort: notify code-agent to recompute group summary with updated labels.
+      // This mirrors what processWebhook does when it receives a label-change webhook.
+      void services.codeAgentClient.notifyGroupSummaryRecompute({
+        userId,
+        linearIssueId: syncedIssue.identifier,
+        labels: updatedLabels.map((l) => ({ id: l.id, name: l.name })),
+        sourceTimestamp: new Date().toISOString(),
+      }).catch((notifyErr: unknown) => {
+        request.log.warn(
+          { issueId, error: notifyErr },
+          'updateIssueMetadata: failed to notify code-agent of label change (best-effort)'
+        );
+      });
+
       return await reply.ok({
         id: updateResult.value.id, // @allow-result-access -- guarded by if (!updateResult.ok) above
         labels: updateResult.value.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
         assignee: updateResult.value.assignee ?? null,
+        droppedLabels,
       });
     }
   );
@@ -543,8 +576,9 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
                         url: { type: 'string' },
                         commentCount: { type: 'number' },
                         lastCommentAt: { type: ['string', 'null'] },
+                        parentIdentifier: { type: ['string', 'null'] },
                       },
-                      required: ['identifier', 'title', 'state', 'priority', 'assignee', 'labels', 'url', 'commentCount', 'lastCommentAt'],
+                      required: ['identifier', 'title', 'state', 'priority', 'assignee', 'labels', 'url', 'commentCount', 'lastCommentAt', 'parentIdentifier'],
                     },
                   },
                 },
@@ -613,22 +647,48 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
         return await handleLinearError(summariesResult.error, reply);
       }
 
+      // 2.5 Batch-resolve parent identifiers for subtasks
+      const uniqueParentIds = [...new Set(
+        foundIssues
+          .map((issue) => issue.parentId)
+          .filter((parentId): parentId is string => parentId !== null)
+      )];
+      const parentIdentifierMap = new Map<string, string>();
+      if (uniqueParentIds.length > 0) {
+        const parentResults = await Promise.all(
+          uniqueParentIds.map((parentId) => services.issueRepository.findById(parentId))
+        );
+
+        for (const parentResult of parentResults) {
+          if (!parentResult.ok) {
+            reply.status(500);
+            return await handleLinearError(parentResult.error, reply);
+          }
+          if (parentResult.value !== null) {
+            parentIdentifierMap.set(parentResult.value.id, parentResult.value.identifier);
+          }
+        }
+      }
+
       // 3. Assemble response (preserve input identifier order)
       const summaryMap = new Map(summariesResult.value.map((s) => [s.issueId, s])); // @allow-result-access -- guarded by if (!summariesResult.ok) above
       const identifierOrder = new Map(
         request.body.identifiers.map((id, idx) => [id, idx])
       );
-      /* v8 ignore start -- ts-type: Map.get() returns T | undefined but all found issues have identifiers in the input map @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess forces undefined check; Map.get() always returns a value because all found issues have identifiers in the input map @preserve */
       const sortedIssues = [...foundIssues].sort(
         (a, b) => (identifierOrder.get(a.identifier) ?? 0) - (identifierOrder.get(b.identifier) ?? 0)
       );
       /* v8 ignore stop @preserve */
 
       const issues: IssueDisplayResponse[] = sortedIssues.map((issue) => {
-        /* v8 ignore start -- ts-type: Map.get() returns T | undefined but getCommentSummaries returns entry for every issueId @preserve */
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess forces undefined check; Map.get() always returns a value because getCommentSummaries guarantees an entry for every issueId @preserve */
         const summary = summaryMap.get(issue.id) ?? { commentCount: 0, lastCommentAt: null };
         /* v8 ignore stop @preserve */
-        return buildIssueDisplayResponse(issue, summary);
+        const parentIdentifier = issue.parentId !== null
+          ? (parentIdentifierMap.get(issue.parentId) ?? null)
+          : null;
+        return buildIssueDisplayResponse(issue, summary, parentIdentifier);
       });
 
       return await reply.ok({ issues });
@@ -662,6 +722,7 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
                 properties: {
                   id: { type: 'string' },
                   identifier: { type: 'string' },
+                  parentIdentifier: { type: ['string', 'null'] },
                   title: { type: 'string' },
                   description: { type: ['string', 'null'] },
                   state: {
@@ -772,11 +833,28 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
         return await handleLinearError(commentsResult.error, reply);
       }
 
-      const displayIssue = buildIssueDisplayResponse(issue, toCommentSummary(commentsResult.value)); // @allow-result-access -- guarded by if (!commentsResult.ok) above
+      let parentIdentifier: string | null = null;
+      if (issue.parentId !== null) {
+        const parentIssueResult = await services.issueRepository.findById(issue.parentId);
+        if (!parentIssueResult.ok) {
+          logger.error({ error: parentIssueResult.error, parentId: issue.parentId, identifier }, 'Failed to fetch parent issue');
+          reply.status(500);
+          return await handleLinearError(parentIssueResult.error, reply);
+        }
+
+        parentIdentifier = parentIssueResult.value?.identifier ?? null;
+      }
+
+      const displayIssue = buildIssueDisplayResponse(
+        issue,
+        toCommentSummary(commentsResult.value),
+        parentIdentifier
+      ); // @allow-result-access -- guarded by if (!commentsResult.ok) above
 
       return await reply.ok({
         id: issue.id,
         identifier: issue.identifier,
+        parentIdentifier: displayIssue.parentIdentifier,
         title: issue.title,
         description: issue.description,
         state: displayIssue.state,
@@ -964,6 +1042,59 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
         })),
       });
     }
+  );
+
+  // GET /internal/linear/issues/:issueId/direct-children - Return live direct children from Linear
+  fastify.get<{ Params: IssueIdParams }>(
+    '/internal/linear/issues/:issueId/direct-children',
+    async (request, reply) => {
+      logIncomingRequest(request);
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      const userId = request.headers['x-user-id'];
+      if (typeof userId !== 'string') {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Missing X-User-Id header');
+      }
+
+      const { issueId } = request.params;
+      const services = getServices();
+      const apiKeyResult = await services.connectionRepository.getApiKey(userId);
+      if (!apiKeyResult.ok) {
+        return await handleLinearError(apiKeyResult.error, reply);
+      }
+      if (apiKeyResult.value === null) {
+        return await handleLinearError(
+          { code: 'NOT_CONNECTED', message: 'User not connected to Linear' },
+          reply,
+        );
+      }
+
+      const childrenResult = await services.linearApiClient.getDirectChildren(apiKeyResult.value, issueId);
+      if (!childrenResult.ok) {
+        return await handleLinearError(childrenResult.error, reply);
+      }
+      if (childrenResult.value === null) {
+        reply.status(404);
+        return await reply.fail('NOT_FOUND', `Issue ${issueId} not found`);
+      }
+
+      return await reply.ok(
+        childrenResult.value.map((issue) => ({
+          id: issue.id,
+          identifier: issue.identifier,
+          url: issue.url,
+          parentId: issue.parentId ?? null,
+          labels: issue.labels.map((label) => label.name),
+          assigneeId: issue.assignee?.id ?? null,
+          state: issue.state.name,
+        })),
+      );
+    },
   );
 
   done();

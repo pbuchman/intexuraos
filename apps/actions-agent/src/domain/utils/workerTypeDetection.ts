@@ -20,7 +20,7 @@ function buildKeywordRules(): readonly KeywordRule[] {
   return CODE_TASK_WORKER_TYPES
     .filter((t) => t !== 'auto')
     .map((workerType) => ({
-      pattern: new RegExp(`\\buse ${workerType}\\b`, 'i'),
+      pattern: new RegExp(`\\buse ${workerType}(?![\\w-])`, 'i'),
       workerType,
     }));
 }

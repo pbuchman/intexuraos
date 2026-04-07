@@ -2,10 +2,14 @@ import { useState } from 'react';
 import { CheckCircle, ChevronDown, Copy, Link2, Star } from 'lucide-react';
 import { ErrorBanner } from '@/components';
 import type { Research } from '@/services/researchAgentApi.types';
-import { getProviderForModel } from '@/services/researchAgentApi.types';
 import { formatRelative } from '@/utils/dateFormat';
 import { stripMarkdown } from '@/utils';
-import { ResearchStatusBadge, getModelDisplayName, isProcessingStatus } from './shared.js';
+import {
+  ResearchStatusBadge,
+  getModelDisplayName,
+  getUniqueResearchProviders,
+  isProcessingStatus,
+} from './shared.js';
 
 interface ResearchHeaderProps {
   research: Research;
@@ -40,7 +44,7 @@ export function ResearchHeader({
     return 'Processing...';
   };
 
-  const uniqueProviders = [...new Set(research.selectedModels.map(getProviderForModel))];
+  const uniqueProviders = getUniqueResearchProviders(research.selectedModels);
 
   return (
     <div className="mb-6">

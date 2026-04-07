@@ -37,15 +37,16 @@ describe('GeminiIntentInterpreter', () => {
       const client = createMockClient({
         ok: true,
         value: {
-          content: 'Here is the result:\n```json\n{"kind":"set_metadata","payload":{"audience":"devs"}}\n```',
+          content: 'Here is the result:\n```json\n{"kind":"update_draft","payload":{"text":"write it","category":"general"}}\n```',
         },
       });
       const interpreter = new GeminiIntentInterpreter(client);
 
-      const result = await interpreter.interpret('target devs', emptyState(), logger);
+      const result = await interpreter.interpret('write it', emptyState(), logger);
 
-      expect(result.kind).toBe('set_metadata');
-      expect(result.payload['audience']).toBe('devs');
+      expect(result.kind).toBe('update_draft');
+      expect(result.payload['text']).toBe('write it');
+      expect(result.payload['category']).toBe('general');
     });
 
     it('returns fallback on LLM call failure', async () => {

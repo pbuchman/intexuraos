@@ -3,6 +3,8 @@ import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-htt
 import { getServices } from '../services.js';
 import { authenticateInternalScheduler } from './helpers/internalAuth.js';
 import { getLinearIssueContext } from '../domain/usecases/getLinearIssueContext.js';
+import { processExecutionMemoryBacklog } from '../domain/usecases/processExecutionMemoryBacklog.js';
+import { loadConfig } from '../config.js';
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // POST /internal/merge-conflicts/reconcile - triggered by Cloud Scheduler (INT-1023)
@@ -191,6 +193,411 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // @allow-raw-send: internal endpoint returns structured context directly
       return await reply.send(result.data);
+    }
+  );
+
+
+  fastify.post<{ Body: { limit?: number } | null }>(
+    '/internal/execution-memory/process',
+    {
+      schema: {
+        operationId: 'processExecutionMemoryBacklog',
+        summary: 'Process pending execution-memory post-run work',
+        description:
+          'Called by Cloud Scheduler. Claims pending execution-memory post-run tasks and evaluates/distills reusable lessons.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          nullable: true,
+          additionalProperties: false,
+          properties: {
+            limit: { type: 'number', minimum: 1, maximum: 50 },
+          },
+        },
+        response: {
+          200: {
+            description: 'Backlog processing completed',
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  claimed: { type: 'number' },
+                  completed: { type: 'number' },
+                  skipped: { type: 'number' },
+                  errored: { type: 'number' },
+                  taskIds: { type: 'array', items: { type: 'string' } },
+                },
+                required: ['claimed', 'completed', 'skipped', 'errored', 'taskIds'],
+              },
+              diagnostics: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  requestId: { type: 'string' },
+                  durationMs: { type: 'number' },
+                  downstreamStatus: { type: 'number' },
+                  downstreamRequestId: { type: 'string' },
+                  endpointCalled: { type: 'string' },
+                },
+                required: ['requestId'],
+              },
+            },
+            required: ['success', 'data'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/execution-memory/process',
+      });
+
+      const authResult = authenticateInternalScheduler(request);
+      if (!authResult.authenticated) {
+        request.log.warn('Internal auth failed for execution-memory process');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      if (!loadConfig().executionMemoryEnabled) {
+        return await reply.ok({ claimed: 0, completed: 0, skipped: 0, errored: 0, taskIds: [] });
+      }
+
+      const services = getServices();
+      const result = await processExecutionMemoryBacklog({
+        logger: services.logger,
+        codeTaskRepo: services.codeTaskRepo,
+        logLineRepo: services.logLineRepo,
+        turnMetricsRepo: services.turnMetricsRepo,
+        linearAgentClient: services.linearAgentClient,
+        executionMemoryRepo: services.executionMemoryRepo as NonNullable<typeof services.executionMemoryRepo>,
+        executionMemoryApplicationRepo:
+          services.executionMemoryApplicationRepo as NonNullable<typeof services.executionMemoryApplicationRepo>,
+        /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes is not tracked after service override tests @preserve */
+        ...(services.executionMemoryEvaluatorClient !== undefined && {
+          evaluatorClient: services.executionMemoryEvaluatorClient,
+        }),
+        ...(services.executionMemoryDistillerClient !== undefined && {
+          distillerClient: services.executionMemoryDistillerClient,
+        }),
+        ...(services.executionMemoryEmbeddingClient !== undefined && {
+          embeddingClient: services.executionMemoryEmbeddingClient,
+        }),
+        /* v8 ignore stop @preserve */
+        limit: request.body?.limit ?? 10,
+      });
+
+      if (!result.ok) {
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      return await reply.ok(result.value);
+    }
+  );
+
+  // GET /internal/tasks/:taskId/dispatch-metadata - fallback for pruned tasks (INT-1130)
+  fastify.get<{ Params: { taskId: string } }>(
+    '/internal/tasks/:taskId/dispatch-metadata',
+    {
+      schema: {
+        operationId: 'getTaskDispatchMetadata',
+        summary: 'Get dispatch metadata for a task by ID',
+        description:
+          'Returns the dispatch metadata fields for a code task. ' +
+          'Used by the orchestrator as a fallback when a task has been pruned from state.',
+        tags: ['internal'],
+        params: {
+          type: 'object',
+          required: ['taskId'],
+          properties: {
+            taskId: { type: 'string', description: 'Code task ID' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Task dispatch metadata',
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              taskId: { type: 'string' },
+              prompt: { type: 'string' },
+              repository: { type: 'string' },
+              baseBranch: { type: 'string' },
+              agentType: { type: ['string', 'null'] },
+              workerType: { type: 'string' },
+              linearIssueId: { type: ['string', 'null'] },
+              webhookSecret: { type: ['string', 'null'] },
+              prNumber: { type: ['number', 'null'] },
+            },
+            required: ['taskId', 'prompt', 'repository', 'baseBranch', 'agentType', 'workerType', 'linearIssueId', 'webhookSecret', 'prNumber'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          404: {
+            description: 'Task not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['NOT_FOUND'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to GET /internal/tasks/:taskId/dispatch-metadata',
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      const { taskId } = request.params;
+      const { codeTaskRepo } = getServices();
+
+      const findResult = await codeTaskRepo.findById(taskId);
+      if (!findResult.ok) {
+        return await reply.fail('NOT_FOUND', `Task ${taskId} not found`);
+      }
+
+      const task = findResult.value;
+
+      // @allow-raw-send: internal endpoint returns structured dispatch metadata directly
+      return await reply.send({
+        taskId: task.id,
+        prompt: task.prompt,
+        repository: task.repository,
+        baseBranch: task.baseBranch,
+        agentType: task.agentType ?? null,
+        workerType: task.workerType,
+        linearIssueId: task.linearIssueId ?? null,
+        webhookSecret: task.webhookSecret ?? null,
+        prNumber: task.prNumber ?? null,
+      });
+    }
+  );
+
+  // POST /internal/archive-stale-groups - triggered by Cloud Scheduler hourly
+  fastify.post(
+    '/internal/archive-stale-groups',
+    {
+      schema: {
+        operationId: 'archiveStaleGroups',
+        summary: 'Archive issue groups with no activity for 7+ days',
+        description: 'Called by Cloud Scheduler hourly. Archives entire issue groups where all tasks have updatedAt older than the staleness threshold.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          nullable: true,
+          properties: {
+            staleDays: { type: 'number', description: 'Days of inactivity before archiving (default: 7)' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Archive completed',
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              totalTasksFetched: { type: 'number' },
+              totalGroupsEvaluated: { type: 'number' },
+              groupsArchived: { type: 'number' },
+              groupsRetained: { type: 'number' },
+              groupsSkippedActive: { type: 'number' },
+              tasksArchived: { type: 'number' },
+              tasksFailed: { type: 'number' },
+              durationMs: { type: 'number' },
+            },
+            required: ['totalTasksFetched', 'totalGroupsEvaluated', 'groupsArchived', 'groupsRetained', 'groupsSkippedActive', 'tasksArchived', 'tasksFailed', 'durationMs'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/archive-stale-groups',
+      });
+
+      const authResult = authenticateInternalScheduler(request);
+      if (!authResult.authenticated) {
+        request.log.warn('Internal auth failed for archive-stale-groups');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+      request.log.info({ strategy: authResult.strategy }, 'Authenticated for archive-stale-groups');
+
+      const { archiveStaleGroups, logger } = getServices();
+
+      const body = request.body as { staleDays?: number } | null;
+      const staleDays = body?.staleDays;
+      const input = staleDays !== undefined ? { staleDays } : undefined;
+
+      const result = await archiveStaleGroups(input);
+      if (!result.ok) {
+        logger.error({ error: result.error.message }, 'Archive stale groups failed');
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      logger.info(result.value, 'Stale issue group archival completed via route');
+
+      // @allow-raw-send: cron endpoint returns archive stats directly
+      return await reply.send(result.value);
+    }
+  );
+
+  // POST /internal/auto-archive-merged-tasks - triggered by Cloud Scheduler daily (INT-1174)
+  fastify.post(
+    '/internal/auto-archive-merged-tasks',
+    {
+      schema: {
+        operationId: 'autoArchiveMergedTasks',
+        summary: 'Archive tasks whose PRs were merged 7+ days ago',
+        description: 'Called by Cloud Scheduler daily. Archives code tasks where the associated PR was merged more than the threshold days ago.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          nullable: true,
+          properties: {
+            mergeDays: { type: 'number', description: 'Days after PR merge before archiving (default: 7)' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Archive completed',
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              totalTasksFetched: { type: 'number' },
+              totalGroupsEvaluated: { type: 'number' },
+              groupsArchived: { type: 'number' },
+              groupsSkippedActive: { type: 'number' },
+              tasksArchived: { type: 'number' },
+              tasksFailed: { type: 'number' },
+              durationMs: { type: 'number' },
+            },
+            required: ['totalTasksFetched', 'totalGroupsEvaluated', 'groupsArchived', 'groupsSkippedActive', 'tasksArchived', 'tasksFailed', 'durationMs'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/auto-archive-merged-tasks',
+      });
+
+      const authResult = authenticateInternalScheduler(request);
+      if (!authResult.authenticated) {
+        request.log.warn('Internal auth failed for auto-archive-merged-tasks');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+      request.log.info({ strategy: authResult.strategy }, 'Authenticated for auto-archive-merged-tasks');
+
+      const { autoArchiveMergedTasks, logger } = getServices();
+
+      const body = request.body as { mergeDays?: number } | null;
+      const mergeDays = body?.mergeDays;
+      const input = mergeDays !== undefined ? { mergeDays } : undefined;
+
+      const result = await autoArchiveMergedTasks(input);
+      if (!result.ok) {
+        logger.error({ error: result.error.message }, 'Auto-archive merged tasks failed');
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      logger.info(result.value, 'Auto-archive merged tasks completed via route');
+
+      // @allow-raw-send: cron endpoint returns archive stats directly
+      return await reply.send(result.value);
     }
   );
 

@@ -312,6 +312,163 @@ describe('LogForwarder', () => {
     });
   });
 
+  describe('appendRawChunk Codex mode', () => {
+    it('ignores empty raw chunks', async () => {
+      fetchSpy.mockResolvedValue(okResponse());
+      forwarder.registerTask('task-codex-empty', 'secret');
+
+      forwarder.appendRawChunk('task-codex-empty', '');
+      await forwarder.flush('task-codex-empty');
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('preserves raw JSON exactly without timestamp prefixing or metadata stripping', async () => {
+      fetchSpy.mockResolvedValue(okResponse());
+      forwarder.registerTask('task-codex-raw', 'secret');
+
+      const rawContent =
+        JSON.stringify({
+          type: 'item.completed',
+          item: {
+            type: 'tool_result',
+            tool_use_result: { originalFile: 'x'.repeat(4096) },
+            text: 'done',
+          },
+        }) + '\n';
+
+      forwarder.appendRawChunk('task-codex-raw', rawContent);
+      await forwarder.flush('task-codex-raw');
+
+      const call = fetchSpy.mock.calls[0];
+      const opts = call?.[1] ?? {};
+      const body = JSON.parse((opts as Record<string, unknown>)['body'] as string) as {
+        chunks: { content: string }[];
+      };
+
+      expect(body.chunks[0]?.content).toBe(rawContent);
+      expect(body.chunks[0]?.content).toContain('tool_use_result');
+      expect(body.chunks[0]?.content).not.toMatch(/^\d{2}:\d{2}:\d{2}\.\d{3} /);
+    });
+
+    it('fragments oversized raw content losslessly without truncation markers', async () => {
+      fetchSpy.mockResolvedValue(okResponse());
+      forwarder.registerTask('task-codex-fragment', 'secret');
+
+      const rawContent =
+        JSON.stringify({
+          type: 'item.completed',
+          item: {
+            type: 'agent_message',
+            text: 'z'.repeat(80 * 1024),
+          },
+        }) + '\n';
+
+      forwarder.appendRawChunk('task-codex-fragment', rawContent);
+      await forwarder.flush('task-codex-fragment');
+
+      expect(fetchSpy).toHaveBeenCalled();
+      const uploaded = fetchSpy.mock.calls.flatMap((call: unknown[]) => {
+        const opts = call[1] ?? {};
+        const body = JSON.parse((opts as Record<string, unknown>)['body'] as string) as {
+          chunks: { content: string }[];
+        };
+        return body.chunks.map((chunk) => chunk.content);
+      });
+
+      expect(uploaded.join('')).toBe(rawContent);
+      expect(uploaded.join('')).not.toContain('[... TRUNCATED ...]');
+      for (const chunk of uploaded) {
+        expect(chunk.length).toBeLessThanOrEqual(64 * 1024);
+      }
+    });
+
+    it('ignores the formatted totalBytes cap for raw uploads', async () => {
+      fetchSpy.mockResolvedValue(okResponse());
+      forwarder.registerTask('task-codex-nocap', 'secret');
+
+      const forwarders = (forwarder as unknown as Record<string, unknown>)['forwarders'] as Map<
+        string,
+        { totalBytes: number }
+      >;
+      forwarder.appendChunk('task-codex-nocap', 'formatted bootstrap\n');
+      const state = forwarders.get('task-codex-nocap');
+      if (state !== undefined) {
+        state.totalBytes = 4 * 1024 * 1024 + 1;
+      }
+
+      fetchSpy.mockClear();
+
+      const rawContent = '{"type":"turn.started"}\n';
+      forwarder.appendRawChunk('task-codex-nocap', rawContent);
+      await forwarder.flush('task-codex-nocap');
+
+      expect(fetchSpy).toHaveBeenCalled();
+      const uploaded = fetchSpy.mock.calls.flatMap((call: unknown[]) => {
+        const opts = call[1] ?? {};
+        const body = JSON.parse((opts as Record<string, unknown>)['body'] as string) as {
+          chunks: { content: string }[];
+        };
+        return body.chunks.map((chunk) => chunk.content);
+      });
+      expect(uploaded).toContain(rawContent);
+    });
+
+    it('derives the webhook secret for raw chunks when the task is not registered', async () => {
+      const expectedSecret = createHmac('sha256', baseConfig.orchestratorSecret)
+        .update('task-codex-unregistered')
+        .digest('hex');
+
+      fetchSpy.mockImplementation(async (_url: string | URL | Request, init?: RequestInit) => {
+        const opts = init as Record<string, unknown>;
+        const sig = (opts['headers'] as Record<string, string>)['X-Request-Signature'];
+        const ts = (opts['headers'] as Record<string, string>)['X-Request-Timestamp'];
+        const body = opts['body'] as string;
+        const expected = createHmac('sha256', expectedSecret).update(`${ts}.${body}`).digest('hex');
+        expect(sig).toBe(expected);
+        return okResponse();
+      });
+
+      forwarder.appendRawChunk('task-codex-unregistered', '{"type":"turn.started"}\n');
+      await forwarder.flush('task-codex-unregistered');
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('continues dropping formatted chunks after the limit without repeating the warning', async () => {
+      const warnSpy = vi.fn();
+      const loggerWithWarn: Logger = {
+        info(): void {},
+        warn: warnSpy,
+        error(): void {},
+        debug(): void {},
+      };
+
+      const fwd = new LogForwarder(baseConfig, loggerWithWarn);
+      fetchSpy.mockResolvedValue(okResponse());
+      fwd.registerTask('task-formatted-stop', 'secret');
+      fwd.appendChunk('task-formatted-stop', 'bootstrap\n');
+      await fwd.flush('task-formatted-stop');
+
+      const forwarders = (fwd as unknown as Record<string, unknown>)['forwarders'] as Map<
+        string,
+        { totalBytes: number; formattedUploadsStopped: boolean; timer: NodeJS.Timeout | null }
+      >;
+      const state = forwarders.get('task-formatted-stop');
+      if (state !== undefined) {
+        state.totalBytes = 4 * 1024 * 1024 + 1;
+        state.formattedUploadsStopped = true;
+      }
+
+      warnSpy.mockClear();
+      fwd.appendChunk('task-formatted-stop', 'more formatted content\n');
+      await vi.advanceTimersByTimeAsync(3100);
+
+      expect(warnSpy).not.toHaveBeenCalled();
+      if (state?.timer !== null && state?.timer !== undefined) clearInterval(state.timer);
+    });
+  });
+
   describe('readNewContent catch block', () => {
     it('logs error when readFileSync fails during polling', async () => {
       const errorSpy = vi.fn();
@@ -391,6 +548,19 @@ describe('LogForwarder', () => {
 
       // Clean up timer
       if (state?.timer !== null && state?.timer !== undefined) clearInterval(state.timer);
+    });
+  });
+
+  describe('flushBuffer internal guard', () => {
+    it('returns early when no forwarding state exists', async () => {
+      const flushBuffer = (
+        forwarder as unknown as {
+          flushBuffer: (taskId: string, force?: boolean) => Promise<void>;
+        }
+      ).flushBuffer.bind(forwarder) as (taskId: string, force?: boolean) => Promise<void>;
+
+      await expect(flushBuffer('missing-task')).resolves.toBeUndefined();
+      expect(fetchSpy).not.toHaveBeenCalled();
     });
   });
 

@@ -201,6 +201,10 @@ export class FakeUserServiceClient implements UserServiceClient {
     return ok(null);
   }
 
+  async getUserTimezone(): Promise<string | undefined> {
+    return undefined;
+  }
+
   setLlmClient(client: LlmGenerateClient): void {
     this.llmClient = client;
   }

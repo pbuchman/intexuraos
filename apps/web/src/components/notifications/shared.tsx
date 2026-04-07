@@ -13,9 +13,23 @@ export interface ActiveFilters {
 /**
  * Pill badge for notification metadata.
  */
-export function Badge({ children }: { children: React.ReactNode }): React.JSX.Element {
+interface BadgeProps {
+  children: React.ReactNode;
+  className?: string;
+  title?: string;
+}
+
+export function Badge({ children, className, title }: BadgeProps): React.JSX.Element {
   return (
-    <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+    <span
+      className={[
+        'inline-flex min-w-0 max-w-full items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300',
+        className,
+      ]
+        .filter((value): value is string => value !== undefined && value !== '')
+        .join(' ')}
+      title={title}
+    >
       {children}
     </span>
   );

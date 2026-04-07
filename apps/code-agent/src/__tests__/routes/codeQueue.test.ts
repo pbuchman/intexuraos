@@ -36,6 +36,7 @@ import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/g
 import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
+import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
 import { createNoOpMetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
@@ -129,6 +130,7 @@ describe('GET /code/queue', () => {
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
       gitHubPRSummaryRepo: {} as never,

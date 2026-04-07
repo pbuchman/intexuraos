@@ -8,7 +8,7 @@ import { executionResponseSchema } from './schemas.js';
 
 interface CreateScheduleBody {
   name: string;
-  description: string;
+  schedule: string;
   action: {
     services: string[];
     instruction: string;
@@ -19,7 +19,7 @@ interface CreateScheduleBody {
 
 interface UpdateScheduleBody {
   name?: string;
-  description?: string;
+  schedule?: string;
   status?: ScheduleStatus;
   action?: {
     services: string[];
@@ -49,10 +49,10 @@ const scheduleParamsSchema = {
 
 const createScheduleBodySchema = {
   type: 'object',
-  required: ['name', 'description', 'action'],
+  required: ['name', 'schedule', 'action'],
   properties: {
     name: { type: 'string', minLength: 1 },
-    description: { type: 'string', minLength: 1 },
+    schedule: { type: 'string', minLength: 1 },
     action: {
       type: 'object',
       required: ['services', 'instruction'],
@@ -73,7 +73,7 @@ const updateScheduleBodySchema = {
   type: 'object',
   properties: {
     name: { type: 'string', minLength: 1 },
-    description: { type: 'string', minLength: 1 },
+    schedule: { type: 'string', minLength: 1 },
     status: { type: 'string', enum: ['active', 'paused', 'deleted'] },
     action: {
       type: 'object',
@@ -115,7 +115,7 @@ const scheduleResponseSchema = {
     id: { type: 'string' },
     userId: { type: 'string' },
     name: { type: 'string' },
-    description: { type: 'string' },
+    scheduleSummary: { type: 'string' },
     cronExpression: { type: 'string' },
     timezone: { type: 'string' },
     action: scheduleActionSchema,
@@ -313,7 +313,7 @@ export const scheduleRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const manager = getScheduleManager();
       const result = await manager.create(auth.userId, {
         name: request.body.name,
-        description: request.body.description,
+        schedule: request.body.schedule,
         action: {
           ...request.body.action,
           preferredTools: request.body.action.preferredTools ?? [],
@@ -408,7 +408,7 @@ export const scheduleRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const manager = getScheduleManager();
       const result = await manager.update(auth.userId, request.params.id, {
         name: request.body.name,
-        description: request.body.description,
+        schedule: request.body.schedule,
         status: request.body.status,
         action: request.body.action !== undefined
           ? { ...request.body.action, preferredTools: request.body.action.preferredTools ?? [] }

@@ -26,11 +26,47 @@ import {
   type DrainTaskQueueDeps,
 } from '../../../domain/usecases/drainTaskQueue.js';
 
+const prepareExecutionMemoryContextMock = vi.fn();
+let mockExecutionMemoryEnabled = false;
+
+vi.mock('../../../domain/usecases/prepareExecutionMemoryContext.js', (): {
+  prepareExecutionMemoryContext: (...args: unknown[]) => unknown;
+  toDispatchExecutionMemoryContext: (context: {
+    status?: string;
+    applicationId?: string;
+    retrievalVersion?: string;
+    querySummary?: string;
+    matchedMemories?: unknown[];
+  } | undefined) => unknown;
+} => ({
+  prepareExecutionMemoryContext: (...args: unknown[]): unknown => prepareExecutionMemoryContextMock(...args),
+  toDispatchExecutionMemoryContext: (context: {
+    status?: string;
+    applicationId?: string;
+    retrievalVersion?: string;
+    querySummary?: string;
+    matchedMemories?: unknown[];
+  } | undefined): unknown =>
+    context?.status === 'matched'
+      ? {
+          applicationId: context.applicationId ?? '',
+          retrievalVersion: context.retrievalVersion ?? '',
+          querySummary: context.querySummary ?? '',
+          matchedMemories: context.matchedMemories ?? [],
+        }
+      : undefined,
+}));
+
 // Mock config
 vi.mock('../../../config.js', () => ({
-  loadConfig: (): { queue: { maxSize: number; ttlMinutes: number }; serviceUrl: string } => ({
-    queue: { maxSize: 50, ttlMinutes: 30 },
+  loadConfig: (): {
+    queue: { maxSize: number; ttlMinutes: number };
+    serviceUrl: string;
+    executionMemoryEnabled: boolean;
+  } => ({
+    queue: { maxSize: 50, ttlMinutes: 1440 },
     serviceUrl: 'https://code-agent.test',
+    executionMemoryEnabled: mockExecutionMemoryEnabled,
   }),
 }));
 
@@ -45,8 +81,7 @@ describe('drainTaskQueue', () => {
   let mockLogger: Logger;
   let mockCodeTaskRepo: {
     listQueuedByAge: ReturnType<typeof vi.fn>;
-    hasActiveTaskForLinearIssue: ReturnType<typeof vi.fn>;
-    findActiveReviewForPR: ReturnType<typeof vi.fn>;
+    hasDispatchedOrRunningForPR: ReturnType<typeof vi.fn>;
     findById: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     countQueued: ReturnType<typeof vi.fn>;
@@ -58,6 +93,7 @@ describe('drainTaskQueue', () => {
   let mockLinearAgentClient: {
     validateIssue: ReturnType<typeof vi.fn>;
     fetchIssueTree: ReturnType<typeof vi.fn>;
+    fetchDirectChildrenLive: ReturnType<typeof vi.fn>;
   };
   let mockWhatsappNotifier: {
     notifyTaskStarted: ReturnType<typeof vi.fn>;
@@ -80,6 +116,8 @@ describe('drainTaskQueue', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    prepareExecutionMemoryContextMock.mockReset();
+    mockExecutionMemoryEnabled = false;
 
     mockLogger = {
       info: vi.fn(),
@@ -90,8 +128,7 @@ describe('drainTaskQueue', () => {
 
     mockCodeTaskRepo = {
       listQueuedByAge: vi.fn(),
-      hasActiveTaskForLinearIssue: vi.fn().mockResolvedValue(ok({ hasActive: false })),
-      findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
+      hasDispatchedOrRunningForPR: vi.fn().mockResolvedValue(ok({ hasActive: false })),
       findById: vi.fn(),
       update: vi.fn(),
       countQueued: vi.fn(),
@@ -105,6 +142,7 @@ describe('drainTaskQueue', () => {
     mockLinearAgentClient = {
       validateIssue: vi.fn(),
       fetchIssueTree: vi.fn(),
+      fetchDirectChildrenLive: vi.fn(),
     };
 
     mockWhatsappNotifier = {
@@ -207,8 +245,8 @@ describe('drainTaskQueue', () => {
   });
 
   it('expires task when TTL exceeded, marks failed, and notifies', async () => {
-    // Create a task queued 31 minutes ago (TTL is 30 minutes)
-    const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+    // Create a task queued 1441 minutes ago (TTL is 1440 minutes)
+    const beyondTtl = new Date(Date.now() - 1441 * 60 * 1000);
     const task = createMockTask({
       queuedAt: Timestamp.fromDate(beyondTtl),
     });
@@ -227,7 +265,7 @@ describe('drainTaskQueue', () => {
       status: 'failed',
       error: {
         code: 'queue_timeout',
-        message: 'Task expired in queue after 30 minutes. Workers were still busy.',
+        message: 'Task expired in queue after 1440 minutes. Workers were still busy.',
       },
     });
 
@@ -235,8 +273,337 @@ describe('drainTaskQueue', () => {
     expect(mockWhatsappNotifier.notifyTaskQueueExpired).toHaveBeenCalledWith('user-456', task);
   });
 
+  it('prepares and threads execution memory context for execution-agent dispatches', async () => {
+    mockExecutionMemoryEnabled = true;
+    const task = createMockTask({
+      linearIssueId: 'INT-1098',
+      agentType: 'execution',
+    });
+
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    mockLinearAgentClient.validateIssue.mockResolvedValue(ok({
+      id: 'issue-123',
+      identifier: 'INT-1098',
+      title: 'Issue',
+      url: 'https://linear.app/intexura/issue/INT-1098',
+      labels: ['code-task'],
+      childCount: 0,
+      parentId: null,
+    }));
+    setupWorkerSettings();
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'matched',
+      applicationId: 'app-123',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'Auth callback logging work',
+      matchedMemories: [
+        {
+          memoryId: 'mem-1',
+          title: 'Add route-level coverage',
+          memoryType: 'verification_pattern',
+          score: 0.91,
+          appliesWhen: 'Fastify callback routes are changing',
+          action: 'Add app.inject coverage',
+          avoid: 'Do not skip schema changes',
+          verification: 'Check task detail serialization',
+        },
+      ],
+    });
+    mockCodeTaskRepo.update.mockImplementation(async (_taskId, input) => ok({
+      ...task,
+      ...(input.status !== undefined ? { status: input.status } : {}),
+      ...(input.executionMemoryContext !== undefined
+        ? { executionMemoryContext: input.executionMemoryContext }
+        : {}),
+      ...(input.workerLocation !== undefined ? { workerLocation: input.workerLocation } : {}),
+    }));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    expect(prepareExecutionMemoryContextMock).toHaveBeenCalledOnce();
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', expect.objectContaining({
+      executionMemoryContext: expect.objectContaining({
+        status: 'matched',
+        applicationId: 'app-123',
+      }),
+    }));
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      agentType: 'execution',
+      executionMemoryContext: {
+        applicationId: 'app-123',
+        retrievalVersion: 'execution-memory-retrieval@1.0.0',
+        querySummary: 'Auth callback logging work',
+        matchedMemories: [
+          expect.objectContaining({ memoryId: 'mem-1' }),
+        ],
+      },
+    }));
+  });
+
+  it('prepares execution memory context for planning agent when enabled', async () => {
+    mockExecutionMemoryEnabled = true;
+    const task = createMockTask({
+      linearIssueId: 'INT-1098',
+      agentType: 'planning',
+    });
+
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    mockLinearAgentClient.validateIssue.mockResolvedValue(ok({
+      id: 'issue-123',
+      identifier: 'INT-1098',
+      title: 'Issue',
+      url: 'https://linear.app/intexura/issue/INT-1098',
+      labels: ['plan'],
+      childCount: 0,
+      parentId: null,
+    }));
+    setupWorkerSettings();
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'matched',
+      applicationId: 'app-planning-123',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'Planning the auth callback feature',
+      matchedMemories: [
+        {
+          memoryId: 'mem-plan-1',
+          title: 'Add route-level coverage',
+          memoryType: 'verification_pattern',
+          score: 0.85,
+          appliesWhen: 'Planning Fastify route changes',
+          action: 'Include coverage plan in output',
+          avoid: 'Do not skip schema changes',
+          verification: 'Check task detail serialization',
+        },
+      ],
+    });
+    mockCodeTaskRepo.update.mockImplementation(async (_taskId, input) => ok({
+      ...task,
+      ...(input.status !== undefined ? { status: input.status } : {}),
+      ...(input.executionMemoryContext !== undefined
+        ? { executionMemoryContext: input.executionMemoryContext }
+        : {}),
+      ...(input.workerLocation !== undefined ? { workerLocation: input.workerLocation } : {}),
+    }));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    expect(prepareExecutionMemoryContextMock).toHaveBeenCalledOnce();
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', expect.objectContaining({
+      executionMemoryContext: expect.objectContaining({
+        status: 'matched',
+        applicationId: 'app-planning-123',
+      }),
+    }));
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      agentType: 'planning',
+      executionMemoryContext: {
+        applicationId: 'app-planning-123',
+        retrievalVersion: 'execution-memory-retrieval@1.0.0',
+        querySummary: 'Planning the auth callback feature',
+        matchedMemories: [
+          expect.objectContaining({ memoryId: 'mem-plan-1' }),
+        ],
+      },
+    }));
+  });
+
+  it('prepares execution memory context for review agent when enabled', async () => {
+    mockExecutionMemoryEnabled = true;
+    const task = createMockTask({
+      linearIssueId: 'INT-1098',
+      agentType: 'review',
+    });
+
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    mockLinearAgentClient.validateIssue.mockResolvedValue(ok({
+      id: 'issue-123',
+      identifier: 'INT-1098',
+      title: 'Issue',
+      url: 'https://linear.app/intexura/issue/INT-1098',
+      labels: ['code-task'],
+      childCount: 0,
+      parentId: null,
+    }));
+    setupWorkerSettings();
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'matched',
+      applicationId: 'app-review-123',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'Reviewing the auth callback feature',
+      matchedMemories: [
+        {
+          memoryId: 'mem-review-1',
+          title: 'Check route schema coverage',
+          memoryType: 'verification_pattern',
+          score: 0.87,
+          appliesWhen: 'Reviewing Fastify route changes',
+          action: 'Verify schema and handler coverage',
+          avoid: 'Do not skip inline comments',
+          verification: 'Check route response shape',
+        },
+      ],
+    });
+    mockCodeTaskRepo.update.mockImplementation(async (_taskId, input) => ok({
+      ...task,
+      ...(input.status !== undefined ? { status: input.status } : {}),
+      ...(input.executionMemoryContext !== undefined
+        ? { executionMemoryContext: input.executionMemoryContext }
+        : {}),
+      ...(input.workerLocation !== undefined ? { workerLocation: input.workerLocation } : {}),
+    }));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    expect(prepareExecutionMemoryContextMock).toHaveBeenCalledOnce();
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', expect.objectContaining({
+      executionMemoryContext: expect.objectContaining({
+        status: 'matched',
+        applicationId: 'app-review-123',
+      }),
+    }));
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      agentType: 'review',
+      executionMemoryContext: {
+        applicationId: 'app-review-123',
+        retrievalVersion: 'execution-memory-retrieval@1.0.0',
+        querySummary: 'Reviewing the auth callback feature',
+        matchedMemories: [
+          expect.objectContaining({ memoryId: 'mem-review-1' }),
+        ],
+      },
+    }));
+  });
+
+  it('prepares execution memory for pull_request agent', async () => {
+    mockExecutionMemoryEnabled = true;
+    const task = createMockTask({
+      linearIssueId: 'INT-1098',
+      agentType: 'pull_request',
+    });
+
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    mockLinearAgentClient.validateIssue.mockResolvedValue(ok({
+      id: 'issue-123',
+      identifier: 'INT-1098',
+      title: 'Issue',
+      url: 'https://linear.app/intexura/issue/INT-1098',
+      labels: ['code-task'],
+      childCount: 0,
+      parentId: null,
+    }));
+    setupWorkerSettings();
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'no_memories',
+      applicationId: 'app-pr-1',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'PR review task',
+      matchedMemories: [],
+    });
+    mockCodeTaskRepo.update.mockResolvedValue(ok({ ...task, status: 'dispatched' }));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    expect(prepareExecutionMemoryContextMock).toHaveBeenCalledOnce();
+  });
+
+  it('warns when execution memory context persistence fails before dispatch', async () => {
+    mockExecutionMemoryEnabled = true;
+    const task = createMockTask({
+      linearIssueId: 'INT-1098',
+      agentType: 'execution',
+    });
+
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    mockLinearAgentClient.validateIssue.mockResolvedValue(ok({
+      id: 'issue-123',
+      identifier: 'INT-1098',
+      title: 'Issue',
+      url: 'https://linear.app/intexura/issue/INT-1098',
+      labels: ['code-task'],
+      childCount: 0,
+      parentId: null,
+    }));
+    setupWorkerSettings();
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'none',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'Auth callback logging work',
+    });
+    mockCodeTaskRepo.update
+      .mockResolvedValueOnce(err({ message: 'update failed' }))
+      .mockResolvedValueOnce(ok({
+        ...task,
+        status: 'dispatched',
+      }));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task-123',
+        error: expect.objectContaining({ message: 'update failed' }),
+      }),
+      'Failed to persist execution memory context before dispatch'
+    );
+  });
+
+  it('logs warning when execution memory retrieval returns error status and still dispatches', async () => {
+    mockExecutionMemoryEnabled = true;
+    const task = createMockTask({
+      linearIssueId: 'INT-1098',
+      agentType: 'execution',
+    });
+
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    mockLinearAgentClient.validateIssue.mockResolvedValue(ok({
+      id: 'issue-123',
+      identifier: 'INT-1098',
+      title: 'Issue',
+      url: 'https://linear.app/intexura/issue/INT-1098',
+      labels: ['code-task'],
+      childCount: 0,
+      parentId: null,
+    }));
+    setupWorkerSettings();
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'error',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'Auth callback logging work',
+      errorCode: 'embedding_failed',
+      errorMessage: 'API timeout',
+    });
+    mockCodeTaskRepo.update.mockResolvedValue(ok({
+      ...task,
+      status: 'dispatched',
+    }));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task-123',
+        errorCode: 'embedding_failed',
+        errorMessage: 'API timeout',
+      }),
+      'Execution memory retrieval returned error status'
+    );
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledOnce();
+  });
+
   it('clears parent implementationTaskId when expired task has parentTaskId', async () => {
-    const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+    const beyondTtl = new Date(Date.now() - 1441 * 60 * 1000);
     const task = createMockTask({
       queuedAt: Timestamp.fromDate(beyondTtl),
       parentTaskId: 'parent-task-1',
@@ -266,7 +633,7 @@ describe('drainTaskQueue', () => {
   });
 
   it('does not clear parent implementationTaskId when it points to a different task', async () => {
-    const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+    const beyondTtl = new Date(Date.now() - 1441 * 60 * 1000);
     const task = createMockTask({
       queuedAt: Timestamp.fromDate(beyondTtl),
       parentTaskId: 'parent-task-1',
@@ -293,7 +660,7 @@ describe('drainTaskQueue', () => {
   });
 
   it('logs warning when clearing parent implementationTaskId fails', async () => {
-    const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+    const beyondTtl = new Date(Date.now() - 1441 * 60 * 1000);
     const task = createMockTask({
       queuedAt: Timestamp.fromDate(beyondTtl),
       parentTaskId: 'parent-task-1',
@@ -326,7 +693,7 @@ describe('drainTaskQueue', () => {
   });
 
   it('logs warning when notifyTaskQueueExpired fails', async () => {
-    const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+    const beyondTtl = new Date(Date.now() - 1441 * 60 * 1000);
     const task = createMockTask({
       queuedAt: Timestamp.fromDate(beyondTtl),
     });
@@ -353,7 +720,7 @@ describe('drainTaskQueue', () => {
 
   it('uses createdAt when queuedAt is not set for TTL check', async () => {
     // Create a task with createdAt 31 minutes ago and no queuedAt
-    const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+    const beyondTtl = new Date(Date.now() - 1441 * 60 * 1000);
     const task = createMockTask();
     // Remove queuedAt to test fallback to createdAt
     delete (task as unknown as Record<string, unknown>)['queuedAt'];
@@ -589,6 +956,66 @@ describe('drainTaskQueue', () => {
     });
   });
 
+  it('forwards prNumber in dispatch request when task has prNumber and prBranch', async () => {
+    const task = createMockTask({ prNumber: 42, prBranch: 'fix/review-branch', agentType: 'review' });
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    setupWorkerSettings();
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      ok({ dispatched: true, workerLocation: 'home-mac' })
+    );
+    mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+    await drainTaskQueue(createDeps());
+
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ prNumber: 42 })
+    );
+  });
+
+  it('fails task with MISSING_PR_BRANCH when review task has prNumber but no prBranch', async () => {
+    const task = createMockTask({ prNumber: 42, agentType: 'review' });
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    setupWorkerSettings();
+    mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'failed' })));
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.action).toBe('failed');
+      expect(result.value.locksToCleanup).toEqual([
+        { repository: 'pbuchman/intexuraos', prNumber: 42 },
+      ]);
+    }
+    expect(mockTaskDispatcher.dispatch).not.toHaveBeenCalled();
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
+      task.id,
+      expect.objectContaining({
+        status: 'failed',
+        error: expect.objectContaining({
+          code: 'MISSING_PR_BRANCH',
+        }),
+      })
+    );
+  });
+
+  it('does not include prNumber in dispatch request when task has no prNumber', async () => {
+    const task = createMockTask({ agentType: 'planning' });
+    delete (task as unknown as Record<string, unknown>)['prNumber'];
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    setupWorkerSettings();
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      ok({ dispatched: true, workerLocation: 'home-mac' })
+    );
+    mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+    await drainTaskQueue(createDeps());
+
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+      expect.not.objectContaining({ prNumber: expect.anything() })
+    );
+  });
+
   it('logs a warning when archiving the original task after queued retry dispatch fails', async () => {
     const task = createMockTask({
       prNumber: 1139,
@@ -812,6 +1239,25 @@ describe('drainTaskQueue', () => {
     }
   });
 
+  it('includes reviewTypes in dispatch when task has them', async () => {
+    const task = createMockTask({ reviewTypes: ['code_quality', 'architecture'] });
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    setupWorkerSettings();
+
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      ok({ dispatched: true, workerLocation: 'home-mac' })
+    );
+    mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+    await drainTaskQueue(createDeps());
+
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reviewTypes: ['code_quality', 'architecture'],
+      })
+    );
+  });
+
   it('uses agentType from task when available', async () => {
     const task = createMockTask({ agentType: 'execution' });
     mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
@@ -833,7 +1279,7 @@ describe('drainTaskQueue', () => {
 
   describe('PR task lock cleanup', () => {
     it('returns locksToCleanup on TTL expiry (PR task)', async () => {
-      const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+      const beyondTtl = new Date(Date.now() - 1441 * 60 * 1000);
       const task = createMockTask({
         queuedAt: Timestamp.fromDate(beyondTtl),
         prNumber: 42,
@@ -853,7 +1299,7 @@ describe('drainTaskQueue', () => {
     });
 
     it('returns locksToCleanup on dispatch failure (PR task)', async () => {
-      const task = createMockTask({ prNumber: 42 });
+      const task = createMockTask({ prNumber: 42, prBranch: 'fix/some-branch' });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
       setupWorkerSettings();
 
@@ -875,7 +1321,7 @@ describe('drainTaskQueue', () => {
     });
 
     it('returns empty locksToCleanup on TTL expiry (non-PR task)', async () => {
-      const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+      const beyondTtl = new Date(Date.now() - 1441 * 60 * 1000);
       const task = createMockTask({
         queuedAt: Timestamp.fromDate(beyondTtl),
       });
@@ -892,7 +1338,7 @@ describe('drainTaskQueue', () => {
     });
 
     it('returns empty locksToCleanup on TTL expiry when task is a follow-up (has parentTaskId)', async () => {
-      const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+      const beyondTtl = new Date(Date.now() - 1441 * 60 * 1000);
       const task = createMockTask({
         queuedAt: Timestamp.fromDate(beyondTtl),
         prNumber: 42,
@@ -915,6 +1361,7 @@ describe('drainTaskQueue', () => {
     it('returns empty locksToCleanup on dispatch failure when task is a follow-up (has parentTaskId)', async () => {
       const task = createMockTask({
         prNumber: 42,
+        prBranch: 'fix/some-branch',
         parentTaskId: 'parent-task-123',
       });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
@@ -936,69 +1383,14 @@ describe('drainTaskQueue', () => {
     });
   });
 
-  describe('per-resource concurrency guard (INT-949)', () => {
-    it('skips task with linearIssueId when active task exists for same issue', async () => {
-      const task = createMockTask({ linearIssueId: 'INT-100' });
-      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
-      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
-        ok({ hasActive: true, taskId: 'other-task-999' })
-      );
-
-      const result = await drainTaskQueue(createDeps());
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toEqual({ action: 'still_busy' });
-      }
-    });
-
-    it('skips task with prNumber when active review exists for same PR', async () => {
+  describe('per-PR concurrency guard and round-robin', () => {
+    it('skips task when dispatched/running task exists for same PR', async () => {
       const task = createMockTask({ prNumber: 42, repository: 'pbuchman/intexuraos' });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
-      mockCodeTaskRepo.findActiveReviewForPR.mockResolvedValue(
-        ok(createMockTask({ id: 'active-review-999' }))
+      mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockResolvedValue(
+        ok({ hasActive: true, taskId: 'running-task-999' })
       );
-
-      const result = await drainTaskQueue(createDeps());
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toEqual({ action: 'still_busy' });
-      }
-    });
-
-    it('dispatches second candidate when first is blocked by linearIssueId', async () => {
-      const blocked = createMockTask({ id: 'task-blocked', linearIssueId: 'INT-100' });
-      const dispatchable = createMockTask({ id: 'task-free' });
-      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([blocked, dispatchable]));
-      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
-        ok({ hasActive: true, taskId: 'other-task-999' })
-      );
-      setupWorkerSettings();
-
-      mockTaskDispatcher.dispatch.mockResolvedValue(
-        ok({ dispatched: true, workerLocation: 'home-mac' })
-      );
-      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ id: 'task-free', status: 'dispatched' })));
-
-      const result = await drainTaskQueue(createDeps());
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-free' });
-      }
-    });
-
-    it('returns still_busy when all candidates are blocked', async () => {
-      const task1 = createMockTask({ id: 'task-1', linearIssueId: 'INT-100' });
-      const task2 = createMockTask({ id: 'task-2', prNumber: 42, repository: 'pbuchman/intexuraos' });
-      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task1, task2]));
-      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
-        ok({ hasActive: true, taskId: 'other-task-999' })
-      );
-      mockCodeTaskRepo.findActiveReviewForPR.mockResolvedValue(
-        ok(createMockTask({ id: 'active-review-999' }))
-      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
 
       const result = await drainTaskQueue(createDeps());
 
@@ -1008,13 +1400,129 @@ describe('drainTaskQueue', () => {
       }
     });
 
-    it('does not self-block: task with linearIssueId dispatches when it is the active task', async () => {
-      const task = createMockTask({ id: 'task-123', linearIssueId: 'INT-100' });
+    it('resets queuedAt when task is skipped due to PR-lock', async () => {
+      const task = createMockTask({ prNumber: 42, repository: 'pbuchman/intexuraos' });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
-      // hasActive returns this task's own ID — should NOT block
-      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
-        ok({ hasActive: true, taskId: 'task-123' })
+      mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockResolvedValue(
+        ok({ hasActive: true, taskId: 'running-task-999' })
       );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual(expect.objectContaining({ action: 'still_busy' }));
+      }
+
+      // Verify queuedAt was reset
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', {
+        queuedAt: expect.any(Date),
+      });
+    });
+
+    it('logs warning and continues when queuedAt reset fails for PR-locked task', async () => {
+      const task = createMockTask({ prNumber: 42, repository: 'pbuchman/intexuraos' });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockResolvedValue(
+        ok({ hasActive: true, taskId: 'running-task-999' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR', message: 'Write failed' })
+      );
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual(expect.objectContaining({ action: 'still_busy' }));
+      }
+
+      // Verify warning was logged about the failed reset
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-123',
+          error: { code: 'FIRESTORE_ERROR', message: 'Write failed' },
+        }),
+        'Failed to reset queuedAt for PR-locked task — TTL clock continues from original queuedAt',
+      );
+    });
+
+    it('does not expire a PR-locked task even when TTL exceeded — resets queuedAt instead', async () => {
+      const beyondTtl = new Date(Date.now() - 31 * 60 * 1000);
+      const task = createMockTask({
+        prNumber: 42,
+        repository: 'pbuchman/intexuraos',
+        queuedAt: Timestamp.fromDate(beyondTtl),
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockResolvedValue(
+        ok({ hasActive: true, taskId: 'running-task-999' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Task stays in queue (still_busy), NOT expired
+        expect(result.value).toEqual(expect.objectContaining({ action: 'still_busy' }));
+      }
+
+      // Verify queuedAt was reset (NOT marked as failed)
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', {
+        queuedAt: expect.any(Date),
+      });
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith('task-123', expect.objectContaining({
+        status: 'failed',
+      }));
+    });
+
+    it('dispatches next PR task when first PR is blocked', async () => {
+      const blocked = createMockTask({ id: 'task-pr42', prNumber: 42, repository: 'pbuchman/intexuraos' });
+      const free = createMockTask({ id: 'task-pr99', prNumber: 99, repository: 'pbuchman/intexuraos' });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([blocked, free]));
+      mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockImplementation(
+        async (_repo: string, prNumber: number) => {
+          if (prNumber === 42) return ok({ hasActive: true, taskId: 'running-on-42' });
+          return ok({ hasActive: false });
+        }
+      );
+      setupWorkerSettings();
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ id: 'task-pr99', status: 'dispatched' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-pr99' });
+      }
+    });
+
+    it('returns still_busy when all candidates are blocked by per-PR guard', async () => {
+      const task1 = createMockTask({ id: 'task-1', prNumber: 42, repository: 'pbuchman/intexuraos' });
+      const task2 = createMockTask({ id: 'task-2', prNumber: 99, repository: 'pbuchman/intexuraos' });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task1, task2]));
+      mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockResolvedValue(
+        ok({ hasActive: true, taskId: 'some-running-task' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task1));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual(expect.objectContaining({ action: 'still_busy' }));
+      }
+    });
+
+    it('dispatches task without prNumber (no per-PR guard applies)', async () => {
+      const task = createMockTask({ id: 'task-no-pr', linearIssueId: 'INT-100' });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
       setupWorkerSettings();
 
       mockLinearAgentClient.validateIssue.mockResolvedValue(
@@ -1023,35 +1531,144 @@ describe('drainTaskQueue', () => {
       mockTaskDispatcher.dispatch.mockResolvedValue(
         ok({ dispatched: true, workerLocation: 'home-mac' })
       );
-      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ id: 'task-no-pr', status: 'dispatched' })));
 
       const result = await drainTaskQueue(createDeps());
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-123' });
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-no-pr' });
       }
+      // Per-PR guard should NOT have been called for a task without prNumber
+      expect(mockCodeTaskRepo.hasDispatchedOrRunningForPR).not.toHaveBeenCalled();
     });
 
-    it('does not self-block: task with prNumber dispatches when it is the active review', async () => {
-      const task = createMockTask({ id: 'task-123', prNumber: 42, repository: 'pbuchman/intexuraos' });
-      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
-      mockCodeTaskRepo.findActiveReviewForPR.mockResolvedValue(
-        ok(createMockTask({ id: 'task-123' }))
+    it('round-robin: picks tasks from different PRs in creation order', async () => {
+      // PR 42 has 2 tasks, PR 99 has 1 — round-robin should pick PR 42 first (oldest), then PR 99
+      const olderTs = Timestamp.fromDate(new Date(Date.now() - 5000));
+      const newerTs = Timestamp.fromDate(new Date(Date.now() - 3000));
+      const newestTs = Timestamp.fromDate(new Date(Date.now() - 1000));
+
+      const pr42_task1 = createMockTask({ id: 'task-pr42-a', prNumber: 42, repository: 'pbuchman/intexuraos', createdAt: olderTs });
+      const pr42_task2 = createMockTask({ id: 'task-pr42-b', prNumber: 42, repository: 'pbuchman/intexuraos', createdAt: newestTs });
+      const pr99_task1 = createMockTask({ id: 'task-pr99-a', prNumber: 99, repository: 'pbuchman/intexuraos', createdAt: newerTs });
+
+      // listQueuedByAge returns global FIFO: pr42_task1, pr99_task1, pr42_task2
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([pr42_task1, pr99_task1, pr42_task2]));
+
+      // PR 42 is blocked, PR 99 is free
+      mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockImplementation(
+        async (_repo: string, prNumber: number) => {
+          if (prNumber === 42) return ok({ hasActive: true, taskId: 'running-on-42' });
+          return ok({ hasActive: false });
+        }
       );
       setupWorkerSettings();
 
       mockTaskDispatcher.dispatch.mockResolvedValue(
         ok({ dispatched: true, workerLocation: 'home-mac' })
       );
-      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ id: 'task-pr99-a', status: 'dispatched' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      // Round-robin tried PR 42 first (blocked), then PR 99 (dispatched)
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-pr99-a' });
+      }
+    });
+
+    it('round-robin: oldest non-PR task dispatches before newer PR-scoped task', async () => {
+      // Regression: non-PR tasks (planning/execution) must not be starved behind newer PR work
+      const olderTs = Timestamp.fromDate(new Date(Date.now() - 10_000));
+      const newerTs = Timestamp.fromDate(new Date(Date.now() - 3000));
+
+      const planningTask = createMockTask({
+        id: 'task-planning',
+        linearIssueId: 'INT-200',
+        createdAt: olderTs,
+        queuedAt: olderTs,
+        // no prNumber — this is a planning task
+      });
+      const prTask = createMockTask({
+        id: 'task-pr-newer',
+        prNumber: 55,
+        repository: 'pbuchman/intexuraos',
+        linearIssueId: 'INT-201',
+        createdAt: newerTs,
+        queuedAt: newerTs,
+      });
+
+      // listQueuedByAge returns global FIFO: planning first, then PR task
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([planningTask, prTask]));
+      mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockResolvedValue(ok({ hasActive: false }));
+      setupWorkerSettings();
+
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({ id: 'issue-id', identifier: 'INT-200', title: 'Test', url: 'https://linear.app', labels: [], childCount: 0 })
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ id: 'task-planning', status: 'dispatched' })));
 
       const result = await drainTaskQueue(createDeps());
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-123' });
+        // The older planning task (no prNumber) must be dispatched, not the newer PR task
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-planning' });
       }
+      // Per-PR guard should NOT have been called for the planning task (no prNumber)
+      expect(mockCodeTaskRepo.hasDispatchedOrRunningForPR).not.toHaveBeenCalled();
+    });
+
+    it('TTL expires a non-PR-locked task that has passed its TTL', async () => {
+      // Regression test: an expired PR task that is NOT PR-locked should be TTL-expired.
+      // Under the new ordering, PR-lock check runs first (returns hasActive: false),
+      // then the TTL check fires and expires the task.
+      const beyondTtl = new Date(Date.now() - 1441 * 60 * 1000);
+      const expiredTask = createMockTask({
+        id: 'task-expired',
+        prNumber: 42,
+        repository: 'pbuchman/intexuraos',
+        linearIssueId: 'INT-100',
+        agentType: 'pull_request',
+        queuedAt: Timestamp.fromDate(beyondTtl),
+      });
+      const blockedTask = createMockTask({
+        id: 'task-blocked',
+        prNumber: 42,
+        repository: 'pbuchman/intexuraos',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+      });
+
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([expiredTask, blockedTask]));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(expiredTask));
+      // No active task for PR 42 — so expiredTask passes the PR-lock check, then hits TTL
+      mockCodeTaskRepo.hasDispatchedOrRunningForPR.mockResolvedValue(ok({ hasActive: false }));
+
+      const result = await drainTaskQueue(createDeps());
+
+      // PR-lock check runs first, then TTL check fires — expired task cleaned up
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual(expect.objectContaining({ action: 'expired', taskId: 'task-expired' }));
+      }
+
+      // Verify task was marked as failed
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-expired', {
+        status: 'failed',
+        error: {
+          code: 'queue_timeout',
+          message: 'Task expired in queue after 1440 minutes. Workers were still busy.',
+        },
+      });
+
+      // Verify per-PR guard WAS called (it runs before TTL in the new ordering)
+      expect(mockCodeTaskRepo.hasDispatchedOrRunningForPR).toHaveBeenCalledWith('pbuchman/intexuraos', 42);
     });
   });
 
@@ -1074,15 +1691,12 @@ describe('drainTaskQueue', () => {
         })
       );
 
-      // fetchIssueTree returns children with code-task labels
-      mockLinearAgentClient.fetchIssueTree.mockResolvedValue(
-        ok({
-          root: { id: 'parent-uuid', identifier: 'INT-956', url: '', parentId: null, labels: ['code-task'], assigneeId: null, state: 'Backlog' },
-          descendants: [
-            { id: 'child-uuid-1', identifier: 'INT-957', url: '', parentId: 'parent-uuid', labels: ['code-task'], assigneeId: null, state: 'Backlog' },
-            { id: 'child-uuid-2', identifier: 'INT-958', url: '', parentId: 'parent-uuid', labels: ['code-task'], assigneeId: null, state: 'Backlog' },
-          ],
-        })
+      // fetchDirectChildrenLive returns children with code-task labels
+      mockLinearAgentClient.fetchDirectChildrenLive.mockResolvedValue(
+        ok([
+          { id: 'child-uuid-1', identifier: 'INT-957', url: '', parentId: 'parent-uuid', labels: ['code-task'], assigneeId: null, state: 'Backlog' },
+          { id: 'child-uuid-2', identifier: 'INT-958', url: '', parentId: 'parent-uuid', labels: ['code-task'], assigneeId: null, state: 'Backlog' },
+        ])
       );
 
       mockCodeTaskRepo.create.mockResolvedValue(ok(createMockTask({ id: 'child-task' })));
@@ -1092,7 +1706,8 @@ describe('drainTaskQueue', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-123' });
+        expect(result.value.action).toBe('dispatched');
+        expect(result.value.taskId).toMatch(/^task_/);
       }
 
       // Verify child tasks were created
@@ -1116,13 +1731,10 @@ describe('drainTaskQueue', () => {
         })
       );
 
-      mockLinearAgentClient.fetchIssueTree.mockResolvedValue(
-        ok({
-          root: { id: 'parent-uuid', identifier: 'INT-956', url: '', parentId: null, labels: ['code-task'], assigneeId: null, state: 'Backlog' },
-          descendants: [
-            { id: 'child-uuid-1', identifier: 'INT-959', url: '', parentId: 'parent-uuid', labels: ['feature'], assigneeId: null, state: 'Backlog' },
-          ],
-        })
+      mockLinearAgentClient.fetchDirectChildrenLive.mockResolvedValue(
+        ok([
+          { id: 'child-uuid-1', identifier: 'INT-959', url: '', parentId: 'parent-uuid', labels: ['feature'], assigneeId: null, state: 'Backlog' },
+        ])
       );
 
       // Normal dispatch should proceed
@@ -1169,6 +1781,117 @@ describe('drainTaskQueue', () => {
       // Normal dispatch should proceed (no fan-out)
       expect(mockTaskDispatcher.dispatch).toHaveBeenCalled();
     });
+
+    it('falls back to normal dispatch when live parent UUID is missing from validation response', async () => {
+      const task = createMockTask({ linearIssueId: 'INT-956' });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      setupWorkerSettings();
+
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: undefined as unknown as string,
+          identifier: 'INT-956',
+          title: 'Parent issue',
+          url: 'https://linear.app/intexura/issue/INT-956',
+          labels: ['code-task'],
+          childCount: 2,
+          parentId: null,
+        }),
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' }),
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-123' });
+      }
+      expect(mockLinearAgentClient.fetchDirectChildrenLive).not.toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-123', linearIssueId: 'INT-956' }),
+        'Drain fan-out skipped: live parent UUID unavailable',
+      );
+    });
+
+    it('logs a warning and still returns dispatched when parent cancellation fails after successful fan-out', async () => {
+      const task = createMockTask({ linearIssueId: 'INT-956', agentType: 'execution' });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      setupWorkerSettings();
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'parent-uuid',
+          identifier: 'INT-956',
+          title: 'Parent issue',
+          url: 'https://linear.app/intexura/issue/INT-956',
+          labels: ['code-task'],
+          childCount: 1,
+          parentId: null,
+        }),
+      );
+      mockLinearAgentClient.fetchDirectChildrenLive.mockResolvedValue(
+        ok([
+          { id: 'child-uuid-1', identifier: 'INT-957', url: '', parentId: 'parent-uuid', labels: ['code-task'], assigneeId: null, state: 'Backlog' },
+        ]),
+      );
+      mockCodeTaskRepo.create.mockResolvedValue(ok(createMockTask({ id: 'child-task' })));
+      mockCodeTaskRepo.update
+        .mockResolvedValueOnce(ok(createMockTask({ implementationTaskId: 'child-task' })))
+        .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'cancel failed' }));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('dispatched');
+        expect(result.value.taskId).toMatch(/^task_/);
+      }
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-123', error: { code: 'FIRESTORE_ERROR', message: 'cancel failed' } }),
+        'Drain fan-out succeeded but failed to cancel parent task',
+      );
+    });
+
+    it('falls back to normal dispatch when live direct-children fetch fails', async () => {
+      const task = createMockTask({ linearIssueId: 'INT-956' });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      setupWorkerSettings();
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'parent-uuid',
+          identifier: 'INT-956',
+          title: 'Parent issue',
+          url: 'https://linear.app/intexura/issue/INT-956',
+          labels: ['code-task'],
+          childCount: 2,
+          parentId: null,
+        }),
+      );
+      mockLinearAgentClient.fetchDirectChildrenLive.mockResolvedValue(
+        err({ code: 'UNAVAILABLE', message: 'children unavailable' }),
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' }),
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-123' });
+      }
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-123',
+          linearIssueId: 'INT-956',
+          error: { code: 'UNAVAILABLE', message: 'children unavailable' },
+        }),
+        'Drain fan-out could not fetch live direct children, falling back to normal dispatch',
+      );
+    });
   });
 
   describe('queued review merge (INT-1014)', () => {
@@ -1178,6 +1901,7 @@ describe('drainTaskQueue', () => {
         id: 'review-old',
         repository: 'pbuchman/intexuraos',
         prNumber: 42,
+        prBranch: 'fix/review-branch',
         agentType: 'review',
         createdAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)), // 10 min ago
         queuedAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
@@ -1187,6 +1911,7 @@ describe('drainTaskQueue', () => {
         id: 'review-new',
         repository: 'pbuchman/intexuraos',
         prNumber: 42,
+        prBranch: 'fix/review-branch',
         agentType: 'review',
         createdAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)), // 5 min ago
         queuedAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
@@ -1241,6 +1966,7 @@ describe('drainTaskQueue', () => {
         id: 'review-1',
         repository: 'pbuchman/intexuraos',
         prNumber: 42,
+        prBranch: 'fix/review-branch',
         agentType: 'review',
         createdAt: Timestamp.fromDate(new Date(Date.now() - 30 * 60 * 1000)),
         queuedAt: Timestamp.fromDate(new Date(Date.now() - 30 * 60 * 1000)),
@@ -1249,6 +1975,7 @@ describe('drainTaskQueue', () => {
         id: 'review-2',
         repository: 'pbuchman/intexuraos',
         prNumber: 42,
+        prBranch: 'fix/review-branch',
         agentType: 'review',
         createdAt: Timestamp.fromDate(new Date(Date.now() - 20 * 60 * 1000)),
         queuedAt: Timestamp.fromDate(new Date(Date.now() - 20 * 60 * 1000)),
@@ -1257,6 +1984,7 @@ describe('drainTaskQueue', () => {
         id: 'review-3',
         repository: 'pbuchman/intexuraos',
         prNumber: 42,
+        prBranch: 'fix/review-branch',
         agentType: 'review',
         createdAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
         queuedAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
@@ -1296,6 +2024,7 @@ describe('drainTaskQueue', () => {
         id: 'review-old',
         repository: 'pbuchman/intexuraos',
         prNumber: 42,
+        prBranch: 'fix/review-branch',
         agentType: 'review',
         createdAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
         queuedAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
@@ -1304,6 +2033,7 @@ describe('drainTaskQueue', () => {
         id: 'review-new',
         repository: 'pbuchman/intexuraos',
         prNumber: 42,
+        prBranch: 'fix/review-branch',
         agentType: 'review',
         createdAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
         queuedAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
@@ -1327,7 +2057,7 @@ describe('drainTaskQueue', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         // Oldest (reviewOld) dispatched — its cancellation failed so it remained in activeCandidates
-        // and was picked first in FIFO dispatch order before findActiveReviewForPR could block it
+        // and was picked first in FIFO dispatch order before per-PR guard could block it
         expect(result.value).toEqual({ action: 'dispatched', taskId: 'review-old' });
       }
 
@@ -1347,6 +2077,7 @@ describe('drainTaskQueue', () => {
         id: 'review-pr42',
         repository: 'pbuchman/intexuraos',
         prNumber: 42,
+        prBranch: 'fix/review-branch-42',
         agentType: 'review',
         createdAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
         queuedAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
@@ -1355,6 +2086,7 @@ describe('drainTaskQueue', () => {
         id: 'review-pr99',
         repository: 'pbuchman/intexuraos',
         prNumber: 99,
+        prBranch: 'fix/review-branch-99',
         agentType: 'review',
         createdAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
         queuedAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
@@ -1497,30 +2229,6 @@ describe('drainTaskQueue', () => {
   });
 
   describe('dispatch metadata field reconstruction (INT-949)', () => {
-    it('passes planningPrBranch and planningPrUrl through to dispatch request', async () => {
-      const task = createMockTask({
-        agentType: 'execution',
-        planningPrBranch: 'task_planning_branch',
-        planningPrUrl: 'https://github.com/pbuchman/intexuraos/pull/99',
-      });
-      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
-      setupWorkerSettings();
-
-      mockTaskDispatcher.dispatch.mockResolvedValue(
-        ok({ dispatched: true, workerLocation: 'home-mac' })
-      );
-      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
-
-      await drainTaskQueue(createDeps());
-
-      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          planningPrBranch: 'task_planning_branch',
-          planningPrUrl: 'https://github.com/pbuchman/intexuraos/pull/99',
-        })
-      );
-    });
-
     it('passes trackingCommentId through to dispatch request', async () => {
       const task = createMockTask({
         agentType: 'pull_request',
@@ -1577,8 +2285,6 @@ describe('drainTaskQueue', () => {
       await drainTaskQueue(createDeps());
 
       const dispatchCall = mockTaskDispatcher.dispatch.mock.calls[0]?.[0] as Record<string, unknown>;
-      expect(dispatchCall['planningPrBranch']).toBeUndefined();
-      expect(dispatchCall['planningPrUrl']).toBeUndefined();
       expect(dispatchCall['trackingCommentId']).toBeUndefined();
       expect(dispatchCall['retriedFrom']).toBeUndefined();
     });

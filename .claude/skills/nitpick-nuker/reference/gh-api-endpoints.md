@@ -30,6 +30,11 @@ gh api repos/{owner}/{repo}/pulls/comments/{comment_id}
 gh api repos/{owner}/{repo}/pulls/comments/{comment_id}/reactions \
   -X POST \
   -f content=laugh
+
+# Reply to review comment (threaded reply)
+gh api repos/{owner}/{repo}/pulls/comments/{comment_id}/replies \
+  -X POST \
+  -f body="reply text"
 ```
 
 ### Reviews (Overall Review with Body)

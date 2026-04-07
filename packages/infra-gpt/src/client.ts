@@ -93,7 +93,7 @@ const DEFAULT_IMAGE_SIZE: ImageSize = '1024x1024';
  */
 export function createGptClient(config: GptConfig): GptClient {
   const client = new OpenAI({ apiKey: config.apiKey });
-  const { model, userId, pricing, imagePricing, logger } = config;
+  const { model, userId, researchId, pricing, imagePricing, logger } = config;
   const usageLogger = createUsageLogger({ logger });
 
   function createRequestContext(
@@ -109,6 +109,8 @@ export function createGptClient(config: GptConfig): GptClient {
       method,
       prompt,
       startedAt: startTime,
+      userId,
+      ...(researchId !== undefined && { researchId }),
     });
     return { requestId, startTime, auditContext };
   }

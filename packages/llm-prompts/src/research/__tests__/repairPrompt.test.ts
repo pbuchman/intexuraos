@@ -6,6 +6,7 @@ describe('buildResearchContextRepairPrompt', () => {
     const result = buildResearchContextRepairPrompt('test query', '{}', 'validation error');
     expect(result).toContain('outdoor_recreation');
     expect(result).toContain('fishing');
+    expect(result).toContain('construction_building');
   });
 
   it('should include user_exclusions in safety schema', () => {

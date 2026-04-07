@@ -45,6 +45,7 @@ describe('buildSynthesisContextRepairPrompt', () => {
     const result = buildSynthesisContextRepairPrompt('query', '{}', 'error');
     expect(result).toContain('outdoor_recreation');
     expect(result).toContain('fishing');
+    expect(result).toContain('construction_building');
   });
 
   it('should include user_exclusions in safety schema', () => {

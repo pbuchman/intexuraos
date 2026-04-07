@@ -99,7 +99,7 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
   }
 
   async function processWatch(
-    watch: { id: string; userId: string; gitHubUsername: string; owner: string; repo: string; baseBranch: string }
+    watch: { id: string; userId: string; gitHubUsername: string; owner: string; repo: string; baseBranch: string; excludedPrNumbers: number[] }
   ): Promise<TickResult> {
     const { id: watchId, userId, gitHubUsername, owner, repo, baseBranch } = watch;
 
@@ -140,8 +140,12 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
     // Step 3f: Sort by PR number ASC (oldest first)
     eligiblePrs.sort((a, b) => a.number - b.number);
 
-    // Step 3g: If zero eligible PRs, drain
-    if (eligiblePrs.length === 0) {
+    // Filter out excluded PRs — they're not managed by this queue run, so they don't prevent drain
+    const excludedSet = new Set(watch.excludedPrNumbers);
+    const prsToProcess = eligiblePrs.filter((pr) => !excludedSet.has(pr.number));
+
+    // Step 3g: Drain when zero selected (non-excluded) PRs remain
+    if (prsToProcess.length === 0) {
       const now = new Date();
       await recordSuccessfulTick(watchId, [], { status: 'drained', drainedAt: now });
       return { watchId, owner, repo, baseBranch, action: 'drained', remainingPrs: 0, skipped: [] };
@@ -150,7 +154,7 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
     // Step 3h: Iterate eligible PRs
     const skippedList: SkippedPr[] = [];
 
-    for (const pr of eligiblePrs) {
+    for (const pr of prsToProcess) {
       // Get PR details
       const detailsResult = await gitHubPRClient.getPullRequestDetails(token, owner, repo, pr.number);
       if (!detailsResult.ok) {
@@ -222,7 +226,7 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
         watchId, owner, repo, baseBranch,
         action: 'merged',
         mergedPrNumber: pr.number,
-        remainingPrs: allPrs.length - 1,
+        remainingPrs: prsToProcess.length - 1,
         skipped: skippedList,
       };
     }
@@ -240,7 +244,7 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
     return {
       watchId, owner, repo, baseBranch,
       action,
-      remainingPrs: allPrs.length,
+      remainingPrs: action === 'drained' ? 0 : prsToProcess.length,
       skipped: skippedList,
     };
   }

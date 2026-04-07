@@ -189,7 +189,7 @@ export function createExecuteCalendarActionUseCase(
       const publishResult = await whatsappPublisher.publishSendMessage({
         userId: action.userId,
         message: whatsappMessage,
-        ctaUrl: { displayText: '\u{1F4C5} View in Calendar', url: fullUrl },
+        ctaUrl: { displayText: 'View in Calendar', url: fullUrl },
         correlationId: `calendar-complete-${actionId}`,
       });
 

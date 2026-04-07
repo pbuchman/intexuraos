@@ -1,6 +1,7 @@
 import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
 import type {
+  AskAgentStartResponse,
   CodeTask,
   CodeTaskStatus,
   GitHubEventLogResponse,
@@ -14,6 +15,15 @@ import type {
   SubmitCodeTaskResponse,
   WorkersStatusResponse,
 } from '@/types';
+
+/**
+ * Response shape for getActiveAskAgent.
+ * Backend only serializes a subset of CodeTask fields (id, status, agentType, prompt, createdAt).
+ * Using Pick<> ensures type accuracy and prevents runtime undefined access.
+ */
+export interface ActiveAskAgentTaskResponse {
+  task: Pick<CodeTask, 'id' | 'status' | 'agentType' | 'prompt' | 'createdAt'> | null;
+}
 
 export interface QueuedTask {
   id: string;
@@ -265,6 +275,32 @@ export async function getDispatchQueue(accessToken: string): Promise<QueueRespon
   return await apiRequest<QueueResponse>(
     config.codeAgentUrl,
     '/code/queue',
+    accessToken,
+  );
+}
+
+/**
+ * Start a new Ask Agent session
+ */
+export async function startAskAgent(
+  accessToken: string,
+  request: { prompt: string }
+): Promise<AskAgentStartResponse> {
+  return await apiRequest<AskAgentStartResponse>(config.codeAgentUrl, '/code/ask-agent/start', accessToken, {
+    method: 'POST',
+    body: request,
+  });
+}
+
+/**
+ * Get the user's active ask-agent conversation (for cross-device persistence)
+ */
+export async function getActiveAskAgent(
+  accessToken: string,
+): Promise<ActiveAskAgentTaskResponse> {
+  return await apiRequest<ActiveAskAgentTaskResponse>(
+    config.codeAgentUrl,
+    '/code/ask-agent/active',
     accessToken,
   );
 }

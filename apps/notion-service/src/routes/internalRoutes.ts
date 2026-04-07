@@ -17,7 +17,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         operationId: 'getInternalNotionContext',
         summary: 'Get Notion connection context (internal)',
         description:
-/* v8 ignore start -- schema: string literal in Fastify route schema definition @preserve */
+/* v8 ignore start -- schema: Fastify schema string literal not reachable by unit tests @preserve */
           'Internal endpoint for service-to-service communication. Returns connection state and token.',
           /* v8 ignore stop @preserve */
         tags: ['internal'],

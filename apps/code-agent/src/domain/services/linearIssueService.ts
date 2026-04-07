@@ -6,7 +6,7 @@
  */
 
 import type { Logger } from '@intexuraos/common-core';
-import type { LinearAgentClient } from '../ports/linearAgentClient.js';
+import type { LinearAgentClient, UpdateIssueStateRequest } from '../ports/linearAgentClient.js';
 
 export type LinearIssueType = 'feature' | 'bug' | 'refactor' | 'research';
 
@@ -56,10 +56,52 @@ export interface LinearIssueService {
    * Transition issue to In Review when PR is created.
    */
   markInReview(userId: string, linearIssueId: string): Promise<void>;
+
+  /**
+   * Transition issue to Todo when a plan-only PR is merged.
+   */
+  markTodo(userId: string, linearIssueId: string): Promise<void>;
+
+  /**
+   * Transition issue to QA when PR is merged.
+   */
+  markQa(userId: string, linearIssueId: string): Promise<void>;
+
+  /**
+   * Remove a label from an issue by name. Best-effort: logs and swallows errors.
+   */
+  removeLabel(userId: string, linearIssueId: string, labelName: string): Promise<void>;
+
+  /**
+   * Add a label to an issue by name. Best-effort: logs and swallows errors.
+   */
+  addLabel(userId: string, linearIssueId: string, labelName: string): Promise<void>;
 }
 
 export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIssueService {
   const { linearAgentClient, logger } = deps;
+
+  async function transitionState(
+    userId: string,
+    linearIssueId: string,
+    state: UpdateIssueStateRequest['state'],
+    label: string,
+  ): Promise<void> {
+    if (!linearIssueId) {
+      logger.debug({}, 'Skipping state transition (no issue ID)');
+      return;
+    }
+
+    const result = await linearAgentClient.updateIssueState({
+      userId,
+      issueId: linearIssueId,
+      state,
+    });
+
+    if (!result.ok) {
+      logger.warn({ linearIssueId, error: result.error }, `Failed to update Linear issue to ${label}`);
+    }
+  }
 
   return {
     async ensureIssueExists(params): Promise<EnsureIssueResult> {
@@ -163,36 +205,50 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
     },
 
     async markInProgress(userId: string, linearIssueId: string): Promise<void> {
-      if (!linearIssueId) {
-        logger.debug({}, 'Skipping state transition (no issue ID)');
-        return;
-      }
-
-      const result = await linearAgentClient.updateIssueState({
-        userId,
-        issueId: linearIssueId,
-        state: 'in_progress',
-      });
-
-      if (!result.ok) {
-        logger.warn({ linearIssueId, error: result.error }, 'Failed to update Linear issue to In Progress');
-      }
+      await transitionState(userId, linearIssueId, 'in_progress', 'In Progress');
     },
 
     async markInReview(userId: string, linearIssueId: string): Promise<void> {
+      await transitionState(userId, linearIssueId, 'in_review', 'In Review');
+    },
+
+    async markTodo(userId: string, linearIssueId: string): Promise<void> {
+      await transitionState(userId, linearIssueId, 'todo', 'Todo');
+    },
+
+    async markQa(userId: string, linearIssueId: string): Promise<void> {
+      await transitionState(userId, linearIssueId, 'qa', 'QA');
+    },
+
+    async removeLabel(userId: string, linearIssueId: string, labelName: string): Promise<void> {
       if (!linearIssueId) {
-        logger.debug({}, 'Skipping state transition (no issue ID)');
         return;
       }
 
-      const result = await linearAgentClient.updateIssueState({
+      const result = await linearAgentClient.updateIssueMetadata({
         userId,
         issueId: linearIssueId,
-        state: 'in_review',
+        removeLabels: [labelName],
       });
 
       if (!result.ok) {
-        logger.warn({ linearIssueId, error: result.error }, 'Failed to update Linear issue to In Review');
+        logger.warn({ linearIssueId, labelName, error: result.error }, 'Failed to remove label from Linear issue');
+      }
+    },
+
+    async addLabel(userId: string, linearIssueId: string, labelName: string): Promise<void> {
+      if (!linearIssueId) {
+        return;
+      }
+
+      const result = await linearAgentClient.updateIssueMetadata({
+        userId,
+        issueId: linearIssueId,
+        addLabels: [labelName],
+      });
+
+      if (!result.ok) {
+        logger.warn({ linearIssueId, labelName, error: result.error }, 'Failed to add label to Linear issue');
       }
     },
   };

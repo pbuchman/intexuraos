@@ -107,6 +107,8 @@ describe('webAgentSummaryClient', () => {
         .post('/internal/page-summaries', {
           url: 'https://example.com/page',
           userId: 'user-456',
+          title: 'Page Title',
+          description: 'Description',
           maxSentences: 20,
           maxReadingMinutes: 3,
         })
@@ -131,6 +133,49 @@ describe('webAgentSummaryClient', () => {
         url: 'https://example.com/page',
         title: 'Page Title',
         description: 'Description',
+      });
+
+      expect(scope.isDone()).toBe(true);
+    });
+
+    it('omits null metadata hints from request body', async () => {
+      const client = createWebAgentSummaryClient({
+        baseUrl: TEST_BASE_URL,
+        internalAuthToken: TEST_INTERNAL_TOKEN,
+        logger: silentLogger,
+      });
+
+      const scope = nock(TEST_BASE_URL)
+        .post('/internal/page-summaries', (body) => {
+          expect(body).toEqual({
+            url: 'https://example.com/page',
+            userId: 'user-456',
+            maxSentences: 20,
+            maxReadingMinutes: 3,
+          });
+          return true;
+        })
+        .reply(200, {
+          success: true,
+          data: {
+            result: {
+              url: 'https://example.com/page',
+              status: 'success',
+              summary: {
+                url: 'https://example.com/page',
+                summary: 'Summary.',
+                wordCount: 1,
+                estimatedReadingMinutes: 1,
+              },
+            },
+            metadata: { durationMs: 100 },
+          },
+        });
+
+      await client.generateSummary('user-456', {
+        url: 'https://example.com/page',
+        title: null,
+        description: null,
       });
 
       expect(scope.isDone()).toBe(true);

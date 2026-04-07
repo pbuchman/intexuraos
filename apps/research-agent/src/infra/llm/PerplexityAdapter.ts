@@ -24,12 +24,14 @@ export class PerplexityAdapter implements LlmResearchProvider {
     model: string,
     userId: string,
     pricing: ModelPricing,
-    logger: Logger
+    logger: Logger,
+    researchId?: string
   ) {
     this.client = createPerplexityClient({
       apiKey,
       model,
       userId,
+      ...(researchId !== undefined && { researchId }),
       pricing,
       logger,
     });

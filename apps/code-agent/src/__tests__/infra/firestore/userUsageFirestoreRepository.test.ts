@@ -472,6 +472,68 @@ describe('userUsageFirestoreRepository', () => {
     });
   });
 
+  describe('normalizeUsage nullish coalescing fallbacks', () => {
+    it('should default missing concurrentTasks and tasksThisHour to 0', async () => {
+      const repo = createUserUsageFirestoreRepository(
+        fakeFirestore as unknown as Firestore,
+        logger
+      );
+
+      // Seed a document with missing concurrentTasks and tasksThisHour
+      const now = Timestamp.now();
+      fakeFirestore.seedCollection('user_usage', [{
+        id: 'user-missing-fields',
+        data: {
+          userId: 'user-missing-fields',
+          // concurrentTasks intentionally missing
+          // tasksThisHour intentionally missing
+          hourStartedAt: now,
+          costToday: 5.0,
+          costThisMonth: 20.0,
+          dayStartedAt: now,
+          monthStartedAt: now,
+          updatedAt: now,
+        },
+      }]);
+
+      const result = await repo.getOrCreate('user-missing-fields');
+
+      expect(result.userId).toBe('user-missing-fields');
+      expect(result.concurrentTasks).toBe(0);
+      expect(result.tasksThisHour).toBe(0);
+    });
+
+    it('should default missing costToday and costThisMonth to 0', async () => {
+      const repo = createUserUsageFirestoreRepository(
+        fakeFirestore as unknown as Firestore,
+        logger
+      );
+
+      // Seed a document with missing cost fields
+      const now = Timestamp.now();
+      fakeFirestore.seedCollection('user_usage', [{
+        id: 'user-missing-costs',
+        data: {
+          userId: 'user-missing-costs',
+          concurrentTasks: 1,
+          tasksThisHour: 2,
+          hourStartedAt: now,
+          // costToday intentionally missing
+          // costThisMonth intentionally missing
+          dayStartedAt: now,
+          monthStartedAt: now,
+          updatedAt: now,
+        },
+      }]);
+
+      const result = await repo.getOrCreate('user-missing-costs');
+
+      expect(result.userId).toBe('user-missing-costs');
+      expect(result.costToday).toBe(0);
+      expect(result.costThisMonth).toBe(0);
+    });
+  });
+
   describe('toTimestamp normalization', () => {
     it('should handle plain Date objects from fake firestore', async () => {
       const repo = createUserUsageFirestoreRepository(

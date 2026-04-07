@@ -353,19 +353,19 @@ jobs:
       - name: Build test worker image
         run: |
           docker build \
-            -t claude-worker:test \
-            -f workers/claude-worker/Dockerfile.test \
-            workers/claude-worker/
+            -t code-worker:test \
+            -f workers/code-worker/Dockerfile.test \
+            workers/code-worker/
 
       - name: Create worker network
         run: |
           docker network create \
             --driver bridge \
             --subnet 172.28.0.0/16 \
-            claude-worker-net
+            code-worker-net
 
       - name: Run E2E isolation tests
         run: pnpm --filter orchestrator test:e2e
         env:
-          WORKER_IMAGE: claude-worker:test
-          WORKER_NETWORK: claude-worker-net
+          WORKER_IMAGE: code-worker:test
+          WORKER_NETWORK: code-worker-net

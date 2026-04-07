@@ -23,6 +23,14 @@ import { generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 import { buildLockCleanups, type LockCleanupInfo } from '../utils/prTaskLock.js';
 import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../utils/taskRouting.js';
 import { archiveRetriedTaskAfterDispatch } from '../utils/archiveRetriedTaskAfterDispatch.js';
+import { isMemoryEligibleAgent } from '../utils/memoryEligibility.js';
+import {
+  prepareExecutionMemoryContext,
+  toDispatchExecutionMemoryContext,
+  type PrepareExecutionMemoryResources,
+} from './prepareExecutionMemoryContext.js';
+import { isStaleTaskError } from '../services/gitHubDispatchService.js';
+import type { SendTaskMessageErrorCode } from './sendTaskMessage.js';
 
 // In-memory guard for single-instance environments
 let isDrainingRetries = false;
@@ -33,7 +41,7 @@ export function _resetRetryDrainGuard(): void {
 }
 
 export interface DrainRetryQueueResult {
-  action: 'dispatched' | 'message_sent' | 'expired' | 'exhausted' | 'retry_failed' | 'failed' | 'empty' | 'skipped';
+  action: 'dispatched' | 'message_sent' | 'expired' | 'exhausted' | 'retry_failed' | 'failed' | 'empty' | 'skipped' | 'stale_task_fallback';
   taskId?: string;
   locksToCleanup?: LockCleanupInfo[];
 }
@@ -53,6 +61,16 @@ export interface DrainRetryQueueDeps {
   workerSettingsRepo: WorkerSettingsRepository;
   logLineRepo: LogLineRepository;
   statusMirrorService: StatusMirrorService;
+  executionMemory?: PrepareExecutionMemoryResources;
+  createTaskForPRFn?: (request: {
+    repository: string;
+    prNumber: number;
+    senderLogin: string;
+    comment: string;
+    eventId: string;
+    prTitle?: string;
+    baseBranch?: string;
+  }) => Promise<Result<{ taskId: string }, { code: string; message: string }>>;
 }
 
 export async function drainRetryQueue(
@@ -245,6 +263,47 @@ async function handleNewTaskRetry(
   const agentType = resolveTaskAgentType(task, linearIssueLabels);
   const dispatchLabels = ensureDispatchLabelsForAgentType(linearIssueLabels, agentType);
   const webhookUrl = `${config.serviceUrl}/internal/webhooks/task-complete`;
+  let taskExecutionMemoryContext = task.executionMemoryContext;
+
+  if (
+    config.executionMemoryEnabled
+    && isMemoryEligibleAgent(agentType)
+    && taskExecutionMemoryContext === undefined
+  ) {
+    taskExecutionMemoryContext = await prepareExecutionMemoryContext({
+      task,
+      logger,
+      linearAgentClient,
+      queryClient: deps.executionMemory?.queryClient,
+      embeddingClient: deps.executionMemory?.embeddingClient,
+      executionMemoryRepo: deps.executionMemory?.executionMemoryRepo,
+      executionMemoryApplicationRepo: deps.executionMemory?.executionMemoryApplicationRepo,
+    });
+
+    if (taskExecutionMemoryContext?.status === 'error') {
+      logger.warn(
+        {
+          taskId: entry.taskId,
+          errorCode: taskExecutionMemoryContext.errorCode,
+          errorMessage: taskExecutionMemoryContext.errorMessage,
+        },
+        'Execution memory retrieval returned error status'
+      );
+    }
+
+    const memoryUpdateResult = await codeTaskRepo.update(entry.taskId, {
+      executionMemoryContext: taskExecutionMemoryContext,
+    });
+
+    if (!memoryUpdateResult.ok) {
+      logger.warn(
+        { taskId: entry.taskId, error: memoryUpdateResult.error },
+        'Failed to persist execution memory context before dispatch'
+      );
+    }
+  }
+
+  const dispatchExecutionMemoryContext = toDispatchExecutionMemoryContext(taskExecutionMemoryContext);
 
   // Attempt dispatch
   const dispatchResult = await taskDispatcher.dispatch({
@@ -266,9 +325,11 @@ async function handleNewTaskRetry(
       continuationPrBranch: task.prBranch,
     }),
     ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
-    /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
     ...(task.reviewTypes !== undefined && { reviewTypes: task.reviewTypes }),
-    /* v8 ignore stop @preserve */
+    ...(dispatchExecutionMemoryContext !== undefined && {
+      executionMemoryContext: dispatchExecutionMemoryContext,
+    }),
+    ...(task.prNumber !== undefined && { prNumber: task.prNumber }),
   });
 
   if (!dispatchResult.ok) {
@@ -381,7 +442,48 @@ async function handleTaskMessageRetry(
       return ok({ action: 'retry_failed', taskId: entry.taskId });
     }
 
-    // Non-retryable
+    // Check if this is a stale task (worker says task doesn't exist anymore)
+    const staleCheck: { success: false; dispatched: false; errorCode?: SendTaskMessageErrorCode; error?: string } = {
+      success: false,
+      dispatched: false,
+      errorCode: sendResult.error.code as SendTaskMessageErrorCode,
+      error: sendResult.error.message,
+    };
+
+    if (isStaleTaskError(staleCheck) && deps.createTaskForPRFn !== undefined) {
+      logger.info(
+        { retryId: entry.id, staleTaskId: entry.taskId, prNumber: entry.pullRequestNumber },
+        'Message retry detected stale task, falling back to new task creation'
+      );
+
+      const createResult = await deps.createTaskForPRFn({
+        repository: entry.repository,
+        prNumber: entry.pullRequestNumber,
+        senderLogin: entry.senderLogin,
+        comment: entry.message ?? '',
+        eventId: entry.eventId,
+        ...(entry.prTitle !== undefined && { prTitle: entry.prTitle }),
+        ...(entry.baseBranch !== undefined && { baseBranch: entry.baseBranch }),
+      });
+
+      await dispatchRetryRepo.delete(entry.id);
+
+      if (createResult.ok) {
+        logger.info(
+          { newTaskId: createResult.value.taskId, staleTaskId: entry.taskId },
+          'Created fallback task after stale task message retry'
+        );
+        return ok({ action: 'stale_task_fallback', taskId: createResult.value.taskId });
+      }
+
+      logger.error(
+        { error: createResult.error, staleTaskId: entry.taskId },
+        'Failed to create fallback task after stale task message retry'
+      );
+      return ok({ action: 'failed', taskId: entry.taskId });
+    }
+
+    // Non-retryable and not stale — drop permanently
     await dispatchRetryRepo.delete(entry.id);
     logger.warn({ retryId: entry.id, error: sendResult.error }, 'Message retry failed permanently');
     return ok({ action: 'failed', taskId: entry.taskId });

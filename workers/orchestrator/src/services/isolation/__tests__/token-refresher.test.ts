@@ -235,6 +235,22 @@ describe('TokenRefresher', () => {
       );
     });
 
+    it('handles non-Error thrown value during token minting', async () => {
+      mockOctokitRequest.mockRejectedValueOnce('string-rejection');
+
+      await expect(refresher.registerTask('task-123')).rejects.toBe('string-rejection');
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        {
+          errorMessage: 'string-rejection',
+          causeMessage: undefined,
+          causeCode: undefined,
+          causeSyscall: undefined,
+          status: undefined,
+        },
+        'GitHub token mint failed after retries'
+      );
+    });
+
     it('throws when private key read fails during registerTask', async () => {
       mockReadFile.mockRejectedValueOnce(new Error('ENOENT: no such file'));
 

@@ -1321,4 +1321,138 @@ describe('WhatsAppNotifier', () => {
       }
     });
   });
+
+  describe('linearIssueId prefix in notification messages', () => {
+    it('notifyTaskStarted includes linearIssueId prefix when set', async () => {
+      const task = createMockTask({
+        linearIssueId: 'INT-200',
+        linearIssueTitle: 'Add feature X',
+        status: 'running',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyTaskStarted('user-123', task);
+
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('INT-200 | Add feature X');
+    });
+
+    it('notifyTaskResumed includes linearIssueId prefix when set', async () => {
+      const task = createMockTask({
+        linearIssueId: 'INT-201',
+        linearIssueTitle: 'Fix auth',
+        status: 'running',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyTaskResumed('user-123', task);
+
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('INT-201 | Fix auth');
+    });
+
+    it('notifyTaskQueued includes linearIssueId prefix when set', async () => {
+      const task = createMockTask({
+        linearIssueId: 'INT-202',
+        linearIssueTitle: 'Add tests',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyTaskQueued('user-123', task, 3);
+
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('INT-202 | Add tests');
+    });
+
+    it('notifyTaskQueueExpired includes linearIssueId prefix when set', async () => {
+      const task = createMockTask({
+        linearIssueId: 'INT-203',
+        linearIssueTitle: 'Refactor module',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyTaskQueueExpired('user-123', task);
+
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('INT-203 | Refactor module');
+    });
+  });
+
+  describe('notifyCIFailure', () => {
+    it('sends CI failure notification with runUrl when provided', async () => {
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      const result = await notifier.notifyCIFailure('user-123', {
+        repository: 'pbuchman/intexuraos',
+        pullRequestNumber: 42,
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+        checkName: 'ESLint',
+        branch: 'task_abc123',
+        runUrl: 'https://github.com/pbuchman/intexuraos/runs/123',
+        taskId: 'task_fix456',
+      });
+
+      expect(result.ok).toBe(true);
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('❌ CI Check Failed: pbuchman/intexuraos#42');
+      expect(callArgs.message).toContain('Check: ESLint');
+      expect(callArgs.message).toContain('Branch: task_abc123');
+      expect(callArgs.message).toContain('GH Actions Run: https://github.com/pbuchman/intexuraos/runs/123');
+      expect(callArgs.message).toContain('A follow-up fix task has been automatically dispatched.');
+      expect(callArgs.ctaUrl).toEqual({
+        displayText: 'View Pull Request',
+        url: 'https://github.com/pbuchman/intexuraos/pull/42',
+      });
+    });
+
+    it('sends CI failure notification without runUrl line when not provided', async () => {
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      const result = await notifier.notifyCIFailure('user-123', {
+        repository: 'pbuchman/intexuraos',
+        pullRequestNumber: 42,
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+        checkName: 'ESLint',
+        branch: 'task_abc123',
+        taskId: 'task_fix456',
+      });
+
+      expect(result.ok).toBe(true);
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('❌ CI Check Failed: pbuchman/intexuraos#42');
+      expect(callArgs.message).not.toContain('GH Actions Run:');
+    });
+
+    it('returns error when publish fails', async () => {
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(
+        err({ code: 'PUBLISH_FAILED', message: 'Connection refused' })
+      );
+
+      const result = await notifier.notifyCIFailure('user-123', {
+        repository: 'pbuchman/intexuraos',
+        pullRequestNumber: 42,
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+        checkName: 'ESLint',
+        branch: 'task_abc123',
+        taskId: 'task_fix456',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('notification_failed');
+        expect(result.error.message).toBe('Connection refused');
+      }
+    });
+  });
 });
