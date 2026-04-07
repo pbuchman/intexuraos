@@ -22,7 +22,6 @@ export interface CreateExecutionMemoryInput {
   evidenceSummary: string;
   retrievalText: string;
   keywords: string[];
-  labelHints: string[];
   componentHints: string[];
   embedding: number[];
   embeddingModel: ExecutionMemoryEmbeddingModel;
@@ -50,7 +49,6 @@ export interface UpdateExecutionMemoryInput {
   evidenceSummary?: string;
   retrievalText?: string;
   keywords?: string[];
-  labelHints?: string[];
   componentHints?: string[];
   embedding?: number[];
   embeddingModel?: ExecutionMemoryEmbeddingModel;

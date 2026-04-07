@@ -36,7 +36,6 @@ function toExecutionMemory(doc: { id: string; data(): Record<string, unknown> })
     evidenceSummary: getStringField(data, 'evidenceSummary'),
     retrievalText: getStringField(data, 'retrievalText'),
     keywords: Array.isArray(data['keywords']) ? data['keywords'] as string[] : [],
-    labelHints: Array.isArray(data['labelHints']) ? data['labelHints'] as string[] : [],
     componentHints: Array.isArray(data['componentHints']) ? data['componentHints'] as string[] : [],
     embeddingModel: data['embeddingModel'] as ExecutionMemory['embeddingModel'],
     fingerprint: getStringField(data, 'fingerprint'),
