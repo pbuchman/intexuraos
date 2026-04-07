@@ -23,7 +23,7 @@
 ```typescript
 interface CreateScheduleInput {
   name: string;
-  description: string; // Natural language, e.g. "every weekday at 9am"
+  schedule: string; // Natural language, e.g. "every weekday at 9am"
   action: {
     services: string[]; // Service keys from GET /cron/services
     instruction: string; // What the agent should do
@@ -40,7 +40,7 @@ interface CronSchedule {
   id: string;
   userId: string;
   name: string;
-  description: string;
+  scheduleSummary: string;
   cronExpression: string;
   timezone: string;
   action: {
@@ -64,7 +64,7 @@ interface CronSchedule {
 // Request
 {
   "name": "Daily Report",
-  "description": "every weekday at 9am",
+  "schedule": "every weekday at 9am",
   "action": {
     "services": ["notes-agent"],
     "instruction": "Create a note with today's date as the title."
@@ -77,6 +77,7 @@ interface CronSchedule {
   "success": true,
   "data": {
     "id": "sched_abc123",
+    "scheduleSummary": "Every weekday (Monday through Friday) at 9:00 AM",
     "cronExpression": "0 9 * * 1-5",
     "status": "active",
     "nextExecutionAt": "2026-03-23T08:00:00.000Z",
@@ -133,7 +134,7 @@ interface CronExecution {
 
 **Endpoint:** `GET /cron/services`
 
-**When to use:** Before creating a schedule, to discover which services and tools are available.
+**When to use:** Before creating a schedule, to discover which services and tools are available. Only services with at least one permitted tool appear in the response.
 
 ### List Schedules
 
@@ -165,12 +166,13 @@ interface CronExecution {
 - Trigger a schedule that already has a running execution
 - Exceed 50 schedules per user
 - Call `/internal/cron/tick` without proper authentication (OIDC or X-Internal-Auth)
+- Assume all services in the catalog are available — check `GET /cron/services` first
 
 **Requires:**
 
 - Valid Bearer token (JWT) for all public endpoints
 - Target services must be running and serving OpenAPI specs at their configured URLs
-- At least one target service must have `/internal/*` endpoints
+- At least one target service must have `/internal/*` endpoints with permitted operations
 
 ## Usage Patterns
 
@@ -178,8 +180,8 @@ interface CronExecution {
 
 ```
 1. GET /cron/services to discover available services and tools
-2. POST /cron/schedules with name, description, action
-3. Verify cronExpression and nextExecutionAt in response
+2. POST /cron/schedules with name, schedule, action
+3. Verify cronExpression, scheduleSummary, and nextExecutionAt in response
 4. Optionally POST /cron/schedules/:id/trigger to test immediately
 5. GET /cron/executions?scheduleId=:id to check result
 ```
@@ -197,7 +199,7 @@ interface CronExecution {
 
 | Error Code | Meaning                          | Recovery Action                      |
 | ---------- | -------------------------------- | ------------------------------------ |
-| 400        | Validation error or parse failed | Fix input; reword description        |
+| 400        | Validation error or parse failed | Fix input; reword schedule           |
 | 401        | Unauthorized                     | Refresh Bearer token                 |
 | 404        | Schedule/execution not found     | Verify ID and ownership              |
 | 409        | Schedule already running         | Wait for current execution to finish |

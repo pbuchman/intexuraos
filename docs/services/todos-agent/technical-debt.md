@@ -1,7 +1,7 @@
 # Todos Agent — Technical Debt
 
-**Last Updated:** 2026-03-22
-**Analysis Run:** Autonomous documentation refresh (service-scribe, v3.4.0 release)
+**Last Updated:** 2026-04-07
+**Analysis Run:** Autonomous documentation refresh (service-scribe, v3.5.0 release)
 
 ---
 
@@ -97,17 +97,23 @@ All files are within reasonable size limits. The largest file (`todoRoutes.ts`) 
 
 ### None Detected
 
-No deprecated APIs or dependencies in use. ZAI provider and GLM-4.7 model references removed in v3.3.0 (commit `93aeac4a`).
+No deprecated APIs or dependencies in use.
 
 ---
 
 ## Recent Improvements
 
+### v3.5.0 (2026-04-07)
+
+Refactored `reorderTodoItems` use case (INT-1072, commit `613ac528`) to replace a v8-ignore workaround with a cleaner implementation. The previous code used a separate validation pass followed by `.map()` with a never-throwing fallback wrapped in `v8 ignore`. The new implementation uses a single `Map`-based iteration loop that returns early on missing items, eliminating the need for coverage exemptions entirely.
+
+Added `getUserTimezone` method to `UserServiceClient` interface (commit `287db2b6`). Test-only changes in `testUtils.ts` and `todoItemExtractionService.test.ts` to implement the new mock method.
+
 ### v3.4.0 (2026-03-22)
 
 Standardized PENDING v8-ignore comments to permanent `ts-type` category (INT-987, commit `da00218e`). Two `ts-type` annotations in `updateTodoItem.ts` and `reorderTodoItems.ts` were reclassified from pending to permanent, confirming these TypeScript narrowing guards are structurally untestable rather than awaiting future test infrastructure.
 
-### Release v3.3.0 (2026-03-15)
+### v3.3.0 (2026-03-15)
 
 Removed ZAI provider and GLM-4.7 models from the LLM dependency chain (commit `93aeac4a`). The service now relies exclusively on Gemini 2.5 Flash with platform Gemini (`INTEXURAOS_GEMINI_APP_API_KEY`) as fallback.
 
@@ -115,7 +121,7 @@ Removed ZAI provider and GLM-4.7 models from the LLM dependency chain (commit `9
 
 Fixed v8 ignore comment category annotations for test-infra blocks (commit `4ab46156`). Added dedicated tests for remaining v8-ignore blocks (INT-796, commit `752fd017`).
 
-### Release v3.2.0 (2026-03-07)
+### v3.2.0 (2026-03-07)
 
 Version bump as part of the monorepo release cycle (commit `44ea683a`).
 
@@ -123,11 +129,11 @@ Version bump as part of the monorepo release cycle (commit `44ea683a`).
 
 Updated cross-service mocks in test utilities to include `resolveGitHubUsername` method on the `UserServiceClient` interface (commit `99febe66`). Test-only change, no production logic affected.
 
-### Release v3.1.0 (2026-02-22)
+### v3.1.0 (2026-02-22)
 
 Version bump to v3.1.0 as part of the monorepo release cycle.
 
-### Release v3.0.0 (2026-02-19)
+### v3.0.0 (2026-02-19)
 
 Major version bump to v3.0.0 as part of the monorepo release cycle. Full documentation refresh completed.
 
@@ -167,23 +173,24 @@ Achieved 100% branch coverage with proper v8 ignore annotations (INT-427).
 
 ### Historical Issues
 
-| Date       | Issue                              | Resolution                                       |
-| ---------- | ---------------------------------- | ------------------------------------------------ |
-| 2026-03-19 | PENDING v8-ignore annotations      | Standardized to permanent ts-type (INT-987)      |
-| 2026-03-12 | ZAI/GLM-4.7 still in LLM chain     | Removed ZAI provider and GLM-4.7 (93aeac4a)      |
-| 2026-03-07 | Version at 3.1.0                   | Released v3.2.0 (44ea683a)                       |
-| 2026-03-02 | UserServiceClient mock incomplete  | Added resolveGitHubUsername mock (99febe66)      |
-| 2026-02-22 | Version at 3.0.0                   | Bumped to v3.1.0                                 |
-| 2026-02-16 | No distributed tracing             | Added Dash0 OpenTelemetry integration (#803)     |
-| 2026-02-15 | Inconsistent API key naming        | Standardized to APP convention (#793)            |
-| 2026-02-15 | Gemini 2.5 Flash not default       | Switched default LLM + added fallback (#792)     |
-| 2026-01-31 | Branch coverage below 100%         | v8 ignore annotations + new tests (INT-427)      |
-| 2026-01-30 | Direct pino() usage (no Sentry)    | Migrated to createAppLogger                      |
-| 2026-01-30 | Raw reply.send() in routes         | Migrated to reply.ok()/reply.fail()              |
-| 2026-01-26 | Local user client re-export barrel | Removed infra/user/index.ts (INT-301)            |
-| 2026-01-24 | Manual LLM validation              | Migrated to Zod schemas (INT-218)                |
-| 2026-01-24 | Inconsistent user-service clients  | Unified via internal-clients (INT-269)           |
-| 2026-01-20 | Gaps in test coverage              | Additional test cases (INT-155)                  |
+| Date       | Issue                                     | Resolution                                                                 |
+| ---------- | ----------------------------------------- | -------------------------------------------------------------------------- |
+| 2026-03-23 | v8-ignore workaround in reorderTodoItems  | Refactored to Map-based iteration, no coverage exemption needed (INT-1072) |
+| 2026-03-19 | PENDING v8-ignore annotations             | Standardized to permanent ts-type (INT-987)                                |
+| 2026-03-12 | ZAI/GLM-4.7 still in LLM chain            | Removed ZAI provider and GLM-4.7 (93aeac4a)                                |
+| 2026-03-07 | Version at 3.1.0                          | Released v3.2.0 (44ea683a)                                                 |
+| 2026-03-02 | UserServiceClient mock incomplete         | Added resolveGitHubUsername mock (99febe66)                                |
+| 2026-02-22 | Version at 3.0.0                          | Bumped to v3.1.0                                                           |
+| 2026-02-16 | No distributed tracing                    | Added Dash0 OpenTelemetry integration (#803)                               |
+| 2026-02-15 | Inconsistent API key naming               | Standardized to APP convention (#793)                                      |
+| 2026-02-15 | Gemini 2.5 Flash not default              | Switched default LLM + added fallback (#792)                               |
+| 2026-01-31 | Branch coverage below 100%                | v8 ignore annotations + new tests (INT-427)                                |
+| 2026-01-30 | Direct pino() usage (no Sentry)           | Migrated to createAppLogger                                                |
+| 2026-01-30 | Raw reply.send() in routes                | Migrated to reply.ok()/reply.fail()                                        |
+| 2026-01-26 | Local user client re-export barrel        | Removed infra/user/index.ts (INT-301)                                      |
+| 2026-01-24 | Manual LLM validation                     | Migrated to Zod schemas (INT-218)                                          |
+| 2026-01-24 | Inconsistent user-service clients         | Unified via internal-clients (INT-269)                                     |
+| 2026-01-20 | Gaps in test coverage                     | Additional test cases (INT-155)                                            |
 
 ---
 

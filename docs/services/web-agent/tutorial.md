@@ -151,7 +151,7 @@ for (const result of data.results) {
 
 ## Part 3: Page Summarization (10 minutes)
 
-Generate an AI summary using the user's configured LLM.
+Generate an AI summary using the user's configured LLM via Cloudflare Browser Rendering.
 
 ### Step 3.1: Summarize a Web Page
 
@@ -194,17 +194,35 @@ curl -X POST http://localhost:8127/internal/page-summaries \
 
 When you call `/internal/page-summaries`:
 
-1. **PageContentFetcher** crawls the URL via Crawl4AI (headless browser)
+1. **PageContentFetcher** sends the URL to Cloudflare Browser Rendering's `/markdown` endpoint, which renders the page in a headless browser and returns clean Markdown
 2. **userServiceClient** fetches the user's default LLM model and API keys
-3. **LlmSummarizer** generates a prompt with language preservation and content focus instructions
+3. **LlmSummarizer** generates a prompt with language preservation, content focus, and main content selection instructions
 4. **parseSummaryResponse** validates the output is prose (not JSON)
 5. If invalid, **repair prompt** triggers one retry automatically
 
-The content focus instructions ensure the LLM summarizes the actual page content rather than describing the platform (e.g., it will not start with "LinkedIn is a professional network...").
+The main content selection logic uses title and description hints (when provided) to identify the primary content block, skipping cookie banners, navigation, login prompts, and other site chrome.
 
 **Note:** 401 responses use the standard response contract format: `{ "success": false, "error": { "code": "UNAUTHORIZED", "message": "..." } }`.
 
-### Step 3.3: Language Preservation
+### Step 3.3: Using Title and Description Hints
+
+Pass metadata hints to help the summarizer identify the main content on cluttered pages:
+
+```bash
+curl -X POST http://localhost:8127/internal/page-summaries \
+  -H "Content-Type: application/json" \
+  -H "X-Internal-Auth: $INTEXURAOS_INTERNAL_AUTH_TOKEN" \
+  -d '{
+    "url": "https://www.linkedin.com/posts/some-post",
+    "userId": "user-abc-123",
+    "title": "AI Safety Research Update",
+    "description": "New findings from alignment research team"
+  }'
+```
+
+The title and description hints guide the LLM to focus on the matching content block rather than platform UI elements. This is especially useful for social media pages where the actual post is surrounded by navigation, login prompts, and recommendations.
+
+### Step 3.4: Language Preservation
 
 Summarize a non-English article:
 
@@ -271,7 +289,7 @@ curl -X POST http://localhost:8127/internal/page-summaries \
     "status": "failed",
     "error": {
       "code": "FETCH_FAILED",
-      "message": "Crawl4AI crawl failed"
+      "message": "Cloudflare request failed"
     }
   }
 }
@@ -294,7 +312,7 @@ curl -X POST http://localhost:8127/internal/page-summaries \
 }
 ```
 
-**Solution:** Page may be entirely JavaScript-rendered or blocked.
+**Solution:** Page may have no extractable text content even after JavaScript rendering.
 
 ### Error: Rate Limited
 
@@ -305,13 +323,13 @@ curl -X POST http://localhost:8127/internal/page-summaries \
     "status": "failed",
     "error": {
       "code": "RATE_LIMITED",
-      "message": "Crawl4AI rate limited: HTTP 429"
+      "message": "Cloudflare rate limited: HTTP 429"
     }
   }
 }
 ```
 
-**Solution:** Too many requests to Crawl4AI. Wait and retry with exponential backoff.
+**Solution:** Too many requests to Cloudflare Browser Rendering. Wait and retry with exponential backoff.
 
 ---
 
@@ -352,7 +370,9 @@ export async function fetchLinkPreview(url: string): Promise<LinkPreview | null>
 
 export async function summarizePage(
   url: string,
-  userId: string
+  userId: string,
+  title?: string,
+  description?: string
 ): Promise<{ summary: string; wordCount: number } | null> {
   const response = await fetch(`${process.env.INTEXURAOS_WEB_AGENT_URL}/internal/page-summaries`, {
     method: 'POST',
@@ -363,6 +383,8 @@ export async function summarizePage(
     body: JSON.stringify({
       url,
       userId,
+      ...(title !== undefined && { title }),
+      ...(description !== undefined && { description }),
       maxSentences: 15,
       maxReadingMinutes: 3,
     }),
@@ -386,14 +408,14 @@ export async function summarizePage(
 
 ## Troubleshooting
 
-| Problem                 | Symptom                      | Solution                                     |
-| ----------------------- | ---------------------------- | -------------------------------------------- |
-| "401 Unauthorized"      | Missing auth header          | Add `X-Internal-Auth` header                 |
-| "ACCESS_DENIED"         | 403 from target site         | Site blocks scrapers; try different URL      |
-| "No API key configured" | Platform fallback also unset | Configure platform keys or user adds API key |
-| "Summary is JSON"       | Repair mechanism kicked in   | Normal behavior — should auto-repair         |
-| "Timeout"               | Slow site or Crawl4AI        | Increase `timeoutMs` parameter               |
-| "RATE_LIMITED"          | HTTP 429 from Crawl4AI       | Wait and retry with exponential backoff      |
+| Problem                 | Symptom                           | Solution                                     |
+| ----------------------- | --------------------------------- | -------------------------------------------- |
+| "401 Unauthorized"      | Missing auth header               | Add `X-Internal-Auth` header                 |
+| "ACCESS_DENIED"         | 403 from target site              | Site blocks scrapers; try different URL      |
+| "No API key configured" | Platform fallback also unset      | Configure platform keys or user adds API key |
+| "Summary is JSON"       | Repair mechanism kicked in        | Normal behavior — should auto-repair         |
+| "Timeout"               | Slow site or Cloudflare rendering | Increase `timeoutMs` parameter               |
+| "RATE_LIMITED"          | HTTP 429 from Cloudflare          | Wait and retry with exponential backoff      |
 
 ---
 
@@ -405,6 +427,7 @@ export async function summarizePage(
 4. **Set appropriate timeouts** — 5s for link previews, 60s for summaries
 5. **Cache link previews** — Same URL rarely changes; caller should cache
 6. **Provide userId** — Required for summarization to get user's LLM keys
+7. **Pass title/description hints** — Helps the summarizer find the main content on cluttered pages
 
 ---
 

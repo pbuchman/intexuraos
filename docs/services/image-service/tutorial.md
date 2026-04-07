@@ -45,7 +45,7 @@ curl https://intexuraos-image-service-cj44trunra-lm.a.run.app/health
   "status": "ok",
   "serviceName": "image-service",
   "version": "0.0.4",
-  "timestamp": "2026-03-22T10:00:00.000Z",
+  "timestamp": "2026-04-07T10:00:00.000Z",
   "checks": [
     { "name": "firestore", "status": "ok", "latencyMs": 12 },
     { "name": "secrets", "status": "ok", "latencyMs": 0 }

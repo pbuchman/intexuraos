@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
+  Archive,
   ArrowRight,
   Bell,
   Bot,
@@ -10,15 +11,14 @@ import {
   Clock,
   Code2,
   Container,
-  Cpu,
   Eye,
+  Globe,
   GitPullRequest,
   Layers,
   Lock,
   Mail,
   MessageSquare,
   Mic,
-  Network,
   PenTool,
   RefreshCw,
   Route,
@@ -603,9 +603,9 @@ function WhatsNewSection(): React.JSX.Element {
     iconColor: string;
   }[] = [
     {
-      title: 'Hellscript Categorized Writing',
+      title: 'Hellscript Agent',
       description:
-        'AI-powered writing following user style and preferences.',
+        'AI-powered writing following user style and preferences with categorized writing configuration.',
       icon: PenTool,
       borderColor: 'border-purple-200',
       bgGradient: 'bg-gradient-to-br from-purple-50 to-white',
@@ -613,29 +613,29 @@ function WhatsNewSection(): React.JSX.Element {
       iconColor: 'text-purple-700',
     },
     {
-      title: 'Codex Runtime Support',
+      title: 'Codex Runtime',
       description:
-        'OpenAI Codex as an execution backend with auth, log processing, and worker types.',
-      icon: Cpu,
+        'OpenAI Codex as a full execution backend with authentication, log processing, and worker types.',
+      icon: Terminal,
       borderColor: 'border-cyan-200',
       bgGradient: 'bg-gradient-to-br from-cyan-50 to-white',
       iconBg: 'bg-cyan-100',
       iconColor: 'text-cyan-700',
     },
     {
-      title: 'Execution Memory Graph',
+      title: 'Execution Memory',
       description:
-        'Visual representation of agent decision-making patterns for RAG tuning.',
-      icon: Network,
+        'Data collection pipeline with vector retrieval and post-run distillation — agents learn from past tasks.',
+      icon: Brain,
       borderColor: 'border-emerald-200',
       bgGradient: 'bg-gradient-to-br from-emerald-50 to-white',
       iconBg: 'bg-emerald-100',
       iconColor: 'text-emerald-700',
     },
     {
-      title: 'Remediation Agent & Review Loop',
+      title: 'Remediation Agent',
       description:
-        'Autonomous auto-improvement with cross-LLM checks and event sourcing.',
+        'Autonomous auto-improvement loop with cross-LLM checks and event-sourcing for AI-native improvements.',
       icon: RefreshCw,
       borderColor: 'border-blue-200',
       bgGradient: 'bg-gradient-to-br from-blue-50 to-white',
@@ -645,12 +645,52 @@ function WhatsNewSection(): React.JSX.Element {
     {
       title: 'OpenRouter Integration',
       description:
-        'Route tasks through OpenRouter models with backend infra and frontend selection.',
+        'Route tasks through OpenRouter models with backend infrastructure, frontend selection, and pricing.',
       icon: Route,
       borderColor: 'border-violet-200',
       bgGradient: 'bg-gradient-to-br from-violet-50 to-white',
       iconBg: 'bg-violet-100',
       iconColor: 'text-violet-700',
+    },
+    {
+      title: 'Ask Agent',
+      description:
+        'Interactive back-and-forth Claude Code sessions directly from the UI.',
+      icon: MessageSquare,
+      borderColor: 'border-amber-200',
+      bgGradient: 'bg-gradient-to-br from-amber-50 to-white',
+      iconBg: 'bg-amber-100',
+      iconColor: 'text-amber-700',
+    },
+    {
+      title: 'Code Task Groups',
+      description:
+        'Backend grouping and pagination of code tasks by Linear issue with batch archive support.',
+      icon: Layers,
+      borderColor: 'border-green-200',
+      bgGradient: 'bg-gradient-to-br from-green-50 to-white',
+      iconBg: 'bg-green-100',
+      iconColor: 'text-green-700',
+    },
+    {
+      title: 'Cloudflare Web Research',
+      description:
+        'Replaced Crawl4AI with Cloudflare Browser Rendering for reliable JS-rendered page research.',
+      icon: Globe,
+      borderColor: 'border-rose-200',
+      bgGradient: 'bg-gradient-to-br from-rose-50 to-white',
+      iconBg: 'bg-rose-100',
+      iconColor: 'text-rose-700',
+    },
+    {
+      title: 'Auto-Archive & CI Handling',
+      description:
+        'Merged tasks archived automatically. Failed CI checks on agent PRs retried without intervention.',
+      icon: Archive,
+      borderColor: 'border-indigo-200',
+      bgGradient: 'bg-gradient-to-br from-indigo-50 to-white',
+      iconBg: 'bg-indigo-100',
+      iconColor: 'text-indigo-700',
     },
   ];
 
@@ -673,11 +713,11 @@ function WhatsNewSection(): React.JSX.Element {
           <h2 className="mb-6 text-4xl font-bold tracking-tight text-neutral-900 md:text-5xl">
             v3.5.0 —{' '}
             <span className="bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
-              5 new capabilities.
+              9 new capabilities.
             </span>
           </h2>
           <p className="text-lg leading-relaxed text-neutral-600">
-            Categorized writing, Codex runtime, execution memory graph, remediation loop, and OpenRouter integration.
+            Codex Runtime, Execution Memory, Remediation Agent, OpenRouter, Ask Agent, and more.
           </p>
         </div>
 

@@ -1,4 +1,4 @@
-# App Settings Service -- Technical Reference
+# App Settings Service — Technical Reference
 
 ## Overview
 
@@ -77,9 +77,8 @@ sequenceDiagram
 
 | Commit     | Description                                                 | Date       |
 | ---------- | ----------------------------------------------------------- | ---------- |
+| `549c9698` | Update v8 ignore comment wording for stricter validation    | 2026-03-24 |
 | `93aeac4a` | Remove ZAI provider and GLM-4.7 models (INT-836)            | 2026-03-12 |
-| `b3f34d85` | Release v3.1.0                                              | 2026-02-22 |
-| `c8a42105` | Release v3.0.0                                              | 2026-02-19 |
 | `6063175b` | Add dev-mode log formatting for PM2 readability             | 2026-02-16 |
 | `a52a6bbc` | Add Dash0 OpenTelemetry integration                         | 2026-02-16 |
 | `d5fbb354` | Fix start:local to use tsx instead of experimental types    | 2026-02-14 |
@@ -265,21 +264,21 @@ This ensures no downstream service can boot with stale or incomplete pricing dat
 
 ## Gotchas
 
-- **Startup boot order** -- Other services (user-service, commands-agent, actions-agent) depend on app-settings-service and poll its `/health` endpoint before starting. The `ecosystem.config.cjs` configures `waitForService: 'http://localhost:8122/health'` for these dependents.
+- **Startup boot order** — Other services (user-service, commands-agent, actions-agent, research-agent, todos-agent) depend on app-settings-service and poll its `/health` endpoint before starting. The `ecosystem.config.cjs` configures `waitForService: 'http://localhost:8122/health'` for these dependents.
 
-- **Missing providers return 500** -- If any of the 4 providers is missing from Firestore, both public and internal pricing endpoints return `reply.fail('INTERNAL_ERROR', ...)`. All 4 providers must be present.
+- **Missing providers return 500** — If any of the 4 providers is missing from Firestore, both public and internal pricing endpoints return `reply.fail('INTERNAL_ERROR', ...)`. All 4 providers must be present.
 
-- **Collection group query reads all history** -- `FirestoreUsageStatsRepository.getUserCosts()` fetches ALL documents for a user via collection group query, then filters by date client-side. The `days` parameter does not reduce Firestore reads.
+- **Collection group query reads all history** — `FirestoreUsageStatsRepository.getUserCosts()` fetches ALL documents for a user via collection group query, then filters by date client-side. The `days` parameter does not reduce Firestore reads.
 
-- **Price precision** -- All cost values are rounded to 6 decimal places (`Math.round(cost * 1_000_000) / 1_000_000`).
+- **Price precision** — All cost values are rounded to 6 decimal places (`Math.round(cost * 1_000_000) / 1_000_000`).
 
-- **Usage data is read-only** -- This service reads usage stats written by other services (via `llm-pricing` package). It does not write usage data.
+- **Usage data is read-only** — This service reads usage stats written by other services (via `llm-pricing` package). It does not write usage data.
 
-- **No per-day breakdown** -- The usage response does NOT include a daily breakdown array. Aggregation dimensions are month, model, and call type only.
+- **No per-day breakdown** — The usage response does NOT include a daily breakdown array. Aggregation dimensions are month, model, and call type only.
 
-- **Internal vs Public auth** -- Internal endpoint uses `X-Internal-Auth` header with shared secret. Public endpoints use Bearer JWT tokens validated via `requireAuth()`.
+- **Internal vs Public auth** — Internal endpoint uses `X-Internal-Auth` header with shared secret. Public endpoints use Bearer JWT tokens validated via `requireAuth()`.
 
-- **Response contract** -- All endpoints use `reply.ok(data)` / `reply.fail(code, message)`. Returns `{ success: true, data }` or `{ success: false, error: { code, message } }`.
+- **Response contract** — All endpoints use `reply.ok(data)` / `reply.fail(code, message)`. Returns `{ success: true, data }` or `{ success: false, error: { code, message } }`.
 
 ## File Structure
 
@@ -295,11 +294,11 @@ apps/app-settings-service/src/
     internalRoutes.ts        # GET /internal/settings/pricing (Internal auth)
   __tests__/
     routes/
-      publicRoutes.test.ts   # 15 tests covering auth, pricing, usage-costs
-      internalRoutes.test.ts # 10 tests covering auth, pricing
+      publicRoutes.test.ts   # Tests covering auth, pricing, usage-costs
+      internalRoutes.test.ts # Tests covering auth, pricing
     infra/
-      FirestorePricingRepository.test.ts  # 2 tests
-      usageStatsRepository.test.ts        # 12 tests covering aggregation, filtering, sorting
+      FirestorePricingRepository.test.ts  # Tests for pricing repository
+      usageStatsRepository.test.ts        # Tests covering aggregation, filtering, sorting
   services.ts                # DI container (getServices, setServices, resetServices)
   server.ts                  # Fastify server setup, OpenAPI schemas, health check
   index.ts                   # Entry point: startup validation, env check, server start

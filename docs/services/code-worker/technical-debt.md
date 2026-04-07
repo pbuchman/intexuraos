@@ -1,7 +1,7 @@
-# Code Worker - Technical Debt
+# Code Worker — Technical Debt
 
-**Last Updated:** 2026-03-15
-**Analysis Run:** v3.3.0 documentation refresh (DashScope worker types, cache busting, orphan cleanup)
+**Last Updated:** 2026-04-07
+**Analysis Run:** v3.5.0 documentation refresh (Codex runtime support, live streaming, worker type expansion)
 
 ---
 
@@ -9,11 +9,10 @@
 
 | Category            | Count | Severity |
 | ------------------- | ----- | -------- |
-| TODO/FIXME Comments | 0     | -        |
 | Security Hardening  | 3     | Medium   |
 | Operational Gaps    | 1     | Low      |
 | Architecture Debt   | 2     | Low      |
-| **Total**           | **6** | —        |
+| **Total**           | **6** | ---      |
 
 ---
 
@@ -21,11 +20,12 @@
 
 ### Planned Features
 
-- **Read-only root filesystem** — Investigate all write paths and create targeted mounts to enable `ReadonlyRootfs: true`
-- **Image size optimization** — Multi-stage build to reduce final image size by excluding build-time-only dependencies
-- **Seccomp profile** — Add a custom seccomp profile to restrict system calls beyond capability dropping
-- **Image versioning** — Tag images with git SHA or semantic version in CI; currently tagged as `:latest`
-- **Plugin auto-update** — Mechanism to refresh pre-installed Claude Code plugins when new versions are released
+- **Read-only root filesystem** --- Investigate all write paths and create targeted mounts to enable `ReadonlyRootfs: true`
+- **Image size optimization** --- Multi-stage build to reduce final image size by excluding build-time-only dependencies
+- **Seccomp profile** --- Add a custom seccomp profile to restrict system calls beyond capability dropping
+- **Image versioning** --- Tag images with git SHA or semantic version in CI; currently tagged as `:latest`
+- **Plugin auto-update** --- Mechanism to refresh pre-installed Claude Code plugins when new versions are released
+- **Codex forensics parity** --- Crash forensics currently collect Claude-specific artifacts (`.claude/debug`, shell-snapshots). Extend to collect Codex-specific state (thread databases, `.codex/` contents) on Codex runtime crashes
 
 ### Proposed Enhancements
 
@@ -69,9 +69,9 @@
 ### 4. No health check endpoint or signal
 
 **Severity:** Low
-**Context:** The orchestrator relies on Docker container state (`inspect`) and the readiness marker to determine worker health. There is no application-level heartbeat inside the container during Claude execution.
-**Impact:** A hung Claude process that keeps the container "running" and produces no output can only be detected by the per-attempt timeout mechanism.
-**Ideal fix:** Have Claude (or the entrypoint) write a periodic heartbeat file to `/tmp/` that the orchestrator can check via `docker exec test -f`.
+**Context:** The orchestrator relies on Docker container state (`inspect`) and the readiness marker to determine worker health. There is no application-level heartbeat inside the container during Claude or Codex execution.
+**Impact:** A hung runtime process that keeps the container "running" and produces no output can only be detected by the per-attempt timeout mechanism.
+**Ideal fix:** Have the entrypoint (or the runtime process) write a periodic heartbeat file to `/tmp/` that the orchestrator can check via `docker exec test -f`.
 
 ---
 
@@ -81,7 +81,7 @@
 
 **Severity:** Low
 **Location:** `Dockerfile` (comment block lines 4-11)
-**Context:** The toolchain selection is based on a one-time analysis of 1,935 commands across 6 worktrees. As Claude's tool usage evolves, the installed toolchain may drift from actual needs, growing the image size unnecessarily or missing newly needed tools.
+**Context:** The toolchain selection is based on a one-time analysis of 1,935 commands across 6 worktrees. As Claude's and Codex's tool usage evolves, the installed toolchain may drift from actual needs, growing the image size unnecessarily or missing newly needed tools.
 **Ideal fix:** Implement periodic command usage auditing and update the Dockerfile accordingly.
 
 ### 6. No image versioning strategy
@@ -96,13 +96,13 @@
 
 ## Test Coverage Gaps
 
-No test coverage gaps. The worker is tested via E2E tests in the orchestrator workspace using the test image (`Dockerfile.test`) with the Claude stub (`test-fixtures/claude-stub.sh`).
+No test coverage gaps. The worker is tested via E2E tests in the orchestrator workspace using the test image (`Dockerfile.test`) with the Claude stub (`test-fixtures/claude-stub.sh`) and Codex stub (`test-fixtures/codex-stub.sh`). Codex streaming regression tests were added in v3.5.0.
 
 ---
 
 ## TypeScript Issues
 
-Not applicable. The code-worker is entirely shell scripts and Dockerfiles — no TypeScript code.
+Not applicable. The code-worker is entirely shell scripts and Dockerfiles --- no TypeScript code.
 
 ---
 
@@ -114,13 +114,31 @@ No TODO, FIXME, or HACK comments found in the worker codebase.
 
 ## SRP Violations
 
-| File             | Lines | Issue                                                              | Suggestion                                                    |
-| ---------------- | ----- | ------------------------------------------------------------------ | ------------------------------------------------------------- |
-| `entrypoint.sh`  | 396   | Handles startup, auth, secret sync, dep install, and Claude exec   | Consider splitting into modular scripts (setup.sh, run.sh)    |
+| File            | Issue                                                                                           | Suggestion                                                 |
+| --------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `entrypoint.sh` | Handles startup, auth, secret sync, dep install, runtime dispatch, forensics, and child cleanup | Consider splitting into modular scripts (setup.sh, run.sh) |
 
 ---
 
 ## Resolved Issues
+
+### Codex Output Buffering (2026-04-04)
+
+**Issue:** Codex output was buffered to a temp file instead of streaming live, preventing real-time log forwarding to the dashboard.
+
+**Resolution:** Replaced temp-file buffering with direct stdout streaming. Codex output now flows live through the orchestrator's log pipeline, matching Claude's existing stream-json behavior.
+
+### BusyBox Timeout Incompatibility (2026-04-04)
+
+**Issue:** Process-level timeout used GNU coreutils flags incompatible with Alpine's BusyBox `timeout` command, causing Codex entrypoint failures.
+
+**Resolution:** Removed process-level timeout from the Codex entrypoint entirely. Timeout enforcement is handled by the orchestrator's `waitForCompletion` mechanism, not by the container.
+
+### Rename from claude-worker to code-worker (2026-03-27)
+
+**Issue:** The service name `claude-worker` and its Claude-specific env vars (`CLAUDE_CONTINUE`, `CLAUDE_FORENSICS`) did not reflect the multi-runtime design after adding Codex support.
+
+**Resolution:** Renamed to `code-worker` with runtime-agnostic env vars (`WORKER_CONTINUE`, `WORKER_FORENSICS`, `WORKER_RUNTIME`). Added `run_codex_attempt()` handler alongside existing `run_claude_attempt()`.
 
 ### Orphaned Child Process Cleanup (2026-03-10)
 
@@ -172,12 +190,12 @@ Moved GCP Secret Manager sync from the orchestrator to the container entrypoint.
 
 ### INT-684: Token Refresh Propagation Fix (2026-03-06)
 
-Removed the broken background token watcher (subshell `export` never propagated to parent/child processes). Rewrote the git credential helper to read `/secrets/github-token` directly on each git operation instead of expanding `${GITHUB_TOKEN}` from the environment. Added a `gh` CLI wrapper at `/usr/local/bin/gh` that re-reads the token file before each invocation. Token freshness is now fully file-based — no background polling needed.
+Removed the broken background token watcher (subshell `export` never propagated to parent/child processes). Rewrote the git credential helper to read `/secrets/github-token` directly on each git operation instead of expanding `${GITHUB_TOKEN}` from the environment. Added a `gh` CLI wrapper at `/usr/local/bin/gh` that re-reads the token file before each invocation. Token freshness is now fully file-based --- no background polling needed.
 
 ---
 
 ## Related
 
-- [Features](features.md) — User-facing documentation
-- [Technical](technical.md) — Developer reference
+- [Features](features.md) --- User-facing documentation
+- [Technical](technical.md) --- Developer reference
 - [Documentation Run Log](../../documentation-runs.md)

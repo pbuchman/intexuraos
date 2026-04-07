@@ -1,4 +1,4 @@
-# App Settings Service -- Tutorial
+# App Settings Service — Tutorial
 
 > **Time:** 15-20 minutes
 > **Prerequisites:** Auth0 access token, IntexuraOS project access
@@ -43,7 +43,7 @@ curl -s http://localhost:8122/health | jq .
   "status": "ok",
   "serviceName": "app-settings-service",
   "version": "0.0.4",
-  "timestamp": "2026-02-22T12:00:00.000Z",
+  "timestamp": "2026-04-07T12:00:00.000Z",
   "checks": [
     { "name": "secrets", "status": "ok", "latencyMs": 0 },
     { "name": "firestore", "status": "ok", "latencyMs": 15 }
@@ -132,7 +132,7 @@ curl -s http://localhost:8122/settings/usage-costs \
     "totalOutputTokens": 320000,
     "monthlyBreakdown": [
       {
-        "month": "2026-02",
+        "month": "2026-04",
         "costUsd": 5.20,
         "calls": 60,
         "inputTokens": 620000,
@@ -140,7 +140,7 @@ curl -s http://localhost:8122/settings/usage-costs \
         "percentage": 42
       },
       {
-        "month": "2026-01",
+        "month": "2026-03",
         "costUsd": 4.25,
         "calls": 84,
         "inputTokens": 500000,
@@ -276,7 +276,7 @@ All endpoints return a standardized response contract:
 | ---------------------- | -------------------------------- | -------------------------------------------------- |
 | 401 UNAUTHORIZED       | Missing or invalid token         | Check Bearer token or X-Internal-Auth header       |
 | 400 INVALID_REQUEST    | Non-numeric or out-of-range days | Pass an integer string between 1 and 365           |
-| 500 INTERNAL_ERROR     | Missing pricing data             | Contact admin -- Firestore pricing needs migration |
+| 500 INTERNAL_ERROR     | Missing pricing data             | Contact admin — Firestore pricing needs migration  |
 | Empty usage data       | No LLM calls made yet            | Make some research queries first                   |
 | Service not starting   | Missing model pricing            | Run Firestore pricing migration                    |
 

@@ -267,4 +267,4 @@ None. This service does not publish Pub/Sub events.
 
 ---
 
-**Last updated:** 2026-03-15
+**Last updated:** 2026-04-07

@@ -1,6 +1,6 @@
 # Data Insights Agent — Tutorial
 
-> **Time:** 30–40 minutes
+> **Time:** 30--40 minutes
 > **Prerequisites:** Node.js 22+, Auth0 access token, configured LLM API key
 > **You'll learn:** Create data sources, build composite feeds, analyze data with AI, generate charts, and save persistent visualizations
 

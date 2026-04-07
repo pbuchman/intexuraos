@@ -1,7 +1,7 @@
 # Bookmarks Agent — Technical Debt
 
-**Last Updated:** 2026-03-22
-**Analysis Run:** [2026-03-22 documentation-runs.md entry](../../documentation-runs.md)
+**Last Updated:** 2026-04-07
+**Analysis Run:** [2026-04-07 documentation-runs.md entry](../../documentation-runs.md)
 
 ---
 
@@ -174,7 +174,14 @@ The public `POST /bookmarks` endpoint does not trigger enrichment — only the i
 | INT-172 | Enrichment pipeline test coverage gaps      | Added comprehensive tests                                   | 2026-01-20 |
 | —       | OG fetch and summarization were synchronous | Split into async Pub/Sub pipeline                           | 2026-01-15 |
 
-### Recent Improvements (v3.3.0–v3.4.0)
+### Recent Improvements (v3.4.0–v3.5.0)
+
+| Improvement                              | Description                                                                                | Date       |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------ | ---------- |
+| Summary prompt hint improvement          | webAgentSummaryClient now passes title/description as contextual hints to web-agent        | 2026-04-02 |
+| Operational log level correction         | Downgraded expected operational warnings (empty content) from warn to info to reduce noise | 2026-03-27 |
+
+### Previous Improvements (v3.3.0–v3.4.0)
 
 | Improvement                                              | Description                                                             | Date       |
 | -------------------------------------------------------- | ----------------------------------------------------------------------- | ---------- |

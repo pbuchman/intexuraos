@@ -8,7 +8,8 @@ The modern web is vast, noisy, and multilingual. When you save a link or start a
 
 1. **Bare URLs say nothing** — A raw link gives no hint of what is on the other side until you click through and read
 2. **Reading takes time** — A ten-minute article demands ten minutes, even when you only need the gist
-3. **Summaries lose the language** — Most AI tools default to English, so a Polish article comes back in English, stripping context and nuance
+3. **JavaScript-heavy pages resist extraction** — Simple scrapers retrieve empty shells because the real content loads after JavaScript execution
+4. **Summaries lose the language** — Most AI tools default to English, so a Polish article comes back in English, stripping context and nuance
 
 ## Use Case
 
@@ -24,13 +25,19 @@ When you save a link through WhatsApp, the bookmarks agent asks Web Agent to pul
 
 ## How It Helps
 
+### Headless browser rendering via Cloudflare
+
+Web Agent uses Cloudflare Browser Rendering to load pages in a real headless browser, execute JavaScript, and extract the rendered content as clean Markdown. Pages built with React, Next.js, or any client-side framework return their actual content — not an empty HTML shell.
+
+The Cloudflare endpoint strips images, media, fonts, and stylesheets automatically, delivering only the text that matters for summarization.
+
 ### Page summarization in the original language
 
-Send a URL, get back a focused summary of what the page actually says. The summarization pipeline fetches the full page content through a headless browser, then passes it through an LLM with strict instructions: summarize the content, not the platform, and write in the same language as the source material.
+Send a URL, get back a focused summary of what the page actually says. The summarization pipeline fetches the full page content through Cloudflare Browser Rendering, then passes it through an LLM with strict instructions: summarize the content, not the platform, and write in the same language as the source material.
 
 A Polish news article stays in Polish. A German blog post stays in German. The summary focuses on what was said — not on explaining that "LinkedIn is a professional networking site" or "Medium is a publishing platform."
 
-You can control the length by setting a maximum number of sentences or a target reading time in minutes. The response includes a word count and estimated reading time so downstream agents can decide how to present it.
+You can control the length by setting a maximum number of sentences or a target reading time in minutes. Callers can also pass title and description hints to help the LLM identify the main content block on cluttered pages. The response includes a word count and estimated reading time so downstream agents can decide how to present it.
 
 ### Rich link previews
 
@@ -40,12 +47,13 @@ Batch requests support partial success — if one URL in a set fails, the rest s
 
 ### Works without user API keys
 
-Summarization uses the user's own LLM credentials when available, keeping costs under the user's control. But if no API key is configured, the platform provides a fallback model automatically. New users get working summaries from day one, with no setup required.
+Summarization uses the user's own LLM credentials when available, keeping costs under the user's control. But if no API key is configured, the platform provides a Gemini 2.5 Flash fallback automatically. New users get working summaries from day one, with no setup required.
 
 ## Key Benefits
 
 - **Language preservation** — Polish stays Polish, German stays German, English stays English
 - **Content-focused** — Summaries capture what the page says, not what the website is
+- **JavaScript rendering** — Cloudflare Browser Rendering handles SPA and JS-heavy pages that defeat simple scrapers
 - **Zero-configuration start** — Platform fallback means summaries work before users add their own API keys
 - **User-controlled costs** — When users bring their own keys, their keys are used
 - **Batch-friendly** — Link preview requests handle multiple URLs at once with per-URL success tracking
@@ -54,7 +62,7 @@ Summarization uses the user's own LLM credentials when available, keeping costs 
 ## Limitations
 
 - **Works behind the scenes** — End users never interact with this service directly; it runs in the background, called by other agents in the platform
-- **Summarization quality varies** — Pages with poor structure, heavy JavaScript rendering, or minimal text content may produce weaker summaries
+- **Summarization quality varies** — Pages with poor structure or minimal text content may produce weaker summaries
 - **Some sites block automated access** — Despite browser-like headers, certain websites still reject non-browser requests
 - **No result caching** — Every request fetches fresh content from the source URL
 - **No authenticated content** — Cannot access paywalled or login-protected pages

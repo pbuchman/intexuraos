@@ -1,6 +1,6 @@
 # Linear Agent
 
-Speak your ideas, ship your issues. Turn voice notes and quick thoughts into structured, prioritized Linear issues — with AI that understands urgency and keeps your board loaded before you blink.
+Speak your ideas, ship your issues. Turn voice notes and quick thoughts into structured, prioritized Linear issues — with AI that understands urgency, keeps your board loaded before you blink, and now automatically cleans up stale issues to stay under subscription limits.
 
 ## The Problem
 
@@ -9,6 +9,8 @@ You are in a meeting when a bug crosses your mind. You could open Linear, naviga
 The real cost is not the typing. It is the tradeoff: capture the thought carefully, or stay present. Most people choose presence, and the thought disappears. The ones who do capture it end up with a graveyard of one-line issues that need a follow-up conversation before anyone can act on them.
 
 Then there is the board itself. Every time you check in on your team's work, you wait for Linear's servers to respond. Open the dashboard, stare at a loading spinner, scan for updates, close the tab. Do that ten times a day and you have donated minutes to waiting — minutes that feel like nothing individually but compound into a tax on your attention. Eventually you stop checking, and a board nobody checks is a board nobody trusts.
+
+And as the board grows — cancelled issues pile up, duplicates accumulate, sub-issues outlive their parents — you drift toward your Linear subscription limit. Nobody wants to manually audit hundreds of issues to decide which ones to delete. So the board bloats silently until the subscription blocks new issues at the worst possible time.
 
 ## Use Case: The Voice Note That Becomes a Specification
 
@@ -50,7 +52,7 @@ The dashboard groups your issues into columns that mirror how work actually flow
 
 ### See Issue Details Without Leaving
 
-Tap into any issue on the dashboard and you get the full picture: description, labels with their colors, and comments from your team — paginated, with author names, timestamps, and markdown formatting preserved. The comment count shows on the card before you tap, so you know whether there is a conversation worth reading before you dive in.
+Tap into any issue on the dashboard and you get the full picture: description, labels with their colors, and comments from your team — paginated, with author names, timestamps, and markdown formatting preserved. The comment count shows on the card before you tap, so you know whether there is a conversation worth reading before you dive in. Sub-tasks display their parent issue identifier as a breadcrumb, so you always know where a piece of work fits in the larger plan.
 
 This keeps context where you need it. You do not bounce between IntexuraOS and Linear to read a thread or check what labels are attached. The local copy holds all of it.
 
@@ -58,19 +60,27 @@ This keeps context where you need it. You do not bounce between IntexuraOS and L
 
 ### Serve Issue Context to Other Services
 
-Other IntexuraOS services can now fetch an issue's description and comments directly from the Linear Agent's local store — without needing user credentials or calling the Linear API. The orchestrator uses this to read issue context during deep validation, enriching its understanding of what the code task should accomplish before deciding whether to proceed.
+Other IntexuraOS services can fetch an issue's description and comments directly from the Linear Agent's local store — without needing user credentials or calling the Linear API. The orchestrator uses this to read issue context during deep validation, enriching its understanding of what the code task should accomplish before deciding whether to proceed.
 
 **Example:** The code agent's orchestrator needs to validate a task against the full issue description and recent discussion. It calls the Linear Agent's context endpoint, receives the description and the latest comments (newest-first, capped at 100), and feeds that context into its validation prompt — all without requiring the user's Linear API key.
 
 ### Let Your Code Agent Update the Board
 
-The Code Agent — another IntexuraOS service that picks up Linear issues and autonomously writes the code to resolve them — updates your board as it works. It creates related issues when implementation breaks into pieces, moves workflow states forward as each piece progresses, adds comments to track work, and updates labels and assignees. Your board reflects what the Code Agent has done without any manual status updates from you.
+The Code Agent — another IntexuraOS service that picks up Linear issues and autonomously writes the code to resolve them — updates your board as it works. It creates related issues when implementation breaks into pieces, moves workflow states forward as each piece progresses, adds comments to track work, and updates labels and assignees. When labels change through the internal API, the Linear Agent automatically notifies code-agent to recompute group summaries, keeping issue group aggregations current. Your board reflects what the Code Agent has done without any manual status updates from you.
 
 When you assign an issue that carries a "planning-task" or "code-task" label, the Linear Agent detects this and automatically triggers a code task. If the issue has a "code-task" label, the agent sends it straight for execution. If it has a "planning-task" label, the agent asks the code agent to first analyze the issue, enrich its description with requirements, acceptance criteria, and a test plan, then mark it ready. In both cases, the dispatched prompt instructs the code agent to read the full Linear issue and all its comments (newest-first) before starting work, so clarifications or follow-up context you added in the comments are never missed.
 
 When the code agent discovers that the work described in an issue has already been completed or merged, it reports `already_completed` and the enforcement pipeline moves the issue to Done with a "Work already completed" comment — no manual cleanup needed.
 
 **Example:** You created an issue from a voice note about a broken CSV export. The code agent picks it up, creates related issues for the parsing fix and the test, adds comments along the way, and moves workflow states forward as it works. An hour later you glance at the dashboard and see the progress reflected on your board. You never touched Linear.
+
+### Clean Up Your Board Automatically
+
+As your issue count grows, the Linear Agent monitors your board against a configurable threshold. When the active issue count exceeds 200, it uses Gemini to classify issues as deletion candidates — cancelled issues, duplicates, obsolete sub-issues, simple fixes that were already merged, and review-only items that no longer need tracking. The candidates are stored for your review in the web app, not deleted immediately. You see each candidate's score, reason, and category before confirming deletion.
+
+This keeps your Linear workspace under subscription limits without manual auditing. The classification runs on a schedule, and confirmed deletions cascade through all connected users' local caches — so the cleanup is visible everywhere.
+
+**Example:** Your board has grown to 230 issues over several sprints. The pruning system activates and Gemini classifies 30 candidates: 8 cancelled issues, 6 duplicates, 10 sub-issues whose parents are already done, and 6 simple fixes that were merged weeks ago. You review the list in the web app, confirm, and the candidates are soft-deleted from Linear. Your board drops back to 200 issues.
 
 ### Generate Titles from Descriptions
 
@@ -88,7 +98,7 @@ When something does go wrong — the AI cannot parse your message, the input is 
 
 ### Recover When Things Drift
 
-Networks hiccup. Updates miss a beat. Over weeks, the local copy can drift from what Linear actually holds. When that happens, you trigger a full refresh — or let the automatic scheduled sync handle it — and the agent pulls every issue from Linear, updates the local store, and removes anything that no longer exists. Your board snaps back to reality.
+Networks hiccup. Updates miss a beat. Over weeks, the local copy can drift from what Linear actually holds. When that happens, you trigger a full refresh — or let the automatic scheduled sync handle it — and the agent pulls every issue from Linear, updates the local store, and removes anything that no longer exists. Completed issues are retained for 60 days in the sync window, giving you a full two-month view of recently closed work. Your board snaps back to reality.
 
 **Example:** After a server restart, you suspect the board might be stale. You trigger a full refresh. The agent reconciles every issue — creates three that were missing, updates twelve that had changed, and removes one that was deleted from Linear. Your dashboard matches your Linear board exactly.
 
@@ -105,6 +115,7 @@ Connect your Linear account through the settings page — you will need your API
 - **Code agent continuity** — issues move through your workflow as the code agent creates sub-tasks, adds comments, updates labels, and transitions states, visible on your board without manual status changes.
 - **Smart auto-trigger** — assign an issue with a "planning-task" or "code-task" label and the code agent starts working automatically, choosing between enrichment and execution based on the label.
 - **Cross-service context sharing** — other services fetch issue descriptions and comments from the local store without user credentials, enabling richer validation and decision-making.
+- **Automatic cleanup** — AI-powered issue pruning identifies stale, duplicate, and obsolete issues for review, keeping your board under subscription limits without manual auditing.
 - **No lost input** — duplicate detection prevents double-creation, and failed extractions queue for review instead of vanishing.
 
 ## Limitations
@@ -116,6 +127,7 @@ Connect your Linear account through the settings page — you will need your API
 - **Seven-day closed window** — completed and cancelled issues appear in the Closed column for seven days, then drop off the dashboard. They still exist in Linear.
 - **One team per connection** — each connected account syncs with a single Linear team. Multi-team setups require separate connections.
 - **Label passthrough gap** — the `POST /internal/issues` endpoint accepts a `labels` field but does not forward label IDs to Linear on creation. Labels must be set via the separate metadata endpoint.
+- **Pruning threshold fixed at 200** — the issue pruning system activates when active issues exceed 200. This threshold is not yet user-configurable.
 
 ---
 

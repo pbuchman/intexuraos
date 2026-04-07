@@ -1,26 +1,26 @@
-# Research Agent — Technical Debt
+# Research Agent -- Technical Debt
 
-**Last Updated:** 2026-03-22
-**Analysis Run:** [v3.4.0 documentation refresh](../../documentation-runs.md)
+**Last Updated:** 2026-04-07
+**Analysis Run:** [v3.5.0 documentation refresh](../../documentation-runs.md)
 
 ---
 
 ## Summary
 
-| Category      | Count | Severity |
-| ------------- | ----- | -------- |
-| Code Smells   | 2     | Medium   |
-| Test Gaps     | 0     | --       |
-| Type Issues   | 1     | Medium   |
-| TODOs         | 1     | Low      |
-| **Total**     | **4** | --       |
+| Category    | Count | Severity |
+| ----------- | ----- | -------- |
+| Code Smells | 2     | Medium   |
+| Test Gaps   | 0     | --       |
+| Type Issues | 1     | Medium   |
+| TODOs       | 1     | Low      |
+| **Total**   | **4** | --       |
 
 ---
 
 ## Future Plans
 
 - Define a proper port interface for `NotionServiceClient` in the domain layer to remove the `as never` cast in `runSynthesis` (currently tracked as a TODO in `runSynthesis.ts`)
-- Extract `LlmCallPublisher` interface duplication — the same interface is redeclared in both `processResearch.ts` and `retryFromFailed.ts` instead of sharing a single definition
+- Extract `LlmCallPublisher` interface duplication -- the same interface is redeclared in both `processResearch.ts` and `retryFromFailed.ts` instead of sharing a single definition
 - Consider moving the Notion export use case (`exportResearchToNotionUseCase.ts`) from `infra/` to `domain/` or a dedicated `usecases/` location to align with the existing use-case organization pattern
 
 ---
@@ -29,16 +29,16 @@
 
 ### Medium Priority
 
-| File                                              | Issue                                                                                         | Impact                                                      |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `src/domain/research/usecases/processResearch.ts` | `LlmCallPublisher` interface duplicated in `retryFromFailed.ts` — same shape, two definitions | Changing one requires updating both; drift risk             |
-| `src/infra/notion/notionResearchExporter.ts`      | `LocalNotionError` / `LocalNotionErrorCode` types shadow the imported package types           | Fragile error mapping; package upgrade may diverge silently |
+| File                                              | Issue                                                                                          | Impact                                                      |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `src/domain/research/usecases/processResearch.ts` | `LlmCallPublisher` interface duplicated in `retryFromFailed.ts` -- same shape, two definitions | Changing one requires updating both; drift risk             |
+| `src/infra/notion/notionResearchExporter.ts`      | `LocalNotionError` / `LocalNotionErrorCode` types shadow the imported package types            | Fragile error mapping; package upgrade may diverge silently |
 
 ---
 
 ## Test Coverage Gaps
 
-No significant gaps identified. The service maintains high test coverage across domain use cases, infra adapters, and route handlers. The `v8-ignore` blocks in `processResearch.ts` and `runSynthesis.ts` are properly justified with testing-blocker explanations and use valid exemption categories.
+No significant gaps identified. The service maintains high test coverage across domain use cases, infra adapters (including the new OpenRouterAdapter), and route handlers. The `v8-ignore` blocks in `processResearch.ts`, `runSynthesis.ts`, and `openRouterRoutes.ts` are properly justified with testing-blocker explanations and use valid exemption categories.
 
 ---
 
@@ -50,7 +50,7 @@ No significant gaps identified. The service maintains high test coverage across 
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ----- |
 | `src/domain/research/usecases/runSynthesis.ts` | `notionServiceClient` typed as `unknown` with `as never` cast to bypass domain layer import restriction | 1     |
 
-**Context:** The `RunSynthesisDeps` interface declares `notionServiceClient?: unknown` and casts it with `notionServiceClient as never` when passing to `exportResearchToNotionUseCase`. This is an acknowledged architectural boundary workaround — the domain layer cannot import from `infra/`. The fix is to define a `NotionExporterPort` interface in `domain/research/ports/` and implement it in the infra layer.
+**Context:** The `RunSynthesisDeps` interface declares `notionServiceClient?: unknown` and casts it with `notionServiceClient as never` when passing to `exportResearchToNotionUseCase`. This is an acknowledged architectural boundary workaround -- the domain layer cannot import from `infra/`. The fix is to define a `NotionExporterPort` interface in `domain/research/ports/` and implement it in the infra layer.
 
 ---
 
@@ -64,7 +64,7 @@ No significant gaps identified. The service maintains high test coverage across 
 
 ## SRP Violations
 
-No violations. The largest files (`researchRoutes.ts`, `internalRoutes.ts`) are appropriately large because they contain multiple related route definitions with full schema declarations — this is an intentional Fastify pattern, not a SRP issue.
+No violations. The largest files (`researchRoutes.ts`, `internalRoutes.ts`) are appropriately large because they contain multiple related route definitions with full schema declarations -- this is an intentional Fastify pattern, not a SRP issue.
 
 ---
 
@@ -86,6 +86,10 @@ No deprecated items identified.
 
 | Date       | Issue                                                                                       | Resolution                                                            |
 | ---------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| 2026-04-07 | Cover image generation used only one provider; failure meant no cover image                 | Added provider failover with ordered pipeline selection (INT-1310)    |
+| 2026-03-29 | `GET /research` list endpoint returned full `Research` documents with large text fields     | Added `ResearchSummary` projection via `findSummariesByUserId`        |
+| 2026-03-26 | OpenRouter pricing display and audit correlation issues (INT-1106)                          | Fixed pricing display and audit log correlation                       |
+| 2026-03-24 | OpenRouter model validation only at selection, not at execution (INT-1011)                  | Added allowlist enforcement at research execution time                |
 | 2026-03-10 | Silent dispatch failures in LLM call publishing (INT-810, INT-811)                          | Fixed nested transaction handling and error propagation               |
 | 2026-03-15 | Notion export race condition: export read stale `shareInfo` without `coverImageUrl`         | Moved export to after Firestore save; documented in gotchas           |
 | 2026-03-12 | ZAI provider and GLM-4.7 models removed after provider change                               | Models cleaned up from LLM adapter registry                           |
@@ -95,6 +99,6 @@ No deprecated items identified.
 
 ## Related
 
-- [Features](features.md) — User-facing documentation
-- [Technical](technical.md) — Developer reference
+- [Features](features.md) -- User-facing documentation
+- [Technical](technical.md) -- Developer reference
 - [Documentation Run Log](../../documentation-runs.md)
