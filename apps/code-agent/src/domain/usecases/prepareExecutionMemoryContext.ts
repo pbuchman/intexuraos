@@ -10,7 +10,7 @@ import type { ExecutionMemoryApplicationRepository } from '../repositories/execu
 import type { ExecutionMemoryPromptContext } from '../services/taskDispatcher.js';
 
 const QUERY_NORMALIZER_VERSION = 'execution-memory-query-normalizer@1.0.0';
-const RETRIEVAL_VERSION = 'execution-memory-retrieval@2.0.0';
+const RETRIEVAL_VERSION = 'execution-memory-retrieval@3.0.0';
 const MAX_DESCRIPTION_LENGTH = 2500;
 const MAX_COMMENT_LENGTH = 800;
 const MAX_TOTAL_CONTEXT_LENGTH = 5000;
@@ -24,7 +24,6 @@ const QueryNormalizationSchema = z.object({
   components: z.array(z.string()).default([]),
   riskFlags: z.array(z.string()).default([]),
   verificationGoals: z.array(z.string()).default([]),
-  labelHints: z.array(z.string()).default([]),
   summary: z.string().min(1),
 });
 
@@ -33,7 +32,6 @@ interface QueryNormalization {
   components: string[];
   riskFlags: string[];
   verificationGoals: string[];
-  labelHints: string[];
   summary: string;
 }
 
@@ -50,7 +48,6 @@ export interface PrepareExecutionMemoryResources {
 
 export interface PrepareExecutionMemoryContextParams extends PrepareExecutionMemoryResources {
   task: Pick<CodeTask, 'id' | 'prompt' | 'sanitizedPrompt' | 'repository' | 'linearIssueId'>;
-  linearIssueLabels: string[];
   logger: Logger;
   linearAgentClient: Pick<LinearAgentClient, 'getIssueContext'>;
 }
@@ -60,7 +57,6 @@ export async function prepareExecutionMemoryContext(
 ): Promise<CodeTask['executionMemoryContext']> {
   const {
     task,
-    linearIssueLabels,
     logger,
     linearAgentClient,
     queryClient,
@@ -73,7 +69,6 @@ export async function prepareExecutionMemoryContext(
   const normalization = await normalizeQuery({
     task,
     issueContext,
-    linearIssueLabels,
     logger,
     queryClient,
   });
@@ -172,21 +167,19 @@ export async function prepareExecutionMemoryContext(
     };
   }
 
-  const reranked = rerankMemories(nearestResult.value, normalization, linearIssueLabels);
+  const reranked = rerankMemories(nearestResult.value, normalization);
   const matchedMemories = reranked
     .filter((candidate) => candidate.rerankScore >= MIN_RERANK_SCORE)
     .slice(0, MAX_MATCHES);
 
   // Observability: log top candidates with score breakdowns
   const queryComponents = dedupeLower(normalization.components);
-  const queryLabels = dedupeLower([...linearIssueLabels, ...normalization.labelHints]);
   const topCandidates = reranked.slice(0, TOP_LOG_CANDIDATES).map((candidate) => ({
     memoryId: candidate.memory.id,
     title: candidate.memory.title,
     rerankScore: roundScore(candidate.rerankScore),
     vectorScore: candidate.memory.vectorScore,
     componentOverlap: roundScore(overlapRatio(queryComponents, candidate.memory.componentHints)),
-    labelOverlap: roundScore(overlapRatio(queryLabels, candidate.memory.labelHints)),
     effectiveness: roundScore(
       (candidate.memory.positiveCount + 1) / (candidate.memory.applicationCount + 2)
     ),
@@ -306,14 +299,12 @@ async function getLinearContext(
 async function normalizeQuery(params: {
   task: Pick<CodeTask, 'prompt' | 'sanitizedPrompt'>;
   issueContext: { description: string | null; comments: string[] };
-  linearIssueLabels: string[];
   logger: Logger;
   queryClient?: LlmGenerateClient | undefined;
 }): Promise<QueryNormalization> {
   const fallback = buildFallbackNormalization(
     params.task,
-    params.issueContext,
-    params.linearIssueLabels
+    params.issueContext
   );
 
   if (params.queryClient === undefined) {
@@ -322,8 +313,7 @@ async function normalizeQuery(params: {
 
   const normalizationPrompt = buildNormalizationPrompt(
     params.task,
-    params.issueContext,
-    params.linearIssueLabels
+    params.issueContext
   );
 
   const generationResult = await params.queryClient.generate(normalizationPrompt);
@@ -349,8 +339,7 @@ async function normalizeQuery(params: {
 
 function buildFallbackNormalization(
   task: Pick<CodeTask, 'prompt' | 'sanitizedPrompt'>,
-  issueContext: { description: string | null; comments: string[] },
-  linearIssueLabels: string[]
+  issueContext: { description: string | null; comments: string[] }
 ): QueryNormalization {
   const queryText = [
     task.sanitizedPrompt.trim(),
@@ -368,15 +357,13 @@ function buildFallbackNormalization(
     components: tokens,
     riskFlags: [],
     verificationGoals: [],
-    labelHints: dedupeLower(linearIssueLabels),
     summary: truncate(task.prompt.trim(), 160),
   };
 }
 
 function buildNormalizationPrompt(
   task: Pick<CodeTask, 'prompt' | 'sanitizedPrompt'>,
-  issueContext: { description: string | null; comments: string[] },
-  linearIssueLabels: string[]
+  issueContext: { description: string | null; comments: string[] }
 ): string {
   return [
     `Version: ${QUERY_NORMALIZER_VERSION}`,
@@ -387,14 +374,12 @@ function buildNormalizationPrompt(
     '',
     `Sanitized prompt:\n${task.sanitizedPrompt}`,
     '',
-    `Linear labels:\n${linearIssueLabels.join(', ')}`,
-    '',
     `Linear description:\n${issueContext.description ?? ''}`,
     '',
     `Recent Linear comments:\n${issueContext.comments.join('\n---\n')}`,
     '',
     'Schema:',
-    '{"semanticQuery":"string","components":["string"],"riskFlags":["string"],"verificationGoals":["string"],"labelHints":["string"],"summary":"string"}',
+    '{"semanticQuery":"string","components":["string"],"riskFlags":["string"],"verificationGoals":["string"],"summary":"string"}',
   ].join('\n');
 }
 
@@ -402,25 +387,21 @@ function rerankMemories(
   candidates: Awaited<ReturnType<NonNullable<PrepareExecutionMemoryResources['executionMemoryRepo']>['findNearest']>> extends Result<infer TValue, unknown>
     ? TValue
     : never,
-  normalization: QueryNormalization,
-  linearIssueLabels: string[]
+  normalization: QueryNormalization
 ): {
   memory: (typeof candidates)[number];
   rerankScore: number;
 }[] {
   const queryComponents = dedupeLower(normalization.components);
-  const queryLabels = dedupeLower([...linearIssueLabels, ...normalization.labelHints]);
 
   return candidates
     .map((memory) => {
       const componentOverlap = overlapRatio(queryComponents, memory.componentHints);
-      const labelOverlap = overlapRatio(queryLabels, memory.labelHints);
       const effectiveness = (memory.positiveCount + 1) / (memory.applicationCount + 2);
       const rerankScore =
-        (0.50 * memory.vectorScore)
-        + (0.20 * componentOverlap)
-        + (0.15 * labelOverlap)
-        + (0.15 * effectiveness);
+        (0.55 * memory.vectorScore)
+        + (0.25 * componentOverlap)
+        + (0.20 * effectiveness);
 
       return { memory, rerankScore };
     })
