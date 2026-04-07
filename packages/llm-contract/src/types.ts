@@ -48,6 +48,8 @@ export interface TokenUsage {
   webSearchCalls?: number;
   /** Google: whether grounding was enabled for the request */
   groundingEnabled?: boolean;
+  /** Google: tokens used for internal reasoning (Gemini 2.5 thinking models) */
+  thinkingTokens?: number;
   /** Cost reported by provider (when available) */
   providerCost?: number;
 }
@@ -75,6 +77,8 @@ export interface NormalizedUsage {
   webSearchCalls?: number;
   /** Whether Google grounding was enabled (Gemini only) */
   groundingEnabled?: boolean;
+  /** Tokens used for internal reasoning (Gemini 2.5 thinking models, billed at output rate) */
+  thinkingTokens?: number;
 }
 
 /**

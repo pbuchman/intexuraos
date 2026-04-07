@@ -8,6 +8,9 @@ const EXPECTED_CODE_TASK_WORKER_TYPES = [
   'glm',
   'qwen',
   'kimi',
+  'codex',
+  'codex-xhigh',
+  'openrouter-free',
 ];
 
 describe('code task worker types', () => {

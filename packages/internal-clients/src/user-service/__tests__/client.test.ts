@@ -1,8 +1,30 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import nock from 'nock';
-import { createUserServiceClient } from '../client.js';
+import { createUserServiceClient, providerToKeyField } from '../client.js';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { createFakePricingContext } from '@intexuraos/llm-pricing';
+
+describe('providerToKeyField', () => {
+  it('returns google for Google provider', () => {
+    expect(providerToKeyField(LlmProviders.Google)).toBe(LlmProviders.Google);
+  });
+
+  it('returns openai for OpenAI provider', () => {
+    expect(providerToKeyField(LlmProviders.OpenAI)).toBe(LlmProviders.OpenAI);
+  });
+
+  it('returns anthropic for Anthropic provider', () => {
+    expect(providerToKeyField(LlmProviders.Anthropic)).toBe(LlmProviders.Anthropic);
+  });
+
+  it('returns perplexity for Perplexity provider', () => {
+    expect(providerToKeyField(LlmProviders.Perplexity)).toBe(LlmProviders.Perplexity);
+  });
+
+  it('returns openrouter for OpenRouter provider', () => {
+    expect(providerToKeyField(LlmProviders.OpenRouter)).toBe(LlmProviders.OpenRouter);
+  });
+});
 
 describe('createUserServiceClient', () => {
   const mockLogger = {
@@ -151,6 +173,7 @@ describe('createUserServiceClient', () => {
         openai: 'openai-key',
         anthropic: 'anthropic-key',
         perplexity: 'perplexity-key',
+        openrouter: 'openrouter-key',
       };
 
       nock('http://localhost:3000')
@@ -166,6 +189,7 @@ describe('createUserServiceClient', () => {
         expect(result.value.openai).toBe('openai-key');
         expect(result.value.anthropic).toBe('anthropic-key');
         expect(result.value.perplexity).toBe('perplexity-key');
+        expect(result.value.openrouter).toBe('openrouter-key');
       } else {
         expect.fail('Expected successful result');
       }
@@ -1090,6 +1114,88 @@ describe('createUserServiceClient', () => {
       } else {
         expect.fail('Expected successful result');
       }
+    });
+  });
+
+  describe('getUserTimezone', () => {
+    it('returns timezone string when user has timezone set', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, {
+          success: true,
+          data: {
+            timezone: 'Europe/Berlin',
+          },
+        });
+
+      const client = createUserServiceClient(config);
+      const result = await client.getUserTimezone('user123');
+
+      expect(result).toBe('Europe/Berlin');
+    });
+
+    it('returns undefined when user has no timezone set', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, {
+          success: true,
+          data: {},
+        });
+
+      const client = createUserServiceClient(config);
+      const result = await client.getUserTimezone('user123');
+
+      expect(result).toBeUndefined();
+    });
+
+    it('returns undefined and logs warning when HTTP call fails', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(500);
+
+      const client = createUserServiceClient(config);
+      const result = await client.getUserTimezone('user123');
+
+      expect(result).toBeUndefined();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        { userId: 'user123', status: 500 },
+        'Failed to fetch user timezone'
+      );
+    });
+
+    it('returns undefined and logs warning on network error', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .replyWithError('ECONNREFUSED');
+
+      const client = createUserServiceClient(config);
+      const result = await client.getUserTimezone('user123');
+
+      expect(result).toBeUndefined();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        { userId: 'user123', error: expect.stringContaining('ECONNREFUSED') },
+        'Failed to fetch user timezone'
+      );
+    });
+
+    it('URL encodes userId with pipe (Auth0 format)', async () => {
+      const userId = 'auth0|user123';
+
+      nock('http://localhost:3000')
+        .get(`/internal/users/${encodeURIComponent(userId)}/settings`)
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, {
+          success: true,
+          data: { timezone: 'America/New_York' },
+        });
+
+      const client = createUserServiceClient(config);
+      const result = await client.getUserTimezone(userId);
+
+      expect(result).toBe('America/New_York');
     });
   });
 });

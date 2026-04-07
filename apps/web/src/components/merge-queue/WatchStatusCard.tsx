@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Loader2, XCircle } from 'lucide-react';
 import { formatRelative } from '@/utils/dateFormat';
 import type { MergeQueueWatch } from '@/types';
 
@@ -7,6 +7,7 @@ interface WatchStatusCardProps {
   onToggle: () => void;
   isToggling: boolean;
   blocked: boolean;
+  excludedCount: number;
 }
 
 function ToggleSwitch({ enabled, disabled, onToggle }: { enabled: boolean; disabled: boolean; onToggle: () => void }): React.JSX.Element {
@@ -30,13 +31,14 @@ function ToggleSwitch({ enabled, disabled, onToggle }: { enabled: boolean; disab
   );
 }
 
-export function WatchStatusCard({ watch, onToggle, isToggling, blocked }: WatchStatusCardProps): React.JSX.Element {
+export function WatchStatusCard({ watch, onToggle, isToggling, blocked, excludedCount }: WatchStatusCardProps): React.JSX.Element {
   const isActive = watch !== null && watch.status === 'active';
   const isDrained = watch !== null && watch.status === 'drained';
+  const isCancelled = watch !== null && watch.status === 'cancelled';
   const hasError = isActive && watch.lastError !== null;
 
-  // No watch, cancelled watch, or blocked branch: simple inline toggle
-  if (blocked || watch === null || watch.status === 'cancelled') {
+  // No watch or blocked branch: simple inline toggle
+  if (blocked || watch === null) {
     return (
       <div className="flex items-center gap-3">
         <ToggleSwitch enabled={false} disabled={blocked || isToggling} onToggle={onToggle} />
@@ -69,6 +71,7 @@ export function WatchStatusCard({ watch, onToggle, isToggling, blocked }: WatchS
         </p>
         <p className="mt-1 text-xs text-red-500 dark:text-red-400/80">
           Merged: {String(watch.mergedPrs.length)} &middot; Skipped: {String(watch.skippedPrs.length)}
+          {excludedCount > 0 ? ` \u00b7 Excluded: ${String(excludedCount)}` : ''}
         </p>
       </div>
     );
@@ -90,7 +93,29 @@ export function WatchStatusCard({ watch, onToggle, isToggling, blocked }: WatchS
         </div>
         <p className="mt-1 text-xs text-blue-600 dark:text-blue-400/80">
           Merged: {String(watch.mergedPrs.length)} &middot; Skipped: {String(watch.skippedPrs.length)}
+          {excludedCount > 0 ? ` \u00b7 Excluded: ${String(excludedCount)}` : ''}
           {watch.lastTickAt !== null ? ` \u00b7 Last tick: ${formatRelative(watch.lastTickAt)}` : ''}
+        </p>
+      </div>
+    );
+  }
+
+  // Cancelled
+  if (isCancelled) {
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-900/30">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-2">
+            <XCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <span className="text-sm font-medium text-amber-700 dark:text-amber-400">Cancelled</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <ToggleSwitch enabled={false} disabled={isToggling} onToggle={onToggle} />
+            {isToggling ? <Loader2 className="h-4 w-4 animate-spin text-slate-400" /> : null}
+          </div>
+        </div>
+        <p className="mt-1 text-xs text-amber-600 dark:text-amber-400/80">
+          Merged: {String(watch.mergedPrs.length)} &middot; Skipped: {String(watch.skippedPrs.length)}
         </p>
       </div>
     );

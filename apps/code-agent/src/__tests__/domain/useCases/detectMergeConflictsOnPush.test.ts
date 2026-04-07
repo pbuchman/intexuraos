@@ -26,6 +26,8 @@ interface TestDeps {
   codeTaskRepo: {
     findById: ReturnType<typeof vi.fn>;
     findByPR: ReturnType<typeof vi.fn>;
+    findLatestExecutionTaskByPR: ReturnType<typeof vi.fn>;
+    findOriginTaskByPR: ReturnType<typeof vi.fn>;
     findByIdForUser: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
@@ -143,6 +145,8 @@ function createSummary(overrides: Partial<GitHubPRSummary> = {}): GitHubPRSummar
     managedConflictTaskOwnerUserId: null,
     lastActivityAt: new Date('2026-03-10T09:00:00Z'),
     firstSeenAt: new Date('2026-03-01T09:00:00Z'),
+    lastReviewedCommitSha: null,
+    lastReviewNeedsRemediation: null,
     ...overrides,
   };
 }
@@ -221,7 +225,11 @@ function createDeps(logger: Logger, options?: { includeSleep?: boolean }): TestD
     },
     codeTaskRepo: {
       findById: vi.fn().mockResolvedValue(err({ code: 'NOT_FOUND', message: 'not found' })),
+      // findByPR satisfies the CodeTaskRepository shape but is unused by the use case
+      // (lineage lookups use findLatestExecutionTaskByPR instead).
       findByPR: vi.fn().mockResolvedValue(ok(null)),
+      findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
       findByIdForUser: vi.fn(),
       create: vi.fn().mockResolvedValue(ok(createTask({ id: 'task-created', status: 'queued' }))),
       update: vi.fn().mockResolvedValue(ok(createTask({ id: 'task-created', status: 'dispatched' }))),
@@ -346,6 +354,10 @@ describe('createDetectMergeConflictsOnPush', () => {
     );
     expect(deps.gitHubPRClient.postPRComment).toHaveBeenCalledTimes(1);
     expect(deps.codeTaskRepo.create).toHaveBeenCalledTimes(1);
+    expect(deps.codeTaskRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      agentType: 'pull_request',
+      followUpReason: 'merge_conflict',
+    }));
     expect(deps.taskEnqueueService.enqueue).toHaveBeenCalledWith({
       taskId: 'task_11111111-1111-4111-8111-111111111111',
       userId: 'user-1',
@@ -568,31 +580,37 @@ describe('createDetectMergeConflictsOnPush', () => {
     );
   });
 
-  it('reuses an existing pull_request task when one already exists', async () => {
+  it('creates a fresh merge-conflict task instead of messaging the latest pull_request task for a new conflict episode', async () => {
     const logger = createLogger();
+    const deps = createDeps(logger);
     const existingTask = createTask({
       id: 'task-existing',
       agentType: 'pull_request',
       status: 'running',
+      linearIssueId: 'INT-123',
     });
-    const deps = createDeps(logger);
     deps.gitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok([createSummary({
       mergeConflictStatus: 'clean',
-      managedConflictCommentId: 54321,
-      managedConflictTaskId: 'task-existing',
-      managedConflictTaskOwnerUserId: 'user-1',
+      managedConflictCommentId: null,
+      managedConflictTaskId: null,
+      managedConflictTaskOwnerUserId: null,
     })]));
-    deps.codeTaskRepo.findById.mockResolvedValue(ok(existingTask));
-    deps.codeTaskRepo.findByIdForUser.mockResolvedValue(ok(existingTask));
+    deps.codeTaskRepo.findLatestExecutionTaskByPR.mockResolvedValue(ok(existingTask));
 
     const detector = createDetectMergeConflictsOnPush(deps as never);
     await detector.detectOnPush(createPushEvent('refs/heads/release/2026.03'), logger);
 
-    expect(deps.taskDispatcher.sendMessageToWorker).toHaveBeenCalledTimes(1);
-    expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
+    expect(deps.taskDispatcher.sendMessageToWorker).not.toHaveBeenCalled();
+    expect(deps.codeTaskRepo.create).toHaveBeenCalledTimes(1);
+    expect(deps.codeTaskRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      agentType: 'pull_request',
+      followUpReason: 'merge_conflict',
+      parentTaskId: 'task-existing',
+      linearIssueId: 'INT-123',
+    }));
     expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(expect.objectContaining({
       managedConflictCommentId: 12345,
-      managedConflictTaskId: 'task-existing',
+      managedConflictTaskId: 'task_11111111-1111-4111-8111-111111111111',
       managedConflictTaskOwnerUserId: 'user-1',
     }));
   });
@@ -602,6 +620,7 @@ describe('createDetectMergeConflictsOnPush', () => {
     const existingTask = createTask({
       id: 'task-existing',
       status: 'running',
+      followUpReason: 'merge_conflict',
     });
     const deps = createDeps(logger);
     deps.gitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok([createSummary({
@@ -617,7 +636,8 @@ describe('createDetectMergeConflictsOnPush', () => {
     await detector.detectOnPush(createPushEvent('refs/heads/release/2026.03'), logger);
 
     expect(deps.gitHubPRClient.postPRComment).toHaveBeenCalledTimes(1);
-    expect(deps.taskDispatcher.sendMessageToWorker).toHaveBeenCalledTimes(1);
+    expect(deps.taskDispatcher.sendMessageToWorker).not.toHaveBeenCalled();
+    expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
     expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(expect.objectContaining({
       managedConflictCommentId: 12345,
       managedConflictTaskId: 'task-existing',
@@ -625,40 +645,41 @@ describe('createDetectMergeConflictsOnPush', () => {
     }));
   });
 
-  it('updates the managed comment with a resumed message when the worker resumes an existing task', async () => {
+  it('keeps the existing managed conflict task for the same unresolved episode', async () => {
     const logger = createLogger();
     const existingTask = createTask({
       id: 'task-existing',
-      status: 'failed',
+      status: 'running',
+      followUpReason: 'merge_conflict',
     });
     const deps = createDeps(logger);
     deps.gitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok([createSummary({
-      mergeConflictStatus: 'clean',
+      mergeConflictStatus: 'conflicting',
       managedConflictCommentId: 12345,
       managedConflictTaskId: 'task-existing',
       managedConflictTaskOwnerUserId: 'user-1',
     })]));
     deps.codeTaskRepo.findById.mockResolvedValue(ok(existingTask));
-    deps.codeTaskRepo.findByIdForUser.mockResolvedValue(ok(existingTask));
-    deps.taskDispatcher.sendMessageToWorker.mockResolvedValue(ok({ action: 'resumed' }));
 
     const detector = createDetectMergeConflictsOnPush(deps as never);
     await detector.detectOnPush(createPushEvent('refs/heads/release/2026.03'), logger);
 
-    expect(deps.gitHubPRClient.updateIssueComment).toHaveBeenLastCalledWith(
-      'oauth-token',
-      'intexuraos',
-      'intexuraos',
-      12345,
-      expect.stringContaining('existing PR task has been instructed')
-    );
+    expect(deps.taskDispatcher.sendMessageToWorker).not.toHaveBeenCalled();
+    expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
+    expect(deps.gitHubPRClient.updateIssueComment).not.toHaveBeenCalled();
+    expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      managedConflictCommentId: 12345,
+      managedConflictTaskId: 'task-existing',
+      managedConflictTaskOwnerUserId: 'user-1',
+    }));
   });
 
-  it('recovers from a stale managed task id by reusing the latest pull request task', async () => {
+  it('recovers from a stale managed task id by creating a replacement conflict task linked to the latest PR task', async () => {
     const logger = createLogger();
     const currentTask = createTask({
       id: 'task-current',
       status: 'running',
+      linearIssueId: 'INT-123',
     });
     const deps = createDeps(logger);
     deps.gitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok([createSummary({
@@ -671,16 +692,21 @@ describe('createDetectMergeConflictsOnPush', () => {
       code: 'NOT_FOUND',
       message: 'Task task-stale not found',
     }));
-    deps.codeTaskRepo.findByPR.mockResolvedValue(ok(currentTask));
+    deps.codeTaskRepo.findLatestExecutionTaskByPR.mockResolvedValue(ok(currentTask));
     deps.codeTaskRepo.findByIdForUser.mockResolvedValue(ok(currentTask));
 
     const detector = createDetectMergeConflictsOnPush(deps as never);
     await detector.detectOnPush(createPushEvent('refs/heads/release/2026.03'), logger);
 
-    expect(deps.taskDispatcher.sendMessageToWorker).toHaveBeenCalledTimes(1);
-    expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
+    expect(deps.taskDispatcher.sendMessageToWorker).not.toHaveBeenCalled();
+    expect(deps.codeTaskRepo.create).toHaveBeenCalledTimes(1);
+    expect(deps.codeTaskRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      followUpReason: 'merge_conflict',
+      parentTaskId: 'task-current',
+      linearIssueId: 'INT-123',
+    }));
     expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      managedConflictTaskId: 'task-current',
+      managedConflictTaskId: 'task_11111111-1111-4111-8111-111111111111',
       managedConflictTaskOwnerUserId: 'user-1',
     }));
   });
@@ -698,12 +724,15 @@ describe('createDetectMergeConflictsOnPush', () => {
       code: 'NOT_FOUND',
       message: 'Task task-stale not found',
     }));
-    deps.codeTaskRepo.findByPR.mockResolvedValue(ok(null));
+    deps.codeTaskRepo.findLatestExecutionTaskByPR.mockResolvedValue(ok(null));
 
     const detector = createDetectMergeConflictsOnPush(deps as never);
     await detector.detectOnPush(createPushEvent('refs/heads/release/2026.03'), logger);
 
     expect(deps.codeTaskRepo.create).toHaveBeenCalledTimes(1);
+    expect(deps.codeTaskRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      followUpReason: 'merge_conflict',
+    }));
     expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(expect.objectContaining({
       managedConflictCommentId: 12345,
       managedConflictTaskId: 'task_11111111-1111-4111-8111-111111111111',
@@ -731,7 +760,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       managedConflictTaskOwnerUserId: 'user-1',
     })]));
     deps.codeTaskRepo.findById.mockResolvedValue(ok(staleManagedTask));
-    deps.codeTaskRepo.findByPR.mockResolvedValue(ok(currentTask));
+    deps.codeTaskRepo.findLatestExecutionTaskByPR.mockResolvedValue(ok(currentTask));
     deps.codeTaskRepo.findByIdForUser.mockResolvedValue(ok(currentTask));
 
     const detector = createDetectMergeConflictsOnPush(deps as never);
@@ -756,7 +785,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       managedConflictTaskId: null,
       managedConflictTaskOwnerUserId: 'user-1',
     })]));
-    deps.codeTaskRepo.findByPR.mockResolvedValue(err({
+    deps.codeTaskRepo.findLatestExecutionTaskByPR.mockResolvedValue(err({
       code: 'FIRESTORE_ERROR',
       message: 'lookup failed',
     }));
@@ -998,6 +1027,7 @@ describe('createDetectMergeConflictsOnPush', () => {
     deps.codeTaskRepo.findById.mockResolvedValue(ok(createTask({
       id: 'task-existing',
       status: 'running',
+      followUpReason: 'merge_conflict',
     })));
 
     const detector = createDetectMergeConflictsOnPush(deps as never);
@@ -1169,7 +1199,7 @@ describe('createDetectMergeConflictsOnPush', () => {
     }));
   });
 
-  it('updates the comment with a failure state when sending instructions to an existing task fails', async () => {
+  it('treats a carried-over non-conflict managed task as stale and creates a fresh conflict task', async () => {
     const logger = createLogger();
     const existingTask = createTask({
       id: 'task-existing',
@@ -1183,24 +1213,21 @@ describe('createDetectMergeConflictsOnPush', () => {
       managedConflictTaskOwnerUserId: 'user-1',
     })]));
     deps.codeTaskRepo.findById.mockResolvedValue(ok(existingTask));
-    deps.codeTaskRepo.findByIdForUser.mockResolvedValue(ok(existingTask));
-    deps.taskDispatcher.sendMessageToWorker.mockResolvedValue(err({
-      code: 'worker_error',
-      message: 'nope',
-    }));
 
     const detector = createDetectMergeConflictsOnPush(deps as never);
     await detector.detectOnPush(createPushEvent('refs/heads/release/2026.03'), logger);
 
+    expect(deps.taskDispatcher.sendMessageToWorker).not.toHaveBeenCalled();
+    expect(deps.codeTaskRepo.create).toHaveBeenCalledTimes(1);
     expect(deps.gitHubPRClient.updateIssueComment).toHaveBeenLastCalledWith(
       'oauth-token',
       'intexuraos',
       'intexuraos',
       12345,
-      expect.stringContaining('could not be started')
+      expect.stringContaining('Automated conflict resolution has started')
     );
     expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      managedConflictTaskId: null,
+      managedConflictTaskId: 'task_11111111-1111-4111-8111-111111111111',
       managedConflictTaskOwnerUserId: 'user-1',
     }));
   });
@@ -1270,6 +1297,9 @@ describe('createDetectMergeConflictsOnPush', () => {
     await detector.detectOnPush(createPushEvent('refs/heads/release/2026.03'), logger);
 
     expect(deps.codeTaskRepo.create).toHaveBeenCalledTimes(1);
+    expect(deps.codeTaskRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      followUpReason: 'merge_conflict',
+    }));
     expect(deps.taskEnqueueService.enqueue).not.toHaveBeenCalled();
     expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(expect.objectContaining({
       managedConflictTaskId: null,
@@ -1277,12 +1307,18 @@ describe('createDetectMergeConflictsOnPush', () => {
     }));
   });
 
-  it('omits linearIssueId reuse when the latest task is an active non-pull-request task', async () => {
+  it('inherits linearIssueId from the latest non-review task even when newer review tasks exist', async () => {
     const logger = createLogger();
     const deps = createDeps(logger);
     deps.codeTaskRepo.findByPR.mockResolvedValue(ok(createTask({
-      id: 'task-review-existing',
+      id: 'task-review-newest',
       agentType: 'review',
+      status: 'running',
+      linearIssueId: 'INT-999',
+    })));
+    deps.codeTaskRepo.findLatestExecutionTaskByPR.mockResolvedValue(ok(createTask({
+      id: 'task-execution-existing',
+      agentType: 'execution',
       status: 'running',
       linearIssueId: 'INT-555',
     })));
@@ -1299,11 +1335,41 @@ describe('createDetectMergeConflictsOnPush', () => {
     await detector.detectOnPush(createPushEvent('refs/heads/release/2026.03'), logger);
 
     const createCall = deps.codeTaskRepo.create.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
-    expect(createCall?.['linearIssueId']).toBeUndefined();
+    expect(deps.codeTaskRepo.findLatestExecutionTaskByPR).toHaveBeenCalledWith('intexuraos/intexuraos', 42);
+    expect(deps.codeTaskRepo.findByPR).not.toHaveBeenCalled();
+    expect(createCall?.['linearIssueId']).toBe('INT-555');
     expect(deps.taskEnqueueService.enqueue).toHaveBeenCalledWith({
       taskId: 'task_11111111-1111-4111-8111-111111111111',
       userId: 'user-1',
     });
+  });
+
+  it('treats review-only history as a fresh conflict workflow start', async () => {
+    const logger = createLogger();
+    const deps = createDeps(logger);
+
+    // Simulate review-only history: findByPR would return a review task,
+    // but the use case exclusively uses findLatestExecutionTaskByPR (which
+    // returns ok(null) by default) — so the workflow treats this as fresh.
+    deps.codeTaskRepo.findByPR.mockResolvedValue(ok(createTask({
+      id: 'task-review-only',
+      agentType: 'review',
+      status: 'reviewed',
+      linearIssueId: 'INT-999',
+    })));
+
+    const detector = createDetectMergeConflictsOnPush(deps as never);
+    await detector.detectOnPush(createPushEvent('refs/heads/release/2026.03'), logger);
+
+    expect(deps.codeTaskRepo.findLatestExecutionTaskByPR).toHaveBeenCalledWith('intexuraos/intexuraos', 42);
+    expect(deps.codeTaskRepo.findByPR).not.toHaveBeenCalled();
+    expect(deps.gitHubPRClient.updateIssueComment).toHaveBeenLastCalledWith(
+      'oauth-token',
+      'intexuraos',
+      'intexuraos',
+      12345,
+      expect.stringContaining('Automated conflict resolution has started.')
+    );
   });
 
   it('preserves an active conflict episode when mergeability remains unknown after retries', async () => {
@@ -1320,6 +1386,7 @@ describe('createDetectMergeConflictsOnPush', () => {
     deps.codeTaskRepo.findById.mockResolvedValue(ok(createTask({
       id: 'task-existing',
       status: 'running',
+      followUpReason: 'merge_conflict',
     })));
     deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails({
       mergeable: null,
@@ -1538,7 +1605,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       );
     });
 
-    it('skips state upsert for already-open summary but refreshes mergeability', async () => {
+    it('skips state upsert for already-open summary but refreshes mergeability and triggers workflow', async () => {
       const logger = createLogger();
       const deps = createDeps(logger);
       deps.gitHubPRSummaryRepo.findRecentlyActive.mockResolvedValue(ok([
@@ -1551,11 +1618,22 @@ describe('createDetectMergeConflictsOnPush', () => {
       const detector = createDetectMergeConflictsOnPush(deps as never);
       const result = await detector.reconcile(logger);
 
-      // State didn't change (already open), but mergeConflictStatus was refreshed
-      expect(result).toEqual(expect.objectContaining({ processed: 1, reopened: 0, closed: 0, mergeConflictRefreshed: 1 }));
+      // State didn't change (already open), but mergeConflictStatus was refreshed + workflow triggered
+      expect(result).toEqual(expect.objectContaining({
+        processed: 1,
+        reopened: 0,
+        closed: 0,
+        mergeConflictRefreshed: 1,
+        conflictWorkflowsTriggered: 1,
+      }));
       expect(deps.gitHubPRClient.getPullRequestDetails).toHaveBeenCalledTimes(1);
       expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(
-        expect.objectContaining({ mergeConflictStatus: 'conflicting', pullRequestNumber: 10 }),
+        expect.objectContaining({
+          mergeConflictStatus: 'conflicting',
+          pullRequestNumber: 10,
+          managedConflictCommentId: 12345,
+          managedConflictTaskOwnerUserId: 'user-1',
+        }),
       );
     });
 
@@ -1742,7 +1820,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       );
     });
 
-    it('refreshes mergeConflictStatus from clean to conflicting for open PRs', async () => {
+    it('refreshes mergeConflictStatus from clean to conflicting and triggers workflow for open PRs', async () => {
       const logger = createLogger();
       const deps = createDeps(logger);
       deps.gitHubPRSummaryRepo.findRecentlyActive.mockResolvedValue(ok([
@@ -1756,20 +1834,25 @@ describe('createDetectMergeConflictsOnPush', () => {
       const detector = createDetectMergeConflictsOnPush(deps as never);
       const result = await detector.reconcile(logger);
 
-      expect(result).toEqual(expect.objectContaining({ mergeConflictRefreshed: 1 }));
+      expect(result).toEqual(expect.objectContaining({
+        mergeConflictRefreshed: 1,
+        conflictWorkflowsTriggered: 1,
+      }));
       expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           pullRequestNumber: 10,
           mergeConflictStatus: 'conflicting',
           lastConflictCheckedAt: expect.any(Date),
+          managedConflictCommentId: 12345,
         }),
       );
     });
 
-    it('refreshes mergeConflictStatus from conflicting to clean for open PRs', async () => {
+    it('refreshes mergeConflictStatus from conflicting to clean without resolve workflow when no managed comment', async () => {
       const logger = createLogger();
       const deps = createDeps(logger);
       deps.gitHubPRSummaryRepo.findRecentlyActive.mockResolvedValue(ok([
+        // No managedConflictCommentId → resolve workflow won't fire
         createSummary({ pullRequestNumber: 10, state: 'open', mergeConflictStatus: 'conflicting' }),
       ]));
       deps.gitHubPRClient.listAllOpenPullRequests.mockResolvedValue(ok([
@@ -1780,13 +1863,18 @@ describe('createDetectMergeConflictsOnPush', () => {
       const detector = createDetectMergeConflictsOnPush(deps as never);
       const result = await detector.reconcile(logger);
 
-      expect(result).toEqual(expect.objectContaining({ mergeConflictRefreshed: 1 }));
+      expect(result).toEqual(expect.objectContaining({
+        mergeConflictRefreshed: 1,
+        conflictWorkflowsTriggered: 0,
+      }));
       expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           pullRequestNumber: 10,
           mergeConflictStatus: 'clean',
+          conflictResolvedAt: expect.any(Date),
         }),
       );
+      expect(deps.gitHubPRClient.updateIssueComment).not.toHaveBeenCalled();
     });
 
     it('skips mergeability refresh when status is already correct', async () => {
@@ -1826,7 +1914,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       expect(deps.gitHubPRSummaryRepo.upsert).not.toHaveBeenCalled();
     });
 
-    it('warns and skips mergeability refresh when getPullRequestDetails fails', async () => {
+    it('logs and skips mergeability refresh when getPullRequestDetails fails', async () => {
       const logger = createLogger();
       const deps = createDeps(logger);
       deps.gitHubPRSummaryRepo.findRecentlyActive.mockResolvedValue(ok([
@@ -1844,14 +1932,214 @@ describe('createDetectMergeConflictsOnPush', () => {
       const result = await detector.reconcile(logger);
 
       expect(result).toEqual(expect.objectContaining({ mergeConflictRefreshed: 0 }));
-      expect(logger.warn).toHaveBeenCalledWith(
+      expect(logger.info).toHaveBeenCalledWith(
         expect.objectContaining({ prNumber: 10 }),
         expect.stringContaining('Failed to fetch PR details for mergeability refresh')
       );
       expect(deps.gitHubPRSummaryRepo.upsert).not.toHaveBeenCalled();
     });
 
-    it('refreshes mergeability for reopened PRs', async () => {
+    it('triggers conflict workflow when reconcile detects clean-to-conflicting transition', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+      deps.gitHubPRSummaryRepo.findRecentlyActive.mockResolvedValue(ok([
+        createSummary({ pullRequestNumber: 10, state: 'open', mergeConflictStatus: 'clean' }),
+      ]));
+      deps.gitHubPRClient.listAllOpenPullRequests.mockResolvedValue(ok([
+        createOpenPRListItem(10),
+      ]));
+      deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails({ number: 10, mergeable: false })));
+
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      const result = await detector.reconcile(logger);
+
+      expect(result).toEqual(expect.objectContaining({
+        mergeConflictRefreshed: 1,
+        conflictWorkflowsTriggered: 1,
+      }));
+      // Conflict comment created
+      expect(deps.gitHubPRClient.postPRComment).toHaveBeenCalledTimes(1);
+      // Task spawned
+      expect(deps.codeTaskRepo.create).toHaveBeenCalledTimes(1);
+      // Full summary upsert with workflow fields
+      expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pullRequestNumber: 10,
+          mergeConflictStatus: 'conflicting',
+          managedConflictCommentId: 12345,
+          managedConflictTaskId: expect.any(String),
+          managedConflictTaskOwnerUserId: 'user-1',
+        }),
+      );
+    });
+
+    it('triggers resolve workflow when reconcile detects conflicting-to-clean transition', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+      deps.gitHubPRSummaryRepo.findRecentlyActive.mockResolvedValue(ok([
+        createSummary({
+          pullRequestNumber: 10,
+          state: 'open',
+          mergeConflictStatus: 'conflicting',
+          managedConflictCommentId: 999,
+          managedConflictTaskId: 'task-old',
+          managedConflictTaskOwnerUserId: 'user-1',
+        }),
+      ]));
+      deps.gitHubPRClient.listAllOpenPullRequests.mockResolvedValue(ok([
+        createOpenPRListItem(10),
+      ]));
+      deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails({ number: 10, mergeable: true })));
+
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      const result = await detector.reconcile(logger);
+
+      expect(result).toEqual(expect.objectContaining({
+        mergeConflictRefreshed: 1,
+        conflictWorkflowsTriggered: 1,
+      }));
+      // Existing comment updated with "resolved" body
+      expect(deps.gitHubPRClient.updateIssueComment).toHaveBeenCalledTimes(1);
+      expect(deps.gitHubPRClient.updateIssueComment).toHaveBeenCalledWith(
+        'oauth-token',
+        'intexuraos',
+        'intexuraos',
+        999,
+        expect.stringContaining('resolved'),
+      );
+    });
+
+    it('skips conflict workflow when per-summary access context is unavailable', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+      deps.gitHubPRSummaryRepo.findRecentlyActive.mockResolvedValue(ok([
+        // First summary has valid auth → used to get repo-level token
+        createSummary({ pullRequestNumber: 9, state: 'open', mergeConflictStatus: 'conflicting' }),
+        // Second summary has unknown author → per-summary access will fail
+        createSummary({ pullRequestNumber: 10, state: 'open', mergeConflictStatus: 'clean', authorLogin: 'unknown-user' }),
+      ]));
+      deps.gitHubPRClient.listAllOpenPullRequests.mockResolvedValue(ok([
+        createOpenPRListItem(9),
+        createOpenPRListItem(10),
+      ]));
+      deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails({ mergeable: false })));
+      // Resolve alice (PR #9) → ok, unknown-user (PR #10) → null
+      deps.userServiceClient.resolveGitHubUsername.mockImplementation((login: string) =>
+        login === 'alice'
+          ? Promise.resolve(ok({ userId: 'user-1' }))
+          : Promise.resolve(ok(null))
+      );
+
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      const result = await detector.reconcile(logger);
+
+      // PR #9 stays conflicting (no transition) → no workflow
+      // PR #10 transitions clean→conflicting but no access context → no workflow, status-only upsert
+      expect(result).toEqual(expect.objectContaining({ conflictWorkflowsTriggered: 0 }));
+      // Only the clean→conflicting transition triggers an upsert
+      expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ pullRequestNumber: 10, mergeConflictStatus: 'conflicting' }),
+      );
+    });
+
+    it('does not trigger workflow when status stays conflicting', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+      deps.gitHubPRSummaryRepo.findRecentlyActive.mockResolvedValue(ok([
+        createSummary({ pullRequestNumber: 10, state: 'open', mergeConflictStatus: 'conflicting' }),
+      ]));
+      deps.gitHubPRClient.listAllOpenPullRequests.mockResolvedValue(ok([
+        createOpenPRListItem(10),
+      ]));
+      deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails({ mergeable: false })));
+
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      const result = await detector.reconcile(logger);
+
+      expect(result).toEqual(expect.objectContaining({ conflictWorkflowsTriggered: 0 }));
+      expect(deps.gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+      expect(deps.gitHubPRSummaryRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('generates synthetic eventId for reconcile-triggered workflows', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+      deps.gitHubPRSummaryRepo.findRecentlyActive.mockResolvedValue(ok([
+        createSummary({ pullRequestNumber: 10, state: 'open', mergeConflictStatus: 'clean' }),
+      ]));
+      deps.gitHubPRClient.listAllOpenPullRequests.mockResolvedValue(ok([
+        createOpenPRListItem(10),
+      ]));
+      deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails({ number: 10, mergeable: false })));
+
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      await detector.reconcile(logger);
+
+      expect(deps.codeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ traceId: expect.stringMatching(/^reconcile-\d+-pr\d+$/) }),
+      );
+    });
+
+    it('performs status-only upsert when status changes but no workflow is needed (null to clean)', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+      deps.gitHubPRSummaryRepo.findRecentlyActive.mockResolvedValue(ok([
+        createSummary({ pullRequestNumber: 10, state: 'open', mergeConflictStatus: null }),
+      ]));
+      deps.gitHubPRClient.listAllOpenPullRequests.mockResolvedValue(ok([
+        createOpenPRListItem(10),
+      ]));
+      deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails({ mergeable: true })));
+
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      const result = await detector.reconcile(logger);
+
+      expect(result).toEqual(expect.objectContaining({
+        mergeConflictRefreshed: 1,
+        conflictWorkflowsTriggered: 0,
+      }));
+      expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pullRequestNumber: 10,
+          mergeConflictStatus: 'clean',
+          lastConflictCheckedAt: expect.any(Date),
+        }),
+      );
+      // No workflow dispatched — no comment posted, no task created
+      expect(deps.gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+      expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('continues with default task resolution when resolveExistingConflictTask fails', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+      deps.gitHubPRSummaryRepo.findRecentlyActive.mockResolvedValue(ok([
+        createSummary({
+          pullRequestNumber: 10,
+          state: 'open',
+          mergeConflictStatus: 'clean',
+          managedConflictTaskId: 'task-stale',
+        }),
+      ]));
+      deps.gitHubPRClient.listAllOpenPullRequests.mockResolvedValue(ok([
+        createOpenPRListItem(10),
+      ]));
+      deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails({ mergeable: false })));
+      // findById returns a non-NOT_FOUND error → resolveExistingConflictTask returns err
+      deps.codeTaskRepo.findById.mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'db failure' }));
+
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      const result = await detector.reconcile(logger);
+
+      // Workflow still triggers with default task resolution
+      expect(result).toEqual(expect.objectContaining({
+        mergeConflictRefreshed: 1,
+        conflictWorkflowsTriggered: 1,
+      }));
+      expect(deps.gitHubPRClient.postPRComment).toHaveBeenCalled();
+    });
+
+    it('refreshes mergeability for reopened PRs and triggers conflict workflow', async () => {
       const logger = createLogger();
       const deps = createDeps(logger);
       deps.gitHubPRSummaryRepo.findRecentlyActive.mockResolvedValue(ok([
@@ -1868,8 +2156,9 @@ describe('createDetectMergeConflictsOnPush', () => {
       expect(result).toEqual(expect.objectContaining({
         reopened: 1,
         mergeConflictRefreshed: 1,
+        conflictWorkflowsTriggered: 1,
       }));
-      // First upsert for state reopen, second for mergeability refresh
+      // First upsert for state reopen, second for mergeability refresh + workflow
       expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledTimes(2);
     });
   });

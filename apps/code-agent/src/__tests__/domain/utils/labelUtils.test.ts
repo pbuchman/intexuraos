@@ -91,6 +91,10 @@ describe('labelUtils', () => {
       expect(getWorkerTypeFromLabels(['qwen'])).toBe('qwen');
     });
 
+    it('returns openrouter-free for single openrouter-free label', () => {
+      expect(getWorkerTypeFromLabels(['openrouter-free'])).toBe('openrouter-free');
+    });
+
     it('returns worker type when mixed with non-worker labels', () => {
       expect(getWorkerTypeFromLabels(['bug', 'opus', 'feature'])).toBe('opus');
     });

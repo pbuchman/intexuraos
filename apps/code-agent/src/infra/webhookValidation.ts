@@ -78,7 +78,7 @@ export function validateOrchestratorSignature(
 
   // Compute expected signature
   const rawBody = JSON.stringify(request.body);
-  /* v8 ignore start -- ts-type: `request @preserve */
+  /* v8 ignore start -- upstream: Fastify always produces non-empty header arrays — cannot simulate empty Array.isArray-true header @preserve */
   const timestampStr = Array.isArray(timestamp) ? timestamp[0] ?? '' : timestamp;
   /* v8 ignore stop @preserve */
   const message = `${timestampStr}.${rawBody}`;
@@ -166,7 +166,7 @@ export async function validateWebhookSignature(
 
   // Compute expected signature
   const rawBody = JSON.stringify(request.body);
-/* v8 ignore start -- ts-type: `request @preserve */
+  /* v8 ignore start -- upstream: Fastify always produces non-empty header arrays — cannot simulate empty Array.isArray-true header @preserve */
   const timestampStr = Array.isArray(timestamp) ? timestamp[0] ?? '' : timestamp;
   /* v8 ignore stop @preserve */
   const message = `${timestampStr}.${rawBody}`;

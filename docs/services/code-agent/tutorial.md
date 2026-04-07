@@ -80,7 +80,7 @@ Expected response:
   "data": {
     "testStatus": "success",
     "testMessage": "Connection successful",
-    "lastTestedAt": "2026-03-22T10:30:00.000Z"
+    "lastTestedAt": "2026-04-07T10:30:00.000Z"
   }
 }
 ```
@@ -131,21 +131,23 @@ curl http://localhost:8128/code/tasks/<codeTaskId> \
 
 The task progresses through statuses: `queued` -> `dispatched` -> `running` -> `planned` or `implemented` or `reviewed` (or `failed`). Tasks never reach a generic `completed` status — they finish as `planned` (planning agent), `implemented` (execution agent), or `reviewed` (review agent). If all workers are busy, the task enters `queued` status and dispatches automatically when capacity opens.
 
-### Step 3: List your tasks
+### Step 3: List your tasks via issue groups
 
 ```bash
-curl "http://localhost:8128/code/tasks?limit=10" \
+curl "http://localhost:8128/code/issue-groups?status=active&limit=10" \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
-You can filter by status (supports multiple statuses):
+Tasks are grouped by Linear issue. Each group shows an aggregated status (active, needs-action, done, failed, archived), pipeline progress, and the latest task details. You can filter by group status and sort by `linear-id`, `pr-number`, `dispatched`, or `last-updated`.
+
+For the flat task list (legacy):
 
 ```bash
 curl "http://localhost:8128/code/tasks?status=running&status=dispatched&limit=10" \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
-Note: Tasks that have been retried show status `archived` and link to the new task via `retriedFrom`.
+Note: Tasks with `agentType: 'ask_agent'` are excluded from both listing endpoints. Use `GET /code/ask-agent/active` instead.
 
 ### Step 4: Cancel a running task
 
@@ -156,7 +158,56 @@ curl -X POST http://localhost:8128/code/cancel \
   -d '{ "taskId": "<codeTaskId>" }'
 ```
 
-## Part 4: Merge Queue (10 min)
+## Part 4: Ask Agent — Interactive Sessions (5 min)
+
+### Step 1: Start an Ask Agent session
+
+```bash
+curl -X POST http://localhost:8128/code/ask-agent/start \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your-auth0-jwt>" \
+  -d '{
+    "prompt": "What files import the CodeTask interface?"
+  }'
+```
+
+Expected response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "submitted",
+    "codeTaskId": "task_abc123-..."
+  }
+}
+```
+
+Ask Agent sessions use the Opus model and run as `agentType: 'ask_agent'`. Unlike regular code tasks, they do not create Linear issues.
+
+### Step 2: Check for an active session
+
+```bash
+curl http://localhost:8128/code/ask-agent/active \
+  -H "Authorization: Bearer <your-auth0-jwt>"
+```
+
+Returns the most recent non-archived ask-agent task, or `null` if none exists. This endpoint supports cross-device session restoration.
+
+### Step 3: Send a follow-up message
+
+While the session is running, send additional context or questions:
+
+```bash
+curl -X POST http://localhost:8128/code/tasks/<askAgentTaskId>/messages \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your-auth0-jwt>" \
+  -d '{
+    "message": "Also check which of those files have tests"
+  }'
+```
+
+## Part 5: Merge Queue (10 min)
 
 ### Step 1: List available branches
 
@@ -215,7 +266,7 @@ curl -X DELETE "http://localhost:8128/code/merge-queue/watch/<watchId>" \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
-## Part 5: Advanced Features (10 min)
+## Part 6: Advanced Features (10 min)
 
 ### Retry a failed task
 
@@ -296,7 +347,7 @@ curl -X POST http://localhost:8128/code/submit \
   }'
 ```
 
-Available worker types: `auto` (default), `opus`, `sonnet`, `minimax`, `glm`, `qwen`, `kimi`. If the linked Linear issue has a label matching a worker type, that label overrides the request.
+Available worker types: `auto` (default), `opus`, `sonnet`, `minimax`, `glm`, `qwen`, `kimi`. If the linked Linear issue has a label matching a worker type, that label overrides the request. Different agent types (planning, execution, review, remediation) can be independently tuned to use different worker types via worker settings.
 
 ### Query the GitHub event decision log
 
@@ -318,26 +369,20 @@ curl "http://localhost:8128/code/github-event-log/<entryId>/payload" \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
-### Hydrate event log rows with full detail
+### Internal: Submit task on behalf of a user
 
-Fetch full audit and decision data for specific log entries:
+Other internal services can create tasks via the internal submit endpoint:
 
 ```bash
-curl -X POST http://localhost:8128/code/github-event-log/rows \
+curl -X POST http://localhost:8128/internal/code/submit \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <your-auth0-jwt>" \
-  -d '{ "ids": ["entry-uuid-1", "entry-uuid-2"] }'
-```
-
-The response includes the full GitHub webhook payload (`audit`) and the LLM decision record (`decision`) with reasoning, tool calls, and cost.
-
-### Query GitHub PR summaries
-
-View the list of PRs with recent activity (30-day window):
-
-```bash
-curl "http://localhost:8128/code/github-pr-summaries" \
-  -H "Authorization: Bearer <your-auth0-jwt>"
+  -H "X-Internal-Auth: <internal-auth-token>" \
+  -d '{
+    "userId": "auth0|user-id",
+    "prompt": "Fix the broken import in utils.ts",
+    "workerType": "auto",
+    "linearIssueId": "INT-500"
+  }'
 ```
 
 ### Internal: Process code action (from actions-agent)
@@ -362,22 +407,23 @@ curl -X POST http://localhost:8128/internal/code/process \
 
 ## Troubleshooting
 
-| Symptom                               | Cause                                             | Fix                                                                              |
-| ------------------------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `worker_not_configured` on submit     | No workers configured or enabled for user         | Add a worker via `POST /code/worker-settings/workers` and enable it              |
-| `429` rate limit on submit            | Concurrent, hourly, or cost limit exceeded        | Wait for tasks to complete, or wait for the time window to reset                 |
-| `409 CONFLICT` on submit              | Deduplication triggered (same prompt in window)   | Wait or modify the prompt                                                        |
-| `validation_error` on submit          | Prompt contains injection patterns                | Remove system override markers or base64 blobs from the prompt                   |
-| Worker connectivity test fails        | CF Access credentials wrong or tunnel not running | Verify tunnel is running and credentials match CF dashboard                      |
-| Task stuck in `dispatched` for >5 min | Worker did not start processing                   | Check orchestrator logs; task will be marked `interrupted` after 30m             |
-| `UNAUTHORIZED` on webhook             | HMAC signature mismatch                           | Verify `INTEXURAOS_ORCHESTRATOR_SECRET` matches on both sides                    |
-| Logs not appearing in UI              | Log chunks failing HMAC validation                | Check `INTEXURAOS_WEBHOOK_VERIFY_SECRET` matches on worker and server            |
-| `too_soon` error on retry             | Cool-off period not elapsed                       | Wait the specified number of minutes before retrying                             |
-| GitHub webhook returning 401          | GitHub webhook secret mismatch                    | Verify `INTEXURAOS_GITHUB_WEBHOOK_SECRET` matches GitHub app settings            |
-| Task queued but never dispatched      | Workers remain busy past queue TTL                | Check worker status; task expires after 30 min in queue                          |
-| Review task not dispatching           | Workers at capacity                               | Review tasks now queue like regular tasks — they dispatch when a worker frees up |
-| Merge queue watch not merging PRs     | CI checks pending or PRs have conflicts           | Check PR status on GitHub; the queue merges one PR per tick when checks pass     |
-| Cannot create watch for `main`        | Main branch is blocked as merge queue target      | Use `development` or another non-blocked branch as the base branch               |
+| Symptom                               | Cause                                             | Fix                                                                          |
+| ------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `worker_not_configured` on submit     | No workers configured or enabled for user         | Add a worker via `POST /code/worker-settings/workers` and enable it          |
+| `429` rate limit on submit            | Concurrent, hourly, or cost limit exceeded        | Wait for tasks to complete, or wait for the time window to reset             |
+| `409 CONFLICT` on submit              | Deduplication triggered (same prompt in window)   | Wait or modify the prompt                                                    |
+| `validation_error` on submit          | Prompt contains injection patterns                | Remove system override markers or base64 blobs from the prompt               |
+| Worker connectivity test fails        | CF Access credentials wrong or tunnel not running | Verify tunnel is running and credentials match CF dashboard                  |
+| Task stuck in `dispatched` for >5 min | Worker did not start processing                   | Check orchestrator logs; task will be marked `interrupted` after 30m         |
+| `UNAUTHORIZED` on webhook             | HMAC signature mismatch                           | Verify `INTEXURAOS_ORCHESTRATOR_SECRET` matches on both sides                |
+| Logs not appearing in UI              | Log chunks failing HMAC validation                | Check `INTEXURAOS_WEBHOOK_VERIFY_SECRET` matches on worker and server        |
+| `too_soon` error on retry             | Cool-off period not elapsed                       | Wait the specified number of minutes before retrying                         |
+| GitHub webhook returning 401          | GitHub webhook secret mismatch                    | Verify `INTEXURAOS_GITHUB_WEBHOOK_SECRET` matches GitHub app settings        |
+| Task queued but never dispatched      | Workers remain busy past queue TTL                | Check worker status; task expires after 24 hours in queue                    |
+| Review task not dispatching           | Workers at capacity                               | Review tasks queue like regular tasks — they dispatch when a worker frees up |
+| Merge queue watch not merging PRs     | CI checks pending or PRs have conflicts           | Check PR status on GitHub; the queue merges one PR per tick when checks pass |
+| Cannot create watch for `main`        | Main branch is blocked as merge queue target      | Use `development` or another non-blocked branch as the base branch           |
+| Ask Agent task not in task list       | Ask Agent tasks are filtered from list endpoints  | Use `GET /code/ask-agent/active` to retrieve Ask Agent sessions              |
 
 ## Exercises
 
@@ -407,23 +453,47 @@ curl -X PUT http://localhost:8128/code/worker-settings/priority \
 
 **Solution verification:** `GET /code/worker-settings` should show `cloud-vm` before `home-mac` in the `workers` array.
 
-### Exercise 2: Submit a task with a Linear issue
+### Exercise 2: Start an Ask Agent session and send follow-up
 
-Submit a task linked to an existing Linear issue:
+Start an interactive session and continue the conversation:
 
 ```bash
-curl -X POST http://localhost:8128/code/submit \
+# Start session
+curl -X POST http://localhost:8128/code/ask-agent/start \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <jwt>" \
-  -d '{
-    "prompt": "Implement the solution described in the Linear issue",
-    "linearIssueId": "INT-500"
-  }'
+  -d '{ "prompt": "List all Firestore collections used by code-agent" }'
+
+# Check it is active
+curl http://localhost:8128/code/ask-agent/active \
+  -H "Authorization: Bearer <jwt>"
+
+# Send follow-up
+curl -X POST http://localhost:8128/code/tasks/<askAgentTaskId>/messages \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <jwt>" \
+  -d '{ "message": "Which of those collections have subcollections?" }'
 ```
 
-**Solution verification:** The created task should have `linearIssueId: "INT-500"` and the Linear issue should transition to "In Progress" when the worker starts.
+**Solution verification:** The active endpoint returns the task with `agentType: "ask_agent"`. The message endpoint returns `{ "action": "queued" }` if the task is running.
 
-### Exercise 3: Create a merge queue watch
+### Exercise 3: Browse issue groups
+
+View grouped tasks and filter by status:
+
+```bash
+# List active groups
+curl "http://localhost:8128/code/issue-groups?status=active&limit=5" \
+  -H "Authorization: Bearer <jwt>"
+
+# List groups needing attention
+curl "http://localhost:8128/code/issue-groups?status=needs-action&limit=5" \
+  -H "Authorization: Bearer <jwt>"
+```
+
+**Solution verification:** Each group includes `linearIssueId`, `aggregateStatus`, `taskCount`, and pipeline step data showing which phases have completed.
+
+### Exercise 4: Create a merge queue watch
 
 Create a watch and observe the merge queue processing PRs:
 
@@ -445,7 +515,7 @@ curl "http://localhost:8128/code/merge-queue/watches" \
 
 **Solution verification:** After Cloud Scheduler triggers a few ticks, the watch should show merged PRs in the `mergedPrs` array and any skipped PRs with reasons in `skippedPrs`.
 
-### Exercise 4: Trigger zombie detection
+### Exercise 5: Trigger zombie detection
 
 Use the internal endpoint to scan for zombie tasks:
 
@@ -456,7 +526,7 @@ curl -X POST http://localhost:8128/internal/code/detect-zombies \
 
 **Solution verification:** The response includes `detected` (count of stale tasks) and `interrupted` (count successfully marked as interrupted).
 
-### Exercise 5: Explore the event decision log
+### Exercise 6: Explore the event decision log
 
 Fetch the GitHub event decision log and inspect a raw payload:
 
@@ -472,7 +542,7 @@ curl "http://localhost:8128/code/github-event-log/<entryId>/payload" \
 
 **Solution verification:** The payload endpoint returns the full GitHub webhook JSON for the selected event, including all nested fields that were sent by GitHub.
 
-### Exercise 6: Set the default review worker type
+### Exercise 7: Set the default review worker type
 
 Configure which model is used for automated code reviews when the GitHub Agent does not specify one:
 

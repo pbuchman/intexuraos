@@ -42,7 +42,7 @@ export async function executeSchedule(
   const startTime = Date.now();
 
   try {
-    const actionResult = await executeAction(actionDeps, schedule.action);
+    const actionResult = await executeAction(actionDeps, schedule.action, schedule.userId);
 
     const durationMs = Date.now() - startTime;
     const completedAt = new Date().toISOString();

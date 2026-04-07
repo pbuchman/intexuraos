@@ -26,6 +26,7 @@ import {
   loadAuth0Config as loadAuth0ConfigFromInfra,
 } from './infra/auth0/index.js';
 import { LlmValidatorImpl } from './infra/llm/index.js';
+import { getAllowlistPricing, OPENROUTER_VALIDATION_MODEL } from '@intexuraos/infra-openrouter';
 import { GoogleOAuthClientImpl } from './infra/google/index.js';
 import { GitHubOAuthClientImpl } from './infra/github/index.js';
 
@@ -109,11 +110,16 @@ export function initializeServices(pricingContext?: PricingContext, logger: Logg
 
   let llmValidator: LlmValidator | null = null;
   if (!isTestEnv && pricingContext !== undefined) {
+    const openrouterPricing = getAllowlistPricing(OPENROUTER_VALIDATION_MODEL);
     const validationPricing = {
       google: pricingContext.getPricing(LlmModels.Gemini20Flash),
       openai: pricingContext.getPricing(LlmModels.GPT4oMini),
       anthropic: pricingContext.getPricing(LlmModels.ClaudeHaiku35),
       perplexity: pricingContext.getPricing(LlmModels.Sonar),
+      openrouter: openrouterPricing ?? {
+        inputPricePerMillion: 0.07,
+        outputPricePerMillion: 0.26,
+      },
     };
     llmValidator = new LlmValidatorImpl(validationPricing, logger);
   }

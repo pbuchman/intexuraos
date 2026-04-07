@@ -415,5 +415,12 @@ describe('buildResearchPrompt', () => {
       const result = buildResearchPrompt('test query', ctx);
       expect(result).toContain('local conditions');
     });
+
+    it('should include construction_building guidelines', () => {
+      const ctx = createTestResearchContext({ domain: 'construction_building' });
+      const result = buildResearchPrompt('test query', ctx);
+      expect(result).toContain('building codes');
+      expect(result).toContain('cost estimation');
+    });
   });
 });

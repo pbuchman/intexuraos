@@ -1,6 +1,7 @@
 import { HashRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { Auth0Provider } from '@auth0/auth0-react';
 import { AuthProvider, SyncQueueProvider, ThemeProvider, useAuth } from '@/context';
+import { useTimezoneAutoDetect } from '@/hooks';
 import { PWAProvider } from '@/context/pwa-context';
 import { AndroidInstallBanner, IOSInstallBanner, UpdateBanner } from '@/components/pwa-banners';
 import { DevBar } from '@/components/DevBar';
@@ -18,9 +19,10 @@ import { config } from '@/config';
 
 import {
   ApiKeysSettingsPage,
+  AskAgentPage,
   BookmarksListPage,
   CalendarPage,
-  CodeTaskViewPageV2,
+  CodeTaskViewPage,
   CodeTaskNewPage,
   CodeTasksPage,
   CronExecutionsPage,
@@ -31,6 +33,8 @@ import {
   MergeQueuePage,
   HellscriptBuffersPage,
   HellscriptConversationPage,
+  HellscriptStylePage,
+  HellscriptSamplesPage,
   CompositeFeedFormPage,
   CompositeFeedsListPage,
   DataInsightsPage,
@@ -43,6 +47,7 @@ import {
   LlmCostsPage,
   LinearConnectionPage,
   LinearIssuesPage,
+  LinearPruneCandidatesPage,
   ResearchAgentPage,
   LlmPricingPage,
   LoginPage,
@@ -61,6 +66,11 @@ import {
   WhatsAppNotesPage,
   WorkerSettingsPage,
 } from '@/pages';
+
+function TimezoneAutoDetect(): null {
+  useTimezoneAutoDetect();
+  return null;
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }): React.JSX.Element {
   const { isAuthenticated, isLoading } = useAuth();
@@ -131,9 +141,9 @@ function BookmarkDetailRedirect(): React.JSX.Element {
   return <Navigate to={`/my-bookmarks?id=${id ?? ''}`} replace />;
 }
 
-function CodeTaskViewPageV2Keyed(): React.JSX.Element {
+function CodeTaskViewPageKeyed(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
-  return <CodeTaskViewPageV2 key={id} />;
+  return <CodeTaskViewPage key={id} />;
 }
 
 function CodeTaskViewRedirect(): React.JSX.Element {
@@ -260,6 +270,22 @@ function AppRoutes(): React.JSX.Element {
         }
       />
       <Route
+        path="/hellscript/voice"
+        element={
+          <ProtectedRoute>
+            <HellscriptStylePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/hellscript/scriptures"
+        element={
+          <ProtectedRoute>
+            <HellscriptSamplesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/hellscript/:id"
         element={
           <ProtectedRoute>
@@ -285,6 +311,14 @@ function AppRoutes(): React.JSX.Element {
         }
       />
       <Route
+        path="/code-tasks/ask-agent"
+        element={
+          <ProtectedRoute>
+            <AskAgentPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/code-tasks/dispatch-queue"
         element={
           <ProtectedRoute>
@@ -304,7 +338,7 @@ function AppRoutes(): React.JSX.Element {
         path="/code-tasks/:id"
         element={
           <ProtectedRoute>
-            <CodeTaskViewPageV2Keyed />
+            <CodeTaskViewPageKeyed />
           </ProtectedRoute>
         }
       />
@@ -521,6 +555,14 @@ function AppRoutes(): React.JSX.Element {
         }
       />
       <Route
+        path="/linear/prune-candidates"
+        element={
+          <ProtectedRoute>
+            <LinearPruneCandidatesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/linear"
         element={
           <ProtectedRoute>
@@ -573,6 +615,7 @@ export function App(): React.JSX.Element {
           >
             <HashRouter>
               <AuthProvider>
+                <TimezoneAutoDetect />
                 <SyncQueueProvider>
                   <AppRoutes />
                   <UpdateBanner />

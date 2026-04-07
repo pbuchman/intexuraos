@@ -1,10 +1,9 @@
-export { Crawl4AIClient, createCrawl4AIClient, type Crawl4AIClientConfig } from './crawl4aiClient.js';
 export {
-  createPageContentFetcher,
+  createCloudflareMarkdownClient,
+  type CloudflareMarkdownClientConfig,
   type PageContentFetcher,
-  type PageContentFetcherConfig,
   type PageContentError,
-} from './pageContentFetcher.js';
+} from './cloudflareMarkdownClient.js';
 export {
   createLlmSummarizer,
   type LlmSummarizer,

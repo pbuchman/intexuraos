@@ -210,17 +210,19 @@ The function polls the health endpoint during the grace period. It stops waiting
 
 ## Recent Changes
 
-| Commit     | Description                                          | Date       |
-| ---------- | ---------------------------------------------------- | ---------- |
-| `44ea683a` | Release v3.2.0 (version bump only)                   | 2026-03-07 |
-| `6ba7ba00` | Fix test type errors from tsconfig check expansion   | 2026-03-03 |
-| `b3f34d85` | Release v3.1.0                                       | 2026-02-22 |
-| `c8a42105` | Release v3.0.0                                       | 2026-02-19 |
-| `b82522d2` | Fix Cloud Functions deployment with esbuild bundling | 2026-02-01 |
-| `f10ebdbf` | Fix empty error objects in log output (INT-464)      | 2026-02-01 |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement (INT-427)    | 2026-01-29 |
-| `7a90db67` | Fix vitest v4 migration and improve branch coverage  | 2026-01-28 |
-| `cd70bc3f` | Add Cloud Functions for VM lifecycle (INT-369/370)   | 2026-01-25 |
+| Commit     | Description                                                 | Date       |
+| ---------- | ----------------------------------------------------------- | ---------- |
+| `626cac13` | Add stop-vm test coverage for health throw and grace expiry | 2026-03-30 |
+| `549c9698` | Improve v8 ignore annotation with specific blocker reason   | 2026-03-24 |
+| `44ea683a` | Release v3.2.0 (version bump only)                          | 2026-03-07 |
+| `6ba7ba00` | Fix test type errors from tsconfig check expansion          | 2026-03-03 |
+| `b3f34d85` | Release v3.1.0                                              | 2026-02-22 |
+| `c8a42105` | Release v3.0.0                                              | 2026-02-19 |
+| `b82522d2` | Fix Cloud Functions deployment with esbuild bundling        | 2026-02-01 |
+| `f10ebdbf` | Fix empty error objects in log output (INT-464)             | 2026-02-01 |
+| `5aa3e1bd` | Enable strict 100% coverage enforcement (INT-427)           | 2026-01-29 |
+| `7a90db67` | Fix vitest v4 migration and improve branch coverage         | 2026-01-28 |
+| `cd70bc3f` | Add Cloud Functions for VM lifecycle (INT-369/370)          | 2026-01-25 |
 
 ## Dependencies
 

@@ -28,6 +28,7 @@ export interface SendTaskMessageResult {
 
 export type SendTaskMessageErrorCode =
   | 'task_not_found'
+  | 'invalid_agent_type'
   | 'invalid_status'
   | 'worker_not_configured'
   | 'worker_unavailable'
@@ -65,6 +66,12 @@ export async function sendTaskMessage(
   }
 
   const task = taskResult.value;
+
+  // Step 1b: Reject messages to non-preservable agent types (review/remediation)
+  if (task.agentType === 'review' || task.agentType === 'remediation') {
+    logger.warn({ taskId, agentType: task.agentType }, 'Cannot send messages to review/remediation tasks');
+    return err({ code: 'invalid_agent_type', message: `Cannot send messages to ${task.agentType} tasks` });
+  }
 
   // Step 2: For queued/dispatched tasks, queue message locally without contacting the worker
   if (task.status === 'queued' || task.status === 'dispatched') {
@@ -130,7 +137,7 @@ export async function sendTaskMessage(
   // Find the worker matching the task's workerLocation
   const worker = enabledWorkers.find((w) => w.name === task.workerLocation) ?? enabledWorkers[0];
 
-  /* v8 ignore start -- ts-type: array access with nullish coalescing creates type narrowing branch @preserve */
+  /* v8 ignore start -- ts-type: Array filter always returns dense array — cannot produce sparse result @preserve */
   if (worker === undefined) {
     return err({ code: 'worker_not_configured', message: 'No workers configured' });
   }

@@ -29,6 +29,7 @@ describe('retryTask use case', () => {
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     hasActiveTaskForLinearIssue: ReturnType<typeof vi.fn>;
+    hasDispatchedOrRunningForPR: ReturnType<typeof vi.fn>;
     countQueued: ReturnType<typeof vi.fn>;
     findRecentTasksByLinearIssue: ReturnType<typeof vi.fn>;
   };
@@ -120,6 +121,7 @@ describe('retryTask use case', () => {
       create: vi.fn(),
       update: vi.fn().mockResolvedValue(ok(createMockTask())),
       hasActiveTaskForLinearIssue: vi.fn(),
+      hasDispatchedOrRunningForPR: vi.fn().mockResolvedValue(ok({ hasActive: false })),
       countQueued: vi.fn().mockResolvedValue(ok(0)),
       findRecentTasksByLinearIssue: vi.fn().mockResolvedValue(ok([])),
     };

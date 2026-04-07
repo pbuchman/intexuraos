@@ -7,7 +7,7 @@ import { WatchStatusCard } from '@/components/merge-queue/WatchStatusCard';
 import { PrStatusPipeline } from '@/components/merge-queue/PrStatusPipeline';
 import { PrList } from '@/components/merge-queue/PrList';
 import { MergeHistoryTimeline } from '@/components/merge-queue/MergeHistoryTimeline';
-import { getPrStatus } from '@/utils/mergeQueueStatus';
+import { getPrStatus, selectCurrentWatch } from '@/utils/mergeQueueStatus';
 import type { PrFilterStatus } from '@/types';
 
 const DEFAULT_OWNER = 'pbuchman';
@@ -22,6 +22,8 @@ export function MergeQueuePage(): React.JSX.Element {
     loading, error, prsLoading, prsError,
     isToggling, toggleError,
     fetchInitialData, handleToggleWatch,
+    excludedPrNumbers, exclusionError,
+    handleToggleExclusion, handleSelectAll, handleDeselectAll,
   } = useMergeQueue(DEFAULT_OWNER, DEFAULT_REPO);
 
   const [activeFilters, setActiveFilters] = useState<Set<PrFilterStatus>>(new Set(ALL_FILTERS));
@@ -47,15 +49,12 @@ export function MergeQueuePage(): React.JSX.Element {
     return counts;
   }, [prs]);
 
-  // Find watch for selected branch — prefer active over drained so a newly
-  // created watch is picked up even when a stale drained watch still exists.
-  const currentWatch = useMemo(() => {
-    if (selectedBranch === null) return null;
-    const branchWatches = watches.filter((w) => w.baseBranch === selectedBranch);
-    return branchWatches.find((w) => w.status === 'active')
-      ?? branchWatches.find((w) => w.status === 'drained')
-      ?? null;
-  }, [watches, selectedBranch]);
+  // Find watch for selected branch — prefer active, then most-recently-created
+  // drained or cancelled watch so history shows the latest execution.
+  const currentWatch = useMemo(
+    () => selectCurrentWatch(watches, selectedBranch),
+    [watches, selectedBranch],
+  );
 
   const isSelectedBranchBlocked = selectedBranch !== null &&
     branches.find((b) => b.name === selectedBranch)?.blocked === true;
@@ -130,9 +129,13 @@ export function MergeQueuePage(): React.JSX.Element {
           onToggle={handleToggleWatch}
           isToggling={isToggling}
           blocked={isSelectedBranchBlocked}
+          excludedCount={excludedPrNumbers.size}
         />
         {toggleError !== null ? (
           <p className="mt-1 text-xs text-red-600 dark:text-red-400">{toggleError}</p>
+        ) : null}
+        {exclusionError !== null ? (
+          <p className="mt-1 text-xs text-red-600 dark:text-red-400">{exclusionError}</p>
         ) : null}
       </div>
 
@@ -164,6 +167,10 @@ export function MergeQueuePage(): React.JSX.Element {
               prs={prs}
               activeFilters={activeFilters}
               isLoading={prsLoading}
+              excludedPrNumbers={excludedPrNumbers}
+              onToggleExclusion={handleToggleExclusion}
+              onSelectAll={handleSelectAll}
+              onDeselectAll={handleDeselectAll}
             />
           )}
         </div>

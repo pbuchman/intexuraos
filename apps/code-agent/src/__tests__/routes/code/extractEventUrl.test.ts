@@ -69,6 +69,18 @@ describe('extractEventUrl', () => {
       );
     });
 
+    it('should fall back to PR URL when before/after present but full_name is not a string', () => {
+      const payload = {
+        before: 'abc1234',
+        after: 'def5678',
+        repository: { full_name: 12345 },
+        pull_request: { html_url: 'https://github.com/org/repo/pull/42' },
+      };
+      expect(extractEventUrl('pull_request', payload)).toBe(
+        'https://github.com/org/repo/pull/42'
+      );
+    });
+
     it('should fall back to PR URL when before/after present but repository missing', () => {
       const payload = {
         before: 'abc1234',

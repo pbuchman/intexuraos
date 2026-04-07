@@ -34,9 +34,17 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
     model: string,
     userId: string,
     pricing: ModelPricing,
-    logger: Logger
+    logger: Logger,
+    researchId?: string
   ) {
-    this.client = createGeminiClient({ apiKey, model, userId, pricing, logger });
+    this.client = createGeminiClient({
+      apiKey,
+      model,
+      userId,
+      ...(researchId !== undefined && { researchId }),
+      pricing,
+      logger,
+    });
     this.model = model;
     this.logger = logger;
   }

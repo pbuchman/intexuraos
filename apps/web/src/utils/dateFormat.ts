@@ -34,6 +34,20 @@ export function formatDateTime(isoDate: string): string {
 }
 
 /**
+ * Format date with time as "Jan 15, 2:30 PM"
+ * Use for: Compact mobile metadata rows
+ */
+export function formatDateTimeCompact(isoDate: string): string {
+  const date = new Date(isoDate);
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+/**
  * Format as relative time for recent items, absolute for older:
  * - "just now" (< 1 minute)
  * - "5m ago" (< 1 hour)

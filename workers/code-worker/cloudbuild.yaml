@@ -1,0 +1,21 @@
+# Manual trigger: Build and push code-worker Docker image only
+# Note: No deploy step - code-worker is a Docker image, not a Cloud Run service
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build'
+    entrypoint: 'bash'
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'code-worker',
+        'workers/code-worker/Dockerfile',
+      ]
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: '600s'

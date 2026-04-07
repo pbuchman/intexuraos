@@ -4,40 +4,10 @@ import ts from 'typescript';
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { strict as assert } from 'node:assert';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = resolve(__dirname, '..');
-
-const NO_OVERRIDES = process.argv.includes('--no-overrides');
-
-// ============================================================================
-// OVERRIDE MECHANISM
-// ============================================================================
-
-function loadOverrides() {
-  if (NO_OVERRIDES) {
-    return { overriddenFiles: new Set(), taskMap: new Map() };
-  }
-
-  const overridesPath = resolve(ROOT_DIR, 'v8-ignore-overrides.json');
-
-  if (!existsSync(overridesPath)) {
-    return { overriddenFiles: new Set(), taskMap: new Map() };
-  }
-
-  const data = JSON.parse(readFileSync(overridesPath, 'utf8'));
-  const overriddenFiles = new Set();
-  const taskMap = new Map();
-
-  for (const [taskId, entry] of Object.entries(data.overrides ?? {})) {
-    for (const file of entry.files ?? []) {
-      overriddenFiles.add(file);
-      taskMap.set(file, taskId);
-    }
-  }
-
-  return { overriddenFiles, taskMap };
-}
 
 const VALID_CATEGORIES = [
   'ts-type',
@@ -53,6 +23,96 @@ const VALID_CATEGORIES = [
 ];
 
 const V8_LEGACY_KEYWORDS = ['next', 'start', 'stop'];
+
+// ============================================================================
+// PHASE B-1: Blocker Keyword Enforcement
+// ============================================================================
+
+const BLOCKER_KEYWORDS = [
+  'cannot',
+  'unable',
+  'impossible',
+  'always returns',
+  'always succeeds',
+  'always has',
+  'always include',
+  'always provided',
+  'always defined',
+  'no support',
+  'not mockable',
+  'not reachable',
+  'not unit-testable',
+  'not tracked',
+  'never triggered',
+  'no way to',
+  'does not expose',
+  'unreachable',
+  'false positive',
+  'guarantees',
+  'guard',
+  'guaranteed',
+  'fallback',
+  'defensive',
+  'nouncheckedindexedaccess',
+  'exactoptionalpropertytypes',
+  'narrows',
+  'narrowing',
+];
+
+const CATEGORY_SPECIFIC_KEYWORDS = {
+  'ts-type': [
+    'type check',
+    'type narrowing',
+    'undefined check',
+    'null check',
+    'type system',
+    'nullish coalescing',
+    'optional property',
+    'spread',
+    'conditional',
+    'ternary',
+  ],
+  'module-init': [
+    'bootstrap',
+    'entry point',
+    'cold start',
+    'module load',
+    'startup',
+    'initialized at',
+    'esm import',
+  ],
+  'source-map': ['alignment', 'misattributed'],
+  upstream: ['prior check', 'early return', 'validated', 'passthrough'],
+  schema: ['zod', 'fastify schema', 'validation'],
+  regex: ['capture group', 'regex match'],
+};
+
+function validateBlockerKeywords(comments) {
+  const errors = [];
+
+  for (const comment of comments) {
+    if (comment.type === 'stop') continue;
+
+    const explanation = (comment.explanation ?? '').toLowerCase();
+    const categoryKeywords = CATEGORY_SPECIFIC_KEYWORDS[comment.category] ?? [];
+    const allKeywords = [...BLOCKER_KEYWORDS, ...categoryKeywords];
+
+    const hasBlocker = allKeywords.some((kw) => explanation.includes(kw));
+
+    if (!hasBlocker) {
+      errors.push({
+        file: comment.file,
+        line: comment.line,
+        message:
+          `Explanation lacks blocker keyword. ` +
+          `Must contain at least one of: ${BLOCKER_KEYWORDS.slice(0, 5).join(', ')}, ... ` +
+          `See .claude/reference/coverage-exemptions.md for full list.`,
+      });
+    }
+  }
+
+  return { errors };
+}
 
 // ============================================================================
 // CATEGORY DETECTORS
@@ -361,17 +421,7 @@ const CATEGORY_DETECTORS = {
       const searchEnd = Math.min(lines.length, lineIdx + 5);
       const context = lines.slice(searchStart, searchEnd).join('\n');
 
-      const patterns = [
-        /\.safeParse\s*\(/,
-        /\.parse\s*\(/,
-        /schema/i,
-        /zod/i,
-        /validate/i,
-        /\.data\./,
-        /body\./,
-        /request\./,
-        /params\./,
-      ];
+      const patterns = [/\.safeParse\s*\(/, /\.parse\s*\(/, /schema/i, /zod/i, /validate/i];
 
       for (const pattern of patterns) {
         if (pattern.test(context)) {
@@ -584,9 +634,8 @@ function validateSyntax(comments) {
 // PHASE C: Pattern Validation
 // ============================================================================
 
-function validatePatterns(comments, overriddenFiles, taskMap) {
+function validatePatterns(comments) {
   const errors = [];
-  const overrideSkips = [];
 
   for (const comment of comments) {
     const detector = CATEGORY_DETECTORS[comment.category];
@@ -602,8 +651,6 @@ function validatePatterns(comments, overriddenFiles, taskMap) {
     const result = detector.detect(sourceCode, comment.line, comment.file);
 
     if (!result.valid) {
-      if (checkOverride(comment, overriddenFiles, taskMap, overrideSkips)) continue;
-
       errors.push({
         file: comment.file,
         line: comment.line,
@@ -612,20 +659,7 @@ function validatePatterns(comments, overriddenFiles, taskMap) {
     }
   }
 
-  return { errors, overrideSkips };
-}
-
-// ============================================================================
-// Override helper (shared by Phase C and C-1)
-// ============================================================================
-
-function checkOverride(comment, overriddenFiles, taskMap, overrideSkips) {
-  if (overriddenFiles.has(comment.file)) {
-    const taskId = taskMap.get(comment.file) ?? 'UNKNOWN';
-    overrideSkips.push({ file: comment.file, line: comment.line, taskId });
-    return true;
-  }
-  return false;
+  return { errors };
 }
 
 // ============================================================================
@@ -657,9 +691,8 @@ const NEVER_VALID_PATTERNS = [
 // Categories that legitimately cover NEVER-valid patterns
 const NEVER_VALID_EXEMPT_CATEGORIES = ['auth-guard', 'module-init'];
 
-function validateNeverValidPatterns(comments, overriddenFiles, taskMap) {
+function validateNeverValidPatterns(comments) {
   const errors = [];
-  const overrideSkips = [];
 
   for (const comment of comments) {
     if (NEVER_VALID_EXEMPT_CATEGORIES.includes(comment.category)) continue;
@@ -679,8 +712,6 @@ function validateNeverValidPatterns(comments, overriddenFiles, taskMap) {
 
     for (const { pattern, message } of NEVER_VALID_PATTERNS) {
       if (pattern.test(ignoredBlock)) {
-        if (checkOverride(comment, overriddenFiles, taskMap, overrideSkips)) break;
-
         errors.push({
           file: comment.file,
           line: comment.line,
@@ -691,7 +722,7 @@ function validateNeverValidPatterns(comments, overriddenFiles, taskMap) {
     }
   }
 
-  return { errors, overrideSkips };
+  return { errors };
 }
 
 // ============================================================================
@@ -1006,7 +1037,6 @@ async function main() {
     VALID_CATEGORIES.forEach((cat) => console.log(`  - ${cat}`));
     console.log('');
     console.log('Flags:');
-    console.log('  --no-overrides  Ignore v8-ignore-overrides.json (strict auditing)');
     console.log('  --all           Show all uncovered branches (not just first 50)');
     console.log('');
     console.log('Rules:');
@@ -1045,19 +1075,14 @@ async function main() {
   // Phase B: Syntax validation
   const { errors: syntaxErrors, validComments } = validateSyntax(comments);
 
-  // Load overrides
-  const { overriddenFiles, taskMap } = loadOverrides();
+  // Phase B-1: Blocker keyword enforcement
+  const { errors: blockerErrors } = validateBlockerKeywords(Array.from(validComments));
 
   // Phase C: Pattern validation
-  const { errors: patternErrors, overrideSkips: patternOverrideSkips } = validatePatterns(
-    Array.from(validComments),
-    overriddenFiles,
-    taskMap
-  );
+  const { errors: patternErrors } = validatePatterns(Array.from(validComments));
 
   // Phase C-1: NEVER-valid pattern blocklist
-  const { errors: neverValidErrors, overrideSkips: neverValidOverrideSkips } =
-    validateNeverValidPatterns(Array.from(validComments), overriddenFiles, taskMap);
+  const { errors: neverValidErrors } = validateNeverValidPatterns(Array.from(validComments));
 
   // Phase D: Coverage cross-reference
   const coveragePath = resolve(ROOT_DIR, 'coverage/coverage-final.json');
@@ -1096,21 +1121,18 @@ async function main() {
   }
 
   // Output
-  const allErrors = [...syntaxErrors, ...patternErrors, ...neverValidErrors, ...coverageErrors];
+  const allErrors = [
+    ...syntaxErrors,
+    ...blockerErrors,
+    ...patternErrors,
+    ...neverValidErrors,
+    ...coverageErrors,
+  ];
   const validCount = validComments.size;
 
   // Count lines within v8 ignore blocks
   const startComments = comments.filter((c) => c.type === 'start');
   const blockCount = startComments.length;
-
-  // Report override skips
-  const allOverrideSkips = [...patternOverrideSkips, ...neverValidOverrideSkips];
-  if (allOverrideSkips.length > 0) {
-    console.log(`\n⏭ ${allOverrideSkips.length} block(s) skipped via overrides:`);
-    for (const skip of allOverrideSkips) {
-      console.log(`  ⏭ OVERRIDE: ${skip.file}:${skip.line} (${skip.taskId})`);
-    }
-  }
 
   console.log(`\n✓ ${validCount} v8 ignore comments validated`);
   console.log(
@@ -1188,4 +1210,83 @@ async function main() {
   process.exit(hasErrors || hasMissing || hasExempted ? 1 : 0);
 }
 
-main();
+async function selfTest() {
+  console.log('Running self-tests for validateBlockerKeywords...');
+
+  // Test: universal keyword match
+  const result1 = validateBlockerKeywords([
+    {
+      type: 'start',
+      category: 'ts-type',
+      explanation: 'TypeScript cannot narrow this type',
+      file: 'test.ts',
+      line: 1,
+    },
+  ]);
+  assert.equal(result1.errors.length, 0, 'universal keyword "cannot" should pass');
+
+  // Test: category-specific keyword accepted
+  const result2 = validateBlockerKeywords([
+    {
+      type: 'start',
+      category: 'ts-type',
+      explanation: 'type narrowing for overloaded signature',
+      file: 'test.ts',
+      line: 1,
+    },
+  ]);
+  assert.equal(result2.errors.length, 0, 'ts-type keyword "type narrowing" should pass');
+
+  // Test: rejection when no keyword present
+  const result3 = validateBlockerKeywords([
+    {
+      type: 'start',
+      category: 'ts-type',
+      explanation: 'some random description',
+      file: 'test.ts',
+      line: 1,
+    },
+  ]);
+  assert.equal(result3.errors.length, 1, 'no blocker keyword should fail');
+
+  // Test: stop comments skipped
+  const result4 = validateBlockerKeywords([{ type: 'stop', file: 'test.ts', line: 2 }]);
+  assert.equal(result4.errors.length, 0, 'stop comments should be skipped');
+
+  // Test: universal keyword works across categories
+  const result5 = validateBlockerKeywords([
+    {
+      type: 'start',
+      category: 'upstream',
+      explanation: 'type narrowing makes branch dead',
+      file: 'test.ts',
+      line: 1,
+    },
+  ]);
+  assert.equal(result5.errors.length, 0, '"narrowing" is a universal keyword');
+
+  // Test: category-specific keyword rejected for wrong category
+  const result6 = validateBlockerKeywords([
+    {
+      type: 'start',
+      category: 'upstream',
+      explanation: 'capture group in the regex',
+      file: 'test.ts',
+      line: 1,
+    },
+  ]);
+  assert.equal(
+    result6.errors.length,
+    1,
+    '"capture group" is regex-specific, should fail for upstream'
+  );
+
+  console.log('All self-tests passed ✅');
+}
+
+// Wire into CLI
+if (process.argv.includes('--self-test')) {
+  selfTest().then(() => process.exit(0));
+} else {
+  main();
+}

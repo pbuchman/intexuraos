@@ -5,6 +5,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
+import type { WorkerSettingsRepository } from '../../../domain/ports/workerSettingsRepository.js';
 import pino from 'pino';
 import { createTaskForPR, type CreateTaskForPRDeps, type CreateTaskForPRRequest } from '../../../domain/usecases/createTaskForPR.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
@@ -49,6 +50,10 @@ function createMockLinearIssueService(): LinearIssueService {
     },
     async markInProgress(): Promise<void> { return; },
     async markInReview(): Promise<void> { return; },
+    async markTodo(): Promise<void> { return; },
+    async markQa(): Promise<void> { return; },
+    async removeLabel(): Promise<void> { return; },
+    async addLabel(): Promise<void> { return; },
   };
 }
 
@@ -90,6 +95,9 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async findActiveReviewForPR(): ReturnType<CodeTaskRepository['findActiveReviewForPR']> {
       return ok(null);
     },
+    async hasDispatchedOrRunningForPR(): ReturnType<CodeTaskRepository['hasDispatchedOrRunningForPR']> {
+      return ok({ hasActive: false });
+    },
     async deleteTask(): ReturnType<CodeTaskRepository['deleteTask']> {
       return ok(undefined);
     },
@@ -97,6 +105,9 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
       return ok([]);
     },
     async listQueued(): ReturnType<CodeTaskRepository['listQueued']> {
+      return ok([]);
+    },
+    async listPendingExecutionMemoryPostRun(): ReturnType<CodeTaskRepository['listPendingExecutionMemoryPostRun']> {
       return ok([]);
     },
     async countQueued(): ReturnType<CodeTaskRepository['countQueued']> {
@@ -108,8 +119,29 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async findPlannedTaskByLinearIssue(): ReturnType<CodeTaskRepository['findPlannedTaskByLinearIssue']> {
       return ok(null);
     },
-    async findLatestNonReviewTaskByPR(): ReturnType<CodeTaskRepository['findLatestNonReviewTaskByPR']> {
+    async findLatestExecutionTaskByPR(): ReturnType<CodeTaskRepository['findLatestExecutionTaskByPR']> {
       return ok(null);
+    },
+    async findOriginTaskByPR(): ReturnType<CodeTaskRepository['findOriginTaskByPR']> {
+      return ok(null);
+    },
+    async findRecentRemediationForPR(): ReturnType<CodeTaskRepository['findRecentRemediationForPR']> {
+      return ok(null);
+    },
+    async findPreservedPullRequestTask(): ReturnType<CodeTaskRepository['findPreservedPullRequestTask']> {
+      return ok(null);
+    },
+    async findLatestAskAgentTask(): ReturnType<CodeTaskRepository['findLatestAskAgentTask']> {
+      return ok(null);
+    },
+    async listAllNonArchived(): ReturnType<CodeTaskRepository['listAllNonArchived']> {
+      return ok([]);
+    },
+    async listAllNonArchivedGlobal(): ReturnType<CodeTaskRepository['listAllNonArchivedGlobal']> {
+      return ok([]);
+    },
+    async findAllNonArchived(): ReturnType<CodeTaskRepository['findAllNonArchived']> {
+      return ok([]);
     },
   };
 }
@@ -149,6 +181,9 @@ function createMockWhatsAppNotifier(): WhatsAppNotifier {
       return ok(undefined);
     },
     async notifyDispatchRetryExhausted(): ReturnType<WhatsAppNotifier['notifyDispatchRetryExhausted']> {
+      return ok(undefined);
+    },
+    async notifyCIFailure(): ReturnType<WhatsAppNotifier['notifyCIFailure']> {
       return ok(undefined);
     },
   };
@@ -224,6 +259,9 @@ function createMockUserServiceClient(): UserServiceClient {
     async resolveGitHubUsername(): ReturnType<UserServiceClient['resolveGitHubUsername']> {
       return ok(null);
     },
+    async getUserTimezone(): Promise<string | undefined> {
+      return undefined;
+    },
   };
 }
 
@@ -246,6 +284,13 @@ function createMockFirestore(): CreateTaskForPRDeps['firestore'] {
   };
 }
 
+function createFakeWorkerSettingsRepo(overrides?: Partial<WorkerSettingsRepository>): WorkerSettingsRepository {
+  return {
+    getSettings: vi.fn().mockResolvedValue(ok(null)),
+    ...overrides,
+  } as unknown as WorkerSettingsRepository;
+}
+
 function createDefaultDeps(): CreateTaskForPRDeps {
   return {
     logger,
@@ -259,6 +304,7 @@ function createDefaultDeps(): CreateTaskForPRDeps {
     userServiceClient: createMockUserServiceClient(),
     firestore: createMockFirestore(),
     automationLog: { record: vi.fn().mockResolvedValue(undefined) },
+    workerSettingsRepo: createFakeWorkerSettingsRepo(),
   };
 }
 
@@ -978,5 +1024,90 @@ describe('createTaskForPR', () => {
       // Verify lock was NOT deleted (task enqueued successfully)
       expect(mockLockDeleteFn).not.toHaveBeenCalled();
     });
+  });
+
+  describe('worker type resolution from user settings', () => {
+    it('uses defaultPullRequestWorkerType from user settings when no request workerType', async () => {
+      let capturedWorkerType: unknown;
+
+      deps.workerSettingsRepo = createFakeWorkerSettingsRepo({
+        getSettings: vi.fn().mockResolvedValue(ok({ defaultPullRequestWorkerType: 'sonnet' })),
+      });
+
+      deps.codeTaskRepo = {
+        ...createMockCodeTaskRepo(),
+        async create(input): ReturnType<CodeTaskRepository['create']> {
+          capturedWorkerType = (input as unknown as Record<string, unknown>)['workerType'];
+          return ok({} as never);
+        },
+      };
+
+      await createTaskForPR(deps, request);
+
+      expect(capturedWorkerType).toBe('sonnet');
+    });
+
+    it('request workerType takes priority over user default', async () => {
+      let capturedWorkerType: unknown;
+
+      deps.workerSettingsRepo = createFakeWorkerSettingsRepo({
+        getSettings: vi.fn().mockResolvedValue(ok({ defaultPullRequestWorkerType: 'sonnet' })),
+      });
+
+      deps.codeTaskRepo = {
+        ...createMockCodeTaskRepo(),
+        async create(input): ReturnType<CodeTaskRepository['create']> {
+          capturedWorkerType = (input as unknown as Record<string, unknown>)['workerType'];
+          return ok({} as never);
+        },
+      };
+
+      request.workerType = 'opus';
+      await createTaskForPR(deps, request);
+
+      expect(capturedWorkerType).toBe('opus');
+    });
+
+    it('falls back to auto when user has no defaultPullRequestWorkerType setting', async () => {
+      let capturedWorkerType: unknown;
+
+      deps.workerSettingsRepo = createFakeWorkerSettingsRepo({
+        getSettings: vi.fn().mockResolvedValue(ok(null)),
+      });
+
+      deps.codeTaskRepo = {
+        ...createMockCodeTaskRepo(),
+        async create(input): ReturnType<CodeTaskRepository['create']> {
+          capturedWorkerType = (input as unknown as Record<string, unknown>)['workerType'];
+          return ok({} as never);
+        },
+      };
+
+      await createTaskForPR(deps, request);
+
+      expect(capturedWorkerType).toBe('auto');
+    });
+  });
+
+  it('passes workerType override to created task when provided, taking priority over user default', async () => {
+    // User has a defaultPullRequestWorkerType of 'sonnet' in their settings.
+    // An explicit workerType in the request ('opus') must always win.
+    deps.workerSettingsRepo = createFakeWorkerSettingsRepo({
+      getSettings: vi.fn().mockResolvedValue(ok({ defaultPullRequestWorkerType: 'sonnet' })),
+    });
+
+    const createSpy = vi.fn().mockResolvedValue(ok({} as never));
+    deps.codeTaskRepo = {
+      ...createMockCodeTaskRepo(),
+      create: createSpy,
+    };
+
+    const result = await createTaskForPR(deps, {
+      ...request,
+      workerType: 'opus',
+    });
+    expect(result.ok).toBe(true);
+    const createCall = (createSpy as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+    expect(createCall?.workerType).toBe('opus');
   });
 });

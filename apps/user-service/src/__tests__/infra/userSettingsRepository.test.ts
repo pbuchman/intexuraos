@@ -564,4 +564,76 @@ describe('FirestoreUserSettingsRepository', () => {
       }
     });
   });
+
+  describe('updateTimezone', () => {
+    it('creates new settings document when user does not exist', async () => {
+      const result = await repo.updateTimezone('new-user', 'Europe/Berlin');
+
+      expect(result.ok).toBe(true);
+
+      const stored = await repo.getSettings('new-user');
+      expect(stored.ok).toBe(true);
+      if (stored.ok && stored.value !== null) {
+        expect(stored.value.userId).toBe('new-user');
+        expect(stored.value.timezone).toBe('Europe/Berlin');
+      }
+    });
+
+    it('updates existing settings document', async () => {
+      await repo.saveSettings(createTestSettings());
+
+      const result = await repo.updateTimezone('user-123', 'America/New_York');
+
+      expect(result.ok).toBe(true);
+
+      const stored = await repo.getSettings('user-123');
+      expect(stored.ok).toBe(true);
+      if (stored.ok && stored.value !== null) {
+        expect(stored.value.timezone).toBe('America/New_York');
+      }
+    });
+
+    it('returns error when Firestore fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
+
+      const result = await repo.updateTimezone('user-123', 'Europe/Berlin');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('Update failed');
+      }
+    });
+  });
+
+  describe('getSettings with timezone', () => {
+    it('returns timezone when present', async () => {
+      const settings = createTestSettings({
+        timezone: 'Asia/Tokyo',
+      });
+      await repo.saveSettings(settings);
+
+      const result = await repo.getSettings('user-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.timezone).toBe('Asia/Tokyo');
+      }
+    });
+  });
+
+  describe('saveSettings with timezone', () => {
+    it('persists timezone and reads back correctly', async () => {
+      const settings = createTestSettings({
+        timezone: 'Europe/London',
+      });
+      await repo.saveSettings(settings);
+
+      const stored = await repo.getSettings('user-123');
+      expect(stored.ok).toBe(true);
+      if (stored.ok && stored.value !== null) {
+        expect(stored.value.timezone).toBe('Europe/London');
+      }
+    });
+  });
 });

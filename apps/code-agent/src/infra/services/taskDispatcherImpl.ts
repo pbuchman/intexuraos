@@ -5,13 +5,14 @@
  */
 
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import type { WorkerType } from '../../domain/models/codeTask.js';
+import type { AgentType, WorkerType } from '../../domain/models/codeTask.js';
 import type { WorkerCredentials } from '../../domain/models/workerSettings.js';
 import type {
   DispatchError,
   DispatchRequest,
   DispatchResult,
   DispatchWorkerCredentials,
+  ExecutionMemoryPromptContext,
 } from '../../domain/services/taskDispatcher.js';
 import type { TaskDispatcherDeps, TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
@@ -58,12 +59,12 @@ interface WorkerTaskRequest {
   hasChildren: boolean;
   linearIssueId?: string;
   traceId?: string;
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  agentType?: AgentType;
+  executionMemoryContext?: ExecutionMemoryPromptContext;
   trackingCommentId?: string;
+  prNumber?: number;
   continuationPrNumber?: number;
   continuationPrBranch?: string;
-  planningPrBranch?: string;
-  planningPrUrl?: string;
   reviewTypes?: string[];
 }
 
@@ -130,8 +131,14 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     if (request.agentType !== undefined) {
       taskRequest.agentType = request.agentType;
     }
+    if (request.executionMemoryContext !== undefined) {
+      taskRequest.executionMemoryContext = request.executionMemoryContext;
+    }
     if (request.trackingCommentId !== undefined) {
       taskRequest.trackingCommentId = request.trackingCommentId;
+    }
+    if (request.prNumber !== undefined) {
+      taskRequest.prNumber = request.prNumber;
     }
     if (request.continuationPrNumber !== undefined) {
       taskRequest.continuationPrNumber = request.continuationPrNumber;
@@ -139,17 +146,9 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     if (request.continuationPrBranch !== undefined) {
       taskRequest.continuationPrBranch = request.continuationPrBranch;
     }
-    if (request.planningPrBranch !== undefined) {
-      taskRequest.planningPrBranch = request.planningPrBranch;
-    }
-    if (request.planningPrUrl !== undefined) {
-      taskRequest.planningPrUrl = request.planningPrUrl;
-    }
-    /* v8 ignore start -- ts-type: conditional assignment for exact optional property types @preserve */
     if (request.reviewTypes !== undefined) {
       taskRequest.reviewTypes = request.reviewTypes;
     }
-    /* v8 ignore stop @preserve */
 
     const body = JSON.stringify(taskRequest);
     const timestamp = Date.now();

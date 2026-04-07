@@ -19,7 +19,7 @@ export interface CronSchedule {
   id: string;
   userId: string;
   name: string;
-  description: string;
+  scheduleSummary: string;
   cronExpression: string;
   timezone: string;
   action: ScheduleAction;
@@ -64,14 +64,14 @@ export interface CronExecution {
 
 export interface CreateScheduleInput {
   name: string;
-  description: string;
+  schedule: string;
   action: ScheduleAction;
   timezone: string;
 }
 
 export interface UpdateScheduleInput {
   name?: string | undefined;
-  description?: string | undefined;
+  schedule?: string | undefined;
   status?: ScheduleStatus | undefined;
   action?: ScheduleAction | undefined;
   timezone?: string | undefined;

@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Logger } from '@intexuraos/common-core';
+import type { WorkerRuntime } from '../runtime/types.js';
 import { withTimeout } from '../../with-timeout.js';
 import type {
   DiscoveredContainer,
@@ -12,6 +13,7 @@ import type {
   WorkerHandle,
   ResourceUsage,
 } from './types.js';
+import { WORKER_TYPES } from './types.js';
 
 export interface DockerProviderConfig {
   imageName: string;
@@ -25,6 +27,7 @@ export interface DockerProviderConfig {
   managedAttemptsMode: boolean;
   workerReadyTimeoutMs?: number;
   sharedCredsPath?: string;
+  sharedCodexAuthPath?: string;
   gitUserName?: string;
   gitUserEmail?: string;
   forensicsMode: boolean;
@@ -33,9 +36,9 @@ export interface DockerProviderConfig {
 
 const DEFAULT_CONFIG: DockerProviderConfig = {
   imageName:
-    'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest',
+    'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest',
   imagePullPolicy: 'always',
-  networkName: 'claude-worker-net',
+  networkName: 'code-worker-net',
   maxConcurrent: 4,
   timeoutMs: 2 * 60 * 60 * 1000,
   secretsBasePath: '/tmp/claude-secrets',
@@ -43,14 +46,15 @@ const DEFAULT_CONFIG: DockerProviderConfig = {
   keepContainersAlive: false,
   managedAttemptsMode: true,
   forensicsMode: false,
-  forensicsBasePath: '/tmp/claude-worker-forensics',
+  forensicsBasePath: '/tmp/code-worker-forensics',
 };
 
 interface WorkerEntry {
   containerId: string;
   handle: WorkerHandle;
+  runtime: WorkerRuntime;
   taskSecretsPath: string;
-  taskSessionPath: string;
+  taskRuntimeHomePath: string;
   attemptRunning: boolean;
   attemptLogBuffer: string;
   taskForensicsPath?: string;
@@ -65,12 +69,14 @@ interface PreservedWorkerEntry {
 
 export const PNPM_STORE_DIR_NAME = 'pnpm-store';
 const CLAUDE_SESSION_DIR_PREFIX = 'claude-session';
+const CODEX_STATE_DIR_PREFIX = 'codex-state';
 const PERIODIC_CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 const HEALTH_CHECK_INTERVAL_MS = 30_000;
 const DOCKER_PING_TIMEOUT_MS = 5_000;
 const MIN_DISK_SPACE_BYTES = 5 * 1024 * 1024 * 1024;
 const MIN_DISK_SPACE_GB = MIN_DISK_SPACE_BYTES / (1024 * 1024 * 1024);
 const PRESERVED_MAX_AGE_MS = 3 * 60 * 60 * 1000;
+const RUNTIME_STATE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 // Container must run as the host user so bind-mounted files (worktrees, secrets,
 // pnpm store) are accessible without permission hacks.
@@ -90,7 +96,7 @@ function getHostUserInfo(): { uid: number; gid: number; userString: string } {
   return _hostUserInfo;
 }
 const DOCKER_PROVIDER_DIR = path.dirname(fileURLToPath(import.meta.url));
-const FORENSICS_SECCOMP_PROFILE_FILENAME = 'claude-worker-forensics-seccomp.json';
+const FORENSICS_SECCOMP_PROFILE_FILENAME = 'code-worker-forensics-seccomp.json';
 const EXEC_INSPECT_POLL_INTERVAL_MS = 5_000;
 
 export class DockerProvider implements IsolationProvider {
@@ -117,8 +123,41 @@ export class DockerProvider implements IsolationProvider {
   }
 
   private extractTaskIdFromContainerName(rawName: string): string | null {
-    const taskId = rawName.replace(/^\/claude-worker-/, '');
+    const taskId = rawName.replace(/^\/code-worker-/, '');
     return taskId === '' ? null : taskId;
+  }
+
+  private resolveWorkerRuntime(config: WorkerConfig): WorkerRuntime {
+    if (config.runtimeOverride !== undefined) {
+      return config.runtimeOverride;
+    }
+
+    return WORKER_TYPES[config.workerType].runtime;
+  }
+
+  private getTaskRuntimeHomePath(taskId: string, runtime: WorkerRuntime): string {
+    const dirPrefix = runtime === 'codex' ? CODEX_STATE_DIR_PREFIX : CLAUDE_SESSION_DIR_PREFIX;
+    return path.join(this.config.secretsBasePath, `${dirPrefix}-${taskId}`);
+  }
+
+  private getContainerRuntimeHome(
+    runtime: WorkerRuntime
+  ): '/home/claude/.claude' | '/home/claude/.codex' {
+    return runtime === 'codex' ? '/home/claude/.codex' : '/home/claude/.claude';
+  }
+
+  private assertResumeRuntimeStateAvailable(
+    runtime: WorkerRuntime,
+    continueSession: boolean,
+    taskRuntimeHomePath: string
+  ): void {
+    if (runtime !== 'codex' || !continueSession) {
+      return;
+    }
+
+    if (!fs.existsSync(taskRuntimeHomePath)) {
+      throw new Error(`Codex resume requires existing task-local state at ${taskRuntimeHomePath}`);
+    }
   }
 
   private async removeTaskSecretsDirectory(taskId: string): Promise<void> {
@@ -165,7 +204,9 @@ export class DockerProvider implements IsolationProvider {
 
     this.preservedWorkers.delete(taskId);
     await this.removeTaskSecretsDirectory(taskId);
-    await this.cleanupTaskSession(taskId);
+    // Runtime session state (codex-state-*, claude-session-*) is intentionally
+    // preserved here — the task may be resumed later. Session cleanup is the
+    // task-dispatcher's responsibility via explicit teardownAttempt(taskId, false).
     this.logger.info({ taskId, containerId, state }, 'Removed stale worker container');
   }
 
@@ -239,7 +280,6 @@ export class DockerProvider implements IsolationProvider {
     const execStream = await execInstance.start({ hijack: false, stdin: false });
     let output = '';
 
-    /* v8 ignore start -- test-infra: exec stream event ordering/close paths depend on Docker daemon stream behavior @preserve */
     await new Promise<void>((resolve, reject) => {
       execStream.on('data', (chunk: Buffer) => {
         output += chunk.toString('utf-8');
@@ -251,9 +291,7 @@ export class DockerProvider implements IsolationProvider {
       });
       execStream.resume();
     });
-    /* v8 ignore stop @preserve */
 
-    /* v8 ignore start -- test-infra: exec inspect ExitCode edge cases depend on Docker daemon responses @preserve */
     try {
       const info = await execInstance.inspect();
       return { exitCode: typeof info.ExitCode === 'number' ? info.ExitCode : 1, output };
@@ -261,7 +299,6 @@ export class DockerProvider implements IsolationProvider {
       this.logger.warn({ taskId, error }, 'Failed to inspect exec completion state');
       return { exitCode: 1, output };
     }
-    /* v8 ignore stop @preserve */
   }
 
   private async captureSegfaultForensics(
@@ -283,7 +320,6 @@ export class DockerProvider implements IsolationProvider {
         }
       );
 
-      /* v8 ignore start -- test-infra: exec inspect failure branches require Docker daemon error injection @preserve */
       try {
         const execInfo = await execInstance.inspect();
         await this.writeJsonArtifact(
@@ -297,9 +333,7 @@ export class DockerProvider implements IsolationProvider {
           'utf-8'
         );
       }
-      /* v8 ignore stop @preserve */
 
-      /* v8 ignore start -- test-infra: container inspect failure branches require Docker daemon error injection @preserve */
       try {
         const containerInfo = await container.inspect();
         await this.writeJsonArtifact(
@@ -313,7 +347,6 @@ export class DockerProvider implements IsolationProvider {
           'utf-8'
         );
       }
-      /* v8 ignore stop @preserve */
 
       const snapshotCommand = [
         'set -eu',
@@ -382,7 +415,7 @@ export class DockerProvider implements IsolationProvider {
     try {
       const containers = await this.docker.listContainers({
         all: true,
-        filters: { name: ['claude-worker-'] },
+        filters: { name: ['code-worker-'] },
       });
 
       return containers
@@ -404,6 +437,7 @@ export class DockerProvider implements IsolationProvider {
 
   async createWorker(config: WorkerConfig): Promise<WorkerHandle> {
     const { taskId, worktreePath, systemPrompt, prompt, secrets, workerType } = config;
+    const runtime = this.resolveWorkerRuntime(config);
 
     const existingWorker = this.workers.get(taskId);
     if (existingWorker !== undefined) {
@@ -421,54 +455,66 @@ export class DockerProvider implements IsolationProvider {
     if (config.continueSession === true) {
       const preserved = this.preservedWorkers.get(taskId);
       if (preserved !== undefined) {
-        this.preservedWorkers.delete(taskId);
+        // Defense-in-depth: container may have been OOM-killed or GC'd between
+        // isResumeAvailable check and here.
+        if (await this.isContainerRunning(preserved.containerId)) {
+          this.preservedWorkers.delete(taskId);
 
-        const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
-        const taskSessionPath = path.join(
-          this.config.secretsBasePath,
-          `${CLAUDE_SESSION_DIR_PREFIX}-${taskId}`
-        );
+          const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
+          const taskRuntimeHomePath = this.getTaskRuntimeHomePath(taskId, runtime);
 
-        // Recreate secrets dir (deleted during preservation) and write new prompt files
-        await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
-        await this.writePromptFiles(taskSecretsPath, systemPrompt, prompt);
+          // Recreate secrets dir (deleted during preservation) and write new prompt files
+          this.assertResumeRuntimeStateAvailable(runtime, true, taskRuntimeHomePath);
+          await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
+          await fs.promises.mkdir(taskRuntimeHomePath, { recursive: true, mode: 0o700 });
+          await this.writePromptFiles(taskSecretsPath, systemPrompt, prompt);
 
-        /* v8 ignore start -- test-infra: branch for copying optional GCP credentials file @preserve */
-        if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
-          await fs.promises.copyFile(
-            config.gcpSaKeyPath,
-            path.join(taskSecretsPath, 'gcp-sa.json')
+          if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
+            await fs.promises.copyFile(
+              config.gcpSaKeyPath,
+              path.join(taskSecretsPath, 'gcp-sa.json')
+            );
+          }
+
+          const handle: WorkerHandle = {
+            taskId,
+            containerId: preserved.containerId,
+            status: 'running',
+            startedAt: new Date(),
+          };
+          const taskForensicsPath = this.ensureTaskForensicsPath(taskId);
+
+          this.workers.set(taskId, {
+            containerId: preserved.containerId,
+            handle,
+            runtime,
+            taskSecretsPath,
+            taskRuntimeHomePath,
+            attemptRunning: false,
+            attemptLogBuffer: '',
+            ...(taskForensicsPath !== null ? { taskForensicsPath } : {}),
+          });
+
+          this.logger.info(
+            { taskId, containerId: preserved.containerId },
+            'Restored preserved container for resume'
           );
+
+          void this.runAttemptInContainer(taskId, config);
+          return handle;
         }
-        /* v8 ignore stop @preserve */
 
-        /* v8 ignore start -- test-infra: forensics+preserved-resume path requires daemon stateful integration setup @preserve */
-        const handle: WorkerHandle = {
-          taskId,
-          containerId: preserved.containerId,
-          status: 'running',
-          startedAt: new Date(),
-        };
-        const taskForensicsPath = this.ensureTaskForensicsPath(taskId);
-
-        this.workers.set(taskId, {
-          containerId: preserved.containerId,
-          handle,
-          taskSecretsPath,
-          taskSessionPath,
-          attemptRunning: false,
-          attemptLogBuffer: '',
-          ...(taskForensicsPath !== null ? { taskForensicsPath } : {}),
-        });
-
-        this.logger.info(
+        // Container is stopped or gone — clean up stale entry and fall through
+        this.preservedWorkers.delete(taskId);
+        try {
+          await this.docker.getContainer(preserved.containerId).remove({ force: true });
+        } catch {
+          // Best-effort removal — container may already be cleaned up by GC
+        }
+        this.logger.warn(
           { taskId, containerId: preserved.containerId },
-          'Restored preserved container for resume'
+          'Preserved container is stopped or gone, falling through to new container creation'
         );
-
-        void this.runAttemptInContainer(taskId, config);
-        return handle;
-        /* v8 ignore stop @preserve */
       }
     }
 
@@ -476,31 +522,27 @@ export class DockerProvider implements IsolationProvider {
     // In-memory Maps are lost on restart, but Docker containers survive
     if (config.continueSession === true) {
       try {
-        const orphanContainer = this.docker.getContainer(`claude-worker-${taskId}`);
+        const orphanContainer = this.docker.getContainer(`code-worker-${taskId}`);
         const orphanInfo = await orphanContainer.inspect();
 
         if (orphanInfo.State.Running) {
           const containerId = orphanInfo.Id;
 
           const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
-          const taskSessionPath = path.join(
-            this.config.secretsBasePath,
-            `${CLAUDE_SESSION_DIR_PREFIX}-${taskId}`
-          );
+          const taskRuntimeHomePath = this.getTaskRuntimeHomePath(taskId, runtime);
 
+          this.assertResumeRuntimeStateAvailable(runtime, true, taskRuntimeHomePath);
           await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
+          await fs.promises.mkdir(taskRuntimeHomePath, { recursive: true, mode: 0o700 });
           await this.writePromptFiles(taskSecretsPath, systemPrompt, prompt);
 
-          /* v8 ignore start -- test-infra: branch for copying optional GCP credentials file @preserve */
           if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
             await fs.promises.copyFile(
               config.gcpSaKeyPath,
               path.join(taskSecretsPath, 'gcp-sa.json')
             );
           }
-          /* v8 ignore stop @preserve */
 
-          /* v8 ignore start -- test-infra: forensics+orphan-resume path requires daemon restart/orphan integration setup @preserve */
           const handle: WorkerHandle = {
             taskId,
             containerId,
@@ -512,8 +554,9 @@ export class DockerProvider implements IsolationProvider {
           this.workers.set(taskId, {
             containerId,
             handle,
+            runtime,
             taskSecretsPath,
-            taskSessionPath,
+            taskRuntimeHomePath,
             attemptRunning: false,
             attemptLogBuffer: '',
             ...(taskForensicsPath !== null ? { taskForensicsPath } : {}),
@@ -526,7 +569,6 @@ export class DockerProvider implements IsolationProvider {
 
           void this.runAttemptInContainer(taskId, config);
           return handle;
-          /* v8 ignore stop @preserve */
         }
 
         // Container exists but stopped — remove it so fresh creation doesn't get 409 conflict
@@ -548,7 +590,6 @@ export class DockerProvider implements IsolationProvider {
 
     // Detect main git directory for worktree support
     // Worktrees have a .git file (not directory) containing: "gitdir: /main/repo/.git/worktrees/name"
-    /* v8 ignore start -- test-infra: worktree detection requires real filesystem, tests mock fs.statSync @preserve */
     let mainGitDir: string | null = null;
     const gitStat = fs.statSync(gitPath);
     if (gitStat.isFile()) {
@@ -562,60 +603,88 @@ export class DockerProvider implements IsolationProvider {
         }
       }
     }
-    /* v8 ignore stop @preserve */
 
     const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
-    const taskSessionPath = path.join(
-      this.config.secretsBasePath,
-      `${CLAUDE_SESSION_DIR_PREFIX}-${taskId}`
+    const taskRuntimeHomePath = this.getTaskRuntimeHomePath(taskId, runtime);
+    this.assertResumeRuntimeStateAvailable(
+      runtime,
+      config.continueSession === true,
+      taskRuntimeHomePath
     );
     await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
-    await fs.promises.mkdir(taskSessionPath, { recursive: true, mode: 0o700 });
+    await fs.promises.mkdir(taskRuntimeHomePath, { recursive: true, mode: 0o700 });
     await this.writePromptFiles(taskSecretsPath, systemPrompt, prompt);
 
     let container: Docker.Container | undefined;
     try {
-      /* v8 ignore start -- test-infra: branch for copying optional GCP credentials file @preserve */
       if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
         await fs.promises.copyFile(config.gcpSaKeyPath, path.join(taskSecretsPath, 'gcp-sa.json'));
       }
-      /* v8 ignore stop @preserve */
 
-      const workerTypeConfig = (await import('./types.js')).WORKER_TYPES[workerType];
-      const apiKey = secrets[workerTypeConfig.apiKeyEnvVar];
-
-      /* v8 ignore start -- test-infra: tests always provide mock API keys @preserve */
-      if (apiKey === '') {
-        throw new Error(
-          `Worker type '${workerType}' requires ${workerTypeConfig.apiKeyEnvVar} but it is not configured`
-        );
-      }
-
-      /* v8 ignore stop @preserve */
+      const workerTypeConfig = WORKER_TYPES[workerType];
+      const apiKey =
+        workerTypeConfig.apiKeyEnvVar === undefined ? '' : secrets[workerTypeConfig.apiKeyEnvVar];
 
       // When shared credentials are configured for opus/auto workers, Claude CLI reads
       // credentials from the mounted .credentials.json file. No ANTHROPIC_API_KEY needed.
       const useSharedCreds =
+        runtime === 'claude' &&
         this.config.sharedCredsPath !== undefined &&
         workerTypeConfig.apiKeyEnvVar === 'ANTHROPIC_API_KEY';
+      const useSharedCodexAuth =
+        runtime === 'codex' && this.config.sharedCodexAuthPath !== undefined;
+      const requiredApiKeyEnvVar = workerTypeConfig.apiKeyEnvVar;
 
-      /* v8 ignore start -- test-infra: worker type configuration varies by test @preserve */
+      if (runtime === 'claude') {
+        if (requiredApiKeyEnvVar === undefined) {
+          throw new Error(`Worker type '${workerType}' is missing API key configuration`);
+        }
+
+        if (apiKey === '') {
+          throw new Error(
+            `Worker type '${workerType}' requires ${requiredApiKeyEnvVar} but it is not configured`
+          );
+        }
+      }
+
+      if (runtime === 'codex' && !useSharedCodexAuth) {
+        throw new Error('Codex runtime requires sharedCodexAuthPath but it is not configured');
+      }
+
       const env = [
         `TASK_ID=${taskId}`,
-        ...(useSharedCreds
-          ? []
-          : [`ANTHROPIC_API_KEY=${apiKey}`, `ANTHROPIC_BASE_URL=${workerTypeConfig.apiBaseUrl}`]),
         `LINEAR_API_KEY=${secrets.LINEAR_API_KEY}`,
         `SENTRY_AUTH_TOKEN=${secrets.SENTRY_AUTH_TOKEN}`,
         `GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json`,
-        'CLAUDE_PROJECT_DIR=/repo',
-        'CLAUDE_WORKER_MODE=1',
-        `CLAUDE_MANAGED_MODE=${this.config.managedAttemptsMode ? '1' : '0'}`,
-        `CLAUDE_CONTINUE=${config.continueSession === true ? '1' : '0'}`,
+        `WORKER_RUNTIME=${runtime}`,
+        'CODE_WORKER_MODE=1',
+        `WORKER_MANAGED_MODE=${this.config.managedAttemptsMode ? '1' : '0'}`,
+        `WORKER_CONTINUE=${config.continueSession === true ? '1' : '0'}`,
       ];
 
-      if (workerTypeConfig.model !== undefined) {
-        env.push(`ANTHROPIC_MODEL=${workerTypeConfig.model}`);
+      if (runtime === 'claude') {
+        env.push('CLAUDE_PROJECT_DIR=/repo');
+        if (!useSharedCreds) {
+          env.push(
+            `ANTHROPIC_API_KEY=${apiKey}`,
+            `ANTHROPIC_BASE_URL=${workerTypeConfig.apiBaseUrl}`
+          );
+        }
+        if (workerTypeConfig.model !== undefined) {
+          env.push(`ANTHROPIC_MODEL=${workerTypeConfig.model}`);
+        }
+        if (workerTypeConfig.effort !== undefined) {
+          env.push(`CLAUDE_CODE_EFFORT_LEVEL=${workerTypeConfig.effort}`);
+        }
+        if (workerTypeConfig.disableExperimentalBetas === true) {
+          env.push('CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1');
+        }
+      } else {
+        env.push('CODEX_HOME=/home/claude/.codex');
+        env.push('CODEX_SQLITE_HOME=/home/claude/.codex');
+        if (workerTypeConfig.effort !== undefined) {
+          env.push(`CODEX_REASONING_EFFORT=${workerTypeConfig.effort}`);
+        }
       }
 
       if (this.config.gitUserName !== undefined) {
@@ -625,18 +694,18 @@ export class DockerProvider implements IsolationProvider {
         env.push(`GIT_USER_EMAIL=${this.config.gitUserEmail}`);
       }
       if (this.config.forensicsMode) {
-        env.push('CLAUDE_FORENSICS=1');
-        env.push('CLAUDE_FORENSICS_DIR=/var/crash');
+        env.push('WORKER_FORENSICS=1');
+        env.push('WORKER_FORENSICS_DIR=/var/crash');
       }
-      /* v8 ignore stop @preserve */
 
-      /* v8 ignore start -- ts-type: ternary for API key length check, short keys only in tests @preserve */
-      const keySuffix = useSharedCreds
-        ? 'shared-creds (.credentials.json)'
-        : apiKey.length > 4
-          ? '...' + apiKey.slice(-4)
-          : '****';
-      /* v8 ignore stop @preserve */
+      const keySuffix =
+        runtime === 'codex'
+          ? 'shared-auth (auth.json)'
+          : useSharedCreds
+            ? 'shared-creds (.credentials.json)'
+            : apiKey.length > 4
+              ? '...' + apiKey.slice(-4)
+              : '****';
       const taskForensicsPath = this.ensureTaskForensicsPath(taskId);
       const requestedImage = this.config.imageName;
       const resolvedImage =
@@ -644,10 +713,9 @@ export class DockerProvider implements IsolationProvider {
       this.logger.info({ taskId }, 'Container creation started');
       this.logger.info(
         {},
-        `Creating worker container: taskId=${taskId} workerType=${workerType} image=${resolvedImage} apiKey=${keySuffix} baseUrl=${workerTypeConfig.apiBaseUrl} worktreePath=${worktreePath}`
+        `Creating worker container: taskId=${taskId} workerType=${workerType} runtime=${runtime} image=${resolvedImage} apiKey=${keySuffix} baseUrl=${workerTypeConfig.apiBaseUrl} worktreePath=${worktreePath}`
       );
 
-      /* v8 ignore start -- test-infra: forensics security-opt/profile fallback branches depend on runtime filesystem packaging @preserve */
       const pnpmStorePath = path.join(
         path.dirname(this.config.secretsBasePath),
         PNPM_STORE_DIR_NAME
@@ -666,11 +734,10 @@ export class DockerProvider implements IsolationProvider {
       const ulimits = this.config.forensicsMode
         ? [{ Name: 'core', Soft: -1, Hard: -1 }]
         : undefined;
-      /* v8 ignore stop @preserve */
 
       container = await this.docker.createContainer({
         Image: resolvedImage,
-        name: `claude-worker-${taskId}`,
+        name: `code-worker-${taskId}`,
         Env: env,
         WorkingDir: '/repo',
         User: getHostUserInfo().userString,
@@ -680,15 +747,16 @@ export class DockerProvider implements IsolationProvider {
             `${worktreePath}:/repo:rw`,
             `${taskSecretsPath}:/secrets:ro`,
             `${pnpmStorePath}:/home/claude/pnpm-store:rw`,
-            `${taskSessionPath}:/home/claude/.claude:rw`,
+            `${taskRuntimeHomePath}:${this.getContainerRuntimeHome(runtime)}:rw`,
             ...(useSharedCreds && this.config.sharedCredsPath !== undefined
               ? [
                   `${this.config.sharedCredsPath}/.credentials.json:/home/claude/.claude/.credentials.json:rw`,
                 ]
               : []),
-            /* v8 ignore start -- test-infra: worktree mount only set when mainGitDir detected @preserve */
+            ...(useSharedCodexAuth && this.config.sharedCodexAuthPath !== undefined
+              ? [`${this.config.sharedCodexAuthPath}/auth.json:/home/claude/.codex/auth.json:rw`]
+              : []),
             ...(mainGitDir !== null ? [`${mainGitDir}:${mainGitDir}:rw`] : []),
-            /* v8 ignore stop @preserve */
             ...(taskForensicsPath !== null ? [`${taskForensicsPath}:/var/crash:rw`] : []),
           ],
           NetworkMode: this.config.networkName,
@@ -719,7 +787,6 @@ export class DockerProvider implements IsolationProvider {
       }
 
       // Capture logs via container.logs() (replaces attach stream)
-      /* v8 ignore start -- test-infra: log stream setup tested via mock, requires running container @preserve */
       let logStream: NodeJS.ReadableStream | undefined;
       if (config.onLog !== undefined && !this.config.managedAttemptsMode) {
         logStream = await container.logs({
@@ -731,7 +798,6 @@ export class DockerProvider implements IsolationProvider {
           config.onLog?.(chunk.toString('utf-8'));
         });
       }
-      /* v8 ignore stop @preserve */
 
       const handle: WorkerHandle = {
         taskId,
@@ -743,17 +809,15 @@ export class DockerProvider implements IsolationProvider {
       this.workers.set(taskId, {
         containerId: container.id,
         handle,
+        runtime,
         taskSecretsPath,
-        taskSessionPath,
+        taskRuntimeHomePath,
         attemptRunning: false,
         attemptLogBuffer: '',
         ...(taskForensicsPath !== null ? { taskForensicsPath } : {}),
-        /* v8 ignore start -- test-infra: logStream only set when onLog callback provided in running container @preserve */
         ...(logStream !== undefined ? { logStream } : {}),
-        /* v8 ignore stop @preserve */
       });
 
-      /* v8 ignore start -- test-infra: managedAttemptsMode is always enabled in production and tests @preserve */
       if (this.config.managedAttemptsMode) {
         void this.runAttemptInContainer(taskId, config);
       } else {
@@ -762,16 +826,17 @@ export class DockerProvider implements IsolationProvider {
           .wait()
           .then(async (data) => {
             const worker = this.workers.get(taskId);
+            /* v8 ignore start -- ts-type: Map.get() null check after container lifecycle @preserve */
             if (worker !== undefined) {
               worker.handle.status = data.StatusCode === 0 ? 'completed' : 'failed';
             }
+            /* v8 ignore stop @preserve */
             config.onComplete?.(data.StatusCode);
           })
           .catch((err: unknown) => {
             this.logger.error({ taskId, error: err }, 'Container wait error');
           });
       }
-      /* v8 ignore stop @preserve */
 
       this.logger.info(
         {},
@@ -780,28 +845,20 @@ export class DockerProvider implements IsolationProvider {
 
       return handle;
     } catch (error) {
-      await fs.promises.rm(taskSecretsPath, { recursive: true, force: true }).catch(
-        /* v8 ignore start -- test-infra: cleanup error handling for edge cases @preserve */
-        (e: unknown) => {
+      await fs.promises
+        .rm(taskSecretsPath, { recursive: true, force: true })
+        .catch((e: unknown) => {
           this.logger.warn({ taskId, error: e }, 'Cleanup: failed to remove task secrets');
-        }
-        /* v8 ignore stop @preserve */
-      );
-      await fs.promises.rm(taskSessionPath, { recursive: true, force: true }).catch(
-        /* v8 ignore start -- test-infra: cleanup error handling for edge cases @preserve */
-        (e: unknown) => {
+        });
+      await fs.promises
+        .rm(taskRuntimeHomePath, { recursive: true, force: true })
+        .catch((e: unknown) => {
           this.logger.warn({ taskId, error: e }, 'Cleanup: failed to remove task session');
-        }
-        /* v8 ignore stop @preserve */
-      );
+        });
       if (container !== undefined) {
-        await container.remove({ force: true }).catch(
-          /* v8 ignore start -- test-infra: cleanup error handling for edge cases @preserve */
-          (e: unknown) => {
-            this.logger.warn({ taskId, error: e }, 'Cleanup: failed to remove container');
-          }
-          /* v8 ignore stop @preserve */
-        );
+        await container.remove({ force: true }).catch((e: unknown) => {
+          this.logger.warn({ taskId, error: e }, 'Cleanup: failed to remove container');
+        });
       }
       throw error;
     }
@@ -816,11 +873,9 @@ export class DockerProvider implements IsolationProvider {
 
     this.logger.info({ taskId, forceKill }, 'Stopping worker container');
 
-    /* v8 ignore start -- test-infra: logStream only set when onLog callback provided in production @preserve */
     if (worker.logStream !== undefined && 'destroy' in worker.logStream) {
       (worker.logStream as NodeJS.ReadableStream & { destroy(): void }).destroy();
     }
-    /* v8 ignore stop @preserve */
 
     try {
       const container = this.docker.getContainer(worker.containerId);
@@ -861,22 +916,37 @@ export class DockerProvider implements IsolationProvider {
     this.logger.info({ taskId }, 'Worker container stopped');
   }
 
-  async isWorkerRunning(taskId: string): Promise<boolean> {
-    const worker = this.workers.get(taskId);
-    if (worker === undefined) {
-      return false;
-    }
-
+  private async isContainerRunning(containerId: string): Promise<boolean> {
     try {
-      const container = this.docker.getContainer(worker.containerId);
-      const info = await container.inspect();
+      const info = await this.docker.getContainer(containerId).inspect();
       return info.State.Running;
     } catch {
       return false;
     }
   }
 
-  /* v8 ignore start -- test-infra: Docker log stream behavior and fallback paths require daemon-level integration tests @preserve */
+  async isWorkerRunning(taskId: string): Promise<boolean> {
+    const worker = this.workers.get(taskId);
+    if (worker === undefined) {
+      return false;
+    }
+    return await this.isContainerRunning(worker.containerId);
+  }
+
+  async isResumeAvailable(taskId: string): Promise<boolean> {
+    const preserved = this.preservedWorkers.get(taskId);
+    const containerId = preserved?.containerId ?? this.workers.get(taskId)?.containerId;
+
+    if (containerId !== undefined) {
+      if (await this.isContainerRunning(containerId)) return true;
+      if (preserved !== undefined) this.preservedWorkers.delete(taskId);
+      return false;
+    }
+
+    // Check for orphaned Docker container (e.g. after orchestrator restart)
+    return await this.isContainerRunning(`code-worker-${taskId}`);
+  }
+
   async getWorkerLogs(taskId: string): Promise<string> {
     const worker = this.workers.get(taskId);
     if (worker === undefined) {
@@ -891,18 +961,15 @@ export class DockerProvider implements IsolationProvider {
         timestamps: true,
       });
       const containerLogs = logs.toString('utf-8');
-      /* v8 ignore start -- test-infra: branch depends on whether exec-stream buffering captured attempt logs @preserve */
       if (worker.attemptLogBuffer === '') {
         return containerLogs;
       }
-      /* v8 ignore stop @preserve */
       return `${containerLogs}\n${worker.attemptLogBuffer}`;
     } catch (error) {
       this.logger.warn({ taskId, error }, 'Failed to retrieve container logs');
       return worker.attemptLogBuffer;
     }
   }
-  /* v8 ignore stop @preserve */
 
   async streamLogs(taskId: string, onChunk: (chunk: string) => void): Promise<void> {
     const worker = this.workers.get(taskId);
@@ -931,7 +998,6 @@ export class DockerProvider implements IsolationProvider {
 
     const container = this.docker.getContainer(worker.containerId);
 
-    /* v8 ignore start -- async-timing: setTimeout/clearTimeout race condition handling, hard to trigger in tests @preserve */
     return await new Promise((resolve) => {
       let timeoutFired = false;
 
@@ -962,7 +1028,6 @@ export class DockerProvider implements IsolationProvider {
           }
         });
     });
-    /* v8 ignore stop @preserve */
   }
 
   async getResourceUsage(taskId: string): Promise<ResourceUsage> {
@@ -971,7 +1036,6 @@ export class DockerProvider implements IsolationProvider {
       throw new Error(`Worker ${taskId} not found`);
     }
 
-    /* v8 ignore start -- test-infra: stats API returns complex nested objects, CPU calc branches not easily covered @preserve */
     const container = this.docker.getContainer(worker.containerId);
     const stats = await container.stats({ stream: false });
 
@@ -980,7 +1044,6 @@ export class DockerProvider implements IsolationProvider {
     const systemDelta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
     const cpuPercent =
       systemDelta > 0 ? (cpuDelta / systemDelta) * stats.cpu_stats.online_cpus * 100 : 0;
-    /* v8 ignore stop @preserve */
 
     return {
       cpuPercent: Math.round(cpuPercent * 100) / 100,
@@ -994,17 +1057,20 @@ export class DockerProvider implements IsolationProvider {
   }
 
   async cleanupTaskSession(taskId: string): Promise<void> {
-    const taskSessionPath = path.join(
-      this.config.secretsBasePath,
-      `${CLAUDE_SESSION_DIR_PREFIX}-${taskId}`
-    );
-    try {
-      await fs.promises.rm(taskSessionPath, { recursive: true, force: true });
-    } catch (err: unknown) {
-      this.logger.error(
-        { taskId, error: err, path: taskSessionPath },
-        'Failed to remove task session directory'
-      );
+    const taskRuntimeHomePaths = [
+      this.getTaskRuntimeHomePath(taskId, 'claude'),
+      this.getTaskRuntimeHomePath(taskId, 'codex'),
+    ];
+
+    for (const taskRuntimeHomePath of taskRuntimeHomePaths) {
+      try {
+        await fs.promises.rm(taskRuntimeHomePath, { recursive: true, force: true });
+      } catch (err: unknown) {
+        this.logger.error(
+          { taskId, error: err, path: taskRuntimeHomePath },
+          'Failed to remove task runtime directory'
+        );
+      }
     }
   }
 
@@ -1057,7 +1123,7 @@ export class DockerProvider implements IsolationProvider {
     try {
       const containers = await this.docker.listContainers({
         all: true,
-        filters: { name: ['claude-worker-'] },
+        filters: { name: ['code-worker-'] },
       });
 
       const containerMap = new Map<
@@ -1066,7 +1132,9 @@ export class DockerProvider implements IsolationProvider {
       >();
 
       for (const container of containers) {
+        /* v8 ignore start -- ts-type: nullish coalescing on array access required by noUncheckedIndexedAccess @preserve */
         const taskId = this.extractTaskIdFromContainerName(container.Names[0] ?? '');
+        /* v8 ignore stop @preserve */
         if (taskId === null) {
           this.logger.warn(
             { containerId: container.Id },
@@ -1095,7 +1163,7 @@ export class DockerProvider implements IsolationProvider {
 
         if (containerInfo === undefined) {
           await this.removeTaskSecretsDirectory(taskId);
-          await this.cleanupTaskSession(taskId);
+          // Runtime session state preserved for potential resume (see removeDetachedContainer).
           this.logger.info(
             { taskId, containerId: preserved.containerId },
             'Removed stale preserved worker metadata'
@@ -1121,6 +1189,47 @@ export class DockerProvider implements IsolationProvider {
     } catch (error) {
       this.logger.warn({ error }, 'Failed to clean up stale worker containers');
     }
+
+    await this.cleanupOrphanedRuntimeState();
+  }
+
+  private async cleanupOrphanedRuntimeState(): Promise<void> {
+    const prefixes = [CLAUDE_SESSION_DIR_PREFIX, CODEX_STATE_DIR_PREFIX];
+    const now = Date.now();
+
+    let entries: string[];
+    try {
+      entries = await fs.promises.readdir(this.config.secretsBasePath);
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      const matchedPrefix = prefixes.find((p) => entry.startsWith(`${p}-`));
+      if (matchedPrefix === undefined) {
+        continue;
+      }
+
+      const taskId = entry.slice(matchedPrefix.length + 1);
+      if (this.workers.has(taskId) || this.preservedWorkers.has(taskId)) {
+        continue;
+      }
+
+      const fullPath = path.join(this.config.secretsBasePath, entry);
+      try {
+        const stat = await fs.promises.stat(fullPath);
+        if (now - stat.mtimeMs <= RUNTIME_STATE_MAX_AGE_MS) {
+          continue;
+        }
+        await fs.promises.rm(fullPath, { recursive: true, force: true });
+        this.logger.info({ taskId, path: fullPath }, 'Removed orphaned runtime state directory');
+      } catch (err: unknown) {
+        this.logger.warn(
+          { taskId, path: fullPath, error: err },
+          'Failed to clean up orphaned runtime state directory'
+        );
+      }
+    }
   }
 
   startPeriodicCleanup(): void {
@@ -1132,6 +1241,7 @@ export class DockerProvider implements IsolationProvider {
       return;
     }
 
+    // Guard against duplicate intervals (idempotent start)
     if (this.cleanupIntervalId !== null) {
       return;
     }
@@ -1146,6 +1256,7 @@ export class DockerProvider implements IsolationProvider {
   }
 
   stopPeriodicCleanup(): void {
+    // Guard against stopping when no interval was started (idempotent stop)
     if (this.cleanupIntervalId === null) {
       return;
     }
@@ -1200,6 +1311,7 @@ export class DockerProvider implements IsolationProvider {
   }
 
   startHealthMonitor(): void {
+    // Guard against duplicate intervals (idempotent start)
     if (this.healthMonitorIntervalId !== null) {
       return;
     }
@@ -1210,6 +1322,7 @@ export class DockerProvider implements IsolationProvider {
   }
 
   stopHealthMonitor(): void {
+    // Guard against stopping when no interval was started (idempotent stop)
     if (this.healthMonitorIntervalId === null) {
       return;
     }
@@ -1256,7 +1369,9 @@ export class DockerProvider implements IsolationProvider {
     const pullOpts: Record<string, unknown> = {};
     if (this.config.gcpSaKeyPath !== '' && fs.existsSync(this.config.gcpSaKeyPath)) {
       const saKey = fs.readFileSync(this.config.gcpSaKeyPath, 'utf-8');
+      /* v8 ignore start -- ts-type: nullish coalescing on array access required by noUncheckedIndexedAccess @preserve */
       const registry = imageName.split('/')[0] ?? '';
+      /* v8 ignore stop @preserve */
       pullOpts['authconfig'] = {
         username: '_json_key',
         password: saKey,
@@ -1298,9 +1413,11 @@ export class DockerProvider implements IsolationProvider {
     try {
       const imageInfo = await this.docker.getImage(imageName).inspect();
       const repoDigests = Array.isArray(imageInfo.RepoDigests) ? imageInfo.RepoDigests : [];
+      /* v8 ignore start -- ts-type: nullish coalescing on array access required by noUncheckedIndexedAccess @preserve */
       const resolvedImage = repoDigests.find((digest) =>
         digest.startsWith(imageName.split(':')[0] ?? '')
       );
+      /* v8 ignore stop @preserve */
       const finalImage = resolvedImage ?? repoDigests[0] ?? imageName;
       this.lastResolvedDigest = finalImage;
       this.logger.info(
@@ -1323,7 +1440,6 @@ export class DockerProvider implements IsolationProvider {
     }
   }
 
-  /* v8 ignore start -- test-infra: readiness polling requires running container with entrypoint @preserve */
   private async waitForWorkerReady(taskId: string, container: Docker.Container): Promise<void> {
     const timeoutMs = this.config.workerReadyTimeoutMs ?? 600_000;
     const pollIntervalMs = 2_000;
@@ -1355,7 +1471,6 @@ export class DockerProvider implements IsolationProvider {
 
     throw new Error(`Worker readiness timeout after ${String(timeoutMs)}ms for task ${taskId}`);
   }
-  /* v8 ignore stop @preserve */
 
   private async assertManagedEntrypointSupport(
     taskId: string,
@@ -1379,7 +1494,6 @@ export class DockerProvider implements IsolationProvider {
     }
   }
 
-  /* v8 ignore start -- test-infra: prompt file writes are covered indirectly by integration tests with real mounted secrets @preserve */
   private async writePromptFiles(
     taskSecretsPath: string,
     systemPrompt: string,
@@ -1392,9 +1506,7 @@ export class DockerProvider implements IsolationProvider {
     );
     await fs.promises.writeFile(path.join(taskSecretsPath, 'user-prompt.txt'), prompt, 'utf-8');
   }
-  /* v8 ignore stop @preserve */
 
-  /* v8 ignore start -- test-infra: Docker exec lifecycle and race handling require daemon-level integration tests @preserve */
   private async runAttemptInContainer(taskId: string, config: WorkerConfig): Promise<void> {
     const worker = this.workers.get(taskId);
     if (worker === undefined) {
@@ -1443,7 +1555,13 @@ export class DockerProvider implements IsolationProvider {
         Tty: false,
         WorkingDir: '/',
         User: getHostUserInfo().userString,
-        Env: [`CLAUDE_CONTINUE=${config.continueSession === true ? '1' : '0'}`],
+        Env: [
+          `WORKER_CONTINUE=${config.continueSession === true ? '1' : '0'}`,
+          `WORKER_RUNTIME=${worker.runtime}`,
+          ...(worker.runtime === 'codex' && config.runtimeSessionId !== undefined
+            ? [`CODEX_THREAD_ID=${config.runtimeSessionId}`]
+            : []),
+        ],
       });
 
       const execStream = await execInstance.start({ hijack: false, stdin: false });
@@ -1491,9 +1609,7 @@ export class DockerProvider implements IsolationProvider {
       worker.attemptRunning = false;
     }
   }
-  /* v8 ignore stop @preserve */
 
-  /* v8 ignore start -- upstream: Docker exec stream/inspect error paths depend on daemon/runtime behavior @preserve */
   private async waitForExecCompletion(
     taskId: string,
     execInstance: Docker.Exec,
@@ -1502,8 +1618,35 @@ export class DockerProvider implements IsolationProvider {
     return await new Promise<number>((resolve) => {
       let resolved = false;
 
+      // Poll timer callback — declared before resolveWith so setInterval and
+      // clearInterval are near each other for the v8-ignore async-timing detector.
+      const onPollTick = (): void => {
+        void execInstance
+          .inspect()
+          .then((info) => {
+            if (!info.Running) {
+              this.logger.info(
+                { taskId },
+                'Exec process exited but stream still open — resolving via inspect fallback'
+              );
+              /* v8 ignore start -- ts-type: FakeHttpClient cannot produce a null ExitCode from Docker.ExecInspectInfo @preserve */
+              resolveWith(typeof info.ExitCode === 'number' ? info.ExitCode : 1);
+              /* v8 ignore stop @preserve */
+            }
+          })
+          .catch(() => {
+            resolveWith(1);
+          });
+      };
+
+      /* v8 ignore start -- async-timing: vi.useFakeTimers cannot deterministically capture the setInterval handle before resolveWith is declared in the same scope @preserve */
+      const pollTimer = setInterval(onPollTick, EXEC_INSPECT_POLL_INTERVAL_MS);
+      /* v8 ignore stop @preserve */
+
       const resolveWith = (exitCode: number): void => {
+        /* v8 ignore start -- async-timing: double-resolution race guard cannot be triggered deterministically because stream end and poll timer fire in the same microtask queue @preserve */
         if (resolved) return;
+        /* v8 ignore stop @preserve */
         resolved = true;
         clearInterval(pollTimer);
         resolve(exitCode);
@@ -1526,26 +1669,6 @@ export class DockerProvider implements IsolationProvider {
         resolveWith(1);
       });
       execStream.resume();
-
-      // Fallback: poll exec inspect for orphaned-fd cases
-      const pollTimer = setInterval(() => {
-        execInstance
-          .inspect()
-          .then((info) => {
-            if (!info.Running) {
-              this.logger.info(
-                { taskId },
-                'Exec process exited but stream still open — resolving via inspect fallback'
-              );
-              resolveWith(typeof info.ExitCode === 'number' ? info.ExitCode : 1);
-            }
-          })
-          .catch(() => {
-            // Inspect failed — exec may have been removed; treat as exit
-            resolveWith(1);
-          });
-      }, EXEC_INSPECT_POLL_INTERVAL_MS);
     });
   }
-  /* v8 ignore stop @preserve */
 }

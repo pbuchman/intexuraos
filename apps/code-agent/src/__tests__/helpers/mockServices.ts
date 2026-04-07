@@ -21,6 +21,8 @@ import { createStatusMirrorService } from '../../infra/services/statusMirrorServ
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
+import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
+import { createAutoArchiveMergedTasksUseCase } from '../../domain/usecases/autoArchiveMergedTasks.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { createNoOpMetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
@@ -63,6 +65,9 @@ export const mockUserServiceClient: UserServiceClient = {
   },
   async resolveGitHubUsername() {
     return ok(null);
+  },
+  async getUserTimezone() {
+    return undefined;
   },
 };
 
@@ -157,9 +162,6 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     taskEnqueueService: createTaskEnqueueService({
       logger,
       codeTaskRepo: createFirestoreCodeTaskRepository({ firestore: fakeFirestore, logger }),
-      whatsappNotifier: createWhatsAppNotifier({
-        whatsappPublisher: { publishSendMessage: async () => ok(undefined) } as unknown as WhatsAppSendPublisher,
-      }),
     }),
     whatsappNotifier: createWhatsAppNotifier({
       whatsappPublisher: { publishSendMessage: async () => ok(undefined) } as unknown as WhatsAppSendPublisher,
@@ -169,7 +171,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     gitHubPRClient: createGitHubPRHttpClient({ timeoutMs: 5000 }),
     userServiceClient: mockUserServiceClient,
     firestore: fakeFirestore,
-    messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS),
+    messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS),
     allowedBots: ALLOWED_BOTS,
     orchestratorSecret: 'test-secret',
     serviceUrl: 'http://localhost:8080',
@@ -193,7 +195,6 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
   const taskEnqueueService = createTaskEnqueueService({
     logger,
     codeTaskRepo,
-    whatsappNotifier,
   });
 
   const container: ServiceContainer = {
@@ -237,6 +238,20 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       logger,
     }),
     cleanupTaskLogs: createCleanupTaskLogsUseCase({
+      codeTaskRepository: createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore,
+        logger,
+      }),
+      logger,
+    }),
+    archiveStaleGroups: createArchiveStaleGroupsUseCase({
+      codeTaskRepository: createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore,
+        logger,
+      }),
+      logger,
+    }),
+    autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({
       codeTaskRepository: createFirestoreCodeTaskRepository({
         firestore: fakeFirestore,
         logger,

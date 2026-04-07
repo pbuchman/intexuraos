@@ -57,4 +57,9 @@ export function initSentry(config: SentryConfig): void {
   }
 
   Sentry.init(options);
+
+  const runtime = process.env['INTEXURAOS_RUNTIME'];
+  if (runtime !== undefined && runtime !== '') {
+    Sentry.setTag('runtime', runtime);
+  }
 }

@@ -109,7 +109,7 @@ export function createScheduleManager(deps: ManageScheduleDeps): ScheduleManager
       }
 
       // Parse schedule description into cron expression
-      const parseResult = await parseSchedule(parseDeps, input.description);
+      const parseResult = await parseSchedule(parseDeps, input.schedule);
       if (!parseResult.ok) {
         return err({
           code: 'PARSE_FAILED',
@@ -117,12 +117,13 @@ export function createScheduleManager(deps: ManageScheduleDeps): ScheduleManager
         });
       }
 
-      const { cronExpression } = parseResult.value;
+      const { cronExpression, humanSummary } = parseResult.value;
       const nextExecutionAt = computeNextExecution(cronExpression, input.timezone);
 
       const result = await scheduleRepo.create(userId, {
         ...input,
         action: normalizedAction,
+        scheduleSummary: humanSummary,
         cronExpression,
         nextExecutionAt,
       });
@@ -197,13 +198,13 @@ export function createScheduleManager(deps: ManageScheduleDeps): ScheduleManager
         updates.timezone = input.timezone;
       }
 
-      // If description changed, re-parse cron expression
-      if (input.description !== undefined) {
-        updates.description = input.description;
-        const parseResult = await parseSchedule(parseDeps, input.description);
+      // If schedule changed, re-parse cron expression
+      if (input.schedule !== undefined) {
+        const parseResult = await parseSchedule(parseDeps, input.schedule);
         if (!parseResult.ok) {
           return err({ code: 'PARSE_FAILED', message: parseResult.error.message });
         }
+        updates.scheduleSummary = parseResult.value.humanSummary;
         updates.cronExpression = parseResult.value.cronExpression;
         const tz = input.timezone ?? schedule.timezone;
         updates.nextExecutionAt = computeNextExecution(parseResult.value.cronExpression, tz);

@@ -49,6 +49,8 @@ export {
   extractModelPreferences,
   validateSelectedModels,
   validateSynthesisModel,
+  getModelDisplayName,
+  getModelKeywords,
   type ExtractModelPreferencesResult,
   type ExtractModelPreferencesDeps,
 } from './extractModelPreferences.js';

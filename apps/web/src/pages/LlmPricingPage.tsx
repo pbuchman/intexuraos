@@ -19,6 +19,7 @@ const PROVIDER_CONFIG: Record<LlmProvider, { name: string; color: string; bgColo
   openai: { name: 'OpenAI', color: 'text-green-700 dark:text-green-300', bgColor: 'bg-green-50 dark:bg-green-900/30' },
   anthropic: { name: 'Anthropic', color: 'text-orange-700 dark:text-orange-300', bgColor: 'bg-orange-50 dark:bg-orange-900/30' },
   perplexity: { name: 'Perplexity', color: 'text-purple-700 dark:text-purple-300', bgColor: 'bg-purple-50 dark:bg-purple-900/30' },
+  openrouter: { name: 'OpenRouter', color: 'text-red-700 dark:text-red-300', bgColor: 'bg-red-50 dark:bg-red-900/30' },
 };
 
 interface ModelRowProps {

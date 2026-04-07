@@ -17,7 +17,7 @@ All rules verified by `pnpm run ci:tracked`. If CI passes, rules are satisfied. 
 **Test-First:** Always write tests BEFORE implementation. Write failing test → confirm failure → implement minimal code → refactor. Exception: pure refactoring of existing tested code.
 
 **Testing:** No external deps — in-memory fakes, `nock` for HTTP. Pattern: `setServices({fakes})` in `beforeEach`, `resetServices()` in `afterEach`. Routes: `app.inject()`. Domain: unit tests. 100% branch coverage required — covered by tests (preferred) or `/* v8 ignore <CATEGORY> -- reason @preserve */` (last resort). Valid categories: `ts-type`, `regex`, `module-init`, `async-timing`, `test-infra`, `upstream`, `module-mock`, `schema`, `source-map`, `auth-guard`. Reference: `.claude/reference/coverage-exemptions.md`. Web app exception: coverage not enforced, tests optional for UI, required for `utils/`, `services/`, `hooks/`.
-**v8 Ignore Proof:** explanation MUST name the testing BLOCKER, not describe the code. BAD: `-- error handling for failed request`. GOOD: `-- FakeHttpClient cannot simulate AbortError`. Override: blocks with planned fixes tracked in `v8-ignore-overrides.json` with Linear task ID.
+**v8 Ignore Proof:** explanation MUST name the testing BLOCKER, not describe the code. BAD: `-- error handling for failed request`. GOOD: `-- FakeHttpClient cannot simulate AbortError`.
 
 **Pre-Flight:** Read types BEFORE writing code. Before mocks: read `*Deps` type. Before ServiceContainer changes: read `services.ts`, search `setServices(` in tests, update all. Before imports: `pnpm build` if "Cannot find module". If build fails with missing dependencies: `pnpm install && pnpm build`. Before Result access: narrow with `if (!result.ok) return result;` first.
 
@@ -25,7 +25,7 @@ All rules verified by `pnpm run ci:tracked`. If CI passes, rules are satisfied. 
 
 **Code Auditing:** When fixing a pattern in one service, audit ALL other services for the same issue before committing.
 
-**Linear MCP Safety:** Never broad text searches with high limits. Use `query: 'INT-445', limit: 10`. Children: `parentId`, not `includeRelations`. Context overflow → `/clear` and retry targeted.
+**Linear MCP Safety:** Never broad text searches with high limits. Use `query: 'INT-445', limit: 10`. Children: `parentId`, not `includeRelations`. Context overflow → `/clear` and retry targeted. NEVER set `assignee`, `assigneeId`, or `delegate` on any issue — assignment is exclusively the user's responsibility. Enforced by PreToolUse hook.
 
 # Architecture
 
@@ -60,5 +60,7 @@ All rules verified by `pnpm run ci:tracked`. If CI passes, rules are satisfied. 
 **Git CLI:** Always prefer `gh` CLI over raw `git` commands. Use `gh` for status, diff, log, branching, PRs, and any operation `gh` supports. Fall back to `git` only when `gh` has no equivalent.
 
 **Full Investigation:** NEVER present partial investigation results with hedging language ("maybe", "possibly", "there are multiple possible causes", "could be"). Always perform complete investigation with all mandatory evidence before presenting findings. Present definitive root cause backed by concrete evidence (logs, code, config). If evidence is genuinely insufficient, say exactly what evidence is missing and fetch it — do not guess. Non-negotiable.
+
+**Investigation Discipline:** When a tool, binary, or service crashes: (1) investigate the environment (arch, resources, config), not the tool. (2) Trace the causal chain to fixable code — surface symptoms are not root causes; keep asking "why?". (3) Diagnosis without fix is incomplete — implement and verify the fix. (4) During dev-env incident triage, act immediately (rebuild images, restart services) without asking permission. (5) Confident speculation is a violation — "crashes because X" without evidence is as wrong as "maybe X". Reference: `.claude/reference/investigation-discipline.md`
 
 **Plan Documentation:** Plans with HTTP endpoints MUST include "Endpoint Changes" section: Modified, Created, Removed, Unchanged.

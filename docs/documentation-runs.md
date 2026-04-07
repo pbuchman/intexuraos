@@ -1,3 +1,755 @@
+## 2026-04-07 — code-agent v3.5.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/code-agent/features.md`
+- `docs/services/code-agent/technical.md`
+- `docs/services/code-agent/tutorial.md`
+- `docs/services/code-agent/technical-debt.md`
+- `docs/services/code-agent/agent.md`
+- `docs/services/index.md` (highlights updated)
+
+**Inferred Insights:**
+
+- Why: Autonomous coding service that accepts natural-language task descriptions and produces pull requests on user-owned infrastructure, with design-first workflow, independent cross-LLM verification, and full audit trail
+- Killer feature: Execution Memory Graph (alpha) — cross-task learning pipeline that distills reusable lessons from completed runs and retrieves them for future tasks via vector similarity
+- Future plans: Execution memory pipeline maturation (rerank tuning, distillation quality), system prompt versioning with computed hashes, codeRoutes.ts route splitting, distributed drain queue guards
+- Limitations: Execution memory in alpha, prompt capped at 10k chars, queued tasks expire after 24h, merge queue blocked on main branch
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 4
+- Test gaps: 0
+- Type issues: 2
+- TODOs: 2
+
+**Changes since v3.4.0:**
+
+- Execution Memory Graph: data collection pipeline with vector retrieval and post-run distillation (alpha)
+- Remediation Agent: autonomous auto-improvement loop with cross-LLM checks and event-sourcing
+- Ask Agent: interactive Claude Code sessions from the web UI
+- Code Tasks Pagination & Group Aggregation: server-side issue grouping with TaskGroupSummary
+- Batch Archive & V3 Loading UX
+- Auto-Archive Merged Code Tasks (daily cron)
+- CI Failure Auto-Handling on agent PRs
+- Per-Agent-Type Worker Settings
+- Internal code submit endpoint (POST /internal/code/submit)
+- Review-outcome merge labels and onReviewSkipped callback
+- PR evidence enforcement for all task types
+- Sender authorization enforcement with GitHub comment
+- Drain queue deadlock fix with per-PR guard
+- V8 ignore blocks replaced with real tests
+
+---
+
+## 2026-04-07 — linear-agent v3.5.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/linear-agent/features.md`
+- `docs/services/linear-agent/technical.md`
+- `docs/services/linear-agent/tutorial.md`
+- `docs/services/linear-agent/technical-debt.md`
+- `docs/services/linear-agent/agent.md`
+
+**Inferred Insights:**
+
+- Why: Bidirectional Linear integration — turns voice notes and text into structured issues, keeps boards synced in real time, and enables AI-driven issue lifecycle management
+- Killer feature: AI-powered issue pruning with Gemini classification and two-phase user-reviewed deletion to keep Linear under subscription limits
+- Future plans: Configurable prune threshold, prune candidate exclusion list, label inference from NL, due date extraction, comment full sync
+- Limitations: Linear only, WhatsApp-only voice input, one team per connection, 200-issue fixed prune threshold, labels not forwarded on internal create
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 3
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+**Changes since v3.4.0:**
+
+- AI-powered issue pruning with Gemini classification and user-reviewed deletion (INT-1164, INT-1168)
+- Extended completed issue retention from 7 to 60 days (INT-963)
+- Write-through label cache and group summary recomputes on label changes (INT-1187)
+- Metadata route fallback to findByIdentifier when findById returns null (INT-1147)
+- Subtask parent breadcrumbs in display endpoints
+- Direct children endpoint for live Linear API child issue lookup
+- Review-outcome label fallback and dropped label detection (INT-1079)
+
+---
+
+## 2026-04-07 — orchestrator v3.5.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/orchestrator/features.md`
+- `docs/services/orchestrator/technical.md`
+- `docs/services/orchestrator/tutorial.md`
+- `docs/services/orchestrator/technical-debt.md`
+- `docs/services/orchestrator/agent.md`
+- `docs/services/index.md` (worker details updated)
+
+**Inferred Insights:**
+
+- Why: Runs code tasks on user-owned hardware with cross-model verification — code never leaves the network, and no model verifies its own work
+- Killer feature: Cross-model verification pipeline — Claude/Codex executes, Gemini verifies completion, independent LLM (OpenRouter) audits the full transcript, deterministic rules enforce what no model can be trusted to check
+- Future plans: Multi-machine orchestration (Pub/Sub queue), container image versioning, task priority queue, real-time metrics and alerting
+- Limitations: Docker required, Cloudflare tunnel required, 3-hour attempt ceiling, Gemini dependency for verification, 4MB log cap, Linux-only metrics
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 2
+
+---
+
+## 2026-04-07 — actions-agent v3.5.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/actions-agent/features.md`
+- `docs/services/actions-agent/technical.md`
+- `docs/services/actions-agent/tutorial.md`
+- `docs/services/actions-agent/technical-debt.md`
+- `docs/services/actions-agent/agent.md`
+
+**Inferred Insights:**
+
+- Why: Central dispatch and lifecycle management for all action types across IntexuraOS
+- Killer feature: Shared template-based architecture (handleActionTemplate + executeActionTemplate) enabling consistent behavior across 7 action types with minimal per-type code
+- Future plans: Reminder handler implementation, Linear auto-execute, migrate remaining execute use cases to template
+- Limitations: No reminder execution, no per-user confidence thresholds, WhatsApp-only approval
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 1
+- Test gaps: 0
+- Type issues: 4
+- TODOs: 0
+
+**Changes since v3.4.0:**
+
+- Code task WhatsApp completion notifications now use CTA button pattern (INT-1260)
+- Removed emoji from WhatsApp CTA displayText (INT-1259)
+- Added codex-xhigh worker type with prefix collision regression tests (INT-1109)
+- Updated worker type list: auto, opus, sonnet, minimax, glm, qwen, kimi, codex, codex-xhigh, openrouter-free
+
+---
+
+## 2026-04-07 — code-worker v3.5.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/code-worker/features.md`
+- `docs/services/code-worker/technical.md`
+- `docs/services/code-worker/tutorial.md`
+- `docs/services/code-worker/technical-debt.md`
+- `docs/services/code-worker/agent.md`
+
+**Inferred Insights:**
+
+- Why: Provides isolated, security-hardened Docker environments for autonomous AI coding tasks — source code never leaves the user's infrastructure
+- Killer feature: Multi-runtime support — Claude Code and OpenAI Codex run in the same container image with runtime selection per task, shared toolchain, and unified session continuity
+- Future plans: Read-only root filesystem, image versioning strategy, seccomp profile, Codex forensics parity
+- Limitations: One task per environment, no private network access, secrets readable during execution, two-hour cap per attempt, no persistent storage
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+- Security hardening: 3
+- Operational gaps: 1
+- Architecture debt: 2
+
+---
+
+## 2026-04-07 — research-agent v3.5.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/research-agent/features.md`
+- `docs/services/research-agent/technical.md`
+- `docs/services/research-agent/tutorial.md`
+- `docs/services/research-agent/technical-debt.md`
+- `docs/services/research-agent/agent.md`
+
+**Inferred Insights:**
+
+- Why: Automates multi-model AI research -- eliminates single-model bias by dispatching one prompt to multiple LLMs and synthesizing a cross-validated report
+- Killer feature: OpenRouter integration -- access 14 frontier models from 10 providers through a single API key, with allowlist enforcement and live pricing
+- Future plans: Define NotionServiceClient port interface, extract duplicated LlmCallPublisher interface, relocate Notion export use case to domain layer
+- Limitations: 60k char / 5 context limit, Notion export requires pre-config, partial failures need user confirmation, cover images require Google or OpenAI key, OpenRouter restricted to curated 14-model allowlist
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 2
+- Test gaps: 0
+- Type issues: 1
+- TODOs: 1
+
+---
+
+## 2026-04-07 — whatsapp-service v3.5.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/whatsapp-service/features.md`
+- `docs/services/whatsapp-service/technical.md`
+- `docs/services/whatsapp-service/tutorial.md`
+- `docs/services/whatsapp-service/technical-debt.md`
+- `docs/services/whatsapp-service/agent.md`
+
+**Inferred Insights:**
+
+- Why: Mobile command center bridging WhatsApp and IntexuraOS agent ecosystem — captures text, voice, and image input; delivers notifications, approvals, and deep links
+- Killer feature: Two-way approval workflow with interactive buttons and reply correlation via OutboundMessage tracking and correlationId-based actionId extraction
+- Future plans: Telegram/SMS support, video message handling, message threading, multi-phone per user
+- Limitations: WhatsApp-only (no Telegram/SMS), 24-hour messaging window, no video, one phone per user, Meta API rate limits
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+- SRP violations: 1 (processWebhookEventUseCase handles 4 message type handlers)
+- Code duplicates: 1 (Pub/Sub auth detection repeated across 4 handlers)
+
+**Notable v3.5.0 Changes:**
+
+- Sentry quota protection: SKIP_SENTRY_KEY on all WhatsApp API error logs in sender.ts (INT-1172)
+- 429 retry fix: Excluded HTTP 429 from permanent error classification so rate-limited sends are retried (INT-1172)
+- v8 ignore enforcement: Strict blocker keyword validation and cross-service override removal (INT-1072)
+
+---
+
+## 2026-04-07 — user-service v3.5.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/user-service/features.md`
+- `docs/services/user-service/technical.md`
+- `docs/services/user-service/tutorial.md`
+- `docs/services/user-service/technical-debt.md`
+- `docs/services/user-service/agent.md`
+
+**Inferred Insights:**
+
+- Why: Centralized identity, credential vault, and preferences for an AI platform with 5 LLM providers, 2 OAuth integrations, and multi-surface authentication
+- Killer feature: Encrypted LLM API key management with real-time provider validation, provider-aware error translation, and zero-cost OpenRouter key checks
+- Future plans: Microsoft/Notion OAuth, usage analytics, key rotation, budget alerts, OpenRouter/Perplexity-specific error parsing, additional transcription providers
+- Limitations: Auth0 dependency, 2 OAuth providers, validation costs (except OpenRouter), 1 transcription provider, no user-side rate limits
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+- SRP violations: 1 (low)
+- Code duplicates: 2 (acknowledged, intentional)
+
+---
+
+## 2026-04-07 — commands-agent v3.5.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/commands-agent/features.md`
+- `docs/services/commands-agent/technical.md`
+- `docs/services/commands-agent/tutorial.md`
+- `docs/services/commands-agent/technical-debt.md`
+- `docs/services/commands-agent/agent.md`
+
+**Inferred Insights:**
+
+- Why: Eliminates the gap between capturing a thought and organizing it — classifies natural language into typed actions so users never need to open the right app or pick the right category
+- Killer feature: 5-step LLM classification prompt with explicit intent priority, bilingual (English/Polish) support, and URL keyword isolation
+- Future plans: Additional language support, structured output mode for Gemini, confidence threshold tuning, circuit breaker for actions-agent, runtime prompt loading
+- Limitations: English and Polish only, single-message classification (no conversation context), no reclassification after action creation
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 2
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+**Changes since v3.4.0:** Minor — `getUserTimezone` method added to `UserServiceClient` interface by `internal-clients` package, requiring test fakes update. No functional changes to commands-agent core logic.
+
+---
+
+## 2026-04-07 — image-service v3.5.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/image-service/features.md`
+- `docs/services/image-service/technical.md`
+- `docs/services/image-service/tutorial.md`
+- `docs/services/image-service/technical-debt.md`
+- `docs/services/image-service/agent.md`
+
+**Inferred Insights:**
+
+- Why: Eliminates the gap between AI-generated content and professional visual identity by automating prompt engineering and image generation from raw text
+- Killer feature: Two-step generation pipeline — reads raw text, generates an optimized prompt via LLM, then produces a cover image with automatic thumbnailing, with zero user prompt engineering
+- Future plans: Additional image providers (Stable Diffusion, Ideogram), image editing (inpainting/outpainting), style presets, batch generation, per-user budgets
+- Limitations: Internal-only access, no image editing, no style selection, no variations, no deduplication
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 1 (pricing model mismatch)
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+- Code duplicates: 1 (mapError/mapLlmError duplication)
+
+---
+
+## 2026-04-07 — data-insights-agent v3.5.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/data-insights-agent/features.md`
+- `docs/services/data-insights-agent/technical.md`
+- `docs/services/data-insights-agent/tutorial.md`
+- `docs/services/data-insights-agent/technical-debt.md`
+- `docs/services/data-insights-agent/agent.md`
+
+**Inferred Insights:**
+
+- Why: Bridges the gap between scattered data silos (CSVs, notifications, text files) and actionable visual insights by using AI to analyze, chart, and track patterns across unified composite feeds
+- Killer feature: AI-driven composite feed analysis that generates up to 5 measurable insights with chart recommendations from mixed data sources (static uploads + live mobile notifications)
+- Future plans: Clean up stale scheduler references in comments, decide on refreshFeedVisualizations use case (wire into route or remove), remove orphaned `listAll()` repository method
+- Limitations: Text-only data sources, max 5 sources per feed, max 3 notification filters, max 10 visualizations per feed, manual refresh only, no chart export
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 1
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+**Key v3.5.0 Changes:**
+
+- Minor: getUserTimezone added to UserServiceClient (test mock updates only)
+- Minor: v8 ignore comment validation enforced with blocker keyword checks
+
+---
+
+## 2026-04-07 — todos-agent v3.5.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/todos-agent/features.md`
+- `docs/services/todos-agent/technical.md`
+- `docs/services/todos-agent/tutorial.md`
+- `docs/services/todos-agent/technical-debt.md`
+- `docs/services/todos-agent/agent.md`
+
+**Inferred Insights:**
+
+- Why: Eliminates task management friction by converting natural language descriptions into structured, prioritized todo lists with AI-powered item extraction
+- Killer feature: AI-powered item extraction via Gemini 2.5 Flash — parses free-text descriptions into structured items with titles, priorities, and due dates
+- Future plans: Todo templates, recurring todos, todo dependencies, bulk operations, full-text search, collaboration, reminders, subtask nesting
+- Limitations: No recurring tasks, no task dependencies, no reminders, no collaboration, one level of depth
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+- Code duplicates: 1 (parseDate function)
+
+---
+
+## 2026-04-07 — web-agent v3.5.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/web-agent/features.md`
+- `docs/services/web-agent/technical.md`
+- `docs/services/web-agent/tutorial.md`
+- `docs/services/web-agent/technical-debt.md`
+- `docs/services/web-agent/agent.md`
+
+**Inferred Insights:**
+
+- Why: Extracts web content and generates AI summaries so other agents (research, bookmarks) can understand URLs without manual reading
+- Killer feature: Cloudflare Browser Rendering with LLM summarization pipeline — renders JavaScript-heavy pages in a headless browser, extracts Markdown, and summarizes in the source language with automatic repair on invalid LLM responses
+- Future plans: Caching layer, batch summarization, built-in rate limiting, content type detection (PDF/docs), schema alignment for RATE_LIMITED error code
+- Limitations: No caching, no authenticated content, no built-in rate limiting, callers must throttle
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 2
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+**Key v3.5.0 Changes:**
+
+- Replaced Crawl4AI with Cloudflare Browser Rendering for page content extraction (INT-1121, INT-1153, INT-1154)
+- Removed legacy crawl4aiClient.ts and CRAWL4AI_APP_API_KEY env var
+- Added title and description hint parameters to page summary request body
+- Improved page summary prompt with MAIN CONTENT SELECTION section (INT-1206)
+- Bumped PromptBuilder prompts from v1.0.0 to v2.0.0
+
+---
+
+## 2026-04-07 — hellscript-agent v3.5.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/hellscript-agent/features.md`
+- `docs/services/hellscript-agent/technical.md`
+- `docs/services/hellscript-agent/tutorial.md`
+- `docs/services/hellscript-agent/technical-debt.md`
+- `docs/services/hellscript-agent/agent.md`
+- `docs/services/index.md` (updated: v3.5.0 highlights, Writing Assistance capability, quick links)
+
+**Inferred Insights:**
+
+- Why: Turns scattered, unstructured thoughts into polished markdown drafts using AI intent interpretation and categorized writing configuration
+- Killer feature: Two-phase LLM pipeline with categorized writing config — Gemini interprets user utterance into structured intent, then generates versioned markdown drafts styled per platform (threads, linkedin, general) using user-provided style instructions and writing samples
+- Future plans: Export formats beyond markdown, collaborative editing, buffer archiving/deletion, Pub/Sub integration, streaming draft generation, additional writing categories
+- Limitations: 10K char utterance limit, 5K char style instructions, 5 samples per category, single-user buffers, markdown-only output, 3 categories only
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+---
+
+## 2026-04-07 — app-settings-service v3.5.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/app-settings-service/features.md`
+- `docs/services/app-settings-service/technical.md`
+- `docs/services/app-settings-service/tutorial.md`
+- `docs/services/app-settings-service/technical-debt.md`
+- `docs/services/app-settings-service/agent.md`
+
+**Inferred Insights:**
+
+- Why: Centralized LLM pricing configuration and per-user usage cost analytics — eliminates manual cost tracking across four providers and fourteen models
+- Killer feature: Startup pricing validation — refuses to boot if any model is missing pricing, guaranteeing completeness for all downstream services
+- Future plans: Budget management, cost alerts, cost forecasting, admin API for pricing, daily aggregation breakdown
+- Limitations: Read-only (no self-service pricing), no budgets/alerts, no forecasting, monthly aggregates only (no daily)
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 3
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+---
+
+## 2026-04-07 — notion-service v3.5.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/notion-service/features.md`
+- `docs/services/notion-service/technical.md`
+- `docs/services/notion-service/tutorial.md`
+- `docs/services/notion-service/technical-debt.md`
+- `docs/services/notion-service/agent.md`
+
+**Inferred Insights:**
+
+- Why: Bridge between IntexuraOS research output and Notion workspaces — enables validated export of research results to user knowledge bases
+- Killer feature: Pre-flight export validation — checks connection state and page access before research-agent attempts to write, surfacing failures early
+- Future plans: Multiple workspace support, webhook event processing, scoped page access, sync status tracking
+- Limitations: Manual token generation (no OAuth), no sync, no page creation/browsing, one-directional connection
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 1
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+**Key v3.5.0 Changes:**
+
+- v8 ignore annotation explanations tightened with blocker keyword enforcement (no functional changes)
+
+---
+
+## 2026-04-07 — cron-agent v3.5.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/cron-agent/features.md`
+- `docs/services/cron-agent/technical.md`
+- `docs/services/cron-agent/tutorial.md`
+- `docs/services/cron-agent/technical-debt.md`
+- `docs/services/cron-agent/agent.md`
+
+**Inferred Insights:**
+
+- Why: Users need to automate recurring cross-service workflows without manual repetition. No built-in scheduling existed in IntexuraOS.
+- Killer feature: LLM-driven action execution with per-service operation allowlists and schedule-owner identity propagation — the agent dynamically discovers permitted tools from other services via OpenAPI specs and executes multi-step instructions autonomously using Gemini 2.5 Flash tool calling, scoped to the user's identity.
+- Future plans: Web UI for schedule management (plan Subtask 2); application-level OIDC validation for tick endpoint.
+- Limitations: 5-minute minimum interval, 50 schedules per user, 10 tool-calling iterations per execution, 50KB response truncation, 100 schedules per tick.
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 1
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+---
+
+## 2026-04-07 — mobile-notifications-service v3.5.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/mobile-notifications-service/features.md`
+- `docs/services/mobile-notifications-service/technical.md`
+- `docs/services/mobile-notifications-service/tutorial.md`
+- `docs/services/mobile-notifications-service/technical-debt.md`
+- `docs/services/mobile-notifications-service/agent.md`
+
+**Inferred Insights:**
+
+- Why: Captures mobile device notifications into a structured, searchable, filterable store for platform-wide analysis
+- Killer feature: Signature-based webhook pipeline with SHA-256 hash comparison, idempotency, and best-effort filter option population
+- Future plans: FCM/APNs push integration, iOS support, rich notifications, scheduled delivery, batch operations, AI categorization
+- Limitations: Android only, single active connection per user, text-only capture, credential shown once
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+---
+
+## 2026-04-07 — api-docs-hub v3.5.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/api-docs-hub/features.md`
+- `docs/services/api-docs-hub/technical.md`
+- `docs/services/api-docs-hub/tutorial.md`
+- `docs/services/api-docs-hub/technical-debt.md`
+- `docs/services/api-docs-hub/agent.md`
+
+**Inferred Insights:**
+
+- Why: Unifies 20 scattered OpenAPI documentation endpoints into a single browsable Swagger UI portal
+- Killer feature: Multi-spec dropdown — one URL gives access to all 20 service APIs with live spec fetching
+- Future plans: Dynamic config reload, spec caching, cross-spec search, authentication helper, ecosystem.config.cjs integration
+- Limitations: Services must be running for specs to load, no version history, no built-in auth, static config requires redeployment
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 2
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+---
+
+## 2026-04-07 — bookmarks-agent v3.5.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/bookmarks-agent/features.md`
+- `docs/services/bookmarks-agent/technical.md`
+- `docs/services/bookmarks-agent/tutorial.md`
+- `docs/services/bookmarks-agent/technical-debt.md`
+- `docs/services/bookmarks-agent/agent.md`
+
+**Inferred Insights:**
+
+- Why: Captures and enriches web links with OpenGraph metadata and AI summaries, delivering results via WhatsApp
+- Killer feature: Three-stage async pipeline (create -> enrich -> summarize) with Pub/Sub event chaining and transient error retry
+- Future plans: Full-text search, folder hierarchy, bookmark sharing, import/export, summary regeneration, configurable WhatsApp notifications
+- Limitations: Flat tag-only organization, no full-text search, no sharing/collaboration, summary quality varies by page structure
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+---
+
+## 2026-04-07 — calendar-agent v3.5.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/calendar-agent/features.md`
+- `docs/services/calendar-agent/technical.md`
+- `docs/services/calendar-agent/tutorial.md`
+- `docs/services/calendar-agent/technical-debt.md`
+- `docs/services/calendar-agent/agent.md`
+
+**Inferred Insights:**
+
+- Why: Bridges the gap between natural language voice/text input and Google Calendar — converts conversational event descriptions into structured calendar events
+- Killer feature: AI-powered natural language event extraction with preview-before-commit workflow, supporting multilingual input (including Polish relative dates) and transparent LLM reasoning
+- Future plans: Recurring events, event colors, reminders, attachments, conference data (Google Meet), batch operations, preview TTL auto-cleanup
+- Limitations: Google Calendar only, single events only (no recurring), no reminders/colors/attachments
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 1
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+---
+
+## 2026-04-07 — vm-lifecycle v3.5.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/vm-lifecycle/technical.md` — Added 2 new commits to Recent Changes table (626cac13, 549c9698)
+- `docs/services/vm-lifecycle/technical-debt.md` — Updated date
+- `docs/services/vm-lifecycle/agent.md` — Updated date
+- `docs/documentation-runs.md` — This entry
+
+**Inferred Insights:**
+
+- Why: Automated cost control — manages GCE VM uptime to weekday business hours without operator intervention
+- Killer feature: Graceful shutdown with 10-minute task-draining grace period — prevents data loss on scheduled nightly stops
+- Future plans: Weekend override API, startup notifications, cost reporting, multi-VM support, status endpoint
+- Limitations: Single VM instance; fixed schedule requires Terraform apply to change; health check dependency; 120s function timeout shorter than 3-minute health poll
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 2 (hardcoded timing constants in config.ts; hardcoded 5s poll in waitForState)
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+---
+
 ## 2026-03-22 — code-agent v3.4.0
 
 **Action:** Updated
@@ -1319,7 +2071,7 @@
 
 ---
 
-## 2026-03-15 — linear-agent, actions-agent, whatsapp-service, mobile-notifications-service, claude-worker (v3.3.0 DashScope migration batch)
+## 2026-03-15 — linear-agent, actions-agent, whatsapp-service, mobile-notifications-service, code-worker (v3.3.0 DashScope migration batch)
 
 **Action:** Updated
 **Agent:** service-scribe (autonomous)
@@ -1338,9 +2090,9 @@
 - `docs/services/whatsapp-service/technical-debt.md` — Added 2 resolved issues, updated analysis run
 - `docs/services/mobile-notifications-service/technical.md` — New Recent Changes for v8 ignore test replacement
 - `docs/services/mobile-notifications-service/technical-debt.md` — Added resolved issue, updated analysis run
-- `docs/services/claude-worker/technical.md` — New Recent Changes (cache bust, tasks env, orphan cleanup), added kimi worker type, updated toolchain (Codex CLI), updated config defaults
-- `docs/services/claude-worker/technical-debt.md` — Added 2 resolved issues (orphan cleanup, cache busting), updated analysis run
-- `docs/services/claude-worker/agent.md` — Updated WorkerType union (glm/qwen/kimi keys), added kimi config
+- `docs/services/code-worker/technical.md` — New Recent Changes (cache bust, tasks env, orphan cleanup), added kimi worker type, updated toolchain (Codex CLI), updated config defaults
+- `docs/services/code-worker/technical-debt.md` — Added 2 resolved issues (orphan cleanup, cache busting), updated analysis run
+- `docs/services/code-worker/agent.md` — Updated WorkerType union (glm/qwen/kimi keys), added kimi config
 - `docs/documentation-runs.md` — This entry
 
 **Inferred Insights:**
@@ -1349,7 +2101,7 @@
 - actions-agent: ZAI env var removed, worker types expanded to 7 (added qwen/kimi), v8 ignore blocks replaced with real tests across 7 files (INT-785)
 - whatsapp-service: v8 ignore blocks replaced with real tests across 5 files (INT-799), silent dispatch failures fixed (INT-810/811)
 - mobile-notifications-service: v8 ignore blocks replaced with real tests in repository files, reduced to 10 directives
-- claude-worker: kimi worker type added (kimi-k2.5 via DashScope), Docker cache busting for Claude CLI, Codex CLI installed, tasks env var enabled, orphaned child process cleanup
+- code-worker: kimi worker type added (kimi-k2.5 via DashScope), Docker cache busting for Claude CLI, Codex CLI installed, tasks env var enabled, orphaned child process cleanup
 
 **Documentation Coverage:** 100%
 
@@ -1556,7 +2308,7 @@
 - `docs/services/orchestrator/technical-debt.md` -- Updated date and analysis run version to v3.1.0; all 11 debt items unchanged (none resolved since last run)
 - `docs/services/orchestrator/agent.md` -- Updated WorkerType from 3 to 6 types, updated TaskVerificationRecord to simplified schema, added planningPrBranch/planningPrUrl/resumedAfterSuccess to Task, updated message limit from 10000 to 20000 chars, updated TaskResult fields, updated startup recovery to include container adoption, added new env vars, updated constraints
 - `docs/services/index.md` -- Updated orchestrator worker description with multi-model support and new features
-- `docs/site-index.json` -- Updated orchestrator features list and endpoint count; updated claude-worker worker types to 6
+- `docs/site-index.json` -- Updated orchestrator features list and endpoint count; updated code-worker worker types to 6
 - `docs/documentation-runs.md` -- This entry
 
 **Inferred Insights:**
@@ -1644,7 +2396,7 @@
 - Why: Developers need a way to dispatch AI coding tasks to dedicated worker machines without managing infrastructure directly. Code Agent bridges the gap between a user prompt and a fully managed coding session -- handling dispatch, security, lifecycle, and notifications.
 - Killer feature: Four-layer task deduplication (approvalEventId, actionId, dedupKey, linearIssueId) combined with two-layer prompt sanitization (secret redaction + injection prevention) -- no other service in the monorepo has this depth of input safety.
 - Future plans: Actual system prompt versioning (replace static hash placeholders with computed SHA-256), route splitting for codeRoutes.ts (continue extracting domain-specific route files).
-- Limitations: Queue TTL is 30 minutes (tasks expire if no worker becomes available), single-instance drain guard (module-level boolean would break with horizontal scaling), ESLint disabled on largest route files.
+- Limitations: Queue TTL is 24 hours (tasks expire if no worker becomes available), single-instance drain guard (module-level boolean would break with horizontal scaling), ESLint disabled on largest route files.
 
 **Documentation Coverage:** 100%
 
@@ -1831,18 +2583,18 @@
 
 ---
 
-## 2026-03-07 -- claude-worker
+## 2026-03-07 -- code-worker
 
 **Action:** Updated
 **Agent:** service-scribe (autonomous)
 
 **Files:**
 
-- `docs/services/claude-worker/features.md` -- Added crash forensics capability, plugin pre-installation, daily rebuild schedule, secret sync/direnv, updated use case and key benefits
-- `docs/services/claude-worker/technical.md` -- Added crash forensics section, plugin pre-installation table, secret sync and direnv entrypoint steps, multi-arch build details, Cloud Build/daily rebuild section, direnv gotcha, forensics env vars, recent changes table updated
-- `docs/services/claude-worker/tutorial.md` -- Added Part 6 for crash forensics, updated expected output for plugins and secret sync, added troubleshooting rows for secret sync and plugins, updated exercises
-- `docs/services/claude-worker/technical-debt.md` -- Updated date; added 4 resolved issues (plugin pre-install, multi-arch build, crash forensics, secret sync to container); added entrypoint SRP violation
-- `docs/services/claude-worker/agent.md` -- Added constraints 11-12 (secret sync, forensics); added error handling table with exit codes; added events published section; added dependencies table
+- `docs/services/code-worker/features.md` -- Added crash forensics capability, plugin pre-installation, daily rebuild schedule, secret sync/direnv, updated use case and key benefits
+- `docs/services/code-worker/technical.md` -- Added crash forensics section, plugin pre-installation table, secret sync and direnv entrypoint steps, multi-arch build details, Cloud Build/daily rebuild section, direnv gotcha, forensics env vars, recent changes table updated
+- `docs/services/code-worker/tutorial.md` -- Added Part 6 for crash forensics, updated expected output for plugins and secret sync, added troubleshooting rows for secret sync and plugins, updated exercises
+- `docs/services/code-worker/technical-debt.md` -- Updated date; added 4 resolved issues (plugin pre-install, multi-arch build, crash forensics, secret sync to container); added entrypoint SRP violation
+- `docs/services/code-worker/agent.md` -- Added constraints 11-12 (secret sync, forensics); added error handling table with exit codes; added events published section; added dependencies table
 - `docs/documentation-runs.md` -- This entry
 
 **Inferred Insights:**
@@ -3062,7 +3814,7 @@
 actions-agent, api-docs-hub, app-settings-service, bookmarks-agent, calendar-agent, chat-agent, code-agent, commands-agent, data-insights-agent, image-service, linear-agent, mobile-notifications-service, notes-agent, notion-service, research-agent, todos-agent, user-service, web, web-agent, whatsapp-service
 
 **Workers Updated:**
-claude-worker, log-cleanup, orchestrator, vm-lifecycle
+code-worker, log-cleanup, orchestrator, vm-lifecycle
 
 **Packages Updated:**
 common-core, common-http, http-contracts, http-server, infra-claude, infra-firestore, infra-gemini, infra-glm, infra-gpt, infra-notion, infra-otel (NEW), infra-perplexity, infra-pubsub, infra-sentry, infra-whatsapp, internal-clients, llm-audit, llm-contract, llm-factory, llm-pricing, llm-prompts, llm-utils
@@ -3268,7 +4020,7 @@ Log of all `/document-service` runs.
 **New Workers:**
 
 - orchestrator - Coordinates multi-agent workflows and resource management
-- claude-worker - Handles Claude API interactions with retry logic and rate limiting
+- code-worker - Handles Claude API interactions with retry logic and rate limiting
 - log-cleanup - Automated log rotation and archival system
 - vm-lifecycle - Virtual machine provisioning and lifecycle management
 

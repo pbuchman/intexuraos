@@ -182,7 +182,7 @@ function parseTable(lines: string[]): { block: NotionBlock; linesConsumed: numbe
   let linesConsumed = 2; // header + separator
   for (let i = 2; i < lines.length; i++) {
     const line = lines[i];
-    /* v8 ignore start -- ts-type: loop bounds guarantee array access is valid @preserve */
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard for array element within loop bounds @preserve */
     if (line === undefined) break;
     /* v8 ignore stop @preserve */
     if (!line.includes('|')) break;
@@ -206,7 +206,7 @@ function parseTable(lines: string[]): { block: NotionBlock; linesConsumed: numbe
 
   // rows is mapped from tableLines which has at least 1 element
   const firstRow = rows[0];
-  /* v8 ignore start -- ts-type: rows mapped from non-empty tableLines array @preserve */
+  /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — rows always has at least one element @preserve */
   if (firstRow === undefined) return null;
   /* v8 ignore stop @preserve */
 
@@ -281,7 +281,7 @@ function parseCodeBlock(lines: string[], startIndex: number): { block: NotionBlo
 
   for (; i < lines.length; i++) {
     const line = lines[i];
-    /* v8 ignore start -- ts-type: loop bounds guarantee array access is valid @preserve */
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard for array element within loop bounds @preserve */
     if (line === undefined) break;
     /* v8 ignore stop @preserve */
     if (line === '```') {

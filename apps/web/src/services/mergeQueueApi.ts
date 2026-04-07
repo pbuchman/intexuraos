@@ -34,11 +34,23 @@ export async function createWatch(
   accessToken: string,
   owner: string,
   repo: string,
-  baseBranch: string
+  baseBranch: string,
+  excludedPrNumbers?: number[]
 ): Promise<MergeQueueWatch> {
   return await apiRequest(config.codeAgentUrl, '/code/merge-queue/watch', accessToken, {
     method: 'POST',
-    body: { owner, repo, baseBranch },
+    body: { owner, repo, baseBranch, excludedPrNumbers: excludedPrNumbers ?? [] },
+  });
+}
+
+export async function updateExclusions(
+  accessToken: string,
+  watchId: string,
+  excludedPrNumbers: number[]
+): Promise<{ excludedPrNumbers: number[] }> {
+  return await apiRequest(config.codeAgentUrl, `/code/merge-queue/watch/${watchId}/exclusions`, accessToken, {
+    method: 'PUT',
+    body: { excludedPrNumbers },
   });
 }
 

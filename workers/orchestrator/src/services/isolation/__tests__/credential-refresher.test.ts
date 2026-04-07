@@ -66,9 +66,9 @@ describe('CredentialRefresher', () => {
 
     refresher = new CredentialRefresher(
       {
-        sharedCredsPath: '/home/user/.claude-orchestrator/claude-creds',
-        imageName: 'europe-central2-docker.pkg.dev/project/repo/claude-worker:latest',
-        networkName: 'claude-worker-net',
+        sharedCredsPath: '/home/user/.code-orchestrator/claude-creds',
+        imageName: 'europe-central2-docker.pkg.dev/project/repo/code-worker:latest',
+        networkName: 'code-worker-net',
       },
       mockDocker as never,
       mockLogger
@@ -84,14 +84,14 @@ describe('CredentialRefresher', () => {
 
     expect(mockDocker.createContainer).toHaveBeenCalledWith(
       expect.objectContaining({
-        Image: 'europe-central2-docker.pkg.dev/project/repo/claude-worker:latest',
+        Image: 'europe-central2-docker.pkg.dev/project/repo/code-worker:latest',
         Entrypoint: ['claude'],
         Cmd: ['--print', '--model', 'haiku', 'reply ok'],
         HostConfig: expect.objectContaining({
           Binds: expect.arrayContaining([
-            '/home/user/.claude-orchestrator/claude-creds:/home/claude/.claude:rw',
+            '/home/user/.code-orchestrator/claude-creds:/home/claude/.claude:rw',
           ]),
-          NetworkMode: 'claude-worker-net',
+          NetworkMode: 'code-worker-net',
           AutoRemove: false,
         }),
       })
@@ -140,13 +140,15 @@ describe('CredentialRefresher', () => {
     expect(result).toBe(false);
   });
 
-  it('logs container output', async () => {
+  it('logs container output at error level on failure', async () => {
+    mockContainer.wait.mockResolvedValue({ StatusCode: 1 });
+
     await refresher.refresh();
 
     expect(mockContainer.logs).toHaveBeenCalled();
-    expect(mockLogger.debug).toHaveBeenCalledWith(
+    expect(mockLogger.error).toHaveBeenCalledWith(
       expect.objectContaining({ output: expect.stringContaining('Claude replied') }),
-      expect.stringContaining('output')
+      expect.stringContaining('refresh failed')
     );
   });
 
@@ -172,12 +174,12 @@ describe('CredentialRefresher', () => {
     expect(result).toBe(true);
   });
 
-  it('handles container.logs() failure gracefully', async () => {
+  it('handles container.logs() failure gracefully on success', async () => {
     mockContainer.logs.mockRejectedValue(new Error('logs not available'));
 
     const result = await refresher.refresh();
 
-    // Should still succeed because log failure is silently caught
+    // Should still succeed because log capture failure is silently caught
     expect(result).toBe(true);
     expect(mockLogger.info).toHaveBeenCalledWith(
       expect.objectContaining({ containerId: 'refresh-container-id' }),

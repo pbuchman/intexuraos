@@ -1,7 +1,7 @@
-# App Settings Service -- Technical Debt
+# App Settings Service — Technical Debt
 
-**Last Updated:** 2026-03-15
-**Analysis Run:** [2026-02-22 entry](#)
+**Last Updated:** 2026-04-07
+**Analysis Run:** [2026-04-07 entry](#)
 
 ---
 
@@ -10,20 +10,20 @@
 | Category    | Count | Severity |
 | ----------- | ----- | -------- |
 | Code Smells | 3     | Low-Med  |
-| Test Gaps   | 0     | --       |
-| Type Issues | 0     | --       |
-| TODOs       | 0     | --       |
-| **Total**   | **3** | --       |
+| Test Gaps   | 0     | —        |
+| Type Issues | 0     | —        |
+| TODOs       | 0     | —        |
+| **Total**   | **3** | —        |
 
 ---
 
 ## Future Plans
 
-1. **Budget management** -- User-defined spending limits with notification thresholds
-2. **Cost alerts** -- Push notifications when spending reaches a configurable percentage of budget
-3. **Cost forecasting** -- Predict future costs based on historical usage patterns
-4. **Admin API** -- Pricing configuration endpoint to manage pricing without direct Firestore migrations
-5. **Daily breakdown** -- Per-day aggregation in usage costs response for finer-grained analytics
+1. **Budget management** — User-defined spending limits with notification thresholds
+2. **Cost alerts** — Push notifications when spending reaches a configurable percentage of budget
+3. **Cost forecasting** — Predict future costs based on historical usage patterns
+4. **Admin API** — Pricing configuration endpoint to manage pricing without direct Firestore migrations
+5. **Daily breakdown** — Per-day aggregation in usage costs response for finer-grained analytics
 
 ---
 
@@ -90,9 +90,9 @@ No TODO, FIXME, or HACK comments found in source code.
 
 ## SRP Violations
 
-| File        | Lines | Issue                                                                   | Suggestion                               |
-| ----------- | ----- | ----------------------------------------------------------------------- | ---------------------------------------- |
-| `server.ts` | 407   | Handles server setup, OpenAPI config, schema registration, health check | Extract OpenAPI schemas to separate file |
+| File        | Issue                                                                   | Suggestion                               |
+| ----------- | ----------------------------------------------------------------------- | ---------------------------------------- |
+| `server.ts` | Handles server setup, OpenAPI config, schema registration, health check | Extract OpenAPI schemas to separate file |
 
 ---
 
@@ -114,6 +114,7 @@ None.
 
 | Date       | Issue                                  | Resolution                                                                                                          |
 | ---------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| 2026-03-24 | v8 ignore comment wording non-standard | Updated to stricter blocker-keyword format (`noUncheckedIndexedAccess guard`)                                       |
 | 2026-02-02 | 100% branch coverage not enforced      | Added v8 ignore exemptions for TypeScript-only safety branches; strict enforcement enabled                          |
 | 2026-02-01 | Response contract violations           | Internal route migrated from raw `reply.send()` to standardized `reply.ok()` / `reply.fail()`                       |
 | 2026-02-01 | Direct `pino()` usage                  | `FirestoreUsageStatsRepository` replaced with `createAppLogger()` from `@intexuraos/infra-sentry`                   |
@@ -123,6 +124,6 @@ None.
 
 ## Related
 
-- [Features](features.md) -- User-facing documentation
-- [Technical](technical.md) -- Developer reference
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
 - [Documentation Run Log](../../documentation-runs.md)

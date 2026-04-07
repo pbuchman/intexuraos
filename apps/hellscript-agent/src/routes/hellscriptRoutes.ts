@@ -4,10 +4,13 @@ import { getServices } from '../services.js';
 import { imposeOnBuffer } from '../domain/usecases/imposeOnBuffer.js';
 import { listBuffers } from '../domain/usecases/listBuffers.js';
 import { getBufferWorkspace } from '../domain/usecases/getBufferWorkspace.js';
+import { BufferNotFoundError, DraftGenerationError } from '../domain/errors.js';
+import { isValidCategory } from '../domain/models/writingCategory.js';
 
 interface ImposeBody {
   bufferId?: string;
   utterance: string;
+  category?: string;
 }
 
 interface BufferParams {
@@ -20,6 +23,7 @@ const imposeBodySchema = {
   properties: {
     bufferId: { type: 'string', maxLength: 128 },
     utterance: { type: 'string', minLength: 1, maxLength: 10000 },
+    category: { type: 'string', enum: ['threads', 'linkedin', 'general'] },
   },
 } as const;
 
@@ -73,6 +77,7 @@ export const hellscriptRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
       const result = await imposeOnBuffer(
         {
           repository: services.hellscriptRepository,
+          writingConfigRepository: services.writingConfigRepository,
           interpreter: services.intentInterpreter,
           draftGenerator: services.draftGenerator,
           logger: request.log,
@@ -81,12 +86,18 @@ export const hellscriptRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
           userId: user.userId,
           bufferId: request.body.bufferId,
           utterance: request.body.utterance,
+          category: request.body.category !== undefined && isValidCategory(request.body.category)
+            ? request.body.category
+            : undefined,
         }
       );
 
       if (!result.ok) {
-        if (result.error.message === 'Buffer not found') {
+        if (result.error instanceof BufferNotFoundError) {
           return await reply.fail('NOT_FOUND', result.error.message);
+        }
+        if (result.error instanceof DraftGenerationError) {
+          return await reply.fail('INTERNAL_ERROR', 'Draft generation failed. Please try again.');
         }
         request.log.error({ err: result.error }, 'Impose failed');
         return await reply.fail('INTERNAL_ERROR', 'An internal error occurred');
@@ -209,7 +220,7 @@ export const hellscriptRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
       );
 
       if (!result.ok) {
-        if (result.error.message === 'Buffer not found') {
+        if (result.error instanceof BufferNotFoundError) {
           return await reply.fail('NOT_FOUND', result.error.message);
         }
         request.log.error({ err: result.error }, 'Get workspace failed');

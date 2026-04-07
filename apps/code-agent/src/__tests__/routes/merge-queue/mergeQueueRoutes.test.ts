@@ -36,6 +36,8 @@ import { createStatusMirrorService } from '../../../infra/services/statusMirrorS
 import { createProcessHeartbeatUseCase } from '../../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../../domain/usecases/detectZombieTasks.js';
 import { createCleanupTaskLogsUseCase } from '../../../domain/usecases/cleanupTaskLogs.js';
+import { createArchiveStaleGroupsUseCase } from '../../../domain/usecases/archiveStaleGroups.js';
+import { createAutoArchiveMergedTasksUseCase } from '../../../domain/usecases/autoArchiveMergedTasks.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../../infra/firestore/workerSettingsRepository.js';
 import type { TaskDispatcherService, DispatchResult } from '../../../domain/services/taskDispatcher.js';
@@ -195,6 +197,8 @@ describe('Merge queue JWT routes', () => {
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -243,6 +247,8 @@ describe('Merge queue JWT routes', () => {
       processHeartbeat: import('../../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
+      autoArchiveMergedTasks: import('../../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerSettingsRepo: ReturnType<typeof createWorkerSettingsRepository>;
       workerHealthProbe: import('../../../domain/ports/workerHealthProbe.js').WorkerHealthProbe;
       gitHubPREventRepo: import('../../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
@@ -281,6 +287,25 @@ describe('Merge queue JWT routes', () => {
         method: 'POST',
         url: '/code/merge-queue/watch',
         headers: { authorization: 'Bearer bad-token' },
+        payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'development' },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('should return 401 when JWT has no sub (empty userId)', async () => {
+      mockedJwtVerify.mockResolvedValueOnce({
+        payload: { email: 'test@example.com' },
+        protectedHeader: new Uint8Array(),
+      } as never);
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/merge-queue/watch',
+        headers: { authorization: 'Bearer test-token' },
         payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'development' },
       });
 
@@ -497,6 +522,84 @@ describe('Merge queue JWT routes', () => {
       const body = JSON.parse(response.body) as { success: boolean; error: { message: string } };
       expect(body.success).toBe(false);
       expect(body.error.message).toBe('Failed to resolve GitHub username');
+    });
+
+    it('passes excludedPrNumbers to repository when provided', async () => {
+      nock('https://api.github.com')
+        .get('/user').reply(200, { login: 'testuser' })
+        .get('/repos/testorg/testrepo').reply(200, { permissions: { push: true } });
+
+      vi.mocked(mockMergeQueueWatchRepo.create).mockResolvedValue(
+        ok({
+          id: 'watch_new',
+          userId: 'test-user-id',
+          gitHubUsername: 'testuser',
+          owner: 'testorg',
+          repo: 'testrepo',
+          baseBranch: 'development',
+          status: 'active',
+          mergedPrs: [],
+          skippedPrs: [],
+          excludedPrNumbers: [10, 20],
+          lastError: null,
+          lastErrorAt: null,
+          createdAt: new Date(),
+          lastTickAt: null,
+          drainedAt: null,
+          cancelledAt: null,
+        } as never)
+      );
+
+      const res = await server.inject({
+        method: 'POST',
+        url: '/code/merge-queue/watch',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: { owner: 'testorg', repo: 'testrepo', baseBranch: 'development', excludedPrNumbers: [10, 20] },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(mockMergeQueueWatchRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ excludedPrNumbers: [10, 20] })
+      );
+    });
+
+    it('silently defaults excludedPrNumbers to empty array when invalid', async () => {
+      nock('https://api.github.com')
+        .get('/user').reply(200, { login: 'testuser' })
+        .get('/repos/testorg/testrepo').reply(200, { permissions: { push: true } });
+
+      vi.mocked(mockMergeQueueWatchRepo.create).mockResolvedValue(
+        ok({
+          id: 'watch_new',
+          userId: 'test-user-id',
+          gitHubUsername: 'testuser',
+          owner: 'testorg',
+          repo: 'testrepo',
+          baseBranch: 'development',
+          status: 'active',
+          mergedPrs: [],
+          skippedPrs: [],
+          excludedPrNumbers: [],
+          lastError: null,
+          lastErrorAt: null,
+          createdAt: new Date(),
+          lastTickAt: null,
+          drainedAt: null,
+          cancelledAt: null,
+        } as never)
+      );
+
+      const res = await server.inject({
+        method: 'POST',
+        url: '/code/merge-queue/watch',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: { owner: 'testorg', repo: 'testrepo', baseBranch: 'development', excludedPrNumbers: 'not-an-array' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(mockMergeQueueWatchRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ excludedPrNumbers: [] })
+      );
     });
 
     it('should return error when user lacks push access', async () => {
@@ -727,6 +830,38 @@ describe('Merge queue JWT routes', () => {
       expect(body.error.message).toBe('owner and repo query parameters are required');
     });
 
+    it('includes excludedPrNumbers in serialized watch response', async () => {
+      vi.mocked(mockMergeQueueWatchRepo.findByUserAndRepo).mockResolvedValue(
+        ok([{
+          id: 'watch_abc',
+          userId: 'test-user-id',
+          owner: 'testorg',
+          repo: 'testrepo',
+          baseBranch: 'development',
+          status: 'active',
+          mergedPrs: [],
+          skippedPrs: [],
+          excludedPrNumbers: [42, 99],
+          lastError: null,
+          lastErrorAt: null,
+          createdAt: new Date(),
+          lastTickAt: null,
+          drainedAt: null,
+          cancelledAt: null,
+        }] as never)
+      );
+
+      const res = await server.inject({
+        method: 'GET',
+        url: '/code/merge-queue/watches?owner=testorg&repo=testrepo',
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body) as { success: boolean; data: { watches: { excludedPrNumbers: number[] }[] } };
+      expect(body.data.watches[0]?.excludedPrNumbers).toStrictEqual([42, 99]);
+    });
+
     it('should return error when findByUserAndRepo fails', async () => {
       vi.mocked(mockMergeQueueWatchRepo.findByUserAndRepo).mockResolvedValue(
         err({ code: 'INTERNAL' as never, message: 'Firestore read failed' })
@@ -742,6 +877,203 @@ describe('Merge queue JWT routes', () => {
       const body = JSON.parse(response.body) as { success: boolean; error: { message: string } };
       expect(body.success).toBe(false);
       expect(body.error.message).toBe('Firestore read failed');
+    });
+  });
+
+  // ─── PUT /code/merge-queue/watch/:watchId/exclusions ───────────────────
+  describe('PUT /code/merge-queue/watch/:watchId/exclusions', () => {
+    it('updates exclusions on an active watch', async () => {
+      vi.mocked(mockMergeQueueWatchRepo.findById).mockResolvedValue(
+        ok({
+          id: 'watch_abc',
+          userId: 'test-user-id',
+          status: 'active',
+          excludedPrNumbers: [],
+        } as never)
+      );
+      vi.mocked(mockMergeQueueWatchRepo.update).mockResolvedValue(ok(undefined));
+
+      const res = await server.inject({
+        method: 'PUT',
+        url: '/code/merge-queue/watch/watch_abc/exclusions',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: { excludedPrNumbers: [42, 99] },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body) as { success: boolean; data: { excludedPrNumbers: number[] } };
+      expect(body.success).toBe(true);
+      expect(body.data.excludedPrNumbers).toStrictEqual([42, 99]);
+      expect(mockMergeQueueWatchRepo.update).toHaveBeenCalledWith('watch_abc', {
+        excludedPrNumbers: [42, 99],
+      });
+    });
+
+    it('clears exclusions when given an empty array', async () => {
+      vi.mocked(mockMergeQueueWatchRepo.findById).mockResolvedValue(
+        ok({
+          id: 'watch_abc',
+          userId: 'test-user-id',
+          status: 'active',
+          excludedPrNumbers: [1, 2],
+        } as never)
+      );
+      vi.mocked(mockMergeQueueWatchRepo.update).mockResolvedValue(ok(undefined));
+
+      const res = await server.inject({
+        method: 'PUT',
+        url: '/code/merge-queue/watch/watch_abc/exclusions',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: { excludedPrNumbers: [] },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body) as { success: boolean; data: { excludedPrNumbers: number[] } };
+      expect(body.success).toBe(true);
+      expect(body.data.excludedPrNumbers).toStrictEqual([]);
+      expect(mockMergeQueueWatchRepo.update).toHaveBeenCalledWith('watch_abc', {
+        excludedPrNumbers: [],
+      });
+    });
+
+    it('returns 404 when watch not found', async () => {
+      vi.mocked(mockMergeQueueWatchRepo.findById).mockResolvedValue(
+        err({ code: 'NOT_FOUND' as const, message: 'Watch watch_xyz not found' })
+      );
+
+      const res = await server.inject({
+        method: 'PUT',
+        url: '/code/merge-queue/watch/watch_xyz/exclusions',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: { excludedPrNumbers: [1] },
+      });
+
+      expect(res.statusCode).toBe(404);
+      const body = JSON.parse(res.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 403 when user does not own the watch', async () => {
+      vi.mocked(mockMergeQueueWatchRepo.findById).mockResolvedValue(
+        ok({
+          id: 'watch_abc',
+          userId: 'other-user-id',
+          status: 'active',
+          excludedPrNumbers: [],
+        } as never)
+      );
+
+      const res = await server.inject({
+        method: 'PUT',
+        url: '/code/merge-queue/watch/watch_abc/exclusions',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: { excludedPrNumbers: [1] },
+      });
+
+      expect(res.statusCode).toBe(403);
+      const body = JSON.parse(res.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('returns 409 when watch is not active', async () => {
+      vi.mocked(mockMergeQueueWatchRepo.findById).mockResolvedValue(
+        ok({
+          id: 'watch_abc',
+          userId: 'test-user-id',
+          status: 'drained',
+          excludedPrNumbers: [],
+        } as never)
+      );
+
+      const res = await server.inject({
+        method: 'PUT',
+        url: '/code/merge-queue/watch/watch_abc/exclusions',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: { excludedPrNumbers: [1] },
+      });
+
+      expect(res.statusCode).toBe(409);
+      const body = JSON.parse(res.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+    });
+
+    it('returns 400 when excludedPrNumbers is not an array', async () => {
+      const res = await server.inject({
+        method: 'PUT',
+        url: '/code/merge-queue/watch/watch_abc/exclusions',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: { excludedPrNumbers: 'not-an-array' },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('returns 400 when excludedPrNumbers contains non-numbers', async () => {
+      const res = await server.inject({
+        method: 'PUT',
+        url: '/code/merge-queue/watch/watch_abc/exclusions',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: { excludedPrNumbers: ['a', 'b'] },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('returns 400 when excludedPrNumbers contains non-positive-integers', async () => {
+      const cases = [[1.5, 2], [0, 1], [-1, 2]];
+      for (const invalid of cases) {
+        const res = await server.inject({
+          method: 'PUT',
+          url: '/code/merge-queue/watch/watch_abc/exclusions',
+          headers: { authorization: 'Bearer valid-token' },
+          payload: { excludedPrNumbers: invalid },
+        });
+        expect(res.statusCode).toBe(400);
+      }
+    });
+
+    it('returns 500 when update fails', async () => {
+      vi.mocked(mockMergeQueueWatchRepo.findById).mockResolvedValue(
+        ok({
+          id: 'watch_abc',
+          userId: 'test-user-id',
+          status: 'active',
+          excludedPrNumbers: [],
+        } as never)
+      );
+      vi.mocked(mockMergeQueueWatchRepo.update).mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR' as const, message: 'Write failed' })
+      );
+
+      const res = await server.inject({
+        method: 'PUT',
+        url: '/code/merge-queue/watch/watch_abc/exclusions',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: { excludedPrNumbers: [1] },
+      });
+
+      expect(res.statusCode).toBe(500);
+    });
+
+    it('returns 500 when findById returns a non-NOT_FOUND error', async () => {
+      vi.mocked(mockMergeQueueWatchRepo.findById).mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR' as const, message: 'Connection lost' })
+      );
+
+      const res = await server.inject({
+        method: 'PUT',
+        url: '/code/merge-queue/watch/watch_abc/exclusions',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: { excludedPrNumbers: [1] },
+      });
+
+      expect(res.statusCode).toBe(500);
+      const body = JSON.parse(res.body) as { success: boolean; error: { message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.message).toBe('Connection lost');
     });
   });
 

@@ -6,6 +6,9 @@ export const CODE_TASK_WORKER_TYPES = [
   'glm',
   'qwen',
   'kimi',
+  'codex',
+  'codex-xhigh',
+  'openrouter-free',
 ] as const;
 
 export type CodeTaskWorkerType = (typeof CODE_TASK_WORKER_TYPES)[number];

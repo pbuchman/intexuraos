@@ -167,7 +167,7 @@ export async function updateCalendarPreview(
     // Build update object with only defined fields
     const updateData: Record<string, unknown> = {};
 
-    /* v8 ignore start -- test-infra: partial update tests don't cover all field combinations @preserve */
+    /* v8 ignore start -- test-infra: cannot cover all field-combination permutations in partial update path @preserve */
     if (updates.status !== undefined) {
       updateData['status'] = updates.status;
     }

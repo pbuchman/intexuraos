@@ -20,11 +20,28 @@ import { generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 import { buildLockCleanups, type LockCleanupInfo } from '../utils/prTaskLock.js';
 import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../utils/taskRouting.js';
 import { archiveRetriedTaskAfterDispatch } from '../utils/archiveRetriedTaskAfterDispatch.js';
+import { isMemoryEligibleAgent } from '../utils/memoryEligibility.js';
 import { shouldFanOut, fanOutChildTasks } from './fanOutChildTasks.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
+import {
+  prepareExecutionMemoryContext,
+  toDispatchExecutionMemoryContext,
+  type PrepareExecutionMemoryResources,
+} from './prepareExecutionMemoryContext.js';
 
 /** Max candidates fetched per drain cycle for the per-resource concurrency guard. */
 const DRAIN_CANDIDATE_BATCH_SIZE = 10;
+
+function groupTasksByPR(tasks: CodeTask[]): Map<string, CodeTask[]> {
+  const groups = new Map<string, CodeTask[]>();
+  for (const task of tasks) {
+    const key = `${task.repository}:${String(task.prNumber)}`;
+    const group = groups.get(key) ?? [];
+    group.push(task);
+    groups.set(key, group);
+  }
+  return groups;
+}
 
 // In-memory guard for single-instance environments
 let isDraining = false;
@@ -54,6 +71,7 @@ export interface DrainTaskQueueDeps {
   workerSettingsRepo: WorkerSettingsRepository;
   taskEnqueueService: TaskEnqueueService;
   orchestratorSecret: string;
+  executionMemory?: PrepareExecutionMemoryResources;
 }
 
 export async function drainTaskQueue(
@@ -89,14 +107,7 @@ export async function drainTaskQueue(
       (c) => c.agentType === 'review' && c.prNumber !== undefined
     );
 
-    // Group by (repository, prNumber)
-    const reviewGroups = new Map<string, CodeTask[]>();
-    for (const task of reviewCandidates) {
-      const key = `${task.repository}:${String(task.prNumber)}`;
-      const group = reviewGroups.get(key) ?? [];
-      group.push(task);
-      reviewGroups.set(key, group);
-    }
+    const reviewGroups = groupTasksByPR(reviewCandidates);
 
     // Remove cancelled reviews from candidates so they are not considered for dispatch
     const cancelledReviewIds = new Set<string>();
@@ -107,7 +118,7 @@ export async function drainTaskQueue(
       // Sort by createdAt descending (newest first), cancel older ones
       group.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
       const newest = group[0];
-      /* v8 ignore start -- ts-type: newest is always defined after sort given group.length > 1 @preserve */
+      /* v8 ignore start -- ts-type: Array groupBy always returns dense arrays — cannot produce sparse result @preserve */
       if (newest === undefined) continue;
       /* v8 ignore stop @preserve */
       const toCancel = group.slice(1);
@@ -145,34 +156,89 @@ export async function drainTaskQueue(
 
     const activeCandidates = candidates.filter((c) => !cancelledReviewIds.has(c.id));
 
-    // Find first dispatchable candidate (no active task for same resource)
-    let task: CodeTask | null = null;
-    for (const candidate of activeCandidates) {
-      // Check Linear issue concurrency
-      if (candidate.linearIssueId !== undefined) {
-        const activeResult = await codeTaskRepo.hasActiveTaskForLinearIssue(candidate.linearIssueId);
-        if (activeResult.ok && activeResult.value.hasActive && activeResult.value.taskId !== candidate.id) {
-          logger.info({
-            taskId: candidate.id,
-            linearIssueId: candidate.linearIssueId,
-            activeTaskId: activeResult.value.taskId,
-          }, 'Skipping queued task — active task exists for same Linear issue');
-          continue;
-        }
-      }
+    // Round-robin: group PR-bound candidates by PR, pick first from each group,
+    // then merge with non-PR tasks sorted by age so older work is never starved.
+    const prBoundCandidates = activeCandidates.filter((c) => c.prNumber !== undefined);
+    const noPrCandidates = activeCandidates.filter((c) => c.prNumber === undefined);
+    const prGroups = groupTasksByPR(prBoundCandidates);
 
-      // Check PR concurrency (for PR-scoped tasks like review/pull_request agents)
+    // Collect the first (oldest) task from each PR group
+    const prRepresentatives: CodeTask[] = [];
+    for (const group of prGroups.values()) {
+      const first = group[0];
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — Map groups are always non-empty by construction @preserve */
+      if (first === undefined) continue;
+      /* v8 ignore stop @preserve */
+      prRepresentatives.push(first);
+    }
+
+    // Merge PR representatives with non-PR tasks, sorted by createdAt (oldest first)
+    // so that older non-PR tasks (planning/execution) are not starved by newer PR work.
+    const roundRobinCandidates = [...prRepresentatives, ...noPrCandidates].sort(
+      (a, b) => a.createdAt.toMillis() - b.createdAt.toMillis()
+    );
+
+    // Find first dispatchable candidate with per-PR guard + TTL check
+    let task: CodeTask | null = null;
+    for (const candidate of roundRobinCandidates) {
+      // Per-PR concurrency guard FIRST — don't expire tasks that are merely PR-locked
       if (candidate.prNumber !== undefined) {
-        const prActiveResult = await codeTaskRepo.findActiveReviewForPR(candidate.repository, candidate.prNumber);
-        if (prActiveResult.ok && prActiveResult.value !== null && prActiveResult.value.id !== candidate.id) {
+        const prActiveResult = await codeTaskRepo.hasDispatchedOrRunningForPR(candidate.repository, candidate.prNumber);
+        if (prActiveResult.ok && prActiveResult.value.hasActive) {
           logger.info({
             taskId: candidate.id,
             repository: candidate.repository,
             prNumber: candidate.prNumber,
-            activeTaskId: prActiveResult.value.id,
-          }, 'Skipping queued task — active task exists for same PR');
+            activeTaskId: prActiveResult.value.taskId,
+          }, 'Skipping queued task — dispatched/running task exists for same PR');
+
+          // Reset TTL so PR-lock-blocked time does not count toward expiry
+          const resetResult = await codeTaskRepo.update(candidate.id, { queuedAt: new Date() });
+          if (!resetResult.ok) {
+            logger.warn(
+              { taskId: candidate.id, error: resetResult.error },
+              'Failed to reset queuedAt for PR-locked task — TTL clock continues from original queuedAt',
+            );
+          }
+
           continue;
         }
+      }
+
+      // TTL check — only for tasks that are actually dispatchable (not PR-locked)
+      const queuedAt = candidate.queuedAt?.toDate() ?? candidate.createdAt.toDate();
+      const ttlMs = config.queue.ttlMinutes * 60 * 1000;
+      const now = Date.now();
+
+      if (now - queuedAt.getTime() > ttlMs) {
+        logger.warn({ taskId: candidate.id, queuedAt }, 'Queued task expired');
+        await codeTaskRepo.update(candidate.id, {
+          status: 'failed',
+          error: {
+            code: 'queue_timeout',
+            message: `Task expired in queue after ${String(config.queue.ttlMinutes)} minutes. Workers were still busy.`,
+          },
+        });
+
+        const locksToCleanup = buildLockCleanups(candidate);
+
+        // Clear parent planning task's implementationTaskId if this was an execution agent task
+        if (candidate.parentTaskId !== undefined) {
+          const parentResult = await codeTaskRepo.findById(candidate.parentTaskId);
+          if (parentResult.ok && parentResult.value.implementationTaskId === candidate.id) {
+            const clearResult = await codeTaskRepo.update(candidate.parentTaskId, { implementationTaskId: null });
+            if (!clearResult.ok) {
+              logger.warn({ parentTaskId: candidate.parentTaskId, expiredTaskId: candidate.id, error: clearResult.error }, 'Failed to clear implementationTaskId on parent task after queue expiry');
+            }
+          }
+        }
+
+        const notifyResult = await whatsappNotifier.notifyTaskQueueExpired(candidate.userId, candidate);
+        if (!notifyResult.ok) {
+          logger.warn({ taskId: candidate.id, error: notifyResult.error }, 'Failed to send queue expired notification');
+        }
+
+        return ok({ action: 'expired', taskId: candidate.id, locksToCleanup });
       }
 
       task = candidate;
@@ -180,48 +246,11 @@ export async function drainTaskQueue(
     }
 
     if (task === null) {
-      logger.info({ candidateCount: activeCandidates.length }, 'All queued tasks blocked by active resources');
+      logger.info({ candidateCount: roundRobinCandidates.length }, 'All queued tasks blocked by active resources');
       return ok({ action: 'still_busy' });
     }
 
     logger.info({ taskId: task.id }, 'Processing queued task');
-
-    // Step 2: Check TTL
-    const queuedAt = task.queuedAt?.toDate() ?? task.createdAt.toDate();
-    const ttlMs = config.queue.ttlMinutes * 60 * 1000;
-    const now = Date.now();
-
-    if (now - queuedAt.getTime() > ttlMs) {
-      logger.warn({ taskId: task.id, queuedAt }, 'Queued task expired');
-      await codeTaskRepo.update(task.id, {
-        status: 'failed',
-        error: {
-          code: 'queue_timeout',
-          message: `Task expired in queue after ${String(config.queue.ttlMinutes)} minutes. Workers were still busy.`,
-        },
-      });
-
-      const locksToCleanup = buildLockCleanups(task);
-
-      // Clear parent planning task's implementationTaskId if this was an execution agent task,
-      // so the web UI can re-submit (INT-619 review fix #2)
-      if (task.parentTaskId !== undefined) {
-        const parentResult = await codeTaskRepo.findById(task.parentTaskId);
-        if (parentResult.ok && parentResult.value.implementationTaskId === task.id) {
-          const clearResult = await codeTaskRepo.update(task.parentTaskId, { implementationTaskId: null });
-          if (!clearResult.ok) {
-            logger.warn({ parentTaskId: task.parentTaskId, expiredTaskId: task.id, error: clearResult.error }, 'Failed to clear implementationTaskId on parent task after queue expiry');
-          }
-        }
-      }
-
-      const notifyResult = await whatsappNotifier.notifyTaskQueueExpired(task.userId, task);
-      if (!notifyResult.ok) {
-        logger.warn({ taskId: task.id, error: notifyResult.error }, 'Failed to send queue expired notification');
-      }
-
-      return ok({ action: 'expired', taskId: task.id, locksToCleanup });
-    }
 
     // Step 3: Fetch user's CURRENT worker settings
     const settingsResult = await workerSettingsRepo.getSettings(task.userId);
@@ -275,39 +304,129 @@ export async function drainTaskQueue(
     if (shouldFanOut(hasChildren, linearIssueLabels) && task.linearIssueId !== undefined) {
       logger.info({ taskId: task.id, linearIssueId: task.linearIssueId }, 'Drain fan-out triggered: parent issue has code-task children');
 
-      const fanOutResult = await fanOutChildTasks(
-        {
-          logger,
-          codeTaskRepo,
-          linearAgentClient,
-          taskEnqueueService: deps.taskEnqueueService,
-          orchestratorSecret: deps.orchestratorSecret,
-        },
-        {
-          parentTask: task,
+      if (linearIssueUuid === undefined) {
+        logger.warn({ taskId: task.id, linearIssueId: task.linearIssueId }, 'Drain fan-out skipped: live parent UUID unavailable');
+      } else {
+        const directChildrenResult = await linearAgentClient.fetchDirectChildrenLive({
           userId: task.userId,
-          linearIssueId: task.linearIssueId,
-          ...(linearIssueUuid !== undefined && { parentIssueUuid: linearIssueUuid }),
-        },
-      );
+          issueId: linearIssueUuid,
+        });
 
-      if (fanOutResult.ok) {
-        logger.info(
-          { taskId: task.id, childTaskIds: fanOutResult.value.childTaskIds },
-          'Drain fan-out completed, parent task marked as implemented',
-        );
-        return ok({ action: 'dispatched', taskId: task.id });
+        if (directChildrenResult.ok) {
+          const directChildren = directChildrenResult.value.filter((child) => child.parentId === linearIssueUuid);
+          const fanOutResult = await fanOutChildTasks(
+            {
+              logger,
+              codeTaskRepo,
+              taskEnqueueService: deps.taskEnqueueService,
+              orchestratorSecret: deps.orchestratorSecret,
+            },
+            {
+              planningTask: task,
+              userId: task.userId,
+              childIssues: directChildren,
+              workerType: task.workerType,
+            },
+          );
+
+          if (fanOutResult.ok) {
+            const cancelParentResult = await codeTaskRepo.update(task.id, {
+              status: 'cancelled',
+              completedAt: new Date(),
+              error: {
+                code: 'fan_out_parent_cancelled',
+                message: 'Parent complex task replaced by direct child execution tasks',
+              },
+            });
+            if (!cancelParentResult.ok) {
+              logger.warn(
+                { taskId: task.id, error: cancelParentResult.error },
+                'Drain fan-out succeeded but failed to cancel parent task',
+              );
+            }
+
+            logger.info(
+              { taskId: task.id, childTaskIds: fanOutResult.value.childTaskIds },
+              'Drain fan-out completed, parent task cancelled in favor of child execution tasks',
+            );
+            return ok({ action: 'dispatched', taskId: fanOutResult.value.primaryChildTaskId });
+          }
+
+          // Fan-out failed — fall through to normal dispatch
+          logger.warn(
+            { taskId: task.id, error: fanOutResult.error },
+            'Drain fan-out failed, falling back to normal dispatch',
+          );
+        } else {
+          logger.warn(
+            { taskId: task.id, linearIssueId: task.linearIssueId, error: directChildrenResult.error },
+            'Drain fan-out could not fetch live direct children, falling back to normal dispatch',
+          );
+        }
       }
-
-      // Fan-out failed — fall through to normal dispatch
-      logger.warn(
-        { taskId: task.id, error: fanOutResult.error },
-        'Drain fan-out failed, falling back to normal dispatch',
-      );
     }
 
     const agentType = resolveTaskAgentType(task, linearIssueLabels);
     const dispatchLabels = ensureDispatchLabelsForAgentType(linearIssueLabels, agentType);
+    let taskExecutionMemoryContext = task.executionMemoryContext;
+
+    if (
+      config.executionMemoryEnabled
+      && isMemoryEligibleAgent(agentType)
+      && taskExecutionMemoryContext === undefined
+    ) {
+      taskExecutionMemoryContext = await prepareExecutionMemoryContext({
+        task,
+        logger,
+        linearAgentClient,
+        queryClient: deps.executionMemory?.queryClient,
+        embeddingClient: deps.executionMemory?.embeddingClient,
+        executionMemoryRepo: deps.executionMemory?.executionMemoryRepo,
+        executionMemoryApplicationRepo: deps.executionMemory?.executionMemoryApplicationRepo,
+      });
+
+      if (taskExecutionMemoryContext?.status === 'error') {
+        logger.warn(
+          {
+            taskId: task.id,
+            errorCode: taskExecutionMemoryContext.errorCode,
+            errorMessage: taskExecutionMemoryContext.errorMessage,
+          },
+          'Execution memory retrieval returned error status'
+        );
+      }
+
+      const memoryUpdateResult = await codeTaskRepo.update(task.id, {
+        executionMemoryContext: taskExecutionMemoryContext,
+      });
+
+      if (!memoryUpdateResult.ok) {
+        logger.warn(
+          { taskId: task.id, error: memoryUpdateResult.error },
+          'Failed to persist execution memory context before dispatch'
+        );
+      }
+    }
+
+    const dispatchExecutionMemoryContext = toDispatchExecutionMemoryContext(taskExecutionMemoryContext);
+
+    // Guard: refuse to dispatch review/remediation tasks with prNumber but no prBranch —
+    // these agents read code from the worktree and would silently check out the base branch
+    // instead of the PR head, producing wrong review findings or fixing the wrong code.
+    if (task.prNumber !== undefined && task.prBranch === undefined && (agentType === 'review' || agentType === 'remediation')) {
+      logger.error(
+        { taskId: task.id, prNumber: task.prNumber, agentType },
+        'Review/remediation task has prNumber but no prBranch — refusing to dispatch on base branch'
+      );
+      await codeTaskRepo.update(task.id, {
+        status: 'failed',
+        error: {
+          code: 'MISSING_PR_BRANCH',
+          message: `prBranch required for ${agentType} task (PR #${String(task.prNumber)})`,
+        },
+      });
+      return ok({ action: 'failed', taskId: task.id, locksToCleanup: buildLockCleanups(task) });
+    }
 
     // Step 5: Attempt dispatch
     const webhookUrl = `${config.serviceUrl}/internal/webhooks/task-complete`;
@@ -332,13 +451,13 @@ export async function drainTaskQueue(
       }),
       ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
       // INT-949: Dispatch metadata fields from task document
-      ...(task.planningPrBranch !== undefined && { planningPrBranch: task.planningPrBranch }),
-      ...(task.planningPrUrl !== undefined && { planningPrUrl: task.planningPrUrl }),
       ...(task.trackingCommentId !== undefined && { trackingCommentId: task.trackingCommentId }),
       ...(task.retriedFrom !== undefined && { retriedFrom: task.retriedFrom }),
-      /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
       ...(task.reviewTypes !== undefined && { reviewTypes: task.reviewTypes }),
-      /* v8 ignore stop @preserve */
+      ...(dispatchExecutionMemoryContext !== undefined && {
+        executionMemoryContext: dispatchExecutionMemoryContext,
+      }),
+      ...(task.prNumber !== undefined && { prNumber: task.prNumber }),
     });
 
     if (!dispatchResult.ok) {

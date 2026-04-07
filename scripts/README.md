@@ -114,7 +114,7 @@ node scripts/build-all-services.mjs
 
 ### build-worker-image.sh
 
-Builds and pushes the Claude Worker Docker image to Artifact Registry.
+Builds and pushes the code-worker Docker image to Artifact Registry.
 
 ```bash
 ./scripts/build-worker-image.sh [image-tag]
@@ -158,7 +158,7 @@ Detects which app services are affected by Terraform file changes between two gi
 
 ### setup-worker-network.sh
 
-Creates an isolated Docker network for Claude worker containers with IP-level restrictions blocking metadata server, localhost, and private IP ranges.
+Creates an isolated Docker network for code-worker containers with IP-level restrictions blocking metadata server, localhost, and private IP ranges.
 
 ```bash
 ./scripts/setup-worker-network.sh

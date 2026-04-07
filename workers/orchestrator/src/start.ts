@@ -27,6 +27,12 @@ import { createHeartbeatManager } from './heartbeat.js';
 import { createIsolationProvider, TokenRefresher } from './services/isolation/index.js';
 import { CredentialMonitor } from './services/isolation/credential-monitor.js';
 import { CredentialRefresher } from './services/isolation/credential-refresher.js';
+import {
+  ClaudeAuthManager,
+  CodexAuthManager,
+  CodexAuthRefresher,
+  WorkerAuthRegistry,
+} from './services/worker-auth/index.js';
 import Docker from 'dockerode';
 import { ApiKeyValidator } from './services/api-key-validator.js';
 import { WORKER_TYPES } from './services/isolation/types.js';
@@ -36,19 +42,19 @@ import type { CompletionControlConfig, IsolationConfig } from './services/task-d
 import { LlmModels } from '@intexuraos/llm-contract';
 import { OrchestratorCompletionVerifier } from './services/completion-verifier.js';
 import { TurnMetricsCollector } from './services/turn-metrics-collector.js';
-import { OrchestratorExecutionDeepValidator } from './services/execution-deep-validator.js';
+import { OrchestratorAgentComplianceValidator } from './services/agent-compliance-validator.js';
 
 const DEFAULT_PORT = 8199;
 const DEFAULT_CAPACITY = 2;
 const DEFAULT_TASK_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour
-const EXEC_TIMEOUT_MS = 30 * 1000; // 30 seconds for external commands
+const EXEC_TIMEOUT_MS = 60 * 1000; // 60 seconds for external commands (gcloud is slow under systemd sandboxing)
 const DEFAULT_COMPLETION_MAX_ATTEMPTS = 3;
 const DEFAULT_WORKER_IMAGE =
-  'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest';
+  'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest';
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
-  /* v8 ignore start -- test-infra: process.exit() terminates the process, cannot test in unit tests @preserve */
+  /* v8 ignore start -- module-init: bootstrap function calls process.exit() which terminates test runner, impossible to test @preserve */
   if (value === undefined || value === '') {
     process.stderr.write(
       `\n❌ PRECONDITION FAILED: Required environment variable '${name}' is not set\n`
@@ -92,7 +98,7 @@ function readRepoGitConfig(repoPath: string, key: string): string | undefined {
 /**
  * Validate GCP credentials are properly configured
  */
-/* v8 ignore start -- test-infra: process.exit() in validation function @preserve */
+/* v8 ignore start -- module-init: bootstrap function calls process.exit() during startup, cannot test @preserve */
 function validateGcpCredentials(gcpSaKeyPath: string, projectId: string): void {
   // Check if credentials file exists
   if (!existsSync(gcpSaKeyPath)) {
@@ -125,7 +131,7 @@ function validateGcpCredentials(gcpSaKeyPath: string, projectId: string): void {
 /**
  * Check if a port is available (synchronous check using lsof)
  */
-/* v8 ignore start -- test-infra: process.exit() in validation function @preserve */
+/* v8 ignore start -- module-init: bootstrap function calls process.exit() during startup, cannot test @preserve */
 function validatePortAvailable(port: number): void {
   try {
     // Use lsof to check if port is in use
@@ -153,7 +159,7 @@ function validatePortAvailable(port: number): void {
  * Validates Anthropic OAuth credentials and third-party API keys.
  * Warns (does not exit) so tasks of one type can still run if the other fails.
  */
-/* v8 ignore start -- test-infra: startup validation with network call @preserve */
+/* v8 ignore start -- module-init: bootstrap function makes live network calls during startup, cannot test network @preserve */
 async function fetchWithRetry(
   input: string,
   init: RequestInit & { signal?: AbortSignal },
@@ -181,13 +187,30 @@ async function validateThirdPartyApiKey(
   const keyName = config.apiKeyEnvVar;
   const keySuffix = suffix(apiKey);
 
-  const url =
-    config.model !== undefined
+  if (keyName === undefined) {
+    logger.info(
+      { workerTypeName },
+      'Skipping API-key validation for runtime without direct API-key authentication'
+    );
+    return;
+  }
+
+  // OpenRouter uses a lightweight key introspection endpoint instead of a real inference request,
+  // because free-tier models are frequently rate-limited upstream regardless of key validity.
+  const isOpenRouter = config.apiBaseUrl.includes('openrouter.ai');
+
+  const url = isOpenRouter
+    ? `${config.apiBaseUrl}/v1/key`
+    : config.model !== undefined
       ? `${config.apiBaseUrl}/v1/messages`
       : `${config.apiBaseUrl}/v1/models`;
 
-  const fetchOptions =
-    config.model !== undefined
+  const fetchOptions = isOpenRouter
+    ? {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${apiKey}` },
+      }
+    : config.model !== undefined
       ? {
           method: 'POST',
           headers: {
@@ -244,44 +267,89 @@ function extractErrorChain(error: unknown): string {
   return parts.join(' → ');
 }
 
+function logWorkerAuthStartupStatus(
+  workerAuthRegistry: WorkerAuthRegistry,
+  logger: pino.Logger
+): void {
+  const states = workerAuthRegistry.getStates();
+  const claudeState = states.claude;
+  const codexState = states.codex;
+
+  if (claudeState.status === 'active') {
+    logger.info(
+      {
+        expiresAt: claudeState.expiresAt,
+        expiresInMinutes: claudeState.expiresInMinutes,
+        subscriptionType: claudeState.subscriptionType,
+      },
+      'Code worker auth active'
+    );
+  } else {
+    logger.warn({ state: claudeState }, 'Code worker auth not ready');
+  }
+
+  if (codexState.status === 'active') {
+    logger.info(
+      {
+        authMode: codexState.authMode,
+        expiresAt: codexState.expiresAt,
+        expiresInMinutes: codexState.expiresInMinutes,
+        lastRefreshAt: codexState.lastRefreshAt,
+      },
+      'Codex worker auth active'
+    );
+  } else {
+    logger.warn({ state: codexState }, 'Codex worker auth not ready');
+  }
+}
+
 async function validateWorkerApiKeys(
-  credentialMonitor: CredentialMonitor,
+  workerAuthRegistry: WorkerAuthRegistry,
   minimaxKey: string,
   dashscopeKey: string,
+  openRouterKey: string,
   logger: pino.Logger
 ): Promise<void> {
   const suffix = (key: string): string => (key.length > 4 ? '...' + key.slice(-4) : '****');
 
-  // Validate orchestrator credentials by checking monitor state
-  const credState = credentialMonitor.getState();
-  if (credState.status === 'active') {
+  const claudeState = workerAuthRegistry.getState('claude');
+  if (claudeState.status === 'active') {
     logger.info(
       {
-        expiresInMinutes: credState.expiresInMinutes,
-        subscriptionType: credState.subscriptionType,
+        expiresInMinutes: claudeState.expiresInMinutes,
+        subscriptionType: claudeState.subscriptionType,
       },
-      'Orchestrator credentials validated — token active, opus/auto tasks ready'
+      'Code worker auth validated — Claude-backed tasks ready'
     );
-  } else if (credState.status === 'expired') {
-    logger.warn('Orchestrator credentials expired — workers will refresh on first use');
   } else {
-    logger.error(
-      { message: credState.message },
-      'Orchestrator credentials not configured — opus/auto tasks will fail'
+    logger.warn({ state: claudeState }, 'Code worker auth not ready at startup');
+  }
+
+  const codexState = workerAuthRegistry.getState('codex');
+  if (codexState.status === 'active') {
+    logger.info(
+      {
+        authMode: codexState.authMode,
+        expiresInMinutes: codexState.expiresInMinutes,
+        lastRefreshAt: codexState.lastRefreshAt,
+      },
+      'Codex worker auth validated — Codex tasks ready'
     );
+  } else {
+    logger.warn({ state: codexState }, 'Codex worker auth not ready at startup');
   }
 
   // Validate all third-party API keys in parallel.
-  // GLM, Qwen, and Kimi all use the same DashScope API key.
+  // GLM, Qwen, and Kimi all use the same DashScope API key — validate once via qwen.
   await Promise.all([
     minimaxKey !== ''
       ? validateThirdPartyApiKey('minimax', minimaxKey, suffix, logger)
       : Promise.resolve(),
     dashscopeKey !== ''
-      ? Promise.all([
-          validateThirdPartyApiKey('qwen', dashscopeKey, suffix, logger),
-          validateThirdPartyApiKey('kimi', dashscopeKey, suffix, logger),
-        ])
+      ? validateThirdPartyApiKey('qwen', dashscopeKey, suffix, logger)
+      : Promise.resolve(),
+    openRouterKey !== ''
+      ? validateThirdPartyApiKey('openrouter-free', openRouterKey, suffix, logger)
       : Promise.resolve(),
   ]);
 }
@@ -297,7 +365,7 @@ function ensureDirectoryExists(path: string): void {
  * Get GitHub private key from Secret Manager or cached file.
  * The key is multiline (PEM format) so it can't be in .envrc.
  */
-/* v8 ignore start -- test-infra: process.exit() in catch block terminates the process @preserve */
+/* v8 ignore start -- module-init: bootstrap function loads Secret Manager keys and calls process.exit() on failure, cannot test @preserve */
 function getGitHubPrivateKey(projectId: string, cachePath: string, gcpSaKeyPath: string): string {
   // Check env var first (for testing or manual override)
   const envKey = process.env['INTEXURAOS_GITHUB_APP_PRIVATE_KEY'];
@@ -307,15 +375,11 @@ function getGitHubPrivateKey(projectId: string, cachePath: string, gcpSaKeyPath:
 
   // Check if cached file exists and is recent (< 1 hour old)
   if (existsSync(cachePath)) {
-    /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
     const stats = statSync(cachePath);
-    /* v8 ignore stop @preserve */
     const ageMs = Date.now() - stats.mtimeMs;
-    /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
     if (ageMs < 60 * 60 * 1000) {
       return readFileSync(cachePath, 'utf-8');
     }
-    /* v8 ignore stop @preserve */
   }
 
   // Fetch from Secret Manager with timeout
@@ -355,8 +419,8 @@ function getGitHubPrivateKey(projectId: string, cachePath: string, gcpSaKeyPath:
 /* v8 ignore start -- module-init: orchestrator bootstrap function: env vars, service wiring @preserve */
 async function bootstrap(): Promise<void> {
   const home = homedir();
-  const orchestratorDir = join(home, '.claude-orchestrator');
-  const worktreeDir = join(home, 'claude-workers', 'worktrees');
+  const orchestratorDir = join(home, '.code-orchestrator');
+  const worktreeDir = join(home, 'code-workers', 'worktrees');
   const logsDir = join(orchestratorDir, 'logs');
   const defaultRepoPath = join(orchestratorDir, 'repo');
 
@@ -476,11 +540,10 @@ async function bootstrap(): Promise<void> {
     {
       repositoryPath: repoPath,
       worktreeBasePath: config.worktreeBasePath,
-      mcpConfigTemplatePath: join(repoPath, '.mcp.json'),
       settingsLocalTemplatePath: join(
         repoPath,
         'workers',
-        'claude-worker',
+        'code-worker',
         'config-defaults',
         'settings.local.json'
       ),
@@ -522,27 +585,29 @@ async function bootstrap(): Promise<void> {
 
   // Create Docker isolation provider
   const { secretsBasePath } = config;
-  const workerImage = getOptionalEnv('INTEXURAOS_CLAUDE_WORKER_IMAGE', DEFAULT_WORKER_IMAGE);
+  const workerImage = getOptionalEnv('INTEXURAOS_CODE_WORKER_IMAGE', DEFAULT_WORKER_IMAGE);
   const keepContainersAlive = process.env['KEEP_CONTAINERS_ALIVE'] === '1';
   if (keepContainersAlive) {
     logger.info({}, 'Debug mode: containers will be kept alive after task completion');
   }
-  const workerForensicsMode = getOptionalEnv('INTEXURAOS_CLAUDE_WORKER_FORENSICS', '0') === '1';
+  const workerForensicsMode = getOptionalEnv('INTEXURAOS_CODE_WORKER_FORENSICS', '0') === '1';
   const workerForensicsBasePath = getOptionalEnv(
-    'INTEXURAOS_CLAUDE_WORKER_FORENSICS_PATH',
+    'INTEXURAOS_CODE_WORKER_FORENSICS_PATH',
     join(orchestratorDir, 'forensics')
   );
   if (workerForensicsMode) {
     ensureDirectoryExists(workerForensicsBasePath);
     logger.warn(
       { workerForensicsBasePath },
-      'Claude worker forensics mode enabled (core dumps, exec stream persistence, crash snapshots)'
+      'Code worker forensics mode enabled (core dumps, exec stream persistence, crash snapshots)'
     );
   }
   const preserveWorkerContainers =
     getOptionalEnv('INTEXURAOS_PRESERVE_WORKER_CONTAINERS', '1') !== '0';
   const sharedCredsPath = join(orchestratorDir, 'claude-creds');
+  const sharedCodexAuthPath = join(orchestratorDir, 'codex-auth');
   ensureDirectoryExists(sharedCredsPath);
+  ensureDirectoryExists(sharedCodexAuthPath);
 
   const isolationProvider = await createIsolationProvider(
     {
@@ -551,6 +616,7 @@ async function bootstrap(): Promise<void> {
       keepContainersAlive,
       imageName: workerImage,
       sharedCredsPath,
+      sharedCodexAuthPath,
       forensicsMode: workerForensicsMode,
       forensicsBasePath: workerForensicsBasePath,
       ...(gitUserName !== undefined ? { gitUserName } : {}),
@@ -570,6 +636,8 @@ async function bootstrap(): Promise<void> {
   );
 
   const credentialsPath = join(sharedCredsPath, '.credentials.json');
+  const codexAuthPath = join(sharedCodexAuthPath, 'auth.json');
+  const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 
   // Credential monitor (read-only watcher)
   const credentialMonitor = new CredentialMonitor(
@@ -577,49 +645,52 @@ async function bootstrap(): Promise<void> {
     logger
   );
 
-  const monitorLoaded = credentialMonitor.loadCredentials();
-  if (!monitorLoaded) {
-    process.stderr.write(`\n❌ Orchestrator credentials not found at ${credentialsPath}\n`);
-    process.stderr.write(`   Run: ./workers/orchestrator/scripts/claude-login.sh\n\n`);
-    process.exit(1);
-  }
-  credentialMonitor.logStartupStatus();
-  credentialMonitor.startMonitoring();
-
   // Credential refresher (Docker-based, for when no workers running)
   const credentialRefresher = new CredentialRefresher(
-    { sharedCredsPath, imageName: workerImage, networkName: 'claude-worker-net' },
-    new Docker({ socketPath: '/var/run/docker.sock' }),
+    { sharedCredsPath, imageName: workerImage, networkName: 'code-worker-net' },
+    docker,
     logger
   );
 
-  // Get initial access token for Anthropic-backed workers.
-  const currentToken = credentialMonitor.getCurrentAccessToken();
-  if (currentToken === null) {
-    process.stderr.write(`\n❌ Credentials expired. Run claude-login.sh again.\n\n`);
-    process.exit(1);
-  }
+  const codexAuthRefresher = new CodexAuthRefresher(
+    { sharedAuthPath: sharedCodexAuthPath, imageName: workerImage, networkName: 'code-worker-net' },
+    docker,
+    logger
+  );
+
+  const workerAuthRegistry = new WorkerAuthRegistry([
+    new ClaudeAuthManager(credentialMonitor, credentialRefresher),
+    new CodexAuthManager(
+      { authPath: codexAuthPath, reloadIntervalMs: 60_000, refresher: codexAuthRefresher },
+      logger
+    ),
+  ]);
+
+  workerAuthRegistry.loadCredentials();
+  workerAuthRegistry.startMonitoring();
+  logWorkerAuthStartupStatus(workerAuthRegistry, logger);
 
   // Get API keys for workers
   const apiKeySecrets = {
-    ANTHROPIC_API_KEY: currentToken,
+    ANTHROPIC_API_KEY: workerAuthRegistry.getCurrentAccessToken('claude') ?? '',
     LINEAR_API_KEY: getRequiredEnv('INTEXURAOS_LINEAR_API_KEY'),
     SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
     MINIMAX_API_KEY: getRequiredEnv('INTEXURAOS_MINIMAX_APP_API_KEY'),
     DASHSCOPE_API_KEY: getRequiredEnv('INTEXURAOS_DASHSCOPE_APP_API_KEY'),
+    OPENROUTER_API_KEY: process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '',
   };
 
   const apiKeyValidator = new ApiKeyValidator(apiKeySecrets, logger);
-  apiKeyValidator.setCredentialMonitor(credentialMonitor);
 
   const isolationConfig: IsolationConfig = {
     provider: isolationProvider,
     tokenRefresher,
     apiKeyValidator,
+    workerAuthRegistry,
     getSecrets: () => ({
       ...apiKeySecrets,
       ANTHROPIC_API_KEY:
-        credentialMonitor.getCurrentAccessToken() ?? apiKeySecrets.ANTHROPIC_API_KEY,
+        workerAuthRegistry.getCurrentAccessToken('claude') ?? apiKeySecrets.ANTHROPIC_API_KEY,
     }),
     gcpSaKeyPath,
     githubAppKeyPath: config.githubAppPrivateKeyPath,
@@ -628,9 +699,10 @@ async function bootstrap(): Promise<void> {
   // Validate API keys asynchronously (non-blocking, warns on failure)
   const secrets = isolationConfig.getSecrets();
   void validateWorkerApiKeys(
-    credentialMonitor,
+    workerAuthRegistry,
     secrets.MINIMAX_API_KEY,
     secrets.DASHSCOPE_API_KEY,
+    secrets.OPENROUTER_API_KEY,
     logger
   );
 
@@ -680,11 +752,30 @@ async function bootstrap(): Promise<void> {
     logger
   );
 
-  const executionDeepValidator = new OrchestratorExecutionDeepValidator(logger, {
-    model: LlmModels.Gemini25Flash,
-    geminiApiKey: geminiVerifierKey,
-    auditLogPath: llmAuditLogPath,
-  });
+  const openRouterApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '';
+  const complianceValidatorModel =
+    process.env['INTEXURAOS_COMPLIANCE_MODEL'] ?? 'xiaomi/mimo-v2-pro';
+
+  logger.info(
+    {
+      complianceValidatorModel,
+      hasOpenRouterApiKey: openRouterApiKey.length > 0,
+    },
+    'Agent compliance validator configuration'
+  );
+
+  const agentComplianceValidator =
+    openRouterApiKey !== ''
+      ? new OrchestratorAgentComplianceValidator(logger, {
+          openRouterApiKey,
+          model: complianceValidatorModel,
+          pricing: {
+            inputPricePerMillion: 1.0,
+            outputPricePerMillion: 3.0,
+          },
+          auditLogPath: llmAuditLogPath,
+        })
+      : undefined;
 
   const dispatcher = new TaskDispatcher(
     config,
@@ -697,25 +788,38 @@ async function bootstrap(): Promise<void> {
     isolationConfig,
     completionControl,
     turnMetricsCollector,
-    executionDeepValidator
+    agentComplianceValidator
   );
 
   // Credential monitoring loop — trigger Docker-based refresh when near expiry
   const REFRESH_BUFFER_MS = 5 * 60 * 1000;
   setInterval(() => {
-    if (credentialMonitor.isExpiringSoon(REFRESH_BUFFER_MS)) {
-      const runningTasks = dispatcher.getRunningTaskIds();
-      if (runningTasks.length === 0) {
-        logger.info('Credentials expiring soon, no active workers — triggering refresh');
-        void credentialRefresher.refresh().catch((err: unknown) => {
-          logger.error({ error: err }, 'Credential refresh failed');
-        });
-      } else {
+    const runningTasks = dispatcher.getRunningTaskIds();
+    if (runningTasks.length > 0) {
+      if (
+        workerAuthRegistry.isExpiringSoon('claude', REFRESH_BUFFER_MS) ||
+        workerAuthRegistry.isExpiringSoon('codex', REFRESH_BUFFER_MS)
+      ) {
         logger.debug(
           { runningCount: runningTasks.length },
-          'Credentials expiring soon but workers running — they will refresh naturally'
+          'Worker auth expiring soon but workers running — refresh deferred'
         );
       }
+      return;
+    }
+
+    for (const provider of ['claude', 'codex'] as const) {
+      if (!workerAuthRegistry.isExpiringSoon(provider, REFRESH_BUFFER_MS)) {
+        continue;
+      }
+
+      logger.info(
+        { provider },
+        'Worker auth expiring soon, no active workers — triggering refresh'
+      );
+      void workerAuthRegistry.refresh(provider).catch((err: unknown) => {
+        logger.error({ provider, error: err }, 'Worker auth refresh failed');
+      });
     }
   }, 60_000);
 
@@ -739,7 +843,7 @@ async function bootstrap(): Promise<void> {
     webhookClient,
     heartbeatManager,
     logger,
-    credentialMonitor,
+    workerAuthRegistry,
     isolationProvider
   );
 }

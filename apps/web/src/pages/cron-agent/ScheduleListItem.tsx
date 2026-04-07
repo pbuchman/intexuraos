@@ -49,12 +49,12 @@ export function ScheduleListItem({
             <ScheduleStatusBadge status={schedule.status} />
           </div>
 
-          {/* Description */}
-          {schedule.description !== '' ? (
+          {/* Schedule summary */}
+          {schedule.scheduleSummary !== '' ? (
             <p className="mb-2 truncate text-xs text-slate-500 dark:text-slate-400">
-              {schedule.description.length > 120
-                ? `${schedule.description.slice(0, 120)}...`
-                : schedule.description}
+              {schedule.scheduleSummary.length > 120
+                ? `${schedule.scheduleSummary.slice(0, 120)}...`
+                : schedule.scheduleSummary}
             </p>
           ) : null}
 

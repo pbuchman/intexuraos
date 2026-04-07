@@ -11,7 +11,7 @@
 | Goal      | Accept task requests, dispatch to workers, and return pull request URLs   |
 
 ```yaml
-version: 3.4.0
+version: 3.5.0
 port: 8128
 framework: fastify
 runtime: node22
@@ -30,6 +30,10 @@ collections:
   - github-event-log-entries
   - pr_automation_comments
   - merge_queue_watches
+  - task_group_summaries
+  - user_group_counts
+  - execution_memories
+  - execution_memory_applications
 ```
 
 ## Capabilities
@@ -99,6 +103,37 @@ All prompts pass through two sanitization layers before reaching the worker:
 1. **Secret redaction** (`sanitizePrompt`): Strips AWS keys, OpenAI/Anthropic API keys, Stripe secrets, GitHub tokens, Slack tokens, Bearer JWTs, PEM private keys, and secret env var assignments. Sensitive URL query parameters are redacted.
 2. **Injection prevention** (`sanitizePromptForInjection`): Rejects system override markers (`[SYSTEM]`, `<|im_start|>`), strips control characters, and blocks base64 blobs over 3000 characters.
 
+### Internal Task Submission
+
+**Endpoint:** `POST /internal/code/submit`
+
+**When to use:** When an internal service needs to create a task on behalf of a user without the actions-agent approval flow
+
+**Input Schema:**
+
+```typescript
+interface InternalSubmitRequest {
+  userId: string;
+  prompt: string;
+  workerType?: WorkerType;
+  linearIssueId?: string;
+  repository?: string;
+  baseBranch?: string;
+}
+```
+
+**Output Schema:**
+
+```typescript
+interface InternalSubmitResponse {
+  success: true;
+  data: {
+    status: 'submitted';
+    codeTaskId: string;
+  };
+}
+```
+
 ### Task Lifecycle
 
 ```typescript
@@ -116,7 +151,7 @@ type TaskStatus =
   | 'cancelled'
   | 'archived';    // original archived after retry
 
-type AgentType = 'planning' | 'execution' | 'pull_request' | 'review';
+type AgentType = 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent';
 
 // Transitions:
 // queued -> dispatched (drain queue picks up task, or immediate dispatch succeeds)
@@ -129,6 +164,47 @@ type AgentType = 'planning' | 'execution' | 'pull_request' | 'review';
 // planned | implemented | failed -> running (on sendTaskMessage with 'resumed' action)
 // failed | cancelled | interrupted -> archived (when task is retried)
 ```
+
+### Ask Agent (Interactive Sessions)
+
+**Endpoints:**
+- `POST /code/ask-agent/start` — Start an interactive session (Auth0 JWT)
+- `GET /code/ask-agent/active` — Get active session for cross-device restoration (Auth0 JWT)
+
+**When to use:** Back-and-forth conversations with Claude Code from the web UI
+
+```typescript
+interface StartAskAgentRequest {
+  prompt: string;
+}
+
+interface StartAskAgentResponse {
+  success: true;
+  data: {
+    status: 'submitted';
+    codeTaskId: string;
+  };
+}
+
+interface GetActiveAskAgentResponse {
+  success: true;
+  data: {
+    task: {
+      id: string;
+      status: string;
+      agentType: string;
+      prompt: string;
+      createdAt: string;
+    } | null;
+  };
+}
+```
+
+**Constraints:**
+- Uses `agentType: 'ask_agent'` and `workerType: 'opus'`
+- No Linear issue integration
+- Filtered from task list and issue group endpoints
+- Subject to same rate limits as regular tasks
 
 ### Check Active Task for Linear Issue
 
@@ -149,6 +225,23 @@ interface ActiveTaskCheckResponse {
 }
 ```
 
+### Issue Groups (Paginated)
+
+**Endpoint:** `GET /code/issue-groups`
+
+**When to use:** Display tasks grouped by Linear issue with aggregated status
+
+```typescript
+interface IssueGroupsQuery {
+  status?: 'active' | 'needs-action' | 'done' | 'failed' | 'archived';
+  sort?: 'linear-id' | 'pr-number' | 'dispatched' | 'last-updated';
+  limit?: number;  // default 20, max 100
+  cursor?: string;
+}
+
+type GroupStatus = 'active' | 'needs-action' | 'done' | 'failed' | 'archived';
+```
+
 ### Linear Issue Context Proxy
 
 **Endpoint:** `GET /internal/linear/issue-context/:identifier`
@@ -165,11 +258,34 @@ interface IssueContextResponse {
 }
 ```
 
+### Task Dispatch Metadata (Fallback)
+
+**Endpoint:** `GET /internal/tasks/:taskId/dispatch-metadata`
+
+**When to use:** When orchestrator needs dispatch metadata for a task that has been pruned from state
+
+**Output Schema:**
+
+```typescript
+interface DispatchMetadataResponse {
+  taskId: string;
+  prompt: string;
+  repository: string;
+  baseBranch: string;
+  agentType: string | null;
+  workerType: string;
+  linearIssueId: string | null;
+  webhookSecret: string | null;
+  prNumber: number | null;
+}
+```
+
 ### Merge Queue
 
 **Endpoints:**
 - `POST /code/merge-queue/watch` — Create a new merge queue watch
 - `DELETE /code/merge-queue/watch/:watchId` — Cancel a watch
+- `PUT /code/merge-queue/watch/:watchId/exclusions` — Set excluded PRs
 - `GET /code/merge-queue/watches` — List active watches
 - `GET /code/merge-queue/branches` — List available base branches
 - `GET /code/merge-queue/prs` — List eligible PRs
@@ -209,6 +325,7 @@ interface UnifiedEvaluator {
 
 // Step 1: Hard rules (deterministic)
 // - CodeWorkerOutputRule: skips events from code worker bots
+// - CIFailureRule: detects CI failures on agent PR branches
 // - ActionableEventRule: filters to supported event+action combos
 // - ProtectedBaseBranchRule: skips pushes to protected branches
 // - SenderWhitelistRule: only ALLOWED_BOTS + repo owner
@@ -227,6 +344,62 @@ interface GitHubAgentEvalResult {
 // Invalid output triggers automatic repair prompt via buildTriageRepairMessage.
 // LLM retries once with failed response as corrective context.
 // GitHub Agent only activates when INTEXURAOS_GEMINI_APP_API_KEY is set and non-empty.
+
+// onReviewSkipped callback: when LLM triage skips a review for an execution-origin task,
+// sets 'ready-to-merge' label on the Linear issue and records automation log.
+```
+
+### Remediation Task
+
+```typescript
+interface CreateRemediationTaskRequest {
+  repository: string;
+  prNumber: number;
+  senderLogin: string;
+  workerType: WorkerType;
+  eventId: string;
+  linearIssueId?: string;
+  baseBranch?: string;
+  prBranch?: string;
+}
+
+interface CreateRemediationTaskResult {
+  status: 'queued';
+  taskId: string;
+  workerType: WorkerType;
+}
+
+// Constraints:
+// - agentType: 'remediation', systemPromptHash: 'remediation-auto'
+// - No dedup (multiple remediation tasks can coexist)
+// - Pushes to existing PR branch, does not create new PRs
+// - Scope limited to review findings only
+// - Runs /nitpick-nuker to fetch and address findings
+```
+
+### Execution Memory Pipeline
+
+```typescript
+// Pre-run retrieval: prepareExecutionMemoryContext
+// - Normalizes task prompt + Linear issue context into semantic query (Gemini)
+// - Generates vector embedding (OpenAI text-embedding-3-small)
+// - Searches execution_memories collection via vector similarity
+// - Reranks candidates with scoring weights (min threshold: 0.55)
+// - Returns top 3 matched memories injected into agent context
+// - Tracks application in execution_memory_applications collection
+
+// Post-run distillation: processExecutionMemoryBacklog (Cloud Scheduler)
+// - Claims pending tasks with executionMemoryPostRun.status === 'pending'
+// - Evaluates memory application outcomes (positive/neutral/negative/unknown)
+// - Distills new memories from execution logs (Gemini)
+// - Deduplicates via fingerprint hash
+// - Generates embedding and stores in execution_memories collection
+// - Memory types: implementation_pattern, verification_pattern, pitfall_pattern,
+//   decomposition_pattern, planning_decision, review_finding
+
+// Feature-flagged: requires INTEXURAOS_EXECUTION_MEMORY_ENABLED=true
+// Requires both INTEXURAOS_GEMINI_APP_API_KEY and INTEXURAOS_OPENAI_APP_API_KEY
+// Only eligible for execution and planning agent types (isMemoryEligibleAgent)
 ```
 
 ### Automation Log
@@ -246,9 +419,10 @@ type AutomationEvent =
   | { type: 'task_dispatch_failed'; error: string }
   | { type: 'task_started'; taskId: string; workerType: string; attempt: number }
   | { type: 'task_completed'; taskId: string; status: string; duration: number }
-  | { type: 'task_failed'; taskId: string; error: string }
+  | { type: 'task_failed'; taskId: string; error: string; errorCode: string }
   | { type: 'task_interrupted'; taskId: string }
-  | { type: 'review_replaced'; replacedTaskId: string };
+  | { type: 'review_replaced'; replacedTaskId: string }
+  | { type: 'remediation_decision'; required: boolean; source: string; signal: string };
 ```
 
 ### Task Completion Webhook
@@ -256,7 +430,7 @@ type AutomationEvent =
 ```typescript
 interface TaskCompleteWebhook {
   taskId: string;
-  status: 'completed' | 'failed' | 'interrupted';
+  status: 'completed' | 'failed' | 'interrupted' | 'cancelled';
   result?: {
     prUrl?: string;
     branch?: string;
@@ -270,17 +444,27 @@ interface TaskCompleteWebhook {
     planning_linear_url?: string;
     planning_subtask_urls?: string;
     planning_pr_url?: string;
+    planning_unclear_clarification?: string;
     execution_outcome_label?: 'implemented' | 'already_completed';
     execution_linear_issue_url?: string;
+    execution_memory_ids_used?: string;
+    execution_memory_ids_rejected?: string;
+    execution_memory_usage_summary?: string;
     review_comments_posted?: string;
     review_types?: string;
+    review_body?: string;
+    review_inline_comments?: string;
     requirements_tracker_updated?: string;
+    gh_actions_status?: string;
+    needs_remediation?: string;
+    requires_re_review?: string;
   };
   error?: {
     code: string;
     message: string;
   };
   duration?: number;
+  resumedCompletion?: boolean;
 }
 ```
 
@@ -291,7 +475,6 @@ const LIMITS = {
   maxConcurrentTasks: 3,
   maxTasksPerHour: 10,
   maxPromptLength: 10000,
-  monthlyCostCap: 200, // dollars
   estimatedCostPerTask: 1.17,
 };
 ```
@@ -348,6 +531,7 @@ interface SendTaskMessageResult {
 // - Task must be owned by userId
 // - Status must NOT be 'queued' (only queued tasks reject messages)
 // - User must have configured workers
+// - Works for ask_agent tasks as well as regular tasks
 ```
 
 ### Execution Agent Implementation
@@ -515,10 +699,11 @@ interface WebhookRule {
 
 // Active rules:
 // 1. CodeWorkerOutputRule - skips events from intexuraos-code-worker[bot]
-// 2. ActionableEventRule - filters to supported event+action combos
-// 3. ProtectedBaseBranchRule - skips pushes to protected base branches
-// 4. SenderWhitelistRule - only ALLOWED_BOTS + repo owner
-// 5. SkipPrefixRule - ignores @claude, @codex, @ignore prefixes
+// 2. CIFailureRule - detects check_suite failures on agent PR branches
+// 3. ActionableEventRule - filters to supported event+action combos
+// 4. ProtectedBaseBranchRule - skips pushes to protected base branches
+// 5. SenderWhitelistRule - only ALLOWED_BOTS + repo owner
+// 6. SkipPrefixRule - ignores @claude, @codex, @ignore prefixes
 
 // Outcomes: dispatch | skip | needs_triage
 // When needs_triage: UnifiedEvaluator invokes GitHub Agent (Gemini)
@@ -553,6 +738,19 @@ interface ReconcileResult {
 }
 ```
 
+### Auto-Archive
+
+```typescript
+// Stale groups: POST /internal/archive-stale-groups (hourly cron)
+// Archives issue groups where all tasks have updatedAt older than staleness threshold (default 7 days).
+// Groups with active tasks are skipped.
+
+// Merged tasks: POST /internal/auto-archive-merged-tasks (daily cron)
+// Archives tasks whose PRs were merged more than threshold days ago (default 7).
+// Groups tasks by Linear issue; only archives entire groups where all tasks are terminal with merged PRs.
+// Active tasks in same group prevent archival.
+```
+
 ## Constraints
 
 ### Authentication
@@ -579,7 +777,6 @@ Layer 3: linearIssueId active check (one active task per issue)
 type RateLimitErrorCode =
   | 'concurrent_limit'    // 429 - max 3 concurrent
   | 'hourly_limit'        // 429 - max 10/hour
-  | 'monthly_cost_limit'  // 429 - $200/month cap
   | 'prompt_too_long'     // 429 - >10000 chars
   | 'service_unavailable'; // 503 - usage DB unreachable
 ```
@@ -593,7 +790,7 @@ PR comment auto-dispatch only processes comments from:
 - `intexuraos-code-worker[bot]`
 - Repository owner (matches `repository.owner.login`)
 
-All other senders are silently ignored. Comments starting with `@claude`, `@codex`, or `@ignore` are also skipped.
+All other senders receive a GitHub comment explaining the rejection. Comments starting with `@claude`, `@codex`, or `@ignore` are also skipped.
 
 ### Blocked Merge Queue Branches
 
@@ -639,6 +836,47 @@ Authorization: Bearer <auth0-jwt>
 -> 429: { "success": false, "error": { "code": "concurrent_limit", "message": "Maximum 3 concurrent tasks" } }
 ```
 
+### Submit task from internal service
+
+```
+POST /internal/code/submit
+X-Internal-Auth: <token>
+
+{
+  "userId": "auth0|user-id",
+  "prompt": "Fix the broken import in utils.ts",
+  "workerType": "auto",
+  "linearIssueId": "INT-500"
+}
+
+-> 200: { "success": true, "data": { "status": "submitted", "codeTaskId": "uuid" } }
+-> 400: { "success": false, "error": { "code": "INVALID_REQUEST", "message": "..." } }
+-> 503: { "success": false, "error": { "code": "MISCONFIGURED", "message": "Worker unavailable" } }
+```
+
+### Start Ask Agent session
+
+```
+POST /code/ask-agent/start
+Authorization: Bearer <auth0-jwt>
+
+{
+  "prompt": "What files use the CodeTask interface?"
+}
+
+-> 200: { "success": true, "data": { "status": "submitted", "codeTaskId": "task_uuid" } }
+-> 429: { "success": false, "error": { "code": "RATE_LIMITED", "message": "..." } }
+```
+
+### List issue groups
+
+```
+GET /code/issue-groups?status=active&sort=last-updated&limit=20
+Authorization: Bearer <auth0-jwt>
+
+-> 200: { "success": true, "data": { "groups": [...], "nextCursor": "cursor-id", "counts": { "active": 5, "needsAction": 2, ... } } }
+```
+
 ### Create merge queue watch
 
 ```
@@ -664,7 +902,7 @@ Authorization: Bearer <auth0-jwt>
 -> 200: { "success": true, "data": { "tasks": [...], "nextCursor": "cursor-id" } }
 ```
 
-Note: The `status` parameter accepts comma-separated values (e.g., `running,dispatched`) to filter by multiple statuses simultaneously. Tasks include live-hydrated Linear issue data (state, labels, priority).
+Note: The `status` parameter accepts comma-separated values. Tasks with `agentType: 'ask_agent'` are excluded. Tasks include live-hydrated Linear issue data.
 
 ### Start execution agent implementation
 
@@ -676,41 +914,6 @@ Authorization: Bearer <auth0-jwt>
 -> 400: { "success": false, "error": { "code": "invalid_status", "message": "Task must be a completed planning task to start implementation" } }
 -> 400: { "success": false, "error": { "code": "label_not_ready", "message": "The code-task label hasn't been added yet." } }
 -> 409: { "success": false, "error": { "code": "already_implemented", "message": "Implementation already started" } }
-```
-
-### GitHub event decision log
-
-```
-GET /code/github-event-log?limit=20&cursor=<iso-date>
-Authorization: Bearer <auth0-jwt>
-
--> 200: {
-  "success": true,
-  "data": {
-    "rows": [{
-      "id": "uuid",
-      "githubEventName": "pull_request",
-      "eventType": "pull_request",
-      "action": "opened",
-      "repository": "org/repo",
-      "pullRequestNumber": 42,
-      "decisionState": "completed",
-      "decisionOutcome": "request_review",
-      "authPassedAt": "2026-03-22T10:00:00.000Z"
-    }],
-    "nextCursor": "2026-03-22T09:55:00.000Z"
-  }
-}
-```
-
-### Get raw webhook payload
-
-```
-GET /code/github-event-log/:id/payload
-Authorization: Bearer <auth0-jwt>
-
--> 200: { "success": true, "data": { "payload": { ... } } }
--> 404: { "success": false, "error": { "code": "NOT_FOUND", "message": "Audit event not found" } }
 ```
 
 ### Send message to task
@@ -737,31 +940,6 @@ X-Internal-Auth: <token>
 -> 200: { "success": true, "data": { "action": "expired", "taskId": "uuid" } }
 -> 200: { "success": true, "data": { "action": "still_busy", "taskId": "uuid" } }
 -> 200: { "success": true, "data": { "action": "empty" } }
-```
-
-### Receive task lifecycle event (automation log)
-
-```
-POST /internal/webhooks/task-event
-X-Internal-Auth: <token>
-X-Webhook-Signature: sha256=<hmac>
-
-{
-  "taskId": "uuid",
-  "event": "started" | "completed" | "failed",
-  "repository": "org/repo",
-  "prNumber": 42,
-  "workerType": "sonnet",
-  "attempt": 1,
-  "status": "implemented",
-  "duration": 847000,
-  "error": "optional error message",
-  "errorCode": "optional_error_code",
-  "prUrl": "https://github.com/org/repo/pull/42",
-  "commits": [{ "sha": "abc123", "message": "Add pagination" }]
-}
-
--> 200: { "received": true }
 ```
 
 ### Get issue context for orchestrator (proxy)
@@ -793,18 +971,20 @@ All errors follow the IntexuraOS contract:
 
 ### Error Code Mapping
 
-| HTTP | Code               | When                                        |
-| ---- | ------------------ | ------------------------------------------- |
-| 401  | `UNAUTHORIZED`     | Missing or invalid auth                     |
-| 400  | `INVALID_REQUEST`  | Bad request body or params                  |
-| 400  | `INVALID_WORKER`   | Worker name doesn't match configured worker |
-| 400  | `validation_error` | Prompt failed injection sanitization        |
-| 404  | `NOT_FOUND`        | Task or worker not found                    |
-| 409  | `CONFLICT`         | Deduplication triggered                     |
-| 429  | `RATE_LIMITED`     | Rate limit exceeded (see code for type)     |
-| 502  | `DOWNSTREAM_ERROR` | Upstream service error (e.g., linear-agent) |
-| 503  | `MISCONFIGURED`    | Worker unavailable or no workers configured |
-| 500  | `INTERNAL_ERROR`   | Unexpected server error                     |
+| HTTP | Code                    | When                                        |
+| ---- | ----------------------- | ------------------------------------------- |
+| 401  | `UNAUTHORIZED`          | Missing or invalid auth                     |
+| 400  | `INVALID_REQUEST`       | Bad request body or params                  |
+| 400  | `INVALID_WORKER`        | Worker name doesn't match configured worker |
+| 400  | `validation_error`      | Prompt failed injection sanitization        |
+| 404  | `NOT_FOUND`             | Task or worker not found                    |
+| 409  | `CONFLICT`              | Deduplication triggered                     |
+| 429  | `RATE_LIMITED`          | Rate limit exceeded (see code for type)     |
+| 502  | `DOWNSTREAM_ERROR`      | Upstream service error (e.g., linear-agent) |
+| 503  | `MISCONFIGURED`         | Worker unavailable or no workers configured |
+| 503  | `QUEUE_FULL`            | Task queue at capacity                      |
+| 503  | `WORKER_NOT_CONFIGURED` | No enabled workers for user                 |
+| 500  | `INTERNAL_ERROR`        | Unexpected server error                     |
 
 ## Events
 
@@ -830,22 +1010,25 @@ All errors follow the IntexuraOS contract:
 | GitHub API    | `PUT /repos/{owner}/{repo}/pulls/{number}/merge`      | Merge queue auto-merge     |
 | GitHub API    | `GET /repos/{owner}/{repo}/commits/{sha}/status`      | CI check status            |
 | Gemini API    | Tool-calling inference                                | PR triage evaluation       |
+| Gemini API    | Text generation                                       | Memory distillation/eval   |
+| OpenAI API    | Embeddings                                            | Memory vector embedding    |
 
 ### Outgoing Pub/Sub
 
-| Topic                        | When                               | Payload                                       |
-| ---------------------------- | ---------------------------------- | --------------------------------------------- |
-| `intexuraos-whatsapp-send-*` | Task started, completed, or failed | WhatsApp message with CTA URL buttons         |
+| Topic                        | When                               | Payload                               |
+| ---------------------------- | ---------------------------------- | ------------------------------------- |
+| `intexuraos-whatsapp-send-*` | Task started, completed, or failed | WhatsApp message with CTA URL buttons |
 
 ### Incoming Webhooks
 
-| Source       | Path                               | Trigger                             |
-| ------------ | ---------------------------------- | ----------------------------------- |
-| Orchestrator | `/internal/webhooks/task-complete` | Task finished (completed/failed)    |
-| Orchestrator | `/internal/webhooks/task-event`    | Task lifecycle events (auto log)    |
-| Orchestrator | `/internal/logs`                   | Log chunks during execution         |
-| Orchestrator | `/internal/turn-metrics`           | Per-turn resource metrics           |
-| GitHub       | `/webhooks/github`                 | PR events (push, review, comment)   |
+| Source       | Path                                    | Trigger                           |
+| ------------ | --------------------------------------- | --------------------------------- |
+| Orchestrator | `/internal/webhooks/task-complete`      | Task finished (completed/failed)  |
+| Orchestrator | `/internal/webhooks/task-event`         | Task lifecycle events (auto log)  |
+| Orchestrator | `/internal/webhooks/compliance-report`  | Compliance report from worker     |
+| Orchestrator | `/internal/logs`                        | Log chunks during execution       |
+| Orchestrator | `/internal/turn-metrics`                | Per-turn resource metrics         |
+| GitHub       | `/webhooks/github`                      | PR events (push, review, comment) |
 
 ### Metrics (Cloud Monitoring)
 

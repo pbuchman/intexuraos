@@ -3,13 +3,18 @@ import type { Logger } from '@intexuraos/common-core';
 import type { HellscriptRepository } from '../ports/hellscriptRepository.js';
 import type { IntentInterpreter } from '../ports/intentInterpreter.js';
 import type { DraftGenerator } from '../ports/draftGenerator.js';
+import type { WritingConfigRepository } from '../ports/writingConfigRepository.js';
 import type { HellscriptBuffer } from '../models/hellscriptBuffer.js';
 import type { MaterializedBufferState } from '../models/materializedBufferState.js';
+import type { WritingCategory } from '../models/writingCategory.js';
 import { emptyState } from '../models/materializedBufferState.js';
+import { isValidCategory } from '../models/writingCategory.js';
 import { applyIntentToState } from '../services/applyIntentToState.js';
+import { BufferNotFoundError, DraftGenerationError } from '../errors.js';
 
 export interface ImposeOnBufferDeps {
   repository: HellscriptRepository;
+  writingConfigRepository: WritingConfigRepository;
   interpreter: IntentInterpreter;
   draftGenerator: DraftGenerator;
   logger: Logger;
@@ -19,6 +24,7 @@ export interface ImposeOnBufferInput {
   userId: string;
   bufferId?: string | undefined;
   utterance: string;
+  category?: WritingCategory | undefined;
 }
 
 export interface ImposeOnBufferResult {
@@ -31,7 +37,7 @@ export async function imposeOnBuffer(
   deps: ImposeOnBufferDeps,
   input: ImposeOnBufferInput
 ): Promise<Result<ImposeOnBufferResult>> {
-  const { repository, interpreter, draftGenerator, logger } = deps;
+  const { repository, writingConfigRepository, interpreter, draftGenerator, logger } = deps;
 
   let bufferId = input.bufferId;
   let buffer: HellscriptBuffer;
@@ -48,13 +54,13 @@ export async function imposeOnBuffer(
     currentState = emptyState();
     logger.info({ bufferId }, 'Created new buffer');
   } else {
-    // Existing buffer — read buffer + state in a single Firestore doc read
+    // Existing buffer — read buffer + state together
     const bufferWithStateResult = await repository.getBufferWithState(bufferId, input.userId);
     if (!bufferWithStateResult.ok) {
       return bufferWithStateResult;
     }
     if (bufferWithStateResult.value === null) {
-      return { ok: false, error: new Error('Buffer not found') };
+      return { ok: false, error: new BufferNotFoundError() };
     }
     buffer = bufferWithStateResult.value.buffer;
     currentState = bufferWithStateResult.value.state ?? emptyState();
@@ -62,63 +68,98 @@ export async function imposeOnBuffer(
 
   const intent = await interpreter.interpret(input.utterance, currentState, logger);
 
-  const eventResult = await repository.saveEvent({
-    bufferId,
-    rawUtterance: input.utterance,
-    intent,
-    createdAt: new Date().toISOString(),
-  });
-  if (!eventResult.ok) {
-    return eventResult;
-  }
-
-  const newState = applyIntentToState(currentState, intent);
-
-  // Use cached event count from buffer doc instead of reading all events
-  const newEventCount = buffer.eventCount + 1;
-
-  const updateStateResult = await repository.updateBufferState(
-    bufferId,
-    newState,
-    newEventCount
-  );
-  if (!updateStateResult.ok) {
-    return updateStateResult;
-  }
-
+  // For update_draft, validate category BEFORE saving the event.
+  // This avoids phantom timeline entries when category_required is returned.
   if (intent.kind === 'update_draft') {
-    const payloadText = intent.payload['text'];
-    const requestText = typeof payloadText === 'string' ? payloadText : input.utterance;
+    const payloadCategory = intent.payload['category'];
+    const intentCategoryStr = typeof payloadCategory === 'string' ? payloadCategory : '';
+    const resolvedCategory: WritingCategory | null =
+      input.category ?? (isValidCategory(intentCategoryStr) ? intentCategoryStr : null);
 
-    // Use cached version number from buffer doc instead of reading all draft versions
-    const currentVersionNumber = buffer.latestDraftVersionNumber ?? 0;
-    const nextVersion = currentVersionNumber + 1;
-
-    // Fetch only the latest draft by ID instead of loading all draft versions
-    let priorDraft: string | null = null;
-    if (buffer.latestDraftVersionId !== null) {
-      const latestDraftResult = await repository.getDraftVersion(
-        buffer.latestDraftVersionId,
-        bufferId
-      );
-      if (!latestDraftResult.ok) {
-        return latestDraftResult;
-      }
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess style fallback for optional chaining on Result value @preserve */
-      priorDraft = latestDraftResult.value?.markdown ?? null;
-      /* v8 ignore stop @preserve */
-    }
-
-    const generateResult = await draftGenerator.generate(newState, priorDraft, requestText, logger);
-    if (!generateResult.ok) {
-      logger.error({ bufferId, err: generateResult.error }, 'Draft generation failed');
+    if (resolvedCategory === null) {
       return {
         ok: true,
         value: {
           bufferId,
-          action: 'update_draft_failed',
+          action: 'category_required',
         },
       };
+    }
+
+    const payloadText = intent.payload['text'];
+    const requestText = typeof payloadText === 'string' ? payloadText : input.utterance;
+    const category: WritingCategory = resolvedCategory;
+
+    const eventResult = await repository.saveEvent({
+      bufferId,
+      rawUtterance: input.utterance,
+      intent,
+      createdAt: new Date().toISOString(),
+    });
+    if (!eventResult.ok) {
+      return eventResult;
+    }
+
+    const newState = applyIntentToState(currentState, intent);
+    const newEventCount = buffer.eventCount + 1;
+
+    const updateStateResult = await repository.updateBufferState(
+      bufferId,
+      newState,
+      newEventCount
+    );
+    if (!updateStateResult.ok) {
+      return updateStateResult;
+    }
+
+    // Fetch writing config + samples + prior draft in parallel (independent reads)
+    const currentVersionNumber = buffer.latestDraftVersionNumber ?? 0;
+    const nextVersion = currentVersionNumber + 1;
+
+    const [configResult, samplesResult, priorDraftResult] = await Promise.all([
+      writingConfigRepository.getStyleConfig(input.userId),
+      writingConfigRepository.listSamples(input.userId, category),
+      buffer.latestDraftVersionId !== null
+        ? repository.getDraftVersion(buffer.latestDraftVersionId, bufferId)
+        : Promise.resolve(null),
+    ]);
+
+    let styleInstructions: string | null = null;
+    if (configResult.ok) {
+      styleInstructions = configResult.value?.[category] ?? null;
+    } else {
+      logger.warn({ err: configResult.error }, 'Failed to fetch writing config, proceeding without style instructions');
+    }
+
+    let writingSamples: string[] = [];
+    if (samplesResult.ok) {
+      writingSamples = samplesResult.value.map((s) => s.text);
+    } else {
+      logger.warn({ err: samplesResult.error }, 'Failed to fetch writing samples, proceeding without samples');
+    }
+
+    let priorDraft: string | null = null;
+    if (priorDraftResult !== null) {
+      if (!priorDraftResult.ok) {
+        return priorDraftResult;
+      }
+      /* v8 ignore start -- ts-type: getDraftVersion returns T | null but null is unreachable here since latestDraftVersionId is non-null @preserve */
+      priorDraft = priorDraftResult.value?.markdown ?? null;
+      /* v8 ignore stop @preserve */
+    }
+
+    const generateResult = await draftGenerator.generate(
+      newState,
+      priorDraft,
+      requestText,
+      styleInstructions,
+      writingSamples,
+      category,
+      logger
+    );
+    if (!generateResult.ok) {
+      logger.error({ bufferId, err: generateResult.error }, 'Draft generation failed');
+      return { ok: false, error: new DraftGenerationError() };
     }
 
     const draftResult = await repository.saveDraftVersion({
@@ -151,6 +192,29 @@ export async function imposeOnBuffer(
         latestDraftVersionId: draftResult.value.id,
       },
     };
+  }
+
+  // Non-draft intent — save event and apply state
+  const eventResult = await repository.saveEvent({
+    bufferId,
+    rawUtterance: input.utterance,
+    intent,
+    createdAt: new Date().toISOString(),
+  });
+  if (!eventResult.ok) {
+    return eventResult;
+  }
+
+  const newState = applyIntentToState(currentState, intent);
+  const newEventCount = buffer.eventCount + 1;
+
+  const updateStateResult = await repository.updateBufferState(
+    bufferId,
+    newState,
+    newEventCount
+  );
+  if (!updateStateResult.ok) {
+    return updateStateResult;
   }
 
   logger.info({ bufferId, action: intent.kind }, 'Intent applied');

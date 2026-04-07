@@ -26,9 +26,17 @@ export class  GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
     model: string,
     userId: string,
     pricing: ModelPricing,
-    logger: Logger
+    logger: Logger,
+    researchId?: string
   ) {
-    this.client = createGptClient({ apiKey, model, userId, pricing, logger });
+    this.client = createGptClient({
+      apiKey,
+      model,
+      userId,
+      ...(researchId !== undefined && { researchId }),
+      pricing,
+      logger,
+    });
     this.model = model;
     this.logger = logger;
   }

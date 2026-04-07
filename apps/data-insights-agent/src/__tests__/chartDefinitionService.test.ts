@@ -22,6 +22,7 @@ describe('chartDefinitionService', () => {
         reportLlmSuccess: vi.fn(),
           getOAuthToken: vi.fn(),
           resolveGitHubUsername: vi.fn().mockResolvedValue(ok(null)),
+      getUserTimezone: async (): Promise<string | undefined> => undefined,
       };
     }
     const mockLlmClient: LlmGenerateClient = {
@@ -33,6 +34,7 @@ describe('chartDefinitionService', () => {
       reportLlmSuccess: vi.fn(),
           getOAuthToken: vi.fn(),
           resolveGitHubUsername: vi.fn().mockResolvedValue(ok(null)),
+      getUserTimezone: async (): Promise<string | undefined> => undefined,
     };
   }
 

@@ -12,7 +12,8 @@ import type { GitHubPREvent } from '../models/gitHubPREvent.js';
 import type { CreateEventDecisionInput } from '../models/eventDecision.js';
 import type { EventDecisionReviewType } from '../models/eventDecision.js';
 import type { WebhookRulesService, RuleOutcome } from './gitHubWebhookRules.js';
-import type { WebhookDispatchService } from './gitHubDispatchService.js';
+import { CIFailureRule } from './gitHubWebhookRules.js';
+import type { WebhookDispatchService, CIFailureDispatchService } from './gitHubDispatchService.js';
 import { resolveLoginForTaskCreation } from './gitHubDispatchService.js';
 import type { EventDecisionRepository } from '../repositories/eventDecisionRepository.js';
 import type { GitHubAgentEvalResult, GitHubAgentError } from '../usecases/githubAgent.js';
@@ -24,10 +25,13 @@ import type {
 import { isReviewCommandComment, extractReviewWorkerType } from '../utils/reviewTriage.js';
 import type { GitHubEventLogEntryRepository } from '../repositories/gitHubEventLogEntryRepository.js';
 import type { AutomationLog } from '../ports/automationLog.js';
+import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
+import type { CodeTask } from '../models/codeTask.js';
 
 export interface UnifiedEvaluatorDeps {
   webhookRules: WebhookRulesService;
   dispatchService: WebhookDispatchService;
+  ciFailureDispatchService?: CIFailureDispatchService;
   eventDecisionRepo: EventDecisionRepository;
   gitHubEventLogEntryRepo?: GitHubEventLogEntryRepository;
   evaluateEvent?: ((event: GitHubPREvent, correctionContext?: string) => Promise<Result<GitHubAgentEvalResult, GitHubAgentError>>) | undefined;
@@ -37,6 +41,12 @@ export interface UnifiedEvaluatorDeps {
   /** Resolve a GitHub login to a platform userId for OAuth token lookup. */
   resolveTokenUserId?: ((senderLogin: string) => Promise<string | undefined>) | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
   allowedBots: Set<string>;
+  /** Code task repository for remediation interception on synchronize events. */
+  codeTaskRepo?: CodeTaskRepository | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
+  /** Best-effort callback to post a GitHub comment when an unauthorized sender is rejected. */
+  onUnauthorizedSender?: ((event: GitHubPREvent) => Promise<void>) | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
+  /** Best-effort callback when LLM triage skips a review. Used to set ready-to-merge label. */
+  onReviewSkipped?: ((params: { repository: string; prNumber: number }) => Promise<void>) | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
 }
 
 export interface UnifiedEvaluator {
@@ -45,6 +55,11 @@ export interface UnifiedEvaluator {
 
 export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvaluator {
   const prRef = (event: GitHubPREvent): { repository: string; prNumber: number } => ({ repository: event.repository, prNumber: event.pullRequestNumber });
+
+  // CIFailureRule must be evaluated BEFORE webhookRules.evaluate() because the rule chain
+  // returns ALL_RULES_PASSED as the reason, not individual rule reasons. This means
+  // the CHECK_SUITE_TASK_BRANCH reason check would never match if we relied on the chain.
+  const ciFailureRule = new CIFailureRule();
 
   /** Best-effort automation log recording. Never throws. */
   const recordLog = (event: GitHubPREvent, automationEvent: Parameters<AutomationLog['record']>[1], userId?: string): void => {
@@ -69,6 +84,59 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
     async evaluate(event: GitHubPREvent, logger: Logger): Promise<void> {
       const startTime = Date.now();
 
+      // Special handling for check_suite events: CIFailureRule must be evaluated directly
+      // because the webhookRules chain returns ALL_RULES_PASSED as the reason, not individual
+      // rule reasons. This means CHECK_SUITE_TASK_BRANCH would never match via the chain.
+      if (event.eventType === 'check_suite' && deps.ciFailureDispatchService !== undefined) {
+        const ciRuleOutcome = ciFailureRule.evaluate(event);
+        logger.info(
+          { eventId: event.id, action: ciRuleOutcome.action, reason: ciRuleOutcome.reason },
+          'CIFailureRule evaluated for check_suite event'
+        );
+
+        if (ciRuleOutcome.action === 'dispatch' && ciRuleOutcome.reason === 'CHECK_SUITE_TASK_BRANCH') {
+          const ciResult = await deps.ciFailureDispatchService.dispatchCIFailure({ event, logger });
+
+          if (ciResult.skipped === true) {
+            const skipEvent: { type: 'ci_failure_skip'; reason: string; headBranch?: string } = {
+              type: 'ci_failure_skip',
+              reason: ciResult.skipReason ?? 'unknown',
+              ...(event.baseBranch !== null && { headBranch: event.baseBranch }),
+            };
+            recordLog(event, skipEvent);
+
+            await recordDecision(deps, event, {
+              decidedBy: 'hard_rules',
+              decision: 'skip',
+              reason: `ci_failure_skipped: ${ciResult.skipReason ?? 'unknown'}`,
+            }, startTime, logger);
+          } else {
+            await recordDecision(deps, event, {
+              decidedBy: 'hard_rules',
+              decision: 'dispatch',
+              reason: 'ci_failure_fix_dispatched',
+              dispatchSuccess: ciResult.success,
+              dispatchAction: 'create_task',
+              dispatchParams: ciResult.fixTaskId !== undefined ? { taskId: ciResult.fixTaskId } : undefined,
+              ...(ciResult.error !== undefined && { dispatchError: ciResult.error }),
+            }, startTime, logger);
+          }
+          return;
+        }
+
+        // For check_suite events that don't match (skip), we still record the decision
+        // but don't dispatch via CI failure path
+        /* v8 ignore start -- upstream: CIFailureRule only returns dispatch(CHECK_SUITE_TASK_BRANCH) or skip for check_suite events — false branch unreachable @preserve */
+        if (ciRuleOutcome.action === 'skip') {
+        /* v8 ignore stop @preserve */
+          logger.info(
+            { eventId: event.id, reason: ciRuleOutcome.reason },
+            'CIFailureRule skipped check_suite event'
+          );
+          // Continue to normal webhook rules evaluation for consistent handling
+        }
+      }
+
       // Step 1: Hard rules
       const ruleOutcome = deps.webhookRules.evaluate(event);
 
@@ -78,32 +146,18 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
       );
 
       if (ruleOutcome.action === 'dispatch') {
-        // Enforcement loop cap: skip if enforcement already ran for this PR within the last hour
-        if (ruleOutcome.reason === 'CODE_WORKER_REVIEW' && deps.eventDecisionRepo.existsByPRAndReason !== undefined) {
-          const ENFORCEMENT_CAP_WINDOW_MS = 60 * 60 * 1000;
-          const alreadyEnforced = await deps.eventDecisionRepo.existsByPRAndReason(
-            event.repository, event.pullRequestNumber,
-            'CODE_WORKER_REVIEW', new Date(Date.now() - ENFORCEMENT_CAP_WINDOW_MS)
-          );
-          if (alreadyEnforced.ok && alreadyEnforced.value) {
-            logger.info(
-              { eventId: event.id, repository: event.repository, prNumber: event.pullRequestNumber },
-              'Enforcement already ran for this PR within the cap window, skipping'
-            );
-            await recordDecision(deps, event, {
-              decidedBy: 'hard_rules',
-              decision: 'skip',
-              reason: 'ENFORCEMENT_ALREADY_RAN',
-            }, startTime, logger);
-            return;
-          }
-        }
-
         await dispatchAndRecord(deps, event, ruleOutcome, startTime, logger);
         return;
       }
 
       if (ruleOutcome.action === 'skip') {
+        // Best-effort GitHub comment for unauthorized senders
+        if (ruleOutcome.reason === 'SENDER_NOT_WHITELISTED' && deps.onUnauthorizedSender !== undefined) {
+          void deps.onUnauthorizedSender(event).catch((commentErr: unknown) => {
+            logger.warn({ commentErr, eventId: event.id }, 'Failed to post unauthorized sender comment');
+          });
+        }
+
         // Record automation log: hard_rules skip
         const userId = await resolveUserId(event);
         recordLog(event, {
@@ -156,8 +210,8 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
         );
 
         // Fail closed for explicit @review commands - do not fallback dispatch
+        /* v8 ignore start -- upstream: isReviewCommandComment('') is always false, so event.body must be truthy when the if-true branch is taken — the ?? '' right side is unreachable in practice @preserve */
         if (event.eventType === 'issue_comment' && isReviewCommandComment(event.body ?? '')) {
-          /* v8 ignore start -- ts-type: defensive null coalescing, body is truthy when isReviewCommandComment passes @preserve */
           const workerType = extractReviewWorkerType(event.body ?? '');
           /* v8 ignore stop @preserve */
 
@@ -209,9 +263,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
           decision: 'dispatch',
           reason: `LLM dispatch: ${triage.template}`,
           llmCostUsd: usage.costUsd,
-          /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
           ...(usage.model !== undefined && { llmModel: usage.model }),
-          /* v8 ignore stop @preserve */
           llmToolCalls: usage.toolCalls,
           llmReasoning: reasoning,
           dispatchSuccess: llmDispatchResult.success,
@@ -221,6 +273,37 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
       }
 
       if (triage.action === 'request_review') {
+        // Synchronize remediation interception:
+        // Before triggering a review for a synchronize event, check if a recent
+        // remediation task already determined that no re-review is needed.
+        if (event.eventType === 'pull_request' && event.action === 'synchronize' && deps.codeTaskRepo !== undefined) {
+          const shouldSkip = await shouldSkipReviewForRemediation(
+            deps.codeTaskRepo, event.repository, event.pullRequestNumber, event.id, logger,
+          );
+          if (shouldSkip) {
+            const userId = await resolveUserId(event);
+            recordLog(event, {
+              type: 'skipped',
+              decidedBy: 'llm_triage',
+              reason: 'remediation_no_rereview',
+              cost: usage.costUsd,
+              reasoning,
+              toolCalls: toolCallSummaries,
+            }, userId);
+
+            await recordDecision(deps, event, {
+              decidedBy: 'github_agent',
+              decision: 'skip',
+              reason: 'remediation_no_rereview: recent remediation task determined no re-review needed',
+              llmCostUsd: usage.costUsd,
+              ...(usage.model !== undefined && { llmModel: usage.model }),
+              llmToolCalls: usage.toolCalls,
+              llmReasoning: reasoning,
+            }, startTime, logger);
+            return;
+          }
+        }
+
         const reviewResult = await deps.createReviewTask(
           logger,
           {
@@ -233,9 +316,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
             ...(event.title !== null && { prTitle: event.title }),
             ...(event.eventType === 'pull_request' && event.body !== null && { prBody: event.body }),
             ...(event.eventType === 'issue_comment' && event.body !== null && { reviewComment: event.body }),
-            /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
             ...(event.baseBranch !== null && { baseBranch: event.baseBranch }),
-            /* v8 ignore stop @preserve */
           },
         );
 
@@ -258,9 +339,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
             decision: 'skip',
             reason: `review_task_failed: ${reviewResult.error.message}`,
             llmCostUsd: usage.costUsd,
-            /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
             ...(usage.model !== undefined && { llmModel: usage.model }),
-            /* v8 ignore stop @preserve */
             llmToolCalls: usage.toolCalls,
             llmReasoning: reasoning,
           }, startTime, logger);
@@ -289,9 +368,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
             workerType: reviewResult.value.workerType,
           }, // @allow-result-access -- narrowed by !reviewResult.ok above
           llmCostUsd: usage.costUsd,
-          /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
           ...(usage.model !== undefined && { llmModel: usage.model }),
-          /* v8 ignore stop @preserve */
           llmToolCalls: usage.toolCalls,
           llmReasoning: reasoning,
         }, startTime, logger);
@@ -316,12 +393,18 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
         decision: 'skip',
         reason: `LLM skip: ${triage.reason}`,
         llmCostUsd: usage.costUsd,
-        /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
         ...(usage.model !== undefined && { llmModel: usage.model }),
-        /* v8 ignore stop @preserve */
         llmToolCalls: usage.toolCalls,
         llmReasoning: reasoning,
       }, startTime, logger);
+
+      // Best-effort: notify that review was skipped so ready-to-merge label can be set.
+      // Only LLM triage skips qualify — hard-rules skips are pre-triage rejections.
+      if (deps.onReviewSkipped !== undefined) {
+        void deps.onReviewSkipped({ repository: event.repository, prNumber: event.pullRequestNumber }).catch((skipErr: unknown) => {
+          logger.warn({ error: skipErr, eventId: event.id }, 'onReviewSkipped callback failed (best-effort)');
+        });
+      }
     },
   };
 }
@@ -429,9 +512,7 @@ async function recordDecision(
     repository: event.repository,
     pullRequestNumber: event.pullRequestNumber,
     eventType: event.eventType,
-    /* v8 ignore start -- ts-type: null coalescing for GitHubPRAction | null @preserve */
     eventAction: event.action ?? 'unknown',
-    /* v8 ignore stop @preserve */
     senderLogin: event.senderLogin,
     decidedBy: fields.decidedBy,
     decision: fields.decision,
@@ -439,9 +520,7 @@ async function recordDecision(
     ...(fields.dispatchAction !== undefined && { dispatchAction: fields.dispatchAction }),
     ...(fields.dispatchParams !== undefined && { dispatchParams: fields.dispatchParams }),
     ...(fields.llmCostUsd !== undefined && { llmCostUsd: fields.llmCostUsd }),
-    /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
     ...(fields.llmModel !== undefined && { llmModel: fields.llmModel }),
-    /* v8 ignore stop @preserve */
     ...(fields.llmToolCalls !== undefined && { llmToolCalls: fields.llmToolCalls }),
     ...(fields.llmReasoning !== undefined && { llmReasoning: fields.llmReasoning }),
     ...(fields.dispatchSuccess !== undefined && { dispatchSuccess: fields.dispatchSuccess }),
@@ -482,6 +561,47 @@ async function recordDecision(
       'Failed to save event decision audit record'
     );
   }
+}
+
+const REMEDIATION_RECENCY_MS = 60 * 60 * 1000; // 60 minutes
+
+/**
+ * Check whether a recent remediation task indicates that re-review should be skipped.
+ * Returns true when review should be SKIPPED, false when review should proceed.
+ * Fails open: any error → proceed with review (return false).
+ */
+async function shouldSkipReviewForRemediation(
+  codeTaskRepo: CodeTaskRepository,
+  repository: string,
+  prNumber: number,
+  eventId: string,
+  logger: Logger,
+): Promise<boolean> {
+  const result = await codeTaskRepo.findRecentRemediationForPR(repository, prNumber);
+  if (!result.ok) {
+    logger.warn(
+      { eventId, error: result.error },
+      'Failed to check remediation task for synchronize interception, proceeding with review',
+    );
+    return false;
+  }
+
+  const task: CodeTask | null = result.value;
+  if (task === null) {
+    return false;
+  }
+
+  // A remediation task is "recent" if running, OR completed within the recency window
+  const isRunning = task.status === 'running';
+  const isRecentlyCompleted = task.completedAt !== undefined &&
+    (Date.now() - task.completedAt.toDate().getTime()) < REMEDIATION_RECENCY_MS;
+
+  if (!isRunning && !isRecentlyCompleted) {
+    return false;
+  }
+
+  // Only an explicit false suppresses a fresh review. Undefined fails open to review.
+  return task.requiresReReview === false;
 }
 
 /** Deduplicate tool calls into string summaries for automation log events. */

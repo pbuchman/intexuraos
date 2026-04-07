@@ -26,7 +26,7 @@
 
 ```typescript
 interface CreateDataSourceInput {
-  title: string;   // max 200 chars
+  title: string; // max 200 chars
   content: string; // max 60,000 chars
 }
 ```
@@ -98,16 +98,16 @@ interface GenerateTitleOutput {
 
 ```typescript
 interface CreateCompositeFeedInput {
-  purpose: string;                         // max 1000 chars
-  staticSourceIds: string[];               // max 5
+  purpose: string; // max 1000 chars
+  staticSourceIds: string[]; // max 5
   notificationFilters: NotificationFilter[]; // max 3
 }
 
 interface NotificationFilter {
   name: string;
-  app?: string[];   // multi-select app filter
-  source?: string;  // single-select source filter
-  title?: string;   // title substring match
+  app?: string[]; // multi-select app filter
+  source?: string; // single-select source filter
+  title?: string; // title substring match
 }
 ```
 
@@ -249,7 +249,14 @@ interface Snapshot {
     filterId: string;
     filterName: string;
     criteria: { app?: string[]; source?: string; title?: string };
-    items: { id: string; app: string; title: string; body: string; timestamp: string; source?: string }[];
+    items: {
+      id: string;
+      app: string;
+      title: string;
+      body: string;
+      timestamp: string;
+      source?: string;
+    }[];
   }[];
 }
 ```
@@ -266,7 +273,7 @@ interface Snapshot {
 interface CreateVisualizationInput {
   feedId: string;
   insightId: string;
-  chartConfig: object;          // Vega-Lite spec without data
+  chartConfig: object; // Vega-Lite spec without data
   transformInstructions: string;
 }
 ```
@@ -323,6 +330,20 @@ interface Visualization {
 
 **Note:** Idempotent when already `refreshing` — returns current state without queuing duplicate computation.
 
+### Compute Visualization (Internal)
+
+**Endpoint:** `POST /internal/visualizations/compute`
+
+**When to use:** Internal service call to compute visualization data. Requires `X-Internal-Auth` header.
+
+**Input Schema:**
+
+```typescript
+interface ComputeVisualizationInput {
+  visualizationId: string;
+}
+```
+
 ---
 
 ## Constraints
@@ -339,6 +360,7 @@ interface Visualization {
 **Requires:**
 
 - Valid Auth0 bearer token for all public requests
+- `X-Internal-Auth` header for internal endpoints
 - Configured LLM API key in user-service for analysis operations
 - Existing snapshot before analysis (created automatically on feed creation/update)
 - Analyzed feed (with insights) before creating visualizations
@@ -421,4 +443,4 @@ interface Visualization {
 
 ---
 
-**Last updated:** 2026-03-07
+**Last updated:** 2026-04-07

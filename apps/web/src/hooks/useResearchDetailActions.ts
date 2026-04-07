@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
+import { LlmProviders } from '@intexuraos/llm-contract';
 import { PROVIDER_MODELS } from '@/components';
 import { useAuth } from '@/context';
 import { useLlmKeys } from '@/hooks';
+import { useOpenRouterModels } from './useOpenRouterModels.js';
 import {
   approveResearch,
   confirmPartialFailure,
@@ -15,6 +17,7 @@ import {
 } from '@/services/researchAgentApi';
 import type {
   LlmProvider,
+  OpenRouterModelInfo,
   PartialFailureDecision,
   Research,
   SupportedModel,
@@ -48,6 +51,8 @@ export interface ResearchDetailActions {
   partialFailure: ActionState & { onConfirm: (action: PartialFailureDecision) => void };
   configuredProviders: LlmProvider[];
   failedProviders: Map<LlmProvider, string>;
+  openRouterModels: OpenRouterModelInfo[];
+  openRouterLoading: boolean;
 }
 
 export function useResearchDetailActions(
@@ -58,6 +63,9 @@ export function useResearchDetailActions(
 ): ResearchDetailActions {
   const { getAccessToken } = useAuth();
   const { keys, loading: keysLoading } = useLlmKeys();
+  const isOpenRouterConfigured = keys !== null && keys.openrouter !== null;
+  // TODO: rewire to lazy-fetch when EnhanceModal OpenRouter integration lands — currently eagerly fetches on every detail page load
+  const { models: openRouterModels, loading: openRouterLoading } = useOpenRouterModels(isOpenRouterConfigured);
 
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
@@ -83,7 +91,10 @@ export function useResearchDetailActions(
   const configuredProviders: LlmProvider[] =
     keysLoading || keys === null
       ? []
-      : PROVIDER_MODELS.filter((p) => keys[p.id] !== null).map((p) => p.id);
+      : [
+          ...PROVIDER_MODELS.filter((p) => keys[p.id] !== null).map((p) => p.id),
+          ...(keys.openrouter !== null ? [LlmProviders.OpenRouter] : []),
+        ];
 
   const failedProviders: Map<LlmProvider, string> = ((): Map<LlmProvider, string> => {
     const map = new Map<LlmProvider, string>();
@@ -319,5 +330,7 @@ export function useResearchDetailActions(
     },
     configuredProviders,
     failedProviders,
+    openRouterModels,
+    openRouterLoading,
   };
 }

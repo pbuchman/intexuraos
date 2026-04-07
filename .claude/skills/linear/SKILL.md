@@ -21,13 +21,14 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 /linear <sentry-url>              # Create issue from Sentry error
 ```
 
-## Core Mandates (5 Essential Rules)
+## Core Mandates (6 Essential Rules)
 
 1. **Test Requirements First**: EVERY issue MUST have a "Test Requirements" section with specific test cases. No exceptions.
 2. **Branch First**: EVERY task starts with branch from `origin/development`. Working on `main` = task failure.
 3. **CI Gate**: `pnpm run ci:tracked` MUST pass before commit. NON-NEGOTIABLE.
 4. **State Management**: Issues transition: Backlog → In Progress → In Review. Never skip states.
 5. **Cross-Linking**: Every issue links Linear ↔ GitHub ↔ Sentry. PRs require `[INT-XXX]` in title.
+6. **Never Assign Issues**: NEVER set `assignee`, `assigneeId`, or `delegate` on any Linear issue. Assignment is exclusively the user's responsibility. Enforced by PreToolUse hook.
 
 ---
 
@@ -40,6 +41,7 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 | One at a Time  | Complete PR for each issue before starting next                                      |
 | Checkpoint     | After issue completion, STOP and wait for instruction                                |
 | Done Forbidden | Maximum agent state is "In Review" (never "QA" or "Done")                            |
+| No Assignment  | NEVER set assignee or delegate on issues. User-only responsibility. Enforced by hook |
 | 95% Coverage   | All listed tests MUST be implemented                                                 |
 | Auto-Complete  | After implementation: CI → commit → push → PR → Linear. Never ask "Should I commit?" |
 

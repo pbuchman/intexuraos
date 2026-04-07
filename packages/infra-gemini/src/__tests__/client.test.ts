@@ -88,6 +88,61 @@ describe('createGeminiClient', () => {
   });
 
   describe('research', () => {
+    it('includes userId and researchId in audit context', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: 'Research findings about AI.',
+        usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 50 },
+        candidates: [{ groundingMetadata: {} }],
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        researchId: 'research-123',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      await client.research('Tell me about AI');
+
+      expect(vi.mocked(createAuditContext).mock.calls[0]?.[0]).toEqual(
+        expect.objectContaining({
+          provider: LlmProviders.Google,
+          model: TEST_MODEL,
+          method: 'research',
+          prompt: 'Tell me about AI',
+          userId: 'test-user',
+          researchId: 'research-123',
+        })
+      );
+    });
+
+    it('excludes researchId from audit context when undefined', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: 'Research findings about AI.',
+        usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 50 },
+        candidates: [{ groundingMetadata: {} }],
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      await client.research('Tell me about AI');
+
+      const auditArgs = vi.mocked(createAuditContext).mock.calls[0]?.[0] as unknown as Record<
+        string,
+        unknown
+      >;
+      expect(auditArgs).not.toHaveProperty('researchId');
+      expect(auditArgs?.['userId']).toBe('test-user');
+    });
+
     it('returns research result with content and usage from pricing', async () => {
       mockGenerateContent.mockResolvedValue({
         text: 'Research findings about AI.',
@@ -330,6 +385,40 @@ describe('createGeminiClient', () => {
         })
       );
     });
+
+    it('includes thinking tokens in usage when returned by Gemini', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: 'Research content',
+        usageMetadata: {
+          promptTokenCount: 100,
+          candidatesTokenCount: 50,
+          thoughtsTokenCount: 200,
+        },
+        candidates: [{ groundingMetadata: {} }],
+      });
+
+      const pricing = createTestPricing();
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing,
+        logger: mockLogger,
+      });
+      const result = await client.research('Tell me about AI');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage.thinkingTokens).toBe(200);
+        // Cost with thinking + grounding:
+        // input: 100 * 0.15 / 1M = 0.000015
+        // output: 50 * 0.6 / 1M = 0.00003
+        // thinking: 200 * 0.6 / 1M = 0.00012
+        // grounding: 0.035
+        // total: 0.035165
+        expect(result.value.usage.costUsd).toBeCloseTo(0.035165, 6);
+      }
+    });
   });
 
   describe('generate', () => {
@@ -421,6 +510,88 @@ describe('createGeminiClient', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
+      }
+    });
+
+    it('includes thinking tokens in usage when returned by Gemini', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: 'Generated text.',
+        usageMetadata: {
+          promptTokenCount: 50,
+          candidatesTokenCount: 100,
+          thoughtsTokenCount: 500,
+        },
+      });
+
+      const pricing = createTestPricing();
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing,
+        logger: mockLogger,
+      });
+      const result = await client.generate('Write something');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage.thinkingTokens).toBe(500);
+        // Cost without grounding (scaled integers, then / 1M):
+        // input: 50 * 0.15 = 7.5
+        // output: 100 * 0.6 = 60
+        // thinking: 500 * 0.6 = 300
+        // total scaled: 367.5 → Math.round → 368
+        // costUsd: 368 / 1M = 0.000368
+        expect(result.value.usage.costUsd).toBeCloseTo(0.000368, 6);
+      }
+    });
+
+    it('omits thinkingTokens when Gemini returns zero', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: 'Generated text.',
+        usageMetadata: {
+          promptTokenCount: 50,
+          candidatesTokenCount: 100,
+          thoughtsTokenCount: 0,
+        },
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+      const result = await client.generate('Write something');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage.thinkingTokens).toBeUndefined();
+      }
+    });
+
+    it('omits thinkingTokens when Gemini does not return thoughtsTokenCount', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: 'Generated text.',
+        usageMetadata: {
+          promptTokenCount: 50,
+          candidatesTokenCount: 100,
+        },
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+      const result = await client.generate('Write something');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage.thinkingTokens).toBeUndefined();
       }
     });
   });

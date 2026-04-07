@@ -17,6 +17,7 @@ import {
 } from '@intexuraos/http-server';
 import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { hellscriptRoutes } from './routes/hellscriptRoutes.js';
+import { writingConfigRoutes } from './routes/writingConfigRoutes.js';
 
 const SERVICE_NAME = 'hellscript-agent';
 const SERVICE_VERSION = '1.0.0';
@@ -136,7 +137,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
-    /* v8 ignore start -- module-init: Fastify logger stream requires real Sentry transport unavailable in tests @preserve */
+    /* v8 ignore start -- module-init: bootstrap logger cannot be tested — Sentry transport not mockable in unit tests @preserve */
     logger:
       process.env['NODE_ENV'] === 'test'
         ? false
@@ -168,6 +169,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   });
 
   await app.register(hellscriptRoutes);
+  await app.register(writingConfigRoutes);
 
   app.get(
     '/openapi.json',

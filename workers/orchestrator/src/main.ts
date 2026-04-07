@@ -6,8 +6,8 @@ import type { TaskDispatcher } from './services/task-dispatcher.js';
 import type { GitHubTokenService } from './github/token-service.js';
 import type { WebhookClient } from './services/webhook-client.js';
 import type { HeartbeatManager } from './heartbeat.js';
-import type { CredentialMonitor } from './services/isolation/credential-monitor.js';
 import type { DiscoveredContainer, IsolationProvider } from './services/isolation/types.js';
+import type { WorkerAuthRegistry } from './services/worker-auth/index.js';
 import { registerRoutes } from './routes.js';
 import fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
@@ -33,7 +33,7 @@ export async function main(
   webhookClient: WebhookClient,
   heartbeatManager: HeartbeatManager,
   logger: Logger,
-  credentialMonitor?: CredentialMonitor,
+  workerAuthRegistry?: WorkerAuthRegistry,
   isolationProvider?: IsolationProvider
 ): Promise<void> {
   const app = fastify({
@@ -56,7 +56,7 @@ export async function main(
       config,
       logger,
       () => getServiceStatus(),
-      credentialMonitor,
+      workerAuthRegistry,
       isolationProvider
     );
 

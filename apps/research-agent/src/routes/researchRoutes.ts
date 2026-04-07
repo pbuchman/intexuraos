@@ -42,6 +42,12 @@ import { getProviderForModel, LlmModels } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
 import { createSynthesisProviders } from './helpers/synthesisHelper.js';
 import {
+  getUnsupportedHistoricalModels,
+  getUnsupportedRetryMessage,
+  getUnsupportedSynthesisMessage,
+  isRetryableStoredResearchModel,
+} from './helpers/storedResearchModels.js';
+import {
   approveResearchResponseSchema,
   confirmPartialFailureBodySchema,
   confirmPartialFailureResponseSchema,
@@ -205,6 +211,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
       }
 
+      const researchId = generateId();
       const submitParams: Parameters<typeof submitResearch>[0] = {
         userId: user.userId,
         prompt: body.prompt,
@@ -219,6 +226,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           body.inputContexts,
           apiKeys.google,
           user.userId,
+          researchId,
           createTitleGenerator,
           pricingContext.getPricing(LlmModels.Gemini25Flash),
           request.log
@@ -239,7 +247,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
       const result = await submitResearch(submitParams, {
         researchRepo,
-        generateId,
+        generateId: () => researchId,
         logger: request.log as unknown as Logger,
       });
 
@@ -283,6 +291,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const body = request.body as SaveDraftBody;
       const { researchRepo, generateId, userServiceClient, createTitleGenerator, pricingContext } =
         getServices();
+      const draftId = generateId();
 
       // Get user's API keys to generate title
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
@@ -296,7 +305,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           apiKeys.google,
           user.userId,
           pricingContext.getPricing(LlmModels.Gemini25Flash),
-          request.log
+          request.log,
+          draftId
         );
         const titleResult = await titleGenerator.generateTitle(body.prompt);
         title = titleResult.ok ? titleResult.value.title : body.prompt.slice(0, 60);
@@ -308,7 +318,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Create draft research (no default models - user must select before approving)
       const selectedModels = body.selectedModels ?? [];
       const draftParams: Parameters<typeof createDraftResearch>[0] = {
-        id: generateId(),
+        id: draftId,
         userId: user.userId,
         title,
         prompt: body.prompt,
@@ -320,6 +330,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           body.inputContexts,
           apiKeys.google,
           user.userId,
+          draftId,
           createTitleGenerator,
           pricingContext.getPricing(LlmModels.Gemini25Flash),
           request.log
@@ -425,7 +436,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             apiKeys.google,
             user.userId,
             pricingContext.getPricing(LlmModels.Gemini25Flash),
-            request.log
+            request.log,
+            existing.id
           );
           const titleResult = await titleGenerator.generateTitle(body.prompt);
           title = titleResult.ok ? titleResult.value.title : body.prompt.slice(0, 60);
@@ -449,6 +461,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           body.inputContexts,
           apiKeys.google,
           user.userId,
+          existing.id,
           createTitleGenerator,
           pricingContext.getPricing(LlmModels.Gemini25Flash),
           request.log
@@ -723,14 +736,14 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
-      /* v8 ignore start -- upstream: getResearch returns null only when Firestore doc missing; route test always seeds the document @preserve */
+      /* v8 ignore start -- upstream: prior check validated result.ok; null branch is not reachable when test always seeds document @preserve */
       if (result.value === null) {
       /* v8 ignore stop @preserve */
         return await reply.fail('NOT_FOUND', 'Research not found');
       }
 
       // Check ownership
-      /* v8 ignore start -- upstream: result.value === null check above ensures value exists; ownership mismatch requires multi-user test setup @preserve */
+      /* v8 ignore start -- upstream: prior check ensures value is not null; ownership mismatch not reachable without multi-user test setup @preserve */
       if (result.value.userId !== user.userId) {
       /* v8 ignore stop @preserve */
         return await reply.fail('FORBIDDEN', 'Access denied');
@@ -904,12 +917,16 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       switch (body.action) {
         case 'proceed': {
+          const synthesisModel = research.synthesisModel;
+          if (!isRetryableStoredResearchModel(synthesisModel)) {
+            return await reply.fail('CONFLICT', getUnsupportedSynthesisMessage(synthesisModel));
+          }
+
           const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
           if (!apiKeysResult.ok) {
             return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
           }
 
-          const synthesisModel = research.synthesisModel;
           const synthesisProvider = getProviderForModel(synthesisModel);
           const synthesisKey = apiKeysResult.value[synthesisProvider];
           if (synthesisKey === undefined) {
@@ -930,6 +947,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             synthesisModel,
             apiKeysResult.value,
             user.userId,
+            id,
             getServices(),
             request.log
           );
@@ -985,14 +1003,19 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               message: 'Synthesis completed successfully',
             });
           }
-          /* v8 ignore start -- ts-type: error type has message field but TypeScript can't narrow after !ok check @preserve */
+          /* v8 ignore start -- ts-type: type narrowing cannot prove error is defined after !ok check @preserve */
           return await reply.fail('INTERNAL_ERROR', synthesisResult.error ?? 'Synthesis failed');
           /* v8 ignore stop @preserve */
-        /* v8 ignore start -- ts-type: error type has message field but TypeScript can't narrow after !ok check @preserve */
+        /* v8 ignore start -- ts-type: unreachable closing brace — type narrowing cannot prove exhaustiveness @preserve */
         }
         /* v8 ignore stop @preserve */
 
         case 'retry': {
+          const unsupportedFailedModels = getUnsupportedHistoricalModels(partialFailure.failedModels);
+          if (unsupportedFailedModels.length > 0) {
+            return await reply.fail('CONFLICT', getUnsupportedRetryMessage(unsupportedFailedModels));
+          }
+
           await researchRepo.update(id, {
             partialFailure: {
               ...partialFailure,
@@ -1005,15 +1028,15 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           if (retryResult.ok) {
             return await reply.ok({
               action: 'retry',
-              /* v8 ignore start -- ts-type: retriedModels is array but TypeScript can't narrow after ok check @preserve */
+              /* v8 ignore start -- ts-type: noUncheckedIndexedAccess nullish coalescing fallback for retriedModels @preserve */
               message: `Retrying failed models: ${(retryResult.retriedModels ?? []).join(', ')}`,
               /* v8 ignore stop @preserve */
             });
           }
-          /* v8 ignore start -- ts-type: error type has message field but TypeScript can't narrow after !ok check @preserve */
+          /* v8 ignore start -- ts-type: type narrowing cannot prove error is defined after !ok check @preserve */
           return await reply.fail('INTERNAL_ERROR', retryResult.error ?? 'Retry failed');
           /* v8 ignore stop @preserve */
-        /* v8 ignore start -- ts-type: error type has message field but TypeScript can't narrow after !ok check @preserve */
+        /* v8 ignore start -- ts-type: unreachable closing brace — type narrowing cannot prove exhaustiveness @preserve */
         }
         /* v8 ignore stop @preserve */
 
@@ -1083,6 +1106,26 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const research = existing.value;
+      const failedModels = research.llmResults
+        .filter((result) => result.status === 'failed')
+        .map((result) => result.model);
+      const hasSynthesisError =
+        research.synthesisError !== undefined && research.synthesisError !== '';
+      const hasSuccessfulLlms = research.llmResults.some((result) => result.status === 'completed');
+
+      if (failedModels.length > 0) {
+        const unsupportedFailedModels = getUnsupportedHistoricalModels(failedModels);
+        if (unsupportedFailedModels.length > 0) {
+          return await reply.fail('CONFLICT', getUnsupportedRetryMessage(unsupportedFailedModels));
+        }
+      } else if (hasSynthesisError && hasSuccessfulLlms) {
+        if (!isRetryableStoredResearchModel(research.synthesisModel)) {
+          return await reply.fail(
+            'CONFLICT',
+            getUnsupportedSynthesisMessage(research.synthesisModel)
+          );
+        }
+      }
 
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
       if (!apiKeysResult.ok) {
@@ -1103,6 +1146,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         synthesisModel,
         apiKeysResult.value,
         user.userId,
+        id,
         getServices(),
         request.log
       );
@@ -1131,15 +1175,15 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (retryResult.error?.startsWith('Cannot retry from status') === true) {
           return await reply.fail('CONFLICT', retryResult.error);
         }
-        /* v8 ignore start -- ts-type: error type has message field but TypeScript can't narrow after !ok check @preserve */
+        /* v8 ignore start -- ts-type: type narrowing cannot prove error is defined after !ok check @preserve */
         return await reply.fail('INTERNAL_ERROR', retryResult.error ?? 'Retry failed');
         /* v8 ignore stop @preserve */
-      /* v8 ignore start -- ts-type: error type has message field but TypeScript can't narrow after !ok check @preserve */
+      /* v8 ignore start -- ts-type: unreachable closing brace — type narrowing cannot prove exhaustiveness @preserve */
       }
       /* v8 ignore stop @preserve */
 
       const messages: Record<string, string> = {
-        /* v8 ignore start -- ts-type: retriedModels is array but TypeScript can't narrow after ok check @preserve */
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess nullish coalescing fallback for retriedModels @preserve */
         retried_llms: `Retrying failed models: ${(retryResult.retriedModels ?? []).join(', ')}`,
         /* v8 ignore stop @preserve */
         retried_synthesis: 'Re-running synthesis',
@@ -1205,7 +1249,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (!sourceResult.ok) {
         return await reply.fail('INTERNAL_ERROR', 'Failed to fetch source research');
       }
-      /* v8 ignore start -- upstream: sourceResult.ok check above ensures result is valid; null branch requires Firestore doc to not exist @preserve */
+      /* v8 ignore start -- upstream: prior check validated result.ok; null branch is not reachable when Firestore doc always exists in tests @preserve */
       if (sourceResult.value === null) {
       /* v8 ignore stop @preserve */
         return await reply.fail('NOT_FOUND', 'Source research not found');
@@ -1248,6 +1292,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           body.additionalContexts,
           apiKeys.google,
           user.userId,
+          id,
           createTitleGenerator,
           pricingContext.getPricing(LlmModels.Gemini25Flash),
           request.log
@@ -1383,10 +1428,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (result.error === 'Research is not shared') {
           return await reply.fail('CONFLICT', result.error);
         }
-        /* v8 ignore start -- ts-type: error type has message field but TypeScript can't narrow @preserve */
+        /* v8 ignore start -- ts-type: type narrowing cannot prove error is defined after !ok check @preserve */
         return await reply.fail('INTERNAL_ERROR', result.error ?? 'Failed to unshare');
         /* v8 ignore stop @preserve */
-      /* v8 ignore start -- ts-type: error type has message field but TypeScript can't narrow @preserve */
+      /* v8 ignore start -- ts-type: unreachable closing brace — type narrowing cannot prove exhaustiveness @preserve */
       }
       /* v8 ignore stop @preserve */
 
@@ -1593,4 +1638,3 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   done();
 };
-

@@ -16,11 +16,18 @@ export interface ForwardingState {
   position: number;
   buffer: string;
   partialLine: string;
+  pendingChunks: QueuedLogChunk[];
   totalBytes: number;
   droppedChunks: number;
+  formattedUploadsStopped: boolean;
   timer: NodeJS.Timeout | null;
   pollTimer: NodeJS.Timeout | null;
   webhookSecret: string;
+}
+
+interface QueuedLogChunk {
+  content: string;
+  raw: boolean;
 }
 
 const MAX_CHUNK_SIZE = 64 * 1024; // 64KB — must exceed largest single JSON message (hook_response with build output)
@@ -76,11 +83,9 @@ export class LogForwarder {
    */
   async flushAndStop(taskId: string): Promise<void> {
     const state = this.forwarders.get(taskId);
-    /* v8 ignore start -- test-infra: early return when task not registered, only happens in error scenarios @preserve */
     if (state === undefined) {
       return;
     }
-    /* v8 ignore stop @preserve */
 
     this.drainPartialLine(state);
 
@@ -88,7 +93,7 @@ export class LogForwarder {
     await this.flushBuffer(taskId, true);
 
     // Stop timer
-    /* v8 ignore start -- test-infra: cannot set timer to non-null to test else branch without breaking startForwarding @preserve */
+    /* v8 ignore start -- ts-type: timer null check after startForwarding always sets it @preserve */
     if (state.timer !== null) {
       clearInterval(state.timer);
     }
@@ -113,8 +118,10 @@ export class LogForwarder {
       position: 0,
       buffer: '',
       partialLine: '',
+      pendingChunks: [],
       totalBytes: 0,
       droppedChunks: 0,
+      formattedUploadsStopped: false,
       timer: null,
       pollTimer: null,
       webhookSecret,
@@ -155,23 +162,17 @@ export class LogForwarder {
     this.logger.info({ taskId }, 'Stopping log forwarding');
 
     // Clear timers
-    /* v8 ignore start -- test-infra: cannot set timer to non-null to test else branch without breaking startForwarding @preserve */
     if (state.timer) {
       clearInterval(state.timer);
       state.timer = null;
     }
-    /* v8 ignore stop @preserve */
 
-    /* v8 ignore start -- test-infra: cannot set pollTimer to non-null to test else branch without breaking startForwarding @preserve */
     if (state.pollTimer) {
       clearInterval(state.pollTimer);
       state.pollTimer = null;
     }
-    /* v8 ignore stop @preserve */
 
-    /* v8 ignore start -- test-infra: partialLine only set via appendChunk (Docker mode), stopForwarding tests use file-based mode @preserve */
     this.drainPartialLine(state);
-    /* v8 ignore stop @preserve */
 
     // Flush remaining buffer
     await this.flushBuffer(taskId);
@@ -191,7 +192,6 @@ export class LogForwarder {
    * Append a chunk of log content directly (for Docker mode where logs come via callbacks).
    * Creates the forwarding state if it doesn't exist.
    */
-  /* v8 ignore start -- test-infra: Docker-only method, Docker isolation branch tested separately @preserve */
   appendChunk(taskId: string, content: string): void {
     let state = this.forwarders.get(taskId);
 
@@ -204,8 +204,10 @@ export class LogForwarder {
         position: 0,
         buffer: '',
         partialLine: '',
+        pendingChunks: [],
         totalBytes: 0,
         droppedChunks: 0,
+        formattedUploadsStopped: false,
         timer: null,
         pollTimer: null,
         webhookSecret,
@@ -236,10 +238,49 @@ export class LogForwarder {
 
     // Flush if buffer exceeds max chunk size
     if (state.buffer.length >= MAX_CHUNK_SIZE) {
+      this.queueFormattedBufferChunks(state);
       void this.flushBuffer(taskId);
     }
   }
-  /* v8 ignore stop @preserve */
+
+  appendRawChunk(taskId: string, content: string): void {
+    if (content === '') return;
+
+    let state = this.forwarders.get(taskId);
+
+    if (state === undefined) {
+      const webhookSecret = this.taskSecrets.get(taskId) ?? this.deriveWebhookSecret(taskId);
+      state = {
+        taskId,
+        logFilePath: '',
+        position: 0,
+        buffer: '',
+        partialLine: '',
+        pendingChunks: [],
+        totalBytes: 0,
+        droppedChunks: 0,
+        formattedUploadsStopped: false,
+        timer: null,
+        pollTimer: null,
+        webhookSecret,
+      };
+      this.forwarders.set(taskId, state);
+
+      state.timer = setInterval(() => {
+        void this.flushBuffer(taskId);
+      }, CHUNK_INTERVAL_MS);
+    }
+
+    this.drainPartialLine(state);
+    this.queueFormattedBufferChunks(state);
+    state.pendingChunks.push(
+      ...this.splitRawIntoChunks(content).map((chunk) => ({ content: chunk, raw: true }))
+    );
+
+    if (content.length >= MAX_CHUNK_SIZE) {
+      void this.flushBuffer(taskId);
+    }
+  }
 
   private readNewContent(taskId: string, logFilePath: string, state: ForwardingState): void {
     // Check if file exists before reading
@@ -260,37 +301,46 @@ export class LogForwarder {
       if (state.buffer.length >= MAX_CHUNK_SIZE) {
         void this.flushBuffer(taskId);
       }
-      /* v8 ignore start -- test-infra: error handling for fs.readFile failures @preserve */
     } catch (error) {
       this.logger.error({ taskId, error }, 'Failed to read log file');
     }
-    /* v8 ignore stop @preserve */
   }
 
   private async flushBuffer(taskId: string, force = false): Promise<void> {
     const state = this.forwarders.get(taskId);
-    if (!state || state.buffer.length === 0) return;
+    if (!state) return;
 
-    // Check size limit (skipped when force=true, e.g. final flush from flushAndStop)
-    /* v8 ignore start -- test-infra: requires sending 4MB of log data to trigger, impractical in unit tests @preserve */
-    if (!force && state.totalBytes >= MAX_TOTAL_LOG_SIZE) {
-      this.logger.warn(
-        { taskId, totalBytes: state.totalBytes },
-        'Max total log size reached, stopping uploads'
-      );
-      state.droppedChunks += 1;
-      state.buffer = '';
-      return;
+    this.queueFormattedBufferChunks(state);
+
+    if (state.pendingChunks.length === 0) return;
+
+    const sendableChunks: QueuedLogChunk[] = [];
+
+    for (const chunk of state.pendingChunks) {
+      if (chunk.raw) {
+        sendableChunks.push(chunk);
+        continue;
+      }
+
+      if (!force && (state.formattedUploadsStopped || state.totalBytes >= MAX_TOTAL_LOG_SIZE)) {
+        if (!state.formattedUploadsStopped) {
+          this.logger.warn(
+            { taskId, totalBytes: state.totalBytes },
+            'Max total log size reached, stopping uploads'
+          );
+          state.formattedUploadsStopped = true;
+        }
+        state.droppedChunks += 1;
+        continue;
+      }
+
+      sendableChunks.push(chunk);
     }
-    /* v8 ignore stop @preserve */
 
-    // Split buffer into chunks
-    const chunks = this.splitIntoChunks(state.buffer);
-    state.buffer = ''; // Clear buffer after splitting
+    state.pendingChunks = [];
 
-    // Send chunks in batches
-    for (let i = 0; i < chunks.length; i += MAX_BATCH_SIZE) {
-      const batch = chunks.slice(i, i + MAX_BATCH_SIZE);
+    for (let i = 0; i < sendableChunks.length; i += MAX_BATCH_SIZE) {
+      const batch = sendableChunks.slice(i, i + MAX_BATCH_SIZE);
       await this.sendBatch(taskId, batch, state);
     }
   }
@@ -327,14 +377,31 @@ export class LogForwarder {
     return chunks;
   }
 
-  /* v8 ignore start -- upstream: early return for small chunks is the happy path @preserve */
-  private async sendBatch(taskId: string, chunks: string[], state: ForwardingState): Promise<void> {
+  private splitRawIntoChunks(content: string): string[] {
+    const chunks: string[] = [];
+    for (let offset = 0; offset < content.length; offset += MAX_CHUNK_SIZE) {
+      chunks.push(content.slice(offset, offset + MAX_CHUNK_SIZE));
+    }
+    return chunks;
+  }
+
+  private queueFormattedBufferChunks(state: ForwardingState): void {
+    if (state.buffer === '') return;
+    const chunks = this.splitIntoChunks(state.buffer);
+    state.buffer = '';
+    state.pendingChunks.push(...chunks.map((content) => ({ content, raw: false })));
+  }
+
+  private async sendBatch(
+    taskId: string,
+    chunks: QueuedLogChunk[],
+    state: ForwardingState
+  ): Promise<void> {
     const now = Date.now();
     const chunkPayloads = chunks.map((chunk, index) => {
-      const truncated = this.enforceChunkSize(chunk);
       return {
         sequence: now + index,
-        content: truncated,
+        content: chunk.raw ? chunk.content : this.enforceChunkSize(chunk.content),
         timestamp: new Date().toISOString(),
       };
     });
@@ -347,7 +414,10 @@ export class LogForwarder {
     const result = await this.sendWithRetry(payload, state.webhookSecret);
 
     if (result.success) {
-      state.totalBytes += chunks.reduce((sum, c) => sum + c.length, 0);
+      state.totalBytes += chunks.reduce(
+        (sum, chunk) => sum + (chunk.raw ? 0 : chunk.content.length),
+        0
+      );
     } else {
       state.droppedChunks += chunks.length;
       const baseUrl = this.config.codeAgentUrl.replace(/\/+$/, '');
@@ -357,7 +427,6 @@ export class LogForwarder {
       );
     }
   }
-  /* v8 ignore stop @preserve */
 
   private async sendWithRetry(
     payload: {
@@ -404,18 +473,14 @@ export class LogForwarder {
           'Log upload failed, retrying'
         );
       } catch (error) {
-        /* v8 ignore start -- ts-type: error type narrowing for non-Error throwables @preserve */
         const errorInfo =
           error instanceof Error
             ? { name: error.name, message: error.message, cause: getErrorCauseChain(error) }
             : { error };
-        /* v8 ignore stop @preserve */
-        /* v8 ignore start -- test-infra: log statement that executes but branch coverage sees as untested @preserve */
         this.logger.warn(
           { taskId: payload.taskId, attempt: i + 1, url, ...errorInfo },
           'Log upload failed, retrying'
         );
-        /* v8 ignore stop @preserve */
       }
 
       if (i < 2) {
@@ -440,9 +505,7 @@ export class LogForwarder {
     const ts = `${h}:${m}:${s}.${ms}`;
 
     return text.replace(/^(.+)$/gm, (line) => {
-      /* v8 ignore start -- test-infra: timestamp-prefixed lines only appear from orchestrator log injection @preserve */
       if (/^\d{2}:\d{2}:\d{2}\.\d{3} /.test(line)) return line;
-      /* v8 ignore stop @preserve */
       return `${ts} ${line}`;
     });
   }
@@ -462,11 +525,8 @@ export class LogForwarder {
   }
 
   private enforceChunkSize(chunk: string): string {
-    /* v8 ignore start -- upstream: early return for normal-sized chunks is the happy path @preserve */
     if (chunk.length <= MAX_CHUNK_SIZE) return chunk;
-    /* v8 ignore stop @preserve */
 
-    /* v8 ignore start -- upstream: truncation path for oversized chunks, normal path returns early @preserve */
     const tailSize = 1024;
     const marker = '\n[... TRUNCATED ...]\n';
     const headSize = MAX_CHUNK_SIZE - tailSize - marker.length;
@@ -474,7 +534,6 @@ export class LogForwarder {
     const tail = chunk.slice(-tailSize);
 
     return head + marker + tail;
-    /* v8 ignore stop @preserve */
   }
 
   async flush(taskId: string): Promise<void> {

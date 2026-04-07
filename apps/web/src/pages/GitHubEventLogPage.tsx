@@ -4,6 +4,7 @@ import { Button, ErrorBanner, GitHubEventLogTableRow, Layout } from '@/component
 import { useGitHubEventLog } from '@/hooks';
 import type { GitHubDecisionOutcome } from '@/types';
 import type { GitHubEventLogListRow } from '@/hooks/useGitHubEventLog';
+import { GITHUB_EVENT_LOG_DESKTOP_GRID } from '@/components/githubEventLogTableLayout';
 
 // --- Types ---
 
@@ -152,7 +153,7 @@ function PageHeader({
 
 function ColumnHeader(): React.JSX.Element {
   return (
-    <div className="mb-1 hidden grid-cols-[24px_80px_160px_120px_100px_1fr_220px] gap-2 px-3 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500 lg:grid">
+    <div className={`mb-1 hidden gap-2 px-3 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500 xl:grid ${GITHUB_EVENT_LOG_DESKTOP_GRID}`}>
       <div />
       <div>Time</div>
       <div>Event</div>

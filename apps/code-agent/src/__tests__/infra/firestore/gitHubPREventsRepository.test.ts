@@ -160,6 +160,39 @@ describe('createFirestoreGitHubPREventsRepository', () => {
       }
     });
 
+    it('should save when deliveryId is non-null but no duplicate exists', async () => {
+      const mockDocRef = {
+        id: 'new-event-id',
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([])),
+        doc: vi.fn(() => mockDocRef),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repository = createFirestoreGitHubPREventsRepository({
+        logger: mockLogger,
+      });
+
+      const input = createEventInput({ deliveryId: 'unique-delivery-id' });
+      const result = await repository.save(input);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.deliveryId).toBe('unique-delivery-id');
+        expect(mockDocRef.set).toHaveBeenCalled();
+        // Verify dedup query was executed
+        expect(mockQuery.where).toHaveBeenCalledWith('deliveryId', '==', 'unique-delivery-id');
+      }
+    });
+
     it('should skip deduplication when deliveryId is null', async () => {
       const mockDocRef = {
         id: 'new-event-id',
@@ -1040,6 +1073,414 @@ describe('createFirestoreGitHubPREventsRepository', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('FIRESTORE_ERROR');
         expect(mockLogger.error).toHaveBeenCalled();
+      }
+    });
+  });
+
+  describe('findReviewComments() with non-null mergedAt', () => {
+    it('should convert non-null mergedAt using toDate in review comments', async () => {
+      const mergedAtDate = new Date('2024-02-01T00:00:00Z');
+
+      const matchingEvent = {
+        githubEventId: 777,
+        deliveryId: 'del-review-merged',
+        repository: 'intexuraos/test-repo',
+        repositoryId: 987654321,
+        pullRequestNumber: 42,
+        pullRequestId: 123456789,
+        eventType: 'pull_request_review_comment',
+        action: 'created',
+        senderLogin: 'reviewer',
+        senderId: 333,
+        senderType: 'User',
+        prAuthorLogin: 'author-user',
+        title: null,
+        body: 'LGTM',
+        state: 'closed',
+        baseBranch: 'main',
+        mergedAt: { toDate: (): Date => mergedAtDate },
+        createdAt: { toDate: (): Date => new Date('2024-01-20T00:00:00Z') },
+        processedAt: { toDate: (): Date => new Date('2024-01-20T00:05:00Z') },
+        payload: {
+          comment: {
+            id: 200,
+            pull_request_review_id: 9999,
+            path: 'src/main.ts',
+            line: 10,
+            body: 'LGTM',
+            user: { login: 'reviewer' },
+          },
+        },
+      };
+
+      const doc = createMockDocSnapshot('doc-merged', matchingEvent);
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([doc])),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repository = createFirestoreGitHubPREventsRepository({
+        logger: mockLogger,
+      });
+
+      const result = await repository.findReviewComments('intexuraos/test-repo', 42, 9999);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(1);
+        expect(result.value[0]?.mergedAt).toEqual(mergedAtDate);
+        expect(result.value[0]?.prAuthorLogin).toBe('author-user');
+        expect(result.value[0]?.baseBranch).toBe('main');
+      }
+    });
+  });
+
+  describe('auditEventId propagation', () => {
+    it('save() includes auditEventId in result when provided in input', async () => {
+      const mockDocRef = {
+        id: 'new-event-id',
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([])),
+        doc: vi.fn(() => mockDocRef),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repository = createFirestoreGitHubPREventsRepository({
+        logger: mockLogger,
+      });
+
+      const input = createEventInput({ auditEventId: 'audit-event-123' });
+      const result = await repository.save(input);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.auditEventId).toBe('audit-event-123');
+      }
+    });
+
+    it('findByPullRequest() propagates auditEventId from stored documents', async () => {
+      const eventData = {
+        githubEventId: 111,
+        deliveryId: 'del-1',
+        auditEventId: 'audit-from-stored',
+        repository: 'intexuraos/test-repo',
+        repositoryId: 987654321,
+        pullRequestNumber: 42,
+        pullRequestId: 123456789,
+        eventType: 'pull_request',
+        action: 'opened',
+        senderLogin: 'user1',
+        senderId: 111,
+        senderType: 'User',
+        prAuthorLogin: 'author1',
+        title: 'PR with audit',
+        body: 'Body',
+        state: 'open',
+        baseBranch: 'main',
+        mergedAt: null,
+        createdAt: new Date('2024-01-02T00:00:00Z'),
+        processedAt: new Date('2024-01-02T00:05:00Z'),
+        payload: {},
+      };
+
+      const doc = createMockDocSnapshot('doc1', eventData);
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([doc])),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repository = createFirestoreGitHubPREventsRepository({
+        logger: mockLogger,
+      });
+
+      const result = await repository.findByPullRequest('intexuraos/test-repo', 42);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value[0]?.auditEventId).toBe('audit-from-stored');
+        expect(result.value[0]?.deliveryId).toBe('del-1');
+        expect(result.value[0]?.prAuthorLogin).toBe('author1');
+        expect(result.value[0]?.baseBranch).toBe('main');
+      }
+    });
+
+    it('findByRepository() propagates auditEventId from stored documents', async () => {
+      const eventData = {
+        githubEventId: 222,
+        deliveryId: null,
+        auditEventId: 'audit-repo-lookup',
+        repository: 'intexuraos/test-repo',
+        repositoryId: 987654321,
+        pullRequestNumber: 10,
+        pullRequestId: 100010,
+        eventType: 'pull_request',
+        action: 'closed',
+        senderLogin: 'user2',
+        senderId: 222,
+        senderType: 'User',
+        prAuthorLogin: null,
+        title: 'Repo PR',
+        body: 'Body',
+        state: 'closed',
+        baseBranch: null,
+        mergedAt: null,
+        createdAt: new Date('2024-01-03T00:00:00Z'),
+        processedAt: new Date('2024-01-03T00:05:00Z'),
+        payload: {},
+      };
+
+      const doc = createMockDocSnapshot('doc1', eventData);
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([doc])),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repository = createFirestoreGitHubPREventsRepository({
+        logger: mockLogger,
+      });
+
+      const result = await repository.findByRepository('intexuraos/test-repo');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value[0]?.auditEventId).toBe('audit-repo-lookup');
+      }
+    });
+
+    it('findReviewComments() propagates auditEventId from matching comments', async () => {
+      const matchingEvent = {
+        githubEventId: 555,
+        deliveryId: 'del-review',
+        auditEventId: 'audit-review-comment',
+        repository: 'intexuraos/test-repo',
+        repositoryId: 987654321,
+        pullRequestNumber: 42,
+        pullRequestId: 123456789,
+        eventType: 'pull_request_review_comment',
+        action: 'created',
+        senderLogin: 'reviewer',
+        senderId: 333,
+        senderType: 'User',
+        prAuthorLogin: 'pr-author',
+        title: null,
+        body: 'Review comment body',
+        state: 'open',
+        baseBranch: 'develop',
+        mergedAt: null,
+        createdAt: new Date('2024-01-02T00:00:00Z'),
+        processedAt: new Date('2024-01-02T00:05:00Z'),
+        payload: {
+          comment: { id: 100, pull_request_review_id: 9999, path: 'a.ts', line: 1, body: 'Review', user: { login: 'reviewer' } },
+        },
+      };
+
+      const doc = createMockDocSnapshot('doc1', matchingEvent);
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([doc])),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repository = createFirestoreGitHubPREventsRepository({
+        logger: mockLogger,
+      });
+
+      const result = await repository.findReviewComments('intexuraos/test-repo', 42, 9999);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(1);
+        expect(result.value[0]?.auditEventId).toBe('audit-review-comment');
+        expect(result.value[0]?.deliveryId).toBe('del-review');
+        expect(result.value[0]?.prAuthorLogin).toBe('pr-author');
+        expect(result.value[0]?.baseBranch).toBe('develop');
+      }
+    });
+
+    it('findAll() propagates auditEventId from stored documents', async () => {
+      const eventData = {
+        githubEventId: 777,
+        deliveryId: null,
+        auditEventId: 'audit-all-query',
+        repository: 'intexuraos/test-repo',
+        repositoryId: 987654321,
+        pullRequestNumber: 5,
+        pullRequestId: 100005,
+        eventType: 'pull_request',
+        action: 'opened',
+        senderLogin: 'user1',
+        senderId: 111,
+        senderType: 'User',
+        prAuthorLogin: null,
+        title: 'PR all',
+        body: 'Body',
+        state: 'open',
+        baseBranch: null,
+        mergedAt: null,
+        createdAt: new Date('2024-01-04T00:00:00Z'),
+        processedAt: new Date('2024-01-04T00:05:00Z'),
+        payload: {},
+      };
+
+      const doc = createMockDocSnapshot('doc1', eventData);
+
+      const mockQuery = {
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([doc])),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repository = createFirestoreGitHubPREventsRepository({
+        logger: mockLogger,
+      });
+
+      const result = await repository.findAll();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value[0]?.auditEventId).toBe('audit-all-query');
+      }
+    });
+  });
+
+  describe('toDate string parsing fallback', () => {
+    it('parses date string when value is neither Date nor toDate object', async () => {
+      const eventData = {
+        githubEventId: 111,
+        deliveryId: null,
+        repository: 'intexuraos/test-repo',
+        repositoryId: 987654321,
+        pullRequestNumber: 42,
+        pullRequestId: 123456789,
+        eventType: 'pull_request',
+        action: 'opened',
+        senderLogin: 'user1',
+        senderId: 111,
+        senderType: 'User',
+        prAuthorLogin: null,
+        title: 'PR with string dates',
+        body: 'Body',
+        state: 'open',
+        baseBranch: null,
+        mergedAt: null,
+        createdAt: '2024-01-02T00:00:00.000Z',
+        processedAt: '2024-01-02T00:05:00.000Z',
+        payload: {},
+      };
+
+      const doc = createMockDocSnapshot('doc1', eventData);
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([doc])),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repository = createFirestoreGitHubPREventsRepository({
+        logger: mockLogger,
+      });
+
+      const result = await repository.findByPullRequest('intexuraos/test-repo', 42);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value[0]?.createdAt).toEqual(new Date('2024-01-02T00:00:00.000Z'));
+        expect(result.value[0]?.processedAt).toEqual(new Date('2024-01-02T00:05:00.000Z'));
+      }
+    });
+  });
+
+  describe('readDeliveryId', () => {
+    it('returns null when deliveryId is a non-string value', async () => {
+      const eventData = {
+        githubEventId: 111,
+        deliveryId: 12345,
+        repository: 'intexuraos/test-repo',
+        repositoryId: 987654321,
+        pullRequestNumber: 42,
+        pullRequestId: 123456789,
+        eventType: 'pull_request',
+        action: 'opened',
+        senderLogin: 'user1',
+        senderId: 111,
+        senderType: 'User',
+        prAuthorLogin: null,
+        title: 'PR with numeric delivery',
+        body: 'Body',
+        state: 'open',
+        baseBranch: null,
+        mergedAt: null,
+        createdAt: new Date('2024-01-02T00:00:00Z'),
+        processedAt: new Date('2024-01-02T00:05:00Z'),
+        payload: {},
+      };
+
+      const doc = createMockDocSnapshot('doc1', eventData);
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([doc])),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repository = createFirestoreGitHubPREventsRepository({
+        logger: mockLogger,
+      });
+
+      const result = await repository.findByPullRequest('intexuraos/test-repo', 42);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value[0]?.deliveryId).toBeNull();
       }
     });
   });

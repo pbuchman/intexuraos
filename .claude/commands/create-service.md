@@ -1003,7 +1003,11 @@ terraform fmt -check -recursive && terraform validate
 - [ ] Per-service `apps/<service>/cloudbuild.yaml` created
 - [ ] Deploy script `cloudbuild/scripts/deploy-<service>.sh` created
 - [ ] Added to `docker_services` in `terraform/modules/cloud-build/main.tf`
-- [ ] Added to GitHub Actions deploy workflow (`.github/workflows/deploy.yml`): docker build list, SERVICES array, both CLOUD_RUN_SERVICES arrays
+- [ ] Added to GitHub Actions deploy workflow (`.github/workflows/deploy.yml`) — all 4 places:
+  - [ ] Docker build list (`build-push-monitored.sh` step)
+  - [ ] SERVICES deploy array
+  - [ ] CLOUD_RUN_SERVICES array in "Fetch web config" step (monolith deploy)
+  - [ ] CLOUD_RUN_SERVICES array in individual web deploy (`web)` case block)
 - [ ] Registered in api-docs-hub
 - [ ] Added to `CLOUD_RUN_SERVICES` in Cloud Build files (`cloudbuild/cloudbuild.yaml`, `apps/web/cloudbuild.yaml`)
 - [ ] Added to `.envrc.local.example`

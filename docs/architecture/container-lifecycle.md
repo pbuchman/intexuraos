@@ -112,9 +112,9 @@ Task Dispatch Request
 // 2. Write prompt files (system-prompt.txt, user-prompt.txt)
 // 3. Copy GCP SA key if configured
 // 4. Create Docker container with:
-//    - Image: claude-worker:latest
+//    - Image: code-worker:latest
 //    - User: host UID:GID (for permission compatibility)
-//    - Network: claude-worker-net
+//    - Network: code-worker-net
 //    - Tmpfs mounts: /tmp (2GB), /home/claude (500MB), /repo/node_modules (4GB)
 // 5. Start container
 // 6. Wait for worker ready (managed mode)
@@ -134,9 +134,9 @@ The container receives these environment variables:
 | `SENTRY_AUTH_TOKEN`              | Sentry auth token                          |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to GCP SA key                         |
 | `CLAUDE_PROJECT_DIR`             | Always `/repo`                             |
-| `CLAUDE_WORKER_MODE`             | Always `1`                                 |
-| `CLAUDE_MANAGED_MODE`            | `1` if managed attempts enabled            |
-| `CLAUDE_CONTINUE`                | `1` if resuming (continueSession)          |
+| `CODE_WORKER_MODE`               | Always `1`                                 |
+| `WORKER_MANAGED_MODE`            | `1` if managed attempts enabled            |
+| `WORKER_CONTINUE`                | `1` if resuming (continueSession)          |
 | `GIT_USER_NAME`                  | Git user name (if configured)              |
 | `GIT_USER_EMAIL`                 | Git user email (if configured)             |
 
@@ -319,7 +319,7 @@ Resume Request (continueSession=true)
      │               Restore             ┌────────────────────┐
      │               preserved           │ 3. Check Docker    │
      │               container           │ for orphan:        │
-     │                    │              │ claude-worker-{id} │
+     │                    │              │ code-worker-{id} │
      │                    │              └─────────┬──────────┘
      │                    │                   ┌────┴─────┐
      │                    │                   │ Running? │
@@ -342,7 +342,7 @@ Resume Request (continueSession=true)
 // docker-provider.ts — createWorker() orphan detection
 if (config.continueSession === true) {
   try {
-    const orphanContainer = this.docker.getContainer(`claude-worker-${taskId}`);
+    const orphanContainer = this.docker.getContainer(`code-worker-${taskId}`);
     const orphanInfo = await orphanContainer.inspect();
 
     if (orphanInfo.State.Running) {
@@ -523,10 +523,10 @@ These are defaults in `DEFAULT_CONFIG` — overridable through the constructor's
 
 | Value                      | Default                                                                                      |
 | -------------------------- | -------------------------------------------------------------------------------------------- |
-| Docker image (`imageName`) | `europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest` |
+| Docker image (`imageName`) | `europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest`   |
 | Max concurrent             | 4                                                                                            |
 | Image pull policy          | `always`                                                                                     |
-| Network name               | `claude-worker-net`                                                                          |
+| Network name               | `code-worker-net`                                                                            |
 | Keep containers alive      | `false`                                                                                      |
 | Secrets base path          | `/tmp/claude-secrets`                                                                        |
 | Managed attempts mode      | `true`                                                                                       |

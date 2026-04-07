@@ -28,6 +28,7 @@ import {
   mapLinearError,
   filterIssuesByCompletionDate,
   mapIssuesWithBatchedStates,
+  DEFAULT_COMPLETED_SINCE_DAYS,
   mapSingleIssue,
   mapSingleIssueWithTeam,
 } from './linearMappers.js';
@@ -49,6 +50,7 @@ export {
   mapLinearError,
   createDedupKey,
   filterIssuesByCompletionDate,
+  DEFAULT_COMPLETED_SINCE_DAYS,
   clearClientCache,
   getClientCacheSize,
   getDedupCacheSize,
@@ -123,7 +125,8 @@ export function createLinearApiClient(): LinearApiClient {
       teamId: string,
       options?: { completedSinceDays?: number }
     ): Promise<Result<LinearIssue[], LinearError>> {
-      const completedSinceDays = options?.completedSinceDays ?? 7;
+      const completedSinceDays =
+        options?.completedSinceDays ?? DEFAULT_COMPLETED_SINCE_DAYS;
       const dedupKey = createDedupKey(
         'listIssues',
         apiKey.slice(0, 8),
@@ -219,6 +222,35 @@ export function createLinearApiClient(): LinearApiClient {
           return ok(null);
         }
         logger.error({ error, identifier }, 'Failed to fetch Linear issue by identifier');
+        return err(mapLinearError(error));
+      }
+    },
+
+    async getDirectChildren(
+      apiKey: string,
+      issueId: string
+    ): Promise<Result<LinearIssue[] | null, LinearError>> {
+      const dedupKey = createDedupKey('getDirectChildren', apiKey.slice(0, 8), issueId);
+
+      try {
+        const mapped = await withDeduplication(dedupKey, async () => {
+          logger.info({ issueId }, 'Fetching direct child issues');
+
+          const client = getOrCreateClient(apiKey);
+          const issue = await client.issue(issueId);
+          const childrenConnection = await issue.children();
+
+          return await Promise.all(childrenConnection.nodes.map(async (child) => await mapSingleIssue(child)));
+        });
+
+        return ok(mapped);
+      } catch (error) {
+        const errorMessage = getErrorMessage(error);
+        if (errorMessage.includes('not found') || errorMessage.includes('Entity not found')) {
+          logger.info({ issueId }, 'Parent issue not found for direct child fetch');
+          return ok(null);
+        }
+        logger.error({ error, issueId }, 'Failed to fetch direct child issues');
         return err(mapLinearError(error));
       }
     },
@@ -354,6 +386,27 @@ export function createLinearApiClient(): LinearApiClient {
         return ok(states);
       } catch (error) {
         logger.error({ error, teamId }, 'Failed to fetch Linear workflow states');
+        return err(mapLinearError(error));
+      }
+    },
+
+    async deleteIssue(apiKey: string, issueId: string): Promise<Result<void, LinearError>> {
+      try {
+        logger.info({ issueId }, 'Deleting Linear issue (soft-delete)');
+
+        const client = getOrCreateClient(apiKey);
+        const issue = await client.issue(issueId);
+        const result = await issue.delete();
+
+        if (!result.success) {
+          logger.error({ issueId }, 'Failed to delete issue - API returned failure');
+          return err({ code: 'API_ERROR', message: `Failed to delete issue ${issueId}` });
+        }
+
+        logger.info({ issueId }, 'Issue deleted successfully (soft-delete)');
+        return ok(undefined);
+      } catch (error) {
+        logger.error({ error, issueId }, 'Failed to delete Linear issue');
         return err(mapLinearError(error));
       }
     },

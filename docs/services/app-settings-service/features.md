@@ -4,7 +4,7 @@ The cost transparency layer for IntexuraOS — know exactly what every AI intera
 
 ## The Problem
 
-AI services bill by the token, and every provider prices differently. Google charges one rate, OpenAI another, Anthropic a third. Some models charge for cache reads, others for web searches, others for image generation. Multiply that by four providers and dozens of models, and the true cost of any given interaction becomes nearly impossible to calculate on your own.
+AI services bill by the token, and every provider prices differently. Google charges one rate, OpenAI another, Anthropic a third. Some models charge for cache reads, others for web searches, others for image generation. Multiply that by four providers and fourteen models, and the true cost of any given interaction becomes nearly impossible to calculate on your own.
 
 Without visibility, usage creeps upward unnoticed. A month passes and the bill arrives with no explanation of which models drove the cost, which workflows consumed the most tokens, or how spending shifted week over week. You are left guessing.
 
@@ -24,7 +24,7 @@ Other services in the platform pull pricing data at launch so they can track cos
 
 ## Key Benefits
 
-- **All providers, one view** — Five providers and every model they offer, displayed in a single pricing endpoint
+- **All providers, one view** — Four providers and every model they offer, displayed in a single pricing endpoint
 - **Verified completeness** — The service will not run unless every model has pricing data, so gaps are impossible
 - **Personal cost tracking** — See your own usage broken down by month, model, and call type
 - **Flexible time range** — Query anywhere from the last day to the last year of usage, with a sensible ninety-day default

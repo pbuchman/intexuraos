@@ -105,6 +105,7 @@ describe('submitTaskFeedback', () => {
       findByIdForUser: vi.fn().mockResolvedValue(ok(createMockCompletedTask())),
       findById: vi.fn(),
       hasActiveTaskForLinearIssue: vi.fn().mockResolvedValue(ok({ hasActive: false })),
+      hasDispatchedOrRunningForPR: vi.fn().mockResolvedValue(ok({ hasActive: false })),
       findRecentTasksByLinearIssue: vi.fn().mockResolvedValue(ok([])),
       create: vi.fn().mockResolvedValue(ok(createMockCompletedTask({ id: 'task_followup-456', status: 'dispatched' }))),
       update: vi.fn().mockResolvedValue(ok(createMockCompletedTask({ id: 'task_followup-456' }))),
@@ -488,6 +489,24 @@ describe('submitTaskFeedback', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('worker_not_configured');
       }
+    });
+
+    it('includes actionId and approvalEventId in create input when original task has them', async () => {
+      const taskWithIds = createMockCompletedTask({
+        actionId: 'action-999',
+        approvalEventId: 'approval-888',
+      });
+      mockCodeTaskRepo.findByIdForUser = vi.fn().mockResolvedValue(ok(taskWithIds));
+
+      const result = await submitTaskFeedback(deps, mockRequest);
+
+      expect(result.ok).toBe(true);
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actionId: 'action-999',
+          approvalEventId: 'approval-888',
+        }),
+      );
     });
 
     it('handles enqueue failure by returning error', async () => {

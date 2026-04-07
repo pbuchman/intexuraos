@@ -3,8 +3,8 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { Header } from '../Header.js';
 
 // Mock useAuth context
@@ -48,6 +48,30 @@ vi.mock('@/context/pwa-context.js', () => ({
   usePWA: (): unknown => mockUsePWA(),
 }));
 
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    Link: ({
+      children,
+      to,
+      onClick,
+      className,
+      title,
+    }: {
+      children: React.ReactNode;
+      to: string;
+      onClick?: () => void;
+      className?: string;
+      title?: string;
+    }): React.JSX.Element => (
+      <a href={to} onClick={onClick} className={className} title={title}>
+        {children}
+      </a>
+    ),
+  };
+});
+
 // Mock useWorkersStatus - will be overridden in tests
 const mockUseWorkersStatus = vi.fn();
 vi.mock('@/hooks/index.js', async () => {
@@ -59,21 +83,29 @@ vi.mock('@/hooks/index.js', async () => {
 });
 
 // Mock lucide-react icons
-vi.mock('lucide-react', () => ({
-  ChevronDown: (): React.JSX.Element => <div data-testid="chevron-down" />,
-  LogOut: (): React.JSX.Element => <div data-testid="logout-icon" />,
-  Moon: (): React.JSX.Element => <div data-testid="moon-icon" />,
-  Sun: (): React.JSX.Element => <div data-testid="sun-icon" />,
-  User: (): React.JSX.Element => <div data-testid="user-icon" />,
-  RefreshCw: (): React.JSX.Element => <div data-testid="refresh-icon" />,
-  RotateCcw: (): React.JSX.Element => <div data-testid="rotate-ccw-icon" />,
-  Server: (): React.JSX.Element => <div data-testid="server-icon" />,
-}));
+vi.mock('lucide-react', async () => {
+  const actual = await vi.importActual<typeof import('lucide-react')>('lucide-react');
+  return {
+    ...actual,
+    ChevronDown: (): React.JSX.Element => <div data-testid="chevron-down" />,
+    LogOut: (): React.JSX.Element => <div data-testid="logout-icon" />,
+    Moon: (): React.JSX.Element => <div data-testid="moon-icon" />,
+    Sun: (): React.JSX.Element => <div data-testid="sun-icon" />,
+    User: (): React.JSX.Element => <div data-testid="user-icon" />,
+    RefreshCw: (): React.JSX.Element => <div data-testid="refresh-icon" />,
+    RotateCcw: (): React.JSX.Element => <div data-testid="rotate-ccw-icon" />,
+    Server: (): React.JSX.Element => <div data-testid="server-icon" />,
+  };
+});
 
 describe('Header', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetAccessToken.mockResolvedValue('test-token');
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   const defaultPWAValue = {
@@ -159,8 +191,9 @@ describe('Header', () => {
       const userMenuButton = screen.getByRole('button', { name: /Test User/i });
       fireEvent.click(userMenuButton);
 
-      // Workers menu IS shown even with no workers (consistent with non-PWA behavior)
+      // Workers menu IS shown even with no workers, but the empty state lives behind the submenu
       expect(screen.getByTestId('workers-status-menu')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Workers' }));
       expect(screen.getByText('No workers configured')).toBeInTheDocument();
     });
   });
@@ -185,8 +218,8 @@ describe('Header', () => {
       const userMenuButton = screen.getByRole('button', { name: /Test User/i });
       fireEvent.click(userMenuButton);
 
-      // Verify workers status is NOT in menu (it's in header bar for non-PWA)
-      expect(screen.queryByTestId('workers-status-menu')).not.toBeInTheDocument();
+      // Non-PWA keeps the menu item in the DOM for mobile, but hides it at md+.
+      expect(screen.getByTestId('workers-status-menu')).toHaveClass('md:hidden');
     });
   });
 });

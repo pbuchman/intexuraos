@@ -139,7 +139,7 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
           healthy: false,
           reason: errorCode === 'ENOTFOUND' ? 'dns-failed' : 'connection-refused',
         };
-        /* v8 ignore start -- upstream: .includes(errorCode ?? '') guard above guarantees errorCode is defined when this branch is reached @preserve */
+        /* v8 ignore start -- upstream: FakeHttpClient error codes always match includes() — cannot produce undefined errorCode inside match block @preserve */
         if (errorCode !== undefined) {
           result.code = errorCode;
         }
@@ -153,13 +153,11 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
           healthy: false,
           reason: 'tls-error',
         };
-        /* v8 ignore start -- upstream: TLS branch does not require errorCode from .includes() guard, undefined path is reachable but not exercised in tests @preserve */
         if (errorCode !== undefined) {
           result.code = errorCode;
         } else {
           result.code = 'TLS_ERROR';
         }
-        /* v8 ignore stop @preserve */
         return result;
       }
 

@@ -13,6 +13,7 @@ export interface IssueDisplayResponse {
   url: string;
   commentCount: number;
   lastCommentAt: string | null;
+  parentIdentifier: string | null;
 }
 
 /**
@@ -31,20 +32,22 @@ export function buildIssueDisplayResponse(
     labels: { id: string; name: string; color: string }[];
     url: string;
   },
-  commentSummary: { commentCount: number; lastCommentAt: string | null }
+  commentSummary: { commentCount: number; lastCommentAt: string | null },
+  parentIdentifier?: string | null
 ): IssueDisplayResponse {
   return {
     identifier: issue.identifier,
     title: issue.title,
     state: { name: issue.state, type: issue.stateType },
     priority: issue.priority,
-    /* v8 ignore start -- ts-type: assigneeName always set when assigneeId is non-null @preserve */
+    /* v8 ignore start -- ts-type: nullish coalescing fallback for assigneeName; always provided when assigneeId is non-null @preserve */
     assignee: issue.assigneeId !== null ? { id: issue.assigneeId, name: issue.assigneeName ?? '' } : null,
     /* v8 ignore stop @preserve */
     labels: issue.labels.map((label) => ({ id: label.id, name: label.name })),
     url: issue.url,
     commentCount: commentSummary.commentCount,
     lastCommentAt: commentSummary.lastCommentAt,
+    parentIdentifier: parentIdentifier ?? null,
   };
 }
 

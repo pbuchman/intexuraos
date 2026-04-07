@@ -1,7 +1,7 @@
 # Orchestrator — Technical Debt
 
-**Last Updated:** 2026-03-22
-**Analysis Run:** [2026-03-22 — orchestrator v3.4.0](../../documentation-runs.md)
+**Last Updated:** 2026-04-07
+**Analysis Run:** [2026-04-07 — orchestrator v3.5.0](../../documentation-runs.md)
 
 ---
 
@@ -11,9 +11,8 @@
 | ------------------- | ------ | -------- |
 | TODO/FIXME Comments | 2      | Low      |
 | Architectural Gaps  | 4      | Medium   |
-| Deprecations        | 1      | Low      |
-| Missing Features    | 4      | Medium   |
-| **Total**           | **11** | Medium   |
+| Missing Features    | 3      | Medium   |
+| **Total**           | **9**  | Medium   |
 
 ---
 
@@ -29,7 +28,7 @@ Distribute tasks across multiple macOS hosts or dev machines:
 
 ### Container Image Versioning
 
-Pin claude-worker images to specific versions instead of `:latest`:
+Pin code-worker images to specific versions instead of `:latest`:
 
 1. Tag images with build timestamps or git SHAs
 2. Store preferred image tag per worker type in configuration
@@ -138,7 +137,7 @@ When Gemini is unavailable (network error, rate limit, API outage), all in-fligh
 
 **Severity:** Medium
 
-`cancelTask()` calls `destroyWorker()` which sends SIGTERM and then force-removes the container. Claude Code does not receive a chance to save progress, push partial work, or clean up.
+`cancelTask()` calls `destroyWorker()` which sends SIGTERM and then force-removes the container. The active worker runtime does not receive a chance to save progress, push partial work, or clean up.
 
 **Recommended fix:** Implement a two-phase cancellation:
 
@@ -148,21 +147,9 @@ When Gemini is unavailable (network error, rate limit, API outage), all in-fligh
 
 ---
 
-## Deprecations
-
-### 7. Direct Linear GraphQL queries
-
-**Severity:** Low
-
-The `readPlanReferencedInLinearIssue` function and direct `LINEAR_GRAPHQL_URL` usage in `deep-validator-helpers.ts` are deprecated in favor of the code-agent proxy (`fetchLinearIssueContextViaCodeAgent`). The deprecated code path remains as a fallback.
-
-**Recommended fix:** Remove the deprecated function and the `LINEAR_GRAPHQL_URL` constant after confirming all deployments use the code-agent proxy (INT-1040).
-
----
-
 ## Missing Features
 
-### 8. No task retry from the orchestrator
+### 7. No task retry from the orchestrator
 
 **Severity:** Medium
 
@@ -172,7 +159,7 @@ The `retriedFrom` field exists on tasks, but retry logic lives entirely in code-
 
 ---
 
-### 9. No worktree cleanup on completed tasks
+### 8. No worktree cleanup on completed tasks
 
 **Severity:** Medium
 
@@ -182,7 +169,7 @@ Worktrees accumulate until manually cleaned or the stale threshold is exceeded. 
 
 ---
 
-### 10. No resource usage monitoring
+### 9. No resource usage monitoring
 
 **Severity:** Low
 
@@ -192,33 +179,40 @@ Worktrees accumulate until manually cleaned or the stale threshold is exceeded. 
 
 ---
 
-### 11. No container log persistence
+## Recent Improvements (v3.5.0)
 
-**Severity:** Low
+The following items improved quality and capability since v3.4.0:
 
-Container logs are streamed to code-agent via `LogForwarder` but are not persisted locally. If the code-agent is unreachable during a task, log data is lost after the chunk retry limit (3 attempts, 4s max backoff).
-
-**Recommended fix:** Write container logs to `~/.claude-orchestrator/logs/{taskId}.log` as a fallback before streaming.
+- **Codex runtime support** — OpenAI Codex as a full execution backend with dedicated auth, log processing, and two worker presets (INT-1104, INT-1109, INT-1117)
+- **Remediation Agent** — Autonomous auto-improvement loop addressing review findings with cross-LLM verification (INT-1087, INT-1116, INT-1130)
+- **Execution Memory Graph** — Cross-task learning pipeline injecting patterns, pitfalls, and verified approaches into prompts (INT-1098, INT-1257)
+- **Ask Agent** — Interactive code-aware Q&A sessions without PR/Linear overhead (INT-1293, INT-1295, INT-1308)
+- **Agent Compliance Validator** — Replaced the monolithic Deep Validator with a modular OpenRouter-based compliance auditor
+- **Evidence PR for all outcomes** — All planned outcomes including SIMPLE tasks require an evidence PR (INT-1279)
+- **openrouter-free worker type** — Zero-cost execution via OpenRouter free tier
+- **Agent dispatch refactor** — `@worker` routing, one preserved container per PR, review/remediation message rejection (INT-1130)
+- **Startup validation improvements** — Port availability check, GCP credential validation, API key health checks (INT-1214)
+- **V8 ignore blocks replaced with tests** — Significant test coverage improvement across task-dispatcher and docker-provider (INT-1071)
+- **Expired container resume** — Resume allowed when container expired but worktree exists (INT-1304)
+- **Fatal exit code tail detection** — Restricted to tail of raw logs to prevent false positives
+- **Development branch sync** — Repo manager syncs local development branch with origin after fetch
+- **Dead MCP config removed** — Removed dead MCP config processing from worktree manager
 
 ---
 
-## Recent Improvements (v3.4.0)
+## Resolved Issues
 
-The following items improved quality and capability since v3.3.0:
-
-- **Review Agent plan awareness** — Review Agent now cross-references implementations against original plan documents, posting structured requirements coverage tables on PRs (INT-1038)
-- **Linear proxy via code-agent** — Deep Validator fetches Linear issue context via code-agent instead of querying Linear GraphQL directly, improving resilience and decoupling (INT-1040)
-- **Auto-enforcement of review findings** — Quality issues identified in code reviews are automatically acted upon without manual intervention (INT-926)
-- **Unified task enqueue** — Queue-first dispatch ensures all tasks are durably recorded before execution (INT-950)
-- **Plan-based review dispatch** — Review agent automatically triggered when plan review is needed, with `plan_review` as a new review type (INT-1039)
-- **Separate image pull timeout** — 15-minute timeout for image pulls prevents slow networks from causing container creation failures (INT-1022)
-- **Base branch fetch** — Worktree creation now fetches base branch first, preventing stale ref failures (INT-984)
-- **Queue position fix** — Off-by-one error in queue position calculation and fan-out parent pollution corrected (INT-977)
-- **Worker instruction sections** — System prompts include shared `WORKER_INSTRUCTIONS` constant for consistency (INT-972)
-- **Selective container preservation** — Only execution and planning containers preserved; review and PR containers cleaned up immediately (INT-973)
-- **MiniMax M2.7 migration** — MiniMax worker type updated from M2.5 to M2.7 model (INT-1009)
-- **Fetch error cause chain** — Full cause chain logged for fetch errors instead of just top-level message (INT-1016)
-- **Timeout increase** — Task execution timeout increased from 2h to 3h; queue TTL increased to 6h
+| Date       | Issue                                     | Resolution                                                                 |
+| ---------- | ----------------------------------------- | -------------------------------------------------------------------------- |
+| 2026-04-07 | Deep Validator was monolithic             | Replaced with modular Agent Compliance Validator using OpenRouter          |
+| 2026-04-07 | No Codex runtime support                  | Full Codex backend with auth, log processing, two worker presets           |
+| 2026-04-07 | No review finding auto-remediation        | Remediation Agent autonomously addresses findings                          |
+| 2026-04-07 | No cross-task learning                    | Execution Memory Graph injects past patterns into prompts                  |
+| 2026-04-07 | Direct Linear GraphQL queries             | Removed — code-agent proxy is now the only path                            |
+| 2026-04-07 | No interactive sessions                   | Ask Agent provides code-aware Q&A without PR overhead                      |
+| 2026-04-07 | Container log persistence missing         | Session transcripts now read from JSONL files for compliance validation    |
+| 2026-03-22 | Review Agent lacked plan awareness        | Review Agent cross-references implementations against plan documents       |
+| 2026-03-22 | Linear fetched directly from orchestrator | Linear proxy via code-agent replaces direct GraphQL                        |
 
 ---
 
@@ -232,11 +226,11 @@ The following items improved quality and capability since v3.3.0:
 | 4   | No horizontal scaling             | 2026-02-08 | -          | -        |
 | 5   | Verifier has no circuit-breaker   | 2026-02-19 | -          | -        |
 | 6   | No graceful container cancel      | 2026-02-08 | -          | -        |
-| 7   | Deprecated Linear GraphQL usage   | 2026-03-22 | -          | INT-1040 |
+| 7   | Deprecated Linear GraphQL usage   | 2026-03-22 | 2026-04-07 | INT-1040 |
 | 8   | No orchestrator-side retry        | 2026-02-08 | -          | -        |
 | 9   | No worktree cleanup on completion | 2026-02-08 | -          | -        |
 | 10  | No resource usage monitoring      | 2026-02-08 | -          | -        |
-| 11  | No local log persistence fallback | 2026-02-08 | -          | -        |
+| 11  | No local log persistence fallback | 2026-02-08 | 2026-04-07 | -        |
 
 ---
 

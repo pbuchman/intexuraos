@@ -80,7 +80,7 @@ export class CodeWorkerOutputRule implements WebhookRule {
     }
 
     if (event.eventType === 'pull_request_review' && event.action === 'submitted') {
-      return { action: 'dispatch', reason: 'CODE_WORKER_REVIEW' };
+      return { action: 'skip', reason: 'CODE_WORKER_REVIEW_HANDLED_BY_TASK_COMPLETE' };
     }
 
     return { action: 'skip', reason: 'CODE_WORKER_NON_PR_EVENT' };
@@ -150,7 +150,7 @@ export class ProtectedBaseBranchRule implements WebhookRule {
 
 /**
  * Rule that checks if the sender is in the allowed bots list or is the repository owner.
- * Pass-through for pull_request events (sender filtering doesn't apply to PRs).
+ * All event types are subject to sender authorization — no blanket pass-throughs.
  */
 export class SenderWhitelistRule implements WebhookRule {
   constructor(
@@ -158,15 +158,6 @@ export class SenderWhitelistRule implements WebhookRule {
   ) {}
 
   evaluate(event: GitHubPREvent): RuleOutcome {
-    // Pass-through for pull_request events — sender filtering doesn't apply
-    if (event.eventType === 'pull_request') {
-      return { action: 'dispatch', reason: 'PR_EVENT_PASS_THROUGH' };
-    }
-
-    if (event.eventType === 'issue_comment' && event.action === 'created') {
-      return { action: 'dispatch', reason: 'ISSUE_COMMENT_CREATED_PASS_THROUGH' };
-    }
-
     const sender = event.senderLogin;
     const repoOwner = event.repository.split('/')[0];
 
@@ -250,6 +241,49 @@ export class SkipPrefixRule implements WebhookRule {
       action: 'dispatch',
       reason: 'COMMENT_DOES_NOT_HAVE_SKIP_PREFIX',
       context: { commentBody }
+    };
+  }
+}
+
+/**
+ * Rule for CI failure detection on agent-created PRs.
+ * - Pass-through for non-check_suite events
+ * - For check_suite events: dispatch only when head branch matches task_* pattern
+ * - Skip check_suite events on non-task branches (human PRs)
+ */
+export class CIFailureRule implements WebhookRule {
+  private static readonly TASK_BRANCH_PREFIX = 'task_';
+
+  evaluate(event: GitHubPREvent): RuleOutcome {
+    // Pass-through for non-check_suite events
+    if (event.eventType !== 'check_suite') {
+      return {
+        action: 'dispatch',
+        reason: 'NOT_A_CHECK_SUITE_EVENT'
+      };
+    }
+
+    // For check_suite events, check if the head branch matches task_* pattern
+    const headBranch = event.baseBranch;
+    if (headBranch === null) {
+      return {
+        action: 'skip',
+        reason: 'CHECK_SUITE_NO_BRANCH_INFO'
+      };
+    }
+
+    if (!headBranch.startsWith(CIFailureRule.TASK_BRANCH_PREFIX)) {
+      return {
+        action: 'skip',
+        reason: 'CHECK_SUITE_NON_TASK_BRANCH',
+        context: { headBranch }
+      };
+    }
+
+    return {
+      action: 'dispatch',
+      reason: 'CHECK_SUITE_TASK_BRANCH',
+      context: { headBranch }
     };
   }
 }

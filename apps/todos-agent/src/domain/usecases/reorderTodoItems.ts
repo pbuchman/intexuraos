@@ -36,32 +36,26 @@ export async function reorderTodoItems(
   }
 
   const todo = findResult.value;
-  const existingItemIds = new Set(todo.items.map((item) => item.id));
+  const itemMap = new Map(todo.items.map((item) => [item.id, item]));
   const providedItemIds = new Set(input.itemIds);
 
-  if (existingItemIds.size !== providedItemIds.size) {
+  if (itemMap.size !== providedItemIds.size) {
     return {
       ok: false,
       error: { code: 'INVALID_OPERATION', message: 'Item count mismatch' },
     };
   }
-
-  for (const id of input.itemIds) {
-    if (!existingItemIds.has(id)) {
+  const reorderedItems = [];
+  for (const [index, id] of input.itemIds.entries()) {
+    const item = itemMap.get(id);
+    if (item === undefined) {
       return {
-        ok: false,
-        error: { code: 'INVALID_OPERATION', message: `Item ${id} not found` },
+        ok: false as const,
+        error: { code: 'INVALID_OPERATION' as const, message: `Item ${id} not found` },
       };
     }
+    reorderedItems.push({ ...item, position: index });
   }
-
-  const itemMap = new Map(todo.items.map((item) => [item.id, item]));
-  const reorderedItems = input.itemIds.map((id, index) => {
-    const item = itemMap.get(id) ?? /* v8 ignore start -- ts-type: itemIds validated against todo.items above @preserve */ ((): never => {
-      throw new Error(`Item ${id} not found`);
-    })() /* v8 ignore stop @preserve */;
-    return { ...item, position: index };
-  });
 
   const updatedTodo: Todo = {
     ...todo,

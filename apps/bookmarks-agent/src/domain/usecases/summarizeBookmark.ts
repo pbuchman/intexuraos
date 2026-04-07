@@ -76,7 +76,7 @@ export async function summarizeBookmark(
   });
 
   if (!summaryResult.ok) {
-    deps.logger.warn(
+    deps.logger.info(
       { bookmarkId, error: summaryResult.error },
       'Failed to generate bookmark summary'
     );

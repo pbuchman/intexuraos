@@ -1,7 +1,7 @@
 # Notion Service — Technical Debt
 
-**Last Updated:** 2026-03-15
-**Analysis Run:** [2026-03-15 entry](../../documentation-runs.md)
+**Last Updated:** 2026-04-07
+**Analysis Run:** [2026-04-07 entry](../../documentation-runs.md)
 
 ---
 
@@ -10,11 +10,11 @@
 | Category            | Count | Severity |
 | ------------------- | ----- | -------- |
 | Code Smells         | 1     | Low      |
-| Test Coverage Gaps  | 0     | —        |
-| TypeScript Issues   | 0     | —        |
-| TODO/FIXME Comments | 0     | —        |
-| SRP Violations      | 0     | —        |
-| Code Duplicates     | 0     | —        |
+| Test Coverage Gaps  | 0     | ---      |
+| TypeScript Issues   | 0     | ---      |
+| TODO/FIXME Comments | 0     | ---      |
+| SRP Violations      | 0     | ---      |
+| Code Duplicates     | 0     | ---      |
 | **Total**           | **1** | Low      |
 
 ---
@@ -42,15 +42,15 @@
 
 ## Test Coverage Gaps
 
-None. The service achieves 100% branch coverage. As of v3.3.0, v8 ignore annotation coverage has been reduced further via INT-794, which replaced annotation-guarded branches with real tests.
+None. The service achieves 100% branch coverage. As of v3.3.0, v8 ignore annotation coverage has been reduced further via INT-794, which replaced annotation-guarded branches with real tests. In v3.5.0, remaining v8 ignore annotations had their explanations tightened with blocker keyword enforcement.
 
 Remaining v8 ignore annotations cover:
 
-- TypeScript type guards on Firestore document types (`notionConnectionRepository.ts`)
-- ESM module-init boundaries (`integrationRoutes.ts`)
-- Schema string literals in Fastify route definitions (`internalRoutes.ts`)
+- Firestore document type shape (`notionConnectionRepository.ts`) — `schema` category
+- ESM module-init boundaries (`integrationRoutes.ts`) — `module-init` category
+- Schema string literals in Fastify route definitions (`internalRoutes.ts`) — `schema` category
 
-All annotations use valid categories (`schema`, `module-init`, `ts-type`) per project standards.
+All annotations use valid categories per project standards.
 
 ---
 
@@ -79,6 +79,14 @@ No significant duplication patterns detected. The service is small and focused.
 ---
 
 ## Recent Improvements
+
+### v3.5.0 Release (2026-04-07)
+
+v8 ignore annotation explanations tightened with blocker keyword enforcement across `notionConnectionRepository.ts` and `internalRoutes.ts`. No functional changes.
+
+### v3.4.0 Release (2026-03-22)
+
+Package version bump to v3.4.0.
 
 ### v3.3.0 Release (2026-03-15)
 
@@ -132,15 +140,16 @@ Achieved strict 100% branch coverage with proper v8 ignore annotations for TypeS
 
 ## Resolved Issues
 
-| Date       | Issue                              | Resolution                            |
-| ---------- | ---------------------------------- | ------------------------------------- |
-| 2026-03-13 | v8 ignore blocks without tests     | INT-794: replaced with real tests     |
-| 2026-02-16 | No distributed tracing             | Added Dash0 OTel integration          |
-| 2026-01-31 | Branch coverage below 100%         | v8 ignore annotations + new tests     |
-| 2026-01-30 | Direct pino() usage (no Sentry)    | Migrated to createAppLogger           |
-| 2026-01-30 | Raw reply.send() in routes         | Migrated to reply.ok()/reply.fail()   |
-| 2026-01-29 | No page access validation          | Added page preview internal endpoint  |
-| 2026-01-26 | Unused promptVaultPageId parameter | Removed from connect schema (INT-319) |
+| Date       | Issue                              | Resolution                                      |
+| ---------- | ---------------------------------- | ----------------------------------------------- |
+| 2026-03-24 | v8 ignore explanations too vague   | Blocker keyword enforcement (strict validation) |
+| 2026-03-13 | v8 ignore blocks without tests     | INT-794: replaced with real tests               |
+| 2026-02-16 | No distributed tracing             | Added Dash0 OTel integration                    |
+| 2026-01-31 | Branch coverage below 100%         | v8 ignore annotations + new tests               |
+| 2026-01-30 | Direct pino() usage (no Sentry)    | Migrated to createAppLogger                     |
+| 2026-01-30 | Raw reply.send() in routes         | Migrated to reply.ok()/reply.fail()             |
+| 2026-01-29 | No page access validation          | Added page preview internal endpoint            |
+| 2026-01-26 | Unused promptVaultPageId parameter | Removed from connect schema (INT-319)           |
 
 ---
 

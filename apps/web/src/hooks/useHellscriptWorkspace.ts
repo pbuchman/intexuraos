@@ -6,18 +6,20 @@ import {
   getHellscriptWorkspace as getWorkspaceApi,
   imposeOnBuffer as imposeApi,
 } from '@/services/hellscriptAgentApi';
-import type { HellscriptWorkspaceResponse } from '@/types';
+import type { HellscriptWorkspaceResponse, WritingCategory } from '@/types';
 
 interface UseHellscriptWorkspaceResult {
   workspace: HellscriptWorkspaceResponse | null;
   loading: boolean;
   error: string | null;
-  impose: (utterance: string) => Promise<void>;
+  impose: (utterance: string, category?: WritingCategory) => Promise<void>;
   imposing: boolean;
+  lastAction: string | null;
+  clearLastAction: () => void;
 }
 
 export function useHellscriptWorkspace(
-  bufferId: string | undefined
+  bufferId: string | undefined // @allow-undefined-type -- function parameter, not optional property
 ): UseHellscriptWorkspaceResult {
   const { getAccessToken } = useAuth();
   const navigate = useNavigate();
@@ -25,6 +27,7 @@ export function useHellscriptWorkspace(
   const [loading, setLoading] = useState(bufferId !== undefined);
   const [error, setError] = useState<string | null>(null);
   const [imposing, setImposing] = useState(false);
+  const [lastAction, setLastAction] = useState<string | null>(null);
 
   const fetchWorkspace = useCallback(
     async (id: string): Promise<void> => {
@@ -51,16 +54,17 @@ export function useHellscriptWorkspace(
   }, [bufferId, fetchWorkspace]);
 
   const impose = useCallback(
-    async (utterance: string): Promise<void> => {
+    async (utterance: string, category?: WritingCategory): Promise<void> => {
       setImposing(true);
       setError(null);
 
       try {
         const token = await getAccessToken();
         const request = bufferId !== undefined
-          ? { bufferId, utterance }
-          : { utterance };
+          ? { bufferId, utterance, ...(category !== undefined ? { category } : {}) }
+          : { utterance, ...(category !== undefined ? { category } : {}) };
         const response = await imposeApi(token, request);
+        setLastAction(response.action);
 
         // For new conversations, navigate to the created buffer
         if (bufferId === undefined) {
@@ -78,11 +82,17 @@ export function useHellscriptWorkspace(
     [getAccessToken, bufferId, navigate, fetchWorkspace]
   );
 
+  const clearLastAction = useCallback(() => {
+    setLastAction(null);
+  }, []);
+
   return {
     workspace,
     loading,
     error,
     impose,
     imposing,
+    lastAction,
+    clearLastAction,
   };
 }

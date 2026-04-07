@@ -107,7 +107,7 @@ export async function findLinearIssueById(
 
     if (snapshot.empty) return ok(null);
 
-    /* v8 ignore start -- test-infra: Firestore integration requires real database mock @preserve */
+    /* v8 ignore start -- test-infra: cannot reach snapshot doc branches; FakeLinearIssueRepository returns canned results without Firestore queries @preserve */
     const data = snapshot.docs[0]?.data() as SyncedLinearIssueDoc | undefined;
     if (data === undefined) return ok(null);
     return ok(docToIssue(data));
@@ -142,7 +142,7 @@ export async function findLinearIssueByIdentifier(
 
     if (snapshot.empty) return ok(null);
 
-    /* v8 ignore start -- test-infra: Firestore integration requires real database mock @preserve */
+    /* v8 ignore start -- test-infra: cannot reach snapshot doc branches; FakeLinearIssueRepository returns canned results without Firestore queries @preserve */
     const data = snapshot.docs[0]?.data() as SyncedLinearIssueDoc | undefined;
     if (data === undefined) return ok(null);
     return ok(docToIssue(data));
@@ -171,14 +171,21 @@ export async function findLinearIssuesByIdentifiers(
     const db = getFirestore();
     const allIssues: SyncedLinearIssue[] = [];
 
+    const chunks: string[][] = [];
     for (let i = 0; i < identifiers.length; i += FIRESTORE_IN_LIMIT) {
-      const chunk = identifiers.slice(i, i + FIRESTORE_IN_LIMIT);
-      const snapshot = await db
-        .collection(COLLECTION_NAME)
-        .where('identifier', 'in', chunk)
-        .where('userId', '==', userId)
-        .get();
+      chunks.push(identifiers.slice(i, i + FIRESTORE_IN_LIMIT));
+    }
 
+    const snapshots = await Promise.all(
+      chunks.map((chunk) =>
+        db.collection(COLLECTION_NAME)
+          .where('identifier', 'in', chunk)
+          .where('userId', '==', userId)
+          .get()
+      )
+    );
+
+    for (const snapshot of snapshots) {
       for (const doc of snapshot.docs) {
         allIssues.push(docToIssue(doc.data() as SyncedLinearIssueDoc));
       }
@@ -242,7 +249,7 @@ export async function findUserIdsByIssueId(
       .where('id', '==', issueId)
       .get();
 
-    /* v8 ignore start -- test-infra: Firestore integration requires real database mock @preserve */
+    /* v8 ignore start -- test-infra: cannot reach snapshot branches; FakeLinearIssueRepository returns canned results without Firestore queries @preserve */
     if (snapshot.empty) return ok([]);
     const userIds = snapshot.docs.map((doc) => (doc.data() as SyncedLinearIssueDoc).userId);
     return ok(userIds);

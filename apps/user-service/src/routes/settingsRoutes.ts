@@ -8,7 +8,7 @@ import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastif
 import { requireAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { isFastModel, getProviderForModel } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
-import { getUserSettings, isTranscriptionProvider, type GetUserSettingsErrorCode } from '../domain/settings/index.js';
+import { getUserSettings, isTranscriptionProvider, isValidTimezone, type GetUserSettingsErrorCode } from '../domain/settings/index.js';
 
 /**
  * Map domain error codes to HTTP error codes for GET.
@@ -29,6 +29,7 @@ const userSettingsDataSchema = {
   type: 'object',
   properties: {
     userId: { type: 'string' },
+    timezone: { type: 'string' },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time' },
   },
@@ -374,6 +375,126 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       return await reply.ok({ provider: body.provider });
+    }
+  );
+
+  // PATCH /users/:uid/settings/timezone
+  fastify.patch(
+    '/users/:uid/settings/timezone',
+    {
+      schema: {
+        operationId: 'updateTimezonePreference',
+        summary: 'Update timezone preference',
+        description: 'Update user timezone preference (IANA timezone string).',
+        tags: ['settings'],
+        params: {
+          type: 'object',
+          properties: {
+            uid: { type: 'string', description: 'User ID' },
+          },
+          required: ['uid'],
+        },
+        body: {
+          type: 'object',
+          required: ['timezone'],
+          properties: {
+            timezone: {
+              type: 'string',
+              description: 'IANA timezone string (e.g. Europe/Berlin)',
+            },
+          },
+        },
+        response: {
+          200: {
+            description: 'Timezone preference updated',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  timezone: { type: 'string' },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'data'],
+          },
+          400: {
+            description: 'Invalid request',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          403: {
+            description: 'Forbidden',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to PATCH /users/:uid/settings/timezone',
+      });
+
+      const user = await requireAuth(request, reply);
+      if (!user) {
+        return;
+      }
+
+      const params = request.params as { uid: string };
+      const body = request.body as { timezone: string };
+
+      if (params.uid !== user.userId) {
+        return await reply.fail('FORBIDDEN', 'Cannot update other user settings');
+      }
+
+      if (!isValidTimezone(body.timezone)) {
+        return await reply.fail('INVALID_REQUEST', `Invalid timezone: ${body.timezone}`);
+      }
+
+      const { userSettingsRepository } = getServices();
+      const result = await userSettingsRepository.updateTimezone(
+        params.uid,
+        body.timezone
+      );
+
+      if (!result.ok) {
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      return await reply.ok({ timezone: body.timezone });
     }
   );
 

@@ -5,12 +5,23 @@ import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-htt
 import { extractOrGenerateTraceId } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
 import { validateWebhookSignature, validateOrchestratorSignature } from '../infra/webhookValidation.js';
-import { formatLogChunk, createFormatterState, type FormatterState } from '../domain/services/logFormatter.js';
+import {
+  formatLogChunkForRuntime,
+  flushLogChunkFormatterForRuntime,
+  createFormatterState,
+  type FormatterState,
+  type LogRuntime,
+} from '../domain/services/logFormatter.js';
 import { loadConfig } from '../config.js';
 import type { TurnMetrics } from '../domain/models/turnMetrics.js';
 import { formatMetricsLogLines } from '../domain/formatters/metricsLogFormatter.js';
 import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
 import { parseLinearIdentifierFromUrl } from '../domain/utils/linearIdentifierParser.js';
+import { parseOwnerRepo } from '../domain/utils/parseOwnerRepo.js';
+import { drainTaskQueue } from '../domain/usecases/drainTaskQueue.js';
+import { isMemoryEligibleAgent } from '../domain/utils/memoryEligibility.js';
+import { mergePlanPr } from '../domain/utils/mergePlanPr.js';
+import { fetchGitHubToken } from '../domain/utils/gitHubTokenResolver.js';
 
 /**
  * Best-effort: record a task_failed automation log event for PR-linked tasks.
@@ -31,7 +42,7 @@ function recordTaskFailed(params: {
       taskId: params.taskId,
       error: params.error,
       errorCode: params.errorCode,
-      /* v8 ignore start -- ts-type: boolean branch of conditional spread is unreachable to v8 when dispatchedAt is always set in test fixtures @preserve */
+      /* v8 ignore start -- test-infra: FakeFirestore cannot simulate Firestore Timestamp for dispatchedAt in task_failed scenarios @preserve */
       ...(params.task.dispatchedAt !== undefined && {
         duration: params.completedAt.getTime() - new Date(params.task.dispatchedAt.toDate()).getTime(),
       }),
@@ -43,10 +54,83 @@ function recordTaskFailed(params: {
   });
 }
 
+function shouldQueueExecutionMemoryPostRun(params: {
+  agentType: string | undefined; // @allow-undefined-type -- required parameter, not optional property
+  existingStatus: string | undefined; // @allow-undefined-type -- required parameter, not optional property
+}): boolean {
+  return (
+    loadConfig().executionMemoryEnabled
+    && isMemoryEligibleAgent(params.agentType)
+    && params.existingStatus === undefined
+  );
+}
+
+function recordRemediationDecision(params: {
+  repository: string;
+  prNumber: number;
+  userId: string;
+  required: boolean;
+  signal: '0' | '1' | 'missing';
+  taskId?: string;
+}): void {
+  getServices().automationLog.record(
+    { repository: params.repository, prNumber: params.prNumber },
+    {
+      type: 'remediation_decision',
+      required: params.required,
+      source: 'review_result',
+      signal: params.signal,
+      ...(params.taskId !== undefined && { taskId: params.taskId }),
+    },
+    params.userId,
+  ).catch((e: unknown) => {
+    getServices().logger.warn(
+      { error: e, repository: params.repository, prNumber: params.prNumber },
+      'Failed to record remediation decision automation log',
+    );
+  });
+}
+
+function resolveLogRuntime(workerType: string): LogRuntime {
+  return workerType.startsWith('codex') ? 'codex' : 'claude';
+}
+
+interface TaskFormatterEntry {
+  runtime: LogRuntime;
+  state: FormatterState;
+  lastSequence: number;
+}
+
 export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // Per-task formatter state: persists tool_use_id→name mappings across HTTP requests
   // so Read suppression works even when assistant + tool_result land in different log chunks
-  const taskFormatterStates = new Map<string, FormatterState>();
+  const taskFormatterStates = new Map<string, TaskFormatterEntry>();
+
+  async function flushPendingTaskLogLines(taskId: string): Promise<void> {
+    const formatterEntry = taskFormatterStates.get(taskId);
+    if (formatterEntry === undefined) return;
+
+    taskFormatterStates.delete(taskId);
+
+    const pendingLines = flushLogChunkFormatterForRuntime(
+      formatterEntry.runtime,
+      formatterEntry.lastSequence + 1,
+      Timestamp.now(),
+      formatterEntry.state,
+    );
+
+    if (pendingLines.length === 0) {
+      return;
+    }
+
+    const lineResult = await getServices().logLineRepo.storeBatch(taskId, pendingLines);
+    if (!lineResult.ok) {
+      getServices().logger.error(
+        { taskId, error: lineResult.error },
+        'Failed to flush pending log lines on task completion',
+      );
+    }
+  }
 
   // ============================================================
   // INTERNAL WEBHOOK ROUTES (X-Internal-Auth + HMAC Signature)
@@ -73,12 +157,19 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       planning_pr_url?: string;
       planning_unclear_clarification?: string;
       execution_outcome_label?: 'implemented' | 'already_completed';
-      execution_superpowers_executing_plans_used?: '0' | '1';
+      execution_superpowers_subagent_driven_dev_used?: '0' | '1';
       execution_superpowers_requesting_code_review_used?: '0' | '1';
+      execution_memory_ids_used?: string;
+      execution_memory_ids_rejected?: string;
+      execution_memory_usage_summary?: string;
       execution_linear_issue_url?: string;
+      review_id?: string;
       review_comments_posted?: string;
       review_types?: string;
       requirements_tracker_updated?: string;
+      gh_actions_status?: string;
+      needs_remediation?: string;
+      requires_re_review?: string;
     };
     error?: {
       code: string;
@@ -122,11 +213,18 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 planning_superpowers_writing_plans_used: { type: 'string' },
                 planning_linear_url: { type: 'string' },
                 execution_outcome_label: { type: 'string' },
-                execution_superpowers_executing_plans_used: { type: 'string' },
+                execution_superpowers_subagent_driven_dev_used: { type: 'string' },
                 execution_superpowers_requesting_code_review_used: { type: 'string' },
+                execution_memory_ids_used: { type: 'string' },
+                execution_memory_ids_rejected: { type: 'string' },
+                execution_memory_usage_summary: { type: 'string' },
+                review_id: { type: 'string' },
                 review_comments_posted: { type: 'string' },
                 review_types: { type: 'string' },
                 requirements_tracker_updated: { type: 'string' },
+                gh_actions_status: { type: 'string' },
+                needs_remediation: { type: 'string' },
+                requires_re_review: { type: 'string' },
               },
               required: [],
             },
@@ -185,7 +283,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Step 2: Validate HMAC signature
       const signatureResult = await validateWebhookSignature(request, {
-        /* v8 ignore start -- ts-type: Result.ok check and optional chaining create type narrowing branches @preserve */
         getWebhookSecret: async (taskId) => {
           const services = getServices();
           const taskResult = await services.codeTaskRepo.findById(taskId);
@@ -193,14 +290,11 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             return null;
           }
           return taskResult.value.webhookSecret ?? null;
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
         },
-        /* v8 ignore stop @preserve */
       });
 
       if (!signatureResult.ok) {
         request.log.warn({ error: signatureResult.error }, 'Webhook signature validation failed');
-        /* v8 ignore stop @preserve */
         // @allow-raw-send: preserve domain-specific signature error codes for webhook validation
         return reply.status(401).send({
           success: false,
@@ -211,7 +305,20 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         });
       }
 
-      const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService, metricsClient, linearIssueService, linearAgentClient, logger, firestore } = getServices();
+      const {
+        codeTaskRepo,
+        statusMirrorService,
+        whatsappNotifier,
+        rateLimitService,
+        metricsClient,
+        linearIssueService,
+        linearAgentClient,
+        logger,
+        firestore,
+        gitHubPRSummaryRepo,
+        gitHubPRClient,
+        userServiceClient,
+      } = getServices();
       const { taskId, status, result, error } = request.body;
 
       // Extract traceId from headers for downstream calls
@@ -232,9 +339,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       );
 
       // Get task details first (to check for actionId)
-      /* v8 ignore start -- ts-type: Result.ok check creates type narrowing branch @preserve */
       const taskResult = await codeTaskRepo.findById(taskId);
-      /* v8 ignore stop @preserve */
       if (!taskResult.ok) {
         request.log.error({ taskId, error: taskResult.error }, 'Task not found');
         return reply.fail('NOT_FOUND', 'Task not found');
@@ -261,6 +366,16 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       ): Promise<{ ok: true } | { ok: false; message: string }> => {
         if (task.linearIssueId === undefined) {
           return { ok: false, message: 'Planning enforcement requires original linearIssueId' };
+        }
+
+        if (outcome === 'planned') {
+          const prUrl = planningResult.planning_pr_url ?? planningResult.prUrl;
+          if (!prUrl) {
+            return {
+              ok: false,
+              message: 'Planning enforcement requires a PR URL for planned outcomes — all planned tasks must produce an evidence PR',
+            };
+          }
         }
 
         const originalIssueValidation = await linearAgentClient.validateIssue({
@@ -299,7 +414,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
 
           if (isComplex) {
+            /* v8 ignore start -- ts-type: result field ?? fallback for optional webhook payload fields @preserve */
             const subtaskUrls = (planningResult.planning_subtask_urls ?? '')
+            /* v8 ignore stop @preserve */
               .split(',')
               .map((s) => s.trim())
               .filter((s) => s !== '');
@@ -345,7 +462,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 }
               }
 
+              /* v8 ignore start -- ts-type: result field ?? fallback for optional webhook payload fields @preserve */
               const planningPrUrl = planningResult.planning_pr_url ?? '';
+              /* v8 ignore stop @preserve */
               if (planningPrUrl !== '') {
                 const prComment = await linearAgentClient.addComment({
                   userId: task.userId,
@@ -363,19 +482,19 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   : `partial URL extraction (${String(subtaskUrls.length)} URLs < ${String(originalIssue.childCount)} children)`;
               request.log.warn(
                 { taskId, linearIssueId: task.linearIssueId, subtaskUrlCount: subtaskUrls.length, childCount: originalIssue.childCount },
-                `Complex planning: ${reason} — falling back to fetchIssueTree`
+                `Complex planning: ${reason} — falling back to fetchDirectChildrenLive`
               );
 
-              const treeResult = await linearAgentClient.fetchIssueTree({
+              const directChildrenResult = await linearAgentClient.fetchDirectChildrenLive({
                 userId: task.userId,
                 issueId: originalIssueUuid,
               });
-              if (!treeResult.ok) {
-                return { ok: false, message: `Failed to fetch issue tree: ${treeResult.error.message}` };
+              if (!directChildrenResult.ok) {
+                return { ok: false, message: `Failed to fetch live direct children: ${directChildrenResult.error.message}` };
               }
 
-              const directChildren = treeResult.value.descendants.filter(
-                (d) => d.parentId === originalIssueUuid
+              const directChildren = directChildrenResult.value.filter(
+                (child) => child.parentId === originalIssueUuid
               );
 
               for (const child of directChildren) {
@@ -400,7 +519,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 }
               }
 
+              /* v8 ignore start -- ts-type: result field ?? fallback for optional webhook payload fields @preserve */
               const planningPrUrl = planningResult.planning_pr_url ?? '';
+              /* v8 ignore stop @preserve */
               if (planningPrUrl !== '') {
                 const prComment = await linearAgentClient.addComment({
                   userId: task.userId,
@@ -429,10 +550,12 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return { ok: true };
         }
 
+        /* v8 ignore start -- ts-type: result field ?? fallback for optional webhook payload fields @preserve */
         const clarificationMessage =
           planningResult.planning_unclear_clarification ??
           taskErrorForUnclear?.message ??
           'Planning agent reported unclear outcome';
+        /* v8 ignore stop @preserve */
 
         const unclearComment = await linearAgentClient.addComment({
           userId: task.userId,
@@ -468,6 +591,14 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
 
         if (executionResult.execution_outcome_label === 'already_completed') {
+          if (executionResult.prUrl == null || executionResult.prUrl === '') {
+            return {
+              ok: false,
+              code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
+              message: 'already_completed outcome requires a PR URL as evidence',
+            };
+          }
+
           const routedIssueValidation = await linearAgentClient.validateIssue({
             userId: task.userId,
             identifier: task.linearIssueId,
@@ -733,6 +864,43 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           await deletePRTaskLock(firestore, task.repository, task.prNumber, request.log);
         }
       };
+
+      const triggerDrainForPR = async (): Promise<void> => {
+        if (task.prNumber === undefined) return;
+        logger.info({ taskId, prNumber: task.prNumber }, 'Triggering post-completion drain for same-PR queued tasks');
+        try {
+          const services = getServices();
+          await drainTaskQueue({
+            logger,
+            codeTaskRepo: services.codeTaskRepo,
+            taskDispatcher: services.taskDispatcher,
+            linearAgentClient: services.linearAgentClient,
+            whatsappNotifier: services.whatsappNotifier,
+            workerSettingsRepo: services.workerSettingsRepo,
+            taskEnqueueService: services.taskEnqueueService,
+            orchestratorSecret: loadConfig().orchestratorSecret,
+            executionMemory: {
+              /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes is not tracked after service override tests @preserve */
+              ...(services.executionMemoryQueryClient !== undefined && {
+                queryClient: services.executionMemoryQueryClient,
+              }),
+              ...(services.executionMemoryEmbeddingClient !== undefined && {
+                embeddingClient: services.executionMemoryEmbeddingClient,
+              }),
+              ...(services.executionMemoryRepo !== undefined && {
+                executionMemoryRepo: services.executionMemoryRepo,
+              }),
+              ...(services.executionMemoryApplicationRepo !== undefined && {
+                executionMemoryApplicationRepo: services.executionMemoryApplicationRepo,
+              }),
+              /* v8 ignore stop @preserve */
+            },
+          });
+        } catch (drainErr) {
+          logger.warn({ taskId, prNumber: task.prNumber, error: drainErr }, 'Post-completion drain failed (non-blocking)');
+        }
+      };
+
       // Step 3: Update task based on status
       if (status === 'completed') {
         // Trace which agent type is being handled for debugging
@@ -993,7 +1161,68 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
         }
 
-        // Extract PR number from prUrl for findByPR correlation (INT-465)
+        if (task.agentType === 'remediation') {
+          if (result === undefined) {
+            request.log.error(
+              { taskId, routedIssueId: task.linearIssueId },
+              'Remediation completion missing result payload'
+            );
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              error: {
+                code: 'REMEDIATION_AGENT_ENFORCEMENT_FAILED',
+                message: 'Remediation completion missing result payload',
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return reply.fail('INTERNAL_ERROR', failResult.error.message);
+            }
+            await cleanupLockIfPR();
+
+            recordTaskFailed({
+              task, taskId, completedAt,
+              error: 'Remediation completion missing result payload',
+              errorCode: 'REMEDIATION_AGENT_ENFORCEMENT_FAILED',
+            });
+
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return await reply.send({ received: true });
+          }
+
+          if (result.execution_outcome_label === 'implemented' && !result.prUrl) {
+            request.log.error(
+              { taskId, routedIssueId: task.linearIssueId },
+              'Remediation deterministic enforcement failed: no PR URL for implemented outcome'
+            );
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              result,
+              error: {
+                code: 'REMEDIATION_AGENT_ENFORCEMENT_FAILED',
+                message: 'Remediation enforcement requires result.prUrl for implemented outcome',
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return reply.fail('INTERNAL_ERROR', failResult.error.message);
+            }
+            await cleanupLockIfPR();
+
+            recordTaskFailed({
+              task, taskId, completedAt,
+              error: 'Remediation enforcement requires result.prUrl for implemented outcome',
+              errorCode: 'REMEDIATION_AGENT_ENFORCEMENT_FAILED',
+            });
+
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return await reply.send({ received: true });
+          }
+        }
+
+        // Extract PR number from prUrl for findByPR correlation (INT-465).
         let prNumber: number | undefined;
         if (result?.prUrl) {
           const match = /\/pull\/(\d+)/.exec(result.prUrl);
@@ -1001,17 +1230,42 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             prNumber = Number(match[1]);
           }
         }
+        if (prNumber === undefined && task.prNumber !== undefined) {
+          prNumber = task.prNumber;
+        }
 
         const resolvedStatus =
           task.agentType === 'planning' ? 'planned' :
           task.agentType === 'review' ? 'reviewed' : 'implemented';
+        const executionMemoryPostRun = shouldQueueExecutionMemoryPostRun({
+          agentType: task.agentType,
+          existingStatus: task.executionMemoryPostRun?.status,
+        })
+          ? {
+              status: 'pending' as const,
+              attempts: 0,
+              generatedMemoryIds: [],
+            }
+          : undefined;
+        const remediationRequiresReReview =
+          task.agentType === 'remediation' && result?.requires_re_review !== undefined
+            ? result.requires_re_review === '1'
+            : undefined;
         const updateResult = await codeTaskRepo.update(taskId, {
           status: resolvedStatus,
           completedAt,
-          ...(result !== undefined && { result }),
+          ...(result !== undefined && {
+            result: request.body.resumedCompletion === true && task.result !== undefined
+              ? { ...task.result, ...result }
+              : result,
+          }),
           error: null,
           ...(prNumber !== undefined && { prNumber }),
           ...(result?.branch !== undefined && { prBranch: result.branch }),
+          ...(executionMemoryPostRun !== undefined && { executionMemoryPostRun }),
+          ...(remediationRequiresReReview !== undefined && {
+              requiresReReview: remediationRequiresReReview,
+            }),
           callbackReceived: true,
         });
 
@@ -1021,34 +1275,325 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
         await cleanupLockIfPR();
 
-        // Best-effort In Review transition for agent types without deterministic enforcement
-        // (planning, execution, and pull_request agents handle this in their own enforcement paths)
-        /* v8 ignore start -- ts-type: optional property checks create type narrowing branches @preserve */
-        if (task.agentType !== 'execution' && task.agentType !== 'pull_request' && task.agentType !== 'planning' && prNumber !== undefined && task.linearIssueId !== undefined) {
-          await linearIssueService.markInReview(task.userId, task.linearIssueId);
-        }
-        /* v8 ignore stop @preserve */
-
-        // Notify actions-agent if task has actionId
-        if (task.actionId) {
-          /* v8 ignore start -- ts-type: optional chaining on result?.prUrl creates type narrowing branch @preserve */
-          const actionsResult = await actionsAgentClient.updateActionStatus(task.actionId, 'completed', result?.prUrl ? {
-            prUrl: result.prUrl,
-          } : undefined, traceId);
-          /* v8 ignore stop @preserve */
-
-          if (!actionsResult.ok) {
-            request.log.warn(
-              { taskId, actionId: task.actionId, error: actionsResult.error },
-              'Failed to notify actions-agent - action status may be stale'
-            );
+        // Best-effort: update PR summary when review completes
+        if (resolvedStatus === 'reviewed' && prNumber !== undefined) {
+          try {
+            const tokenResult = await userServiceClient.getOAuthToken(task.userId, 'github');
+            if (tokenResult.ok) {
+              const parsed = parseOwnerRepo(task.repository);
+              /* v8 ignore start -- ts-type: parseOwnerRepo cannot return null for valid task.repository (always owner/repo format) @preserve */
+              if (parsed !== null) {
+              /* v8 ignore stop @preserve */
+                const detailsResult = await gitHubPRClient.getPullRequestDetails(tokenResult.value.accessToken, parsed.owner, parsed.repo, prNumber);
+                if (detailsResult.ok) {
+                  await gitHubPRSummaryRepo.upsert({
+                    repository: task.repository,
+                    pullRequestNumber: prNumber,
+                    lastActivityAt: new Date(),
+                    lastReviewedCommitSha: detailsResult.value.headSha,
+                    lastReviewNeedsRemediation: result?.needs_remediation ?? null,
+                  });
+                  request.log.info({ taskId, prNumber, headSha: detailsResult.value.headSha }, 'Updated lastReviewedCommitSha on PR summary');
+                }
+              }
+            }
+          } catch (reviewShaError: unknown) {
+            request.log.warn({ error: reviewShaError, taskId, prNumber }, 'Failed to update lastReviewedCommitSha (best-effort)');
           }
         }
 
+        // Best-effort: create remediation task when review finds actionable issues
+        if (task.agentType === 'review' && prNumber !== undefined && result !== undefined) {
+          try {
+            const remediationSignal: '0' | '1' | 'missing' =
+              result.needs_remediation === '0' || result.needs_remediation === '1'
+                ? result.needs_remediation
+                : 'missing';
+            if (result.needs_remediation === '0') {
+              recordRemediationDecision({
+                repository: task.repository,
+                prNumber,
+                userId: task.userId,
+                required: false,
+                signal: remediationSignal,
+              });
+
+              // Best-effort: set review-outcome label on the associated Linear issue
+              // Skip if PR is already merged — handlePrClose already cleaned up labels.
+              let prAlreadyMerged = false;
+              try {
+                const prMergeSummary = await gitHubPRSummaryRepo.findByPullRequest(task.repository, prNumber);
+                prAlreadyMerged = prMergeSummary.ok && prMergeSummary.value !== null && prMergeSummary.value.mergedAt !== null;
+              } catch {
+                // gitHubPRSummaryRepo may not be fully initialized — assume not merged
+              }
+
+              // Fallback: if summary says not-merged, check GitHub API directly.
+              // The summary is updated by a webhook that may arrive after this callback.
+              if (!prAlreadyMerged) {
+                try {
+                  const tokenResult = await userServiceClient.getOAuthToken(task.userId, 'github');
+                  if (tokenResult.ok) {
+                    const parsed = parseOwnerRepo(task.repository);
+                    /* v8 ignore start -- ts-type: task creation helpers always defined with valid owner/repo strings; no fake mechanism can inject a malformed repository field post-task-creation @preserve */
+                    if (parsed !== null) {
+                    /* v8 ignore stop @preserve */
+                      const prStatus = await gitHubPRClient.getPullRequestStatus(tokenResult.value.accessToken, parsed.owner, parsed.repo, prNumber);
+                      if (prStatus.ok && prStatus.value.mergedAt !== null) {
+                        prAlreadyMerged = true;
+                        request.log.info({ taskId, prNumber },
+                          'prAlreadyMerged detected via GitHub API fallback (summary was stale)');
+                      }
+                    }
+                  }
+                } catch {
+                  // GitHub API unavailable — proceed with summary-based decision
+                }
+              }
+
+              if (prAlreadyMerged) {
+                request.log.debug({ taskId, prNumber }, 'Skipping review-outcome label — PR already merged');
+              } else {
+              try {
+                const originResult = await codeTaskRepo.findOriginTaskByPR(task.repository, prNumber);
+                let targetLinearIssueId: string | undefined;
+                let targetUserId: string | undefined;
+                let label: string | undefined;
+                let source: string | undefined;
+
+                if (originResult.ok && originResult.value !== null && originResult.value.linearIssueId !== undefined) {
+                  if (originResult.value.agentType === 'planning') {
+                    // Plan-phase reviews do not auto-advance to execution.
+                    // The user must explicitly trigger execution from the UI.
+                    // But we DO auto-merge the plan PR so the plan docs land on development immediately.
+                    request.log.info({ taskId, prNumber, linearIssueId: originResult.value.linearIssueId },
+                      'Plan review passed — auto-merging plan PR (user must explicitly trigger execution)');
+
+                    const planningPrUrl = originResult.value.result?.planning_pr_url ?? originResult.value.result?.prUrl;
+                    if (planningPrUrl !== undefined && planningPrUrl !== '') {
+                      try {
+                        const gitHubToken = await fetchGitHubToken(userServiceClient, task.userId, request.log);
+                        if (gitHubToken !== null) {
+                          const mergeResult = await mergePlanPr(
+                            { logger: request.log, gitHubPRClient },
+                            { planningPrUrl, repository: task.repository, token: gitHubToken },
+                          );
+                          if (mergeResult.ok) {
+                            request.log.info({ prNumber, planningPrUrl }, 'Plan PR auto-merged on review pass');
+                          } else {
+                            request.log.warn({ prNumber, planningPrUrl, error: mergeResult.error }, 'Plan PR auto-merge failed (best-effort)');
+                          }
+                        } else {
+                          request.log.warn({ prNumber }, 'Skipping plan PR auto-merge — no GitHub token available');
+                        }
+                      } catch (mergeError: unknown) {
+                        request.log.warn({ prNumber, planningPrUrl, error: mergeError }, 'Plan PR auto-merge threw (best-effort)');
+                      }
+                    } else {
+                      request.log.debug({ prNumber, taskId: originResult.value.id }, 'No planning_pr_url on origin task — skipping plan PR auto-merge');
+                    }
+                  } else {
+                    targetLinearIssueId = originResult.value.linearIssueId;
+                    targetUserId = originResult.value.userId;
+                    label = 'ready-to-merge';
+                    source = 'origin';
+                  }
+                } else {
+                  // Fallback: use review task's own issue (common for external PRs)
+                  targetLinearIssueId = task.linearIssueId;
+                  targetUserId = task.userId;
+                  label = 'ready-to-merge';
+                  source = 'review-fallback';
+
+                  if (!originResult.ok) {
+                    request.log.warn({ taskId, prNumber, error: originResult.error },
+                      'Origin task lookup failed, falling back to review task issue');
+                  } else {
+                    request.log.info({ taskId, prNumber,
+                      originFound: originResult.value !== null,
+                      originHasLinearId: originResult.value?.linearIssueId !== undefined },
+                      'No origin task with linearIssueId, falling back to review task issue');
+                  }
+                }
+
+                if (targetLinearIssueId === undefined) {
+                  request.log.warn({ taskId, prNumber },
+                    'No Linear issue available for review-outcome label — skipping');
+                } else {
+                  const issueValidation = await linearAgentClient.validateIssue({
+                    userId: targetUserId!,
+                    identifier: targetLinearIssueId,
+                  });
+                  if (issueValidation.ok) {
+                    const labelResult = await linearAgentClient.updateIssueMetadata({
+                      userId: targetUserId!,
+                      issueId: issueValidation.value.id,
+                      addLabels: [label!],
+                    });
+                    if (labelResult.ok) {
+                      if (labelResult.value.droppedLabels.length > 0) {
+                        request.log.warn({ taskId, prNumber, droppedLabels: labelResult.value.droppedLabels, linearIssueId: targetLinearIssueId },
+                          'Review-outcome label not found in Linear team — label not applied');
+                      } else {
+                        request.log.info({ taskId, prNumber, label, linearIssueId: targetLinearIssueId, source },
+                          'Set review-outcome label');
+
+                        // Best-effort: recompute group summary with the new label so
+                        // cached aggregateStatus reflects the actionable state.
+                        const { groupSummaryRepo: summaryRepoForLabel } = getServices();
+                        if (summaryRepoForLabel !== undefined && targetLinearIssueId !== undefined) {
+                          const updatedLabels: { id: string; name: string }[] = [
+                            ...issueValidation.value.labels.map((l) => ({ id: '', name: l })),
+                            { id: '', name: label! },
+                          ];
+                          void summaryRepoForLabel.recomputeWithLabels(
+                            targetUserId!, targetLinearIssueId, updatedLabels, completedAt.toISOString(),
+                          ).catch((recomputeErr: unknown) => {
+                            request.log.warn({ linearIssueId: targetLinearIssueId, error: recomputeErr },
+                              'Failed to recompute group summary after review-outcome label (best-effort)');
+                          });
+                        }
+                      }
+                    } else {
+                      request.log.warn({ taskId, prNumber, label, error: labelResult.error },
+                        'Failed to set review-outcome label (best-effort)');
+                    }
+                  } else {
+                    request.log.warn({ taskId, prNumber, linearIssueId: targetLinearIssueId, error: issueValidation.error },
+                      'Failed to validate issue for review-outcome label (best-effort)');
+                  }
+                }
+              } catch (labelError: unknown) {
+                request.log.warn({ error: labelError, taskId, prNumber }, 'Failed to set review-outcome label (best-effort)');
+              }
+              }
+            } else {
+              // Best-effort: remove stale review-outcome label from the associated Linear issue.
+              // A prior passing review may have set ready-to-merge / ready-to-implement;
+              // now that remediation is needed, clear it so the UI no longer shows merge-ready.
+              try {
+                const originResult = await codeTaskRepo.findOriginTaskByPR(task.repository, prNumber);
+                let targetLinearIssueId: string | undefined; // @allow-undefined-type -- let binding requires union, not optional property
+                let targetUserId: string;
+                let labelToRemove: string;
+
+                if (originResult.ok && originResult.value !== null && originResult.value.linearIssueId !== undefined) {
+                  targetLinearIssueId = originResult.value.linearIssueId;
+                  targetUserId = originResult.value.userId;
+                  labelToRemove = originResult.value.agentType === 'planning' ? 'ready-to-implement' : 'ready-to-merge';
+                } else {
+                  targetLinearIssueId = task.linearIssueId;
+                  targetUserId = task.userId;
+                  labelToRemove = 'ready-to-merge';
+                }
+
+                if (targetLinearIssueId !== undefined) {
+                  await linearIssueService.removeLabel(targetUserId, targetLinearIssueId, labelToRemove);
+                  request.log.info({ taskId, prNumber, label: labelToRemove, linearIssueId: targetLinearIssueId },
+                    'Removed stale review-outcome label after negative review');
+
+                  // Passing [] clears all label flags in the summary (same pattern as handlePrClose).
+                  // Safe because latestReviewNeedsRemediation is already true, which independently
+                  // blocks the merge-readiness check in deriveAggregateStatusFromSummary.
+                  const { groupSummaryRepo: summaryRepoForRemoval } = getServices();
+                  if (summaryRepoForRemoval !== undefined) {
+                    void summaryRepoForRemoval.recomputeWithLabels(
+                      targetUserId, targetLinearIssueId, [], completedAt.toISOString(),
+                    ).catch((recomputeErr: unknown) => {
+                      request.log.warn({ linearIssueId: targetLinearIssueId, error: recomputeErr },
+                        'Failed to recompute group summary after label removal (best-effort)');
+                    });
+                  }
+                }
+              } catch (labelRemovalError: unknown) {
+                request.log.warn({ error: labelRemovalError, taskId, prNumber },
+                  'Failed to remove stale review-outcome label (best-effort)');
+              }
+
+              const { createRemediationTaskFn, logger: remediationLogger } = getServices();
+              if (createRemediationTaskFn !== undefined) {
+                const remediationResult = await createRemediationTaskFn(
+                  remediationLogger,
+                  {
+                    repository: task.repository,
+                    prNumber,
+                    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard, repository always contains '/' @preserve */
+                    senderLogin: task.repository.split('/')[0] ?? task.userId,
+                    /* v8 ignore stop @preserve */
+                    workerType: 'auto',
+                    eventId: taskId,
+                    ...(task.baseBranch !== undefined && { baseBranch: task.baseBranch }),
+                    ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+                    ...(task.prBranch !== undefined && { prBranch: task.prBranch }),
+                  },
+                );
+                if (remediationResult.ok) {
+                  request.log.info(
+                    { taskId, prNumber, remediationTaskId: remediationResult.value.taskId },
+                    'Created remediation task from review task-complete',
+                  );
+                  recordRemediationDecision({
+                    repository: task.repository,
+                    prNumber,
+                    userId: task.userId,
+                    required: true,
+                    signal: remediationSignal,
+                    taskId: remediationResult.value.taskId,
+                  });
+                } else {
+                  request.log.warn(
+                    { taskId, prNumber, error: remediationResult.error },
+                    'Failed to create remediation task from review task-complete (best-effort)',
+                  );
+                  recordRemediationDecision({
+                    repository: task.repository,
+                    prNumber,
+                    userId: task.userId,
+                    required: true,
+                    signal: remediationSignal,
+                  });
+                }
+              } else {
+                request.log.warn({ taskId, prNumber }, 'createRemediationTaskFn not configured, skipping remediation creation');
+                recordRemediationDecision({
+                  repository: task.repository,
+                  prNumber,
+                  userId: task.userId,
+                  required: true,
+                  signal: remediationSignal,
+                });
+              }
+            }
+          } catch (remediationError: unknown) {
+            request.log.warn({ error: remediationError, taskId, prNumber }, 'Unexpected error during remediation task creation (best-effort)');
+            recordRemediationDecision({
+              repository: task.repository,
+              prNumber,
+              userId: task.userId,
+              required: true,
+              signal:
+                result.needs_remediation === '0' || result.needs_remediation === '1'
+                  ? result.needs_remediation
+                  : 'missing',
+            });
+          }
+        }
+
+        // Best-effort In Review transition for agent types without deterministic enforcement
+        // (planning, execution, and pull_request agents handle this in their own enforcement paths)
+        if (task.agentType !== 'execution' && task.agentType !== 'pull_request' && task.agentType !== 'planning' && task.agentType !== 'remediation' && prNumber !== undefined && task.linearIssueId !== undefined) {
+          await linearIssueService.markInReview(task.userId, task.linearIssueId);
+        }
+
+        await statusMirrorService.mirrorStatus({
+          actionId: task.actionId,
+          taskStatus: resolvedStatus,
+          ...(result?.prUrl !== undefined && { resourceUrl: result.prUrl }),
+          traceId,
+        });
+
         // Send WhatsApp notification (use updated task with result populated)
-        /* v8 ignore start -- ts-type: spread with boolean shorthand creates complex type that requires assertion @preserve */
         const completedTask = { ...task, status: resolvedStatus, ...(result !== undefined && { result }) } as typeof task;
-        /* v8 ignore stop @preserve */
 
         // INT-628: If planning agent completed, send notification with button to proceed to execution
         if (task.agentType === 'planning') {
@@ -1077,26 +1622,20 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
         }
 
-        // Record task completion for rate limiting (fire and forget)
         rateLimitService.recordTaskComplete(task.userId).catch((err) => {
           request.log.error({ taskId, userId: task.userId, error: err }, 'Failed to record task completion for rate limiting');
         });
-
-        // Record metrics (fire and forget)
         metricsClient.incrementTasksCompleted(task.workerType, resolvedStatus).catch((err) => {
           request.log.warn({ taskId, error: err }, 'Failed to record task completion metric');
         });
-        /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
         if (request.body.duration) {
           metricsClient.recordTaskDuration(task.workerType, request.body.duration).catch((err) => {
             request.log.warn({ taskId, error: err }, 'Failed to record task duration metric');
           });
         }
-        /* v8 ignore stop @preserve */
 
         // Verify result was stored
         const verifyResult = await codeTaskRepo.findById(taskId);
-        /* v8 ignore start -- ts-type: ternary operators create type narrowing branches @preserve */
         logger.info(
           {
             taskId,
@@ -1104,13 +1643,12 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             prUrl: result?.prUrl,
             branch: result?.branch,
             storedHasResult: verifyResult.ok && verifyResult.value.result !== undefined,
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
             storedResultKeys: verifyResult.ok && verifyResult.value.result ? Object.keys(verifyResult.value.result) : [],
-            /* v8 ignore stop @preserve */
           },
-        /* v8 ignore stop @preserve */
           'Task marked as completed'
         );
+        await flushPendingTaskLogLines(taskId);
+        await triggerDrainForPR();
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
@@ -1135,6 +1673,8 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               return reply.fail('INTERNAL_ERROR', failResult.error.message);
             }
             await cleanupLockIfPR();
+            await flushPendingTaskLogLines(taskId);
+            await triggerDrainForPR();
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
           }
@@ -1147,6 +1687,20 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             code: taskError.code,
             message: taskError.message,
           },
+          ...(shouldQueueExecutionMemoryPostRun({
+            agentType: task.agentType,
+            existingStatus: task.executionMemoryPostRun?.status,
+          })
+            /* v8 ignore start -- source-map: multiline ternary is misattributed despite execution and planning webhook tests covering both branches @preserve */
+            ? {
+                executionMemoryPostRun: {
+                  status: 'pending' as const,
+                  attempts: 0,
+                  generatedMemoryIds: [],
+                },
+              }
+            : {}),
+          /* v8 ignore stop @preserve */
           callbackReceived: true,
         });
 
@@ -1156,37 +1710,25 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
         await cleanupLockIfPR();
 
-        // Notify actions-agent if task has actionId
-        /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
-        if (task.actionId) {
-          const actionsResult = await actionsAgentClient.updateActionStatus(task.actionId, 'failed', {
-            error: taskError.message,
-          }, traceId);
-
-          if (!actionsResult.ok) {
-            request.log.warn(
-              { taskId, actionId: task.actionId, error: actionsResult.error },
-              'Failed to notify actions-agent - action status may be stale'
-            );
-          }
-        }
+        await statusMirrorService.mirrorStatus({
+          actionId: task.actionId,
+          taskStatus: 'failed',
+          errorMessage: taskError.message,
+          traceId,
+        });
 
         await whatsappNotifier.notifyTaskFailed(
           task.userId,
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
           task,
-          /* v8 ignore stop @preserve */
           taskError
         );
 
         rateLimitService.recordTaskComplete(task.userId).catch((err) => {
           request.log.error({ taskId, userId: task.userId, error: err }, 'Failed to record task completion for rate limiting');
         });
-
         metricsClient.incrementTasksCompleted(task.workerType, 'failed').catch((err) => {
           request.log.warn({ taskId, error: err }, 'Failed to record task completion metric');
         });
-        /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
         if (request.body.duration) {
           metricsClient.recordTaskDuration(task.workerType, request.body.duration).catch((err) => {
             request.log.warn({ taskId, error: err }, 'Failed to record task duration metric');
@@ -1194,6 +1736,8 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
 
         request.log.info({ taskId, error: taskError }, 'Task marked as failed');
+        await flushPendingTaskLogLines(taskId);
+        await triggerDrainForPR();
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
@@ -1215,24 +1759,12 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
         await cleanupLockIfPR();
 
-        // Notify actions-agent if task has actionId
-        // Design line 328: interrupted → failed
-        /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
-        if (task.actionId) {
-        /* v8 ignore stop @preserve */
-          const actionsResult = await actionsAgentClient.updateActionStatus(task.actionId, 'failed', {
-            error: 'Worker was interrupted during task execution',
-          }, traceId);
-
-          if (!actionsResult.ok) {
-            request.log.warn(
-              { taskId, actionId: task.actionId, error: actionsResult.error },
-              'Failed to notify actions-agent - action status may be stale'
-            );
-            // Don't fail the webhook - task update succeeded
-          }
-        }
-        /* v8 ignore stop @preserve */
+        await statusMirrorService.mirrorStatus({
+          actionId: task.actionId,
+          taskStatus: 'interrupted',
+          errorMessage: 'Worker was interrupted during task execution',
+          traceId,
+        });
 
         // Send WhatsApp notification for interrupted task
         await whatsappNotifier.notifyTaskFailed(
@@ -1244,12 +1776,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
         );
 
-        // Record task completion for rate limiting (fire and forget)
         rateLimitService.recordTaskComplete(task.userId).catch((err) => {
           request.log.error({ taskId, userId: task.userId, error: err }, 'Failed to record task completion for rate limiting');
         });
-
-        // Record metrics (fire and forget)
         metricsClient.incrementTasksCompleted(task.workerType, 'interrupted').catch((err) => {
           request.log.warn({ taskId, error: err }, 'Failed to record task completion metric');
         });
@@ -1260,12 +1789,15 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
 
         request.log.info({ taskId }, 'Task marked as interrupted');
+        await flushPendingTaskLogLines(taskId);
+        await triggerDrainForPR();
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
-      /* v8 ignore stop @preserve */
 
+      /* v8 ignore start -- schema: webhook status enum is exhaustive — cancelled is the last branch, false path unreachable @preserve */
       if (status === 'cancelled') {
+      /* v8 ignore stop @preserve */
         const updateResult = await codeTaskRepo.update(taskId, {
           status: 'cancelled',
           completedAt,
@@ -1282,18 +1814,11 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
         await cleanupLockIfPR();
 
-        /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
-        if (task.actionId) {
-        /* v8 ignore stop @preserve */
-          const actionsResult = await actionsAgentClient.updateActionStatus(task.actionId, 'cancelled', undefined, traceId);
-
-          if (!actionsResult.ok) {
-            request.log.warn(
-              { taskId, actionId: task.actionId, error: actionsResult.error },
-              'Failed to notify actions-agent - action status may be stale'
-            );
-          }
-        }
+        await statusMirrorService.mirrorStatus({
+          actionId: task.actionId,
+          taskStatus: 'cancelled',
+          traceId,
+        });
 
         await whatsappNotifier.notifyTaskFailed(
           task.userId,
@@ -1307,7 +1832,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         rateLimitService.recordTaskComplete(task.userId).catch((err) => {
           request.log.error({ taskId, userId: task.userId, error: err }, 'Failed to record task completion for rate limiting');
         });
-
         metricsClient.incrementTasksCompleted(task.workerType, 'cancelled').catch((err) => {
           request.log.warn({ taskId, error: err }, 'Failed to record task completion metric');
         });
@@ -1318,6 +1842,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
 
         request.log.info({ taskId }, 'Task marked as cancelled');
+        await flushPendingTaskLogLines(taskId);
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
@@ -1408,18 +1933,16 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Step 2: Validate HMAC signature
       const signatureResult = await validateWebhookSignature(request, {
-        /* v8 ignore start -- ts-type: Result.ok check and optional chaining create type narrowing branches @preserve */
         getWebhookSecret: async (taskId) => {
           const services = getServices();
           const taskResult = await services.codeTaskRepo.findById(taskId);
           if (!taskResult.ok) {
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
             return null;
-            /* v8 ignore stop @preserve */
           }
+          /* v8 ignore start -- test-infra: FakeFirestore task fixtures always include webhookSecret so null path unreachable @preserve */
           return taskResult.value.webhookSecret ?? null;
+          /* v8 ignore stop @preserve */
         },
-        /* v8 ignore stop @preserve */
       });
 
       if (!signatureResult.ok) {
@@ -1441,9 +1964,10 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // First log delivery for this task — task might still be dispatched.
       // Update to running and mirror to action.
-      if (!taskFormatterStates.has(taskId)) {
+      let formatterEntry = taskFormatterStates.get(taskId);
+      /* v8 ignore start -- test-infra: FakeFirestore cannot simulate stateful multi-request log delivery with dispatched task @preserve */
+      if (formatterEntry === undefined) {
         const taskResult = await codeTaskRepo.findById(taskId);
-        /* v8 ignore start -- ts-type: Result.ok check creates type narrowing branch @preserve */
         if (taskResult.ok && taskResult.value.status === 'dispatched') {
           await codeTaskRepo.update(taskId, { status: 'running' });
           // Mirror running status to action (non-fatal)
@@ -1453,8 +1977,17 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             traceId: extractOrGenerateTraceId(request.headers),
           });
         }
-        /* v8 ignore stop @preserve */
+        if (taskResult.ok) {
+          const resolvedFormatterEntry: TaskFormatterEntry = {
+            runtime: resolveLogRuntime(taskResult.value.workerType),
+            state: createFormatterState(),
+            lastSequence: 0,
+          };
+          formatterEntry = resolvedFormatterEntry;
+          taskFormatterStates.set(taskId, resolvedFormatterEntry);
+        }
       }
+      /* v8 ignore stop @preserve */
 
       // Step 3: Store chunks in Firestore subcollection
       const logChunks = chunks.map((chunk) => ({
@@ -1472,12 +2005,19 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return reply.fail('INTERNAL_ERROR', storeResult.error.message);
       }
 
-      const state = taskFormatterStates.get(taskId) ?? createFormatterState();
+      const formatter = formatterEntry ?? {
+        runtime: 'claude' as const,
+        state: createFormatterState(),
+        lastSequence: chunks[chunks.length - 1]?.sequence ?? 0,
+      };
       const allLines = chunks.flatMap((chunk) => {
         const chunkTimestamp = Timestamp.fromDate(new Date(chunk.timestamp));
-        return formatLogChunk(chunk.content, chunk.sequence, chunkTimestamp, state);
+        return formatLogChunkForRuntime(formatter.runtime, chunk.content, chunk.sequence, chunkTimestamp, formatter.state);
       });
-      taskFormatterStates.set(taskId, state);
+      formatter.lastSequence = chunks[chunks.length - 1]?.sequence ?? formatter.lastSequence;
+      if (formatterEntry !== undefined) {
+        taskFormatterStates.set(taskId, formatter);
+      }
 
       if (allLines.length > 0) {
         const lineResult = await logLineRepo.storeBatch(taskId, allLines);

@@ -141,10 +141,10 @@ export function parseModelExtractionResponse(
 
     const parsed = JSON.parse(jsonMatch[0]) as unknown;
 
-    /* v8 ignore start -- ts-type: JSON.parse type check @preserve */
+    /* v8 ignore start -- ts-type: type narrowing guard for JSON.parse result, cannot return non-object in practice @preserve */
     if (typeof parsed !== 'object' || parsed === null) {
       /* v8 ignore stop @preserve */
-      /* v8 ignore start -- ts-type: JSON.parse returns object | null, typeof null is 'object' @preserve */
+      /* v8 ignore start -- ts-type: unreachable fallback, JSON.parse always returns object for valid JSON input @preserve */
       return null;
       /* v8 ignore stop @preserve */
     }

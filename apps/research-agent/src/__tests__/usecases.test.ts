@@ -238,7 +238,7 @@ describe('listResearches', () => {
     }
   });
 
-  it('returns user researches', async () => {
+  it('returns user researches as summaries', async () => {
     fakeRepo.addResearch(createTestResearch({ id: 'r1', userId: 'user-123' }));
     fakeRepo.addResearch(createTestResearch({ id: 'r2', userId: 'user-123' }));
     fakeRepo.addResearch(createTestResearch({ id: 'r3', userId: 'other-user' }));
@@ -248,6 +248,14 @@ describe('listResearches', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.items).toHaveLength(2);
+      const firstItem = result.value.items[0];
+      expect(firstItem).toBeDefined();
+      if (firstItem === undefined) return;
+      // Verify summary shape: has llmResultStatuses, lacks full-document fields
+      expect(firstItem.llmResultStatuses).toBeDefined();
+      expect('synthesizedResult' in firstItem).toBe(false);
+      expect('prompt' in firstItem).toBe(false);
+      expect('llmResults' in firstItem).toBe(false);
     }
   });
 

@@ -11,6 +11,20 @@ vi.mock('jose', () => ({
   jwtVerify: vi.fn(),
 }));
 
+vi.mock('@intexuraos/infra-gpt', () => ({
+  EmbeddingClient: vi.fn().mockImplementation(() => ({
+    createEmbedding: vi.fn(),
+  })),
+}));
+
+vi.mock('openai', () => ({
+  default: vi.fn().mockImplementation(() => ({
+    embeddings: {
+      create: vi.fn(),
+    },
+  })),
+}));
+
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 
 import { buildServer } from '../../server.js';
@@ -45,6 +59,8 @@ import type { StatusMirrorService } from '../../infra/services/statusMirrorServi
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
+import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
+import { createAutoArchiveMergedTasksUseCase } from '../../domain/usecases/autoArchiveMergedTasks.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
@@ -52,12 +68,134 @@ import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js'
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
-import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
+import type { GitHubPRClient, PullRequestStatus, PullRequestFile, PullRequestCommit, GitHubPullRequestListItem, GitHubPullRequestDetails, GitHubPRClientError } from '../../domain/ports/gitHubPRClient.js';
+import type { GitHubPRSummaryRepository } from '../../domain/repositories/gitHubPRSummaryRepository.js';
+import type { GitHubPRSummary } from '../../domain/models/gitHubPRSummary.js';
+import type { CreateRemediationTaskRequest, CreateRemediationTaskResult, CreateRemediationTaskError } from '../../domain/usecases/createRemediationTask.js';
+import type { Result } from '@intexuraos/common-core';
+import type { SummaryRepositoryError } from '../../domain/repositories/gitHubPRSummaryRepository.js';
 
 // Mock fetchWithAuth
 vi.mock('@intexuraos/internal-clients', async () => ({
   fetchWithAuth: vi.fn(),
 }));
+
+// Mock drainTaskQueue so tests can assert it is (or is not) called
+vi.mock('../../domain/usecases/drainTaskQueue.js', () => ({
+  drainTaskQueue: vi.fn().mockResolvedValue({ ok: true, value: { action: 'dispatched' } }),
+  _resetDrainGuard: vi.fn(),
+}));
+import * as drainTaskQueueModule from '../../domain/usecases/drainTaskQueue.js';
+
+/**
+ * In-memory fake for GitHubPRSummaryRepository with declarative seeding.
+ */
+class FakeGitHubPRSummaryRepo implements GitHubPRSummaryRepository {
+  private summaries = new Map<string, GitHubPRSummary>();
+
+  private key(repository: string, prNumber: number): string {
+    return `${repository}:${prNumber}`;
+  }
+
+  seedSummary(summary: GitHubPRSummary): void {
+    this.summaries.set(this.key(summary.repository, summary.pullRequestNumber), summary);
+  }
+
+  async upsert(): Promise<Result<void, { code: 'FIRESTORE_ERROR'; message: string }>> {
+    return ok(undefined);
+  }
+
+  async findRecentlyActive(): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>> {
+    return ok([]);
+  }
+
+  async findByPullRequest(repository: string, prNumber: number): Promise<Result<GitHubPRSummary | null, SummaryRepositoryError>> {
+    return ok(this.summaries.get(this.key(repository, prNumber)) ?? null);
+  }
+
+  async findOpenByBaseBranch(): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>> {
+    return ok([]);
+  }
+
+  async findOpenByRepository(): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>> {
+    return ok([]);
+  }
+
+  async findAllOpen(): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>> {
+    return ok([]);
+  }
+}
+
+/**
+ * In-memory fake for GitHubPRClient with declarative seeding.
+ */
+class FakeGitHubPRClient implements GitHubPRClient {
+  private prStatuses = new Map<string, PullRequestStatus>();
+
+  private key(owner: string, repo: string, prNumber: number): string {
+    return `${owner}/${repo}:${prNumber}`;
+  }
+
+  seedPrStatus(owner: string, repo: string, prNumber: number, status: PullRequestStatus): void {
+    this.prStatuses.set(this.key(owner, repo, prNumber), status);
+  }
+
+  async updatePRTitle(): Promise<Result<void, GitHubPRClientError>> {
+    return ok(undefined);
+  }
+
+  async getPullRequestFiles(): Promise<Result<PullRequestFile[], GitHubPRClientError>> {
+    return ok([]);
+  }
+
+  async getPullRequestCommits(): Promise<Result<PullRequestCommit[], GitHubPRClientError>> {
+    return ok([]);
+  }
+
+  async getPullRequestBaseBranch(): Promise<Result<string, GitHubPRClientError>> {
+    return ok('main');
+  }
+
+  async getPullRequestStatus(_token: string, owner: string, repo: string, prNumber: number): Promise<Result<PullRequestStatus, GitHubPRClientError>> {
+    const status = this.prStatuses.get(this.key(owner, repo, prNumber));
+    if (status === undefined) {
+      return ok({ state: 'open' as const, mergedAt: null, headRef: '' });
+    }
+    return ok(status);
+  }
+
+  async postPRComment(): Promise<Result<{ commentId: number }, GitHubPRClientError>> {
+    return ok({ commentId: 1 });
+  }
+
+  async listOpenPullRequestsByBaseBranch(): Promise<Result<GitHubPullRequestListItem[], GitHubPRClientError>> {
+    return ok([]);
+  }
+
+  async getPullRequestDetails(): Promise<Result<GitHubPullRequestDetails, GitHubPRClientError>> {
+    return ok({} as GitHubPullRequestDetails);
+  }
+
+  async getIssueComment(): Promise<Result<{ body: string }, GitHubPRClientError>> {
+    return ok({ body: '' });
+  }
+
+  async updateIssueComment(): Promise<Result<{ commentId: number }, GitHubPRClientError>> {
+    return ok({ commentId: 1 });
+  }
+
+  async mergePullRequest(): Promise<Result<{ sha: string; merged: boolean }, GitHubPRClientError>> {
+    return ok({ sha: '', merged: false });
+  }
+
+  async getCombinedCheckStatus(): Promise<Result<{ state: 'success' | 'failure' | 'pending' }, GitHubPRClientError>> {
+    return ok({ state: 'success' });
+  }
+
+  async listAllOpenPullRequests(): Promise<Result<GitHubPullRequestListItem[], GitHubPRClientError>> {
+    return ok([]);
+  }
+}
 
 describe('POST /internal/webhooks/task-complete', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -66,6 +204,7 @@ describe('POST /internal/webhooks/task-complete', () => {
   let codeTaskRepo: CodeTaskRepository;
   let taskDispatcher: TaskDispatcherService;
   let logChunkRepo: LogChunkRepository;
+  let logLineRepo: LogLineRepository;
   let actionsAgentClient: ActionsAgentClient;
   let mockFetchWithAuth: ReturnType<typeof vi.fn>;
   let mockWhatsAppPublisher: { publishSendMessage: ReturnType<typeof vi.fn> };
@@ -97,7 +236,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       logger,
     });
 
-    const logLineRepo = createFirestoreLogLineRepository({
+    logLineRepo = createFirestoreLogLineRepository({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
     });
@@ -150,7 +289,8 @@ describe('POST /internal/webhooks/task-complete', () => {
         descendants: [],
       })
     );
-    vi.spyOn(linearAgentClient, 'updateIssueMetadata').mockResolvedValue(ok(undefined));
+    vi.spyOn(linearAgentClient, 'fetchDirectChildrenLive').mockResolvedValue(ok([]));
+    vi.spyOn(linearAgentClient, 'updateIssueMetadata').mockResolvedValue(ok({ droppedLabels: [] }));
     vi.spyOn(linearAgentClient, 'addComment').mockResolvedValue(ok({ commentId: 'comment-1' }));
     vi.spyOn(linearAgentClient, 'updateIssueState').mockResolvedValue(ok(undefined));
 
@@ -204,6 +344,8 @@ describe('POST /internal/webhooks/task-complete', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
@@ -254,6 +396,8 @@ describe('POST /internal/webhooks/task-complete', () => {
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
+      autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
@@ -276,6 +420,7 @@ describe('POST /internal/webhooks/task-complete', () => {
   });
 
   afterEach(() => {
+    delete process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'];
     resetServices();
     resetFirestore();
     vi.clearAllMocks();
@@ -527,6 +672,103 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(body.error.code).toBe('INVALID_SIGNATURE');
     });
 
+    it('returns UNKNOWN_TASK when findById fails during HMAC secret lookup (L189)', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_189',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      // Mock findById to fail (simulate DB error during HMAC secret lookup)
+      const spy = vi.spyOn(codeTaskRepo, 'findById').mockResolvedValueOnce(
+        err({ code: 'FIRESTORE_ERROR', message: 'DB unavailable' })
+      );
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: { branch: 'test-branch', commits: 1, summary: 'Test summary' },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('UNKNOWN_TASK');
+      spy.mockRestore();
+    });
+
+    it('returns UNKNOWN_TASK when task has no webhookSecret (L192)', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_192',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      // Mock findById to return task WITHOUT webhookSecret
+      const { webhookSecret: _removed, ...taskWithoutSecret } = task;
+      const spy = vi.spyOn(codeTaskRepo, 'findById').mockResolvedValueOnce(
+        ok(taskWithoutSecret as typeof task)
+      );
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: { branch: 'test-branch', commits: 1, summary: 'Test summary' },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('UNKNOWN_TASK');
+      spy.mockRestore();
+    });
+
     it('accepts valid signed request', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
@@ -571,6 +813,56 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.received).toBe(true);
+    });
+  });
+
+  describe('task lookup after HMAC', () => {
+    it('returns NOT_FOUND when task lookup fails after HMAC validation passes (L230)', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_230',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: { branch: 'test-branch', commits: 1, summary: 'Test summary' },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      // First findById call (HMAC validation) succeeds, second call fails
+      const spy = vi.spyOn(codeTaskRepo, 'findById')
+        .mockResolvedValueOnce(ok(task)) // HMAC lookup succeeds
+        .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'Task vanished' })); // Post-HMAC lookup fails
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('NOT_FOUND');
+      spy.mockRestore();
     });
   });
 
@@ -626,6 +918,232 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.status).toBe('implemented');
       expect(getResult.value.result?.branch).toBe('test-branch');
       expect(getResult.value.callbackReceived).toBe(true);
+    });
+
+    it('flushes a trailing Codex log fragment when the task completes', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'default',
+        workerType: 'codex',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_codex_flush_123',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const lineStoreSpy = vi.spyOn(logLineRepo, 'storeBatch');
+
+      const rawFragment = JSON.stringify({
+        type: 'turn.failed',
+        error: { message: 'boom' },
+      });
+
+      const logsPayload = {
+        taskId: task.id,
+        chunks: [
+          {
+            sequence: 1,
+            content: rawFragment,
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      };
+
+      const logsSig = generateWebhookSignature(logsPayload, 'test-webhook-secret');
+      const logsResponse = await app.inject({
+        method: 'POST',
+        url: '/internal/logs',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': logsSig.timestamp,
+          'x-request-signature': logsSig.signature,
+        },
+        payload: logsPayload,
+      });
+
+      expect(logsResponse.statusCode).toBe(200);
+      expect(lineStoreSpy).not.toHaveBeenCalled();
+
+      const completePayload = {
+        taskId: task.id,
+        status: 'failed' as const,
+        error: {
+          code: 'CODEX_FAILED',
+          message: 'Codex failed',
+        },
+      };
+
+      const completeSig = generateWebhookSignature(completePayload, 'test-webhook-secret');
+      const completeResponse = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': completeSig.timestamp,
+          'x-request-signature': completeSig.signature,
+        },
+        payload: completePayload,
+      });
+
+      expect(completeResponse.statusCode).toBe(200);
+      expect(lineStoreSpy).toHaveBeenCalledOnce();
+      const flushedLines = lineStoreSpy.mock.calls[0]?.[1];
+      expect(flushedLines?.[0]?.text).toBe(rawFragment);
+    });
+
+    it('does not flush extra log lines on task completion when Codex logs already ended with a newline', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'default',
+        workerType: 'codex',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_codex_no_flush_123',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const lineStoreSpy = vi.spyOn(logLineRepo, 'storeBatch');
+      const rawLine = JSON.stringify({
+        type: 'turn.completed',
+        usage: { output_tokens: 1 },
+      }) + '\n';
+
+      const logsPayload = {
+        taskId: task.id,
+        chunks: [
+          {
+            sequence: 1,
+            content: rawLine,
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      };
+      const logsSig = generateWebhookSignature(logsPayload, 'test-webhook-secret');
+      await app.inject({
+        method: 'POST',
+        url: '/internal/logs',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': logsSig.timestamp,
+          'x-request-signature': logsSig.signature,
+        },
+        payload: logsPayload,
+      });
+
+      const completePayload = {
+        taskId: task.id,
+        status: 'failed' as const,
+        error: {
+          code: 'CODEX_FAILED',
+          message: 'Codex failed',
+        },
+      };
+      const completeSig = generateWebhookSignature(completePayload, 'test-webhook-secret');
+      const completeResponse = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': completeSig.timestamp,
+          'x-request-signature': completeSig.signature,
+        },
+        payload: completePayload,
+      });
+
+      expect(completeResponse.statusCode).toBe(200);
+      expect(lineStoreSpy).toHaveBeenCalledTimes(1);
+      expect(lineStoreSpy.mock.calls[0]?.[1]?.[0]?.text).toBe(rawLine.trimEnd());
+    });
+
+    it('logs an error when flushing pending Codex log lines fails on task completion', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'default',
+        workerType: 'codex',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_codex_flush_error_123',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const lineStoreSpy = vi.spyOn(logLineRepo, 'storeBatch');
+      const loggerErrorSpy = vi.spyOn(logger, 'error');
+
+      const rawFragment = JSON.stringify({
+        type: 'turn.failed',
+        error: { message: 'boom' },
+      });
+
+      const logsPayload = {
+        taskId: task.id,
+        chunks: [
+          {
+            sequence: 1,
+            content: rawFragment,
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      };
+      const logsSig = generateWebhookSignature(logsPayload, 'test-webhook-secret');
+      await app.inject({
+        method: 'POST',
+        url: '/internal/logs',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': logsSig.timestamp,
+          'x-request-signature': logsSig.signature,
+        },
+        payload: logsPayload,
+      });
+
+      lineStoreSpy.mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'write failed' }));
+
+      const completePayload = {
+        taskId: task.id,
+        status: 'failed' as const,
+        error: {
+          code: 'CODEX_FAILED',
+          message: 'Codex failed',
+        },
+      };
+      const completeSig = generateWebhookSignature(completePayload, 'test-webhook-secret');
+      const completeResponse = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': completeSig.timestamp,
+          'x-request-signature': completeSig.signature,
+        },
+        payload: completePayload,
+      });
+
+      expect(completeResponse.statusCode).toBe(200);
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: task.id }),
+        'Failed to flush pending log lines on task completion',
+      );
     });
 
     it('maps planning-agent planned completion to planned status and stores flattened planning result', async () => {
@@ -708,7 +1226,7 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       const linearAgentClient = getServices().linearAgentClient;
       const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
-      const fetchIssueTreeSpy = vi.mocked(linearAgentClient.fetchIssueTree);
+      const fetchDirectChildrenLiveSpy = vi.mocked(linearAgentClient.fetchDirectChildrenLive);
       const addCommentSpy = vi.mocked(linearAgentClient.addComment);
       const updateIssueStateSpy = vi.mocked(linearAgentClient.updateIssueState);
       const updateIssueMetadataSpy = vi.mocked(linearAgentClient.updateIssueMetadata);
@@ -725,38 +1243,27 @@ describe('POST /internal/webhooks/task-complete', () => {
           parentId: null,
         })
       );
-      fetchIssueTreeSpy.mockResolvedValue(
-        ok({
-          root: {
-            id: 'original-uuid',
-            identifier: 'INT-123',
-            url: 'https://linear.app/pbuchman/issue/INT-123',
-            parentId: null,
-            labels: [],
+      fetchDirectChildrenLiveSpy.mockResolvedValue(
+        ok([
+          {
+            id: 'child-1-uuid',
+            identifier: 'INT-200',
+            url: 'https://linear.app/pbuchman/issue/INT-200',
+            parentId: 'original-uuid',
+            labels: ['code-task'],
             assigneeId: null,
-            state: 'In Progress',
+            state: 'Todo',
           },
-          descendants: [
-            {
-              id: 'child-1-uuid',
-              identifier: 'INT-200',
-              url: 'https://linear.app/pbuchman/issue/INT-200',
-              parentId: 'original-uuid',
-              labels: ['code-task'],
-              assigneeId: null,
-              state: 'Todo',
-            },
-            {
-              id: 'child-2-uuid',
-              identifier: 'INT-201',
-              url: 'https://linear.app/pbuchman/issue/INT-201',
-              parentId: 'original-uuid',
-              labels: ['code-task'],
-              assigneeId: null,
-              state: 'Todo',
-            },
-          ],
-        })
+          {
+            id: 'child-2-uuid',
+            identifier: 'INT-201',
+            url: 'https://linear.app/pbuchman/issue/INT-201',
+            parentId: 'original-uuid',
+            labels: ['code-task'],
+            assigneeId: null,
+            state: 'Todo',
+          },
+        ])
       );
       addCommentSpy.mockClear();
       updateIssueStateSpy.mockClear();
@@ -838,7 +1345,7 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       const linearAgentClient = getServices().linearAgentClient;
       const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
-      const fetchIssueTreeSpy = vi.mocked(linearAgentClient.fetchIssueTree);
+      const fetchDirectChildrenLiveSpy = vi.mocked(linearAgentClient.fetchDirectChildrenLive);
 
       validateIssueSpy.mockReset();
       validateIssueSpy.mockResolvedValueOnce(
@@ -852,29 +1359,18 @@ describe('POST /internal/webhooks/task-complete', () => {
           parentId: null,
         })
       );
-      fetchIssueTreeSpy.mockResolvedValue(
-        ok({
-          root: {
-            id: 'original-uuid',
-            identifier: 'INT-123',
-            url: 'https://linear.app/pbuchman/issue/INT-123',
-            parentId: null,
+      fetchDirectChildrenLiveSpy.mockResolvedValue(
+        ok([
+          {
+            id: 'child-uuid',
+            identifier: 'INT-200',
+            url: 'https://linear.app/pbuchman/issue/INT-200',
+            parentId: 'original-uuid',
             labels: [],
-            assigneeId: null,
-            state: 'In Progress',
+            assigneeId: 'some-user',
+            state: 'Backlog',
           },
-          descendants: [
-            {
-              id: 'child-uuid',
-              identifier: 'INT-200',
-              url: 'https://linear.app/pbuchman/issue/INT-200',
-              parentId: 'original-uuid',
-              labels: [],
-              assigneeId: 'some-user',
-              state: 'Backlog',
-            },
-          ],
-        })
+        ])
       );
 
       const payload = {
@@ -887,7 +1383,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '1' as const,
           planning_subtask_urls: '',
-          planning_pr_url: '',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
           planning_unclear_clarification: '',
         },
       };
@@ -930,7 +1426,7 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       const linearAgentClient = getServices().linearAgentClient;
       const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
-      const fetchIssueTreeSpy = vi.mocked(linearAgentClient.fetchIssueTree);
+      const fetchDirectChildrenLiveSpy = vi.mocked(linearAgentClient.fetchDirectChildrenLive);
 
       validateIssueSpy.mockReset();
       validateIssueSpy.mockResolvedValueOnce(
@@ -944,29 +1440,18 @@ describe('POST /internal/webhooks/task-complete', () => {
           parentId: null,
         })
       );
-      fetchIssueTreeSpy.mockResolvedValue(
-        ok({
-          root: {
-            id: 'original-uuid',
-            identifier: 'INT-123',
-            url: 'https://linear.app/pbuchman/issue/INT-123',
-            parentId: null,
+      fetchDirectChildrenLiveSpy.mockResolvedValue(
+        ok([
+          {
+            id: 'grandchild-uuid',
+            identifier: 'INT-300',
+            url: 'https://linear.app/pbuchman/issue/INT-300',
+            parentId: 'some-other-parent',
             labels: [],
             assigneeId: null,
-            state: 'In Progress',
+            state: 'Backlog',
           },
-          descendants: [
-            {
-              id: 'grandchild-uuid',
-              identifier: 'INT-300',
-              url: 'https://linear.app/pbuchman/issue/INT-300',
-              parentId: 'some-other-parent',
-              labels: [],
-              assigneeId: null,
-              state: 'Backlog',
-            },
-          ],
-        })
+        ])
       );
 
       const payload = {
@@ -979,7 +1464,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '1' as const,
           planning_subtask_urls: '',
-          planning_pr_url: '',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
           planning_unclear_clarification: '',
         },
       };
@@ -1027,7 +1512,7 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       const linearAgentClient = getServices().linearAgentClient;
       const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
-      const fetchIssueTreeSpy = vi.mocked(linearAgentClient.fetchIssueTree);
+      const fetchDirectChildrenLiveSpy = vi.mocked(linearAgentClient.fetchDirectChildrenLive);
       const addCommentSpy = vi.mocked(linearAgentClient.addComment);
 
       validateIssueSpy.mockReset();
@@ -1042,29 +1527,18 @@ describe('POST /internal/webhooks/task-complete', () => {
           parentId: null,
         })
       );
-      fetchIssueTreeSpy.mockResolvedValue(
-        ok({
-          root: {
-            id: 'original-uuid',
-            identifier: 'INT-123',
-            url: 'https://linear.app/pbuchman/issue/INT-123',
-            parentId: null,
-            labels: [],
+      fetchDirectChildrenLiveSpy.mockResolvedValue(
+        ok([
+          {
+            id: 'child-uuid',
+            identifier: 'INT-200',
+            url: 'https://linear.app/pbuchman/issue/INT-200',
+            parentId: 'original-uuid',
+            labels: ['code-task'],
             assigneeId: null,
-            state: 'In Progress',
+            state: 'Todo',
           },
-          descendants: [
-            {
-              id: 'child-uuid',
-              identifier: 'INT-200',
-              url: 'https://linear.app/pbuchman/issue/INT-200',
-              parentId: 'original-uuid',
-              labels: ['code-task'],
-              assigneeId: null,
-              state: 'Todo',
-            },
-          ],
-        })
+        ])
       );
       addCommentSpy.mockClear();
 
@@ -1097,7 +1571,14 @@ describe('POST /internal/webhooks/task-complete', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      // No PR comment should be added
+      // With PR URL enforcement, empty planning_pr_url causes enforcement failure
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('failed');
+      expect(getResult.value.error?.code).toBe('PLANNING_AGENT_ENFORCEMENT_FAILED');
+      expect(getResult.value.error?.message).toContain('PR URL');
+      // No PR comment should be added since enforcement failed before comment logic
       expect(addCommentSpy).not.toHaveBeenCalled();
     });
 
@@ -1123,7 +1604,7 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       const linearAgentClient = getServices().linearAgentClient;
       const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
-      const fetchIssueTreeSpy = vi.mocked(linearAgentClient.fetchIssueTree);
+      const fetchDirectChildrenLiveSpy = vi.mocked(linearAgentClient.fetchDirectChildrenLive);
       const updateIssueStateSpy = vi.mocked(linearAgentClient.updateIssueState);
       const updateIssueMetadataSpy = vi.mocked(linearAgentClient.updateIssueMetadata);
 
@@ -1162,7 +1643,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             parentId: 'original-uuid',
           })
         );
-      fetchIssueTreeSpy.mockClear();
+      fetchDirectChildrenLiveSpy.mockClear();
       updateIssueStateSpy.mockClear();
       updateIssueMetadataSpy.mockClear();
 
@@ -1195,8 +1676,8 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // fetchIssueTree must NOT be called — URL-based path was used
-      expect(fetchIssueTreeSpy).not.toHaveBeenCalled();
+      // fetchDirectChildrenLive must NOT be called — URL-based path was used
+      expect(fetchDirectChildrenLiveSpy).not.toHaveBeenCalled();
 
       // validateIssue called: 1 for original + 2 for subtasks = 3 total (single pass)
       expect(validateIssueSpy).toHaveBeenCalledTimes(3);
@@ -1269,7 +1750,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '1' as const,
           planning_subtask_urls: 'not-a-url,https://linear.app/pbuchman/issue/INT-200/subtask-1',
-          planning_pr_url: '',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
           planning_unclear_clarification: '',
         },
       };
@@ -1295,7 +1776,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.error?.message).toContain('Invalid subtask URL');
     });
 
-    it('complex planned: falls back to fetchIssueTree when subtask URLs empty', async () => {
+    it('complex planned: falls back to fetchDirectChildrenLive when subtask URLs empty', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
         prompt: 'Plan complex task tree fallback',
@@ -1317,7 +1798,7 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       const linearAgentClient = getServices().linearAgentClient;
       const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
-      const fetchIssueTreeSpy = vi.mocked(linearAgentClient.fetchIssueTree);
+      const fetchDirectChildrenLiveSpy = vi.mocked(linearAgentClient.fetchDirectChildrenLive);
 
       validateIssueSpy.mockReset();
       validateIssueSpy.mockResolvedValueOnce(
@@ -1331,21 +1812,8 @@ describe('POST /internal/webhooks/task-complete', () => {
           parentId: null,
         })
       );
-      fetchIssueTreeSpy.mockResolvedValue(
-        ok({
-          root: {
-            id: 'original-uuid',
-            identifier: 'INT-123',
-            url: 'https://linear.app/pbuchman/issue/INT-123',
-            parentId: null,
-            labels: [],
-            assigneeId: null,
-            state: 'In Progress',
-          },
-          descendants: [],
-        })
-      );
-      fetchIssueTreeSpy.mockClear();
+      fetchDirectChildrenLiveSpy.mockResolvedValue(ok([]));
+      fetchDirectChildrenLiveSpy.mockClear();
 
       const payload = {
         taskId: task.id,
@@ -1357,7 +1825,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '1' as const,
           planning_subtask_urls: '',
-          planning_pr_url: '',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
           planning_unclear_clarification: '',
         },
       };
@@ -1376,9 +1844,9 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // fetchIssueTree must be called — fallback path
-      expect(fetchIssueTreeSpy).toHaveBeenCalledTimes(1);
-      expect(fetchIssueTreeSpy).toHaveBeenCalledWith(
+      // fetchDirectChildrenLive must be called — fallback path
+      expect(fetchDirectChildrenLiveSpy).toHaveBeenCalledTimes(1);
+      expect(fetchDirectChildrenLiveSpy).toHaveBeenCalledWith(
         expect.objectContaining({ issueId: 'original-uuid' })
       );
 
@@ -1388,7 +1856,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.status).toBe('planned');
     });
 
-    it('complex planned: falls back to fetchIssueTree when URL extraction is partial', async () => {
+    it('complex planned: falls back to fetchDirectChildrenLive when URL extraction is partial', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
         prompt: 'Plan complex task partial URLs',
@@ -1410,7 +1878,7 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       const linearAgentClient = getServices().linearAgentClient;
       const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
-      const fetchIssueTreeSpy = vi.mocked(linearAgentClient.fetchIssueTree);
+      const fetchDirectChildrenLiveSpy = vi.mocked(linearAgentClient.fetchDirectChildrenLive);
       const updateIssueStateSpy = vi.mocked(linearAgentClient.updateIssueState);
       const updateIssueMetadataSpy = vi.mocked(linearAgentClient.updateIssueMetadata);
 
@@ -1427,49 +1895,38 @@ describe('POST /internal/webhooks/task-complete', () => {
           parentId: null,
         })
       );
-      fetchIssueTreeSpy.mockResolvedValue(
-        ok({
-          root: {
-            id: 'original-uuid',
-            identifier: 'INT-123',
-            url: 'https://linear.app/pbuchman/issue/INT-123',
-            parentId: null,
+      fetchDirectChildrenLiveSpy.mockResolvedValue(
+        ok([
+          {
+            id: 'child-1-uuid',
+            identifier: 'INT-200',
+            url: 'https://linear.app/pbuchman/issue/INT-200',
+            parentId: 'original-uuid',
             labels: [],
             assigneeId: null,
             state: 'In Progress',
           },
-          descendants: [
-            {
-              id: 'child-1-uuid',
-              identifier: 'INT-200',
-              url: 'https://linear.app/pbuchman/issue/INT-200',
-              parentId: 'original-uuid',
-              labels: [],
-              assigneeId: null,
-              state: 'In Progress',
-            },
-            {
-              id: 'child-2-uuid',
-              identifier: 'INT-201',
-              url: 'https://linear.app/pbuchman/issue/INT-201',
-              parentId: 'original-uuid',
-              labels: [],
-              assigneeId: null,
-              state: 'In Progress',
-            },
-            {
-              id: 'child-3-uuid',
-              identifier: 'INT-202',
-              url: 'https://linear.app/pbuchman/issue/INT-202',
-              parentId: 'original-uuid',
-              labels: [],
-              assigneeId: null,
-              state: 'In Progress',
-            },
-          ],
-        })
+          {
+            id: 'child-2-uuid',
+            identifier: 'INT-201',
+            url: 'https://linear.app/pbuchman/issue/INT-201',
+            parentId: 'original-uuid',
+            labels: [],
+            assigneeId: null,
+            state: 'In Progress',
+          },
+          {
+            id: 'child-3-uuid',
+            identifier: 'INT-202',
+            url: 'https://linear.app/pbuchman/issue/INT-202',
+            parentId: 'original-uuid',
+            labels: [],
+            assigneeId: null,
+            state: 'In Progress',
+          },
+        ])
       );
-      fetchIssueTreeSpy.mockClear();
+      fetchDirectChildrenLiveSpy.mockClear();
       updateIssueStateSpy.mockClear();
       updateIssueMetadataSpy.mockClear();
 
@@ -1484,7 +1941,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_is_complex: '1' as const,
           // Only 1 of 3 subtask URLs extracted by LLM
           planning_subtask_urls: 'https://linear.app/pbuchman/issue/INT-200/subtask-1',
-          planning_pr_url: '',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
           planning_unclear_clarification: '',
         },
       };
@@ -1503,9 +1960,9 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // fetchIssueTree must be called — partial extraction triggers fallback
-      expect(fetchIssueTreeSpy).toHaveBeenCalledTimes(1);
-      expect(fetchIssueTreeSpy).toHaveBeenCalledWith(
+      // fetchDirectChildrenLive must be called — partial extraction triggers fallback
+      expect(fetchDirectChildrenLiveSpy).toHaveBeenCalledTimes(1);
+      expect(fetchDirectChildrenLiveSpy).toHaveBeenCalledWith(
         expect.objectContaining({ issueId: 'original-uuid' })
       );
 
@@ -1553,7 +2010,7 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       const linearAgentClient = getServices().linearAgentClient;
       const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
-      const fetchIssueTreeSpy = vi.mocked(linearAgentClient.fetchIssueTree);
+      const fetchDirectChildrenLiveSpy = vi.mocked(linearAgentClient.fetchDirectChildrenLive);
       const addCommentSpy = vi.mocked(linearAgentClient.addComment);
       const updateIssueStateSpy = vi.mocked(linearAgentClient.updateIssueState);
       const updateIssueMetadataSpy = vi.mocked(linearAgentClient.updateIssueMetadata);
@@ -1570,7 +2027,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           parentId: null,
         })
       );
-      fetchIssueTreeSpy.mockClear();
+      fetchDirectChildrenLiveSpy.mockClear();
       addCommentSpy.mockClear();
       updateIssueStateSpy.mockClear();
       updateIssueMetadataSpy.mockClear();
@@ -1584,7 +2041,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_superpowers_writing_plans_used: '1' as const,
           planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '0' as const,
-          planning_pr_url: '',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
           planning_unclear_clarification: '',
         },
       };
@@ -1604,7 +2061,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(response.statusCode).toBe(200);
 
       // Should NOT fetch issue tree (simple task)
-      expect(fetchIssueTreeSpy).not.toHaveBeenCalled();
+      expect(fetchDirectChildrenLiveSpy).not.toHaveBeenCalled();
 
       // Should only validate the original issue (1 call)
       expect(validateIssueSpy).toHaveBeenCalledTimes(1);
@@ -1692,7 +2149,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_superpowers_writing_plans_used: '0' as const,
           planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '0' as const,
-          planning_pr_url: '',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
           planning_unclear_clarification: '',
         },
       };
@@ -1772,7 +2229,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_superpowers_writing_plans_used: '0' as const,
           planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '0' as const,
-          planning_pr_url: '',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
           planning_unclear_clarification: '',
         },
       };
@@ -1865,7 +2322,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           commits: 2,
           summary: 'Implemented execution task',
           execution_outcome_label: 'implemented' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -1904,6 +2361,102 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.status).toBe('implemented');
       expect(getResult.value.result?.execution_outcome_label).toBe('implemented');
       expect(getResult.value.result?.execution_linear_issue_url).toContain('/INT-123');
+    });
+
+    it('marks execution memory post-run pending and stores memory usage fields when feature flag is enabled', async () => {
+      process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] = 'true';
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Implement the task',
+        sanitizedPrompt: 'Implement the task',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 't-exec-memory-pending',
+        linearIssueId: 'INT-123',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'execution',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const validateIssueSpy = vi.spyOn(getServices().linearAgentClient, 'validateIssue');
+      validateIssueSpy.mockReset();
+      validateIssueSpy
+        .mockResolvedValueOnce(
+          ok({
+            id: 'routed-uuid',
+            identifier: 'INT-123',
+            title: 'Routed issue',
+            url: 'https://linear.app/pbuchman/issue/INT-123',
+            labels: ['code-task'],
+            childCount: 0,
+            parentId: null,
+          })
+        )
+        .mockResolvedValueOnce(
+          ok({
+            id: 'routed-uuid',
+            identifier: 'INT-123',
+            title: 'Routed issue',
+            url: 'https://linear.app/pbuchman/issue/INT-123',
+            labels: ['code-task'],
+            childCount: 0,
+            parentId: null,
+          })
+        );
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/901',
+          branch: 'feat/execution-agent',
+          commits: 2,
+          summary: 'Implemented execution task',
+          execution_outcome_label: 'implemented' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
+          execution_superpowers_requesting_code_review_used: '1' as const,
+          execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
+          execution_memory_ids_used: 'mem_142,mem_155',
+          execution_memory_ids_rejected: 'mem_188',
+          execution_memory_usage_summary: 'Used route logging and coverage lessons.',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.executionMemoryPostRun).toEqual(
+        expect.objectContaining({
+          status: 'pending',
+          attempts: 0,
+          generatedMemoryIds: [],
+        })
+      );
+      expect(getResult.value.result?.execution_memory_ids_used).toBe('mem_142,mem_155');
+      expect(getResult.value.result?.execution_memory_ids_rejected).toBe('mem_188');
+      expect(getResult.value.result?.execution_memory_usage_summary).toBe(
+        'Used route logging and coverage lessons.'
+      );
     });
 
     it('does not post implementation completion comment when the final update fails', async () => {
@@ -1968,7 +2521,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           commits: 2,
           summary: 'Implemented execution task',
           execution_outcome_label: 'implemented' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -1990,6 +2543,172 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(gitHubPRClient.postPRComment).not.toHaveBeenCalled();
 
       updateSpy.mockRestore();
+    });
+
+    it('does not queue execution-memory post-run work for non-execution agents', async () => {
+      process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] = 'true';
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Implement the task',
+        sanitizedPrompt: 'Implement the task',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_non_execution',
+        linearIssueId: 'INT-123',
+        agentType: 'pull_request',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Planned the task',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.executionMemoryPostRun).toBeUndefined();
+    });
+
+    it('queues execution memory post-run for planning task', async () => {
+      process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] = 'true';
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Plan the task',
+        sanitizedPrompt: 'Plan the task',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_planning_memory',
+        linearIssueId: 'INT-123',
+        agentType: 'planning',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Planned the task',
+          planning_outcome_label: 'planned' as const,
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.executionMemoryPostRun).toEqual(
+        expect.objectContaining({
+          status: 'pending',
+          attempts: 0,
+          generatedMemoryIds: [],
+        })
+      );
+    });
+
+    it('queues execution memory post-run for review task', async () => {
+      process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] = 'true';
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the task',
+        sanitizedPrompt: 'Review the task',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_review_memory',
+        linearIssueId: 'INT-123',
+        agentType: 'review',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Reviewed the task',
+          review_id: 'review-123',
+          review_comments_posted: '3',
+          review_types: 'security,performance',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.executionMemoryPostRun).toEqual(
+        expect.objectContaining({
+          status: 'pending',
+          attempts: 0,
+          generatedMemoryIds: [],
+        })
+      );
     });
 
     it('handles markdown-wrapped execution_linear_issue_url in execution completion', async () => {
@@ -2034,7 +2753,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           commits: 2,
           summary: 'Implemented execution task',
           execution_outcome_label: 'implemented' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
           execution_linear_issue_url: '[INT-123](https://linear.app/pbuchman/issue/INT-123)',
         },
@@ -2119,7 +2838,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           prUrl: 'https://github.com/pbuchman/intexuraos/pull/902',
           execution_outcome_label: 'implemented' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-999',
         },
@@ -2182,7 +2901,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         status: 'completed' as const,
         result: {
           execution_outcome_label: 'implemented' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2260,7 +2979,8 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'Work was already merged into development',
           execution_outcome_label: 'already_completed' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/850',
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2343,7 +3063,8 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'The feature was already implemented and merged in PR #850',
           execution_outcome_label: 'already_completed' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/850',
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2415,7 +3136,8 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'Work already done',
           execution_outcome_label: 'already_completed' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/850',
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2489,7 +3211,8 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'Work already done',
           execution_outcome_label: 'already_completed' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/850',
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2564,7 +3287,8 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'Work already done',
           execution_outcome_label: 'already_completed' as const,
-          execution_superpowers_executing_plans_used: '1' as const,
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/850',
+          execution_superpowers_subagent_driven_dev_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '0' as const,
           execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
@@ -2997,6 +3721,264 @@ describe('POST /internal/webhooks/task-complete', () => {
       if (!getResult.ok) throw new Error('Failed to get task');
       expect(getResult.value.status).toBe('reviewed');
       expect(getResult.value.error).toBeUndefined();
+    });
+
+    it('updates lastReviewedCommitSha on PR summary when review completes (INT-1087)', async () => {
+      const { gitHubPRClient } = installPRNotificationServices();
+      vi.mocked(gitHubPRClient.getPullRequestDetails).mockResolvedValue(
+        ok({
+          title: 'Test PR',
+          body: '',
+          authorLogin: 'alice',
+          baseBranch: 'development',
+          headBranch: 'feature/test',
+          mergeable: true,
+          mergeableState: 'clean',
+          headSha: 'abc123def456',
+        } as never)
+      );
+
+      const mockUpsert = vi.fn().mockResolvedValue(ok(undefined));
+      setServices({
+        ...getServices(),
+        gitHubPRSummaryRepo: {
+          ...getServices().gitHubPRSummaryRepo,
+          upsert: mockUpsert,
+        },
+      });
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_sha_update',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+          summary: 'Reviewed and posted findings.',
+          review_comments_posted: '2',
+          review_types: 'code_quality',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Verify task status
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('reviewed');
+
+      // Verify lastReviewedCommitSha was updated on PR summary
+      expect(mockUpsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          repository: 'pbuchman/intexuraos',
+          pullRequestNumber: 42,
+          lastReviewedCommitSha: 'abc123def456',
+        })
+      );
+    });
+
+    it('skips PR summary upsert when OAuth token fetch fails (INT-1087)', async () => {
+      const { userServiceClient } = installPRNotificationServices();
+      vi.mocked(userServiceClient.getOAuthToken).mockResolvedValue(
+        err({ code: 'CONNECTION_NOT_FOUND' as const, message: 'No token' })
+      );
+
+      const mockUpsert = vi.fn().mockResolvedValue(ok(undefined));
+      setServices({
+        ...getServices(),
+        gitHubPRSummaryRepo: {
+          ...getServices().gitHubPRSummaryRepo,
+          upsert: mockUpsert,
+        },
+      });
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_token_fail',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+          summary: 'Reviewed.',
+          review_comments_posted: '1',
+          review_types: 'code_quality',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockUpsert).not.toHaveBeenCalled();
+    });
+
+    it('skips PR summary upsert when PR details fetch fails (INT-1087)', async () => {
+      const { gitHubPRClient } = installPRNotificationServices();
+      vi.mocked(gitHubPRClient.getPullRequestDetails).mockResolvedValue(
+        err({ code: 'NOT_FOUND' as const, message: 'PR not found' })
+      );
+
+      const mockUpsert = vi.fn().mockResolvedValue(ok(undefined));
+      setServices({
+        ...getServices(),
+        gitHubPRSummaryRepo: {
+          ...getServices().gitHubPRSummaryRepo,
+          upsert: mockUpsert,
+        },
+      });
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_details_fail',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+          summary: 'Reviewed.',
+          review_comments_posted: '1',
+          review_types: 'code_quality',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockUpsert).not.toHaveBeenCalled();
+    });
+
+    it('handles thrown error in lastReviewedCommitSha update gracefully (INT-1087)', async () => {
+      const { userServiceClient } = installPRNotificationServices();
+      vi.mocked(userServiceClient.getOAuthToken).mockRejectedValue(
+        new Error('Network timeout')
+      );
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_throw',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+          summary: 'Reviewed.',
+          review_comments_posted: '1',
+          review_types: 'code_quality',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      // Should still succeed — the catch block handles the error gracefully
+      expect(response.statusCode).toBe(200);
     });
 
     it('records automation log for review failure when task has workerType', async () => {
@@ -3547,6 +4529,1480 @@ describe('POST /internal/webhooks/task-complete', () => {
     });
   });
 
+  describe('review task-complete → remediation creation (INT-1103)', () => {
+    // Helper: create a review task in Firestore and return it
+    async function createReviewTask(overrides: {
+      traceId: string;
+      prNumber?: number;
+      agentType?: 'review' | 'remediation';
+      prBranch?: string;
+    }): Promise<import('../../domain/models/codeTask.js').CodeTask> {
+      const result = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: overrides.traceId,
+        prNumber: overrides.prNumber ?? 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: overrides.agentType ?? 'review',
+        ...(overrides.prBranch !== undefined && { prBranch: overrides.prBranch }),
+      });
+      if (!result.ok) throw new Error('Failed to create task');
+      return result.value;
+    }
+
+    async function saveReviewEvent(reviewId: number, body: string | null): Promise<void> {
+      const saveResult = await getServices().gitHubPREventRepo.save({
+        githubEventId: reviewId,
+        deliveryId: `delivery-review-${String(reviewId)}`,
+        repository: 'pbuchman/intexuraos',
+        repositoryId: 1,
+        pullRequestNumber: 42,
+        pullRequestId: 420,
+        eventType: 'pull_request_review',
+        action: 'submitted',
+        senderLogin: 'intexuraos-code-worker[bot]',
+        senderId: 1000,
+        senderType: 'Bot',
+        prAuthorLogin: 'pbuchman',
+        title: null,
+        body,
+        state: 'open',
+        baseBranch: 'development',
+        mergedAt: null,
+        createdAt: new Date('2026-03-27T00:00:00Z'),
+        payload: {
+          review: {
+            id: reviewId,
+            body,
+          },
+        },
+      });
+      if (!saveResult.ok) throw new Error(`Failed to save review event: ${saveResult.error.message}`);
+    }
+
+    function makeRemediationPayload(
+      taskId: string,
+      needs_remediation?: string,
+      review_id?: string,
+    ): {
+      taskId: string;
+      status: 'completed';
+      result: {
+        summary: string;
+        review_comments_posted: string;
+        review_types: string;
+        needs_remediation?: string;
+        review_id?: string;
+      };
+    } {
+      return {
+        taskId,
+        status: 'completed' as const,
+        result: {
+          summary: 'Found 2 issues',
+          review_comments_posted: '2',
+          review_types: 'code_quality',
+          ...(needs_remediation !== undefined && { needs_remediation }),
+          ...(review_id !== undefined && { review_id }),
+        },
+      };
+    }
+
+    type RemediationFn = (logger: import('pino').Logger, request: CreateRemediationTaskRequest) => Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>>;
+
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+    async function sendTaskCompleteWithRemediation(payload: object, mockCreateRemediationFn?: ReturnType<typeof vi.fn>) {
+      const mockFn = mockCreateRemediationFn ?? vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'remediation-task-1', workerType: 'auto' }));
+      setServices({
+        ...getServices(),
+        createRemediationTaskFn: mockFn as RemediationFn,
+      });
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+      return { response, mockFn };
+    }
+
+    it('creates remediation task when needs_remediation is "1"', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_1', prBranch: 'feature/test-pr-branch' });
+      const payload = makeRemediationPayload(task.id, '1');
+
+      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).toHaveBeenCalledOnce();
+      expect(mockFn).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          repository: 'pbuchman/intexuraos',
+          prNumber: 42,
+          workerType: 'auto',
+          prBranch: 'feature/test-pr-branch',
+        }),
+      );
+      const automationLogMock = vi.mocked(getServices().automationLog.record);
+      await vi.waitFor(() => {
+        const decisionCall = automationLogMock.mock.calls.find(
+          (call) => (call[1] as { type: string }).type === 'remediation_decision'
+        );
+        expect(decisionCall).toBeDefined();
+      });
+      const decisionCall = automationLogMock.mock.calls.find(
+        (call) => (call[1] as { type: string }).type === 'remediation_decision'
+      );
+      expect(decisionCall).toBeDefined();
+      expect(decisionCall?.[1]).toMatchObject({
+        type: 'remediation_decision',
+        required: true,
+        source: 'review_result',
+        signal: '1',
+        taskId: 'remediation-task-1',
+      });
+    });
+
+    it('creates remediation task when review_id is present (no pre-loading of findings)', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_review_ctx' });
+      const payload = makeRemediationPayload(task.id, '1', '777');
+
+      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).toHaveBeenCalledOnce();
+      expect(mockFn).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          repository: 'pbuchman/intexuraos',
+          prNumber: 42,
+          workerType: 'auto',
+        }),
+      );
+      // Findings are NOT pre-loaded — nitpick-nuker fetches them at runtime
+      const callArg = mockFn.mock.calls[0]?.[1] as Record<string, unknown>;
+      expect(callArg).not.toHaveProperty('reviewBody');
+      expect(callArg).not.toHaveProperty('inlineComments');
+    });
+
+    it('creates remediation task without pre-loaded findings regardless of stored review events', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_review_ctx_no_comments' });
+      await saveReviewEvent(779, 'Please fix the blocking issue before merge.');
+      const payload = makeRemediationPayload(task.id, '1', '779');
+
+      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).toHaveBeenCalledOnce();
+      const callArg = mockFn.mock.calls[0]?.[1] as Record<string, unknown>;
+      expect(callArg).not.toHaveProperty('reviewBody');
+      expect(callArg).not.toHaveProperty('inlineComments');
+    });
+
+    it('does NOT create remediation task when needs_remediation is "0"', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_0' });
+      const payload = makeRemediationPayload(task.id, '0');
+
+      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).not.toHaveBeenCalled();
+      const automationLogMock = vi.mocked(getServices().automationLog.record);
+      await vi.waitFor(() => {
+        const decisionCall = automationLogMock.mock.calls.find(
+          (call) => (call[1] as { type: string }).type === 'remediation_decision'
+        );
+        expect(decisionCall).toBeDefined();
+      });
+      const decisionCall = automationLogMock.mock.calls.find(
+        (call) => (call[1] as { type: string }).type === 'remediation_decision'
+      );
+      expect(decisionCall?.[1]).toMatchObject({
+        type: 'remediation_decision',
+        required: false,
+        source: 'review_result',
+        signal: '0',
+      });
+    });
+
+    it('creates remediation task when needs_remediation is undefined (fail-open)', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_undefined' });
+      const payload = makeRemediationPayload(task.id, undefined);
+
+      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).toHaveBeenCalledOnce();
+      const automationLogMock = vi.mocked(getServices().automationLog.record);
+      await vi.waitFor(() => {
+        const decisionCall = automationLogMock.mock.calls.find(
+          (call) => (call[1] as { type: string }).type === 'remediation_decision'
+        );
+        expect(decisionCall).toBeDefined();
+      });
+      const decisionCall = automationLogMock.mock.calls.find(
+        (call) => (call[1] as { type: string }).type === 'remediation_decision'
+      );
+      expect(decisionCall?.[1]).toMatchObject({
+        type: 'remediation_decision',
+        required: true,
+        source: 'review_result',
+        signal: 'missing',
+        taskId: 'remediation-task-1',
+      });
+    });
+
+    it('creates remediation task when review_id is absent', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_no_review_id' });
+      const payload = makeRemediationPayload(task.id, '1');
+
+      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).toHaveBeenCalledOnce();
+      expect(mockFn).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ repository: 'pbuchman/intexuraos', prNumber: 42 }),
+      );
+    });
+
+    it('creates remediation task when review_id is empty', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_empty_review_id' });
+      const payload = makeRemediationPayload(task.id, '1', '');
+
+      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).toHaveBeenCalledOnce();
+    });
+
+    it('creates remediation task when review_id is not numeric', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_invalid_review_id' });
+      const payload = makeRemediationPayload(task.id, '1', 'not-a-number');
+
+      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).toHaveBeenCalledOnce();
+    });
+
+    it('creates remediation task when review_id is numeric (no enrichment needed)', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_numeric_review_id' });
+      const payload = makeRemediationPayload(task.id, '1', '780');
+
+      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).toHaveBeenCalledOnce();
+      expect(mockFn).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          repository: 'pbuchman/intexuraos',
+          prNumber: 42,
+          workerType: 'auto',
+        }),
+      );
+    });
+
+    it('does NOT create remediation task when result is absent (verification failed)', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_no_result' });
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+      };
+
+      const mockFn = vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'rem-never', workerType: 'auto' }));
+      setServices({ ...getServices(), createRemediationTaskFn: mockFn });
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      // No result → review enforcement rejects it before reaching the remediation block
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).not.toHaveBeenCalled();
+    });
+
+    it('passes linearIssueId and baseBranch to remediation task when present on review task', async () => {
+      const result = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_rem_linear',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+        linearIssueId: 'INT-999',
+      });
+      if (!result.ok) throw new Error('Failed to create task');
+      const task = result.value;
+
+      const payload = makeRemediationPayload(task.id, '1');
+      const { response, mockFn } = await sendTaskCompleteWithRemediation(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).toHaveBeenCalledOnce();
+      expect(mockFn).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          repository: 'pbuchman/intexuraos',
+          prNumber: 42,
+          linearIssueId: 'INT-999',
+          baseBranch: 'development',
+        }),
+      );
+    });
+
+    it('does NOT create remediation for remediation task-complete (agentType guard)', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_guard', agentType: 'remediation' });
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Fixed 2 issues',
+          needs_remediation: '1',
+        },
+      };
+
+      const mockFn = vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'rem-never', workerType: 'auto' }));
+      setServices({ ...getServices(), createRemediationTaskFn: mockFn });
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockFn).not.toHaveBeenCalled();
+    });
+
+    it('still returns 200 when createRemediationTaskFn returns an error (best-effort)', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_error' });
+      const payload = makeRemediationPayload(task.id, '1');
+
+      const { response } = await sendTaskCompleteWithRemediation(
+        payload,
+        vi.fn().mockResolvedValue(err({ code: 'task_creation_failed', message: 'Firestore error' })),
+      );
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('still records remediation decision when createRemediationTaskFn throws unexpectedly', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_throw_missing' });
+      const payload = makeRemediationPayload(task.id, undefined);
+
+      const { response } = await sendTaskCompleteWithRemediation(
+        payload,
+        vi.fn().mockRejectedValue(new Error('boom')),
+      );
+
+      expect(response.statusCode).toBe(200);
+      const automationLogMock = vi.mocked(getServices().automationLog.record);
+      await vi.waitFor(() => {
+        const decisionCall = automationLogMock.mock.calls.find(
+          (call) => (call[1] as { type: string }).type === 'remediation_decision'
+        );
+        expect(decisionCall).toBeDefined();
+      });
+      const decisionCall = automationLogMock.mock.calls.find(
+        (call) => (call[1] as { type: string }).type === 'remediation_decision'
+      );
+      expect(decisionCall?.[1]).toMatchObject({
+        type: 'remediation_decision',
+        required: true,
+        source: 'review_result',
+        signal: 'missing',
+      });
+    });
+
+    it('preserves explicit remediation signal when createRemediationTaskFn throws unexpectedly', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_throw_signal_1' });
+      const payload = makeRemediationPayload(task.id, '1');
+
+      const { response } = await sendTaskCompleteWithRemediation(
+        payload,
+        vi.fn().mockRejectedValue(new Error('boom')),
+      );
+
+      expect(response.statusCode).toBe(200);
+      const automationLogMock = vi.mocked(getServices().automationLog.record);
+      await vi.waitFor(() => {
+        const decisionCall = automationLogMock.mock.calls.find(
+          (call) => (call[1] as { type: string }).type === 'remediation_decision'
+        );
+        expect(decisionCall).toBeDefined();
+      });
+      const decisionCall = automationLogMock.mock.calls.find(
+        (call) => (call[1] as { type: string }).type === 'remediation_decision'
+      );
+      expect(decisionCall?.[1]).toMatchObject({
+        type: 'remediation_decision',
+        required: true,
+        source: 'review_result',
+        signal: '1',
+      });
+    });
+
+    it('still returns 200 when createRemediationTaskFn is not configured', async () => {
+      const task = await createReviewTask({ traceId: 'trace_rem_no_fn' });
+      const payload = makeRemediationPayload(task.id, '1');
+
+      // Do NOT set createRemediationTaskFn — it's optional in ServiceContainer
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+  });
+
+  describe('review task-complete → review-outcome labels on Linear issue', () => {
+    async function createOriginTask(overrides: {
+      traceId: string;
+      agentType: 'planning' | 'execution' | 'pull_request';
+      linearIssueId?: string;
+    }): Promise<import('../../domain/models/codeTask.js').CodeTask> {
+      const result = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Create a PR',
+        sanitizedPrompt: 'Create a PR',
+        systemPromptHash: 'origin-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: overrides.traceId,
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: overrides.agentType,
+        linearIssueId: overrides.linearIssueId ?? 'INT-500',
+      });
+      if (!result.ok) throw new Error('Failed to create origin task');
+      return result.value;
+    }
+
+    async function createReviewTaskForLabel(overrides: {
+      traceId: string;
+      linearIssueId?: string;
+    }): Promise<import('../../domain/models/codeTask.js').CodeTask> {
+      const result = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: overrides.traceId,
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+        ...(overrides.linearIssueId !== undefined && { linearIssueId: overrides.linearIssueId }),
+      });
+      if (!result.ok) throw new Error('Failed to create review task');
+      return result.value;
+    }
+
+    function makeLabelPayload(taskId: string): {
+      taskId: string;
+      status: 'completed';
+      result: {
+        summary: string;
+        review_comments_posted: string;
+        review_types: string;
+        needs_remediation: string;
+      };
+    } {
+      return {
+        taskId,
+        status: 'completed' as const,
+        result: {
+          summary: 'All good',
+          review_comments_posted: '0',
+          review_types: 'code_quality',
+          needs_remediation: '0',
+        },
+      };
+    }
+
+    function makeNegativeReviewPayload(taskId: string): {
+      taskId: string;
+      status: 'completed';
+      result: {
+        summary: string;
+        review_comments_posted: string;
+        review_types: string;
+        needs_remediation: string;
+      };
+    } {
+      return {
+        taskId,
+        status: 'completed' as const,
+        result: {
+          summary: 'Found issues',
+          review_comments_posted: '2',
+          review_types: 'code_quality',
+          needs_remediation: '1',
+        },
+      };
+    }
+
+    type LabelRemediationFn = (logger: import('pino').Logger, request: CreateRemediationTaskRequest) => Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>>;
+
+    async function sendLabelPayload(payload: object): Promise<import('fastify').LightMyRequestResponse> {
+      const mockFn = vi.fn().mockResolvedValue(ok({ status: 'queued', taskId: 'rem-never', workerType: 'auto' }));
+      setServices({
+        ...getServices(),
+        createRemediationTaskFn: mockFn as LabelRemediationFn,
+      });
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      return app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+    }
+
+    it('does NOT set ready-to-implement label when origin task is a planning task', async () => {
+      await createOriginTask({ traceId: 'trace_label_planning', agentType: 'planning' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_planning_review' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      // Plan-origin reviews skip labeling entirely — no ready-to-implement set
+      expect(metadataSpy).not.toHaveBeenCalled();
+    });
+
+    it('adds ready-to-merge label when origin task is an execution task', async () => {
+      await createOriginTask({ traceId: 'trace_label_execution', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_execution_review' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      expect(metadataSpy).toHaveBeenCalledWith({
+        userId: 'user-123',
+        issueId: 'linear-issue-uuid',
+        addLabels: ['ready-to-merge'],
+      });
+    });
+
+    it('walks past pull_request task to find planning origin and does NOT set ready-to-implement', async () => {
+      const planningTask = await createOriginTask({ traceId: 'trace_label_pr_task_planning', agentType: 'planning' });
+      await codeTaskRepo.update(planningTask.id, { status: 'planned' });
+      await createOriginTask({ traceId: 'trace_label_pr_task_newer', agentType: 'pull_request' });
+
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_pr_task_review' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      // Plan-origin reviews skip labeling entirely
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      expect(metadataSpy).not.toHaveBeenCalled();
+    });
+
+    it('adds ready-to-merge label when origin is a pull_request task (fallback)', async () => {
+      // Create only a pull_request origin task — no planning/execution.
+      // findOriginTaskByPR should return the pull_request task as fallback.
+      await createOriginTask({ traceId: 'trace_label_pr_only_origin', agentType: 'pull_request' });
+
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_pr_only_review' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const validateSpy = vi.mocked(lac.validateIssue);
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      expect(validateSpy).toHaveBeenCalledWith({
+        userId: 'user-123',
+        identifier: 'INT-500',
+      });
+      expect(metadataSpy).toHaveBeenCalledWith({
+        userId: 'user-123',
+        issueId: 'linear-issue-uuid',
+        addLabels: ['ready-to-merge'],
+      });
+    });
+
+    it('skips label when findOriginTaskByPR returns null', async () => {
+      // No origin task created — only the review task exists
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_no_origin' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const validateSpy = vi.mocked(lac.validateIssue);
+      // validateIssue should NOT be called for the label-setting path
+      // (it may be called by other paths, so we check it wasn't called with INT-500)
+      const labelCalls = validateSpy.mock.calls.filter(
+        (call) => call[0].identifier === 'INT-500'
+      );
+      expect(labelCalls).toHaveLength(0);
+    });
+
+    it('skips label when origin task has no linearIssueId', async () => {
+      // Create origin task without linearIssueId
+      const originResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Create a PR',
+        sanitizedPrompt: 'Create a PR',
+        systemPromptHash: 'origin-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_label_no_linear',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'execution',
+        // no linearIssueId
+      });
+      if (!originResult.ok) throw new Error('Failed to create origin task');
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_no_linear_review' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      // No label update should have been attempted
+      const { linearAgentClient: lac } = getServices();
+      const validateSpy = vi.mocked(lac.validateIssue);
+      const labelCalls = validateSpy.mock.calls.filter(
+        (call) => call[0].identifier === 'INT-500'
+      );
+      expect(labelCalls).toHaveLength(0);
+    });
+
+    describe('plan PR auto-merge on review pass', () => {
+      // Shared setup for auto-merge tests
+      async function createPlanningTaskWithPrUrl(traceId: string, prUrl: string): Promise<import('../../domain/models/codeTask.js').CodeTask> {
+        const result = await codeTaskRepo.create({
+          userId: 'user-123',
+          prompt: 'Plan the task',
+          sanitizedPrompt: 'Plan the task',
+          systemPromptHash: 'plan-auto',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId,
+          prNumber: 1654,
+          webhookSecret: 'test-webhook-secret',
+          agentType: 'planning',
+          linearIssueId: 'INT-500',
+        });
+        if (!result.ok) throw new Error('Failed to create planning task');
+        await codeTaskRepo.update(result.value.id, { result: { planning_pr_url: prUrl } });
+        const taskResult = await codeTaskRepo.findById(result.value.id);
+        if (!taskResult.ok) throw new Error('Failed to refetch planning task');
+        return taskResult.value;
+      }
+
+      async function createReviewTaskWithPr(traceId: string, prNumber = 1654): Promise<import('../../domain/models/codeTask.js').CodeTask> {
+        const result = await codeTaskRepo.create({
+          userId: 'user-123',
+          prompt: 'Review the PR',
+          sanitizedPrompt: 'Review the PR',
+          systemPromptHash: 'review-auto',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId,
+          prNumber,
+          webhookSecret: 'test-webhook-secret',
+          agentType: 'review',
+          linearIssueId: 'INT-500',
+        });
+        if (!result.ok) throw new Error('Failed to create review task');
+        return result.value;
+      }
+
+      it('auto-merges plan PR when plan review passes and planning_pr_url exists', async () => {
+        await createPlanningTaskWithPrUrl('trace_plan_merge_ok', 'https://github.com/pbuchman/intexuraos/pull/1654');
+        const reviewTask = await createReviewTaskWithPr('trace_plan_merge_ok_review');
+
+        // Install fresh gitHubPRClient mock with mergePullRequest
+        const { gitHubPRClient: ghClient } = installPRNotificationServices();
+        vi.mocked(ghClient.getPullRequestStatus).mockResolvedValueOnce(
+          ok({ state: 'open' as const, mergedAt: null, headRef: 'plan/test' })
+        );
+        vi.mocked(ghClient.mergePullRequest).mockResolvedValueOnce(
+          ok({ sha: 'abc123', merged: true })
+        );
+
+        const payload = {
+          taskId: reviewTask.id,
+          status: 'completed' as const,
+          result: {
+            summary: 'Plan review passed',
+            review_comments_posted: '0',
+            review_types: 'plan-review',
+            needs_remediation: '0',
+            prUrl: 'https://github.com/pbuchman/intexuraos/pull/1654',
+          },
+        };
+
+        const response = await sendLabelPayload(payload);
+
+        expect(response.statusCode).toBe(200);
+        expect(ghClient.mergePullRequest).toHaveBeenCalledWith(
+          'ghp_test_token',
+          'pbuchman',
+          'intexuraos',
+          1654,
+          'merge',
+          expect.stringContaining('[plan]'),
+        );
+      });
+
+      it('succeeds even when plan PR auto-merge fails', async () => {
+        await createPlanningTaskWithPrUrl('trace_plan_merge_fail', 'https://github.com/pbuchman/intexuraos/pull/1654');
+        const reviewTask = await createReviewTaskWithPr('trace_plan_merge_fail_review');
+
+        const { gitHubPRClient: ghClient } = installPRNotificationServices();
+        vi.mocked(ghClient.getPullRequestStatus).mockResolvedValueOnce(
+          ok({ state: 'open' as const, mergedAt: null, headRef: 'plan/test' })
+        );
+        vi.mocked(ghClient.mergePullRequest).mockResolvedValueOnce(
+          err({ code: 'API_ERROR' as const, message: 'Merge conflict' })
+        );
+
+        const payload = {
+          taskId: reviewTask.id,
+          status: 'completed' as const,
+          result: {
+            summary: 'Plan review passed',
+            review_comments_posted: '0',
+            review_types: 'plan-review',
+            needs_remediation: '0',
+            prUrl: 'https://github.com/pbuchman/intexuraos/pull/1654',
+          },
+        };
+
+        const response = await sendLabelPayload(payload);
+
+        // Webhook still succeeds — merge failure is best-effort
+        expect(response.statusCode).toBe(200);
+      });
+
+      it('skips plan PR merge when GitHub token is unavailable', async () => {
+        await createPlanningTaskWithPrUrl('trace_plan_merge_no_token', 'https://github.com/pbuchman/intexuraos/pull/1654');
+        const reviewTask = await createReviewTaskWithPr('trace_plan_merge_no_token_review');
+
+        installPRNotificationServices();
+        // Override getOAuthToken to return an error (no token available)
+        const { userServiceClient: uc } = getServices();
+        vi.mocked(uc.getOAuthToken).mockResolvedValue(
+          err({ code: 'CONNECTION_NOT_FOUND' as const, message: 'Connection not found' })
+        );
+
+        const payload = {
+          taskId: reviewTask.id,
+          status: 'completed' as const,
+          result: {
+            summary: 'Plan review passed',
+            review_comments_posted: '0',
+            review_types: 'plan-review',
+            needs_remediation: '0',
+            prUrl: 'https://github.com/pbuchman/intexuraos/pull/1654',
+          },
+        };
+
+        const response = await sendLabelPayload(payload);
+
+        expect(response.statusCode).toBe(200);
+        // mergePullRequest should not have been called since we have no token
+        const { gitHubPRClient: ghClient } = getServices();
+        expect(ghClient.mergePullRequest).not.toHaveBeenCalled();
+      });
+
+      it('skips plan PR merge when planning task has no planning_pr_url', async () => {
+        const result = await codeTaskRepo.create({
+          userId: 'user-123',
+          prompt: 'Plan the task',
+          sanitizedPrompt: 'Plan the task',
+          systemPromptHash: 'plan-auto',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace_plan_merge_no_url',
+          prNumber: 1654,
+          webhookSecret: 'test-webhook-secret',
+          agentType: 'planning',
+          linearIssueId: 'INT-500',
+        });
+        if (!result.ok) throw new Error('Failed to create planning task');
+        // Update result to have empty planning_pr_url
+        await codeTaskRepo.update(result.value.id, { result: { planning_pr_url: '' } });
+        const reviewTask = await createReviewTaskWithPr('trace_plan_merge_no_url_review');
+
+        installPRNotificationServices();
+
+        const payload = {
+          taskId: reviewTask.id,
+          status: 'completed' as const,
+          result: {
+            summary: 'Plan review passed',
+            review_comments_posted: '0',
+            review_types: 'plan-review',
+            needs_remediation: '0',
+            prUrl: 'https://github.com/pbuchman/intexuraos/pull/1654',
+          },
+        };
+
+        const response = await sendLabelPayload(payload);
+
+        expect(response.statusCode).toBe(200);
+        const { gitHubPRClient: ghClient } = getServices();
+        expect(ghClient.mergePullRequest).not.toHaveBeenCalled();
+      });
+
+      it('does NOT auto-merge plan PR when review requires remediation', async () => {
+        await createPlanningTaskWithPrUrl('trace_plan_merge_remediation', 'https://github.com/pbuchman/intexuraos/pull/1654');
+        const reviewTask = await createReviewTaskWithPr('trace_plan_merge_remediation_review');
+
+        installPRNotificationServices();
+
+        const payload = {
+          taskId: reviewTask.id,
+          status: 'completed' as const,
+          result: {
+            summary: 'Plan review needs remediation',
+            review_comments_posted: '2',
+            review_types: 'plan-review',
+            needs_remediation: '1',
+            prUrl: 'https://github.com/pbuchman/intexuraos/pull/1654',
+          },
+        };
+
+        const response = await sendLabelPayload(payload);
+
+        expect(response.statusCode).toBe(200);
+        const { gitHubPRClient: ghClient } = getServices();
+        expect(ghClient.mergePullRequest).not.toHaveBeenCalled();
+      });
+    });
+
+    it('logs warning and succeeds when findOriginTaskByPR returns error', async () => {
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_origin_error' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      vi.spyOn(codeTaskRepo, 'findOriginTaskByPR').mockResolvedValueOnce(
+        err({ code: 'FIRESTORE_ERROR' as const, message: 'Simulated query error' })
+      );
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      // validateIssue should NOT be called since origin lookup failed
+      const { linearAgentClient: lac } = getServices();
+      const validateSpy = vi.mocked(lac.validateIssue);
+      const labelCalls = validateSpy.mock.calls.filter(
+        (call) => call[0].identifier === 'INT-500'
+      );
+      expect(labelCalls).toHaveLength(0);
+    });
+
+    it('logs error and succeeds when validateIssue fails', async () => {
+      await createOriginTask({ traceId: 'trace_label_validate_fail', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_validate_fail_review' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      const { linearAgentClient: lac } = getServices();
+      vi.mocked(lac.validateIssue).mockResolvedValueOnce(
+        err({ code: 'NOT_FOUND' as const, message: 'Issue not found' })
+      );
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      // updateIssueMetadata should NOT be called since validate failed
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      const labelCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].addLabels !== undefined &&
+          (call[0].addLabels.includes('ready-to-merge') || call[0].addLabels.includes('ready-to-implement'))
+      );
+      expect(labelCalls).toHaveLength(0);
+    });
+
+    it('logs error and succeeds when updateIssueMetadata fails', async () => {
+      await createOriginTask({ traceId: 'trace_label_metadata_fail', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_metadata_fail_review' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      const { linearAgentClient: lac } = getServices();
+      vi.mocked(lac.updateIssueMetadata).mockResolvedValueOnce(
+        err({ code: 'UNKNOWN' as const, message: 'Update failed' })
+      );
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('warns and succeeds when updateIssueMetadata returns droppedLabels', async () => {
+      await createOriginTask({ traceId: 'trace_label_dropped', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_dropped_review' });
+      const payload = makeLabelPayload(reviewTask.id);
+
+      const { linearAgentClient: lac } = getServices();
+      vi.mocked(lac.updateIssueMetadata).mockResolvedValueOnce(
+        ok({ droppedLabels: ['ready-to-merge'] })
+      );
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      const labelCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].addLabels !== undefined &&
+          call[0].addLabels.includes('ready-to-merge')
+      );
+      expect(labelCalls).toHaveLength(1);
+    });
+
+    it('falls back to review task issue when no origin task exists (external PR)', async () => {
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_fallback_review', linearIssueId: 'INT-REVIEW-99' });
+      vi.spyOn(codeTaskRepo, 'findOriginTaskByPR').mockResolvedValueOnce(ok(null));
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const validateSpy = vi.mocked(lac.validateIssue);
+      expect(validateSpy).toHaveBeenCalledWith({
+        userId: 'user-123',
+        identifier: 'INT-REVIEW-99',
+      });
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      expect(metadataSpy).toHaveBeenCalledWith({
+        userId: 'user-123',
+        issueId: 'linear-issue-uuid',
+        addLabels: ['ready-to-merge'],
+      });
+    });
+
+    it('falls back to review task issue when origin lookup fails', async () => {
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_fallback_error', linearIssueId: 'INT-REVIEW-ERR' });
+      vi.spyOn(codeTaskRepo, 'findOriginTaskByPR').mockResolvedValueOnce(
+        err({ code: 'FIRESTORE_ERROR' as const, message: 'Simulated query error' })
+      );
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      // Should still attempt to set label on review task's issue
+      const validateSpy = vi.mocked(lac.validateIssue);
+      expect(validateSpy).toHaveBeenCalledWith({
+        userId: 'user-123',
+        identifier: 'INT-REVIEW-ERR',
+      });
+    });
+
+    it('skips label when neither origin nor review task has linearIssueId', async () => {
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_no_issue_at_all' });
+      // No origin task exists either
+      vi.spyOn(codeTaskRepo, 'findOriginTaskByPR').mockResolvedValueOnce(ok(null));
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      // No label-related metadata update should have been attempted
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      const labelMetaCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].addLabels !== undefined &&
+          (call[0].addLabels.includes('ready-to-merge') || call[0].addLabels.includes('ready-to-implement'))
+      );
+      expect(labelMetaCalls).toHaveLength(0);
+    });
+
+    it('skips review-outcome label when PR is already merged', async () => {
+      await createOriginTask({ traceId: 'trace_label_merged', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_merged_review' });
+
+      // Use fake with seeding instead of vi.fn() override
+      const fakeSummaryRepo = new FakeGitHubPRSummaryRepo();
+      fakeSummaryRepo.seedSummary({
+        repository: 'pbuchman/intexuraos',
+        pullRequestNumber: reviewTask.prNumber ?? 42,
+        title: 'Test PR',
+        state: 'closed',
+        mergedAt: new Date('2026-04-01T09:35:00Z'),
+        baseBranch: 'main',
+        authorLogin: 'test-user',
+        headBranch: 'feature/test',
+        mergeConflictStatus: null,
+        lastConflictCheckedAt: null,
+        conflictEpisodeStartedAt: null,
+        conflictResolvedAt: null,
+        managedConflictCommentId: null,
+        managedConflictTaskId: null,
+        managedConflictTaskOwnerUserId: null,
+        lastActivityAt: new Date(),
+        firstSeenAt: new Date(),
+        lastReviewedCommitSha: null,
+        lastReviewNeedsRemediation: null,
+      });
+      setServices({
+        ...getServices(),
+        gitHubPRSummaryRepo: fakeSummaryRepo,
+      });
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      // updateIssueMetadata should NOT have been called for label addition
+      const labelCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].addLabels !== undefined
+      );
+      expect(labelCalls).toHaveLength(0);
+    });
+
+    it('skips review-outcome label when GitHub API fallback detects PR is merged (stale summary)', async () => {
+      await createOriginTask({ traceId: 'trace_label_merged_fallback', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_merged_fallback_review' });
+
+      // Use fakes with seeding instead of vi.fn() overrides
+      const fakeSummaryRepo = new FakeGitHubPRSummaryRepo();
+      // Simulate stale summary: says NOT merged
+      fakeSummaryRepo.seedSummary({
+        repository: 'pbuchman/intexuraos',
+        pullRequestNumber: reviewTask.prNumber ?? 42,
+        title: 'Test PR',
+        state: 'open',
+        mergedAt: null,
+        baseBranch: 'main',
+        authorLogin: 'test-user',
+        headBranch: 'feature/test',
+        mergeConflictStatus: null,
+        lastConflictCheckedAt: null,
+        conflictEpisodeStartedAt: null,
+        conflictResolvedAt: null,
+        managedConflictCommentId: null,
+        managedConflictTaskId: null,
+        managedConflictTaskOwnerUserId: null,
+        lastActivityAt: new Date(),
+        firstSeenAt: new Date(),
+        lastReviewedCommitSha: null,
+        lastReviewNeedsRemediation: null,
+      });
+
+      const fakePRClient = new FakeGitHubPRClient();
+      // GitHub API says actually merged
+      fakePRClient.seedPrStatus('pbuchman', 'intexuraos', reviewTask.prNumber ?? 42, {
+        state: 'closed',
+        mergedAt: new Date('2026-04-01T09:35:00Z'),
+        headRef: 'feature/test',
+      });
+
+      // OAuth token needed for fallback API call
+      const fakeUserServiceClient = {
+        ...mockUserServiceClient,
+        getOAuthToken: async (): Promise<Result<{ accessToken: string; email: string }, { code: string; message: string }>> => ok({ accessToken: 'test-token', email: 'test@test.com' }),
+      } as UserServiceClient;
+
+      setServices({
+        ...getServices(),
+        gitHubPRSummaryRepo: fakeSummaryRepo,
+        gitHubPRClient: fakePRClient,
+        userServiceClient: fakeUserServiceClient,
+      });
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      // updateIssueMetadata should NOT have been called for label addition
+      const labelCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].addLabels !== undefined
+      );
+      expect(labelCalls).toHaveLength(0);
+    });
+
+    it('still applies ready-to-merge label when GitHub API fallback confirms PR is not merged', async () => {
+      await createOriginTask({ traceId: 'trace_label_fallback_not_merged', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_fallback_not_merged_review' });
+
+      // Use fakes with seeding instead of vi.fn() overrides
+      const fakeSummaryRepo = new FakeGitHubPRSummaryRepo();
+      // Simulate stale summary: says NOT merged
+      fakeSummaryRepo.seedSummary({
+        repository: 'pbuchman/intexuraos',
+        pullRequestNumber: reviewTask.prNumber ?? 42,
+        title: 'Test PR',
+        state: 'open',
+        mergedAt: null,
+        baseBranch: 'main',
+        authorLogin: 'test-user',
+        headBranch: 'feature/test',
+        mergeConflictStatus: null,
+        lastConflictCheckedAt: null,
+        conflictEpisodeStartedAt: null,
+        conflictResolvedAt: null,
+        managedConflictCommentId: null,
+        managedConflictTaskId: null,
+        managedConflictTaskOwnerUserId: null,
+        lastActivityAt: new Date(),
+        firstSeenAt: new Date(),
+        lastReviewedCommitSha: null,
+        lastReviewNeedsRemediation: null,
+      });
+
+      const fakePRClient = new FakeGitHubPRClient();
+      // GitHub API also says NOT merged (PR still open)
+      fakePRClient.seedPrStatus('pbuchman', 'intexuraos', reviewTask.prNumber ?? 42, {
+        state: 'open',
+        mergedAt: null,
+        headRef: 'feature/test',
+      });
+
+      // OAuth token needed for fallback API call
+      const fakeUserServiceClient = {
+        ...mockUserServiceClient,
+        getOAuthToken: async (): Promise<Result<{ accessToken: string; email: string }, { code: string; message: string }>> => ok({ accessToken: 'test-token', email: 'test@test.com' }),
+      } as UserServiceClient;
+
+      setServices({
+        ...getServices(),
+        gitHubPRSummaryRepo: fakeSummaryRepo,
+        gitHubPRClient: fakePRClient,
+        userServiceClient: fakeUserServiceClient,
+      });
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      // Label SHOULD be applied since PR is not merged
+      const labelCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].addLabels !== undefined && call[0].addLabels.includes('ready-to-merge')
+      );
+      expect(labelCalls).toHaveLength(1);
+    });
+
+    it('does NOT set labels when needs_remediation is not "0"', async () => {
+      await createOriginTask({ traceId: 'trace_label_remediation', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_remediation_review' });
+      const payload = {
+        taskId: reviewTask.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Found issues',
+          review_comments_posted: '2',
+          review_types: 'code_quality',
+          needs_remediation: '1',
+        },
+      };
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      const labelCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].addLabels !== undefined &&
+          (call[0].addLabels.includes('ready-to-merge') || call[0].addLabels.includes('ready-to-implement'))
+      );
+      expect(labelCalls).toHaveLength(0);
+    });
+
+    it('recomputes group summary after setting review-outcome label', async () => {
+      await createOriginTask({ traceId: 'trace_label_summary', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_summary_review' });
+
+      const mockRecomputeWithLabels = vi.fn().mockResolvedValue(ok(undefined));
+      setServices({
+        ...getServices(),
+        groupSummaryRepo: {
+          recomputeWithLabels: mockRecomputeWithLabels,
+        } as never,
+      });
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockRecomputeWithLabels).toHaveBeenCalledWith(
+        'user-123',
+        'INT-500',
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'ready-to-merge' }),
+        ]),
+        expect.any(String),
+      );
+    });
+
+    it('does not throw when recomputeWithLabels fails after label set', async () => {
+      await createOriginTask({ traceId: 'trace_label_summary_fail', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_summary_fail_review' });
+
+      const mockRecomputeWithLabels = vi.fn().mockRejectedValue(new Error('firestore down'));
+      setServices({
+        ...getServices(),
+        groupSummaryRepo: {
+          recomputeWithLabels: mockRecomputeWithLabels,
+        } as never,
+      });
+
+      const payload = makeLabelPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      // Should complete successfully — recompute is fire-and-forget
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('removes ready-to-merge label when needs_remediation is 1 and origin is execution task', async () => {
+      await createOriginTask({ traceId: 'trace_remove_label_exec', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_remove_label_exec_review' });
+      const payload = makeNegativeReviewPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      const removeCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].removeLabels !== undefined &&
+          call[0].removeLabels.includes('ready-to-merge')
+      );
+      expect(removeCalls).toHaveLength(1);
+      expect(removeCalls[0]?.[0]).toEqual({
+        userId: 'user-123',
+        issueId: 'INT-500',
+        removeLabels: ['ready-to-merge'],
+      });
+    });
+
+    it('removes ready-to-implement label when needs_remediation is 1 and origin is planning task', async () => {
+      await createOriginTask({ traceId: 'trace_remove_label_plan', agentType: 'planning' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_remove_label_plan_review' });
+      const payload = makeNegativeReviewPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      const removeCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].removeLabels !== undefined &&
+          call[0].removeLabels.includes('ready-to-implement')
+      );
+      expect(removeCalls).toHaveLength(1);
+      expect(removeCalls[0]?.[0]).toEqual({
+        userId: 'user-123',
+        issueId: 'INT-500',
+        removeLabels: ['ready-to-implement'],
+      });
+    });
+
+    it('skips label removal when no target Linear issue available for needs_remediation 1', async () => {
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_remove_label_no_issue' });
+      vi.spyOn(codeTaskRepo, 'findOriginTaskByPR').mockResolvedValueOnce(ok(null));
+
+      const payload = makeNegativeReviewPayload(reviewTask.id);
+
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      const removeCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].removeLabels !== undefined
+      );
+      expect(removeCalls).toHaveLength(0);
+    });
+
+    it('recomputes group summary with empty labels after removing review-outcome label', async () => {
+      await createOriginTask({ traceId: 'trace_remove_label_recompute', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_remove_label_recompute_review' });
+
+      const mockRecomputeWithLabels = vi.fn().mockResolvedValue(ok(undefined));
+      setServices({
+        ...getServices(),
+        groupSummaryRepo: {
+          recomputeWithLabels: mockRecomputeWithLabels,
+        } as never,
+      });
+
+      const payload = makeNegativeReviewPayload(reviewTask.id);
+      const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockRecomputeWithLabels).toHaveBeenCalledWith(
+        'user-123',
+        'INT-500',
+        [],
+        expect.any(String),
+      );
+    });
+  });
+
+  describe('remediation task-complete → requiresReReview persistence', () => {
+    async function createRemediationTaskRecord(
+      traceId: string,
+      requiresReReview?: boolean,
+    ): Promise<import('../../domain/models/codeTask.js').CodeTask> {
+      const result = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix review findings',
+        sanitizedPrompt: 'Fix review findings',
+        systemPromptHash: 'remediation-auto',
+        workerType: 'codex',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId,
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'remediation',
+      });
+      if (!result.ok) throw new Error('Failed to create remediation task');
+      if (requiresReReview === undefined) {
+        return result.value;
+      }
+      const updateResult = await codeTaskRepo.update(result.value.id, { requiresReReview });
+      if (!updateResult.ok) throw new Error('Failed to seed remediation requiresReReview');
+      return updateResult.value;
+    }
+
+    it('writes requiresReReview from remediation result', async () => {
+      const task = await createRemediationTaskRecord('trace_remediation_backfill');
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Fixed the review findings.',
+          requires_re_review: '1',
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/504',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const stored = await codeTaskRepo.findById(task.id);
+      expect(stored.ok).toBe(true);
+      if (!stored.ok) throw new Error('Failed to get remediation task');
+      expect(stored.value.requiresReReview).toBe(true);
+      expect(stored.value.result?.requires_re_review).toBe('1');
+    });
+
+    it('overwrites existing requiresReReview with result value', async () => {
+      const task = await createRemediationTaskRecord('trace_remediation_overwrite', false);
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Fixed the review findings.',
+          requires_re_review: '1',
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/505',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const stored = await codeTaskRepo.findById(task.id);
+      expect(stored.ok).toBe(true);
+      if (!stored.ok) throw new Error('Failed to get remediation task');
+      expect(stored.value.requiresReReview).toBe(true);
+      expect(stored.value.result?.requires_re_review).toBe('1');
+    });
+  });
+
   describe('planning-agent unclear failure mapping', () => {
     it('stores failed planning unclear webhook error and preserves flattened planning result', async () => {
       const createResult = await codeTaskRepo.create({
@@ -3624,7 +6080,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         baseBranch: 'development',
         traceId: 'trace_123',
         webhookSecret: 'test-webhook-secret',
-        actionId: 'action-123',
+        actionId: '550e8400-e29b-41d4-a716-446655440000',
       });
 
       expect(createResult.ok).toBe(true);
@@ -3663,7 +6119,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           baseUrl: 'http://actions-agent',
           internalAuthToken: 'test-token',
         }),
-        `/internal/actions/action-123/status`,
+        `/internal/actions/550e8400-e29b-41d4-a716-446655440000/status`,
         expect.objectContaining({
           method: 'PATCH',
           body: JSON.stringify({
@@ -3741,7 +6197,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         baseBranch: 'development',
         traceId: 'trace_123',
         webhookSecret: 'test-webhook-secret',
-        actionId: 'action-pr-less',
+        actionId: '660e8400-e29b-41d4-a716-446655440001',
       });
 
       expect(createResult.ok).toBe(true);
@@ -3779,7 +6235,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           baseUrl: 'http://actions-agent',
           internalAuthToken: 'test-token',
         }),
-        `/internal/actions/action-pr-less/status`,
+        `/internal/actions/660e8400-e29b-41d4-a716-446655440001/status`,
         expect.objectContaining({
           method: 'PATCH',
           body: JSON.stringify({
@@ -3801,7 +6257,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         baseBranch: 'development',
         traceId: 'trace_123',
         webhookSecret: 'test-webhook-secret',
-        actionId: 'action-789',
+        actionId: '770e8400-e29b-41d4-a716-446655440002',
       });
 
       expect(createResult.ok).toBe(true);
@@ -3838,7 +6294,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           baseUrl: 'http://actions-agent',
           internalAuthToken: 'test-token',
         }),
-        `/internal/actions/action-789/status`,
+        `/internal/actions/770e8400-e29b-41d4-a716-446655440002/status`,
         expect.objectContaining({
           method: 'PATCH',
           body: JSON.stringify({
@@ -3863,7 +6319,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         baseBranch: 'development',
         traceId: 'trace_123',
         webhookSecret: 'test-webhook-secret',
-        actionId: 'action-update-fail',
+        actionId: '880e8400-e29b-41d4-a716-446655440003',
       });
 
       expect(createResult.ok).toBe(true);
@@ -3922,7 +6378,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         baseBranch: 'development',
         traceId: 'trace_123',
         webhookSecret: 'test-webhook-secret',
-        actionId: 'action-456',
+        actionId: '990e8400-e29b-41d4-a716-446655440004',
       });
 
       expect(createResult.ok).toBe(true);
@@ -3949,13 +6405,13 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Verify actions-agent was called with 'failed' status
+      // Verify actions-agent was called with 'interrupted' status (INT-1119: statusMirrorService maps correctly)
       expect(mockFetchWithAuth).toHaveBeenCalledWith(
         expect.any(Object),
-        '/internal/actions/action-456/status',
+        '/internal/actions/990e8400-e29b-41d4-a716-446655440004/status',
         expect.objectContaining({
           body: JSON.stringify({
-            resource_status: 'failed',
+            resource_status: 'interrupted',
             resource_result: {
               error: 'Worker was interrupted during task execution',
             },
@@ -3976,7 +6432,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         baseBranch: 'development',
         traceId: 'trace_123',
         webhookSecret: 'test-webhook-secret',
-        actionId: 'action-789',
+        actionId: 'aa0e8400-e29b-41d4-a716-446655440005',
       });
 
       expect(createResult.ok).toBe(true);
@@ -4374,6 +6830,57 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(markInReviewSpy).not.toHaveBeenCalled();
     });
 
+    it('does not call markInReview for remediation task with linearIssueId', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix review findings',
+        sanitizedPrompt: 'Fix review findings',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        webhookSecret: 'test-webhook-secret',
+        linearIssueId: 'INT-504',
+        agentType: 'remediation',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const services = getServices();
+      const markInReviewSpy = vi.spyOn(services.linearIssueService, 'markInReview');
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          branch: 'fix/remediation-fixes',
+          commits: 1,
+          summary: 'Fixed review findings',
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/504',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(markInReviewSpy).not.toHaveBeenCalled();
+    });
+
     it('does not call markInReview for failed task with linearIssueId', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
@@ -4420,6 +6927,218 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
       expect(markInReviewSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('triggers drain on task completion (INT-1098)', () => {
+    it('calls drainTaskQueue when completed task has prNumber', async () => {
+      const mockDrain = vi.mocked(drainTaskQueueModule.drainTaskQueue);
+      mockDrain.mockClear();
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_drain_1',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          branch: 'fix/drain-test',
+          commits: 1,
+          summary: 'Test drain trigger',
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.received).toBe(true);
+      expect(mockDrain).toHaveBeenCalledOnce();
+    });
+
+    it('does not call drainTaskQueue when completed task has no prNumber', async () => {
+      const mockDrain = vi.mocked(drainTaskQueueModule.drainTaskQueue);
+      mockDrain.mockClear();
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug no pr',
+        sanitizedPrompt: 'Fix the bug no pr',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_drain_2',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          branch: 'fix/no-pr-drain',
+          commits: 1,
+          summary: 'No PR, no drain',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.received).toBe(true);
+      expect(mockDrain).not.toHaveBeenCalled();
+    });
+
+    it('returns { received: true } even when drainTaskQueue throws', async () => {
+      const mockDrain = vi.mocked(drainTaskQueueModule.drainTaskQueue);
+      mockDrain.mockClear();
+      mockDrain.mockRejectedValueOnce(new Error('drain exploded'));
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug drain throws',
+        sanitizedPrompt: 'Fix the bug drain throws',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_drain_3',
+        prNumber: 99,
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          branch: 'fix/drain-throws',
+          commits: 1,
+          summary: 'Drain will throw',
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/99',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.received).toBe(true);
+      // Verify drain WAS called (so the rejection was actually exercised, not bypassed)
+      expect(mockDrain).toHaveBeenCalledOnce();
+    });
+
+    it('passes executionMemory resources to drainTaskQueue during post-completion drain', async () => {
+      const mockDrain = vi.mocked(drainTaskQueueModule.drainTaskQueue);
+      mockDrain.mockClear();
+
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug with memory',
+        sanitizedPrompt: 'Fix the bug with memory',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_drain_memory',
+        prNumber: 99,
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          branch: 'fix/memory-drain-test',
+          commits: 1,
+          summary: 'Test memory drain trigger',
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/99',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockDrain).toHaveBeenCalledWith(
+        expect.objectContaining({
+          executionMemory: expect.any(Object),
+        }),
+      );
     });
   });
 });
@@ -4542,6 +7261,8 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
@@ -4592,6 +7313,8 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
+      autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
@@ -4915,6 +7638,8 @@ describe('POST /internal/logs', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
@@ -4965,6 +7690,8 @@ describe('POST /internal/logs', () => {
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
+      autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
@@ -5058,6 +7785,99 @@ describe('POST /internal/logs', () => {
     expect(body.count).toBe(2);
   });
 
+  it('accepts an empty chunk batch without storing formatted lines', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Fix the bug',
+      sanitizedPrompt: 'Fix the bug',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_empty_logs_123',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    vi.spyOn(logChunkRepo, 'storeBatch').mockResolvedValueOnce(ok(undefined));
+    const entryStoreSpy = vi.spyOn(logLineRepo, 'storeBatch');
+
+    const payload = {
+      taskId: task.id,
+      chunks: [],
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/logs',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(entryStoreSpy).not.toHaveBeenCalled();
+  });
+
+  it('accepts an empty chunk batch even when runtime lookup falls back transiently', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Fix the bug',
+      sanitizedPrompt: 'Fix the bug',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_empty_logs_fallback_123',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    const originalFindById = codeTaskRepo.findById.bind(codeTaskRepo);
+    const findByIdSpy = vi.spyOn(codeTaskRepo, 'findById');
+    findByIdSpy
+      .mockResolvedValueOnce(ok(task))
+      .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'transient lookup failure' }))
+      .mockImplementation(originalFindById);
+
+    vi.spyOn(logChunkRepo, 'storeBatch').mockResolvedValueOnce(ok(undefined));
+    const entryStoreSpy = vi.spyOn(logLineRepo, 'storeBatch');
+
+    const payload = {
+      taskId: task.id,
+      chunks: [],
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/logs',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(entryStoreSpy).not.toHaveBeenCalled();
+  });
+
   it('stores formatted log lines alongside raw chunks', async () => {
     const createResult = await codeTaskRepo.create({
       userId: 'user-123',
@@ -5114,6 +7934,153 @@ describe('POST /internal/logs', () => {
     expect(storedEntries).toHaveLength(2);
     expect(storedEntries?.[0]?.text).toBe('[init] Model: claude-opus-4-6 | Tools: 2');
     expect(storedEntries?.[1]?.text).toBe('[claude] Hello');
+  });
+
+  it('stores raw Codex JSON log lines without Claude formatting', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Review the PR',
+      sanitizedPrompt: 'Review the PR',
+      systemPromptHash: 'default',
+      workerType: 'codex',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_codex_123',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    vi.spyOn(logChunkRepo, 'storeBatch').mockResolvedValueOnce(ok(undefined));
+    const entryStoreSpy = vi.spyOn(logLineRepo, 'storeBatch');
+
+    const jsonContent = JSON.stringify({
+      type: 'item.completed',
+      item: { type: 'agent_message', text: 'READY' },
+    }) + '\n';
+
+    const payload = {
+      taskId: task.id,
+      chunks: [
+        {
+          sequence: 1,
+          content: jsonContent,
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/logs',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(entryStoreSpy).toHaveBeenCalledOnce();
+    const storedEntries = entryStoreSpy.mock.calls[0]?.[1];
+    expect(storedEntries).toHaveLength(1);
+    expect(storedEntries?.[0]?.text).toBe(jsonContent.trimEnd());
+  });
+
+  it('does not cache the Claude fallback when runtime lookup fails transiently for a Codex task', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Review the PR',
+      sanitizedPrompt: 'Review the PR',
+      systemPromptHash: 'default',
+      workerType: 'codex',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_codex_runtime_retry_123',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    const originalFindById = codeTaskRepo.findById.bind(codeTaskRepo);
+    const findByIdSpy = vi.spyOn(codeTaskRepo, 'findById');
+    findByIdSpy
+      .mockResolvedValueOnce(ok(task))
+      .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'transient lookup failure' }))
+      .mockImplementation(originalFindById);
+
+    vi.spyOn(logChunkRepo, 'storeBatch').mockResolvedValueOnce(ok(undefined));
+    const entryStoreSpy = vi.spyOn(logLineRepo, 'storeBatch');
+
+    const firstJson = JSON.stringify({
+      type: 'item.completed',
+      item: { type: 'agent_message', text: 'FIRST' },
+    }) + '\n';
+    const firstPayload = {
+      taskId: task.id,
+      chunks: [
+        {
+          sequence: 1,
+          content: firstJson,
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    };
+
+    const firstSig = generateWebhookSignature(firstPayload, 'test-webhook-secret');
+
+    const firstResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/logs',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': firstSig.timestamp,
+        'x-request-signature': firstSig.signature,
+      },
+      payload: firstPayload,
+    });
+
+    expect(firstResponse.statusCode).toBe(200);
+    expect(entryStoreSpy.mock.calls[0]?.[1]?.[0]?.text).toBe('[event] item.completed');
+
+    const secondJson = JSON.stringify({
+      type: 'item.completed',
+      item: { type: 'agent_message', text: 'SECOND' },
+    }) + '\n';
+    const secondPayload = {
+      taskId: task.id,
+      chunks: [
+        {
+          sequence: 2,
+          content: secondJson,
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    };
+    const secondSig = generateWebhookSignature(secondPayload, 'test-webhook-secret');
+
+    const secondResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/logs',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': secondSig.timestamp,
+        'x-request-signature': secondSig.signature,
+      },
+      payload: secondPayload,
+    });
+
+    expect(secondResponse.statusCode).toBe(200);
+    expect(entryStoreSpy.mock.calls[1]?.[1]?.[0]?.text).toBe(secondJson.trimEnd());
   });
 
   it('validates HMAC signature', async () => {
@@ -5350,6 +8317,55 @@ describe('POST /internal/logs', () => {
     expect(body.error.code).toBe('UNAUTHORIZED');
   });
 
+  it('returns UNKNOWN_TASK when findById fails during HMAC secret lookup for logs (L1387)', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Fix the bug',
+      sanitizedPrompt: 'Fix the bug',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_logs_189',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    // Mock findById to fail (simulate DB error during HMAC secret lookup)
+    const spy = vi.spyOn(codeTaskRepo, 'findById').mockResolvedValueOnce(
+      err({ code: 'FIRESTORE_ERROR', message: 'DB unavailable' })
+    );
+
+    const payload = {
+      taskId: task.id,
+      chunks: [
+        { sequence: 1, content: 'Log line', timestamp: new Date().toISOString() },
+      ],
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/logs',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(401);
+    const body = JSON.parse(response.body);
+    expect(body.error.code).toBe('UNKNOWN_TASK');
+    spy.mockRestore();
+  });
+
   it('updates task from dispatched to running on first log chunk', async () => {
     const createResult = await codeTaskRepo.create({
       userId: 'user-123',
@@ -5511,6 +8527,8 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
@@ -5561,6 +8579,8 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
+      autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
@@ -5955,6 +8975,93 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     expect(params.message).not.toContain('🔁');
   });
 
+  it('merges result fields on resumed completion instead of replacing', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Implement the new feature',
+      sanitizedPrompt: 'Implement the new feature',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_merge_test',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    // First: send a normal completion to set initial result fields including
+    // a field (planning_outcome_label) that will NOT be present in the second webhook
+    const firstPayload = {
+      taskId: task.id,
+      status: 'completed' as const,
+      result: {
+        branch: 'feature/initial-branch',
+        summary: 'Original summary',
+        planning_outcome_label: 'planned' as const,
+      },
+    };
+    const { timestamp: ts1, signature: sig1 } = generateWebhookSignature(firstPayload, 'test-webhook-secret');
+    const firstResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': ts1,
+        'x-request-signature': sig1,
+      },
+      payload: firstPayload,
+    });
+    expect(firstResponse.statusCode).toBe(200);
+
+    // Confirm first webhook stored planning_outcome_label
+    const afterFirst = await codeTaskRepo.findById(task.id);
+    expect(afterFirst.ok).toBe(true);
+    if (!afterFirst.ok) throw new Error('Failed to get task after first webhook');
+    expect(afterFirst.value.result?.planning_outcome_label).toBe('planned');
+
+    // Second: send resumed completion with git result fields — does NOT include planning_outcome_label
+    const resumedPayload = {
+      taskId: task.id,
+      status: 'completed' as const,
+      resumedCompletion: true,
+      result: {
+        branch: 'feature/final-branch',
+        commits: 3,
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+        summary: 'Updated summary from resumed run',
+      },
+    };
+    const { timestamp: ts2, signature: sig2 } = generateWebhookSignature(resumedPayload, 'test-webhook-secret');
+    const resumedResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': ts2,
+        'x-request-signature': sig2,
+      },
+      payload: resumedPayload,
+    });
+    expect(resumedResponse.statusCode).toBe(200);
+
+    // Verify the result was MERGED: new fields present AND first-webhook-only field preserved
+    const getResult = await codeTaskRepo.findById(task.id);
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) throw new Error('Failed to get task');
+    // New fields from resumed payload are present
+    expect(getResult.value.result?.branch).toBe('feature/final-branch');
+    expect(getResult.value.result?.commits).toBe(3);
+    expect(getResult.value.result?.prUrl).toBe('https://github.com/pbuchman/intexuraos/pull/42');
+    // summary updated by resumed payload
+    expect(getResult.value.result?.summary).toBe('Updated summary from resumed run');
+    // planning_outcome_label from first webhook is preserved (this is the key assertion)
+    expect(getResult.value.result?.planning_outcome_label).toBe('planned');
+  });
+
   describe('stale callback handling for cancelled tasks', () => {
     it('ignores completed callback for already cancelled task', async () => {
       const createResult = await codeTaskRepo.create({
@@ -6177,5 +9284,1704 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       if (!getResult.ok) throw new Error('Failed to get task');
       expect(getResult.value.status).toBe('cancelled');
     });
+  });
+});
+
+describe('POST /internal/webhooks/task-complete - Additional branch coverage', () => {
+  let app: Awaited<ReturnType<typeof buildServer>>;
+  let fakeFirestore: ReturnType<typeof createFakeFirestore>;
+  let logger: Logger;
+  let codeTaskRepo: CodeTaskRepository;
+
+  function generateWebhookSignature(body: object, secret: string): { timestamp: string; signature: string } {
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const rawBody = JSON.stringify(body);
+    const message = `${timestamp}.${rawBody}`;
+    const signature = crypto.createHmac('sha256', secret).update(message).digest('hex');
+    return { timestamp, signature };
+  }
+
+  beforeEach(async () => {
+    mockedJwtVerify.mockResolvedValue({
+      payload: { sub: 'test-user-id', email: 'test@example.com' },
+      protectedHeader: new Uint8Array(),
+    } as never);
+
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.intexuraos.cloud';
+    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
+
+    fakeFirestore = createFakeFirestore();
+    setFirestore(fakeFirestore as unknown as Firestore);
+    logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
+
+    codeTaskRepo = createFirestoreCodeTaskRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
+    const logChunkRepo = createFirestoreLogChunkRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
+    const logLineRepo = createFirestoreLogLineRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
+    const actionsAgentClient = createActionsAgentClient({
+      baseUrl: 'http://actions-agent',
+      internalAuthToken: 'test-token',
+      logger,
+    });
+
+    const linearAgentClient = createLinearAgentHttpClient({
+      baseUrl: 'http://linear-agent:8086',
+      internalAuthToken: 'test-token',
+      timeoutMs: 10000,
+    }, logger);
+    vi.spyOn(linearAgentClient, 'validateIssue').mockResolvedValue(
+      ok({
+        id: 'linear-issue-uuid',
+        identifier: 'INT-123',
+        title: 'Test issue',
+        url: 'https://linear.app/pbuchman/issue/INT-123',
+        labels: [],
+        childCount: 0,
+        parentId: null,
+      })
+    );
+    vi.spyOn(linearAgentClient, 'fetchIssueTree').mockResolvedValue(
+      ok({
+        root: {
+          id: 'linear-issue-uuid',
+          identifier: 'INT-999',
+          url: 'https://linear.app/pbuchman/issue/INT-999',
+          parentId: 'linear-issue-uuid',
+          labels: [],
+          assigneeId: null,
+          state: 'Backlog',
+        },
+        descendants: [],
+      })
+    );
+    vi.spyOn(linearAgentClient, 'fetchDirectChildrenLive').mockResolvedValue(ok([]));
+    vi.spyOn(linearAgentClient, 'updateIssueMetadata').mockResolvedValue(ok({ droppedLabels: [] }));
+    vi.spyOn(linearAgentClient, 'addComment').mockResolvedValue(ok({ commentId: 'comment-1' }));
+    vi.spyOn(linearAgentClient, 'updateIssueState').mockResolvedValue(ok(undefined));
+
+    const linearIssueService = createLinearIssueService({ linearAgentClient, logger });
+    const rateLimitService: RateLimitService = {
+      async checkLimits() { return ok(undefined); },
+      async recordTaskStart() { return; },
+      async recordTaskComplete() { return; },
+    };
+    const mockWhatsAppPublisher = { publishSendMessage: vi.fn().mockResolvedValue(ok(undefined)) };
+    const whatsappNotifier = createWhatsAppNotifier({
+      whatsappPublisher: mockWhatsAppPublisher as unknown as WhatsAppSendPublisher,
+    });
+
+    vi.mocked(fetchWithAuth).mockResolvedValue(ok(undefined));
+
+    setServices({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+      codeTaskRepo,
+      logChunkRepo,
+      logLineRepo,
+      taskDispatcher: createTaskDispatcherService({ logger, workerHealthProbe: mockWorkerHealthProbe }),
+      workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      whatsappNotifier,
+      actionsAgentClient,
+      linearAgentClient,
+      rateLimitService,
+      linearIssueService,
+      metricsClient: createNoOpMetricsClient(),
+      statusMirrorService: createStatusMirrorService({ actionsAgentClient, logger }),
+      processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      workerHealthProbe: mockWorkerHealthProbe,
+      gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
+      gitHubPRSummaryRepo: {} as never,
+      turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      userServiceClient: mockUserServiceClient,
+      gitHubPRClient: {} as never,
+      webhookRules: {} as never,
+      dispatchService: {} as never,
+      toolCallingClient: undefined,
+      eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
+      unifiedEvaluator: {} as never,
+      automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
+      taskEnqueueService: {} as never,
+      mergeConflictDetector: {
+        detectOnPush: vi.fn().mockResolvedValue(undefined),
+        reconcile: vi.fn().mockResolvedValue({ processed: 0 }),
+      },
+      mergeQueueWatchRepo: {
+        create: vi.fn(),
+        findById: vi.fn(),
+        findActiveByUserAndBranch: vi.fn(),
+        findAllActive: vi.fn(),
+        findByUserAndRepo: vi.fn(),
+        update: vi.fn(),
+        appendMergedPr: vi.fn(),
+      },
+    } as {
+      firestore: Firestore;
+      logger: Logger;
+      codeTaskRepo: CodeTaskRepository;
+      logChunkRepo: LogChunkRepository;
+      logLineRepo: LogLineRepository;
+      taskDispatcher: TaskDispatcherService;
+      workerSettingsRepo: WorkerSettingsRepository;
+      actionsAgentClient: ActionsAgentClient;
+      linearAgentClient: LinearAgentClient;
+      whatsappNotifier: WhatsAppNotifier;
+      rateLimitService: RateLimitService;
+      linearIssueService: LinearIssueService;
+      statusMirrorService: StatusMirrorService;
+      metricsClient: MetricsClient;
+      processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
+      detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
+      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
+      autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
+      workerHealthProbe: WorkerHealthProbe;
+      gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
+      turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
+      userServiceClient: import('@intexuraos/internal-clients').UserServiceClient;
+      gitHubPRClient: import('../../domain/ports/gitHubPRClient.js').GitHubPRClient;
+      webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
+      dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
+      toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
+      eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
+      unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
+      automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
+      taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
+      mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
+      mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
+    });
+
+    app = await buildServer();
+  });
+
+  afterEach(() => {
+    resetServices();
+    resetFirestore();
+    vi.clearAllMocks();
+  });
+
+  it('fails planning enforcement when linearIssueId is undefined', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'Plan without linear', sanitizedPrompt: 'Plan without linear',
+      systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_no_linear',
+      webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '0' as const, planning_subtask_urls: '', planning_pr_url: '' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+
+    expect(response.statusCode).toBe(200);
+    const getResult = await codeTaskRepo.findById(task.id);
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) throw new Error('Failed');
+    expect(getResult.value.status).toBe('failed');
+    expect(getResult.value.error?.message).toContain('linearIssueId');
+  });
+
+  it('fails planning enforcement when validateIssue fails', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'Plan validate fail', sanitizedPrompt: 'Plan validate fail',
+      systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_validate_fail',
+      linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    vi.mocked(getServices().linearAgentClient.validateIssue).mockReset();
+    vi.mocked(getServices().linearAgentClient.validateIssue).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'Linear down' }));
+
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '0' as const, planning_subtask_urls: '', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+
+    expect(response.statusCode).toBe(200);
+    const getResult = await codeTaskRepo.findById(task.id);
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) throw new Error('Failed');
+    expect(getResult.value.status).toBe('failed');
+    expect(getResult.value.error?.message).toContain('Failed to validate original issue');
+  });
+
+  it('fails planning when subtask validation fails via URL-based resolution', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't1', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'original-uuid', identifier: 'INT-123', title: 'O', url: 'u', labels: [], childCount: 1, parentId: null })).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'down' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: 'https://linear.app/pbuchman/issue/INT-200/sub', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.status).toBe('failed');
+    expect(g.value.error?.message).toContain('Failed to validate subtask');
+  });
+
+  it('fails planning when subtask is not a direct child in URL-based resolution', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't2', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'original-uuid', identifier: 'INT-123', title: 'O', url: 'u', labels: [], childCount: 1, parentId: null })).mockResolvedValueOnce(ok({ id: 'child-uuid', identifier: 'INT-200', title: 'C', url: 'u', labels: [], childCount: 0, parentId: 'wrong-parent' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: 'https://linear.app/pbuchman/issue/INT-200/sub', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('not a direct child');
+  });
+
+  it('fails planning when subtask state normalization fails in URL path', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't3', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'original-uuid', identifier: 'INT-123', title: 'O', url: 'u', labels: [], childCount: 1, parentId: null })).mockResolvedValueOnce(ok({ id: 'child-uuid', identifier: 'INT-200', title: 'C', url: 'u', labels: [], childCount: 0, parentId: 'original-uuid' }));
+    vi.mocked(lac.updateIssueState).mockReset();
+    vi.mocked(lac.updateIssueState).mockResolvedValueOnce(ok(undefined)).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'state fail' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: 'https://linear.app/pbuchman/issue/INT-200/sub', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('Failed to normalize subtask');
+  });
+
+  it('fails planning when subtask metadata normalization fails in URL path', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't4', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'original-uuid', identifier: 'INT-123', title: 'O', url: 'u', labels: [], childCount: 1, parentId: null })).mockResolvedValueOnce(ok({ id: 'child-uuid', identifier: 'INT-200', title: 'C', url: 'u', labels: [], childCount: 0, parentId: 'original-uuid' }));
+    vi.mocked(lac.updateIssueState).mockReset();
+    vi.mocked(lac.updateIssueState).mockResolvedValue(ok(undefined));
+    vi.mocked(lac.updateIssueMetadata).mockReset();
+    vi.mocked(lac.updateIssueMetadata).mockResolvedValueOnce(ok({ droppedLabels: [] })).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'meta fail' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: 'https://linear.app/pbuchman/issue/INT-200/sub', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('Failed to normalize subtask');
+  });
+
+  it('fails planning when PR comment fails in URL-based subtask path', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't5', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'original-uuid', identifier: 'INT-123', title: 'O', url: 'u', labels: [], childCount: 1, parentId: null })).mockResolvedValueOnce(ok({ id: 'child-uuid', identifier: 'INT-200', title: 'C', url: 'u', labels: [], childCount: 0, parentId: 'original-uuid' }));
+    vi.mocked(lac.addComment).mockReset();
+    vi.mocked(lac.addComment).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'comment fail' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: 'https://linear.app/pbuchman/issue/INT-200/sub', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('Failed to comment planning PR');
+  });
+
+  it('fails planning when fetchDirectChildrenLive fails in fallback', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't6', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'original-uuid', identifier: 'INT-123', title: 'O', url: 'u', labels: [], childCount: 1, parentId: null }));
+    vi.mocked(lac.fetchDirectChildrenLive).mockReset();
+    vi.mocked(lac.fetchDirectChildrenLive).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'children fail' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: '', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('Failed to fetch live direct children');
+  });
+
+  it('fails planning when subtask state normalization fails in fallback path', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't7', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'original-uuid', identifier: 'INT-123', title: 'O', url: 'u', labels: [], childCount: 1, parentId: null }));
+    vi.mocked(lac.fetchDirectChildrenLive).mockReset();
+    vi.mocked(lac.fetchDirectChildrenLive).mockResolvedValueOnce(ok([{ id: 'c', identifier: 'INT-200', url: 'u', parentId: 'original-uuid', labels: [], assigneeId: null, state: 'IP' }]));
+    vi.mocked(lac.updateIssueState).mockReset();
+    vi.mocked(lac.updateIssueState).mockResolvedValueOnce(ok(undefined)).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'state fail' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: '', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('Failed to normalize subtask');
+  });
+
+  it('fails planning when subtask metadata normalization fails in fallback path', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't8', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'original-uuid', identifier: 'INT-123', title: 'O', url: 'u', labels: [], childCount: 1, parentId: null }));
+    vi.mocked(lac.fetchDirectChildrenLive).mockReset();
+    vi.mocked(lac.fetchDirectChildrenLive).mockResolvedValueOnce(ok([{ id: 'c', identifier: 'INT-200', url: 'u', parentId: 'original-uuid', labels: [], assigneeId: null, state: 'IP' }]));
+    vi.mocked(lac.updateIssueState).mockReset();
+    vi.mocked(lac.updateIssueState).mockResolvedValue(ok(undefined));
+    vi.mocked(lac.updateIssueMetadata).mockReset();
+    vi.mocked(lac.updateIssueMetadata).mockResolvedValueOnce(ok({ droppedLabels: [] })).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'meta fail' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: '', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('Failed to normalize subtask');
+  });
+
+  it('fails planning when PR comment fails in fallback path', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't9', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'original-uuid', identifier: 'INT-123', title: 'O', url: 'u', labels: [], childCount: 1, parentId: null }));
+    vi.mocked(lac.fetchDirectChildrenLive).mockReset();
+    vi.mocked(lac.fetchDirectChildrenLive).mockResolvedValueOnce(ok([{ id: 'c', identifier: 'INT-200', url: 'u', parentId: 'original-uuid', labels: [], assigneeId: null, state: 'IP' }]));
+    vi.mocked(lac.updateIssueState).mockReset();
+    vi.mocked(lac.updateIssueState).mockResolvedValue(ok(undefined));
+    vi.mocked(lac.updateIssueMetadata).mockReset();
+    vi.mocked(lac.updateIssueMetadata).mockResolvedValue(ok({ droppedLabels: [] }));
+    vi.mocked(lac.addComment).mockReset();
+    vi.mocked(lac.addComment).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'comment fail' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '1' as const, planning_subtask_urls: '', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/42' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('Failed to comment planning PR');
+  });
+
+  it('fails planning when code-task label stamp fails in simple path', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't10', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'original-uuid', identifier: 'INT-123', title: 'O', url: 'u', labels: [], childCount: 0, parentId: null }));
+    vi.mocked(lac.updateIssueState).mockReset();
+    vi.mocked(lac.updateIssueState).mockResolvedValue(ok(undefined));
+    vi.mocked(lac.updateIssueMetadata).mockReset();
+    vi.mocked(lac.updateIssueMetadata).mockResolvedValueOnce(ok({ droppedLabels: [] })).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'stamp fail' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '0' as const, planning_subtask_urls: '', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('Failed to add code-task label');
+  });
+
+  it('unclear planning uses task error message as fallback', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't11', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'original-uuid', identifier: 'INT-123', title: 'O', url: 'u', labels: [], childCount: 0, parentId: null }));
+    vi.mocked(lac.addComment).mockReset();
+    vi.mocked(lac.addComment).mockResolvedValue(ok({ commentId: 'c1' }));
+    vi.mocked(lac.updateIssueMetadata).mockReset();
+    vi.mocked(lac.updateIssueMetadata).mockResolvedValue(ok({ droppedLabels: [] }));
+    const payload = { taskId: task.id, status: 'failed' as const, result: { planning_outcome_label: 'unclear' as const }, error: { code: 'PLANNING_AGENT_UNCLEAR', message: 'Ambiguous reqs' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    expect(vi.mocked(lac.addComment)).toHaveBeenCalledWith(expect.objectContaining({ body: 'Ambiguous reqs' }));
+  });
+
+  it('fails unclear planning when addComment fails', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't12', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'original-uuid', identifier: 'INT-123', title: 'O', url: 'u', labels: [], childCount: 0, parentId: null }));
+    vi.mocked(lac.addComment).mockReset();
+    vi.mocked(lac.addComment).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'down' }));
+    const payload = { taskId: task.id, status: 'failed' as const, result: { planning_outcome_label: 'unclear' as const, planning_unclear_clarification: 'Need details' }, error: { code: 'PLANNING_AGENT_UNCLEAR', message: 'Unclear' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('Failed to comment unclear clarification');
+  });
+
+  it('fails unclear planning when label update fails', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't13', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'original-uuid', identifier: 'INT-123', title: 'O', url: 'u', labels: [], childCount: 0, parentId: null }));
+    vi.mocked(lac.addComment).mockReset();
+    vi.mocked(lac.addComment).mockResolvedValue(ok({ commentId: 'c1' }));
+    vi.mocked(lac.updateIssueMetadata).mockReset();
+    vi.mocked(lac.updateIssueMetadata).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'labels fail' }));
+    const payload = { taskId: task.id, status: 'failed' as const, result: { planning_outcome_label: 'unclear' as const, planning_unclear_clarification: 'Need details' }, error: { code: 'PLANNING_AGENT_UNCLEAR', message: 'Unclear' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('Failed to enforce unclear labels');
+  });
+
+  it('fails planning enforcement when planned outcome has no PR URL', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'Plan without PR', sanitizedPrompt: 'Plan without PR',
+      systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_no_pr',
+      linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '0' as const, planning_subtask_urls: '', planning_pr_url: '' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+
+    expect(response.statusCode).toBe(200);
+    const getResult = await codeTaskRepo.findById(task.id);
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) throw new Error('Failed');
+    expect(getResult.value.status).toBe('failed');
+    expect(getResult.value.error?.code).toBe('PLANNING_AGENT_ENFORCEMENT_FAILED');
+    expect(getResult.value.error?.message).toContain('PR URL');
+  });
+
+  it('passes planning enforcement when prUrl is set as fallback (no planning_pr_url)', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'Plan with prUrl fallback', sanitizedPrompt: 'Plan with prUrl fallback',
+      systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_prurl_fallback',
+      linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '0' as const, planning_subtask_urls: '', prUrl: 'https://github.com/pbuchman/intexuraos/pull/999' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+
+    expect(response.statusCode).toBe(200);
+    const getResult = await codeTaskRepo.findById(task.id);
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) throw new Error('Failed');
+    // Should not fail enforcement — prUrl fallback is used
+    expect(getResult.value.status).not.toBe('failed');
+  });
+
+  it('fails remediation when result is missing (no payload)', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'Remediate', sanitizedPrompt: 'Remediate',
+      systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_rem_no_result',
+      webhookSecret: 'test-webhook-secret', agentType: 'remediation',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    const payload = { taskId: task.id, status: 'completed' as const };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+
+    expect(response.statusCode).toBe(200);
+    const getResult = await codeTaskRepo.findById(task.id);
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) throw new Error('Failed');
+    expect(getResult.value.status).toBe('failed');
+    expect(getResult.value.error?.code).toBe('REMEDIATION_AGENT_ENFORCEMENT_FAILED');
+  });
+
+  it('fails remediation enforcement when implemented outcome has no PR URL', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'Remediate no PR', sanitizedPrompt: 'Remediate no PR',
+      systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_rem_no_pr',
+      webhookSecret: 'test-webhook-secret', agentType: 'remediation',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    const payload = { taskId: task.id, status: 'completed' as const, result: { execution_outcome_label: 'implemented' as const, summary: 'Fixed stuff' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+
+    expect(response.statusCode).toBe(200);
+    const getResult = await codeTaskRepo.findById(task.id);
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) throw new Error('Failed');
+    expect(getResult.value.status).toBe('failed');
+    expect(getResult.value.error?.code).toBe('REMEDIATION_AGENT_ENFORCEMENT_FAILED');
+    expect(getResult.value.error?.message).toContain('prUrl');
+  });
+
+  it('returns INTERNAL_ERROR when remediation missing-result update fails', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'Remediate update fail', sanitizedPrompt: 'Remediate update fail',
+      systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_rem_update_fail_1',
+      webhookSecret: 'test-webhook-secret', agentType: 'remediation',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR' as const, message: 'db down' }));
+
+    const payload = { taskId: task.id, status: 'completed' as const };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+
+    expect(response.statusCode).toBe(500);
+  });
+
+  it('returns INTERNAL_ERROR when remediation no-PR update fails', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'Remediate update fail 2', sanitizedPrompt: 'Remediate update fail 2',
+      systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_rem_update_fail_2',
+      webhookSecret: 'test-webhook-secret', agentType: 'remediation',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR' as const, message: 'db down' }));
+
+    const payload = { taskId: task.id, status: 'completed' as const, result: { execution_outcome_label: 'implemented' as const, summary: 'Fixed stuff' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+
+    expect(response.statusCode).toBe(500);
+  });
+
+  it('remediation with already_completed outcome and no PR URL passes enforcement', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'Remediate already done', sanitizedPrompt: 'Remediate already done',
+      systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_rem_already_done',
+      webhookSecret: 'test-webhook-secret', agentType: 'remediation',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    const payload = { taskId: task.id, status: 'completed' as const, result: { execution_outcome_label: 'already_completed' as const, summary: 'Already done' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+
+    expect(response.statusCode).toBe(200);
+    const getResult = await codeTaskRepo.findById(task.id);
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) throw new Error('Failed');
+    // Should NOT be failed — should be 'implemented' (the resolved status for remediation)
+    expect(getResult.value.status).toBe('implemented');
+  });
+
+  it('fails execution enforcement when linearIssueId is undefined', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't14', webhookSecret: 'test-webhook-secret', agentType: 'execution',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const payload = { taskId: task.id, status: 'completed' as const, result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/42', execution_outcome_label: 'implemented' as const, execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.code).toBe('EXECUTION_AGENT_ENFORCEMENT_FAILED');
+  });
+
+  it('fails already_completed enforcement when validateIssue fails', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't15', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    vi.mocked(getServices().linearAgentClient.validateIssue).mockReset();
+    vi.mocked(getServices().linearAgentClient.validateIssue).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'down' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { execution_outcome_label: 'already_completed' as const, prUrl: 'https://github.com/pbuchman/intexuraos/pull/1', summary: 'done' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.code).toBe('EXECUTION_AGENT_ENFORCEMENT_FAILED');
+  });
+
+  it('fails execution missing execution_linear_issue_url', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't16', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const payload = { taskId: task.id, status: 'completed' as const, result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/42', execution_outcome_label: 'implemented' as const } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.code).toBe('EXECUTION_AGENT_WRONG_ISSUE_MISMATCH');
+  });
+
+  it('fails execution when routed issue validation fails', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't17', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    vi.mocked(getServices().linearAgentClient.validateIssue).mockReset();
+    vi.mocked(getServices().linearAgentClient.validateIssue).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'down' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/42', execution_outcome_label: 'implemented' as const, execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('Failed to validate routed issue');
+  });
+
+  it('fails execution when execution_linear_issue_url is unparseable', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't18', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    vi.mocked(getServices().linearAgentClient.validateIssue).mockReset();
+    vi.mocked(getServices().linearAgentClient.validateIssue).mockResolvedValueOnce(ok({ id: 'uuid', identifier: 'INT-123', title: 'T', url: 'u', labels: [], childCount: 0, parentId: null }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/42', execution_outcome_label: 'implemented' as const, execution_linear_issue_url: 'https://not-linear.com/bogus' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('Invalid execution_linear_issue_url');
+  });
+
+  it('fails execution when reported issue validation fails', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't19', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const v = vi.mocked(getServices().linearAgentClient.validateIssue);
+    v.mockReset();
+    v.mockResolvedValueOnce(ok({ id: 'uuid', identifier: 'INT-123', title: 'T', url: 'u', labels: [], childCount: 0, parentId: null })).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'down' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/42', execution_outcome_label: 'implemented' as const, execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-456' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('Failed to validate execution-reported issue');
+  });
+
+  it('fails execution when addComment fails', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't20', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValue(ok({ id: 'uuid', identifier: 'INT-123', title: 'T', url: 'u', labels: [], childCount: 0, parentId: null }));
+    vi.mocked(lac.addComment).mockReset();
+    vi.mocked(lac.addComment).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'down' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/42', execution_outcome_label: 'implemented' as const, execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('Failed to comment executed issue');
+  });
+
+  it('fails execution when updateIssueState (markReview) fails', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't21', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValue(ok({ id: 'uuid', identifier: 'INT-123', title: 'T', url: 'u', labels: [], childCount: 0, parentId: null }));
+    vi.mocked(lac.addComment).mockReset();
+    vi.mocked(lac.addComment).mockResolvedValue(ok({ commentId: 'c1' }));
+    vi.mocked(lac.updateIssueState).mockReset();
+    vi.mocked(lac.updateIssueState).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'down' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/42', execution_outcome_label: 'implemented' as const, execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('Failed to move executed issue to In Review');
+  });
+
+  it('fails execution when updateIssueMetadata fails', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't22', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValue(ok({ id: 'uuid', identifier: 'INT-123', title: 'T', url: 'u', labels: [], childCount: 0, parentId: null }));
+    vi.mocked(lac.addComment).mockReset();
+    vi.mocked(lac.addComment).mockResolvedValue(ok({ commentId: 'c1' }));
+    vi.mocked(lac.updateIssueState).mockReset();
+    vi.mocked(lac.updateIssueState).mockResolvedValue(ok(undefined));
+    vi.mocked(lac.updateIssueMetadata).mockReset();
+    vi.mocked(lac.updateIssueMetadata).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'down' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/42', execution_outcome_label: 'implemented' as const, execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('Failed to preserve code-task label');
+  });
+
+  it('fails pull_request enforcement when linearIssueId is undefined', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't23', webhookSecret: 'test-webhook-secret', agentType: 'pull_request',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const payload = { taskId: task.id, status: 'completed' as const, result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/42', comment_replied: true } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.code).toBe('PULL_REQUEST_AGENT_ENFORCEMENT_FAILED');
+  });
+
+  it('fails pull_request enforcement when validateIssue fails', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't24', linearIssueId: 'INT-456', webhookSecret: 'test-webhook-secret', agentType: 'pull_request',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    vi.mocked(getServices().linearAgentClient.validateIssue).mockReset();
+    vi.mocked(getServices().linearAgentClient.validateIssue).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'down' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/42', comment_replied: true } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('Failed to validate routed issue');
+  });
+
+  it('fails pull_request enforcement when addComment fails', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't25', linearIssueId: 'INT-456', webhookSecret: 'test-webhook-secret', agentType: 'pull_request',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    vi.mocked(getServices().linearAgentClient.validateIssue).mockReset();
+    vi.mocked(getServices().linearAgentClient.validateIssue).mockResolvedValueOnce(ok({ id: 'uuid', identifier: 'INT-456', title: 'T', url: 'u', labels: [], childCount: 0, parentId: null }));
+    vi.mocked(getServices().linearAgentClient.addComment).mockReset();
+    vi.mocked(getServices().linearAgentClient.addComment).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'down' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/42', comment_replied: true } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('Failed to comment on issue');
+  });
+
+  it('fails pull_request enforcement when updateIssueState fails', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't26', linearIssueId: 'INT-456', webhookSecret: 'test-webhook-secret', agentType: 'pull_request',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    vi.mocked(getServices().linearAgentClient.validateIssue).mockReset();
+    vi.mocked(getServices().linearAgentClient.validateIssue).mockResolvedValueOnce(ok({ id: 'uuid', identifier: 'INT-456', title: 'T', url: 'u', labels: [], childCount: 0, parentId: null }));
+    vi.mocked(getServices().linearAgentClient.addComment).mockReset();
+    vi.mocked(getServices().linearAgentClient.addComment).mockResolvedValue(ok({ commentId: 'c1' }));
+    vi.mocked(getServices().linearAgentClient.updateIssueState).mockReset();
+    vi.mocked(getServices().linearAgentClient.updateIssueState).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'down' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/42', comment_replied: true } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('Failed to move issue to In Review');
+  });
+
+  it('fails review enforcement when review_comments_posted is missing', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't27', webhookSecret: 'test-webhook-secret', agentType: 'review',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const payload = { taskId: task.id, status: 'completed' as const, result: { review_types: 'code_quality' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.code).toBe('REVIEW_AGENT_ENFORCEMENT_FAILED');
+  });
+
+  it('fails review enforcement when review_comments_posted is not numeric', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't28', webhookSecret: 'test-webhook-secret', agentType: 'review',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const payload = { taskId: task.id, status: 'completed' as const, result: { review_comments_posted: 'abc', review_types: 'code_quality' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('non-negative integer');
+  });
+
+  it('fails execution when result is missing (no payload)', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't29', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const payload = { taskId: task.id, status: 'completed' as const };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('missing result payload');
+  });
+
+  it('fails planning when result is missing (no payload)', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't30', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const payload = { taskId: task.id, status: 'completed' as const };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.code).toBe('PLANNING_AGENT_ENFORCEMENT_FAILED');
+  });
+
+  it('fails review when result is missing (no payload)', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't31', webhookSecret: 'test-webhook-secret', agentType: 'review',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const payload = { taskId: task.id, status: 'completed' as const };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.message).toContain('missing result payload');
+  });
+
+  it('handles cancelled status with actionId and actions-agent failure and duration', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't32', webhookSecret: 'test-webhook-secret', actionId: 'action-cancel',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    vi.mocked(fetchWithAuth).mockResolvedValueOnce(err({ code: 'NETWORK_ERROR' as const, message: 'down' }));
+    const payload = { taskId: task.id, status: 'cancelled' as const, duration: 10 };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.status).toBe('cancelled');
+  });
+
+  it('handles cancelled status with actionId and actions-agent success', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't32b', webhookSecret: 'test-webhook-secret', actionId: 'action-cancel-ok',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    vi.mocked(fetchWithAuth).mockResolvedValueOnce(ok({ data: { success: true } }));
+    const payload = { taskId: task.id, status: 'cancelled' as const };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+  });
+
+  it('returns 500 when update fails for cancelled status', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't33', webhookSecret: 'test-webhook-secret',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const spy = vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'fail' }));
+    const payload = { taskId: task.id, status: 'cancelled' as const };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(500);
+    spy.mockRestore();
+  });
+
+  it('unclear enforcement failure on failed webhook preserves enforcement error', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't34', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    vi.mocked(getServices().linearAgentClient.validateIssue).mockReset();
+    vi.mocked(getServices().linearAgentClient.validateIssue).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'down' }));
+    const payload = { taskId: task.id, status: 'failed' as const, result: { planning_outcome_label: 'unclear' as const, planning_unclear_clarification: 'need details' }, error: { code: 'PLANNING_AGENT_UNCLEAR', message: 'Unclear' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.code).toBe('PLANNING_AGENT_ENFORCEMENT_FAILED');
+  });
+
+  it('planning task with non-planned outcome skips enforcement', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't35', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const payload = { taskId: task.id, status: 'completed' as const, result: { summary: 'No outcome label' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.status).toBe('planned');
+  });
+
+  it('continues when planning design-complete notification fails', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't36', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValue(ok({ id: 'uuid', identifier: 'INT-123', title: 'T', url: 'u', labels: [], childCount: 0, parentId: null }));
+    vi.spyOn(getServices().whatsappNotifier, 'notifyDesignComplete').mockResolvedValueOnce(err({ code: 'notification_failed' as const, message: 'down' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '0' as const, planning_subtask_urls: '', planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+  });
+
+  it('continues when resumed task-complete notification fails', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't37', webhookSecret: 'test-webhook-secret',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    vi.spyOn(getServices().whatsappNotifier, 'notifyResumedTaskComplete').mockResolvedValueOnce(err({ code: 'notification_failed' as const, message: 'down' }));
+    const payload = { taskId: task.id, status: 'completed' as const, resumedCompletion: true, result: { summary: 'Done' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+  });
+
+  // L747: execution missing result + codeTaskRepo.update fails
+  it('returns 500 when execution enforcement update fails for missing result', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'tx1', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const spy = vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'update failed' }));
+    const payload = { taskId: task.id, status: 'completed' as const };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(500);
+    spy.mockRestore();
+  });
+
+  // L785: execution enforcement update fails
+  it('returns 500 when execution enforcement update fails for mismatch', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'tx2', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const spy = vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'update failed' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/42', execution_outcome_label: 'implemented' as const } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(500);
+    spy.mockRestore();
+  });
+
+  // L817: pull_request missing result + update fails
+  it('returns 500 when pull_request enforcement update fails for missing result', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'tx3', linearIssueId: 'INT-456', webhookSecret: 'test-webhook-secret', agentType: 'pull_request',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const spy = vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'update failed' }));
+    const payload = { taskId: task.id, status: 'completed' as const };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(500);
+    spy.mockRestore();
+  });
+
+  // L855: pull_request enforcement update fails
+  it('returns 500 when pull_request enforcement update fails for invalid result', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'tx4', webhookSecret: 'test-webhook-secret', agentType: 'pull_request',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const spy = vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'update failed' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/42', comment_replied: true } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(500);
+    spy.mockRestore();
+  });
+
+  // L887: planning missing result + update fails
+  it('returns 500 when planning enforcement update fails for missing result', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'tx5', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const spy = vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'update failed' }));
+    const payload = { taskId: task.id, status: 'completed' as const };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(500);
+    spy.mockRestore();
+  });
+
+  // L909: planning enforcement update fails for planned outcome
+  it('returns 500 when planning enforcement update fails for planned outcome', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'tx6', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    // No linearIssueId -> enforcement fails, then update also fails
+    const spy = vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'update failed' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { planning_outcome_label: 'planned' as const, planning_is_complex: '0' as const, planning_subtask_urls: '', planning_pr_url: '' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(500);
+    spy.mockRestore();
+  });
+
+  // L934: review missing result + update fails
+  it('returns 500 when review enforcement update fails for missing result', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'tx7', webhookSecret: 'test-webhook-secret', agentType: 'review',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const spy = vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'update failed' }));
+    const payload = { taskId: task.id, status: 'completed' as const };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(500);
+    spy.mockRestore();
+  });
+
+  // L972: review enforcement update fails for invalid result
+  it('returns 500 when review enforcement update fails for enforcement failure', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'tx8', webhookSecret: 'test-webhook-secret', agentType: 'review',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const spy = vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'update failed' }));
+    const payload = { taskId: task.id, status: 'completed' as const, result: { review_comments_posted: '0', review_types: '' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(500);
+    spy.mockRestore();
+  });
+
+  // L1114: unclear enforcement failure + update fails in failed webhook path
+  it('returns 500 when unclear enforcement update fails in failed path', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'tx9', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    vi.mocked(getServices().linearAgentClient.validateIssue).mockReset();
+    vi.mocked(getServices().linearAgentClient.validateIssue).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'down' }));
+    const spy = vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'update failed' }));
+    const payload = { taskId: task.id, status: 'failed' as const, result: { planning_outcome_label: 'unclear' as const }, error: { code: 'PLANNING_AGENT_UNCLEAR', message: 'Unclear' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(500);
+    spy.mockRestore();
+  });
+
+  // L34: recordTaskFailed records automation log when task has prNumber and dispatchedAt
+  it('records task_failed automation log for PR-linked dispatched task (L34)', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_l34', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
+      prNumber: 42, initialStatus: 'dispatched',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValueOnce(err({ code: 'UNAVAILABLE' as const, message: 'down' }));
+
+    const payload = { taskId: task.id, status: 'completed' as const, result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/42', execution_outcome_label: 'already_completed' as const, summary: 'done' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+
+    // Wait for fire-and-forget automation log call
+    const automationLogMock = vi.mocked(getServices().automationLog.record);
+    await vi.waitFor(() => {
+      const failedCall = automationLogMock.mock.calls.find(
+        (c) => (c[1] as { type: string }).type === 'task_failed'
+      );
+      expect(failedCall).toBeDefined();
+    });
+
+    // Verify automation log was called with the task_failed type
+    const failedCall = automationLogMock.mock.calls.find(
+      (c) => (c[1] as { type: string }).type === 'task_failed'
+    );
+    expect(failedCall).toBeDefined();
+    if (failedCall !== undefined) {
+      expect((failedCall[1] as { errorCode: string }).errorCode).toBe('EXECUTION_AGENT_ENFORCEMENT_FAILED');
+    }
+  });
+
+  // L427: unclear clarification uses error.message when planning_unclear_clarification is undefined
+  it('uses error.message as clarification when planning_unclear_clarification is undefined (L427)', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_l427', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'planning',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'uuid', identifier: 'INT-123', title: 'T', url: 'u', labels: [], childCount: 0, parentId: null }));
+    vi.mocked(lac.addComment).mockReset();
+    vi.mocked(lac.addComment).mockResolvedValue(ok({ commentId: 'c1' }));
+    vi.mocked(lac.updateIssueMetadata).mockReset();
+    vi.mocked(lac.updateIssueMetadata).mockResolvedValue(ok({ droppedLabels: [] }));
+
+    // Send unclear result WITHOUT planning_unclear_clarification but WITH error.message
+    const payload = {
+      taskId: task.id,
+      status: 'failed' as const,
+      result: { planning_outcome_label: 'unclear' as const },
+      error: { code: 'PLANNING_AGENT_UNCLEAR', message: 'Error-based clarification text' },
+    };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+
+    // The addComment should have been called with the error message
+    expect(lac.addComment).toHaveBeenCalledWith(
+      expect.objectContaining({ body: 'Error-based clarification text' })
+    );
+  });
+
+  // L475: execution already_completed without summary uses fallback
+  it('uses fallback summary when execution already_completed has no summary (L475)', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_l475', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'routed-uuid', identifier: 'INT-123', title: 'T', url: 'u', labels: ['code-task'], childCount: 0, parentId: null }));
+    vi.mocked(lac.addComment).mockReset();
+    vi.mocked(lac.addComment).mockResolvedValue(ok({ commentId: 'c1' }));
+    vi.mocked(lac.updateIssueState).mockReset();
+    vi.mocked(lac.updateIssueState).mockResolvedValue(ok(undefined));
+    vi.mocked(lac.updateIssueMetadata).mockReset();
+    vi.mocked(lac.updateIssueMetadata).mockResolvedValue(ok({ droppedLabels: [] }));
+
+    // Send already_completed WITHOUT summary but WITH prUrl
+    const payload = {
+      taskId: task.id,
+      status: 'completed' as const,
+      result: { execution_outcome_label: 'already_completed' as const, prUrl: 'https://github.com/pbuchman/intexuraos/pull/850' },
+    };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+
+    // The addComment should have been called with fallback text
+    expect(lac.addComment).toHaveBeenCalledWith(
+      expect.objectContaining({ body: 'Work already completed: No details provided' })
+    );
+  });
+
+  // L992: prNumber extraction - falsy path (no match on /pull/ pattern)
+  it('does not set prNumber when prUrl has no /pull/ pattern', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'tx10', webhookSecret: 'test-webhook-secret',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const payload = { taskId: task.id, status: 'completed' as const, result: { prUrl: 'https://github.com/pbuchman/intexuraos/issues/42', branch: 'feat/test' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.prNumber).toBeUndefined();
+  });
+
+  // T5: already_completed with valid prUrl — enforcement should succeed
+  it('already_completed with valid prUrl succeeds — issue moved to Done', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_t5', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValueOnce(ok({ id: 'routed-uuid', identifier: 'INT-123', title: 'T', url: 'u', labels: ['code-task'], childCount: 0, parentId: null }));
+    vi.mocked(lac.addComment).mockReset();
+    vi.mocked(lac.addComment).mockResolvedValue(ok({ commentId: 'c1' }));
+    vi.mocked(lac.updateIssueState).mockReset();
+    vi.mocked(lac.updateIssueState).mockResolvedValue(ok(undefined));
+    vi.mocked(lac.updateIssueMetadata).mockReset();
+    vi.mocked(lac.updateIssueMetadata).mockResolvedValue(ok({ droppedLabels: [] }));
+
+    const payload = {
+      taskId: task.id,
+      status: 'completed' as const,
+      result: {
+        execution_outcome_label: 'already_completed' as const,
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/850',
+        summary: 'The feature was already implemented',
+      },
+    };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.status).toBe('implemented');
+    expect(lac.updateIssueState).toHaveBeenCalledWith(expect.objectContaining({ state: 'done' }));
+  });
+
+  // T6: already_completed without prUrl — enforcement must fail
+  it('already_completed without prUrl fails with EXECUTION_AGENT_ENFORCEMENT_FAILED', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_t6', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    const payload = {
+      taskId: task.id,
+      status: 'completed' as const,
+      result: {
+        execution_outcome_label: 'already_completed' as const,
+        summary: 'The feature was already implemented',
+      },
+    };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.code).toBe('EXECUTION_AGENT_ENFORCEMENT_FAILED');
+    expect(g.value.error?.message).toContain('already_completed outcome requires a PR URL');
+  });
+
+  // T7: already_completed with empty prUrl — enforcement must fail
+  it('already_completed with empty prUrl fails with EXECUTION_AGENT_ENFORCEMENT_FAILED', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 'trace_t7', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    const payload = {
+      taskId: task.id,
+      status: 'completed' as const,
+      result: {
+        execution_outcome_label: 'already_completed' as const,
+        prUrl: '',
+        summary: 'The feature was already implemented',
+      },
+    };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.code).toBe('EXECUTION_AGENT_ENFORCEMENT_FAILED');
+    expect(g.value.error?.message).toContain('already_completed outcome requires a PR URL');
+  });
+});
+
+describe('POST /internal/turn-metrics - branch coverage', () => {
+  let app: Awaited<ReturnType<typeof buildServer>>;
+  let fakeFirestore: ReturnType<typeof createFakeFirestore>;
+  let logger: Logger;
+
+  function generateOrchestratorSignature(body: object, secret: string): { timestamp: string; signature: string } {
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const rawBody = JSON.stringify(body);
+    const message = `${timestamp}.${rawBody}`;
+    const signature = crypto.createHmac('sha256', secret).update(message).digest('hex');
+    return { timestamp, signature };
+  }
+
+  beforeEach(async () => {
+    mockedJwtVerify.mockResolvedValue({ payload: { sub: 'test-user-id', email: 'test@example.com' }, protectedHeader: new Uint8Array() } as never);
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.intexuraos.cloud';
+    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
+    process.env['INTEXURAOS_ORCHESTRATOR_SECRET'] = 'test-orch-secret';
+
+    fakeFirestore = createFakeFirestore();
+    setFirestore(fakeFirestore as unknown as Firestore);
+    logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
+    const codeTaskRepo = createFirestoreCodeTaskRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
+    const logLineRepo = createFirestoreLogLineRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
+    const actionsAgentClient = createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger });
+    const linearAgentClient = createLinearAgentHttpClient({ baseUrl: 'http://linear-agent:8086', internalAuthToken: 'test-token', timeoutMs: 10000 }, logger);
+
+    setServices({
+      firestore: fakeFirestore as unknown as Firestore, logger, codeTaskRepo,
+      logChunkRepo: createFirestoreLogChunkRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      logLineRepo,
+      taskDispatcher: createTaskDispatcherService({ logger, workerHealthProbe: mockWorkerHealthProbe }),
+      workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      whatsappNotifier: createWhatsAppNotifier({ whatsappPublisher: { publishSendMessage: async () => ok(undefined) } as unknown as WhatsAppSendPublisher }),
+      actionsAgentClient, linearAgentClient,
+      rateLimitService: { async checkLimits() { return ok(undefined); }, async recordTaskStart() { return; }, async recordTaskComplete() { return; } },
+      linearIssueService: createLinearIssueService({ linearAgentClient, logger }),
+      metricsClient: createNoOpMetricsClient(),
+      statusMirrorService: createStatusMirrorService({ actionsAgentClient, logger }),
+      processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      workerHealthProbe: mockWorkerHealthProbe,
+      gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
+      gitHubPRSummaryRepo: {} as never,
+      turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      userServiceClient: mockUserServiceClient,
+      gitHubPRClient: {} as never, webhookRules: {} as never, dispatchService: {} as never, toolCallingClient: undefined,
+      eventDecisionRepo: {} as never, dispatchRetryRepo: {} as never, unifiedEvaluator: {} as never,
+      automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
+      taskEnqueueService: {} as never,
+      mergeConflictDetector: { detectOnPush: vi.fn().mockResolvedValue(undefined), reconcile: vi.fn().mockResolvedValue({ processed: 0 }) },
+      mergeQueueWatchRepo: { create: vi.fn(), findById: vi.fn(), findActiveByUserAndBranch: vi.fn(), findAllActive: vi.fn(), findByUserAndRepo: vi.fn(), update: vi.fn(), appendMergedPr: vi.fn() },
+    } as {
+      firestore: Firestore; logger: Logger; codeTaskRepo: CodeTaskRepository; logChunkRepo: LogChunkRepository; logLineRepo: LogLineRepository;
+      taskDispatcher: TaskDispatcherService; workerSettingsRepo: WorkerSettingsRepository; actionsAgentClient: ActionsAgentClient;
+      linearAgentClient: LinearAgentClient; whatsappNotifier: WhatsAppNotifier; rateLimitService: RateLimitService;
+      linearIssueService: LinearIssueService; statusMirrorService: StatusMirrorService; metricsClient: MetricsClient;
+      processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
+      detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
+      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
+      autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
+      workerHealthProbe: WorkerHealthProbe;
+      gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
+      turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
+      userServiceClient: import('@intexuraos/internal-clients').UserServiceClient;
+      gitHubPRClient: import('../../domain/ports/gitHubPRClient.js').GitHubPRClient;
+      webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
+      dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
+      toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
+      eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
+      unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
+      automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
+      taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
+      mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
+      mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
+    });
+    app = await buildServer();
+  });
+
+  afterEach(() => { resetServices(); resetFirestore(); vi.clearAllMocks(); });
+
+  it('returns 500 when turnMetricsRepo.store fails', async () => {
+    vi.spyOn(getServices().turnMetricsRepo, 'store').mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'fail' }));
+    const payload = { taskId: 'task_123', attempt: 1, timestamp: new Date().toISOString() };
+    const { timestamp, signature } = generateOrchestratorSignature(payload, 'test-orch-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/turn-metrics', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(500);
+  });
+
+  it('returns 200 when logLineRepo.storeBatch fails (non-fatal)', async () => {
+    const services = getServices();
+    const storeSpy = vi.spyOn(services.turnMetricsRepo, 'store').mockResolvedValue(ok(undefined));
+    const lineSpy = vi.spyOn(services.logLineRepo, 'storeBatch').mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'fail' }));
+    const payload = {
+      taskId: 'task_123', attempt: 1, timestamp: new Date().toISOString(),
+      cpuTimeSeconds: 10, cpuCores: 4, peakMemoryMB: 512, wallTimeSeconds: 15,
+      apiWaitSeconds: 5, toolExecSeconds: 3, backgroundWaitSeconds: 1, overheadSeconds: 1,
+      totalInputTokens: 1000, totalOutputTokens: 500, totalCacheReadTokens: 200,
+      totalCacheCreationTokens: 100, apiCallCount: 5, cpuUtilizationPercent: 50, idlePercent: 10,
+    };
+    const { timestamp, signature } = generateOrchestratorSignature(payload, 'test-orch-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/turn-metrics', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    storeSpy.mockRestore();
+    lineSpy.mockRestore();
   });
 });

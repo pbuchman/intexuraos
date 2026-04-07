@@ -2,7 +2,7 @@ import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { LinkPreviewFetcherPort } from './domain/index.js';
 import {
   OpenGraphFetcher,
-  createPageContentFetcher,
+  createCloudflareMarkdownClient,
   createLlmSummarizer,
   createUserServiceClient,
   type PageContentFetcher,
@@ -19,7 +19,8 @@ export interface ServiceContainer {
 }
 
 export interface ServiceDependencies {
-  crawl4aiApiKey: string;
+  cloudflareAccountId: string;
+  cloudflareApiToken: string;
   userServiceUrl: string;
   internalAuthToken: string;
   pricingContext: IPricingContext;
@@ -32,8 +33,11 @@ export function initServices(dependencies: ServiceDependencies): void {
 
   container = {
     linkPreviewFetcher: new OpenGraphFetcher({}, logger),
-    pageContentFetcher: createPageContentFetcher(
-      { apiKey: dependencies.crawl4aiApiKey },
+    pageContentFetcher: createCloudflareMarkdownClient(
+      {
+        accountId: dependencies.cloudflareAccountId,
+        apiToken: dependencies.cloudflareApiToken,
+      },
       createAppLogger({ name: 'pageContentFetcher' })
     ),
     llmSummarizer: createLlmSummarizer(

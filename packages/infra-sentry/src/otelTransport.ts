@@ -27,7 +27,7 @@ export function getOtelTransport(): NodeJS.WritableStream | undefined {
   // Set OTel-standard env vars for the transport worker thread
   process.env['OTEL_EXPORTER_OTLP_LOGS_ENDPOINT'] = `${endpoint}/v1/logs`;
 
-  /* v8 ignore start -- module-init: only reached with live Dash0 endpoint @preserve */
+  /* v8 ignore start -- module-init: cannot test startup path that requires live Dash0 auth token at bootstrap @preserve */
   const authToken = process.env['INTEXURAOS_DASH0_AUTH_TOKEN'] ?? '';
   if (authToken !== '') {
     process.env['OTEL_EXPORTER_OTLP_LOGS_HEADERS'] = `Authorization=Bearer ${authToken}`;

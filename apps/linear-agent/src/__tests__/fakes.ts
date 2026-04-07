@@ -25,6 +25,8 @@ import type {
   LinearCommentRepository,
   LinearComment,
   CommentSummary,
+  PruneCandidateRepository,
+  StoredPruneCandidate,
 } from '../domain/index.js';
 import type { UserServiceClient, UserServiceError } from '@intexuraos/internal-clients';
 import type { CodeAgentClient, CodeAgentError, TriggerCodeTaskResponse } from '../domain/index.js';
@@ -350,6 +352,18 @@ export class FakeLinearApiClient implements LinearApiClient {
     return ok(issue ?? null);
   }
 
+  async getDirectChildren(
+    _apiKey: string,
+    issueId: string
+  ): Promise<Result<LinearIssue[] | null, LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    const issue = this.issues.find((i) => i.id === issueId);
+    if (!issue) {
+      return ok(null);
+    }
+    return ok(issue.children);
+  }
+
   async updateIssueState(
     _apiKey: string,
     issueId: string,
@@ -423,6 +437,14 @@ export class FakeLinearApiClient implements LinearApiClient {
   ): Promise<Result<WorkflowState[], LinearError>> {
     if (this.shouldFail) return err(this.failError);
     return ok(this.workflowStates);
+  }
+
+  async deleteIssue(
+    _apiKey: string,
+    _issueId: string
+  ): Promise<Result<void, LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    return ok(undefined);
   }
 
   reset(): void {
@@ -684,8 +706,10 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
     return ok(null);
   }
 
+  private shouldFailFindByIdentifier = false;
+
   async findByIdentifier(identifier: string, userId?: string): Promise<Result<SyncedLinearIssue | null, LinearError>> {
-    if (this.shouldFail) return err(this.failError);
+    if (this.shouldFail || this.shouldFailFindByIdentifier) return err(this.failError);
     for (const issue of this.issues.values()) {
       if (issue.identifier === identifier) {
         if (userId !== undefined && issue.userId !== userId) continue;
@@ -693,6 +717,11 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
       }
     }
     return ok(null);
+  }
+
+  setFindByIdentifierFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailFindByIdentifier = fail;
+    if (error) this.failError = error;
   }
 
   private shouldFailFindByIdentifiers = false;
@@ -777,6 +806,7 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
     this.shouldFailSave = false;
     this.shouldFailListByUserId = false;
     this.shouldFailDeleteById = false;
+    this.shouldFailFindByIdentifier = false;
     this.shouldFailFindByIdentifiers = false;
     this.saveFailUserIds.clear();
     this.findUserIdsByIssueIdOverride = null;
@@ -870,6 +900,10 @@ export class FakeUserServiceClient implements UserServiceClient {
 
   async resolveGitHubUsername(): Promise<Result<{ userId: string } | null, UserServiceError>> {
     return ok(null);
+  }
+
+  async getUserTimezone(): Promise<string | undefined> {
+    return undefined;
   }
 
   reset(): void {
@@ -993,6 +1027,7 @@ export class FakeCodeAgentClient implements CodeAgentClient {
   private failError: CodeAgentError = { code: 'UNAVAILABLE', message: 'code-agent unavailable' };
   private lastRequest: { userId: string; linearIssueId: string; prompt: string; workerType: string; actionId: string; approvalEventId: string } | null = null;
   private taskIdCounter = 1;
+  private recomputeCalls: { userId: string; linearIssueId: string; labels: { id: string; name: string }[]; sourceTimestamp: string }[] = [];
 
   async triggerCodeTask(request: {
     userId: string;
@@ -1016,6 +1051,20 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     return ok({ codeTaskId: `code-task-${this.taskIdCounter++}` });
   }
 
+  async notifyGroupSummaryRecompute(request: {
+    userId: string;
+    linearIssueId: string;
+    labels: { id: string; name: string }[];
+    sourceTimestamp: string;
+  }): Promise<Result<void, CodeAgentError>> {
+    this.recomputeCalls.push(request);
+    return ok(undefined);
+  }
+
+  getRecomputeCalls(): { userId: string; linearIssueId: string; labels: { id: string; name: string }[]; sourceTimestamp: string }[] {
+    return this.recomputeCalls;
+  }
+
   setFailure(fail: boolean, error?: CodeAgentError): void {
     this.shouldFail = fail;
     if (error) this.failError = error;
@@ -1029,5 +1078,46 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     this.shouldFail = false;
     this.lastRequest = null;
     this.taskIdCounter = 1;
+    this.recomputeCalls = [];
+  }
+}
+
+export class FakePruneCandidateRepository implements PruneCandidateRepository {
+  private candidates: StoredPruneCandidate[] = [];
+  private shouldFailListAll = false;
+  private failError: LinearError = { code: 'INTERNAL_ERROR', message: 'Database error' };
+
+  async clearAll(): Promise<Result<void, LinearError>> {
+    this.candidates = [];
+    return ok(undefined);
+  }
+
+  async storeAll(candidates: StoredPruneCandidate[]): Promise<Result<void, LinearError>> {
+    this.candidates = [...candidates];
+    return ok(undefined);
+  }
+
+  async listAll(): Promise<Result<StoredPruneCandidate[], LinearError>> {
+    if (this.shouldFailListAll) return err(this.failError);
+    const sorted = [...this.candidates].sort((a, b) => b.score - a.score);
+    return ok(sorted);
+  }
+
+  setListAllFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailListAll = fail;
+    if (error) this.failError = error;
+  }
+
+  reset(): void {
+    this.candidates = [];
+    this.shouldFailListAll = false;
+  }
+
+  seedCandidates(candidates: StoredPruneCandidate[]): void {
+    this.candidates = [...candidates];
+  }
+
+  getCandidates(): StoredPruneCandidate[] {
+    return [...this.candidates];
   }
 }

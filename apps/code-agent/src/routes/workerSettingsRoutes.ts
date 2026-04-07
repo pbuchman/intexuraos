@@ -18,6 +18,7 @@ import type {
   WorkerConfigUpdateInput,
 } from '../domain/models/workerSettings.js';
 import { WORKER_NAME_REGEX, MAX_WORKERS_PER_USER } from '../domain/models/workerSettings.js';
+import type { DefaultWorkerTypeField } from '../domain/ports/workerSettingsRepository.js';
 
 export interface WorkerSettingsRoutesOptions {
   jwtValidator: JwtValidator;
@@ -81,7 +82,6 @@ function maskWorkerConfig(config: WorkerConfig): MaskedWorkerConfig {
     enabled: config.enabled,
   };
 
-  /* v8 ignore start -- ts-type: optional property checks for test metadata @preserve */
   if (config.lastTestedAt !== undefined) {
     masked.lastTestedAt = config.lastTestedAt;
   }
@@ -91,7 +91,6 @@ function maskWorkerConfig(config: WorkerConfig): MaskedWorkerConfig {
   if (config.testMessage !== undefined) {
     masked.testMessage = config.testMessage;
   }
-  /* v8 ignore stop @preserve */
 
   return masked;
 }
@@ -152,6 +151,49 @@ const maskedWorkerConfigSchema = {
   required: ['name', 'url', 'cfAccessClientId', 'cfAccessClientSecret', 'dispatchSigningSecret', 'enabled'],
 } as const;
 
+async function handleDefaultWorkerTypeUpdate(
+  request: FastifyRequest<{ Body: { workerType: string } }>,
+  reply: FastifyReply,
+  field: DefaultWorkerTypeField,
+  label: string,
+): Promise<void> {
+  const { workerSettingsRepo } = getServices();
+  /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
+  const userId = request.user?.userId ?? 'unknown-user';
+  /* v8 ignore stop @preserve */
+  const { workerType } = request.body;
+
+  // "auto" is a special sentinel that clears the override, restoring fallback behavior
+  if (workerType === 'auto') {
+    request.log.info({ userId, field }, `Clearing default ${label} worker type (restoring auto)`);
+    const result = await workerSettingsRepo.clearDefaultWorkerType(userId, field);
+    if (!result.ok) {
+      request.log.error({ error: result.error, field }, `Failed to clear default ${label} worker type`);
+      return await reply.fail('INTERNAL_ERROR', result.error.message);
+    }
+    request.log.info({ userId, field }, `Default ${label} worker type cleared`);
+    return await reply.ok({ updated: true });
+  }
+
+  /* v8 ignore start -- ts-type: Fastify schema validates enum — ?? fallback unreachable @preserve */
+  if (!isCodeTaskWorkerType(workerType)) {
+    return await reply.fail('INVALID_REQUEST', `Invalid worker type: ${workerType}`);
+  }
+  /* v8 ignore stop @preserve */
+
+  request.log.info({ userId, workerType, field }, `Updating default ${label} worker type`);
+
+  const result = await workerSettingsRepo.updateDefaultWorkerType(userId, field, workerType);
+
+  if (!result.ok) {
+    request.log.error({ error: result.error, field }, `Failed to update default ${label} worker type`);
+    return await reply.fail('INTERNAL_ERROR', result.error.message);
+  }
+
+  request.log.info({ userId, workerType, field }, `Default ${label} worker type updated`);
+  return await reply.ok({ updated: true });
+}
+
 export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOptions> = (
   fastify,
   opts,
@@ -185,6 +227,10 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
                     items: maskedWorkerConfigSchema,
                   },
                   defaultReviewWorkerType: { type: 'string', enum: [...CODE_TASK_WORKER_TYPES] },
+                  defaultRemediationWorkerType: { type: 'string', enum: [...CODE_TASK_WORKER_TYPES] },
+                  defaultExecutionWorkerType: { type: 'string', enum: [...CODE_TASK_WORKER_TYPES] },
+                  defaultPlanningWorkerType: { type: 'string', enum: [...CODE_TASK_WORKER_TYPES] },
+                  defaultPullRequestWorkerType: { type: 'string', enum: [...CODE_TASK_WORKER_TYPES] },
                 },
                 required: ['workers'],
               },
@@ -231,7 +277,7 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
       });
 
       const { workerSettingsRepo } = getServices();
-      /* v8 ignore start -- ts-type: nullish coalescing fallback for optional user @preserve */
+      /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
 
@@ -239,12 +285,10 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
 
       const result = await workerSettingsRepo.getSettings(userId);
 
-      /* v8 ignore start -- test-infra: FakeWorkerSettingsRepo.getSettings cannot simulate internal failure @preserve */
       if (!result.ok) {
         request.log.error({ error: result.error }, 'Failed to get worker settings');
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
-      /* v8 ignore stop @preserve */
 
       const settings = result.value;
 
@@ -252,6 +296,18 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
         workers: settings?.workers.map(maskWorkerConfig) ?? [],
         ...(settings?.defaultReviewWorkerType !== undefined && {
           defaultReviewWorkerType: settings.defaultReviewWorkerType,
+        }),
+        ...(settings?.defaultRemediationWorkerType !== undefined && {
+          defaultRemediationWorkerType: settings.defaultRemediationWorkerType,
+        }),
+        ...(settings?.defaultExecutionWorkerType !== undefined && {
+          defaultExecutionWorkerType: settings.defaultExecutionWorkerType,
+        }),
+        ...(settings?.defaultPlanningWorkerType !== undefined && {
+          defaultPlanningWorkerType: settings.defaultPlanningWorkerType,
+        }),
+        ...(settings?.defaultPullRequestWorkerType !== undefined && {
+          defaultPullRequestWorkerType: settings.defaultPullRequestWorkerType,
         }),
       };
 
@@ -362,9 +418,7 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
       });
 
       const { workerSettingsRepo } = getServices();
-      /* v8 ignore start -- auth-guard: FakeAuthPlugin always returns valid user, cannot simulate null userId @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
-      /* v8 ignore stop @preserve */
       const { name } = request.body;
 
       // Validate worker name
@@ -392,9 +446,7 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
           already_exists: 'CONFLICT',
           internal_error: 'INTERNAL_ERROR',
         };
-        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes codeMap lookup possibly undefined despite exhaustive keys @preserve */
         return await reply.fail(codeMap[result.error.code] ?? 'INTERNAL_ERROR', result.error.message);
-        /* v8 ignore stop @preserve */
       }
 
       request.log.info({ userId, name }, 'Worker added successfully');
@@ -502,9 +554,7 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
       });
 
       const { workerSettingsRepo } = getServices();
-      /* v8 ignore start -- auth-guard: FakeAuthPlugin always returns valid user, cannot simulate null userId @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
-      /* v8 ignore stop @preserve */
       const { name } = request.params;
 
       // Validate credentials are not masked values (security: prevent storing display-only data)
@@ -523,9 +573,7 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
           not_found: 'NOT_FOUND',
           internal_error: 'INTERNAL_ERROR',
         };
-        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes codeMap lookup possibly undefined despite exhaustive keys @preserve */
         return await reply.fail(codeMap[result.error.code] ?? 'INTERNAL_ERROR', result.error.message);
-        /* v8 ignore stop @preserve */
       }
 
       request.log.info({ userId, name }, 'Worker updated successfully');
@@ -628,9 +676,7 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
       });
 
       const { workerSettingsRepo } = getServices();
-      /* v8 ignore start -- auth-guard: FakeAuthPlugin always returns valid user, cannot simulate null userId @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
-      /* v8 ignore stop @preserve */
       const { name } = request.params;
 
       request.log.info({ userId, name }, 'Deleting worker');
@@ -643,9 +689,7 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
           not_found: 'NOT_FOUND',
           internal_error: 'INTERNAL_ERROR',
         };
-        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes codeMap lookup possibly undefined despite exhaustive keys @preserve */
         return await reply.fail(codeMap[result.error.code] ?? 'INTERNAL_ERROR', result.error.message);
-        /* v8 ignore stop @preserve */
       }
 
       request.log.info({ userId, name }, 'Worker deleted successfully');
@@ -766,21 +810,17 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
       });
 
       const { workerSettingsRepo } = getServices();
-      /* v8 ignore start -- auth-guard: FakeAuthPlugin always returns valid user, cannot simulate null userId @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
-      /* v8 ignore stop @preserve */
       const { name } = request.params;
 
       request.log.info({ userId, name }, 'Testing worker connectivity');
 
       const configResult = await workerSettingsRepo.getWorkerByName(userId, name);
 
-      /* v8 ignore start -- test-infra: FakeWorkerSettingsRepo.getWorkerByName cannot simulate internal failure @preserve */
       if (!configResult.ok) {
         request.log.error({ error: configResult.error }, 'Failed to get worker config for test');
         return await reply.fail('INTERNAL_ERROR', configResult.error.message);
       }
-      /* v8 ignore stop @preserve */
 
       const config = configResult.value;
 
@@ -916,9 +956,7 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
       });
 
       const { workerSettingsRepo } = getServices();
-      /* v8 ignore start -- auth-guard: FakeAuthPlugin always returns valid user, cannot simulate null userId @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
-      /* v8 ignore stop @preserve */
       const { workerNames } = request.body;
 
       request.log.info({ userId, workerNames }, 'Reordering workers');
@@ -936,6 +974,80 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
     }
   );
 
+  const defaultWorkerTypeBody = {
+    type: 'object',
+    properties: {
+      workerType: { type: 'string', enum: [...CODE_TASK_WORKER_TYPES] },
+    },
+    required: ['workerType'],
+  } as const;
+
+  const defaultWorkerTypeResponse = {
+    200: {
+      description: 'Default worker type updated',
+      type: 'object',
+      required: ['success', 'data'],
+      properties: {
+        success: { type: 'boolean', enum: [true] },
+        data: {
+          type: 'object',
+          properties: {
+            updated: { type: 'boolean', enum: [true] },
+          },
+          required: ['updated'],
+        },
+      },
+    },
+    400: {
+      description: 'Invalid request',
+      type: 'object',
+      required: ['success', 'error'],
+      properties: {
+        success: { type: 'boolean', enum: [false] },
+        error: {
+          type: 'object',
+          required: ['code', 'message'],
+          properties: {
+            code: { type: 'string', enum: ['INVALID_REQUEST'] },
+            message: { type: 'string' },
+          },
+        },
+      },
+    },
+    401: {
+      description: 'Unauthorized',
+      type: 'object',
+      required: ['success', 'error'],
+      properties: {
+        success: { type: 'boolean', enum: [false] },
+        error: {
+          type: 'object',
+          required: ['code', 'message'],
+          properties: {
+            code: { type: 'string', enum: ['UNAUTHORIZED'] },
+            message: { type: 'string' },
+          },
+        },
+      },
+    },
+    500: {
+      description: 'Internal server error',
+      type: 'object',
+      required: ['success', 'error'],
+      properties: {
+        success: { type: 'boolean', enum: [false] },
+        error: {
+          type: 'object',
+          required: ['code', 'message'],
+          properties: {
+            code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+            message: { type: 'string' },
+          },
+        },
+      },
+    },
+  } as const;
+
   // PATCH /code/worker-settings/default-review-worker-type - Update default review worker type
   fastify.patch<{
     Body: { workerType: string };
@@ -949,111 +1061,115 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
         summary: 'Update default review worker type',
         description: 'Set the default worker type for automated PR reviews. Requires Auth0 JWT.',
         tags: ['public', 'worker-settings'],
-        body: {
-          type: 'object',
-          properties: {
-            workerType: { type: 'string', enum: [...CODE_TASK_WORKER_TYPES] },
-          },
-          required: ['workerType'],
-        },
-        response: {
-          200: {
-            description: 'Default review worker type updated',
-            type: 'object',
-            required: ['success', 'data'],
-            properties: {
-              success: { type: 'boolean', enum: [true] },
-              data: {
-                type: 'object',
-                properties: {
-                  updated: { type: 'boolean', enum: [true] },
-                },
-                required: ['updated'],
-              },
-            },
-          },
-          400: {
-            description: 'Invalid request',
-            type: 'object',
-            required: ['success', 'error'],
-            properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: {
-                type: 'object',
-                required: ['code', 'message'],
-                properties: {
-                  code: { type: 'string', enum: ['INVALID_REQUEST'] },
-                  message: { type: 'string' },
-                },
-              },
-            },
-          },
-          401: {
-            description: 'Unauthorized',
-            type: 'object',
-            required: ['success', 'error'],
-            properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: {
-                type: 'object',
-                required: ['code', 'message'],
-                properties: {
-                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
-                  message: { type: 'string' },
-                },
-              },
-            },
-          },
-          500: {
-            description: 'Internal server error',
-            type: 'object',
-            required: ['success', 'error'],
-            properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: {
-                type: 'object',
-                required: ['code', 'message'],
-                properties: {
-                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
-                  message: { type: 'string' },
-                },
-              },
-            },
-          },
-        },
+        body: defaultWorkerTypeBody,
+        response: defaultWorkerTypeResponse,
       },
     },
     async (request: FastifyRequest<{ Body: { workerType: string } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to PATCH /code/worker-settings/default-review-worker-type',
       });
+      await handleDefaultWorkerTypeUpdate(request, reply, 'defaultReviewWorkerType', 'review');
+    }
+  );
 
-      const { workerSettingsRepo } = getServices();
-      /* v8 ignore start -- auth-guard: FakeAuthPlugin always returns valid user, cannot simulate null userId @preserve */
-      const userId = request.user?.userId ?? 'unknown-user';
-      /* v8 ignore stop @preserve */
-      const { workerType } = request.body;
+  // PATCH /code/worker-settings/default-remediation-worker-type - Update default remediation worker type
+  fastify.patch<{
+    Body: { workerType: string };
+  }>(
+    '/code/worker-settings/default-remediation-worker-type',
+    {
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
+      onRequest: jwtValidator,
+      schema: {
+        operationId: 'updateDefaultRemediationWorkerType',
+        summary: 'Update default remediation worker type',
+        description: 'Set the default worker type for automated remediations. Requires Auth0 JWT.',
+        tags: ['public', 'worker-settings'],
+        body: defaultWorkerTypeBody,
+        response: defaultWorkerTypeResponse,
+      },
+    },
+    async (request: FastifyRequest<{ Body: { workerType: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to PATCH /code/worker-settings/default-remediation-worker-type',
+      });
+      await handleDefaultWorkerTypeUpdate(request, reply, 'defaultRemediationWorkerType', 'remediation');
+    }
+  );
 
-      /* v8 ignore start -- schema: Fastify body schema enum validation rejects invalid values before handler runs @preserve */
-      if (!isCodeTaskWorkerType(workerType)) {
-        return await reply.fail('INVALID_REQUEST', `Invalid worker type: ${workerType}`);
-      }
-      /* v8 ignore stop @preserve */
+  // PATCH /code/worker-settings/default-execution-worker-type - Update default execution worker type
+  fastify.patch<{
+    Body: { workerType: string };
+  }>(
+    '/code/worker-settings/default-execution-worker-type',
+    {
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
+      onRequest: jwtValidator,
+      schema: {
+        operationId: 'updateDefaultExecutionWorkerType',
+        summary: 'Update default execution worker type',
+        description: 'Set the default worker type for code execution tasks. Requires Auth0 JWT.',
+        tags: ['public', 'worker-settings'],
+        body: defaultWorkerTypeBody,
+        response: defaultWorkerTypeResponse,
+      },
+    },
+    async (request: FastifyRequest<{ Body: { workerType: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to PATCH /code/worker-settings/default-execution-worker-type',
+      });
+      await handleDefaultWorkerTypeUpdate(request, reply, 'defaultExecutionWorkerType', 'execution');
+    }
+  );
 
-      request.log.info({ userId, workerType }, 'Updating default review worker type');
+  // PATCH /code/worker-settings/default-planning-worker-type - Update default planning worker type
+  fastify.patch<{
+    Body: { workerType: string };
+  }>(
+    '/code/worker-settings/default-planning-worker-type',
+    {
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
+      onRequest: jwtValidator,
+      schema: {
+        operationId: 'updateDefaultPlanningWorkerType',
+        summary: 'Update default planning worker type',
+        description: 'Set the default worker type for planning tasks. Requires Auth0 JWT.',
+        tags: ['public', 'worker-settings'],
+        body: defaultWorkerTypeBody,
+        response: defaultWorkerTypeResponse,
+      },
+    },
+    async (request: FastifyRequest<{ Body: { workerType: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to PATCH /code/worker-settings/default-planning-worker-type',
+      });
+      await handleDefaultWorkerTypeUpdate(request, reply, 'defaultPlanningWorkerType', 'planning');
+    }
+  );
 
-      const result = await workerSettingsRepo.updateDefaultReviewWorkerType(userId, workerType);
-
-      /* v8 ignore start -- test-infra: FakeWorkerSettingsRepo.updateDefaultReviewWorkerType cannot simulate internal failure @preserve */
-      if (!result.ok) {
-        request.log.error({ error: result.error }, 'Failed to update default review worker type');
-        return await reply.fail('INTERNAL_ERROR', result.error.message);
-      }
-      /* v8 ignore stop @preserve */
-
-      request.log.info({ userId, workerType }, 'Default review worker type updated');
-
-      return await reply.ok({ updated: true });
+  // PATCH /code/worker-settings/default-pull-request-worker-type - Update default pull request worker type
+  fastify.patch<{
+    Body: { workerType: string };
+  }>(
+    '/code/worker-settings/default-pull-request-worker-type',
+    {
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
+      onRequest: jwtValidator,
+      schema: {
+        operationId: 'updateDefaultPullRequestWorkerType',
+        summary: 'Update default pull request worker type',
+        description: 'Set the default worker type for pull request tasks. Requires Auth0 JWT.',
+        tags: ['public', 'worker-settings'],
+        body: defaultWorkerTypeBody,
+        response: defaultWorkerTypeResponse,
+      },
+    },
+    async (request: FastifyRequest<{ Body: { workerType: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to PATCH /code/worker-settings/default-pull-request-worker-type',
+      });
+      await handleDefaultWorkerTypeUpdate(request, reply, 'defaultPullRequestWorkerType', 'pull request');
     }
   );
 

@@ -562,6 +562,26 @@ describe('Internal Routes', () => {
       expect(fakeLlmSummarizer.getSummarizeCalls()[0]?.options?.maxReadingMinutes).toBe(5);
     });
 
+    it('accepts optional title and description hints', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/page-summaries',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          url: 'https://example.com/jobs/123',
+          userId: testUserId,
+          title: 'SEEKR hiring AI Engineer in London Area, United Kingdom',
+          description: 'AI Engineer role focused on applied AI systems in London.',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(fakeLlmSummarizer.getSummarizeCalls()[0]?.options).toMatchObject({
+        title: 'SEEKR hiring AI Engineer in London Area, United Kingdom',
+        description: 'AI Engineer role focused on applied AI systems in London.',
+      });
+    });
+
     it('handles INVALID_URL for non-HTTP protocols', async () => {
       const response = await app.inject({
         method: 'POST',

@@ -16,6 +16,7 @@ import type { GitHubPREventRepository } from '../repositories/gitHubPREventRepos
 import type { WebhookMessageBuilder } from './gitHubMessageBuilder.js';
 import { createTaskForPR } from '../usecases/createTaskForPR.js';
 import { sendTaskMessage } from '../usecases/sendTaskMessage.js';
+import type { SendTaskMessageErrorCode } from '../usecases/sendTaskMessage.js';
 import type { DispatchRetryRepository } from '../repositories/dispatchRetryRepository.js';
 import { isRetryableErrorCode } from '../utils/retryableErrors.js';
 import { loadConfig } from '../../config.js';
@@ -34,10 +35,33 @@ export interface WebhookDispatchResult {
   dispatched: boolean;
   taskId?: string;
   error?: string;
+  errorCode?: SendTaskMessageErrorCode;
 }
 
 export interface WebhookDispatchService {
   dispatch(context: DispatchContext): Promise<WebhookDispatchResult>;
+}
+
+/**
+ * Context for CI failure dispatch.
+ */
+export interface CIFailureDispatchContext {
+  event: GitHubPREvent;
+  logger: Logger;
+}
+
+export interface CIFailureDispatchResult {
+  success: boolean;
+  fixTaskCreated: boolean;
+  parentTaskId?: string;
+  fixTaskId?: string;
+  error?: string;
+  skipped?: boolean;
+  skipReason?: string;
+}
+
+export interface CIFailureDispatchService {
+  dispatchCIFailure(context: CIFailureDispatchContext): Promise<CIFailureDispatchResult>;
 }
 
 export interface WebhookDispatchServiceDeps {
@@ -65,6 +89,27 @@ export interface WebhookDispatchServiceDeps {
   automationLog: AutomationLog;
 }
 
+/**
+ * Resolve worker credentials for a preserved task by looking up the user's
+ * worker settings and matching on workerLocation. Shared by handleNewTask
+ * (@worker destruction) and handlePrClose (merge cleanup).
+ */
+export async function resolveWorkerCredentials(
+  workerSettingsRepo: WorkerSettingsRepository,
+  userId: string,
+  workerLocation: string,
+): Promise<{ url: string; cfAccessClientId: string; cfAccessClientSecret: string } | undefined> {
+  const settingsResult = await workerSettingsRepo.getSettings(userId);
+  if (!settingsResult.ok || settingsResult.value === null) return undefined;
+  const workerConfig = settingsResult.value.workers.find((w) => w.name === workerLocation);
+  if (workerConfig?.enabled !== true) return undefined;
+  return {
+    url: workerConfig.url,
+    cfAccessClientId: workerConfig.cfAccessClientId,
+    cfAccessClientSecret: workerConfig.cfAccessClientSecret,
+  };
+}
+
 export function resolveLoginForTaskCreation(senderLogin: string, repository: string, allowedBots: Set<string>): string {
   if (!allowedBots.has(senderLogin)) return senderLogin;
   const slashIndex = repository.indexOf('/');
@@ -76,7 +121,7 @@ export function resolveLoginForTaskCreation(senderLogin: string, repository: str
   return owner;
 }
 
-export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): WebhookDispatchService {
+export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): WebhookDispatchService & CIFailureDispatchService {
   return {
     async dispatch(context: DispatchContext): Promise<WebhookDispatchResult> {
       const { event, logger } = context;
@@ -87,8 +132,14 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
           'Starting GitHub dispatch workflow'
         );
 
+        // Extract @worker directive if present; will be passed to pull_request task creation.
+        // Note: if an existing task is already executing for this PR, the @worker directive
+        // is intentionally ignored — the comment is sent as a message to the running task
+        // rather than creating a competing task.
+        const workerDirective = extractDispatchWorkerType(event.body ?? '');
+
         // Use non-review lookup to avoid routing generic comments into review tasks
-        const taskResult = await deps.codeTaskRepo.findLatestNonReviewTaskByPR(event.repository, event.pullRequestNumber);
+        const taskResult = await deps.codeTaskRepo.findLatestExecutionTaskByPR(event.repository, event.pullRequestNumber);
 
         if (!taskResult.ok) {
           logger.error(
@@ -101,10 +152,21 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
         const task = taskResult.value;
 
         if (task === null) {
-          return await handleNewTask(deps, event, logger);
+          return await handleNewTask(deps, event, logger, workerDirective);
         }
 
-        return await handleExistingTask(deps, event, task, logger);
+        const existingResult = await handleExistingTask(deps, event, task, logger);
+
+        // If the existing task is stale (worker says "not found"), fall back to creating a new task
+        if (!existingResult.success && isStaleTaskError(existingResult)) {
+          logger.info(
+            { staleTaskId: task.id, prNumber: event.pullRequestNumber },
+            'Existing task is stale on worker, falling back to new task creation'
+          );
+          return await handleNewTask(deps, event, logger, workerDirective);
+        }
+
+        return existingResult;
       } catch (error) {
         const errorMessage = getErrorMessage(error, 'Unknown error');
         logger.error(
@@ -114,13 +176,317 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
         return { success: false, dispatched: false, error: `Unexpected error: ${errorMessage}` };
       }
     },
+
+    async dispatchCIFailure(context: CIFailureDispatchContext): Promise<CIFailureDispatchResult> {
+      const { event, logger } = context;
+
+      try {
+        logger.info(
+          { prNumber: event.pullRequestNumber, repo: event.repository, eventType: event.eventType },
+          'Starting CI failure dispatch workflow'
+        );
+
+        // Find the original task that created this PR
+        const taskResult = await deps.codeTaskRepo.findLatestExecutionTaskByPR(event.repository, event.pullRequestNumber);
+
+        if (!taskResult.ok) {
+          logger.error(
+            { prNumber: event.pullRequestNumber, repo: event.repository, error: taskResult.error },
+            'Failed to find original task for CI failure'
+          );
+          return { success: false, fixTaskCreated: false, error: `Failed to find task: ${taskResult.error.message}` };
+        }
+
+        const originalTask = taskResult.value;
+
+        if (originalTask === null) {
+          logger.info(
+            { prNumber: event.pullRequestNumber, repo: event.repository },
+            'No original task found for CI failure, skipping'
+          );
+          return { success: true, fixTaskCreated: false, skipped: true, skipReason: 'no_original_task' };
+        }
+
+        // Check loop prevention: only skip if this task was already a CI failure follow-up.
+        // If it's a pr_comment or other follow-up whose PR failed CI, we should still
+        // create a ci_failure follow-up (that's a different failure, not a loop).
+        if (originalTask.followUpReason === 'ci_failure') {
+          logger.info(
+            { taskId: originalTask.id, prNumber: event.pullRequestNumber },
+            'CI failure follow-up already exists, skipping to prevent loop'
+          );
+          return { success: true, fixTaskCreated: false, skipped: true, skipReason: 'already_follow_up' };
+        }
+
+        // Extract CI failure details from payload
+        const payload = event.payload as Record<string, unknown> | null;
+        const checkName = typeof payload?.['checkName'] === 'string' ? payload['checkName'] : 'Unknown Check';
+        const headBranch = event.baseBranch ?? 'unknown';
+        const headSha = typeof payload?.['headSha'] === 'string' ? payload['headSha'] : 'unknown';
+        const checkSuiteId = typeof payload?.['checkSuiteId'] === 'number' ? payload['checkSuiteId'] : 0;
+        /* v8 ignore start -- ts-type: typeof narrowing on unknown payload field — checkSuiteUrl fallback unreachable when payload always has string url @preserve */
+        const checkSuiteUrl = typeof payload?.['checkSuiteUrl'] === 'string' ? payload['checkSuiteUrl'] : undefined;
+        /* v8 ignore stop @preserve */
+
+        // Record ci_failure_detected in automation log
+        const prUrl = `https://github.com/${event.repository}/pull/${String(event.pullRequestNumber)}`;
+        await deps.automationLog.record(
+          { repository: event.repository, prNumber: event.pullRequestNumber },
+          {
+            type: 'ci_failure_detected',
+            checkName,
+            conclusion: 'failure',
+            headBranch,
+            headSha,
+            checkSuiteId,
+            prUrl,
+          },
+          originalTask.userId,
+        ).catch((error: unknown) => {
+          logger.warn({ error }, 'Failed to record ci_failure_detected in automation log');
+        });
+
+        // Build follow-up task prompt
+        const fixPrompt = buildCIFixPrompt({
+          repository: event.repository,
+          prNumber: event.pullRequestNumber,
+          prUrl,
+          checkName,
+          branch: headBranch,
+          headSha,
+        });
+
+        // Create follow-up task
+        const createInput: {
+          id?: string;
+          userId: string;
+          prompt: string;
+          sanitizedPrompt: string;
+          systemPromptHash: string;
+          workerType: typeof originalTask.workerType;
+          workerLocation: string;
+          repository: string;
+          baseBranch: string;
+          traceId: string;
+          parentTaskId: string;
+          followUpReason: 'ci_failure';
+          agentType: 'pull_request';
+          initialStatus: 'queued';
+          prNumber: number;
+          prBranch?: string;
+          linearIssueId?: string;
+        } = {
+          userId: originalTask.userId,
+          prompt: fixPrompt,
+          sanitizedPrompt: fixPrompt,
+          systemPromptHash: 'ci-failure-fix',
+          workerType: originalTask.workerType,
+          workerLocation: originalTask.workerLocation,
+          repository: event.repository,
+          baseBranch: event.baseBranch ?? originalTask.baseBranch,
+          traceId: `ci-fix-${event.id}`,
+          parentTaskId: originalTask.id,
+          followUpReason: 'ci_failure',
+          agentType: 'pull_request',
+          initialStatus: 'queued',
+          prNumber: event.pullRequestNumber,
+          ...(event.baseBranch !== null && { prBranch: event.baseBranch }),
+          ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
+        };
+
+        const createResult = await deps.codeTaskRepo.create(createInput);
+
+        if (!createResult.ok) {
+          logger.error(
+            { error: createResult.error, originalTaskId: originalTask.id },
+            'Failed to create CI fix follow-up task'
+          );
+          return { success: false, fixTaskCreated: false, error: `Failed to create task: ${createResult.error.message}` };
+        }
+
+        const fixTaskId = createResult.value.id;
+
+        // Record fix_task_dispatched in automation log
+        await deps.automationLog.record(
+          { repository: event.repository, prNumber: event.pullRequestNumber },
+          {
+            type: 'fix_task_dispatched',
+            parentTaskId: originalTask.id,
+            fixTaskId,
+            checkName,
+          },
+          originalTask.userId,
+        ).catch((error: unknown) => {
+          logger.warn({ error }, 'Failed to record fix_task_dispatched in automation log');
+        });
+
+        // Enqueue the fix task
+        await deps.taskEnqueueService.enqueue({ taskId: fixTaskId, userId: originalTask.userId }).catch((error: unknown) => {
+          logger.warn({ error, fixTaskId }, 'Failed to enqueue CI fix task');
+        });
+
+        // Send WhatsApp notification
+        await deps.whatsappNotifier.notifyCIFailure(originalTask.userId, {
+          repository: event.repository,
+          pullRequestNumber: event.pullRequestNumber,
+          prUrl,
+          checkName,
+          branch: headBranch,
+          taskId: originalTask.id,
+          /* v8 ignore start -- ts-type: conditional spread on checkSuiteUrl !== undefined — fallback unreachable when upstream typeof narrowing guarantees string @preserve */
+          ...(checkSuiteUrl !== undefined && { runUrl: checkSuiteUrl }),
+          /* v8 ignore stop @preserve */
+        }).catch((error: unknown) => {
+          logger.warn({ error }, 'Failed to send CI failure WhatsApp notification');
+        });
+
+        logger.info(
+          { originalTaskId: originalTask.id, fixTaskId, prNumber: event.pullRequestNumber },
+          'CI failure follow-up task created'
+        );
+
+        return {
+          success: true,
+          fixTaskCreated: true,
+          parentTaskId: originalTask.id,
+          fixTaskId,
+        };
+      } catch (error) {
+        const errorMessage = getErrorMessage(error, 'Unknown error');
+        logger.error(
+          { prNumber: event.pullRequestNumber, repo: event.repository, error: errorMessage },
+          'Unexpected error in CI failure dispatch workflow'
+        );
+        return { success: false, fixTaskCreated: false, error: `Unexpected error: ${errorMessage}` };
+      }
+    },
   };
+}
+
+/**
+ * Build the prompt for a CI fix follow-up task.
+ */
+function buildCIFixPrompt(input: {
+  repository: string;
+  prNumber: number;
+  prUrl: string;
+  checkName: string;
+  branch: string;
+  headSha: string;
+}): string {
+  return `## CI Failure Fix Task
+
+### Context
+A CI check failed on your agent's Pull Request.
+
+### PR Details
+- Repository: ${input.repository}
+- PR Number: #${String(input.prNumber)}
+- PR URL: ${input.prUrl}
+- Branch: ${input.branch}
+- Commit: ${input.headSha}
+
+### Failing Check
+${input.checkName}
+
+### Instructions
+1. First, check the GitHub Actions run to understand what failed:
+   - Visit: ${input.prUrl}/checks
+   - Look at the failing check's logs
+
+2. The most common cause is coverage failures from missing test exemptions.
+   If you see "uncovered branch" errors, add v8 ignore comments with valid exemptions.
+
+3. Fix the issue in your code:
+   - If it's a coverage issue, add v8 ignore comments with valid exemptions
+   - If it's a lint error, fix the linting issues
+   - If it's a type error, fix the TypeScript types
+
+4. After fixing, run \`pnpm run ci:tracked\` locally to verify
+
+5. Commit and push your fix
+
+### Important Reminders
+- Only fix the CI failure issue - do not make unrelated changes
+- Add proper v8 ignore exemptions with specific categories and explanations
+- Ensure all existing tests still pass
+`;
+}
+
+/**
+ * Detect when a dispatch failure indicates the task is stale and no longer reachable.
+ * Two scenarios: (1) task_not_found — task was found by PR lookup but deleted before
+ * message send (Firestore-level race), (2) worker_error with "Task not found" — task
+ * completed/crashed and was cleaned up on the worker but Firestore still has a record.
+ *
+ * Checks the structured error code first (preferred), then falls back to message
+ * matching for worker_error responses where the code is generic.
+ */
+export function isStaleTaskError(result: WebhookDispatchResult): boolean {
+  if (result.errorCode === 'task_not_found') return true;
+  if (result.errorCode === 'worker_error' && result.error !== undefined) {
+    return result.error.includes('Task not found') || result.error.includes('HTTP 404');
+  }
+  return false;
+}
+
+/** Best-effort destroy a preserved container when @worker directive requires a fresh agent. */
+async function destroyPreservedContainer(
+  deps: Pick<WebhookDispatchServiceDeps, 'workerSettingsRepo' | 'taskDispatcher'>,
+  preserved: { id: string; userId: string; workerLocation: string },
+  logger: Logger,
+): Promise<void> {
+  try {
+    const workerCreds = await resolveWorkerCredentials(
+      deps.workerSettingsRepo, preserved.userId, preserved.workerLocation,
+    );
+    await deps.taskDispatcher.cancelOnWorker(preserved.id, preserved.workerLocation, workerCreds);
+  } catch (error) {
+    logger.warn({ taskId: preserved.id, error }, 'Failed to destroy preserved container (best-effort)');
+  }
+}
+
+/** Attempt to reuse a preserved pull_request container by sending it a message. */
+async function reusePreservedContainer(
+  deps: Pick<WebhookDispatchServiceDeps, 'codeTaskRepo' | 'logLineRepo' | 'taskDispatcher' | 'workerSettingsRepo' | 'statusMirrorService' | 'whatsappNotifier'>,
+  preserved: { id: string; userId: string },
+  comment: string,
+  logger: Logger,
+): Promise<WebhookDispatchResult | null> {
+  try {
+    const sendResult = await sendTaskMessage(
+      {
+        logger,
+        codeTaskRepo: deps.codeTaskRepo,
+        logLineRepo: deps.logLineRepo,
+        taskDispatcher: deps.taskDispatcher,
+        workerSettingsRepo: deps.workerSettingsRepo,
+        statusMirrorService: deps.statusMirrorService,
+        whatsappNotifier: deps.whatsappNotifier,
+      },
+      { taskId: preserved.id, userId: preserved.userId, message: comment },
+    );
+    if (sendResult.ok) {
+      return { success: true, dispatched: true };
+    }
+    logger.warn(
+      { taskId: preserved.id, error: sendResult.error },
+      'Failed to send message to preserved container, falling through to new task',
+    );
+  } catch (error) {
+    logger.warn(
+      { taskId: preserved.id, error },
+      'Error sending to preserved container, falling through',
+    );
+  }
+  return null;
 }
 
 async function handleNewTask(
   deps: WebhookDispatchServiceDeps,
   event: GitHubPREvent,
   logger: Logger,
+  workerType?: import('../models/codeTask.js').WorkerType,
 ): Promise<WebhookDispatchResult> {
   if (deps.userLookupService === undefined) {
     logger.warn({ repo: event.repository, prNumber: event.pullRequestNumber }, 'UserLookupService not configured, cannot create task');
@@ -146,17 +512,40 @@ async function handleNewTask(
     }
   }
 
-  // Extract @worker/@model directive from comment
-  const workerType = extractDispatchWorkerType(event.body ?? '');
-  if (workerType !== undefined) {
-    logger.info({ workerType, prNumber: event.pullRequestNumber }, 'Extracted worker type from comment');
-  }
-
   // Use messageBuilder for pull_request_review events to apply template routing
-  // (e.g. code-worker reviews → nitpick-nuker template)
   const comment = event.eventType === 'pull_request_review'
     ? deps.messageBuilder.build(event)
     : event.body ?? '';
+
+  // Look up any preserved container for this PR once — used in both branches below.
+  const preservedResult = await deps.codeTaskRepo.findPreservedPullRequestTask(
+    event.repository,
+    event.pullRequestNumber,
+  );
+  const preserved = preservedResult.ok ? preservedResult.value : null;
+
+  // When @worker directive is present, destroy any preserved container first (best-effort).
+  // The user's intent is a fresh agent with a specific model — failing to destroy the old
+  // one should not block creating the new task.
+  if (workerType !== undefined && preserved !== null) {
+    logger.info(
+      { taskId: preserved.id, prNumber: event.pullRequestNumber },
+      'Destroying preserved container for @worker directive',
+    );
+    await destroyPreservedContainer(deps, preserved, logger);
+  }
+
+  // Check for preserved pull_request container to reuse (non-@worker comments only)
+  if (workerType === undefined && preserved !== null) {
+    const reuseResult = await reusePreservedContainer(deps, preserved, comment, logger);
+    if (reuseResult !== null) {
+      logger.info(
+        { taskId: preserved.id, prNumber: event.pullRequestNumber },
+        'Reused preserved container for PR comment',
+      );
+      return reuseResult;
+    }
+  }
 
   const createResult = await createTaskForPR(
     {
@@ -171,6 +560,7 @@ async function handleNewTask(
       userServiceClient: deps.userServiceClient,
       firestore: deps.firestore,
       automationLog: deps.automationLog,
+      workerSettingsRepo: deps.workerSettingsRepo,
     },
     {
       repository: event.repository,
@@ -250,7 +640,7 @@ async function handleExistingTask(
       { taskId: task.id, error: sendResult.error },
       'Failed to send message to task'
     );
-    return { success: false, dispatched: false, taskId: task.id, error: sendResult.error.message };
+    return { success: false, dispatched: false, taskId: task.id, error: sendResult.error.message, errorCode: sendResult.error.code };
   }
 
   deps.automationLog.record(

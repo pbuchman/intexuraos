@@ -40,5 +40,6 @@ export function serializeWatch(watch: MergeQueueWatch): Record<string, unknown> 
       author: pr.author,
       mergedAt: tsToIso(pr.mergedAt),
     })),
+    excludedPrNumbers: watch.excludedPrNumbers,
   };
 }

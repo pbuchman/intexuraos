@@ -47,7 +47,7 @@ const testSchedule: CronSchedule = {
   id: 'schedule-1',
   userId: TEST_USER_ID,
   name: 'Test Schedule',
-  description: 'Every minute',
+  scheduleSummary: 'Every minute',
   cronExpression: '*/5 * * * *',
   timezone: 'UTC',
   action: { services: ['code-agent'], instruction: 'do something', preferredTools: [] },
@@ -338,7 +338,7 @@ describe('Schedule Routes', () => {
   describe('POST /cron/schedules', () => {
     const validBody = {
       name: 'Test',
-      description: 'Every minute',
+      schedule: 'Every minute',
       action: {
         services: ['code-agent'],
         instruction: 'do something',
@@ -413,7 +413,7 @@ describe('Schedule Routes', () => {
         headers: { authorization: AUTH_HEADER },
         payload: {
           name: 'No tools',
-          description: 'Every minute',
+          schedule: 'Every minute',
           action: { services: ['code-agent'], instruction: 'do something' },
         },
       });
@@ -428,7 +428,8 @@ describe('Schedule Routes', () => {
         ...createFakeServices().scheduleRepo,
         create: vi.fn(async (_userId: string, input: {
           name: string;
-          description: string;
+          schedule: string;
+          scheduleSummary: string;
           action: CronSchedule['action'];
           timezone: string;
           cronExpression: string;
@@ -716,12 +717,12 @@ describe('Schedule Routes', () => {
       expect(response.statusCode).toBe(404);
     });
 
-    it('accepts update with description field', async () => {
+    it('accepts update with schedule field', async () => {
       const response = await app.inject({
         method: 'PATCH',
         url: '/cron/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
-        payload: { description: 'Every 5 minutes' },
+        payload: { schedule: 'Every 5 minutes' },
       });
 
       expect(response.statusCode).toBe(200);

@@ -114,6 +114,8 @@ describe('POST /internal/webhooks/task-event', () => {
       processHeartbeat: {} as never,
       detectZombieTasks: {} as never,
       cleanupTaskLogs: {} as never,
+      archiveStaleGroups: {} as never,
+      autoArchiveMergedTasks: {} as never,
       metricsClient: {} as never,
       workerSettingsRepo: {} as never,
       workerHealthProbe: {} as never,
@@ -365,6 +367,48 @@ describe('POST /internal/webhooks/task-event', () => {
     });
   });
 
+  it('includes agentType in task_started event when task has agentType', async () => {
+    mockCodeTaskRepo.findById.mockResolvedValue(ok({
+      id: TASK_ID,
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-123',
+      status: 'running',
+      agentType: 'review',
+      webhookSecret: generateWebhookSecret(ORCHESTRATOR_SECRET, TASK_ID),
+    }));
+
+    const body = { taskId: TASK_ID, event: 'task_started', attempt: 1, workerType: 'opus' };
+    const response = await sendTaskEvent(body);
+
+    expect(response.statusCode).toBe(200);
+
+    const [, event] = mockAutomationLog.record.mock.calls[0] as [unknown, AutomationEvent];
+    expect(event).toEqual({
+      type: 'task_started',
+      taskId: TASK_ID,
+      workerType: 'opus',
+      attempt: 1,
+      agentType: 'review',
+    });
+  });
+
+  it('omits agentType from task_started event when task has no agentType', async () => {
+    const body = { taskId: TASK_ID, event: 'task_started', attempt: 1, workerType: 'opus' };
+    const response = await sendTaskEvent(body);
+
+    expect(response.statusCode).toBe(200);
+
+    const [, event] = mockAutomationLog.record.mock.calls[0] as [unknown, AutomationEvent];
+    expect(event).toEqual({
+      type: 'task_started',
+      taskId: TASK_ID,
+      workerType: 'opus',
+      attempt: 1,
+    });
+    expect(event).not.toHaveProperty('agentType');
+  });
+
   // -----------------------------------------------------------------------
   // Event mapping: task_completed
   // -----------------------------------------------------------------------
@@ -406,6 +450,48 @@ describe('POST /internal/webhooks/task-event', () => {
       status: 'unknown',
       duration: 0,
     });
+  });
+
+  it('includes agentType in task_completed event when task has agentType', async () => {
+    mockCodeTaskRepo.findById.mockResolvedValue(ok({
+      id: TASK_ID,
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-123',
+      status: 'running',
+      agentType: 'remediation',
+      webhookSecret: generateWebhookSecret(ORCHESTRATOR_SECRET, TASK_ID),
+    }));
+
+    const body = { taskId: TASK_ID, event: 'task_completed', status: 'implemented', duration: 60000 };
+    const response = await sendTaskEvent(body);
+
+    expect(response.statusCode).toBe(200);
+
+    const [, event] = mockAutomationLog.record.mock.calls[0] as [unknown, AutomationEvent];
+    expect(event).toEqual({
+      type: 'task_completed',
+      taskId: TASK_ID,
+      status: 'implemented',
+      duration: 60000,
+      agentType: 'remediation',
+    });
+  });
+
+  it('omits agentType from task_completed event when task has no agentType', async () => {
+    const body = { taskId: TASK_ID, event: 'task_completed', status: 'implemented', duration: 60000 };
+    const response = await sendTaskEvent(body);
+
+    expect(response.statusCode).toBe(200);
+
+    const [, event] = mockAutomationLog.record.mock.calls[0] as [unknown, AutomationEvent];
+    expect(event).toEqual({
+      type: 'task_completed',
+      taskId: TASK_ID,
+      status: 'implemented',
+      duration: 60000,
+    });
+    expect(event).not.toHaveProperty('agentType');
   });
 
   // -----------------------------------------------------------------------

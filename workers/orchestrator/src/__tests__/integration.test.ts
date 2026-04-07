@@ -96,6 +96,24 @@ describe('Orchestrator HTTP-Only Integration', () => {
     return { timestamp, signature };
   }
 
+  function verifyWebhookSignature(
+    _url: string,
+    body: string,
+    headers: Record<string, string>
+  ): boolean {
+    const timestamp = headers['x-request-timestamp'];
+    const signature = headers['x-request-signature'];
+
+    if (!timestamp || !signature) {
+      return false;
+    }
+
+    const message = `${String(timestamp)}.${body}`;
+    const expected = crypto.createHmac('sha256', webhookSecret).update(message).digest('hex');
+
+    return signature === expected;
+  }
+
   function verifyOrchestratorSignature(
     _url: string,
     body: string,
@@ -421,6 +439,91 @@ describe('Orchestrator HTTP-Only Integration', () => {
       orchestratorRequests.forEach((req) => {
         expect(verifyOrchestratorSignature(req.url, req.body, req.headers)).toBe(true);
       });
+    });
+  });
+
+  describe('Failure Completion and Cleanup', () => {
+    it('entrypoint log lines flow through log pipeline to code-agent', async () => {
+      const taskId = 'log-pipeline-task-123';
+
+      const entrypointMarker = '[entrypoint] Codex attempt finished with exit code: 1';
+
+      const logChunks = [
+        { sequence: 1, content: 'Starting codex...', timestamp: '2024-01-01T00:00:00.000Z' },
+        { sequence: 2, content: entrypointMarker, timestamp: '2024-01-01T00:01:00.000Z' },
+      ];
+
+      const logPayload = { taskId, chunks: logChunks };
+      const { timestamp, signature } = generateOrchestratorSignature(logPayload);
+
+      const logResponse = await fetch(`${codeAgentUrl}/internal/logs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Request-Timestamp': timestamp,
+          'X-Request-Signature': signature,
+        },
+        body: JSON.stringify(logPayload),
+        signal: AbortSignal.timeout(5000),
+      });
+
+      expect(logResponse.ok).toBe(true);
+
+      // Verify the log request was signed and contains the entrypoint marker
+      const logRequest = httpRequests.find((req) => req.url.includes('/internal/logs'));
+      if (logRequest === undefined) {
+        throw new Error('Expected log request to be captured but none was found');
+      }
+      const verifiedLogRequest = logRequest;
+      expect(
+        verifyOrchestratorSignature(
+          verifiedLogRequest.url,
+          verifiedLogRequest.body,
+          verifiedLogRequest.headers
+        )
+      ).toBe(true);
+      const body = JSON.parse(verifiedLogRequest.body) as {
+        taskId: string;
+        chunks: { content: string }[];
+      };
+      expect(body.chunks.some((c) => c.content.includes('exit code: 1'))).toBe(true);
+    });
+
+    it('completion webhook accepts failure status with valid HMAC', async () => {
+      const taskId = 'failure-task-456';
+
+      const webhookPayload = {
+        taskId,
+        status: 'failed',
+        result: { error: 'Codex process exited with non-zero code' },
+      };
+
+      const { timestamp: whTimestamp, signature: whSignature } =
+        generateWebhookSignature(webhookPayload);
+
+      const webhookResponse = await fetch(`${codeAgentUrl}/internal/webhooks/task-complete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Request-Timestamp': whTimestamp,
+          'X-Request-Signature': whSignature,
+        },
+        body: JSON.stringify(webhookPayload),
+        signal: AbortSignal.timeout(5000),
+      });
+
+      expect(webhookResponse.ok).toBe(true);
+
+      const webhookRequest = httpRequests.find((req) =>
+        req.url.includes('/internal/webhooks/task-complete')
+      );
+      if (webhookRequest === undefined) {
+        throw new Error('Expected webhook request to be captured but none was found');
+      }
+      const verifiedRequest = webhookRequest;
+      expect(
+        verifyWebhookSignature(verifiedRequest.url, verifiedRequest.body, verifiedRequest.headers)
+      ).toBe(true);
     });
   });
 

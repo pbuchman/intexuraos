@@ -9,7 +9,7 @@ import { getServices } from '../services.js';
 export interface StatusResponse {
   configured: boolean;
   lastNotificationAt: string | null;
-/* v8 ignore start -- test-infra: test setup mocks all services as healthy @preserve */
+/* v8 ignore start -- test-infra: cannot test route registration without mocking all services @preserve */
 }
 
 export const statusRoutes: FastifyPluginCallback = (fastify, _opts, done) => {

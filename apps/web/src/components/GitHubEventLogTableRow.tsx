@@ -4,6 +4,7 @@ import { useAuth } from '@/context';
 import { getGitHubEventLogPayload } from '@/services/codeAgentApi';
 import type { GitHubEventLogListRow } from '@/hooks';
 import { formatTimeOnly } from '@/utils/dateFormat';
+import { GITHUB_EVENT_LOG_DESKTOP_GRID } from './githubEventLogTableLayout.js';
 
 export interface GitHubEventLogTableRowProps {
   row: GitHubEventLogListRow;
@@ -26,17 +27,27 @@ function truncateText(text: string, maxLen: number): string {
   return `${text.slice(0, maxLen)}…`;
 }
 
-function formatDecisionSummary(row: GitHubEventLogListRow): string {
+function formatDecisionBadgeLabel(row: GitHubEventLogListRow): string {
+  if (row.decisionState === 'pending') {
+    return 'Pending';
+  }
+  if (row.dispatchAction === 'create_review_task' || row.decisionOutcome === 'request_review') {
+    return 'Review';
+  }
+  if (row.decisionOutcome === 'dispatch') {
+    return 'Dispatch';
+  }
+  if (row.decisionOutcome === 'skip') {
+    return 'Skip';
+  }
+  return 'Completed';
+}
+
+function formatDecisionDetail(row: GitHubEventLogListRow): string | null {
   if (row.dispatchAction === 'create_review_task' && row.reviewTypes.length > 0) {
-    return `requested_review(${row.reviewTypes.join(', ')})`;
+    return row.reviewTypes.join(', ');
   }
-  if (row.dispatchAction !== null) {
-    return row.dispatchAction;
-  }
-  if (row.decisionOutcome !== null) {
-    return row.decisionOutcome;
-  }
-  return 'pending';
+  return null;
 }
 
 function decisionClasses(row: GitHubEventLogListRow): string {
@@ -100,6 +111,8 @@ function buildEntityUrl(row: GitHubEventLogListRow): string | null {
 
 function GitHubEventLogTableRowComponent({ row }: GitHubEventLogTableRowProps): React.JSX.Element {
   const entityUrl = buildEntityUrl(row);
+  const decisionLabel = formatDecisionBadgeLabel(row);
+  const decisionDetail = formatDecisionDetail(row);
   const { getAccessToken } = useAuth();
   const [isExpanded, setIsExpanded] = useState(false);
   const [payload, setPayload] = useState<unknown>(null);
@@ -144,7 +157,7 @@ function GitHubEventLogTableRowComponent({ row }: GitHubEventLogTableRowProps): 
       className={`group overflow-hidden rounded-lg border border-slate-200 bg-white transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800 ${getAccentShadow(row)}`}
     >
       {/* Desktop: grid layout */}
-      <div className="hidden items-center gap-2 px-3 py-1.5 lg:grid lg:grid-cols-[24px_80px_160px_120px_100px_1fr_220px]">
+      <div className={`hidden items-center gap-2 px-3 py-1.5 xl:grid ${GITHUB_EVENT_LOG_DESKTOP_GRID}`}>
         {chevronButton}
 
         {/* Time */}
@@ -163,17 +176,24 @@ function GitHubEventLogTableRowComponent({ row }: GitHubEventLogTableRowProps): 
         </div>
 
         {/* Action */}
-        <span className="truncate text-xs text-slate-600 dark:text-slate-400">
+        <span className="min-w-0 truncate text-xs text-slate-600 dark:text-slate-400" title={row.action ?? undefined}>
           {row.action ?? '—'}
         </span>
 
         {/* Decision */}
-        <span className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] ring-1 ${decisionClasses(row)}`}>
-          {formatDecisionSummary(row)}
-        </span>
+        <div className="min-w-0">
+          <span className={`inline-flex max-w-full truncate rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] ring-1 ${decisionClasses(row)}`}>
+            {decisionLabel}
+          </span>
+          {decisionDetail !== null ? (
+            <div className="mt-1 truncate text-[11px] text-slate-500 dark:text-slate-400" title={decisionDetail}>
+              {decisionDetail}
+            </div>
+          ) : null}
+        </div>
 
         {/* Reason */}
-        <span className="truncate text-xs text-slate-500 dark:text-slate-400" title={row.reason ?? undefined}>
+        <span className="min-w-0 truncate text-xs text-slate-500 dark:text-slate-400" title={row.reason ?? undefined}>
           {row.reason ?? '—'}
         </span>
 
@@ -183,30 +203,39 @@ function GitHubEventLogTableRowComponent({ row }: GitHubEventLogTableRowProps): 
             href={entityUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="truncate text-xs text-blue-600 hover:underline dark:text-blue-400"
+            className="block min-w-0 truncate text-xs text-blue-600 hover:underline dark:text-blue-400"
           >
             {truncateText(formatEntityLabel(row), 30)}
           </a>
         ) : (
-          <span className="truncate text-xs text-slate-400">—</span>
+          <span className="min-w-0 truncate text-xs text-slate-400">—</span>
         )}
       </div>
 
       {/* Mobile: compact flex row */}
-      <div className="flex items-center gap-2 px-3 py-1.5 lg:hidden">
-        {chevronButton}
-        <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
-          {formatTimeOnly(row.authPassedAt)}
-        </span>
-        <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-[0.08em] ring-1 ${eventClasses(row)}`}>
-          {row.githubEventName}
-        </span>
-        {row.isHydrating ? (
-          <Loader2 className="h-3 w-3 shrink-0 animate-spin text-amber-500" />
+      <div className="px-3 py-1.5 xl:hidden">
+        <div className="flex min-w-0 items-center gap-2">
+          {chevronButton}
+          <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
+            {formatTimeOnly(row.authPassedAt)}
+          </span>
+          <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-[0.08em] ring-1 ${eventClasses(row)}`}>
+            {row.githubEventName}
+          </span>
+          {row.isHydrating ? (
+            <Loader2 className="h-3 w-3 shrink-0 animate-spin text-amber-500" />
+          ) : null}
+          <span className={`ml-auto inline-flex max-w-[45%] shrink-0 truncate rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] ring-1 ${decisionClasses(row)}`}>
+            {decisionLabel}
+          </span>
+        </div>
+        {decisionDetail !== null ? (
+          <div className="pl-7 pt-1 text-[11px] text-slate-500 dark:text-slate-400">
+            <div className="truncate" title={decisionDetail}>
+              {decisionDetail}
+            </div>
+          </div>
         ) : null}
-        <span className={`ml-auto inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] ring-1 ${decisionClasses(row)}`}>
-          {formatDecisionSummary(row)}
-        </span>
       </div>
 
       {/* Expanded payload section */}

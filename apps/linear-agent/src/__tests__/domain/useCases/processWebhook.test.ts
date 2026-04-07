@@ -5,11 +5,12 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import type { Result } from '@intexuraos/common-core';
 import { ok } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
-import { processWebhook } from '../../../domain/useCases/processWebhook.js';
+import { processWebhook as processWebhookUseCase } from '../../../domain/useCases/processWebhook.js';
 import type { LinearConnectionRepository, LinearIssueRepository, LinearCommentRepository, CodeAgentClient } from '../../../domain/ports.js';
 import type { SyncedLinearIssue, LinearComment, CommentSummary, LinearConnectionPublic, LinearConnection } from '../../../domain/models.js';
 import type { LinearError } from '../../../domain/errors.js';
-import type { ProcessWebhookResult } from '../../../domain/useCases/processWebhook.js';
+import type { ProcessWebhookDeps, ProcessWebhookResult, WebhookPayload } from '../../../domain/useCases/processWebhook.js';
+import { FakeLinearApiClient } from '../../fakes.js';
 
 // Type guard helpers for discriminated union
 function expectIgnored(result: ProcessWebhookResult): asserts result is { outcome: 'ignored'; message: string } {
@@ -223,6 +224,15 @@ class FakeCodeAgentClient implements CodeAgentClient {
   }): Promise<Result<{ codeTaskId: string }, { code: string; message: string }>> {
     return ok({ codeTaskId: 'task-123' });
   }
+
+  async notifyGroupSummaryRecompute(_request: {
+    userId: string;
+    linearIssueId: string;
+    labels: { id: string; name: string }[];
+    sourceTimestamp: string;
+  }): Promise<Result<void, { code: string; message: string }>> {
+    return ok(undefined);
+  }
 }
 
 // Test helper functions
@@ -307,6 +317,7 @@ describe('processWebhook', () => {
   let issueRepo: FakeIssueRepository;
   let commentRepo: FakeCommentRepository;
   let codeAgentClient: FakeCodeAgentClient;
+  let linearApiClient: FakeLinearApiClient;
   let logger: Logger;
 
   const webhookSecret = 'test-webhook-secret';
@@ -317,6 +328,7 @@ describe('processWebhook', () => {
     issueRepo = new FakeIssueRepository();
     commentRepo = new FakeCommentRepository();
     codeAgentClient = new FakeCodeAgentClient();
+    linearApiClient = new FakeLinearApiClient();
     logger = createFakeLogger();
   });
 
@@ -327,6 +339,11 @@ describe('processWebhook', () => {
   const createInvalidSignatureValidator = () => {
     return (): Result<void, string> => ({ ok: false, error: 'Invalid signature' });
   };
+
+  const processWebhook = (
+    payload: WebhookPayload,
+    deps: Omit<ProcessWebhookDeps, 'linearApiClient'>
+  ): Promise<ProcessWebhookResult> => processWebhookUseCase(payload, { ...deps, linearApiClient });
 
   describe('ignored types', () => {
     it('ignores non-Issue and non-Comment webhook types', async () => {

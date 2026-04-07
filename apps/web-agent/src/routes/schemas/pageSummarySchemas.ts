@@ -11,6 +11,14 @@ export const summarizePageBodySchema = {
       type: 'string',
       description: 'User ID for fetching LLM API keys',
     },
+    title: {
+      type: 'string',
+      description: 'Optional page title hint from metadata',
+    },
+    description: {
+      type: 'string',
+      description: 'Optional page description hint from metadata',
+    },
     maxSentences: {
       type: 'number',
       minimum: 1,
@@ -89,6 +97,8 @@ export const summarizePageResponseSchema = {
 export interface SummarizePageBody {
   url: string;
   userId: string;
+  title?: string;
+  description?: string;
   maxSentences?: number;
   maxReadingMinutes?: number;
 }

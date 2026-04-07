@@ -9,12 +9,69 @@ import {
   isValidModel,
   LlmModels,
   LlmProviders,
+  isOpenRouterModel,
+  createOpenRouterModelId,
+  getOpenRouterRawId,
   type LLMModel,
   type ResearchModel,
   type ImageModel,
   type ValidationModel,
   type FastModel,
 } from '../supportedModels.js';
+
+describe('OpenRouter model helpers', () => {
+  it('isOpenRouterModel returns true for or: prefixed models', () => {
+    expect(isOpenRouterModel('or:anthropic/claude-sonnet-4')).toBe(true);
+    expect(isOpenRouterModel('or:meta-llama/llama-3.1-70b-instruct')).toBe(true);
+    expect(isOpenRouterModel('or:qwen/qwen3.5-plus-02-15')).toBe(true);
+  });
+
+  it('isOpenRouterModel returns false for static models', () => {
+    expect(isOpenRouterModel('gemini-2.5-pro')).toBe(false);
+    expect(isOpenRouterModel('')).toBe(false);
+    expect(isOpenRouterModel('sonar')).toBe(false);
+    expect(isOpenRouterModel('claude-opus-4-5-20251101')).toBe(false);
+  });
+
+  it('createOpenRouterModelId adds or: prefix', () => {
+    const id = createOpenRouterModelId('anthropic/claude-sonnet-4');
+    expect(id).toBe('or:anthropic/claude-sonnet-4');
+    expect(isOpenRouterModel(id)).toBe(true);
+  });
+
+  it('getOpenRouterRawId strips or: prefix', () => {
+    const id = createOpenRouterModelId('meta-llama/llama-3.1-70b');
+    expect(getOpenRouterRawId(id)).toBe('meta-llama/llama-3.1-70b');
+  });
+
+  it('getOpenRouterRawId returns input for non-OpenRouter models', () => {
+    expect(getOpenRouterRawId('gemini-2.5-pro')).toBe('gemini-2.5-pro');
+  });
+});
+
+describe('LlmProviders constants', () => {
+  it('contains all 5 providers (including OpenRouter)', () => {
+    expect(LlmProviders.Google).toBe('google');
+    expect(LlmProviders.OpenAI).toBe('openai');
+    expect(LlmProviders.Anthropic).toBe('anthropic');
+    expect(LlmProviders.Perplexity).toBe('perplexity');
+    expect(LlmProviders.OpenRouter).toBe('openrouter');
+  });
+});
+
+describe('getProviderForModel', () => {
+  it('returns openrouter for OpenRouter model IDs', () => {
+    const orModel = createOpenRouterModelId('anthropic/claude-sonnet-4');
+    expect(getProviderForModel(orModel)).toBe('openrouter');
+  });
+
+  it('returns correct provider for static models (unchanged)', () => {
+    expect(getProviderForModel(LlmModels.Gemini25Pro)).toBe('google');
+    expect(getProviderForModel(LlmModels.GPT52)).toBe('openai');
+    expect(getProviderForModel(LlmModels.ClaudeOpus45)).toBe('anthropic');
+    expect(getProviderForModel(LlmModels.Sonar)).toBe('perplexity');
+  });
+});
 
 describe('supportedModels', () => {
   describe('ALL_LLM_MODELS', () => {
@@ -97,28 +154,6 @@ describe('supportedModels', () => {
       expect(LlmModels.GPT52).toBe('gpt-5.2');
       expect(LlmModels.ClaudeOpus45).toBe('claude-opus-4-5-20251101');
       expect(LlmModels.SonarPro).toBe('sonar-pro');
-    });
-  });
-
-  describe('LlmProviders constants', () => {
-    it('contains all 4 providers (no ZAI)', () => {
-      expect(LlmProviders.Google).toBe('google');
-      expect(LlmProviders.OpenAI).toBe('openai');
-      expect(LlmProviders.Anthropic).toBe('anthropic');
-      expect(LlmProviders.Perplexity).toBe('perplexity');
-    });
-
-    it('does NOT contain ZAI', () => {
-      expect(Object.values(LlmProviders)).not.toContain('zai');
-    });
-  });
-
-  describe('getProviderForModel', () => {
-    it('returns correct provider for all models', () => {
-      expect(getProviderForModel('gemini-2.5-pro')).toBe('google');
-      expect(getProviderForModel('claude-opus-4-5-20251101')).toBe('anthropic');
-      expect(getProviderForModel('gpt-5.2')).toBe('openai');
-      expect(getProviderForModel('sonar-pro')).toBe('perplexity');
     });
   });
 
@@ -226,6 +261,12 @@ describe('supportedModels', () => {
       const fastModel: FastModel = 'gpt-4o-mini';
       const llmModel: LLMModel = fastModel;
       expect(llmModel).toBe('gpt-4o-mini');
+    });
+
+    it('allows OpenRouterModelId where ResearchModel is expected', () => {
+      const openRouterModel = createOpenRouterModelId('anthropic/claude-sonnet-4.6');
+      const researchModel: ResearchModel = openRouterModel;
+      expect(researchModel).toBe('or:anthropic/claude-sonnet-4.6');
     });
   });
 });

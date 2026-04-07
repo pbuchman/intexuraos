@@ -1,4 +1,6 @@
+import type { WorkerRuntime } from '../services/runtime/types.js';
 import type { WorkerType } from '../services/isolation/types.js';
+import type { ExecutionMemoryPromptContext } from './execution-memory.js';
 
 export type TaskStatus =
   | 'queued'
@@ -24,6 +26,8 @@ export interface PendingResumeStart {
 export interface Task {
   taskId: string;
   workerType: WorkerType;
+  runtime?: WorkerRuntime;
+  runtimeSessionId?: string;
   prompt: string;
   repository: string;
   baseBranch: string;
@@ -46,17 +50,17 @@ export interface Task {
    */
   retriedFrom?: string;
   /** Agent type from code-agent. When set, used instead of recalculating from labels. */
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent';
+  /** Prompt-ready execution memory context prepared by code-agent retrieval. */
+  executionMemoryContext?: ExecutionMemoryPromptContext;
   /** Existing PR tracking comment to reuse instead of creating a new one. */
   trackingCommentId?: string;
+  /** PR number this task is operating on. Used to enforce one-per-PR container preservation. */
+  prNumber?: number;
   /** Existing PR number inherited from retry/follow-up continuation flow. */
   continuationPrNumber?: number;
   /** Existing PR branch inherited from retry/follow-up continuation flow. */
   continuationPrBranch?: string;
-  /** Branch name of planning PR to merge into execution worktree. */
-  planningPrBranch?: string;
-  /** PR URL to close after successful execution. */
-  planningPrUrl?: string;
   /** Review types requested for review agent tasks. */
   reviewTypes?: string[];
   /**
@@ -77,7 +81,7 @@ export interface Task {
   verificationHistory?: TaskVerificationRecord[];
   /**
    * Set when a completed task is resumed via sendMessage().
-   * Gates loosened completion verification (exit code + Claude error only).
+   * Gates loosened completion verification (exit code + runtime-reported hard error only).
    * Cleared before persisting in finalizeTask().
    */
   resumedAfterSuccess?: boolean;
@@ -108,16 +112,26 @@ export interface TaskResult {
   planning_superpowers_writing_plans_used?: '0' | '1';
   planning_linear_url?: string;
   planning_is_complex?: '0' | '1';
+  planning_has_plan_doc?: '0' | '1';
   planning_subtask_urls?: string;
   planning_pr_url?: string;
   planning_unclear_clarification?: string;
   execution_outcome_label?: 'implemented' | 'already_completed';
-  execution_superpowers_executing_plans_used?: '0' | '1';
+  execution_superpowers_subagent_driven_dev_used?: '0' | '1';
   execution_superpowers_requesting_code_review_used?: '0' | '1';
+  execution_memory_ids_used?: string;
+  execution_memory_ids_rejected?: string;
+  execution_memory_usage_summary?: string;
   execution_linear_issue_url?: string;
   review_comments_posted?: string;
+  review_id?: string;
   review_types?: string;
   requirements_tracker_updated?: string;
+  gh_actions_status?: string;
+  needs_remediation?: string; // '0' or '1'
+  review_body?: string;
+  review_inline_comments?: string;
+  requires_re_review?: string; // '0' or '1'
   rebaseResult?: {
     attempted: boolean;
     success: boolean;

@@ -74,4 +74,11 @@ export interface UserSettingsRepository {
     userId: string,
     provider: TranscriptionProvider
   ): Promise<Result<void, SettingsError>>;
+
+  /**
+   * Update the user's timezone preference.
+   * Creates the settings document if it doesn't exist.
+   * @param timezone - IANA timezone string (e.g., "Europe/Berlin")
+   */
+  updateTimezone(userId: string, timezone: string): Promise<Result<void, SettingsError>>;
 }

@@ -9,12 +9,6 @@ interface HellscriptTimelineProps {
 const INTENT_BADGE_STYLES: Record<HellscriptIntentKind, string> = {
   append_thought:
     'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  add_writing_sample:
-    'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
-  set_style_instructions:
-    'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
-  set_metadata:
-    'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
   delete_thought:
     'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
   reorder_thoughts:
@@ -25,8 +19,14 @@ const INTENT_BADGE_STYLES: Record<HellscriptIntentKind, string> = {
     'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
 };
 
+const INTENT_DISPLAY_LABELS: Partial<Record<HellscriptIntentKind, string>> = {
+  append_thought: 'append whisper',
+  delete_thought: 'delete whisper',
+  reorder_thoughts: 'reorder whispers',
+};
+
 function formatIntentLabel(kind: HellscriptIntentKind): string {
-  return kind.replace(/_/g, ' ');
+  return INTENT_DISPLAY_LABELS[kind] ?? kind.replace(/_/g, ' ');
 }
 
 
@@ -34,7 +34,7 @@ export function HellscriptTimeline({ events }: HellscriptTimelineProps): React.J
   if (events.length === 0) {
     return (
       <div className="py-8 text-center text-sm text-slate-400 dark:text-slate-500">
-        No events yet. Start by typing a thought below.
+        No events yet. Start by typing a whisper below.
       </div>
     );
   }

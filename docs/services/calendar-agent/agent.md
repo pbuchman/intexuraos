@@ -337,4 +337,4 @@ interface ServiceFeedback {
 
 ---
 
-**Last updated:** 2026-03-22 (v3.4.0 — route file split, internal route dedup)
+**Last updated:** 2026-04-07 (v3.5.0 — minor package-level updates, no endpoint or behavior changes)

@@ -20,11 +20,14 @@ import type { LinearAgentClient } from '../ports/linearAgentClient.js';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
+import type { GitHubPRSummaryRepository } from '../repositories/gitHubPRSummaryRepository.js';
 
 import { createHmac } from 'node:crypto';
 import type { AutomationLog } from '../ports/automationLog.js';
 import { updatePRTitleWithLinearTag } from '../utils/updatePRTitleWithLinearTag.js';
 import { extractIntIssueId, extractLinearIdentifierFromText } from '../utils/linearIdentifierParser.js';
+import { fetchGitHubToken } from '../utils/gitHubTokenResolver.js';
+import { parseOwnerRepo } from '../utils/parseOwnerRepo.js';
 
 export interface CreateReviewTaskRequest {
   repository: string;
@@ -40,7 +43,7 @@ export interface CreateReviewTaskRequest {
 }
 
 export interface CreateReviewTaskError {
-  code: 'user_not_found' | 'no_workers_configured' | 'task_creation_failed' | 'dispatch_failed' | 'queue_full' | 'internal_error';
+  code: 'user_not_found' | 'no_workers_configured' | 'task_creation_failed' | 'dispatch_failed' | 'queue_full' | 'internal_error' | 'pr_branch_unavailable';
   message: string;
   taskId?: string;
 }
@@ -59,6 +62,7 @@ export interface CreateReviewTaskDeps {
   workerSettingsRepo: WorkerSettingsRepository;
   orchestratorSecret: string;
   automationLog: AutomationLog;
+  gitHubPRSummaryRepo?: GitHubPRSummaryRepository;
 }
 
 interface ResolvedLinearIssue {
@@ -110,10 +114,21 @@ async function resolveLinearIssueId(
     }
   }
 
-  // Tier 3: Create new Linear issue
-  const title = prTitle !== undefined
-    ? `[Review] PR #${String(prNumber)}: ${prTitle}`
-    : `[Review] PR #${String(prNumber)} in ${repository}`;
+  // Tier 3: Create new Linear issue with LLM-generated title
+  const titleContext = buildTitleContext(request);
+  const titleResult = await linearAgentClient.generateTitle({ userId, description: titleContext });
+
+  let title: string;
+  if (titleResult.ok) {
+    title = titleResult.value.title; // @allow-result-access -- narrowed by titleResult.ok
+    logger.info({ title, issueType: titleResult.value.issueType, prNumber }, 'Generated review issue title via LLM');
+  } else {
+    title = prTitle !== undefined
+      ? `[Review] PR #${String(prNumber)}: ${prTitle}`
+      : `[Review] PR #${String(prNumber)} in ${repository}`;
+    logger.warn({ error: titleResult.error, prNumber }, 'LLM title generation failed, using fallback title');
+  }
+
   const description = buildLinearIssueDescription(request);
   const createResult = await linearAgentClient.createIssue({ userId, title, description });
   if (createResult.ok) {
@@ -129,26 +144,48 @@ async function resolveLinearIssueId(
 const PR_BODY_MAX_LENGTH = 500;
 const ISSUE_DESCRIPTION_MAX_LENGTH = 4000;
 
-function buildLinearIssueDescription(request: CreateReviewTaskRequest): string {
-  const { repository, prNumber, prBody, reviewTypes, reviewComment } = request;
-  const lines: string[] = [
-    'Automated PR review created by GitHub Agent triage system.',
-    '',
-    `**Pull Request:** #${String(prNumber)} in ${repository}`,
-  ];
+function truncatePrBody(prBody: string): string {
+  return prBody.length > PR_BODY_MAX_LENGTH
+    ? `${prBody.slice(0, PR_BODY_MAX_LENGTH)}...`
+    : prBody;
+}
+
+function buildTitleContext(request: CreateReviewTaskRequest): string {
+  const { repository, prNumber, prTitle, prBody, reviewTypes } = request;
+  const lines: string[] = [];
+
+  const suffix = prTitle !== undefined ? `: ${prTitle}` : '';
+  lines.push(`Review PR #${String(prNumber)} in ${repository}${suffix}`);
 
   if (prBody !== undefined) {
-    const truncated = prBody.length > PR_BODY_MAX_LENGTH
-      ? `${prBody.slice(0, PR_BODY_MAX_LENGTH)}...`
-      : prBody;
-    lines.push('', '**PR Description:**', truncated);
+    lines.push('', truncatePrBody(prBody));
   }
 
-  lines.push('', `**Review types:** ${reviewTypes.join(', ')}`);
+  lines.push('', `Review focus: ${reviewTypes.join(', ')}`);
+  return lines.join('\n');
+}
+
+function buildLinearIssueDescription(request: CreateReviewTaskRequest): string {
+  const { repository, prNumber, prTitle, prBody, reviewTypes, reviewComment } = request;
+  const lines: string[] = [];
+
+  if (prTitle !== undefined) {
+    lines.push(`## PR Review: ${prTitle}`, '');
+  }
+
+  if (prBody !== undefined) {
+    lines.push(truncatePrBody(prBody), '');
+  }
+
+  lines.push('---', '');
+  lines.push(`**Pull Request:** #${String(prNumber)} in ${repository}`);
+  lines.push(`**Review focus:** ${reviewTypes.join(', ')}`);
+
   if (reviewComment !== undefined) {
-    lines.push('', '**Triggered by comment:**', reviewComment);
+    lines.push('', '**Review requested:**', reviewComment);
   }
 
+  lines.push('', '*Review created automatically by code-agent*');
   return lines.join('\n');
 }
 
@@ -156,6 +193,7 @@ function buildReviewPrompt(request: CreateReviewTaskRequest & {
   workerType: WorkerType;
   issueDescription?: string;
   planDocumentPath?: string;
+  reReviewCommitSha?: string;
 }): string {
   const { repository, prNumber, reviewTypes, workerType, reviewComment } = request;
   const lines = [
@@ -208,6 +246,25 @@ function buildReviewPrompt(request: CreateReviewTaskRequest & {
         `Plan file path: ${request.planDocumentPath}`,
       );
     }
+  }
+
+  if (request.reReviewCommitSha !== undefined) {
+    lines.push(
+      '',
+      '## Re-review Context',
+      '',
+      'This is a re-review for this PR. Your review MUST focus on changes',
+      `since commit ${request.reReviewCommitSha}.`,
+      '',
+      '### Review Scope',
+      `Commits since last review: ${request.reReviewCommitSha}..HEAD`,
+      '',
+      'IMPORTANT: Do NOT re-flag findings from the previous review unless they',
+      'are still present in the new changes. If a finding was flagged before and',
+      'the relevant code has not changed in the diff, assume it is being tracked',
+      'separately. Focus your review on NEW code, CHANGED code, and whether',
+      'prior findings were correctly addressed.',
+    );
   }
 
   return lines.join('\n');
@@ -318,25 +375,57 @@ export async function createReviewTask(
     }
   }
 
-  // Best-effort Linear issue linking for UI grouping
-  let linearIssueId: string | undefined;
-  let createdDescription: string | undefined; // @allow-undefined-type -- mutable variable, not a property
-  if (linearAgentClient !== undefined) {
+  const parsed = parseOwnerRepo(repository);
+  const prBranchPromise = (async (): Promise<{ headBranch?: string; baseBranch?: string }> => {
+    if (parsed === null) return {};
+    const token = await fetchGitHubToken(deps.userServiceClient, userId, logger);
+    if (token === null) return {};
+    const [statusResult, baseResult] = await Promise.all([
+      deps.gitHubPRClient.getPullRequestStatus(token, parsed.owner, parsed.repo, prNumber),
+      deps.gitHubPRClient.getPullRequestBaseBranch(token, parsed.owner, parsed.repo, prNumber),
+    ]);
+    return {
+      ...(statusResult.ok && { headBranch: statusResult.value.headRef }),
+      ...(baseResult.ok && { baseBranch: baseResult.value }),
+    };
+  })().catch((error: unknown): { headBranch?: string; baseBranch?: string } => {
+    logger.warn({ error, prNumber }, 'PR branch resolution failed (best-effort)');
+    return {};
+  });
+
+  // Run re-review detection and Linear issue linking in parallel — they are independent
+  const reReviewPromise = (async (): Promise<string | undefined> => {
+    if (deps.gitHubPRSummaryRepo === undefined) return undefined;
+    try {
+      const summaryResult = await deps.gitHubPRSummaryRepo.findByPullRequest(repository, prNumber);
+      if (summaryResult.ok && summaryResult.value !== null && summaryResult.value.lastReviewedCommitSha !== null) {
+        logger.info({ repository, prNumber, lastReviewedCommitSha: summaryResult.value.lastReviewedCommitSha }, 'Detected re-review — prior review commit found');
+        return summaryResult.value.lastReviewedCommitSha;
+      }
+    } catch (error: unknown) {
+      logger.warn({ error, repository, prNumber }, 'Failed to fetch PR summary for re-review detection (best-effort)');
+    }
+    return undefined;
+  })();
+
+  const linearPromise = (async (): Promise<{ linearIssueId?: string; createdDescription?: string }> => {
+    if (linearAgentClient === undefined) return {};
     try {
       const linearResult = await resolveLinearIssueId({ logger, codeTaskRepo, linearAgentClient }, request, userId);
       if (linearResult.ok) {
         const resolved = linearResult.value; // @allow-result-access -- narrowed by linearResult.ok
-        linearIssueId = resolved.identifier;
-        createdDescription = resolved.createdDescription;
-      } else {
-        deps.automationLog.record(
-          { repository, prNumber },
-          { type: 'linear_issue_failed', error: linearResult.error },
-          userId,
-        ).catch((logError: unknown) => {
-          logger.warn({ error: logError, prNumber }, 'Failed to record Linear failure in automation log');
-        });
+        return {
+          ...(resolved.identifier !== undefined && { linearIssueId: resolved.identifier }),
+          ...(resolved.createdDescription !== undefined && { createdDescription: resolved.createdDescription }),
+        };
       }
+      deps.automationLog.record(
+        { repository, prNumber },
+        { type: 'linear_issue_failed', error: linearResult.error },
+        userId,
+      ).catch((logError: unknown) => {
+        logger.warn({ error: logError, prNumber }, 'Failed to record Linear failure in automation log');
+      });
     } catch (error: unknown) {
       logger.warn({ error, prNumber }, 'Unexpected error resolving Linear issue for review task');
       deps.automationLog.record(
@@ -347,28 +436,32 @@ export async function createReviewTask(
         logger.warn({ error: logError, prNumber }, 'Failed to record Linear failure in automation log');
       });
     }
-  }
+    return {};
+  })();
+
+  const [reReviewCommitSha, { linearIssueId, createdDescription }, resolvedPrBranches] = await Promise.all([reReviewPromise, linearPromise, prBranchPromise]);
 
   // Best-effort: fetch issue description for review requirements context
   let issueDescription: string | undefined;
   let planDocumentPath: string | undefined;
   if (linearIssueId !== undefined && linearAgentClient !== undefined) {
-    try {
-      const descResult = await linearAgentClient.getIssueDescription({
-        userId,
-        identifier: linearIssueId,
-      });
-      if (descResult.ok) {
-        issueDescription = descResult.value;
-      }
-    } catch (error: unknown) {
-      logger.warn({ error, linearIssueId }, 'Failed to fetch issue description for review context');
-    }
-
-    // Fallback: use the description we passed to createIssue (Tier 3) when
-    // Firestore cache is empty due to Linear webhook race (~6s delay)
-    if (issueDescription === undefined && createdDescription !== undefined) {
+    if (createdDescription !== undefined) {
+      // Tier 3 path: we just created this issue — skip the HTTP round-trip
+      // since the Linear webhook cache won't have populated yet (~6s delay)
       issueDescription = createdDescription;
+    } else {
+      // Tier 1/2 path: issue already existed — fetch its description
+      try {
+        const descResult = await linearAgentClient.getIssueDescription({
+          userId,
+          identifier: linearIssueId,
+        });
+        if (descResult.ok) {
+          issueDescription = descResult.value;
+        }
+      } catch (error: unknown) {
+        logger.warn({ error, linearIssueId }, 'Failed to fetch issue description for review context');
+      }
     }
 
     if (issueDescription !== undefined) {
@@ -386,11 +479,16 @@ export async function createReviewTask(
     workerType: effectiveWorkerType,
     ...(issueDescription !== undefined && { issueDescription }),
     ...(planDocumentPath !== undefined && { planDocumentPath }),
+    ...(reReviewCommitSha !== undefined && { reReviewCommitSha }),
   });
   const webhookSecret = createHmac('sha256', orchestratorSecret).update(eventId).digest('hex');
 
-  const [owner] = repository.split('/');
-  const baseBranch = request.baseBranch ?? 'main';
+  const baseBranch = resolvedPrBranches.baseBranch ?? request.baseBranch ?? 'main';
+
+  if (resolvedPrBranches.headBranch === undefined) {
+    logger.error({ repository, prNumber }, 'Cannot create review task: PR head branch resolution failed');
+    return err({ code: 'pr_branch_unavailable', message: `Failed to resolve head branch for PR #${String(prNumber)}` });
+  }
 
   const taskInput: CreateTaskInput = {
     userId,
@@ -406,6 +504,7 @@ export async function createReviewTask(
     prNumber,
     agentType: 'review',
     ...(linearIssueId !== undefined && { linearIssueId }),
+    prBranch: resolvedPrBranches.headBranch,
     reviewTypes: request.reviewTypes,
   };
 
@@ -435,7 +534,7 @@ export async function createReviewTask(
   }
 
   logger.info(
-    { taskId: task.id, repository, prNumber, reviewTypes: request.reviewTypes, owner, queuePosition: enqueueResult.value.queuePosition },
+    { taskId: task.id, repository, prNumber, reviewTypes: request.reviewTypes, owner: parsed?.owner, queuePosition: enqueueResult.value.queuePosition },
     'Review task created and enqueued'
   );
 

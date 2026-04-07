@@ -12,6 +12,7 @@ import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js'
 import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
+import type { GitHubPRSummaryRepository } from '../../domain/repositories/gitHubPRSummaryRepository.js';
 import { createReviewTask, type CreateReviewTaskDeps } from '../../domain/usecases/createReviewTask.js';
 
 function createFakeLogger(): Logger {
@@ -61,6 +62,7 @@ function createFakeUserServiceClient(): UserServiceClient {
     reportLlmSuccess: vi.fn().mockResolvedValue(undefined),
     getOAuthToken: vi.fn().mockResolvedValue(ok({ accessToken: 'ghp_test_token', email: 'test@example.com' })),
     resolveGitHubUsername: vi.fn().mockResolvedValue(ok(null)),
+      getUserTimezone: async (): Promise<string | undefined> => undefined,
   } as unknown as UserServiceClient;
 }
 
@@ -80,6 +82,36 @@ function createFakeWorkerSettingsRepo(): WorkerSettingsRepository {
     saveSettings: vi.fn().mockResolvedValue(ok(undefined)),
     updateDefaultReviewWorkerType: vi.fn().mockResolvedValue(ok(undefined)),
   } as unknown as WorkerSettingsRepository;
+}
+
+function createFakeGitHubPRSummaryRepo(lastReviewedCommitSha: string | null = null): GitHubPRSummaryRepository {
+  return {
+    upsert: vi.fn().mockResolvedValue(ok(undefined)),
+    findRecentlyActive: vi.fn().mockResolvedValue(ok([])),
+    findByPullRequest: vi.fn().mockResolvedValue(ok({
+      repository: 'intexuraos/intexuraos',
+      pullRequestNumber: 42,
+      title: 'Fix bug',
+      state: 'open',
+      mergedAt: null,
+      baseBranch: 'main',
+      authorLogin: 'dev-user',
+      headBranch: 'feature/fix',
+      mergeConflictStatus: null,
+      lastConflictCheckedAt: null,
+      conflictEpisodeStartedAt: null,
+      conflictResolvedAt: null,
+      managedConflictCommentId: null,
+      managedConflictTaskId: null,
+      managedConflictTaskOwnerUserId: null,
+      lastActivityAt: new Date(),
+      firstSeenAt: new Date(),
+      lastReviewedCommitSha,
+    })),
+    findOpenByBaseBranch: vi.fn().mockResolvedValue(ok([])),
+    findOpenByRepository: vi.fn().mockResolvedValue(ok([])),
+    findAllOpen: vi.fn().mockResolvedValue(ok([])),
+  } as unknown as GitHubPRSummaryRepository;
 }
 
 function createFakeTaskEnqueueService(): TaskEnqueueService {
@@ -815,8 +847,12 @@ describe('createReviewTask', () => {
     }
   });
 
-  it('uses provided baseBranch instead of default main', async () => {
-    const deps = createFakeDeps();
+  it('uses provided baseBranch as fallback when PR base branch fetch fails', async () => {
+    const gitHubPRClient = createFakeGitHubPRClient();
+    vi.mocked(gitHubPRClient.getPullRequestBaseBranch).mockResolvedValue(
+      err({ code: 'API_ERROR' as const, message: 'GitHub unavailable' })
+    );
+    const deps = createFakeDeps({ gitHubPRClient });
     await createReviewTask(deps, {
       repository: 'intexuraos/intexuraos',
       prNumber: 42,
@@ -939,7 +975,7 @@ describe('createReviewTask', () => {
       expect(result.ok).toBe(true);
     });
 
-    it('skips PR title update when repository format is invalid (no slash)', async () => {
+    it('fails with pr_branch_unavailable when repository format is invalid (no slash)', async () => {
       const gitHubPRClient = createFakeGitHubPRClient();
       const deps = createFakeDeps({ gitHubPRClient });
 
@@ -952,11 +988,13 @@ describe('createReviewTask', () => {
         prTitle: 'Fix bug',
       });
 
-      expect(result.ok).toBe(true);
-      expect(gitHubPRClient.updatePRTitle).not.toHaveBeenCalled();
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('pr_branch_unavailable');
+      }
     });
 
-    it('skips PR title update when GitHub token is not available', async () => {
+    it('fails with pr_branch_unavailable when GitHub token is not available', async () => {
       const gitHubPRClient = createFakeGitHubPRClient();
       const userServiceClient = createFakeUserServiceClient();
       vi.mocked(userServiceClient.getOAuthToken).mockResolvedValue(
@@ -973,8 +1011,10 @@ describe('createReviewTask', () => {
         prTitle: 'Fix bug',
       });
 
-      expect(result.ok).toBe(true);
-      expect(gitHubPRClient.updatePRTitle).not.toHaveBeenCalled();
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('pr_branch_unavailable');
+      }
     });
 
     it('logs warning when updatePRTitle fails (best-effort)', async () => {
@@ -1163,10 +1203,14 @@ describe('createReviewTask', () => {
         prTitle: 'Fix bug',
       });
 
+      expect(deps.linearAgentClient?.generateTitle).toHaveBeenCalledWith({
+        userId: 'user-1',
+        description: expect.stringContaining('Fix bug'),
+      });
       expect(deps.linearAgentClient?.createIssue).toHaveBeenCalledWith({
         userId: 'user-1',
-        title: '[Review] PR #42: Fix bug',
-        description: expect.stringContaining('Automated PR review created by GitHub Agent triage system.'),
+        title: 'Generated',
+        description: expect.stringContaining('Review created automatically by code-agent'),
       });
 
       const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
@@ -1321,7 +1365,7 @@ describe('createReviewTask', () => {
       }
     });
 
-    it('uses fallback title when prTitle not provided', async () => {
+    it('generates LLM title even when prTitle not provided', async () => {
       const deps = createFakeDeps();
 
       await createReviewTask(deps, {
@@ -1332,10 +1376,14 @@ describe('createReviewTask', () => {
         eventId: 'evt-link-7',
       });
 
+      expect(deps.linearAgentClient?.generateTitle).toHaveBeenCalledWith({
+        userId: 'user-1',
+        description: expect.stringContaining('Review PR #42 in intexuraos/intexuraos'),
+      });
       expect(deps.linearAgentClient?.createIssue).toHaveBeenCalledWith({
         userId: 'user-1',
-        title: '[Review] PR #42 in intexuraos/intexuraos',
-        description: expect.stringContaining('Automated PR review created by GitHub Agent triage system.'),
+        title: 'Generated',
+        description: expect.stringContaining('Review created automatically by code-agent'),
       });
     });
 
@@ -1357,12 +1405,13 @@ describe('createReviewTask', () => {
       expect(createIssueCall).toBeDefined();
       if (createIssueCall !== undefined) {
         const description = createIssueCall[0].description;
-        expect(description).toContain('Automated PR review created by GitHub Agent triage system.');
+        expect(description).toContain('## PR Review: Fix auth bug');
         expect(description).toContain('#42');
         expect(description).toContain('intexuraos/intexuraos');
         expect(description).toContain('This PR fixes the authentication bypass vulnerability in the login flow.');
         expect(description).toContain('code_quality');
         expect(description).toContain('security');
+        expect(description).toContain('Review created automatically by code-agent');
       }
     });
 
@@ -1388,6 +1437,80 @@ describe('createReviewTask', () => {
         expect(description).not.toContain(longBody);
         expect(description).toContain('...');
       }
+    });
+
+    it('calls generateTitle with PR context for LLM title generation', async () => {
+      const linearAgentClient = createFakeLinearAgentClient();
+      const deps = createFakeDeps({ linearAgentClient });
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality', 'security'],
+        eventId: 'evt-gen-title',
+        prTitle: 'Fix auth bug',
+        prBody: 'This PR fixes the authentication bypass.',
+      });
+
+      const generateCall = vi.mocked(linearAgentClient.generateTitle).mock.calls[0];
+      expect(generateCall).toBeDefined();
+      if (generateCall !== undefined) {
+        const description = generateCall[0].description;
+        expect(description).toContain('Fix auth bug');
+        expect(description).toContain('authentication bypass');
+        expect(description).toContain('code_quality');
+        expect(description).toContain('security');
+      }
+    });
+
+    it('falls back to template title when generateTitle fails', async () => {
+      const linearAgentClient = createFakeLinearAgentClient();
+      vi.mocked(linearAgentClient.generateTitle).mockResolvedValue(
+        err({ code: 'UNAVAILABLE' as const, message: 'LLM down' })
+      );
+      const deps = createFakeDeps({ linearAgentClient });
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-fallback-title',
+        prTitle: 'Fix bug',
+      });
+
+      expect(linearAgentClient.generateTitle).toHaveBeenCalledWith({
+        userId: 'user-1',
+        description: expect.stringContaining('Fix bug'),
+      });
+      expect(linearAgentClient.createIssue).toHaveBeenCalledWith(
+        expect.objectContaining({ title: '[Review] PR #42: Fix bug' })
+      );
+    });
+
+    it('falls back to repository-based title when generateTitle fails and no prTitle', async () => {
+      const linearAgentClient = createFakeLinearAgentClient();
+      vi.mocked(linearAgentClient.generateTitle).mockResolvedValue(
+        err({ code: 'UNAVAILABLE' as const, message: 'LLM down' })
+      );
+      const deps = createFakeDeps({ linearAgentClient });
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-fallback-title-2',
+      });
+
+      expect(linearAgentClient.generateTitle).toHaveBeenCalledWith({
+        userId: 'user-1',
+        description: expect.stringContaining('Review PR #42 in intexuraos/intexuraos'),
+      });
+      expect(linearAgentClient.createIssue).toHaveBeenCalledWith(
+        expect.objectContaining({ title: '[Review] PR #42 in intexuraos/intexuraos' })
+      );
     });
   });
 
@@ -1697,11 +1820,10 @@ describe('createReviewTask', () => {
       }
     });
 
-    it('uses created description as fallback when getIssueDescription returns undefined for newly-created issue', async () => {
-      // Tier 3: createIssue succeeds, but getIssueDescription returns undefined
-      // (simulates Linear webhook race — issue.create webhook has description: null)
+    it('uses created description directly for Tier 3 issues without fetching from Linear', async () => {
+      // Tier 3: createIssue succeeds — getIssueDescription should NOT be called
+      // because the description is already available from the create call
       const linearAgentClient = createFakeLinearAgentClient();
-      vi.mocked(linearAgentClient.getIssueDescription).mockResolvedValue(ok(undefined));
       const deps = createFakeDeps({ linearAgentClient });
 
       await createReviewTask(deps, {
@@ -1716,13 +1838,14 @@ describe('createReviewTask', () => {
 
       // Tier 3 should have been used (no existing task, no INT-XXX in title/body)
       expect(linearAgentClient.createIssue).toHaveBeenCalled();
+      expect(linearAgentClient.getIssueDescription).not.toHaveBeenCalled();
 
       const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
       expect(createCall).toBeDefined();
       if (createCall !== undefined) {
         // The fallback description from buildLinearIssueDescription should be embedded
         expect(createCall[0].prompt).toContain('### Issue Requirements');
-        expect(createCall[0].prompt).toContain('Automated PR review created by GitHub Agent triage system.');
+        expect(createCall[0].prompt).toContain('## PR Review: Fix auth bug');
         expect(createCall[0].prompt).toContain('This PR fixes the authentication bypass.');
       }
     });
@@ -1748,6 +1871,214 @@ describe('createReviewTask', () => {
       if (createCall !== undefined) {
         expect(createCall[0].prompt).not.toContain('### Issue Requirements');
       }
+    });
+  });
+
+  describe('re-review context injection', () => {
+    it('includes re-review context when lastReviewedCommitSha is present', async () => {
+      const gitHubPRSummaryRepo = createFakeGitHubPRSummaryRepo('abc1234');
+      const deps = createFakeDeps({ gitHubPRSummaryRepo });
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-rereview-1',
+      });
+
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].prompt).toContain('## Re-review Context');
+        expect(createCall[0].prompt).toContain('abc1234');
+        expect(createCall[0].prompt).toContain('abc1234..HEAD');
+        expect(createCall[0].prompt).toContain('Do NOT re-flag findings from the previous review');
+      }
+    });
+
+    it('does not include re-review context when lastReviewedCommitSha is null', async () => {
+      const gitHubPRSummaryRepo = createFakeGitHubPRSummaryRepo(null);
+      const deps = createFakeDeps({ gitHubPRSummaryRepo });
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-rereview-2',
+      });
+
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].prompt).not.toContain('## Re-review Context');
+      }
+    });
+
+    it('does not include re-review context when gitHubPRSummaryRepo is not provided', async () => {
+      const deps = createFakeDeps();
+      // Default deps have no gitHubPRSummaryRepo
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-rereview-3',
+      });
+
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].prompt).not.toContain('## Re-review Context');
+      }
+    });
+
+    it('continues without re-review context when findByPullRequest fails', async () => {
+      const gitHubPRSummaryRepo = createFakeGitHubPRSummaryRepo(null);
+      vi.mocked(gitHubPRSummaryRepo.findByPullRequest).mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR' as const, message: 'DB error' })
+      );
+      const deps = createFakeDeps({ gitHubPRSummaryRepo });
+
+      const result = await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-rereview-4',
+      });
+
+      expect(result.ok).toBe(true);
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].prompt).not.toContain('## Re-review Context');
+      }
+    });
+
+    it('continues without re-review context when findByPullRequest returns null', async () => {
+      const gitHubPRSummaryRepo = createFakeGitHubPRSummaryRepo(null);
+      vi.mocked(gitHubPRSummaryRepo.findByPullRequest).mockResolvedValue(ok(null));
+      const deps = createFakeDeps({ gitHubPRSummaryRepo });
+
+      const result = await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-rereview-5',
+      });
+
+      expect(result.ok).toBe(true);
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].prompt).not.toContain('## Re-review Context');
+      }
+    });
+  });
+
+  describe('PR branch resolution (INT-1258)', () => {
+    it('sets prBranch from PR headRef via getPullRequestStatus', async () => {
+      const gitHubPRClient = createFakeGitHubPRClient();
+      vi.mocked(gitHubPRClient.getPullRequestStatus).mockResolvedValue(
+        ok({ state: 'open' as const, mergedAt: null, headRef: 'fix/INT-123-auth' })
+      );
+      const deps = createFakeDeps({ gitHubPRClient });
+
+      const result = await createReviewTask(deps, {
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-branch-1',
+      });
+
+      expect(result.ok).toBe(true);
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].prBranch).toBe('fix/INT-123-auth');
+      }
+    });
+
+    it('sets baseBranch from PR baseRefName via getPullRequestBaseBranch', async () => {
+      const gitHubPRClient = createFakeGitHubPRClient();
+      vi.mocked(gitHubPRClient.getPullRequestBaseBranch).mockResolvedValue(ok('development'));
+      const deps = createFakeDeps({ gitHubPRClient });
+
+      const result = await createReviewTask(deps, {
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-branch-2',
+      });
+
+      expect(result.ok).toBe(true);
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].baseBranch).toBe('development');
+      }
+    });
+
+    it('fails with pr_branch_unavailable when getPullRequestStatus fails', async () => {
+      const gitHubPRClient = createFakeGitHubPRClient();
+      vi.mocked(gitHubPRClient.getPullRequestStatus).mockResolvedValue(
+        err({ code: 'API_ERROR' as const, message: 'GitHub down' })
+      );
+      vi.mocked(gitHubPRClient.getPullRequestBaseBranch).mockResolvedValue(
+        err({ code: 'API_ERROR' as const, message: 'GitHub down' })
+      );
+      const deps = createFakeDeps({ gitHubPRClient });
+
+      const result = await createReviewTask(deps, {
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-branch-3',
+        baseBranch: 'development',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('pr_branch_unavailable');
+        expect(result.error.message).toContain('PR #42');
+      }
+      expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('fails with pr_branch_unavailable when GitHub token is unavailable', async () => {
+      const gitHubPRClient = createFakeGitHubPRClient();
+      vi.mocked(gitHubPRClient.getPullRequestStatus).mockResolvedValue(
+        err({ code: 'API_ERROR' as const, message: 'GitHub down' })
+      );
+      vi.mocked(gitHubPRClient.getPullRequestBaseBranch).mockResolvedValue(
+        err({ code: 'API_ERROR' as const, message: 'GitHub down' })
+      );
+      const userServiceClient = createFakeUserServiceClient();
+      vi.mocked(userServiceClient.getOAuthToken).mockResolvedValue(
+        err({ code: 'CONNECTION_NOT_FOUND', message: 'No token' }) as never
+      );
+      const deps = createFakeDeps({ gitHubPRClient, userServiceClient });
+
+      const result = await createReviewTask(deps, {
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-branch-4',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('pr_branch_unavailable');
+      }
+      expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
     });
   });
 });

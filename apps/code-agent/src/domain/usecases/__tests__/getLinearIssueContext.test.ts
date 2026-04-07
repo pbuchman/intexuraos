@@ -16,6 +16,7 @@ function createFakeClient(
     generateTitle(): ReturnType<LinearAgentClient['generateTitle']> { return Promise.resolve(err({ code: 'UNKNOWN', message: 'not implemented' })); },
     addComment(): ReturnType<LinearAgentClient['addComment']> { return Promise.resolve(err({ code: 'UNKNOWN', message: 'not implemented' })); },
     fetchIssueTree(): ReturnType<LinearAgentClient['fetchIssueTree']> { return Promise.resolve(err({ code: 'UNKNOWN', message: 'not implemented' })); },
+    fetchDirectChildrenLive(): ReturnType<LinearAgentClient['fetchDirectChildrenLive']> { return Promise.resolve(err({ code: 'UNKNOWN', message: 'not implemented' })); },
     updateIssueMetadata(): ReturnType<LinearAgentClient['updateIssueMetadata']> { return Promise.resolve(err({ code: 'UNKNOWN', message: 'not implemented' })); },
     fetchIssueForDisplay(): ReturnType<LinearAgentClient['fetchIssueForDisplay']> { return Promise.resolve(err({ code: 'UNKNOWN', message: 'not implemented' })); },
     fetchIssuesForDisplay(): ReturnType<LinearAgentClient['fetchIssuesForDisplay']> { return Promise.resolve(err({ code: 'UNKNOWN', message: 'not implemented' })); },

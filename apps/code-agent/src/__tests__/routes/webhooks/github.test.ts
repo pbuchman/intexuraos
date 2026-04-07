@@ -24,13 +24,38 @@ import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import type { GitHubPRSummaryRepository } from '../../../domain/repositories/gitHubPRSummaryRepository.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
 import { ActionableEventRule, SenderWhitelistRule, SkipPrefixRule, createWebhookRulesService } from '../../../domain/services/gitHubWebhookRules.js';
-import { ALLOWED_BOTS, type GitHubWebhookBody } from '../../../routes/webhooks/github.js';
+import { ALLOWED_BOTS, resolvePrCloseSourceTimestamp, type GitHubWebhookBody } from '../../../routes/webhooks/github.js';
 import type { GitHubWebhookAuditEventRepository } from '../../../domain/repositories/gitHubWebhookAuditEventRepository.js';
 import type { GitHubEventLogEntryRepository } from '../../../domain/repositories/gitHubEventLogEntryRepository.js';
 import type { EventDecisionRepository } from '../../../domain/repositories/eventDecisionRepository.js';
 import { waitForDetachedAsync, waitForSettlement } from '../../helpers/waitForDetachedAsync.js';
 
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
+
+describe('resolvePrCloseSourceTimestamp', () => {
+  it('prefers closed_at when present', () => {
+    expect(resolvePrCloseSourceTimestamp({
+      closedAt: '2026-03-21T02:00:00Z',
+      mergedAt: new Date('2026-03-21T01:00:00Z'),
+    })).toBe('2026-03-21T02:00:00Z');
+  });
+
+  it('falls back to mergedAt when closed_at is absent', () => {
+    expect(resolvePrCloseSourceTimestamp({
+      closedAt: null,
+      mergedAt: new Date('2026-03-21T01:00:00Z'),
+    })).toBe('2026-03-21T01:00:00.000Z');
+  });
+
+  it('falls back to current time when neither closed_at nor mergedAt is available', () => {
+    const result = resolvePrCloseSourceTimestamp({
+      closedAt: undefined,
+      mergedAt: null,
+    });
+
+    expect(Number.isNaN(Date.parse(result))).toBe(false);
+  });
+});
 
 describe('POST /webhooks/github', () => {
   let app: FastifyInstance;
@@ -108,13 +133,22 @@ describe('POST /webhooks/github', () => {
       archiveTaskLogs: vi.fn().mockResolvedValue(ok(undefined)),
       findByPR: vi.fn().mockResolvedValue(ok(null)),
       findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
+      hasDispatchedOrRunningForPR: vi.fn().mockResolvedValue(ok({ hasActive: false })),
       deleteTask: vi.fn().mockResolvedValue(ok(undefined)),
       listQueuedByAge: vi.fn().mockResolvedValue(ok([])),
       listQueued: vi.fn().mockResolvedValue(ok([])),
+      listPendingExecutionMemoryPostRun: vi.fn().mockResolvedValue(ok([])),
       countQueued: vi.fn().mockResolvedValue(ok(0)),
       findRecentTasksByLinearIssue: vi.fn().mockResolvedValue(ok([])),
       findPlannedTaskByLinearIssue: vi.fn().mockResolvedValue(ok(null)),
-      findLatestNonReviewTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findRecentRemediationForPR: vi.fn().mockResolvedValue(ok(null)),
+      findPreservedPullRequestTask: vi.fn().mockResolvedValue(ok(null)),
+      findLatestAskAgentTask: vi.fn().mockResolvedValue(ok(null)),
+      listAllNonArchived: vi.fn().mockResolvedValue(ok([])),
+      listAllNonArchivedGlobal: vi.fn().mockResolvedValue(ok([])),
+      findAllNonArchived: vi.fn().mockResolvedValue(ok([])),
     };
 
     // Create mock PR summary repo
@@ -202,6 +236,8 @@ describe('POST /webhooks/github', () => {
       processHeartbeat: {} as never,
       detectZombieTasks: {} as never,
       cleanupTaskLogs: {} as never,
+      archiveStaleGroups: {} as never,
+      autoArchiveMergedTasks: {} as never,
       metricsClient: {} as never,
       workerSettingsRepo: {} as never,
       workerHealthProbe: {} as never,
@@ -3022,6 +3058,270 @@ describe('POST /webhooks/github', () => {
       );
     });
 
+    it('skips automation log for repository_out_of_scope without PR context (L496)', async () => {
+      const pushPayload = {
+        action: 'completed',
+        repository: {
+          id: 456,
+          name: 'other-repo',
+          full_name: 'other-org/other-repo',
+          owner: { login: 'other-org', id: 789 },
+        },
+        sender: { login: 'testuser', id: 999, type: 'User' },
+      };
+
+      const { payload, signature } = signPayload(pushPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'push',
+          'x-github-delivery': 'delivery-no-pr-scope',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Wait a tick for detached async
+      await waitForSettlement();
+
+      // Only webhook_received should NOT be recorded because push has PR=0
+      const recordCalls = vi.mocked(mockServices.automationLog.record).mock.calls;
+      const skippedCall = recordCalls.find((c) => (c[1] as { type: string }).type === 'skipped');
+      // Since pullRequestNumber is 0, skipped event should NOT be in automation log
+      expect(skippedCall).toBeUndefined();
+    });
+
+    it('skips automation log for duplicate_delivery without PR context (L531)', async () => {
+      // First request to create the event
+      const pushPayload = createPullRequestPayload({
+        pull_request: undefined,
+      } as never);
+      delete (pushPayload as Record<string, unknown>)['pull_request'];
+
+      const { payload, signature } = signPayload(pushPayload);
+
+      await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'push',
+          'x-github-delivery': 'delivery-dup-no-pr',
+        },
+        body: payload,
+      });
+
+      // Send duplicate - mock save to return DUPLICATE_EVENT
+      mockEventRepo.save = vi.fn().mockResolvedValue(
+        err({ code: 'DUPLICATE_EVENT' as const, message: 'Duplicate' })
+      );
+      setServices({ ...mockServices, gitHubPREventRepo: mockEventRepo });
+
+      const { payload: payload2, signature: signature2 } = signPayload(pushPayload);
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature2,
+          'x-github-event': 'push',
+          'x-github-delivery': 'delivery-dup-no-pr',
+        },
+        body: payload2,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForSettlement();
+
+      // skipped event should NOT be in automation log since pullRequestNumber is 0
+      const recordCalls = vi.mocked(mockServices.automationLog.record).mock.calls;
+      const skippedCall = recordCalls.find((c) => (c[1] as { reason?: string }).reason === 'duplicate_delivery');
+      expect(skippedCall).toBeUndefined();
+    });
+
+    it('records webhook_received with null sender (L403/L423 fallback)', async () => {
+      const prPayload = createPullRequestPayload();
+      delete (prPayload as Record<string, unknown>)['sender'];
+
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-no-sender',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForDetachedAsync(() => vi.mocked(mockServices.automationLog.record).mock.calls.length >= 1);
+
+      const recordCalls = vi.mocked(mockServices.automationLog.record).mock.calls;
+      const webhookReceivedCall = recordCalls.find((c) => (c[1] as { type: string }).type === 'webhook_received');
+      expect(webhookReceivedCall).toBeDefined();
+      if (webhookReceivedCall !== undefined) {
+        expect((webhookReceivedCall[1] as { sender: string }).sender).toBe('unknown');
+      }
+    });
+
+    it('records webhook_received with null resolved user (L409)', async () => {
+      vi.mocked(mockServices.userServiceClient.resolveGitHubUsername).mockResolvedValue(
+        ok(null)
+      );
+
+      const prPayload = createPullRequestPayload();
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-null-user',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForDetachedAsync(() => vi.mocked(mockServices.automationLog.record).mock.calls.length >= 1);
+
+      // tokenUserId should be undefined since resolvedUser is null
+      expect(mockServices.automationLog.record).toHaveBeenCalledWith(
+        { repository: 'pbuchman/intexuraos', prNumber: 123 },
+        expect.objectContaining({
+          type: 'webhook_received',
+        }),
+        undefined,
+      );
+    });
+
+    it('records webhook_received without action field (L422 fallback)', async () => {
+      const prPayload = createPullRequestPayload();
+      delete (prPayload as Record<string, unknown>)['action'];
+
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-no-action',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForDetachedAsync(() => vi.mocked(mockServices.automationLog.record).mock.calls.length >= 1);
+
+      const recordCalls = vi.mocked(mockServices.automationLog.record).mock.calls;
+      const webhookReceivedCall = recordCalls.find((c) => (c[1] as { type: string }).type === 'webhook_received');
+      expect(webhookReceivedCall).toBeDefined();
+      if (webhookReceivedCall !== undefined) {
+        expect((webhookReceivedCall[1] as { action: string }).action).toBe('unknown');
+      }
+    });
+
+    it('records webhook_received without eventUrl when not available (L425)', async () => {
+      // push events don't have an extractable event URL
+      const pushPayload = {
+        action: 'pushed',
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'pbuchman/intexuraos',
+          owner: { login: 'pbuchman', id: 789 },
+        },
+        pull_request: {
+          id: 101,
+          number: 123,
+          title: 'Test PR',
+          body: 'Test description',
+          state: 'open',
+          merged_at: null,
+        },
+        sender: { login: 'testuser', id: 999, type: 'User' },
+      };
+
+      const { payload, signature } = signPayload(pushPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'push',
+          'x-github-delivery': 'delivery-no-eventurl',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForDetachedAsync(() => vi.mocked(mockServices.automationLog.record).mock.calls.length >= 1);
+
+      const recordCalls = vi.mocked(mockServices.automationLog.record).mock.calls;
+      const webhookReceivedCall = recordCalls.find((c) => (c[1] as { type: string }).type === 'webhook_received');
+      expect(webhookReceivedCall).toBeDefined();
+      if (webhookReceivedCall !== undefined) {
+        // eventUrl should not be in the record since extractEventUrl returns null for push
+        expect((webhookReceivedCall[1] as Record<string, unknown>)['eventUrl']).toBeUndefined();
+      }
+    });
+
+    it('persists fallback decision when findByEventIds is undefined on eventDecisionRepo (L230)', async () => {
+      setServices({
+        ...mockServices,
+        eventDecisionRepo: {
+          save: mockEventDecisionRepo.save,
+          // findByEventIds intentionally omitted (undefined)
+        } as import('../../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository,
+        unifiedEvaluator: {
+          evaluate: vi.fn().mockRejectedValue(new Error('evaluation crashed')),
+        },
+      });
+
+      const { payload, signature } = signPayload(createPullRequestPayload());
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'eval-no-findByEventIds',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // The fallback decision should have been saved since findByEventIds is undefined
+      // and the code skips the duplicate check
+      await vi.waitFor(() => {
+        expect(mockEventDecisionRepo.save).toHaveBeenCalled();
+      });
+    });
+
     it('records skipped event for normalized_event_save_failed with PR context', async () => {
       mockEventRepo.save = vi.fn().mockResolvedValue(
         err({ code: 'FIRESTORE_ERROR' as const, message: 'Firestore unavailable' })
@@ -3054,6 +3354,116 @@ describe('POST /webhooks/github', () => {
         { repository: 'pbuchman/intexuraos', prNumber: 123 },
         { type: 'skipped', decidedBy: 'webhook_route', reason: 'normalized_event_save_failed' },
       ]);
+    });
+  });
+
+  describe('PR close → handlePrClose (merge transitions + label cleanup)', () => {
+    let mockMarkQa: ReturnType<typeof vi.fn>;
+    let mockRemoveLabel: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      mockMarkQa = vi.fn().mockResolvedValue(undefined);
+      mockRemoveLabel = vi.fn().mockResolvedValue(undefined);
+      Object.assign(mockServices, { linearIssueService: { markQa: mockMarkQa, markTodo: vi.fn().mockResolvedValue(undefined), removeLabel: mockRemoveLabel } });
+    });
+
+    it('should transition to QA and remove label when PR is closed with merge', async () => {
+      vi.mocked(mockServices.codeTaskRepo.findByPR).mockResolvedValue(
+        ok({
+          id: 'task_merge-1',
+          userId: 'merge-user',
+          linearIssueId: 'INT-999',
+        } as never)
+      );
+
+      const mergedPayload = createPullRequestPayload({
+        action: 'closed',
+        pull_request: {
+          id: 101,
+          number: 123,
+          title: '[INT-999] Test PR',
+          body: 'Fixes INT-999',
+          state: 'closed',
+          merged_at: '2026-03-21T01:00:00Z',
+        },
+      });
+
+      const { payload, signature } = signPayload(mergedPayload);
+      await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-merge-1',
+        },
+        body: payload,
+      });
+
+      await waitForDetachedAsync(() => mockMarkQa.mock.calls.length >= 1);
+      expect(mockMarkQa).toHaveBeenCalledWith('merge-user', 'INT-999');
+    });
+
+    it('should remove label but NOT transition state when PR closed without merge', async () => {
+      vi.mocked(mockServices.codeTaskRepo.findByPR).mockResolvedValue(
+        ok({
+          id: 'task_close-1',
+          userId: 'close-user',
+          linearIssueId: 'INT-888',
+        } as never)
+      );
+
+      const closedPayload = createPullRequestPayload({
+        action: 'closed',
+        pull_request: {
+          id: 101,
+          number: 123,
+          title: '[INT-888] Test PR',
+          body: 'Test description',
+          state: 'closed',
+          closed_at: '2026-03-21T02:00:00Z',
+          merged_at: null,
+        },
+      });
+
+      const { payload, signature } = signPayload(closedPayload);
+      await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-close-no-merge-1',
+        },
+        body: payload,
+      });
+
+      await waitForDetachedAsync(() => mockRemoveLabel.mock.calls.length >= 1);
+      expect(mockRemoveLabel).toHaveBeenCalledWith('close-user', 'INT-888', 'ready-to-merge');
+      expect(mockMarkQa).not.toHaveBeenCalled();
+    });
+
+    it('should NOT call handlePrClose when PR is opened', async () => {
+      const openedPayload = createPullRequestPayload({ action: 'opened' });
+
+      const { payload, signature } = signPayload(openedPayload);
+      await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-opened-no-merge-1',
+        },
+        body: payload,
+      });
+
+      await waitForDetachedAsync(() => vi.mocked(mockServices.unifiedEvaluator.evaluate).mock.calls.length >= 1);
+      expect(mockMarkQa).not.toHaveBeenCalled();
+      expect(mockRemoveLabel).not.toHaveBeenCalled();
     });
   });
 });

@@ -157,6 +157,46 @@ describe('sendTaskMessage', () => {
   }
 
   describe('validation', () => {
+    it('should return invalid_agent_type for review tasks', async () => {
+      const reviewTask = createMockTask({ agentType: 'review', status: 'running' });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(reviewTask));
+
+      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('invalid_agent_type');
+        expect(result.error.message).toContain('review');
+      }
+      expect(mockTaskDispatcher.sendMessageToWorker).not.toHaveBeenCalled();
+    });
+
+    it('should allow ask_agent tasks (not blocked by agent type check)', async () => {
+      setupSuccessPath({ agentType: 'ask_agent', status: 'running' }, 'queued');
+
+      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('queued');
+      }
+      expect(mockTaskDispatcher.sendMessageToWorker).toHaveBeenCalled();
+    });
+
+    it('should return invalid_agent_type for remediation tasks', async () => {
+      const remediationTask = createMockTask({ agentType: 'remediation', status: 'running' });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(remediationTask));
+
+      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('invalid_agent_type');
+        expect(result.error.message).toContain('remediation');
+      }
+      expect(mockTaskDispatcher.sendMessageToWorker).not.toHaveBeenCalled();
+    });
+
     it('should return task_not_found when task does not exist', async () => {
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(
         err({ code: 'NOT_FOUND', message: 'Task not found' })

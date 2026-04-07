@@ -223,34 +223,34 @@
       "description": "Technical-Debt documentation for cron-agent"
     },
     {
-      "path": "services/claude-worker/features.md",
-      "title": "Claude Worker",
+      "path": "services/code-worker/features.md",
+      "title": "Code Worker",
       "category": "services",
-      "description": "Features documentation for claude-worker"
+      "description": "Features documentation for code-worker"
     },
     {
-      "path": "services/claude-worker/technical.md",
-      "title": "Claude Worker \u2014 Technical Reference",
+      "path": "services/code-worker/technical.md",
+      "title": "Code Worker \u2014 Technical Reference",
       "category": "services",
-      "description": "Technical documentation for claude-worker"
+      "description": "Technical documentation for code-worker"
     },
     {
-      "path": "services/claude-worker/tutorial.md",
-      "title": "Claude Worker - Tutorial",
+      "path": "services/code-worker/tutorial.md",
+      "title": "Code Worker - Tutorial",
       "category": "services",
-      "description": "Tutorial documentation for claude-worker"
+      "description": "Tutorial documentation for code-worker"
     },
     {
-      "path": "services/claude-worker/agent.md",
-      "title": "claude-worker \u2014 Agent Interface",
+      "path": "services/code-worker/agent.md",
+      "title": "code-worker \u2014 Agent Interface",
       "category": "services",
-      "description": "Agent documentation for claude-worker"
+      "description": "Agent documentation for code-worker"
     },
     {
-      "path": "services/claude-worker/technical-debt.md",
-      "title": "Claude Worker - Technical Debt",
+      "path": "services/code-worker/technical-debt.md",
+      "title": "Code Worker - Technical Debt",
       "category": "services",
-      "description": "Technical-Debt documentation for claude-worker"
+      "description": "Technical-Debt documentation for code-worker"
     },
     {
       "path": "services/code-agent/features.md",

@@ -82,6 +82,10 @@ export class FakeUserServiceClient implements UserServiceClient {
   async resolveGitHubUsername(): Promise<Result<{ userId: string } | null, import('@intexuraos/internal-clients').UserServiceError>> {
     return ok(null);
   }
+
+  async getUserTimezone(): Promise<string | undefined> {
+    return undefined;
+  }
 }
 
 export class FakeGoogleCalendarClient implements GoogleCalendarClient {

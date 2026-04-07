@@ -36,7 +36,7 @@ import {
 } from './infra/firestore/researchExportSettingsRepository.js';
 
 export type { DecryptedApiKeys } from '@intexuraos/internal-clients';
-export type { ImageServiceClient, GeneratedImageData } from './infra/image/index.js';
+export type { ImageServiceClient, GeneratedImageData, PromptModel, ImageModel } from './infra/image/index.js';
 import type { Logger, Result } from '@intexuraos/common-core';
 import type { ModelPricing, ResearchModel, FastModel } from '@intexuraos/llm-contract';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
@@ -96,28 +96,32 @@ export interface ServiceContainer {
     apiKey: string,
     userId: string,
     pricing: ModelPricing,
-    logger: Logger
+    logger: Logger,
+    researchId: string | undefined
   ) => LlmResearchProvider;
   createSynthesizer: (
     model: ResearchModel,
     apiKey: string,
     userId: string,
     pricing: ModelPricing,
-    logger: Logger
+    logger: Logger,
+    researchId: string | undefined
   ) => LlmSynthesisProvider;
   createTitleGenerator: (
     model: FastModel,
     apiKey: string,
     userId: string,
     pricing: ModelPricing,
-    logger: Logger
+    logger: Logger,
+    researchId: string | undefined
   ) => TitleGenerator;
   createContextInferrer: (
     model: FastModel,
     apiKey: string,
     userId: string,
     pricing: ModelPricing,
-    logger: Logger
+    logger: Logger,
+    researchId: string | undefined
   ) => ContextInferenceProvider;
   createInputValidator: (
     model: FastModel,

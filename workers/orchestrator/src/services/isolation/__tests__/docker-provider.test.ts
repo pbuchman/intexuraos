@@ -93,7 +93,7 @@ function createMockDocker(): MockDockerResult {
     getImage: vi.fn().mockReturnValue({
       inspect: vi.fn().mockResolvedValue({
         RepoDigests: [
-          'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker@sha256:testdigest',
+          'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker@sha256:testdigest',
         ],
       }),
     }),
@@ -145,10 +145,7 @@ vi.mock('node:fs', async (importOriginal) => {
     statSync: vi.fn().mockReturnValue({ isFile: () => false, isDirectory: () => true }),
     statfsSync: vi.fn().mockReturnValue({ bavail: 2_000_000, bsize: 4096 }),
     readFileSync: vi.fn().mockImplementation((filePath: unknown) => {
-      if (
-        typeof filePath === 'string' &&
-        filePath.includes('claude-worker-forensics-seccomp.json')
-      ) {
+      if (typeof filePath === 'string' && filePath.includes('code-worker-forensics-seccomp.json')) {
         return '{"defaultAction":"SCMP_ACT_ERRNO","syscalls":[]}';
       }
       return '';
@@ -162,6 +159,7 @@ vi.mock('node:fs', async (importOriginal) => {
       rm: vi.fn().mockResolvedValue(undefined),
       readdir: vi.fn().mockResolvedValue(['system-prompt.txt', 'user-prompt.txt', 'github-token']),
       writeFile: vi.fn().mockResolvedValue(undefined),
+      stat: vi.fn().mockResolvedValue({ mtimeMs: Date.now() }),
       statfs: vi.fn().mockResolvedValue({ bavail: 2_000_000, bsize: 4096 }),
     },
   };
@@ -188,11 +186,22 @@ const createTestConfig = (overrides: Partial<WorkerConfig> = {}): WorkerConfig =
     SENTRY_AUTH_TOKEN: 'test-sentry-token',
     MINIMAX_API_KEY: 'test-minimax-key',
     DASHSCOPE_API_KEY: 'test-dashscope-key',
+    OPENROUTER_API_KEY: 'test-openrouter-key',
   },
   gcpSaKeyPath: '/test/gcp-sa.json',
   githubAppKeyPath: '/test/github-key.pem',
   ...overrides,
 });
+
+function createRuntimeOverrideConfig(
+  runtimeOverride: 'claude' | 'codex',
+  overrides: Partial<WorkerConfig> = {}
+): WorkerConfig {
+  return {
+    ...createTestConfig(overrides),
+    runtimeOverride,
+  } as WorkerConfig & { runtimeOverride: 'claude' | 'codex' };
+}
 
 class TestableDockerProvider extends DockerProvider {
   constructor(
@@ -354,6 +363,162 @@ describe('DockerProvider', () => {
       );
     });
 
+    it('mounts shared Codex auth separately from task-local Codex state', async () => {
+      const codexProvider = new TestableDockerProvider(
+        { sharedCodexAuthPath: '/shared/codex-auth' } as Partial<DockerProviderConfig>,
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await codexProvider.createWorker(createRuntimeOverrideConfig('codex'));
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      expect(binds).toContainEqual(
+        expect.stringContaining('codex-state-test-task-123:/home/claude/.codex:rw')
+      );
+      expect(binds).toContain('/shared/codex-auth/auth.json:/home/claude/.codex/auth.json:rw');
+    });
+
+    it('creates public codex workers without requiring a direct API key env var', async () => {
+      const codexProvider = new TestableDockerProvider(
+        { sharedCodexAuthPath: '/shared/codex-auth' } as Partial<DockerProviderConfig>,
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await codexProvider.createWorker(createTestConfig({ workerType: 'codex' }));
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0] as {
+        Env?: string[];
+      };
+      const envArr = createCall.Env ?? [];
+
+      expect(envArr).toContain('WORKER_RUNTIME=codex');
+      expect(envArr.some((entry) => entry.startsWith('ANTHROPIC_API_KEY='))).toBe(false);
+    });
+
+    it('sets CODEX_REASONING_EFFORT for codex-xhigh worker', async () => {
+      const codexProvider = new TestableDockerProvider(
+        { sharedCodexAuthPath: '/shared/codex-auth' } as Partial<DockerProviderConfig>,
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await codexProvider.createWorker(createTestConfig({ workerType: 'codex-xhigh' }));
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0] as {
+        Env?: string[];
+      };
+      const envArr = createCall.Env ?? [];
+
+      expect(envArr).toContain('WORKER_RUNTIME=codex');
+      expect(envArr).toContain('CODEX_REASONING_EFFORT=xhigh');
+    });
+
+    it('does not set CODEX_REASONING_EFFORT for base codex worker', async () => {
+      const codexProvider = new TestableDockerProvider(
+        { sharedCodexAuthPath: '/shared/codex-auth' } as Partial<DockerProviderConfig>,
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await codexProvider.createWorker(createTestConfig({ workerType: 'codex' }));
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0] as {
+        Env?: string[];
+      };
+      const envArr = createCall.Env ?? [];
+
+      expect(envArr.some((entry) => entry.startsWith('CODEX_REASONING_EFFORT='))).toBe(false);
+    });
+
+    it('fails codex runtime creation when shared Codex auth is not configured', async () => {
+      await expect(provider.createWorker(createRuntimeOverrideConfig('codex'))).rejects.toThrow(
+        'Codex runtime requires sharedCodexAuthPath but it is not configured'
+      );
+
+      expect(mocks.mockDocker.createContainer).not.toHaveBeenCalled();
+    });
+
+    it('fails when Claude runtime is selected for a worker type without API key env config', async () => {
+      await expect(
+        provider.createWorker(
+          createTestConfig({
+            workerType: 'codex',
+            runtimeOverride: 'claude',
+          })
+        )
+      ).rejects.toThrow("Worker type 'codex' is missing API key configuration");
+    });
+
+    it('gives different tasks different Codex state directories', async () => {
+      const codexProvider = new TestableDockerProvider(
+        { sharedCodexAuthPath: '/shared/codex-auth' } as Partial<DockerProviderConfig>,
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await codexProvider.createWorker(
+        createRuntimeOverrideConfig('codex', { taskId: 'codex-task-a' })
+      );
+      await codexProvider.createWorker(
+        createRuntimeOverrideConfig('codex', { taskId: 'codex-task-b' })
+      );
+
+      const firstCreateCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const firstBinds = firstCreateCall?.HostConfig?.Binds as string[];
+      expect(firstBinds).toContainEqual(
+        expect.stringContaining('codex-state-codex-task-a:/home/claude/.codex:rw')
+      );
+
+      const secondCreateCall = mocks.mockDocker.createContainer.mock.calls[1]?.[0];
+      const secondBinds = secondCreateCall?.HostConfig?.Binds as string[];
+      expect(secondBinds).toContainEqual(
+        expect.stringContaining('codex-state-codex-task-b:/home/claude/.codex:rw')
+      );
+    });
+
+    it('fails codex resume when task-local state home is missing', async () => {
+      const fsModule = await import('node:fs');
+      (fsModule.existsSync as Mock).mockImplementation((filePath: unknown) => {
+        return !(typeof filePath === 'string' && filePath.includes('codex-state-test-task-123'));
+      });
+
+      const codexProvider = new TestableDockerProvider(
+        { sharedCodexAuthPath: '/shared/codex-auth' } as Partial<DockerProviderConfig>,
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await expect(
+        codexProvider.createWorker(
+          createRuntimeOverrideConfig('codex', {
+            continueSession: true,
+          })
+        )
+      ).rejects.toThrow('Codex resume requires existing task-local state');
+
+      expect(mocks.mockDocker.createContainer).not.toHaveBeenCalled();
+    });
+
+    it('keeps Claude mounts unchanged when Codex auth support is configured', async () => {
+      const codexAwareProvider = new TestableDockerProvider(
+        { sharedCodexAuthPath: '/shared/codex-auth' } as Partial<DockerProviderConfig>,
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await codexAwareProvider.createWorker(createTestConfig({ workerType: 'auto' }));
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      expect(binds).toContainEqual(
+        expect.stringContaining('claude-session-test-task-123:/home/claude/.claude:rw')
+      );
+      expect(binds.some((bind) => bind.includes('/home/claude/.codex'))).toBe(false);
+    });
+
     it('mounts pnpm store volume and node_modules tmpfs', async () => {
       const config = createTestConfig();
       await provider.createWorker(config);
@@ -390,8 +555,8 @@ describe('DockerProvider', () => {
         Hard: number;
       }[];
 
-      expect(envArr).toContain('CLAUDE_FORENSICS=1');
-      expect(envArr).toContain('CLAUDE_FORENSICS_DIR=/var/crash');
+      expect(envArr).toContain('WORKER_FORENSICS=1');
+      expect(envArr).toContain('WORKER_FORENSICS_DIR=/var/crash');
       expect(binds).toContain('/tmp/worker-forensics/test-task-123:/var/crash:rw');
       expect(capAdd).toContain('SYS_PTRACE');
       expect(securityOpt.some((opt: string) => opt.startsWith('seccomp='))).toBe(true);
@@ -399,16 +564,16 @@ describe('DockerProvider', () => {
       expect(ulimits).toContainEqual({ Name: 'core', Soft: -1, Hard: -1 });
     });
 
-    it('sets CLAUDE_WORKER_MODE env var', async () => {
+    it('sets CODE_WORKER_MODE env var', async () => {
       const config = createTestConfig();
       await provider.createWorker(config);
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
-      expect(envArr).toContainEqual('CLAUDE_WORKER_MODE=1');
+      expect(envArr).toContainEqual('CODE_WORKER_MODE=1');
     });
 
-    it('sets CLAUDE_CONTINUE for resumed attempts', async () => {
+    it('sets WORKER_CONTINUE for resumed attempts', async () => {
       // No orphan container exists — force creation path
       mocks.mockContainer.inspect.mockRejectedValueOnce(new Error('No such container'));
       const config = createTestConfig({ continueSession: true });
@@ -416,7 +581,7 @@ describe('DockerProvider', () => {
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
-      expect(envArr).toContainEqual('CLAUDE_CONTINUE=1');
+      expect(envArr).toContainEqual('WORKER_CONTINUE=1');
     });
 
     it('reuses existing container for continued attempts', async () => {
@@ -875,6 +1040,115 @@ describe('DockerProvider', () => {
     });
   });
 
+  describe('isResumeAvailable', () => {
+    it('returns true when preserved worker container is running', async () => {
+      const config = createTestConfig({ taskId: 'resume-task-1' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('resume-task-1');
+
+      const result = await provider.isResumeAvailable('resume-task-1');
+
+      expect(result).toBe(true);
+    });
+
+    it('returns false and cleans up preserved entry when container is stopped', async () => {
+      const config = createTestConfig({ taskId: 'resume-task-2' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('resume-task-2');
+
+      mocks.mockContainer.inspect.mockResolvedValueOnce({ State: { Running: false } });
+
+      const result = await provider.isResumeAvailable('resume-task-2');
+
+      expect(result).toBe(false);
+      expect(await provider.listPreservedWorkers()).toHaveLength(0);
+    });
+
+    it('returns false and cleans up preserved entry when container no longer exists', async () => {
+      const config = createTestConfig({ taskId: 'resume-task-3' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('resume-task-3');
+
+      mocks.mockContainer.inspect.mockRejectedValueOnce(new Error('No such container'));
+
+      const result = await provider.isResumeAvailable('resume-task-3');
+
+      expect(result).toBe(false);
+      expect(await provider.listPreservedWorkers()).toHaveLength(0);
+    });
+
+    it('returns false when no container entry exists and orphan lookup fails', async () => {
+      mocks.mockContainer.inspect.mockRejectedValueOnce(new Error('No such container'));
+
+      const result = await provider.isResumeAvailable('nonexistent-task');
+
+      expect(result).toBe(false);
+    });
+
+    it('returns true for running orphaned container when no map entry exists', async () => {
+      mocks.mockContainer.inspect.mockResolvedValueOnce({ State: { Running: true } });
+
+      const result = await provider.isResumeAvailable('orphan-task');
+
+      expect(result).toBe(true);
+    });
+
+    it('returns false for stopped orphaned container when no map entry exists', async () => {
+      mocks.mockContainer.inspect.mockResolvedValueOnce({ State: { Running: false } });
+
+      const result = await provider.isResumeAvailable('orphan-task-stopped');
+
+      expect(result).toBe(false);
+    });
+
+    it('returns false for stopped active worker container (not preserved)', async () => {
+      // Container in workers map (not preservedWorkers) — preserved is undefined
+      const config = createTestConfig({ taskId: 'active-stopped-task' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      mocks.mockContainer.inspect.mockResolvedValueOnce({ State: { Running: false } });
+
+      const result = await provider.isResumeAvailable('active-stopped-task');
+
+      expect(result).toBe(false);
+      // preservedWorkers should not be touched since task was never preserved
+      expect(await provider.listPreservedWorkers()).toHaveLength(0);
+    });
+  });
+
+  describe('preserved container restore with stopped container', () => {
+    it('falls through to new container creation when preserved container is stopped', async () => {
+      const config = createTestConfig({ taskId: 'stale-preserved-task' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('stale-preserved-task');
+
+      expect(await provider.listPreservedWorkers()).toHaveLength(1);
+
+      // Preserved container is stopped, and no orphan container exists either
+      mocks.mockContainer.inspect.mockResolvedValueOnce({ State: { Running: false } });
+      mocks.mockContainer.inspect.mockRejectedValueOnce(new Error('No such container'));
+      mocks.mockDocker.createContainer.mockClear();
+
+      await provider.createWorker(
+        createTestConfig({
+          taskId: 'stale-preserved-task',
+          continueSession: true,
+          prompt: 'Resume prompt',
+        })
+      );
+
+      // Should have fallen through to create new container
+      expect(mocks.mockDocker.createContainer).toHaveBeenCalled();
+      // Stale preserved entry should be cleaned up
+      expect(await provider.listPreservedWorkers()).toHaveLength(0);
+    });
+  });
+
   describe('startup failure cleanup', () => {
     it('cleans up secrets and session dirs on image pull failure', async () => {
       const fs = await import('node:fs');
@@ -1098,6 +1372,56 @@ describe('DockerProvider', () => {
       expect(modelEntry).toBe('ANTHROPIC_MODEL=MiniMax-M2.7');
     });
 
+    it('sets OpenRouter env vars for openrouter-free worker', async () => {
+      const config = createTestConfig({ workerType: 'openrouter-free' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const baseUrlEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='));
+      expect(baseUrlEntry).toBe('ANTHROPIC_BASE_URL=https://openrouter.ai/api');
+      const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
+      expect(modelEntry).toBe('ANTHROPIC_MODEL=qwen/qwen3.6-plus:free');
+      const effortEntry = envArr.find((e: string) => e.startsWith('CLAUDE_CODE_EFFORT_LEVEL='));
+      expect(effortEntry).toBe('CLAUDE_CODE_EFFORT_LEVEL=high');
+      const betasEntry = envArr.find((e: string) =>
+        e.startsWith('CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=')
+      );
+      expect(betasEntry).toBe('CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1');
+    });
+
+    it('does not set CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS for opus worker', async () => {
+      const config = createTestConfig({ workerType: 'opus' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const betasEntry = envArr.find((e: string) =>
+        e.startsWith('CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=')
+      );
+      expect(betasEntry).toBeUndefined();
+    });
+
+    it('sets CLAUDE_CODE_EFFORT_LEVEL for opus worker', async () => {
+      const config = createTestConfig({ workerType: 'opus' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const effortEntry = envArr.find((e: string) => e.startsWith('CLAUDE_CODE_EFFORT_LEVEL='));
+      expect(effortEntry).toBe('CLAUDE_CODE_EFFORT_LEVEL=high');
+    });
+
+    it('does not set CLAUDE_CODE_EFFORT_LEVEL for sonnet worker', async () => {
+      const config = createTestConfig({ workerType: 'sonnet' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const effortEntry = envArr.find((e: string) => e.startsWith('CLAUDE_CODE_EFFORT_LEVEL='));
+      expect(effortEntry).toBeUndefined();
+    });
+
     it('uses per-task session path with credential file overlay for sonnet workers', async () => {
       const config = createTestConfig({ workerType: 'sonnet' });
       await sharedCredsProvider.createWorker(config);
@@ -1229,7 +1553,7 @@ describe('DockerProvider', () => {
     it('returns configured image info with null digest before any pull', () => {
       const info = provider.getImageInfo();
       expect(info.configuredRef).toBe(
-        'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest'
+        'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest'
       );
       expect(info.lastResolvedDigest).toBeNull();
       expect(info.pullPolicy).toBe('always');
@@ -1241,7 +1565,7 @@ describe('DockerProvider', () => {
 
       const info = provider.getImageInfo();
       expect(info.lastResolvedDigest).toBe(
-        'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker@sha256:testdigest'
+        'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker@sha256:testdigest'
       );
     });
 
@@ -1269,7 +1593,7 @@ describe('DockerProvider', () => {
 
       expect(mocks.mockDocker.pull).toHaveBeenCalled();
       expect(resolvedImage).toBe(
-        'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker@sha256:testdigest'
+        'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker@sha256:testdigest'
       );
     });
 
@@ -1328,7 +1652,7 @@ describe('DockerProvider', () => {
 
       expect(mocks.mockDocker.pull).not.toHaveBeenCalled();
       expect(resolvedImage).toBe(
-        'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest'
+        'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest'
       );
     });
 
@@ -1439,7 +1763,7 @@ describe('DockerProvider', () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
         {
           Id: 'test-container-id',
-          Names: ['/claude-worker-preserved-task'],
+          Names: ['/code-worker-preserved-task'],
           State: 'running',
           Created: Math.floor((Date.now() - 1000) / 1000),
         },
@@ -1461,7 +1785,7 @@ describe('DockerProvider', () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
         {
           Id: 'test-container-id',
-          Names: ['/claude-worker-preserved-task'],
+          Names: ['/code-worker-preserved-task'],
           State: 'running',
           Created: Math.floor(Date.now() / 1000),
         },
@@ -1479,7 +1803,7 @@ describe('DockerProvider', () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
         {
           Id: 'orphan-container-id',
-          Names: ['/claude-worker-orphan-task'],
+          Names: ['/code-worker-orphan-task'],
           State: 'running',
           Created: fourHoursAgo,
         },
@@ -1497,7 +1821,7 @@ describe('DockerProvider', () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
         {
           Id: 'exited-container-id',
-          Names: ['/claude-worker-exited-task'],
+          Names: ['/code-worker-exited-task'],
           State: 'exited',
           Created: fourHoursAgo,
         },
@@ -1517,7 +1841,7 @@ describe('DockerProvider', () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
         {
           Id: 'test-container-id',
-          Names: ['/claude-worker-active-task'],
+          Names: ['/code-worker-active-task'],
           State: 'running',
           Created: fourHoursAgo,
         },
@@ -1549,7 +1873,7 @@ describe('DockerProvider', () => {
         mocks.mockDocker.listContainers.mockResolvedValueOnce([
           {
             Id: 'orphan-container-id',
-            Names: ['/claude-worker-orphan-task'],
+            Names: ['/code-worker-orphan-task'],
             State: 'running',
             Created: fourHoursAgo,
           },
@@ -1574,7 +1898,7 @@ describe('DockerProvider', () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
         {
           Id: 'orphan-container-id',
-          Names: ['/claude-worker-orphan-task'],
+          Names: ['/code-worker-orphan-task'],
           State: 'running',
           Created: fourHoursAgo,
         },
@@ -1598,7 +1922,7 @@ describe('DockerProvider', () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
         {
           Id: 'orphan-container-id',
-          Names: ['/claude-worker-orphan-task'],
+          Names: ['/code-worker-orphan-task'],
           State: 'running',
           Created: fourHoursAgo,
         },
@@ -1628,7 +1952,7 @@ describe('DockerProvider', () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
         {
           Id: 'orphan-container-id',
-          Names: ['/claude-worker-orphan-task'],
+          Names: ['/code-worker-orphan-task'],
           State: 'running',
           Created: fourHoursAgo,
         },
@@ -1684,8 +2008,8 @@ describe('DockerProvider', () => {
   describe('listWorkerContainers', () => {
     it('returns discovered containers with taskId extracted from name', async () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
-        { Id: 'container-1', Names: ['/claude-worker-task-abc'], State: 'running' },
-        { Id: 'container-2', Names: ['/claude-worker-task-def'], State: 'exited' },
+        { Id: 'container-1', Names: ['/code-worker-task-abc'], State: 'running' },
+        { Id: 'container-2', Names: ['/code-worker-task-def'], State: 'exited' },
       ]);
 
       const result = await provider.listWorkerContainers();
@@ -1696,7 +2020,7 @@ describe('DockerProvider', () => {
       ]);
       expect(mocks.mockDocker.listContainers).toHaveBeenCalledWith({
         all: true,
-        filters: { name: ['claude-worker-'] },
+        filters: { name: ['code-worker-'] },
       });
     });
 
@@ -1721,7 +2045,7 @@ describe('DockerProvider', () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
         {
           Id: 'container-uuid',
-          Names: ['/claude-worker-550e8400-e29b-41d4-a716-446655440000'],
+          Names: ['/code-worker-550e8400-e29b-41d4-a716-446655440000'],
           State: 'running',
         },
       ]);
@@ -1741,7 +2065,7 @@ describe('DockerProvider', () => {
       mocks.mockDocker.listContainers.mockResolvedValue([
         {
           Id: 'container-good',
-          Names: ['/claude-worker-task_abc'],
+          Names: ['/code-worker-task_abc'],
           State: 'running',
           Created: Math.floor(Date.now() / 1000),
         },
@@ -1775,7 +2099,7 @@ describe('DockerProvider', () => {
       const result = (provider as any).resolveForensicsSeccompProfilePath();
 
       expect(result).toBeTypeOf('string');
-      expect(result).toContain('claude-worker-forensics-seccomp.json');
+      expect(result).toContain('code-worker-forensics-seccomp.json');
     });
 
     it('returns null when no candidate path exists', async () => {
@@ -1974,6 +2298,2125 @@ describe('DockerProvider', () => {
       mocks.mockDocker.ping.mockRejectedValue(new Error('connection refused'));
       await provider.checkHealth();
       expect(provider.getHealthDetails()).toEqual({ docker: false, disk: true });
+    });
+  });
+
+  describe('runExecAndCapture (exec stream + inspect)', () => {
+    it('collects output from exec stream data events and resolves with exit code from inspect', async () => {
+      const execStream = createMockExecStream();
+      const mockInspect = vi.fn().mockResolvedValue({ ExitCode: 42 });
+      const mockExecInstance = {
+        start: vi.fn().mockImplementation(async () => {
+          setTimeout(() => {
+            execStream.emit('data', Buffer.from('line1\n'));
+            execStream.emit('data', Buffer.from('line2\n'));
+            execStream.emit('end');
+          }, 0);
+          return execStream;
+        }),
+        inspect: mockInspect,
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (provider as any).runExecAndCapture('test-task', mockExecInstance);
+
+      expect(result.exitCode).toBe(42);
+      expect(result.output).toBe('line1\nline2\n');
+    });
+
+    it('resolves via close event when end is not emitted', async () => {
+      const execStream = createMockExecStream();
+      const mockExecInstance = {
+        start: vi.fn().mockImplementation(async () => {
+          setTimeout(() => {
+            execStream.emit('data', Buffer.from('output'));
+            execStream.emit('close');
+          }, 0);
+          return execStream;
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 0 }),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (provider as any).runExecAndCapture('test-task', mockExecInstance);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.output).toBe('output');
+    });
+
+    it('rejects when exec stream emits error', async () => {
+      const execStream = createMockExecStream();
+      const mockExecInstance = {
+        start: vi.fn().mockImplementation(async () => {
+          setTimeout(() => {
+            execStream.emit('error', new Error('stream broke'));
+          }, 0);
+          return execStream;
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 0 }),
+      };
+
+      await expect(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (provider as any).runExecAndCapture('test-task', mockExecInstance)
+      ).rejects.toThrow('stream broke');
+    });
+
+    it('wraps non-Error stream error in Error', async () => {
+      const execStream = createMockExecStream();
+      const mockExecInstance = {
+        start: vi.fn().mockImplementation(async () => {
+          setTimeout(() => {
+            execStream.emit('error', 'string-error');
+          }, 0);
+          return execStream;
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 0 }),
+      };
+
+      await expect(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (provider as any).runExecAndCapture('test-task', mockExecInstance)
+      ).rejects.toThrow('string-error');
+    });
+
+    it('returns exitCode 1 when ExitCode is not a number', async () => {
+      const execStream = createMockExecStream();
+      const mockExecInstance = {
+        start: vi.fn().mockImplementation(async () => {
+          setTimeout(() => {
+            execStream.emit('end');
+          }, 0);
+          return execStream;
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: null }),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (provider as any).runExecAndCapture('test-task', mockExecInstance);
+
+      expect(result.exitCode).toBe(1);
+    });
+
+    it('returns exitCode 1 when inspect throws', async () => {
+      const execStream = createMockExecStream();
+      const mockExecInstance = {
+        start: vi.fn().mockImplementation(async () => {
+          setTimeout(() => {
+            execStream.emit('end');
+          }, 0);
+          return execStream;
+        }),
+        inspect: vi.fn().mockRejectedValue(new Error('inspect failed')),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (provider as any).runExecAndCapture('test-task', mockExecInstance);
+
+      expect(result.exitCode).toBe(1);
+      expect(result.output).toBe('');
+    });
+  });
+
+  describe('captureSegfaultForensics', () => {
+    it('writes exec-inspect.json on success and container-inspect.json on success', async () => {
+      const fsModule = await import('node:fs');
+      await provider.createWorker(createTestConfig());
+
+      const mockExecInstance = {
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 139, Pid: 1234 }),
+      };
+      mocks.mockContainer.inspect.mockResolvedValue({
+        State: { Running: false },
+        Id: 'test-container-id',
+      });
+
+      // Mock exec for snapshot command
+      const snapshotStream = createMockExecStream();
+      mocks.mockContainer.exec.mockResolvedValueOnce({
+        start: vi.fn().mockImplementation(async () => {
+          setTimeout(() => snapshotStream.emit('end'), 0);
+          return snapshotStream;
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 0 }),
+      });
+
+      (fsModule.promises.writeFile as ReturnType<typeof vi.fn>).mockClear();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (provider as any).captureSegfaultForensics(
+        'test-task-123',
+        mocks.mockContainer,
+        mockExecInstance,
+        '/tmp/forensics/attempt-1',
+        '/var/crash/attempt-1'
+      );
+
+      const writeFileCalls = (fsModule.promises.writeFile as ReturnType<typeof vi.fn>).mock.calls;
+      const writtenPaths = writeFileCalls.map((c: unknown[]) => c[0]);
+      expect(writtenPaths).toContainEqual('/tmp/forensics/attempt-1/orchestrator-segfault.json');
+      expect(writtenPaths).toContainEqual('/tmp/forensics/attempt-1/exec-inspect.json');
+      expect(writtenPaths).toContainEqual('/tmp/forensics/attempt-1/container-inspect.json');
+    });
+
+    it('writes exec-inspect.error.txt when exec inspect throws', async () => {
+      const fsModule = await import('node:fs');
+      await provider.createWorker(createTestConfig());
+
+      const mockExecInstance = {
+        inspect: vi.fn().mockRejectedValue(new Error('exec inspect failed')),
+      };
+      mocks.mockContainer.inspect.mockResolvedValue({
+        State: { Running: false },
+        Id: 'test-container-id',
+      });
+
+      const snapshotStream = createMockExecStream();
+      mocks.mockContainer.exec.mockResolvedValueOnce({
+        start: vi.fn().mockImplementation(async () => {
+          setTimeout(() => snapshotStream.emit('end'), 0);
+          return snapshotStream;
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 0 }),
+      });
+
+      (fsModule.promises.writeFile as ReturnType<typeof vi.fn>).mockClear();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (provider as any).captureSegfaultForensics(
+        'test-task-123',
+        mocks.mockContainer,
+        mockExecInstance,
+        '/tmp/forensics/attempt-1',
+        '/var/crash/attempt-1'
+      );
+
+      const writeFileCalls = (fsModule.promises.writeFile as ReturnType<typeof vi.fn>).mock.calls;
+      const errorTxtCalls = writeFileCalls.filter(
+        (c: unknown[]) =>
+          typeof c[0] === 'string' && (c[0] as string).includes('exec-inspect.error.txt')
+      );
+      expect(errorTxtCalls).toHaveLength(1);
+    });
+
+    it('writes container-inspect.error.txt when container inspect throws', async () => {
+      const fsModule = await import('node:fs');
+      await provider.createWorker(createTestConfig());
+
+      const mockExecInstance = {
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 139 }),
+      };
+      mocks.mockContainer.inspect.mockRejectedValue(new Error('container inspect failed'));
+
+      const snapshotStream = createMockExecStream();
+      mocks.mockContainer.exec.mockResolvedValueOnce({
+        start: vi.fn().mockImplementation(async () => {
+          setTimeout(() => snapshotStream.emit('end'), 0);
+          return snapshotStream;
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 0 }),
+      });
+
+      (fsModule.promises.writeFile as ReturnType<typeof vi.fn>).mockClear();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (provider as any).captureSegfaultForensics(
+        'test-task-123',
+        mocks.mockContainer,
+        mockExecInstance,
+        '/tmp/forensics/attempt-1',
+        '/var/crash/attempt-1'
+      );
+
+      const writeFileCalls = (fsModule.promises.writeFile as ReturnType<typeof vi.fn>).mock.calls;
+      const errorTxtCalls = writeFileCalls.filter(
+        (c: unknown[]) =>
+          typeof c[0] === 'string' && (c[0] as string).includes('container-inspect.error.txt')
+      );
+      expect(errorTxtCalls).toHaveLength(1);
+    });
+
+    it('writes error.stack when exec inspect throws Error with stack', async () => {
+      const fsModule = await import('node:fs');
+      await provider.createWorker(createTestConfig());
+
+      const err = new Error('exec inspect failed');
+      const mockExecInstance = {
+        inspect: vi.fn().mockRejectedValue(err),
+      };
+      mocks.mockContainer.inspect.mockResolvedValue({ State: { Running: false }, Id: 'cid' });
+
+      const snapshotStream = createMockExecStream();
+      mocks.mockContainer.exec.mockResolvedValueOnce({
+        start: vi.fn().mockImplementation(async () => {
+          setTimeout(() => snapshotStream.emit('end'), 0);
+          return snapshotStream;
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 0 }),
+      });
+
+      (fsModule.promises.writeFile as ReturnType<typeof vi.fn>).mockClear();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (provider as any).captureSegfaultForensics(
+        'test-task-123',
+        mocks.mockContainer,
+        mockExecInstance,
+        '/tmp/forensics/attempt-1',
+        '/var/crash/attempt-1'
+      );
+
+      const writeFileCalls = (fsModule.promises.writeFile as ReturnType<typeof vi.fn>).mock.calls;
+      const errorTxtCall = writeFileCalls.find(
+        (c: unknown[]) =>
+          typeof c[0] === 'string' && (c[0] as string).includes('exec-inspect.error.txt')
+      );
+      expect(errorTxtCall).toBeDefined();
+      expect(errorTxtCall?.[1]).toContain('exec inspect failed');
+    });
+
+    it('writes String(error) when container inspect throws non-Error', async () => {
+      const fsModule = await import('node:fs');
+      await provider.createWorker(createTestConfig());
+
+      const mockExecInstance = {
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 139 }),
+      };
+      mocks.mockContainer.inspect.mockRejectedValue('some-string-error');
+
+      const snapshotStream = createMockExecStream();
+      mocks.mockContainer.exec.mockResolvedValueOnce({
+        start: vi.fn().mockImplementation(async () => {
+          setTimeout(() => snapshotStream.emit('end'), 0);
+          return snapshotStream;
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 0 }),
+      });
+
+      (fsModule.promises.writeFile as ReturnType<typeof vi.fn>).mockClear();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (provider as any).captureSegfaultForensics(
+        'test-task-123',
+        mocks.mockContainer,
+        mockExecInstance,
+        '/tmp/forensics/attempt-1',
+        '/var/crash/attempt-1'
+      );
+
+      const writeFileCalls = (fsModule.promises.writeFile as ReturnType<typeof vi.fn>).mock.calls;
+      const errorTxtCall = writeFileCalls.find(
+        (c: unknown[]) =>
+          typeof c[0] === 'string' && (c[0] as string).includes('container-inspect.error.txt')
+      );
+      expect(errorTxtCall).toBeDefined();
+      expect(errorTxtCall?.[1]).toBe('some-string-error');
+    });
+  });
+
+  describe('GCP credentials copy', () => {
+    it('copies GCP SA key when gcpSaKeyPath exists during preserved resume', async () => {
+      const fsModule = await import('node:fs');
+      const config = createTestConfig({ taskId: 'gcp-preserved' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('gcp-preserved');
+
+      (fsModule.promises.copyFile as ReturnType<typeof vi.fn>).mockClear();
+
+      await provider.createWorker(
+        createTestConfig({
+          taskId: 'gcp-preserved',
+          continueSession: true,
+          gcpSaKeyPath: '/test/gcp-sa.json',
+        })
+      );
+
+      expect(fsModule.promises.copyFile).toHaveBeenCalledWith(
+        '/test/gcp-sa.json',
+        expect.stringContaining('gcp-sa.json')
+      );
+    });
+
+    it('skips GCP copy when gcpSaKeyPath is empty during preserved resume', async () => {
+      const fsModule = await import('node:fs');
+      const config = createTestConfig({ taskId: 'no-gcp-preserved' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('no-gcp-preserved');
+
+      (fsModule.promises.copyFile as ReturnType<typeof vi.fn>).mockClear();
+
+      await provider.createWorker(
+        createTestConfig({
+          taskId: 'no-gcp-preserved',
+          continueSession: true,
+          gcpSaKeyPath: '',
+        })
+      );
+
+      expect(fsModule.promises.copyFile).not.toHaveBeenCalled();
+    });
+
+    it('copies GCP SA key when gcpSaKeyPath exists during orphan resume', async () => {
+      const fsModule = await import('node:fs');
+      mocks.mockContainer.inspect.mockResolvedValueOnce({
+        State: { Running: true },
+        Id: 'orphan-gcp-id',
+      });
+
+      (fsModule.promises.copyFile as ReturnType<typeof vi.fn>).mockClear();
+
+      await provider.createWorker(
+        createTestConfig({
+          continueSession: true,
+          gcpSaKeyPath: '/test/gcp-sa.json',
+        })
+      );
+
+      expect(fsModule.promises.copyFile).toHaveBeenCalledWith(
+        '/test/gcp-sa.json',
+        expect.stringContaining('gcp-sa.json')
+      );
+    });
+
+    it('copies GCP SA key during normal creation when gcpSaKeyPath exists', async () => {
+      const fsModule = await import('node:fs');
+      (fsModule.promises.copyFile as ReturnType<typeof vi.fn>).mockClear();
+
+      await provider.createWorker(
+        createTestConfig({
+          gcpSaKeyPath: '/test/gcp-sa.json',
+        })
+      );
+
+      expect(fsModule.promises.copyFile).toHaveBeenCalledWith(
+        '/test/gcp-sa.json',
+        expect.stringContaining('gcp-sa.json')
+      );
+    });
+
+    it('skips GCP copy during normal creation when gcpSaKeyPath is empty', async () => {
+      const fsModule = await import('node:fs');
+      (fsModule.existsSync as Mock).mockImplementation(() => true);
+      (fsModule.promises.copyFile as ReturnType<typeof vi.fn>).mockClear();
+
+      await provider.createWorker(
+        createTestConfig({
+          gcpSaKeyPath: '',
+        })
+      );
+
+      expect(fsModule.promises.copyFile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('forensics + preserved-resume path', () => {
+    it('sets taskForensicsPath on preserved resume when forensicsMode enabled', async () => {
+      const forensicsProvider = new TestableDockerProvider(
+        { forensicsMode: true, forensicsBasePath: '/tmp/forensics' },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      const config = createTestConfig({ taskId: 'forensics-preserved' });
+      await forensicsProvider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await forensicsProvider.preserveWorker('forensics-preserved');
+
+      const handle = await forensicsProvider.createWorker(
+        createTestConfig({
+          taskId: 'forensics-preserved',
+          continueSession: true,
+        })
+      );
+
+      expect(handle.containerId).toBe('test-container-id');
+      expect(handle.status).toBe('running');
+      const workers = await forensicsProvider.listWorkers();
+      expect(workers).toHaveLength(1);
+    });
+  });
+
+  describe('forensics + orphan-resume path', () => {
+    it('sets taskForensicsPath on orphan resume when forensicsMode enabled', async () => {
+      const forensicsProvider = new TestableDockerProvider(
+        { forensicsMode: true, forensicsBasePath: '/tmp/forensics' },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      mocks.mockContainer.inspect.mockResolvedValueOnce({
+        State: { Running: true },
+        Id: 'orphan-forensics-id',
+      });
+
+      const handle = await forensicsProvider.createWorker(
+        createTestConfig({
+          continueSession: true,
+        })
+      );
+
+      expect(handle.containerId).toBe('orphan-forensics-id');
+      expect(handle.status).toBe('running');
+      const workers = await forensicsProvider.listWorkers();
+      expect(workers).toHaveLength(1);
+    });
+  });
+
+  describe('worktree detection', () => {
+    it('detects worktree .git file and mounts main git dir', async () => {
+      const fsModule = await import('node:fs');
+      // First existsSync call is for .git path check (returns true)
+      // statSync returns isFile()=true for the .git path
+      (fsModule.statSync as Mock).mockReturnValueOnce({
+        isFile: () => true,
+        isDirectory: () => false,
+      });
+      // readFileSync returns gitdir pointer for worktree
+      (fsModule.readFileSync as Mock).mockReturnValueOnce(
+        'gitdir: /main/repo/.git/worktrees/my-branch'
+      );
+
+      await provider.createWorker(createTestConfig());
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      expect(binds).toContainEqual('/main/repo/.git:/main/repo/.git:rw');
+    });
+
+    it('does not mount main git dir for regular .git directory', async () => {
+      // Default mock: statSync returns isFile()=false, isDirectory()=true
+      await provider.createWorker(createTestConfig());
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      const mainGitBinds = binds.filter(
+        (b: string) => b.includes('.git:') && !b.includes('/repo:')
+      );
+      expect(mainGitBinds).toHaveLength(0);
+    });
+
+    it('does not mount when gitdir pattern does not match worktree structure', async () => {
+      const fsModule = await import('node:fs');
+      (fsModule.statSync as Mock).mockReturnValueOnce({
+        isFile: () => true,
+        isDirectory: () => false,
+      });
+      (fsModule.readFileSync as Mock).mockReturnValueOnce('gitdir: /some/other/path');
+
+      await provider.createWorker(createTestConfig());
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      const gitBinds = binds.filter((b: string) => b.includes('.git:') && !b.includes('/repo:'));
+      expect(gitBinds).toHaveLength(0);
+    });
+  });
+
+  describe('API key validation', () => {
+    it('throws when API key is empty string', async () => {
+      await expect(
+        provider.createWorker(
+          createTestConfig({
+            secrets: {
+              ANTHROPIC_API_KEY: '',
+              LINEAR_API_KEY: 'test',
+              SENTRY_AUTH_TOKEN: 'test',
+              MINIMAX_API_KEY: 'test',
+              DASHSCOPE_API_KEY: 'test',
+              OPENROUTER_API_KEY: 'test',
+            },
+          })
+        )
+      ).rejects.toThrow('requires ANTHROPIC_API_KEY but it is not configured');
+    });
+  });
+
+  describe('env configuration branches', () => {
+    it('sets WORKER_MANAGED_MODE=1 when managedAttemptsMode is true', async () => {
+      await provider.createWorker(createTestConfig());
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      expect(envArr).toContainEqual('WORKER_MANAGED_MODE=1');
+    });
+
+    it('sets WORKER_MANAGED_MODE=0 when managedAttemptsMode is false', async () => {
+      const nonManagedProvider = new TestableDockerProvider(
+        { managedAttemptsMode: false },
+        mockLogger,
+        mocks.mockDocker
+      );
+      await nonManagedProvider.createWorker(createTestConfig());
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      expect(envArr).toContainEqual('WORKER_MANAGED_MODE=0');
+    });
+
+    it('sets LINEAR_API_KEY and SENTRY_AUTH_TOKEN in env', async () => {
+      await provider.createWorker(createTestConfig());
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      expect(envArr).toContainEqual('LINEAR_API_KEY=test-linear-key');
+      expect(envArr).toContainEqual('SENTRY_AUTH_TOKEN=test-sentry-token');
+    });
+  });
+
+  describe('keySuffix ternary (ts-type)', () => {
+    it('shows last 4 chars for key longer than 4 chars', async () => {
+      await provider.createWorker(createTestConfig());
+
+      // The logger.info call includes the apiKey suffix
+      const infoCalls = (mockLogger.info as ReturnType<typeof vi.fn>).mock.calls;
+      const creationMsg = infoCalls.find(
+        (c: unknown[]) => typeof c[1] === 'string' && (c[1] as string).includes('apiKey=')
+      );
+      expect(creationMsg).toBeDefined();
+      expect(creationMsg?.[1]).toContain('apiKey=...-key');
+    });
+
+    it('shows shared-creds label when using shared credentials', async () => {
+      const sharedProvider = new TestableDockerProvider(
+        { sharedCredsPath: '/shared/creds' },
+        mockLogger,
+        mocks.mockDocker
+      );
+      await sharedProvider.createWorker(createTestConfig({ workerType: 'auto' }));
+
+      const infoCalls = (mockLogger.info as ReturnType<typeof vi.fn>).mock.calls;
+      const creationMsg = infoCalls.find(
+        (c: unknown[]) => typeof c[1] === 'string' && (c[1] as string).includes('apiKey=')
+      );
+      expect(creationMsg).toBeDefined();
+      expect(creationMsg?.[1]).toContain('shared-creds');
+    });
+
+    it('shows **** for key with 4 or fewer chars', async () => {
+      await provider.createWorker(
+        createTestConfig({
+          secrets: {
+            ANTHROPIC_API_KEY: 'key',
+            LINEAR_API_KEY: 'test',
+            SENTRY_AUTH_TOKEN: 'test',
+            MINIMAX_API_KEY: 'test',
+            DASHSCOPE_API_KEY: 'test',
+            OPENROUTER_API_KEY: 'test',
+          },
+        })
+      );
+
+      const infoCalls = (mockLogger.info as ReturnType<typeof vi.fn>).mock.calls;
+      const creationMsg = infoCalls.find(
+        (c: unknown[]) => typeof c[1] === 'string' && (c[1] as string).includes('apiKey=')
+      );
+      expect(creationMsg).toBeDefined();
+      expect(creationMsg?.[1]).toContain('apiKey=****');
+    });
+  });
+
+  describe('security-opt/pnpmStore/capAdd/ulimits config', () => {
+    it('creates pnpm-store directory', async () => {
+      const fsModule = await import('node:fs');
+      (fsModule.mkdirSync as Mock).mockClear();
+
+      await provider.createWorker(createTestConfig());
+
+      expect(fsModule.mkdirSync).toHaveBeenCalledWith(expect.stringContaining('pnpm-store'), {
+        recursive: true,
+      });
+    });
+
+    it('sets capAdd to NET_RAW only when forensicsMode is false', async () => {
+      await provider.createWorker(createTestConfig());
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const capAdd = createCall?.HostConfig?.CapAdd as string[];
+      expect(capAdd).toEqual(['NET_RAW']);
+    });
+
+    it('sets securityOpt to no-new-privileges only when forensicsMode is false', async () => {
+      await provider.createWorker(createTestConfig());
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const securityOpt = createCall?.HostConfig?.SecurityOpt as string[];
+      expect(securityOpt).toEqual(['no-new-privileges']);
+    });
+
+    it('does not set Ulimits when forensicsMode is false', async () => {
+      await provider.createWorker(createTestConfig());
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(createCall?.HostConfig?.Ulimits).toBeUndefined();
+    });
+
+    it('uses fallback securityOpt when seccomp profile is not found in forensics mode', async () => {
+      const fsModule = await import('node:fs');
+      // Make all seccomp profile candidates not found, but .git exists
+      (fsModule.existsSync as Mock).mockImplementation((p: unknown) => {
+        if (typeof p === 'string' && p.includes('seccomp')) return false;
+        return true;
+      });
+
+      const forensicsProvider = new TestableDockerProvider(
+        { forensicsMode: true, forensicsBasePath: '/tmp/forensics' },
+        mockLogger,
+        mocks.mockDocker
+      );
+      await forensicsProvider.createWorker(createTestConfig());
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const securityOpt = createCall?.HostConfig?.SecurityOpt as string[];
+      expect(securityOpt).toEqual(['no-new-privileges']);
+      expect(securityOpt).not.toContainEqual(expect.stringContaining('seccomp='));
+    });
+  });
+
+  describe('log stream setup', () => {
+    it('sets up log stream when onLog provided and managedAttemptsMode is false', async () => {
+      const nonManagedProvider = new TestableDockerProvider(
+        { managedAttemptsMode: false },
+        mockLogger,
+        mocks.mockDocker
+      );
+      const mockLogStream = new EventEmitter() as NodeJS.ReadableStream;
+      mocks.mockContainer.logs.mockResolvedValueOnce(mockLogStream);
+
+      const onLog = vi.fn();
+      await nonManagedProvider.createWorker(createTestConfig({ onLog }));
+
+      // Simulate data event
+      mockLogStream.emit('data', Buffer.from('test-log'));
+      expect(onLog).toHaveBeenCalledWith('test-log');
+    });
+
+    it('does not set up log stream when onLog not provided', async () => {
+      const nonManagedProvider = new TestableDockerProvider(
+        { managedAttemptsMode: false },
+        mockLogger,
+        mocks.mockDocker
+      );
+      const logsSpy = mocks.mockContainer.logs;
+      logsSpy.mockClear();
+
+      await nonManagedProvider.createWorker(createTestConfig());
+
+      // logs() is called for the follow stream only when onLog is provided
+      // In non-managed mode without onLog, container.logs should not be called for follow
+      const followCalls = logsSpy.mock.calls.filter(
+        (c: unknown[]) => (c[0] as { follow?: boolean })?.follow === true
+      );
+      expect(followCalls).toHaveLength(0);
+    });
+
+    it('does not set up log stream in managedAttemptsMode even with onLog', async () => {
+      const logsSpy = mocks.mockContainer.logs;
+      logsSpy.mockClear();
+
+      await provider.createWorker(createTestConfig({ onLog: vi.fn() }));
+
+      const followCalls = logsSpy.mock.calls.filter(
+        (c: unknown[]) => (c[0] as { follow?: boolean })?.follow === true
+      );
+      expect(followCalls).toHaveLength(0);
+    });
+  });
+
+  describe('managedAttemptsMode vs legacy mode', () => {
+    it('runs attempt in managed mode', async () => {
+      const onComplete = vi.fn();
+      await provider.createWorker(createTestConfig({ onComplete }));
+
+      // Wait for async attempt to complete
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // In managed mode, exec is called for: entrypoint check, readiness, and run-attempt
+      expect(mocks.mockContainer.exec).toHaveBeenCalled();
+    });
+
+    it('uses container.wait() in legacy mode and calls onComplete', async () => {
+      const nonManagedProvider = new TestableDockerProvider(
+        { managedAttemptsMode: false },
+        mockLogger,
+        mocks.mockDocker
+      );
+      const onComplete = vi.fn();
+
+      await nonManagedProvider.createWorker(createTestConfig({ onComplete }));
+
+      // Resolve container.wait
+      mocks.resolveContainerWait({ StatusCode: 0 });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(onComplete).toHaveBeenCalledWith(0);
+    });
+
+    it('sets status to failed in legacy mode when StatusCode is non-zero', async () => {
+      const nonManagedProvider = new TestableDockerProvider(
+        { managedAttemptsMode: false },
+        mockLogger,
+        mocks.mockDocker
+      );
+      const onComplete = vi.fn();
+
+      const handle = await nonManagedProvider.createWorker(createTestConfig({ onComplete }));
+
+      mocks.resolveContainerWait({ StatusCode: 1 });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(handle.status).toBe('failed');
+      expect(onComplete).toHaveBeenCalledWith(1);
+    });
+
+    it('handles container.wait() error in legacy mode', async () => {
+      const nonManagedProvider = new TestableDockerProvider(
+        { managedAttemptsMode: false },
+        mockLogger,
+        mocks.mockDocker
+      );
+      mocks.mockContainer.wait.mockRejectedValueOnce(new Error('wait error'));
+
+      await nonManagedProvider.createWorker(createTestConfig());
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'test-task-123' }),
+        'Container wait error'
+      );
+    });
+  });
+
+  describe('cleanup error handling', () => {
+    it('logs warning when secrets rm fails during error cleanup', async () => {
+      const fsModule = await import('node:fs');
+      mocks.mockDocker.createContainer.mockRejectedValueOnce(new Error('create failed'));
+      (fsModule.promises.rm as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error('rm secrets failed')
+      );
+
+      await expect(provider.createWorker(createTestConfig())).rejects.toThrow('create failed');
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'test-task-123' }),
+        'Cleanup: failed to remove task secrets'
+      );
+    });
+
+    it('logs warning when session rm fails during error cleanup', async () => {
+      const fsModule = await import('node:fs');
+      mocks.mockDocker.createContainer.mockRejectedValueOnce(new Error('create failed'));
+      // First rm succeeds (secrets), second fails (session)
+      (fsModule.promises.rm as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('rm session failed'));
+
+      await expect(provider.createWorker(createTestConfig())).rejects.toThrow('create failed');
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'test-task-123' }),
+        'Cleanup: failed to remove task session'
+      );
+    });
+
+    it('logs warning when container remove fails during error cleanup', async () => {
+      // Container is created, but start fails
+      mocks.mockContainer.start.mockRejectedValueOnce(new Error('start failed'));
+      mocks.mockContainer.remove.mockRejectedValueOnce(new Error('remove failed'));
+
+      await expect(provider.createWorker(createTestConfig())).rejects.toThrow('start failed');
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'test-task-123' }),
+        'Cleanup: failed to remove container'
+      );
+    });
+  });
+
+  describe('destroyWorker logStream cleanup', () => {
+    it('destroys logStream when present', async () => {
+      const nonManagedProvider = new TestableDockerProvider(
+        { managedAttemptsMode: false },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      const mockLogStream = new EventEmitter() as NodeJS.ReadableStream & {
+        destroy: ReturnType<typeof vi.fn>;
+      };
+      mockLogStream.destroy = vi.fn();
+      mocks.mockContainer.logs.mockResolvedValueOnce(mockLogStream);
+
+      await nonManagedProvider.createWorker(createTestConfig({ onLog: vi.fn() }));
+      await nonManagedProvider.destroyWorker('test-task-123');
+
+      expect(mockLogStream.destroy).toHaveBeenCalled();
+    });
+  });
+
+  describe('getWorkerLogs branches', () => {
+    it('returns only container logs when attemptLogBuffer is empty', async () => {
+      await provider.createWorker(createTestConfig());
+
+      mocks.mockContainer.logs.mockResolvedValueOnce(Buffer.from('container output'));
+
+      const logs = await provider.getWorkerLogs('test-task-123');
+
+      expect(logs).toBe('container output');
+    });
+
+    it('returns container logs + attempt log buffer when both present', async () => {
+      await provider.createWorker(createTestConfig());
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      mocks.mockContainer.logs.mockResolvedValueOnce(Buffer.from('container output'));
+
+      const logs = await provider.getWorkerLogs('test-task-123');
+
+      // attemptLogBuffer is populated by runAttemptInContainer exec stream
+      // The exact content depends on the mock exec behavior
+      expect(logs).toContain('container output');
+    });
+
+    it('returns attempt log buffer when container.logs() fails', async () => {
+      await provider.createWorker(createTestConfig());
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      mocks.mockContainer.logs.mockRejectedValueOnce(new Error('logs failed'));
+
+      const logs = await provider.getWorkerLogs('test-task-123');
+
+      // Should return attemptLogBuffer (populated by exec stream)
+      expect(typeof logs).toBe('string');
+    });
+  });
+
+  describe('waitForCompletion timeout race', () => {
+    it('resolves with StatusCode when container.wait() completes before timeout', async () => {
+      await provider.createWorker(createTestConfig());
+
+      const waitPromise = provider.waitForCompletion('test-task-123', 5000);
+
+      // Resolve the container wait
+      mocks.resolveContainerWait({ StatusCode: 42 });
+
+      const result = await waitPromise;
+      expect(result).toBe(42);
+    });
+
+    it('resolves with -1 when timeout fires and calls destroyWorker', async () => {
+      await provider.createWorker(createTestConfig());
+
+      mocks.mockContainer.wait.mockImplementationOnce(
+        () =>
+          new Promise(() => {
+            /* never resolves */
+          })
+      );
+
+      const result = await provider.waitForCompletion('test-task-123', 100);
+
+      expect(result).toBe(-1);
+    });
+
+    it('ignores container.wait() completion after timeout', async () => {
+      await provider.createWorker(createTestConfig());
+
+      let resolveWait: (v: { StatusCode: number }) => void;
+      mocks.mockContainer.wait.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveWait = resolve;
+          })
+      );
+
+      const result = await provider.waitForCompletion('test-task-123', 100);
+      expect(result).toBe(-1);
+
+      // Late resolution should not cause issues
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      resolveWait!({ StatusCode: 0 });
+    });
+
+    it('handles container.wait() rejection after timeout', async () => {
+      await provider.createWorker(createTestConfig());
+
+      let rejectWait: (e: Error) => void;
+      mocks.mockContainer.wait.mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectWait = reject;
+          })
+      );
+
+      const result = await provider.waitForCompletion('test-task-123', 100);
+      expect(result).toBe(-1);
+
+      // Late rejection should not cause issues
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      rejectWait!(new Error('late error'));
+    });
+
+    it('resolves with -1 when container.wait() rejects before timeout', async () => {
+      await provider.createWorker(createTestConfig());
+
+      mocks.mockContainer.wait.mockRejectedValueOnce(new Error('wait error'));
+
+      const result = await provider.waitForCompletion('test-task-123', 5000);
+
+      expect(result).toBe(-1);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'test-task-123' }),
+        'Wait error'
+      );
+    });
+  });
+
+  describe('getResourceUsage CPU calculation', () => {
+    it('calculates CPU percent from stats deltas', async () => {
+      await provider.createWorker(createTestConfig());
+
+      mocks.mockContainer.stats.mockResolvedValueOnce({
+        cpu_stats: {
+          cpu_usage: { total_usage: 2000 },
+          system_cpu_usage: 20000,
+          online_cpus: 4,
+        },
+        precpu_stats: {
+          cpu_usage: { total_usage: 1000 },
+          system_cpu_usage: 10000,
+        },
+        memory_stats: {
+          usage: 1024 * 1024 * 256,
+          limit: 1024 * 1024 * 1024 * 4,
+        },
+      });
+
+      const usage = await provider.getResourceUsage('test-task-123');
+
+      // cpuDelta = 1000, systemDelta = 10000, cpuPercent = (1000/10000)*4*100 = 40
+      expect(usage.cpuPercent).toBe(40);
+      expect(usage.memoryUsedMB).toBe(256);
+      expect(usage.memoryLimitMB).toBe(4096);
+    });
+
+    it('returns 0 CPU percent when systemDelta is 0', async () => {
+      await provider.createWorker(createTestConfig());
+
+      mocks.mockContainer.stats.mockResolvedValueOnce({
+        cpu_stats: {
+          cpu_usage: { total_usage: 1000 },
+          system_cpu_usage: 10000,
+          online_cpus: 4,
+        },
+        precpu_stats: {
+          cpu_usage: { total_usage: 1000 },
+          system_cpu_usage: 10000,
+        },
+        memory_stats: {
+          usage: 1024 * 1024 * 512,
+          limit: 1024 * 1024 * 1024 * 8,
+        },
+      });
+
+      const usage = await provider.getResourceUsage('test-task-123');
+
+      expect(usage.cpuPercent).toBe(0);
+    });
+  });
+
+  describe('waitForWorkerReady polling', () => {
+    it('succeeds when readiness marker appears', async () => {
+      provider = new TestableDockerProvider(
+        { managedAttemptsMode: true, workerReadyTimeoutMs: 10_000 },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      // Default exec mock already returns ExitCode: 0 for readiness check
+      await provider.createWorker(createTestConfig());
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'test-task-123' }),
+        'Worker readiness confirmed'
+      );
+    });
+
+    it('throws timeout when readiness marker never appears', async () => {
+      const originalExecImpl = mocks.mockContainer.exec.getMockImplementation() as
+        | ((...args: unknown[]) => unknown)
+        | undefined;
+      mocks.mockContainer.exec = vi.fn().mockImplementation((opts: { Cmd?: string[] }) => {
+        const cmd = opts?.Cmd?.join?.(' ') ?? '';
+        if (cmd.includes('worker-ready')) {
+          const readyStream = createMockExecStream();
+          return Promise.resolve({
+            start: vi.fn().mockImplementation(async () => {
+              setTimeout(() => readyStream.emit('end'), 0);
+              return readyStream;
+            }),
+            inspect: vi.fn().mockResolvedValue({ ExitCode: 1 }),
+          });
+        }
+        return originalExecImpl?.(opts);
+      });
+
+      provider = new TestableDockerProvider(
+        { managedAttemptsMode: true, workerReadyTimeoutMs: 200 },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await expect(
+        provider.createWorker(createTestConfig({ taskId: 'ready-timeout' }))
+      ).rejects.toThrow(/readiness.*timeout/i);
+    });
+  });
+
+  describe('writePromptFiles', () => {
+    it('writes system-prompt.txt and user-prompt.txt', async () => {
+      const fsModule = await import('node:fs');
+      (fsModule.promises.writeFile as ReturnType<typeof vi.fn>).mockClear();
+
+      await provider.createWorker(
+        createTestConfig({
+          systemPrompt: 'My system prompt',
+          prompt: 'My user prompt',
+        })
+      );
+
+      expect(fsModule.promises.writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('system-prompt.txt'),
+        'My system prompt',
+        'utf-8'
+      );
+      expect(fsModule.promises.writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('user-prompt.txt'),
+        'My user prompt',
+        'utf-8'
+      );
+    });
+  });
+
+  describe('runAttemptInContainer', () => {
+    it('calls onComplete with exit code on successful attempt', async () => {
+      const onComplete = vi.fn();
+      await provider.createWorker(createTestConfig({ onComplete }));
+
+      // Wait for async attempt
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(onComplete).toHaveBeenCalledWith(0);
+    });
+
+    it('passes codex runtime metadata into run-attempt exec for resumed Codex tasks', async () => {
+      const codexProvider = new TestableDockerProvider(
+        { sharedCodexAuthPath: '/shared/codex-auth' } as Partial<DockerProviderConfig>,
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await codexProvider.createWorker(
+        createRuntimeOverrideConfig('codex', {
+          continueSession: true,
+          runtimeSessionId: 'thread_123',
+          onComplete: vi.fn(),
+        })
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const runAttemptCall = mocks.mockContainer.exec.mock.calls.find((call: unknown[]) => {
+        const opts = call[0] as { Cmd?: string[] };
+        return opts.Cmd?.[0] === '/entrypoint.sh' && opts.Cmd?.[1] === 'run-attempt';
+      });
+      const envArr = runAttemptCall?.[0]?.Env as string[];
+
+      expect(envArr).toContain('WORKER_RUNTIME=codex');
+      expect(envArr).toContain('CODEX_THREAD_ID=thread_123');
+    });
+
+    it('calls onComplete(1) when worker not found', async () => {
+      const onComplete = vi.fn();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (provider as any).runAttemptInContainer('nonexistent-task', {
+        onComplete,
+        taskId: 'nonexistent-task',
+      });
+
+      expect(onComplete).toHaveBeenCalledWith(1);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'nonexistent-task' }),
+        'Cannot start attempt: worker not found'
+      );
+    });
+
+    it('calls onComplete(1) when previous attempt is still running', async () => {
+      const onComplete1 = vi.fn();
+      const onComplete2 = vi.fn();
+
+      // Create worker - this triggers runAttemptInContainer which sets attemptRunning = true
+      await provider.createWorker(createTestConfig({ onComplete: onComplete1 }));
+
+      // Manually set attemptRunning to true to simulate race
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const workers = (provider as any).workers as Map<string, { attemptRunning: boolean }>;
+      const worker = workers.get('test-task-123');
+      if (worker !== undefined) {
+        worker.attemptRunning = true;
+      }
+
+      // Try to start another attempt while first is "running"
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (provider as any).runAttemptInContainer('test-task-123', {
+        onComplete: onComplete2,
+        taskId: 'test-task-123',
+      });
+
+      expect(onComplete2).toHaveBeenCalledWith(1);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'test-task-123' }),
+        'Cannot start attempt: previous attempt still running'
+      );
+    });
+
+    it('writes forensics artifacts when forensicsMode is enabled', async () => {
+      const fsModule = await import('node:fs');
+      const forensicsProvider = new TestableDockerProvider(
+        { forensicsMode: true, forensicsBasePath: '/tmp/forensics' },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      (fsModule.promises.writeFile as ReturnType<typeof vi.fn>).mockClear();
+
+      await forensicsProvider.createWorker(createTestConfig({ onComplete: vi.fn() }));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const writeFileCalls = (fsModule.promises.writeFile as ReturnType<typeof vi.fn>).mock.calls;
+      const forensicsPaths = writeFileCalls
+        .map((c: unknown[]) => c[0])
+        .filter((p: unknown) => typeof p === 'string' && (p as string).includes('forensics'));
+      expect(forensicsPaths.length).toBeGreaterThan(0);
+    });
+
+    it('handles exec error and sets status to failed', async () => {
+      const onComplete = vi.fn();
+
+      // Make the attempt exec fail
+      const originalExecImpl = mocks.mockContainer.exec.getMockImplementation() as
+        | ((...args: unknown[]) => unknown)
+        | undefined;
+      mocks.mockContainer.exec = vi.fn().mockImplementation((opts: { Cmd?: string[] }) => {
+        const cmd = opts?.Cmd ?? [];
+        // Match the run-attempt exec specifically (Cmd = ['/entrypoint.sh', 'run-attempt'])
+        if (cmd[0] === '/entrypoint.sh' && cmd[1] === 'run-attempt') {
+          return Promise.reject(new Error('exec failed'));
+        }
+        return originalExecImpl?.(opts);
+      });
+
+      provider = new TestableDockerProvider(
+        { managedAttemptsMode: true },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      const handle = await provider.createWorker(createTestConfig({ onComplete }));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(handle.status).toBe('failed');
+      expect(onComplete).toHaveBeenCalledWith(1);
+    });
+
+    it('persists attempt logs to file when forensicsMode is enabled', async () => {
+      const fsModule = await import('node:fs');
+      const forensicsProvider = new TestableDockerProvider(
+        { forensicsMode: true, forensicsBasePath: '/tmp/forensics' },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      (fsModule.appendFileSync as Mock).mockClear();
+
+      await forensicsProvider.createWorker(createTestConfig({ onLog: vi.fn() }));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(fsModule.appendFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('exec-stream.log'),
+        expect.any(String),
+        'utf-8'
+      );
+    });
+
+    it('logs warning when appendFileSync fails for persistent log', async () => {
+      const fsModule = await import('node:fs');
+      const forensicsProvider = new TestableDockerProvider(
+        { forensicsMode: true, forensicsBasePath: '/tmp/forensics' },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      (fsModule.appendFileSync as Mock).mockImplementation(() => {
+        throw new Error('disk full');
+      });
+
+      await forensicsProvider.createWorker(createTestConfig({ onLog: vi.fn() }));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'test-task-123' }),
+        'Failed to persist attempt exec stream chunk'
+      );
+    });
+  });
+
+  describe('waitForExecCompletion', () => {
+    it('resolves via stream end with inspect ExitCode', async () => {
+      const execStream = createMockExecStream();
+      const mockExecInstance = {
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 5 }),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const promise = (provider as any).waitForExecCompletion(
+        'test-task',
+        mockExecInstance,
+        execStream
+      );
+
+      execStream.emit('end');
+      const result = await promise;
+
+      expect(result).toBe(5);
+    });
+
+    it('resolves via stream close event', async () => {
+      const execStream = createMockExecStream();
+      const mockExecInstance = {
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 3 }),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const promise = (provider as any).waitForExecCompletion(
+        'test-task',
+        mockExecInstance,
+        execStream
+      );
+
+      execStream.emit('close');
+      const result = await promise;
+
+      expect(result).toBe(3);
+    });
+
+    it('resolves with 1 on stream error', async () => {
+      const execStream = createMockExecStream();
+      const mockExecInstance = {
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 0 }),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const promise = (provider as any).waitForExecCompletion(
+        'test-task',
+        mockExecInstance,
+        execStream
+      );
+
+      execStream.emit('error', new Error('stream error'));
+      const result = await promise;
+
+      expect(result).toBe(1);
+    });
+
+    it('resolves with 1 when ExitCode is not a number', async () => {
+      const execStream = createMockExecStream();
+      const mockExecInstance = {
+        inspect: vi.fn().mockResolvedValue({ ExitCode: undefined }),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const promise = (provider as any).waitForExecCompletion(
+        'test-task',
+        mockExecInstance,
+        execStream
+      );
+
+      execStream.emit('end');
+      const result = await promise;
+
+      expect(result).toBe(1);
+    });
+
+    it('resolves with 1 when inspect throws after stream end', async () => {
+      const execStream = createMockExecStream();
+      const mockExecInstance = {
+        inspect: vi.fn().mockRejectedValue(new Error('inspect error')),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const promise = (provider as any).waitForExecCompletion(
+        'test-task',
+        mockExecInstance,
+        execStream
+      );
+
+      execStream.emit('end');
+      const result = await promise;
+
+      expect(result).toBe(1);
+    });
+
+    it('resolves via poll fallback when exec stops running but stream stays open', async () => {
+      vi.useFakeTimers();
+      const execStream = createMockExecStream();
+      const mockExecInstance = {
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 7, Running: false }),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const promise = (provider as any).waitForExecCompletion(
+        'test-task',
+        mockExecInstance,
+        execStream
+      );
+
+      // Advance past the poll interval (5000ms)
+      await vi.advanceTimersByTimeAsync(5_000);
+      const result = await promise;
+
+      expect(result).toBe(7);
+    });
+
+    it('resolves with 1 via poll fallback when inspect throws during polling', async () => {
+      vi.useFakeTimers();
+      const execStream = createMockExecStream();
+      const mockExecInstance = {
+        inspect: vi.fn().mockRejectedValue(new Error('gone')),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const promise = (provider as any).waitForExecCompletion(
+        'test-task',
+        mockExecInstance,
+        execStream
+      );
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      const result = await promise;
+
+      expect(result).toBe(1);
+    });
+
+    it('does not resolve twice when both stream end and poll fire', async () => {
+      vi.useFakeTimers();
+      const execStream = createMockExecStream();
+      const mockExecInstance = {
+        inspect: vi.fn().mockImplementation(async () => {
+          return { ExitCode: 10, Running: false };
+        }),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const promise = (provider as any).waitForExecCompletion(
+        'test-task',
+        mockExecInstance,
+        execStream
+      );
+
+      // Stream ends first
+      execStream.emit('end');
+      // Then poll fires
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      const result = await promise;
+      // Should resolve only once with the first result
+      expect(result).toBe(10);
+    });
+  });
+
+  describe('pullAndResolveImage edge cases', () => {
+    it('uses GCP SA key auth when gcpSaKeyPath is configured and exists', async () => {
+      const gcpProvider = new TestableDockerProvider(
+        { gcpSaKeyPath: '/test/gcp-key.json' },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      const fsModule = await import('node:fs');
+      (fsModule.readFileSync as Mock).mockReturnValueOnce('{"type":"service_account"}');
+
+      await gcpProvider.createWorker(createTestConfig());
+
+      const pullCall = mocks.mockDocker.pull.mock.calls[0];
+      expect(pullCall?.[1]).toHaveProperty('authconfig');
+    });
+
+    it('falls back to image name when getImage().inspect() throws', async () => {
+      mocks.mockDocker.getImage.mockReturnValueOnce({
+        inspect: vi.fn().mockRejectedValue(new Error('image not found')),
+      });
+
+      const handle = await provider.createWorker(createTestConfig());
+
+      expect(handle).toBeDefined();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.any(Error) }),
+        expect.stringContaining('Failed to inspect pulled image digest')
+      );
+    });
+
+    it('handles non-Error throw during image pull', async () => {
+      mocks.mockDocker.pull.mockRejectedValueOnce('string error');
+
+      await expect(provider.createWorker(createTestConfig())).rejects.toThrow(
+        'Failed to pull worker image'
+      );
+    });
+
+    it('handles followProgress error during image pull', async () => {
+      mocks.mockDocker.modem.followProgress.mockImplementationOnce(
+        (_stream: unknown, onFinished: (err: Error | null) => void) => {
+          onFinished(new Error('pull layer failed'));
+        }
+      );
+
+      await expect(provider.createWorker(createTestConfig())).rejects.toThrow(
+        'Failed to pull worker image'
+      );
+    });
+
+    it('handles non-array RepoDigests from image inspect', async () => {
+      mocks.mockDocker.getImage.mockReturnValueOnce({
+        inspect: vi.fn().mockResolvedValue({
+          RepoDigests: null,
+        }),
+      });
+
+      const handle = await provider.createWorker(createTestConfig());
+      expect(handle).toBeDefined();
+    });
+
+    it('falls back to first digest when no matching prefix found', async () => {
+      mocks.mockDocker.getImage.mockReturnValueOnce({
+        inspect: vi.fn().mockResolvedValue({
+          RepoDigests: ['other-registry/image@sha256:abc123'],
+        }),
+      });
+
+      const handle = await provider.createWorker(createTestConfig());
+      expect(handle).toBeDefined();
+    });
+
+    it('falls back to imageName when RepoDigests is empty array', async () => {
+      mocks.mockDocker.getImage.mockReturnValueOnce({
+        inspect: vi.fn().mockResolvedValue({
+          RepoDigests: [],
+        }),
+      });
+
+      const handle = await provider.createWorker(createTestConfig());
+      expect(handle).toBeDefined();
+    });
+  });
+
+  describe('runCleanupCycle additional branches', () => {
+    it('cleans up preserved worker metadata when container not in Docker listing', async () => {
+      await provider.createWorker(createTestConfig({ taskId: 'stale-preserved' }));
+      await provider.preserveWorker('stale-preserved');
+
+      // Make it stale
+      const preservedWorkers = (
+        provider as unknown as {
+          preservedWorkers: Map<string, { preservedAt: string }>;
+        }
+      ).preservedWorkers;
+      const entry = preservedWorkers.get('stale-preserved');
+      if (entry !== undefined) {
+        entry.preservedAt = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+      }
+
+      vi.clearAllMocks();
+
+      // Container NOT in Docker listing
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([]);
+
+      await provider.runCleanupCycle();
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'stale-preserved' }),
+        'Removed stale preserved worker metadata'
+      );
+    });
+
+    it('skips containers with unrecognizable names during cleanup', async () => {
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'bad-container',
+          Names: ['/code-worker-'],
+          State: 'running',
+          Created: Math.floor(Date.now() / 1000) - 4 * 60 * 60,
+        },
+      ]);
+
+      await provider.runCleanupCycle();
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ containerId: 'bad-container' }),
+        expect.stringContaining('no recognizable name')
+      );
+    });
+
+    it('skips containers younger than 3 hours in the unmanaged set', async () => {
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'young-container',
+          Names: ['/code-worker-young-task'],
+          State: 'running',
+          Created: Math.floor(Date.now() / 1000) - 60, // 1 minute ago
+        },
+      ]);
+
+      await provider.runCleanupCycle();
+
+      expect(mocks.mockContainer.stop).not.toHaveBeenCalled();
+      expect(mocks.mockContainer.remove).not.toHaveBeenCalled();
+    });
+
+    it('preserves runtime state directories when removing stale containers', async () => {
+      const fourHoursAgo = Math.floor(Date.now() / 1000) - 4 * 60 * 60;
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'stale-container-id',
+          Names: ['/code-worker-stale-state-task'],
+          State: 'exited',
+          Created: fourHoursAgo,
+        },
+      ]);
+
+      // Mock readdir to return no runtime state dirs (so orphan cleanup is a no-op)
+      const fsModule = await import('node:fs');
+      (fsModule.promises.readdir as Mock).mockResolvedValueOnce([]);
+
+      vi.clearAllMocks();
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'stale-container-id',
+          Names: ['/code-worker-stale-state-task'],
+          State: 'exited',
+          Created: fourHoursAgo,
+        },
+      ]);
+
+      await provider.runCleanupCycle();
+
+      // Container is removed but cleanupTaskSession should NOT be called —
+      // runtime state directories are preserved for potential resume.
+      expect(mocks.mockContainer.remove).toHaveBeenCalledWith({ force: true });
+      const rmCalls = (fsModule.promises.rm as Mock).mock.calls;
+      const runtimeStateDeletions = rmCalls.filter(
+        (call: unknown[]) =>
+          typeof call[0] === 'string' &&
+          (call[0].includes('codex-state-stale-state-task') ||
+            call[0].includes('claude-session-stale-state-task'))
+      );
+      expect(runtimeStateDeletions).toHaveLength(0);
+    });
+
+    it('removes orphaned runtime state directories older than 24 hours', async () => {
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([]);
+
+      const fsModule = await import('node:fs');
+      (fsModule.promises.readdir as Mock).mockResolvedValueOnce([
+        'codex-state-orphan-task-1',
+        'claude-session-orphan-task-2',
+        'some-other-dir',
+      ]);
+
+      const oldMtime = Date.now() - 25 * 60 * 60 * 1000; // 25 hours ago
+      (fsModule.promises.stat as Mock).mockResolvedValue({ mtimeMs: oldMtime });
+
+      vi.clearAllMocks();
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([]);
+      (fsModule.promises.readdir as Mock).mockResolvedValueOnce([
+        'codex-state-orphan-task-1',
+        'claude-session-orphan-task-2',
+        'some-other-dir',
+      ]);
+      (fsModule.promises.stat as Mock).mockResolvedValue({ mtimeMs: oldMtime });
+
+      await provider.runCleanupCycle();
+
+      const rmCalls = (fsModule.promises.rm as Mock).mock.calls;
+      const runtimeRemovals = rmCalls.filter(
+        (call: unknown[]) =>
+          typeof call[0] === 'string' &&
+          (call[0].includes('codex-state-orphan-task-1') ||
+            call[0].includes('claude-session-orphan-task-2'))
+      );
+      expect(runtimeRemovals).toHaveLength(2);
+
+      // Non-matching dirs should not be removed
+      const otherRemovals = rmCalls.filter(
+        (call: unknown[]) => typeof call[0] === 'string' && call[0].includes('some-other-dir')
+      );
+      expect(otherRemovals).toHaveLength(0);
+    });
+
+    it('keeps runtime state directories younger than 24 hours', async () => {
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([]);
+
+      const fsModule = await import('node:fs');
+      const recentMtime = Date.now() - 2 * 60 * 60 * 1000; // 2 hours ago
+
+      vi.clearAllMocks();
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([]);
+      (fsModule.promises.readdir as Mock).mockResolvedValueOnce(['codex-state-recent-task']);
+      (fsModule.promises.stat as Mock).mockResolvedValue({ mtimeMs: recentMtime });
+
+      await provider.runCleanupCycle();
+
+      const rmCalls = (fsModule.promises.rm as Mock).mock.calls;
+      const runtimeRemovals = rmCalls.filter(
+        (call: unknown[]) =>
+          typeof call[0] === 'string' && call[0].includes('codex-state-recent-task')
+      );
+      expect(runtimeRemovals).toHaveLength(0);
+    });
+
+    it('keeps runtime state directories for active and preserved workers', async () => {
+      await provider.createWorker(createTestConfig({ taskId: 'active-worker' }));
+      await provider.createWorker(createTestConfig({ taskId: 'preserved-worker' }));
+      await provider.preserveWorker('preserved-worker');
+
+      const fsModule = await import('node:fs');
+      const oldMtime = Date.now() - 25 * 60 * 60 * 1000;
+
+      vi.clearAllMocks();
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([]);
+      (fsModule.promises.readdir as Mock).mockResolvedValueOnce([
+        'codex-state-active-worker',
+        'codex-state-preserved-worker',
+        'codex-state-abandoned-worker',
+      ]);
+      (fsModule.promises.stat as Mock).mockResolvedValue({ mtimeMs: oldMtime });
+
+      await provider.runCleanupCycle();
+
+      const rmCalls = (fsModule.promises.rm as Mock).mock.calls;
+      // Active and preserved workers should NOT be removed
+      const activeRemovals = rmCalls.filter(
+        (call: unknown[]) =>
+          typeof call[0] === 'string' &&
+          (call[0].includes('codex-state-active-worker') ||
+            call[0].includes('codex-state-preserved-worker'))
+      );
+      expect(activeRemovals).toHaveLength(0);
+
+      // Abandoned worker should be removed (old + not in any map)
+      const abandonedRemovals = rmCalls.filter(
+        (call: unknown[]) =>
+          typeof call[0] === 'string' && call[0].includes('codex-state-abandoned-worker')
+      );
+      expect(abandonedRemovals).toHaveLength(1);
+    });
+  });
+
+  describe('runAttemptInContainer segfault forensics path', () => {
+    it('calls captureSegfaultForensics on exit code 139 with forensics enabled', async () => {
+      const forensicsProvider = new TestableDockerProvider(
+        { forensicsMode: true, forensicsBasePath: '/tmp/forensics' },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      const originalExecImpl = mocks.mockContainer.exec.getMockImplementation() as
+        | ((...args: unknown[]) => unknown)
+        | undefined;
+      mocks.mockContainer.exec = vi.fn().mockImplementation((opts: { Cmd?: string[] }) => {
+        const cmd = opts?.Cmd ?? [];
+        if (cmd[0] === '/entrypoint.sh' && cmd[1] === 'run-attempt') {
+          const execStream = createMockExecStream();
+          return Promise.resolve({
+            start: vi.fn().mockImplementation(async () => {
+              setTimeout(() => execStream.emit('end'), 0);
+              return execStream;
+            }),
+            inspect: vi.fn().mockResolvedValue({ ExitCode: 139 }),
+          });
+        }
+        // For snapshot command exec during forensics
+        if (
+          cmd[0] === 'sh' &&
+          cmd[1] === '-lc' &&
+          typeof cmd[2] === 'string' &&
+          cmd[2].includes('set -eu')
+        ) {
+          const execStream = createMockExecStream();
+          return Promise.resolve({
+            start: vi.fn().mockImplementation(async () => {
+              setTimeout(() => execStream.emit('end'), 0);
+              return execStream;
+            }),
+            inspect: vi.fn().mockResolvedValue({ ExitCode: 0 }),
+          });
+        }
+        return originalExecImpl?.(opts);
+      });
+
+      const onComplete = vi.fn();
+      await forensicsProvider.createWorker(createTestConfig({ onComplete }));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(onComplete).toHaveBeenCalledWith(139);
+    });
+  });
+
+  describe('captureSegfaultForensics Error without stack', () => {
+    it('uses error.message when error.stack is undefined', async () => {
+      const fsModule = await import('node:fs');
+      await provider.createWorker(createTestConfig());
+
+      const err = new Error('no stack');
+      delete err.stack;
+      const mockExecInstance = {
+        inspect: vi.fn().mockRejectedValue(err),
+      };
+      mocks.mockContainer.inspect.mockResolvedValue({ State: { Running: false }, Id: 'cid' });
+
+      const snapshotStream = createMockExecStream();
+      mocks.mockContainer.exec.mockResolvedValueOnce({
+        start: vi.fn().mockImplementation(async () => {
+          setTimeout(() => snapshotStream.emit('end'), 0);
+          return snapshotStream;
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 0 }),
+      });
+
+      (fsModule.promises.writeFile as ReturnType<typeof vi.fn>).mockClear();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (provider as any).captureSegfaultForensics(
+        'test-task-123',
+        mocks.mockContainer,
+        mockExecInstance,
+        '/tmp/forensics/attempt-1',
+        '/var/crash/attempt-1'
+      );
+
+      const writeFileCalls = (fsModule.promises.writeFile as ReturnType<typeof vi.fn>).mock.calls;
+      const errorTxtCall = writeFileCalls.find(
+        (c: unknown[]) =>
+          typeof c[0] === 'string' && (c[0] as string).includes('exec-inspect.error.txt')
+      );
+      expect(errorTxtCall).toBeDefined();
+      expect(errorTxtCall?.[1]).toBe('no stack');
+    });
+
+    it('uses error.message when container inspect error has no stack', async () => {
+      const fsModule = await import('node:fs');
+      await provider.createWorker(createTestConfig());
+
+      const mockExecInstance = {
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 139 }),
+      };
+
+      const containerErr = new Error('container down');
+      delete containerErr.stack;
+      mocks.mockContainer.inspect.mockRejectedValue(containerErr);
+
+      const snapshotStream = createMockExecStream();
+      mocks.mockContainer.exec.mockResolvedValueOnce({
+        start: vi.fn().mockImplementation(async () => {
+          setTimeout(() => snapshotStream.emit('end'), 0);
+          return snapshotStream;
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 0 }),
+      });
+
+      (fsModule.promises.writeFile as ReturnType<typeof vi.fn>).mockClear();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (provider as any).captureSegfaultForensics(
+        'test-task-123',
+        mocks.mockContainer,
+        mockExecInstance,
+        '/tmp/forensics/attempt-1',
+        '/var/crash/attempt-1'
+      );
+
+      const writeFileCalls = (fsModule.promises.writeFile as ReturnType<typeof vi.fn>).mock.calls;
+      const errorTxtCall = writeFileCalls.find(
+        (c: unknown[]) =>
+          typeof c[0] === 'string' && (c[0] as string).includes('container-inspect.error.txt')
+      );
+      expect(errorTxtCall).toBeDefined();
+      expect(errorTxtCall?.[1]).toBe('container down');
+    });
+  });
+
+  describe('health monitoring transitions', () => {
+    it('logs disk space transition from healthy to unhealthy', async () => {
+      mocks.mockDocker.ping.mockResolvedValue('OK');
+      await provider.checkHealth();
+      expect(provider.isHealthy()).toBe(true);
+
+      vi.mocked(fs.promises.statfs).mockResolvedValueOnce({
+        bavail: 100,
+        bsize: 4096,
+      } as unknown as fs.StatsFs);
+      await provider.checkHealth();
+      expect(provider.getHealthDetails().disk).toBe(false);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ component: 'health-monitor' }),
+        expect.stringContaining('Disk space critically low')
+      );
+    });
+
+    it('logs disk space transition from unhealthy to healthy', async () => {
+      mocks.mockDocker.ping.mockResolvedValue('OK');
+      vi.mocked(fs.promises.statfs).mockResolvedValueOnce({
+        bavail: 100,
+        bsize: 4096,
+      } as unknown as fs.StatsFs);
+      await provider.checkHealth();
+      expect(provider.getHealthDetails().disk).toBe(false);
+
+      await provider.checkHealth();
+      expect(provider.getHealthDetails().disk).toBe(true);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ component: 'health-monitor' }),
+        expect.stringContaining('Disk space is healthy again')
+      );
+    });
+
+    it('handles statfs failure as unhealthy disk', async () => {
+      mocks.mockDocker.ping.mockResolvedValue('OK');
+      vi.mocked(fs.promises.statfs).mockRejectedValueOnce(new Error('statfs failed'));
+      const result = await provider.checkHealth();
+      expect(result.disk).toBe(false);
+    });
+  });
+
+  describe('runAttemptInContainer log forwarding', () => {
+    it('calls onLog with exec stream data when provided', async () => {
+      const onLog = vi.fn();
+      await provider.createWorker(createTestConfig({ onLog }));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(onLog).toHaveBeenCalledWith('attempt logs');
+    });
+  });
+
+  describe('runAttemptInContainer forensics exit code write', () => {
+    it('writes exit code file when forensics path exists', async () => {
+      const fsModule = await import('node:fs');
+      const forensicsProvider = new TestableDockerProvider(
+        { forensicsMode: true, forensicsBasePath: '/tmp/forensics' },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      (fsModule.promises.writeFile as ReturnType<typeof vi.fn>).mockClear();
+
+      await forensicsProvider.createWorker(createTestConfig({ onComplete: vi.fn() }));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const writeFileCalls = (fsModule.promises.writeFile as ReturnType<typeof vi.fn>).mock.calls;
+      const exitCodeCalls = writeFileCalls.filter(
+        (c: unknown[]) =>
+          typeof c[0] === 'string' && (c[0] as string).includes('exec-exit-code.txt')
+      );
+      expect(exitCodeCalls).toHaveLength(1);
+    });
+  });
+
+  describe('waitForExecCompletion poll with Running=true', () => {
+    it('does not resolve when poll shows exec still running', async () => {
+      vi.useFakeTimers();
+      const execStream = createMockExecStream();
+      let inspectCount = 0;
+      const mockExecInstance = {
+        inspect: vi.fn().mockImplementation(async () => {
+          inspectCount++;
+          if (inspectCount === 1) {
+            return { ExitCode: null, Running: true };
+          }
+          return { ExitCode: 0, Running: false };
+        }),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const promise = (provider as any).waitForExecCompletion(
+        'test-task',
+        mockExecInstance,
+        execStream
+      );
+
+      // First poll: still running
+      await vi.advanceTimersByTimeAsync(5_000);
+      // Second poll: not running
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      const result = await promise;
+      expect(result).toBe(0);
+    });
+  });
+
+  describe('worktree .git file with no gitdir match', () => {
+    it('does not set mainGitDir when gitdir regex does not match', async () => {
+      const fsModule = await import('node:fs');
+      (fsModule.statSync as Mock).mockReturnValueOnce({
+        isFile: () => true,
+        isDirectory: () => false,
+      });
+      // gitdir content that doesn't match the regex
+      (fsModule.readFileSync as Mock).mockReturnValueOnce('not-a-gitdir-line');
+
+      await provider.createWorker(createTestConfig());
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      const gitBinds = binds.filter((b: string) => b.includes('.git:') && !b.includes('/repo:'));
+      expect(gitBinds).toHaveLength(0);
+    });
+  });
+
+  describe('captureSegfaultForensics error handling', () => {
+    it('writes String(error) when execInstance.inspect throws a non-Error', async () => {
+      const fsModule = await import('node:fs');
+
+      const mockExecInstance = {
+        inspect: vi.fn().mockRejectedValue('connection lost' as unknown as Error),
+      };
+
+      const mockContainer = {
+        inspect: vi.fn().mockResolvedValue({ State: { Running: false } }),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (provider as any).captureSegfaultForensics(
+        'segfault-task',
+        mockContainer,
+        mockExecInstance,
+        '/tmp/forensics/segfault-1',
+        '/var/crash/segfault-1'
+      );
+
+      const writeFileCalls = (fsModule.promises.writeFile as ReturnType<typeof vi.fn>).mock.calls;
+      const errorTxtCall = writeFileCalls.find(
+        (c: unknown[]) =>
+          typeof c[0] === 'string' && (c[0] as string).includes('exec-inspect.error.txt')
+      );
+      expect(errorTxtCall).toBeDefined();
+      expect(errorTxtCall?.[1]).toBe('connection lost');
+    });
+  });
+
+  describe('orphan resume gcpSaKeyPath handling', () => {
+    it('skips gcp-sa.json copy when gcpSaKeyPath does not exist', async () => {
+      const fsModule = await import('node:fs');
+
+      (fsModule.existsSync as Mock).mockImplementation((filePath: unknown) => {
+        if (typeof filePath === 'string' && filePath.includes('gcp-sa.json')) {
+          return false;
+        }
+        return true;
+      });
+
+      mocks.mockContainer.inspect.mockResolvedValueOnce({
+        State: { Running: true },
+        Id: 'orphan-gcp-sa-test',
+      });
+      mocks.mockDocker.createContainer.mockClear();
+
+      const handle = await provider.createWorker(
+        createTestConfig({
+          taskId: 'orphan-gcp-sa-task',
+          continueSession: true,
+        })
+      );
+
+      expect(handle.containerId).toBe('orphan-gcp-sa-test');
+
+      const copyFileCalls = (fsModule.promises.copyFile as ReturnType<typeof vi.fn>).mock.calls;
+      const gcpSaCopyCalls = copyFileCalls.filter(
+        (c: unknown[]) => typeof c[1] === 'string' && (c[1] as string).includes('gcp-sa.json')
+      );
+      expect(gcpSaCopyCalls).toHaveLength(0);
+    });
+
+    it('copies gcp-sa.json when gcpSaKeyPath exists', async () => {
+      const fsModule = await import('node:fs');
+
+      (fsModule.existsSync as Mock).mockImplementation(() => true);
+
+      mocks.mockContainer.inspect.mockResolvedValueOnce({
+        State: { Running: true },
+        Id: 'orphan-gcp-sa-copy',
+      });
+      mocks.mockDocker.createContainer.mockClear();
+
+      await provider.createWorker(
+        createTestConfig({
+          taskId: 'orphan-gcp-sa-copy-task',
+          continueSession: true,
+        })
+      );
+
+      const copyFileCalls = (fsModule.promises.copyFile as ReturnType<typeof vi.fn>).mock.calls;
+      const gcpSaCopyCalls = copyFileCalls.filter(
+        (c: unknown[]) => typeof c[1] === 'string' && (c[1] as string).includes('gcp-sa.json')
+      );
+      expect(gcpSaCopyCalls).toHaveLength(1);
+      expect(gcpSaCopyCalls?.[0]?.[0]).toBe('/test/gcp-sa.json');
+    });
+  });
+
+  describe('periodic cleanup idempotency', () => {
+    afterEach(() => {
+      provider.stopPeriodicCleanup();
+    });
+
+    it('startPeriodicCleanup is idempotent - second call does not log again', () => {
+      provider.startPeriodicCleanup();
+      const firstCallCount = (mockLogger.info as ReturnType<typeof vi.fn>).mock.calls.length;
+
+      provider.startPeriodicCleanup();
+      const secondCallCount = (mockLogger.info as ReturnType<typeof vi.fn>).mock.calls.length;
+
+      expect(secondCallCount).toBe(firstCallCount);
+    });
+
+    it('stopPeriodicCleanup does not throw when interval was never started', () => {
+      expect(() => provider.stopPeriodicCleanup()).not.toThrow();
+      expect(mockLogger.info).not.toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'Stopped periodic container cleanup' })
+      );
+    });
+  });
+
+  describe('health monitor idempotency', () => {
+    afterEach(() => {
+      provider.stopHealthMonitor();
+    });
+
+    it('startHealthMonitor is idempotent - second call is a no-op', () => {
+      provider.startHealthMonitor();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const intervalId = (provider as any).healthMonitorIntervalId;
+
+      provider.startHealthMonitor();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const intervalIdAfterSecond = (provider as any).healthMonitorIntervalId;
+
+      expect(intervalIdAfterSecond).toBe(intervalId);
+    });
+
+    it('stopHealthMonitor does not throw when interval was never started', () => {
+      expect(() => provider.stopHealthMonitor()).not.toThrow();
     });
   });
 });

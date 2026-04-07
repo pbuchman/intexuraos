@@ -1,7 +1,7 @@
 # Commands Agent — Technical Debt
 
-**Last Updated:** 2026-03-22
-**Analysis Run:** [2026-03-22 — v3.4.0](../../documentation-runs.md)
+**Last Updated:** 2026-04-07
+**Analysis Run:** [2026-04-07 — v3.5.0](../../documentation-runs.md)
 
 ---
 
@@ -24,7 +24,7 @@ Based on code analysis and git history:
 
 1. **Additional language support** — Currently English and Polish; German and Spanish phrases could be added to Step 1 and Step 2 of the classification prompt
 
-2. **Confidence threshold tuning** — Low-confidence commands default to `note`; a user confirmation flow for ambiguous inputs (confidence 0.40--0.60) could reduce silent misclassifications
+2. **Confidence threshold tuning** — Low-confidence commands default to `note`; a user confirmation flow for ambiguous inputs (confidence 0.40–0.60) could reduce silent misclassifications
 
 3. **Structured output mode** — Consider using Gemini function calling or native JSON mode instead of regex JSON extraction, eliminating the fallback-to-note path for malformed responses
 

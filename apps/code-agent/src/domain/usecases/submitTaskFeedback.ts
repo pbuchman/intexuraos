@@ -23,7 +23,7 @@ import { resolveTaskAgentType } from '../../domain/utils/taskRouting.js';
 import { generateWebhookSecret } from '../utils/secrets.js';
 import {
   bootstrapContinuationPrTaskComment,
-  resolveExecutionContinuationPr,
+  resolveContinuationPr,
 } from '../../domain/utils/continuationPr.js';
 import type { AutomationLog } from '../../domain/ports/automationLog.js';
 
@@ -207,7 +207,7 @@ ${feedback.trim()}
 
   // resolveTaskAgentType() already routes legacy PR-linked tasks back to execution
   // when they only carry prNumber, prBranch, or result.prUrl metadata.
-  const continuationResult = await resolveExecutionContinuationPr(
+  const continuationResult = await resolveContinuationPr(
     {
       logger,
       codeTaskRepo,
@@ -215,7 +215,6 @@ ${feedback.trim()}
       userServiceClient: deps.userServiceClient,
     },
     {
-      agentType,
       task: originalTask,
       userId,
     }
@@ -249,13 +248,11 @@ ${feedback.trim()}
     webhookSecret,
     parentTaskId: originalTask.id,
     followUpReason: 'user_feedback' as const,
-    /* v8 ignore start -- ts-type: optional field spread operators create type narrowing branches @preserve */
     ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
     ...(originalTask.actionId !== undefined && { actionId: originalTask.actionId }),
     ...(originalTask.approvalEventId !== undefined && { approvalEventId: originalTask.approvalEventId }),
     ...(continuationPr !== null && { prNumber: continuationPr.prNumber }),
     ...(continuationPr !== null && { prBranch: continuationPr.prBranch }),
-    /* v8 ignore stop @preserve */
     agentType,
   };
 
