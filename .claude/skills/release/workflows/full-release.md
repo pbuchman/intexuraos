@@ -73,7 +73,7 @@ fi
 # LAST_TAG_DATE was computed in step 1.3 (with first-release guard)
 
 # List merged PRs since that date
-gh pr list --state merged --base development --json number,title,body,mergedAt,author --limit 100 | \
+gh pr list --state merged --base development --json number,title,body,mergedAt,author --limit 3000 | \
   jq --arg date "$LAST_TAG_DATE" '[.[] | select(.mergedAt > $date)]'
 ```
 
