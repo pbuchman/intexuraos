@@ -8228,6 +8228,7 @@ describe('TaskDispatcher', () => {
       const createWorkerCalls = vi.mocked(mockIsolationProvider.createWorker).mock.calls;
       const lastCall = createWorkerCalls[createWorkerCalls.length - 1];
       const workerConfig = lastCall?.[0];
+      expect(workerConfig).toBeDefined();
       expect(workerConfig?.prompt).not.toContain('RESUME PRE-FLIGHT');
       expect(workerConfig?.prompt).not.toContain('gh pr view');
       expect(workerConfig?.prompt).not.toContain('git checkout -b followup');
@@ -8260,6 +8261,7 @@ describe('TaskDispatcher', () => {
       const createWorkerCalls = vi.mocked(mockIsolationProvider.createWorker).mock.calls;
       const lastCall = createWorkerCalls[createWorkerCalls.length - 1];
       const workerConfig = lastCall?.[0];
+      expect(workerConfig).toBeDefined();
       expect(workerConfig?.systemPrompt).not.toContain('ACTIVE GOAL');
     });
 
