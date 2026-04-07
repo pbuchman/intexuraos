@@ -1,7 +1,7 @@
 # WhatsApp Service — Technical Debt
 
-**Last Updated:** 2026-03-22
-**Analysis Run:** v3.4.0 documentation refresh
+**Last Updated:** 2026-04-07
+**Analysis Run:** v3.5.0 documentation refresh
 
 ---
 
@@ -62,6 +62,7 @@ All endpoints and use cases have test coverage. The service maintains >95% cover
 - Phone verification, interactive buttons
 - No-nonce buttons, reject intent, read receipts on button click
 - Event-driven transcription via srt-service, CTA URL messages
+- Sentry quota protection via SKIP_SENTRY_KEY in sender error paths
 
 ### Test Files
 
@@ -73,7 +74,7 @@ Located in `apps/whatsapp-service/src/__tests__/`:
 - `messageRoutes.test.ts` — Message list operations
 - `messageMediaRoutes.test.ts` — Media URL, thumbnail URL, message deletion
 - `mappingRoutes.test.ts` — User phone number mapping (with verification gate)
-- `pubsubRoutes.test.ts` — Pub/Sub event handlers (including interactive messages, CTA URL, transcription-completed)
+- `pubsubRoutes.test.ts` — Pub/Sub event handlers (including interactive messages, CTA URL, transcription-completed, 429 retry classification)
 - `verificationRoutes.test.ts` — Phone verification send/confirm/status
 - `shared.test.ts` — Shared utility functions (extractButtonResponse with button_reply fix)
 - `usecases/processAudioMessage.test.ts` — Audio download and GCS storage
@@ -169,6 +170,10 @@ No deprecated APIs or dependencies in use. Speechmatics direct dependency was re
 
 | Date       | Issue                                                             | Resolution                                                                  |
 | ---------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| 2026-03-29 | WhatsApp API errors exhausting Sentry quota                       | Added SKIP_SENTRY_KEY to all error log paths in sender.ts (INT-1172)        |
+| 2026-03-29 | 429 rate limit responses classified as permanent errors           | Excluded 429 from permanent error classification in send-message handler    |
+| 2026-03-24 | v8 ignore blocks lacked blocker keyword enforcement               | Enforced strict v8 ignore validation with blocker keyword checks            |
+| 2026-03-23 | v8 ignore overrides in cross-service files                        | Replaced override blocks with real tests (INT-1072)                         |
 | 2026-03-19 | v8-ignore overrides entry for whatsapp-service                    | Standardized format and removed override (INT-989)                          |
 | 2026-03-18 | messageRoutes.ts handled listing, media, and deletion             | Split into messageRoutes.ts and messageMediaRoutes.ts (INT-883)             |
 | 2026-03-17 | Duplicated HTTP patterns in sender.ts                             | Extracted shared request helpers (INT-882)                                  |

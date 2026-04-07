@@ -75,6 +75,7 @@ sequenceDiagram
 
 | Commit     | Change                                                       | Date       |
 | ---------- | ------------------------------------------------------------ | ---------- |
+| `549c969`  | Enforce strict v8 ignore validation with blocker keywords    | 2026-03-24 |
 | `6ca6e5a`  | Address review comments on v8-ignore tests                   | 2026-03-11 |
 | `34d0200`  | Add v8-ignore exemptions for ts-type branches                | 2026-03-11 |
 | `b271a4a`  | Write tests for v8-ignore blocks and remove exemptions       | 2026-03-10 |
@@ -82,6 +83,10 @@ sequenceDiagram
 | `a52a6bb`  | Add Dash0 OpenTelemetry integration (distributed tracing)    | 2026-02-16 |
 | `5aa3e1b`  | Enable strict 100% coverage enforcement (Phase 3)            | 2026-01-31 |
 | `4468d72`  | Add @allow-raw-send annotations for 204 No Content responses | 2026-01-30 |
+
+### v3.5.0 — v8 Ignore Blocker Keywords
+
+Commit `549c969` updated v8 ignore annotation explanations across 42 files as part of a platform-wide enforcement pass. In mobile-notifications-service, the existing annotations already used correct blocker keywords (`ts-type`, `test-infra`) and required no functional changes.
 
 ### v3.3.0 — v8 Ignore Test Replacement
 
@@ -172,7 +177,7 @@ interface QueryNotificationsBody {
 }
 ```
 
-Internal response maps `text` → `body` and `receivedAt` → `timestamp` for compatibility with consumers.
+Internal response maps `text` to `body` and `receivedAt` to `timestamp` for compatibility with consumers.
 
 ## Domain Models
 
@@ -267,7 +272,7 @@ Internal response maps `text` → `body` and `receivedAt` → `timestamp` for co
 
 - **Cursor encoding** — Pagination cursors are base64-encoded JSON containing `receivedAt` and `id`. Invalid cursors are silently ignored (treated as no cursor).
 
-- **Sentry logging** — Uses `createAppLogger()` from `@intexuraos/infra-sentry`, not direct `pino()`.
+- **Raw body capture** — The webhook endpoint (`/mobile-notifications/webhooks`) captures the raw request body in a `preParsing` hook for debugging JSON parse errors. Only this endpoint has raw body capture enabled.
 
 ## File Structure
 

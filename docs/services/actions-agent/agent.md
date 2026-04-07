@@ -278,7 +278,17 @@ type ResourceStatus =
 
 interface CodeActionPayload {
   prompt: string;
-  workerType: 'auto' | 'opus' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi';
+  workerType:
+    | 'auto'
+    | 'opus'
+    | 'sonnet'
+    | 'minimax'
+    | 'glm'
+    | 'qwen'
+    | 'kimi'
+    | 'codex'
+    | 'codex-xhigh'
+    | 'openrouter-free';
   linearIssueId?: string;
   linearIssueTitle?: string;
   approvalEventId?: string;
@@ -514,4 +524,4 @@ whatsapp-service -> action.approval.reply (buttonId: "approve:{actionId}")
 
 ---
 
-**Last updated:** 2026-03-22
+**Last updated:** 2026-04-07

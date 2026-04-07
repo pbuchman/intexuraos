@@ -19,7 +19,7 @@ graph TB
 
     subgraph "LLM Key Management"
         WebUI[Web UI] -->|API Key| US
-        US -->|Validate| LLM[LLM Providers]
+        US -->|Validate| LLM[LLM Providers<br/>5 providers]
         US -->|Encrypt| KMS[AES-256-GCM]
         KMS -->|Store| FS
     end
@@ -70,6 +70,20 @@ sequenceDiagram
         UserSvc-->>Web: 200 + masked preview
     end
 
+    Note over User,Firestore: OpenRouter Key Validation (Zero Cost)
+    User->>Web: Add OpenRouter key
+    Web->>UserSvc: PATCH /users/:uid/settings/llm-keys
+    UserSvc->>LLMProvider: GET /api/v1/key (lightweight check)
+    alt Key invalid
+        LLMProvider-->>UserSvc: Error
+        UserSvc-->>Web: 400 + "Invalid OpenRouter API key"
+    else Key valid
+        LLMProvider-->>UserSvc: Key info
+        UserSvc->>UserSvc: Encrypt with AES-256-GCM
+        UserSvc->>Firestore: Store encrypted key
+        UserSvc-->>Web: 200 + masked preview
+    end
+
     Note over User,Firestore: LLM Key Test Flow
     User->>Web: Test API key
     Web->>UserSvc: POST /users/:uid/settings/llm-keys/:provider/test
@@ -90,22 +104,15 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                       | Date       |
-| ---------- | ----------------------------------------------------------------- | ---------- |
-| `5d88167`  | Standardize v8-ignore wording across OAuth route files            | 2026-03-19 |
-| `bfaeae3`  | Remove unnecessary v8-ignores and standardize remainder (INT-988) | 2026-03-19 |
-| `c4e3a13c` | Release v3.3.0                                                    | 2026-03-15 |
-| `93aeac4a` | Remove ZAI provider and GLM-4.7 models (INT-836)                  | 2026-03-12 |
-| `3ec78836` | Add tests for v8-ignore blocks in user-service routes (INT-797)   | 2026-03-10 |
-| `1e742bbc` | Fix: remove schema enum to make isTranscriptionProvider coverable | 2026-03-06 |
-| `ab863ba5` | Refactor: add isTranscriptionProvider type guard                  | 2026-03-06 |
-| `0fff5af7` | Feat: add transcription preferences to user settings              | 2026-03-06 |
-| `99febe66` | Fix: wire GitHub OAuth integration and update cross-service mocks | 2026-03-02 |
-| `e07de959` | Feat: add GitHub OAuth integration (Stream A, tasks A1-A5)        | 2026-03-01 |
-| `1478b385` | INT-571: log cascade failure + document over-clearing assumption  | 2026-02-22 |
-| `cbd5d845` | INT-571: restrict default model selection to configured API keys  | 2026-02-22 |
-| `b3f34d85` | Release v3.1.0                                                    | 2026-02-22 |
-| `c8a42105` | Release v3.0.0                                                    | 2026-02-19 |
+| Commit      | Description                                                      | Date       |
+| ----------- | ---------------------------------------------------------------- | ---------- |
+| `d3db7a24`  | Add timezone preference to user settings (INT-1126)              | 2026-03-27 |
+| `e2afa180`  | Address PR review: DRY violations, JSDoc, buildModelInfo extract | 2026-03-25 |
+| `7540e6cb`  | Fix validateKey to use lightweight /api/v1/key endpoint          | 2026-03-25 |
+| `b4564912`  | Fix or: prefix stripping for OpenRouterAdapter and validation    | 2026-03-24 |
+| `83717bbb`  | OpenRouter Backend Infrastructure (Phase A) (INT-1011)           | 2026-03-24 |
+| `5d88167`   | Standardize v8-ignore wording across OAuth route files           | 2026-03-19 |
+| `bfaeae3`   | Remove unnecessary v8-ignores, standardize remainder (INT-988)   | 2026-03-19 |
 
 ## API Endpoints
 
@@ -131,6 +138,7 @@ sequenceDiagram
 | GET    | `/users/:uid/settings`                          | Get user settings                        | Bearer token |
 | PATCH  | `/users/:uid/settings`                          | Update default LLM model                 | Bearer token |
 | PATCH  | `/users/:uid/settings/transcription`            | Update transcription provider preference | Bearer token |
+| PATCH  | `/users/:uid/settings/timezone`                 | Update timezone preference               | Bearer token |
 | GET    | `/users/:uid/settings/llm-keys`                 | Get LLM API keys (masked) + defaultModel | Bearer token |
 | PATCH  | `/users/:uid/settings/llm-keys`                 | Set/update LLM API key                   | Bearer token |
 | POST   | `/users/:uid/settings/llm-keys/:provider/test`  | Test LLM API key                         | Bearer token |
@@ -169,33 +177,35 @@ sequenceDiagram
 
 ### UserSettings
 
-| Field                        | Type                      | Description                        |
-| ---------------------------- | ------------------------- | ---------------------------------- |
-| `userId`                     | string                    | User identifier                    |
-| `llmApiKeys`                 | LlmApiKeys                | AES-256 encrypted API keys         |
-| `llmTestResults`             | LlmTestResults            | Last test result per provider      |
-| `llmPreferences`             | LlmPreferences            | User's default model settings      |
-| `transcriptionPreferences`   | TranscriptionPreferences  | User's transcription provider      |
-| `notifications`              | NotificationSettings      | Notification filter rules          |
-| `createdAt`                  | string                    | Creation timestamp                 |
-| `updatedAt`                  | string                    | Last update timestamp              |
+| Field                        | Type                      | Description                           |
+| ---------------------------- | ------------------------- | ------------------------------------- |
+| `userId`                     | string                    | User identifier                       |
+| `llmApiKeys`                 | LlmApiKeys                | AES-256 encrypted API keys            |
+| `llmTestResults`             | LlmTestResults            | Last test result per provider         |
+| `llmPreferences`             | LlmPreferences            | User's default model settings         |
+| `transcriptionPreferences`   | TranscriptionPreferences  | User's transcription provider         |
+| `timezone`                   | string                    | IANA timezone (e.g., "Europe/Berlin") |
+| `notifications`              | NotificationSettings      | Notification filter rules             |
+| `createdAt`                  | string                    | Creation timestamp                    |
+| `updatedAt`                  | string                    | Last update timestamp                 |
 
 ### LlmApiKeys
 
-| Field        | Type           | Description                    |
-| ------------ | -------------- | ------------------------------ |
-| `google`     | EncryptedValue | Gemini API key (encrypted)     |
-| `openai`     | EncryptedValue | OpenAI API key (encrypted)     |
-| `anthropic`  | EncryptedValue | Anthropic API key (encrypted)  |
-| `perplexity` | EncryptedValue | Perplexity API key (encrypted) |
+| Field        | Type           | Description                     |
+| ------------ | -------------- | ------------------------------- |
+| `google`     | EncryptedValue | Gemini API key (encrypted)      |
+| `openai`     | EncryptedValue | OpenAI API key (encrypted)      |
+| `anthropic`  | EncryptedValue | Anthropic API key (encrypted)   |
+| `perplexity` | EncryptedValue | Perplexity API key (encrypted)  |
+| `openrouter` | EncryptedValue | OpenRouter API key (encrypted)  |
 
 ### LlmTestResult
 
-| Field      | Type                       | Description           |
-| ---------- | -------------------------- | --------------------- |
-| `status`   | `'success' \               | 'failure'`            | Test outcome |
-| `message`  | string                     | LLM response or error |
-| `testedAt` | string                     | ISO 8601 timestamp    |
+| Field      | Type                         | Description           |
+| ---------- | ---------------------------- | --------------------- |
+| `status`   | `'success' \                 | 'failure'`            | Test outcome |
+| `message`  | string                       | LLM response or error |
+| `testedAt` | string                       | ISO 8601 timestamp    |
 
 ### LlmPreferences
 
@@ -211,14 +221,14 @@ sequenceDiagram
 
 ### OAuthConnection
 
-| Field       | Type                       | Description              |
-| ----------- | -------------------------- | ------------------------ |
-| `userId`    | string                     | User identifier          |
-| `provider`  | `'google' \                | 'github'`                | OAuth provider |
-| `email`     | string                     | User's email or username |
-| `tokens`    | OAuthTokens                | Encrypted tokens         |
-| `createdAt` | string                     | Connection timestamp     |
-| `updatedAt` | string                     | Last refresh timestamp   |
+| Field       | Type                         | Description              |
+| ----------- | ---------------------------- | ------------------------ |
+| `userId`    | string                       | User identifier          |
+| `provider`  | `'google' \                  | 'github'`                | OAuth provider |
+| `email`     | string                       | User's email or username |
+| `tokens`    | OAuthTokens                  | Encrypted tokens         |
+| `createdAt` | string                       | Connection timestamp     |
+| `updatedAt` | string                       | Last refresh timestamp   |
 
 ### OAuthTokens
 
@@ -290,16 +300,17 @@ The generic error parser checks for rate limits BEFORE API key errors. This prev
 
 ## LLM Key Validation
 
-Keys are validated before storage using cheap, fast models:
+Keys are validated before storage. Most providers use cheap, fast model calls. OpenRouter uses a dedicated key-check endpoint at zero token cost.
 
-| Provider   | Validation Model |
-| ---------- | ---------------- |
-| Google     | gemini-2.0-flash |
-| OpenAI     | gpt-4o-mini      |
-| Anthropic  | claude-3.5-haiku |
-| Perplexity | sonar            |
+| Provider   | Validation Method                       | Validation Model          |
+| ---------- | --------------------------------------- | ------------------------- |
+| Google     | Model call (generate)                   | gemini-2.0-flash          |
+| OpenAI     | Model call (generate)                   | gpt-4o-mini               |
+| Anthropic  | Model call (generate)                   | claude-3.5-haiku          |
+| Perplexity | Model call (generate)                   | sonar                     |
+| OpenRouter | Lightweight `/api/v1/key` endpoint      | N/A (no model call)       |
 
-Validation prompt: `Say "API key validated" in exactly 3 words.`
+Validation prompt (for model-call providers): `Say "API key validated" in exactly 3 words.`
 
 ## Pub/Sub Events
 
@@ -314,7 +325,7 @@ None — user-service does not publish or subscribe to Pub/Sub events.
 | Auth0         | Identity management, authentication |
 | Google OAuth  | OAuth token management              |
 | GitHub OAuth  | OAuth token management              |
-| LLM APIs      | Key validation (4 providers)        |
+| LLM APIs      | Key validation (5 providers)        |
 
 ### Internal Services
 
@@ -371,11 +382,11 @@ None — user-service does not publish or subscribe to Pub/Sub events.
 
 **API key masking**: In logs and API responses, keys are masked showing only first 4 and last 4 characters.
 
-**LLM key testing costs money**: The `/test` endpoint validates keys by making actual API calls to the provider.
+**LLM key testing costs money**: The `/test` endpoint validates keys by making actual API calls to the provider (except OpenRouter validation, which uses a free key-check endpoint).
 
 **Rate limit vs API key errors**: Error parser checks rate limits before API key patterns to avoid misdiagnosis.
 
-**Provider naming**: Internal provider names (`google`, `openai`, `anthropic`, `perplexity`) differ from display names.
+**Provider naming**: Internal provider names (`google`, `openai`, `anthropic`, `perplexity`, `openrouter`) differ from display names.
 
 **Internal endpoints use response contract**: All internal endpoints return `{ success: true, data: ... }` or `{ success: false, error: { code, message } }`. Callers must read from `response.data` instead of the top level.
 
@@ -399,6 +410,14 @@ None — user-service does not publish or subscribe to Pub/Sub events.
 
 **Transcription provider validation**: Only `speechmatics` is currently a valid transcription provider. The `isTranscriptionProvider()` type guard validates at runtime.
 
+**Timezone validation**: The `isValidTimezone()` function validates against `Intl.supportedValuesOf('timeZone')` at runtime. Only IANA timezone strings are accepted (e.g., `Europe/Berlin`, `America/New_York`).
+
+**OpenRouter validation uses key endpoint**: Unlike other providers that validate via a generate() call, OpenRouter uses the lightweight `/api/v1/key` endpoint — zero token cost. The `createOpenRouterClient()` provides both `generate()` (for testing) and `validateKey()` (for validation) methods.
+
+**OpenRouter or: prefix**: OpenRouter model identifiers may use an `or:` prefix that must be stripped before passing to the OpenRouter API.
+
+**Internal /llm-keys returns openrouter**: The `GET /internal/users/:uid/llm-keys` endpoint returns a fifth key field (`openrouter`) alongside the original four providers. Callers should handle the additional field.
+
 ## File Structure
 
 ```
@@ -415,7 +434,7 @@ apps/user-service/src/
         refreshAccessToken.ts  # Token refresh logic
     settings/
       models/
-        UserSettings.ts        # Settings aggregate (LLM keys, preferences, transcription)
+        UserSettings.ts        # Settings aggregate (LLM keys, preferences, transcription, timezone)
         SettingsError.ts       # Settings error types
       ports/
         UserSettingsRepository.ts # Settings storage
@@ -458,7 +477,7 @@ apps/user-service/src/
     github/
       gitHubOAuthClient.ts     # GitHub OAuth client
     llm/
-      LlmValidatorImpl.ts      # Key validation (4 providers)
+      LlmValidatorImpl.ts      # Key validation (5 providers incl. OpenRouter)
   routes/
     deviceRoutes.ts            # Device code flow
     tokenRoutes.ts             # Token refresh
@@ -467,8 +486,8 @@ apps/user-service/src/
     oauthConnectionRoutes.ts   # Google OAuth connection management
     gitHubOAuthConnectionRoutes.ts # GitHub OAuth connection management
     configRoutes.ts            # Auth0 config
-    settingsRoutes.ts          # User settings + default model + transcription
-    llmKeysRoutes.ts           # LLM key management (CRUD + test)
+    settingsRoutes.ts          # User settings + default model + transcription + timezone
+    llmKeysRoutes.ts           # LLM key management (CRUD + test, 5 providers)
     frontendRoutes.ts          # Login/logout/me pages
     internalRoutes.ts          # Service-to-service (6 endpoints)
     schemas.ts                 # Zod request schemas

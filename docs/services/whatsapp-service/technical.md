@@ -110,31 +110,20 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                                  | Date       |
-| ---------- | ---------------------------------------------------------------------------- | ---------- |
-| `376ea03e` | Add missing persistence error test and simplify FakeQuery (INT-989)          | 2026-03-19 |
-| `087b7f76` | Standardize v8-ignore format and remove whatsapp-service override (INT-989)  | 2026-03-19 |
-| `2d0f9d25` | Add logIncomingRequest to DELETE handler for consistency (INT-883)           | 2026-03-18 |
-| `0b605f5f` | Split messageRoutes.ts by concern (INT-883)                                  | 2026-03-18 |
-| `dc2e9f4f` | Address PR review feedback (INT-882)                                         | 2026-03-17 |
-| `3b11aff0` | Deduplicate HTTP patterns in sender.ts (INT-882)                             | 2026-03-17 |
-| `741711b2` | Extract processWebhookEvent into ProcessWebhookEventUseCase (INT-880)        | 2026-03-16 |
+| Commit     | Description                                                                       | Date       |
+| ---------- | --------------------------------------------------------------------------------- | ---------- |
+| `e93fe94f` | Exclude 429 from permanent error classification in send-message handler           | 2026-03-29 |
+| `9ef663f5` | Prevent Sentry quota exhaustion from WhatsApp message failures (INT-1172)         | 2026-03-29 |
+| `549c9698` | Enforce strict v8 ignore validation with blocker keyword checks                   | 2026-03-24 |
+| `613ac528` | Replace v8 ignore override blocks with real tests (INT-1072)                      | 2026-03-23 |
 
-### Route Restructuring (INT-883)
+### Sentry Quota Protection (INT-1172)
 
-Split the monolithic `messageRoutes.ts` into two focused files: `messageRoutes.ts` (GET /whatsapp/messages — list messages) and `messageMediaRoutes.ts` (GET media, GET thumbnail, DELETE message). Each file now handles a single concern. The DELETE handler also gained a missing `logIncomingRequest` call for consistency.
+WhatsApp API errors in `sender.ts` now use `SKIP_SENTRY_KEY` on all error log entries. This prevents expected transient failures (network timeouts, Meta API errors) from consuming Sentry quota. The fix applies to three paths: non-2xx API responses, request timeouts, and fetch exceptions. Additionally, HTTP 429 (rate limit) responses are excluded from the permanent error classification in the send-message Pub/Sub handler, ensuring they are retried via Pub/Sub instead of being silently acknowledged.
 
-### HTTP Pattern Deduplication (INT-882)
+### v8 Ignore Standardization (INT-1072)
 
-Consolidated duplicated HTTP request/response patterns in the WhatsApp Cloud API sender infrastructure. Shared patterns for API calls were extracted into reusable functions, reducing boilerplate across `sendTextMessage`, `sendInteractiveMessage`, and `sendCtaUrlMessage`.
-
-### ProcessWebhookEvent Use Case Extraction (INT-880)
-
-Extracted the `processWebhookEvent` function from `webhookRoutes.ts` into a dedicated `ProcessWebhookEventUseCase` class in the domain layer. This decouples webhook processing from Fastify route concerns and improves testability by accepting typed dependency injection.
-
-### v8-Ignore Standardization (INT-989)
-
-Standardized the v8-ignore format across the service to use the canonical category-based format. Removed the whatsapp-service entry from `v8-ignore-overrides.json`. Added a missing persistence error test case.
+Replaced v8 ignore override blocks with real tests across code-agent and cross-service files, removing the need for the whatsapp-service entry in override configuration.
 
 ## API Endpoints
 
@@ -194,15 +183,15 @@ Standardized the v8-ignore format across the service to use the canonical catego
 
 ### TranscriptionState
 
-| Field         | Type                                                           | Description               |
-| ------------- | -------------------------------------------------------------- | ------------------------- |
-| `status`      | `'pending' \                                                   | 'processing' \            | 'completed' \ | 'failed'` | Transcription progress |
-| `jobId`       | `string \                                                      | undefined`                | Provider job ID |
-| `text`        | `string \                                                      | undefined`                | Full transcribed text |
-| `summary`     | `string \                                                      | undefined`                | AI-generated key points |
-| `error`       | `TranscriptionError \                                          | undefined`                | Error details if failed |
-| `startedAt`   | `string \                                                      | undefined`                | When processing started |
-| `completedAt` | `string \                                                      | undefined`                | When completed or failed |
+| Field         | Type                             | Description               |
+| ------------- | -------------------------------- | ------------------------- |
+| `status`      | `'pending' \                     | 'processing' \            | 'completed' \ | 'failed'` | Transcription progress |
+| `jobId`       | `string \                        | undefined`                | Provider job ID |
+| `text`        | `string \                        | undefined`                | Full transcribed text |
+| `summary`     | `string \                        | undefined`                | AI-generated key points |
+| `error`       | `TranscriptionError \            | undefined`                | Error details if failed |
+| `startedAt`   | `string \                        | undefined`                | When processing started |
+| `completedAt` | `string \                        | undefined`                | When completed or failed |
 
 ### OutboundMessage
 
@@ -220,29 +209,29 @@ Tracks sent messages for reply correlation. Uses wamid as document ID for effici
 
 Tracks phone number verification attempts with rate limiting and cooldown.
 
-| Field           | Type                                                           | Description                  |
-| --------------- | -------------------------------------------------------------- | ---------------------------- |
-| `id`            | `string`                                                       | Unique verification ID       |
-| `userId`        | `string`                                                       | User requesting verification |
-| `phoneNumber`   | `string`                                                       | Phone number being verified  |
-| `code`          | `string`                                                       | 6-digit verification code    |
-| `attempts`      | `number`                                                       | Failed attempt count         |
-| `status`        | `'pending' \                                                   | 'verified' \                 | 'expired' \ | 'max_attempts'` | Verification progress |
-| `createdAt`     | `string`                                                       | ISO 8601 creation time       |
-| `expiresAt`     | `number`                                                       | Unix timestamp (10 min TTL)  |
-| `lastAttemptAt` | `string \                                                      | undefined`                   | Last failed attempt time |
-| `verifiedAt`    | `string \                                                      | undefined`                   | When verification succeeded |
+| Field           | Type                                                     | Description                  |
+| --------------- | -------------------------------------------------------- | ---------------------------- |
+| `id`            | `string`                                                 | Unique verification ID       |
+| `userId`        | `string`                                                 | User requesting verification |
+| `phoneNumber`   | `string`                                                 | Phone number being verified  |
+| `code`          | `string`                                                 | 6-digit verification code    |
+| `attempts`      | `number`                                                 | Failed attempt count         |
+| `status`        | `'pending' \                                             | 'verified' \                 | 'expired' \ | 'max_attempts'` | Verification progress |
+| `createdAt`     | `string`                                                 | ISO 8601 creation time       |
+| `expiresAt`     | `number`                                                 | Unix timestamp (10 min TTL)  |
+| `lastAttemptAt` | `string \                                                | undefined`                   | Last failed attempt time |
+| `verifiedAt`    | `string \                                                | undefined`                   | When verification succeeded |
 
 ### WebhookEvent
 
-| Field            | Type                                                                              | Description                   |
-| ---------------- | --------------------------------------------------------------------------------- | ----------------------------- |
-| `id`             | `string`                                                                          | Unique event ID               |
-| `payload`        | `unknown`                                                                         | Raw webhook payload           |
-| `signatureValid` | `boolean`                                                                         | Signature verification result |
-| `receivedAt`     | `string`                                                                          | ISO 8601 timestamp            |
-| `phoneNumberId`  | `string \                                                                         | null`                         | WhatsApp phone number ID |
-| `status`         | `'pending' \                                                                      | 'completed' \                 | 'failed' \ | 'ignored' \ | 'user_unmapped'` | Processing status |
+| Field            | Type                                                                     | Description                   |
+| ---------------- | ------------------------------------------------------------------------ | ----------------------------- |
+| `id`             | `string`                                                                 | Unique event ID               |
+| `payload`        | `unknown`                                                                | Raw webhook payload           |
+| `signatureValid` | `boolean`                                                                | Signature verification result |
+| `receivedAt`     | `string`                                                                 | ISO 8601 timestamp            |
+| `phoneNumberId`  | `string \                                                                | null`                         | WhatsApp phone number ID |
+| `status`         | `'pending' \                                                             | 'completed' \                 | 'failed' \ | 'ignored' \ | 'user_unmapped'` | Processing status |
 
 ### UserMapping
 
@@ -408,6 +397,14 @@ Audio transcription is fully event-driven since the migration from Speechmatics 
 4. srt-service publishes `srt.transcription.completed` when done
 5. whatsapp-service receives the completed event, updates the message, sends the transcript to the user, and publishes `command.ingest`
 
+### Sentry Quota Protection (INT-1172)
+
+All WhatsApp API error logs in `sender.ts` use `SKIP_SENTRY_KEY` to prevent expected transient failures from consuming Sentry quota. This applies to non-2xx API responses, request timeouts, and fetch exceptions. The `SKIP_SENTRY_KEY` marker tells `@intexuraos/infra-sentry` to log the error without forwarding it to Sentry.
+
+### Permanent vs Transient Error Classification
+
+The send-message Pub/Sub handler classifies WhatsApp API errors as permanent (4xx except 429) or transient (5xx, 429, network errors). Permanent errors are acknowledged without retry — Pub/Sub does not redeliver them. Transient errors return 500, causing Pub/Sub to retry with exponential backoff. The 429 exclusion ensures rate-limited requests are retried rather than dropped.
+
 ### `extractButtonResponse()` Accepts Both Button Types
 
 WhatsApp sends `interactive.type = "button_reply"` for button clicks in practice, but the API documentation also describes `"button"`. The `extractButtonResponse()` function in `routes/shared.ts` accepts both formats to handle API inconsistencies.
@@ -476,7 +473,7 @@ apps/whatsapp-service/src/
     gcs/
     whatsapp/
       cloudApiAdapter.ts              # markAsReadWithTyping
-      sender.ts                       # sendInteractiveMessage, sendCtaUrlMessage (deduplicated HTTP patterns)
+      sender.ts                       # sendInteractiveMessage, sendCtaUrlMessage (SKIP_SENTRY_KEY on errors)
     media/
     linkpreview/
       webAgentLinkPreviewClient.ts
@@ -487,7 +484,7 @@ apps/whatsapp-service/src/
     messageRoutes.ts                  # GET /whatsapp/messages (list)
     messageMediaRoutes.ts             # GET media, GET thumbnail, DELETE message
     mappingRoutes.ts                  # Verification-gated connect
-    pubsubRoutes.ts                   # send-message, media-cleanup, transcription-completed, process-webhook
+    pubsubRoutes.ts                   # send-message (429 retry), media-cleanup, transcription-completed, process-webhook
     verificationRoutes.ts
     shared.ts                         # extractButtonResponse (button/button_reply fix)
     schemas.ts

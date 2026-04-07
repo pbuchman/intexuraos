@@ -2,7 +2,7 @@
 
 ## Overview
 
-The orchestrator is a Fastify-based HTTP service that runs on local machines behind a Cloudflare Tunnel. It receives HMAC-signed task dispatch requests from code-agent, creates isolated git worktrees, spawns Docker containers running the shared code-worker runtime, streams logs back in real time, and delivers completion results via signed webhooks. It manages GitHub App installation tokens plus shared worker auth for Claude and Codex, persists state atomically to disk, and recovers interrupted tasks (including container adoption) on restart. After each worker attempt, an LLM-backed completion verifier (Gemini 2.5 Flash) evaluates whether the task met its agent-specific contract; failed verifications automatically trigger follow-up attempts up to a configurable limit. For execution tasks, a Deep Validator performs post-completion transcript analysis — verifying claims, checking contract compliance, comparing plan to reality, and posting a structured report on the PR. The Review Agent can be dispatched in `plan_review` mode to cross-reference implementations against their original plan documents. After each task completes, it collects per-task resource and token metrics and publishes them to code-agent. Linear issue context is now fetched via the code-agent proxy rather than querying Linear directly, improving resilience and decoupling.
+The orchestrator is a Fastify-based HTTP service that runs on local machines behind a Cloudflare Tunnel. It receives HMAC-signed task dispatch requests from code-agent, creates isolated git worktrees, spawns Docker containers running the shared code-worker runtime (Claude or Codex), streams logs back in real time, and delivers completion results via signed webhooks. It manages GitHub App installation tokens plus shared worker auth for Claude and Codex, persists state atomically to disk, and recovers interrupted tasks (including container adoption and pending resume recovery) on restart. After each worker attempt, an LLM-backed completion verifier (Gemini 2.5 Flash) evaluates whether the task met its agent-specific contract; failed verifications automatically trigger follow-up attempts up to a configurable limit. For execution tasks, an Agent Compliance Validator performs post-completion transcript analysis via OpenRouter — verifying claims, checking contract compliance, detecting anomalies, and posting a structured report on the PR. The Remediation Agent autonomously addresses review findings on existing PR branches. Execution memory from past tasks is injected into prompts to prevent repeated mistakes. The Ask Agent provides interactive code-aware Q&A sessions.
 
 ## Agent-Based Routing and Contracts
 
@@ -11,8 +11,10 @@ The orchestrator is a Fastify-based HTTP service that runs on local machines beh
 1. `agentType` field from code-agent (explicit routing, takes priority)
 2. PR / issue comment / review event (label `pr-comment`) -> `pull_request`
 3. `agentType === 'review'` -> `review`
-4. Linear issue without `code-task` label -> `planning`
-5. Linear issue with `code-task` label -> `execution`
+4. `agentType === 'remediation'` -> `remediation`
+5. `agentType === 'ask_agent'` -> `ask_agent`
+6. Linear issue without `code-task` label -> `planning`
+7. Linear issue with `code-task` label -> `execution`
 
 ### Prompt markers and final blocks
 
@@ -20,6 +22,17 @@ The orchestrator is a Fastify-based HTTP service that runs on local machines beh
 - Exactly one injected marker: `[AGENT:PLANNING]` / `[AGENT:EXECUTION]` / `[AGENT:PULL_REQUEST]` / `[AGENT:REVIEW]`
 - Final block names: `PLANNING_AGENT_FINAL`, `EXECUTION_AGENT_FINAL`, `PULL_REQUEST_AGENT_FINAL`, `REVIEW_AGENT_FINAL`
 - All prompts follow the versioned `PromptBuilder` pattern (semver versioned, CI-enforced bump-on-change)
+
+### Agent types
+
+| Agent Type     | Description                                                  | Verification Contract                        |
+| -------------- | ------------------------------------------------------------ | -------------------------------------------- |
+| `planning`     | Analyze issues, produce plans, create subtasks               | Outcome label, Linear URL, plan doc presence |
+| `execution`    | Implement code, run CI, create PRs                           | PR URL, skill usage, outcome label           |
+| `pull_request` | Respond to PR comments/reviews, push to existing branch      | PR URL, comment reply status                 |
+| `review`       | Read-only PR review with structured inline comments          | PR URL, review types, comments posted        |
+| `remediation`  | Address review findings, push fixes, decide on re-review     | PR URL, re-review decision                   |
+| `ask_agent`    | Interactive Q&A — no PR, no Linear, direct message delivery  | Lighter contract, no PR URL required         |
 
 ### Review Agent types
 
@@ -32,8 +45,6 @@ The Review Agent supports four review types, controlled by the `reviewTypes` fie
 | `architecture` | Separation of concerns, dependency direction, API design, scalability, coupling/cohesion                    |
 | `plan_review`  | Plan document validation — task decomposition, TDD discipline, file path accuracy, codebase cross-reference |
 
-When `reviewTypes` includes `plan_review`, the Review Agent reads the plan file from the worktree and validates every requirement against the codebase. Requirements coverage is tracked with a per-requirement status table (implemented / partially implemented / missing).
-
 ### Planning Agent webhook semantics
 
 - `planned` -> webhook `status=completed`
@@ -45,6 +56,7 @@ Flattened Planning Agent `result` fields:
 - `planning_superpowers_writing_plans_used`
 - `planning_linear_url`
 - `planning_is_complex`
+- `planning_has_plan_doc`
 - `planning_subtask_urls`
 - `planning_pr_url`
 - `planning_unclear_clarification`
@@ -57,8 +69,11 @@ Flattened Planning Agent `result` fields:
 Flattened Execution Agent `result` fields:
 
 - `execution_outcome_label` (`'implemented'` or `'already_completed'`)
-- `execution_superpowers_executing_plans_used`
+- `execution_superpowers_subagent_driven_dev_used`
 - `execution_superpowers_requesting_code_review_used`
+- `execution_memory_ids_used`
+- `execution_memory_ids_rejected`
+- `execution_memory_usage_summary`
 - `execution_linear_issue_url`
 
 ### Review Agent webhook semantics
@@ -70,10 +85,15 @@ Flattened Review Agent `result` fields:
 - `review_comments_posted`
 - `review_types`
 - `requirements_tracker_updated`
+- `gh_actions_status`
+- `needs_remediation`
+- `review_body`
+- `review_inline_comments`
+- `requires_re_review`
 
 ### Ownership split
 
-- Orchestrator: routing, prompts, completion verification, deep validation, flattened metadata
+- Orchestrator: routing, prompts, completion verification, compliance validation, execution memory injection, flattened metadata
 - `code-agent`: deterministic Linear issue mutations after webhook receipt
 
 ## Architecture
@@ -100,10 +120,10 @@ graph TB
             TD --> LF[LogForwarder<br/>3s chunked upload]
             TD --> WC[WebhookClient<br/>HMAC-signed callbacks]
             TD --> SP[StatePersistence<br/>atomic JSON file]
-            TD --> SYS[SystemPrompt<br/>Planning / Execution / PR / Review<br/>PromptBuilder versioned]
+            TD --> SYS[SystemPrompt<br/>6 agent types<br/>PromptBuilder versioned]
             TD --> TMC[TurnMetricsCollector<br/>cgroup + session JSONL]
             TD --> CV[CompletionVerifier<br/>Gemini 2.5 Flash]
-            TD --> DV[ExecutionDeepValidator<br/>Gemini 2.5 Flash]
+            TD --> ACV[AgentComplianceValidator<br/>OpenRouter LLM]
 
             GTS[GitHubTokenService<br/>JWT + installation token]
             TR[TokenRefresher<br/>per-container tokens]
@@ -112,6 +132,7 @@ graph TB
             CM[CredentialMonitor<br/>OAuth watcher]
             CR[CredentialRefresher<br/>Docker-based refresh]
             AKV[ApiKeyValidator<br/>key health check]
+            WAR[WorkerAuthRegistry<br/>Claude + Codex auth]
         end
 
         subgraph "Docker Containers"
@@ -132,6 +153,7 @@ graph TB
             LOGS[~/.code-orchestrator/logs/]
             AUDIT[~/.code-orchestrator/logs/llm-audit.log]
             CREDS[~/.code-orchestrator/claude-creds/<br/>shared OAuth credentials]
+            CODEX_AUTH[~/.code-orchestrator/codex-auth/<br/>shared Codex auth]
         end
 
         WM --> REPO
@@ -151,71 +173,62 @@ graph TB
     WC -->|POST webhook| CA
     HB -->|POST /internal/code/heartbeat| CA
     TMC -->|POST /internal/turn-metrics| CA
-    DV -->|GET /internal/linear/issue-context| CA
+    ACV -->|gh pr comment| GH
     ORCH --> SM
 ```
 
 ## Recent Changes
 
-### v3.4.0 Release (2026-03-22)
+### v3.5.0 Release
 
-Key changes since v3.3.0: Review Agent plan awareness with requirements tracking, Linear proxy via code-agent replacing direct GraphQL dependency, auto-enforcement of review findings, unified task enqueue, plan-based review dispatch, worker instruction sections in system prompts, selective container preservation by agent type, automatic sub-task creation from parent tasks, and numerous reliability fixes.
+Key changes since v3.4.0: Codex runtime support as an execution backend, Remediation Agent with autonomous auto-improvement loop, Execution Memory Graph for cross-task learning, Ask Agent for interactive sessions, Agent Compliance Validator replacing the Deep Validator, agent dispatch refactored with `@worker` routing and container lifecycle, evidence PR required for all planned outcomes, openrouter-free worker type, startup validation and observability improvements, and numerous reliability fixes.
 
-### Review Agent Plan Awareness (INT-1038, PR #1389)
+### Codex Runtime Support (INT-1104, INT-1109, INT-1117, INT-1125, INT-1143, INT-1205, INT-1212)
 
-The Review Agent now checks whether an implementation matches the original plan. When dispatched in `plan_review` mode, the agent reads the plan document from the worktree, cross-references every requirement against the PR diff, and posts a structured requirements coverage table on the PR. The review prompt was upgraded to v6.0.0 with a requirements tracker and per-type breakdown structure. Each review type (code quality, security, architecture, plan review) gets its own section with an independent verdict.
+The orchestrator now supports OpenAI Codex as an execution backend alongside Claude. Two Codex worker presets were added: `codex` (standard) and `codex-xhigh` (high effort). Codex uses ChatGPT device-auth rather than API keys, with auth managed through `CodexAuthManager` and `CodexAuthRefresher`. A dedicated Codex log processor handles streaming output formatting. Codex runtime state is preserved across cleanup cycles. The orchestrator validates Codex auth at startup and exposes it on the health endpoint.
 
-### Orchestrator Linear Proxy (INT-1040, PR #1414)
+### Remediation Agent and Review Loop (INT-1087, INT-1103, INT-1116, INT-1119, INT-1130, INT-1132, INT-1139)
 
-The Deep Validator now fetches Linear issue context via code-agent's `/internal/linear/issue-context/:identifier` endpoint instead of querying the Linear GraphQL API directly. This removes the orchestrator's direct Linear dependency, improving resilience (code-agent handles retries and caching) and decoupling. The `readPlanReferencedInLinearIssue` function is deprecated in favor of `readPlanFile` with the `planDocumentPath` from code-agent's response.
+A new `remediation` agent type addresses review findings autonomously. When a review identifies issues above a severity threshold, the Remediation Agent receives the review comments, implements fixes on the existing PR branch, runs CI, and decides whether a re-review is needed. The remediation prompt was mandated to use `/nitpick-nuker`. Messages are rejected for review/remediation agent types via `sendMessage()`. Container lifecycle was refactored with `@worker` routing — one preserved `pull_request` container per PR, selective container preservation by agent type.
 
-### Auto-Enforcement of Review Findings (INT-926, PR #1233)
+### Execution Memory Graph (INT-1098, INT-1257)
 
-Quality issues identified during automated code reviews are now automatically acted upon. When the review agent detects findings above a severity threshold, enforcement actions are triggered without requiring manual intervention.
+Execution memory is now injected into planning and review prompts (not just execution). The memory section includes mandatory acknowledgment — agents must explicitly list every memory they received before proceeding. Usage reporting tracks which memories were applied vs rejected. Memory types include `implementation_pattern`, `verification_pattern`, `pitfall_pattern`, `decomposition_pattern`, `planning_decision`, and `review_finding`. The review prompt captures review content for memory extraction.
 
-### Unified Task Enqueue Service (INT-950, PR #1288)
+### Agent Compliance Validator (replaces Deep Validator)
 
-All code tasks now go through a consistent, reliable queue before dispatch. The queue-first approach ensures tasks are durably recorded before execution begins, preventing lost dispatches during transient failures.
+The monolithic `ExecutionDeepValidator` was replaced by a modular `AgentComplianceValidator` that uses OpenRouter with configurable models (default: `xiaomi/mimo-v2-pro`). The validator reads session transcripts via `readSessionTranscript()` and `formatTranscript()`, builds a compliance prompt comparing agent claims against transcript evidence, parses the response against a Zod `AgentComplianceReportSchema`, and posts formatted PR comments via `gh pr comment`. The report covers claim verification, contract compliance, anomaly detection, and execution metrics.
 
-### Plan-Based Review Dispatch (INT-1039, PR #1391)
+### Ask Agent (INT-1293, INT-1294, INT-1295, INT-1308)
 
-The review agent is now automatically triggered when plan review is needed. A new `plan_review` review type validates task decomposition, TDD discipline, file path accuracy, and missing steps — all cross-referenced against the actual codebase. The `reviewTypes` field on `CreateTaskRequest` controls which review types are requested.
+A new `ask_agent` type provides interactive code-aware sessions. Ask Agent sessions skip the PR resume preamble, deliver messages directly (not wrapped in orchestrator context), check pending messages in the completion path, and prohibit `AskUserQuestion` in the prompt. The `linearIssueId` is intentionally omitted from the ask-agent prompt.
 
-### Worker Instruction Sections in System Prompts (INT-972, PR #1301)
+### Agent Dispatch Refactor (INT-1130)
 
-System prompts now include a `WORKER_INSTRUCTIONS` constant with mandatory sections covering git CLI usage (prefer `gh`), GCP service account credentials, and code task debugging rules. Extracted to a shared constant to ensure consistency across all four agent types.
+Agent dispatch was refactored with `@worker` routing and container lifecycle improvements. Key changes: preserved `pull_request` containers enforced to one per PR, review and remediation agent types reject `sendMessage()`, dispatch metadata endpoint added (`GET /internal/tasks/:id/dispatch-metadata`), and `prNumber` field forwarded in routes for container deduplication.
 
-### Selective Container Preservation by Agent Type (INT-973, PR #1302)
+### Evidence PR Required for All Outcomes (INT-1279)
 
-Container preservation on task completion is now agent-type-aware. Only execution and planning containers are preserved; review and pull request containers are cleaned up immediately. The `preserveWorkerContainers` configuration controls the default behavior.
+All execution outcomes — including tasks where the agent determines work was already completed — now require a `gh_pr_url` evidence field. The Gemini extraction prompt was updated to enforce this. SIMPLE planning tasks also require an evidence PR (a lightweight commit with a plan summary file).
 
-### Automatic Sub-Task Creation and Dispatch (INT-962, PR #1295)
+### Worker Type Additions
 
-Parent tasks with `hasChildren: true` can now automatically create and dispatch sub-tasks. The orchestrator handles fan-out from a parent task to its children, with queue position tracking to prevent pollution of the parent's position.
+- `codex`: Standard Codex runtime with ChatGPT auth
+- `codex-xhigh`: High-effort Codex for complex tasks
+- `openrouter-free`: Zero-cost execution via OpenRouter (Qwen 3.6 Plus free tier, `disableExperimentalBetas: true`)
 
-### Base Branch Fetch Before Worktree Creation (INT-984, PR #1319)
+### Other Notable Changes
 
-The orchestrator now fetches the base branch from origin before creating a worktree, preventing stale refs from causing worktree creation failures when the branch has been force-pushed or updated remotely.
-
-### Queue Position and Fan-Out Fixes (INT-977, PR #1311)
-
-Fixed an off-by-one error in queue position calculation and prevented parent task state pollution during fan-out dispatch. Queue positions are now accurately reported for both parent and child tasks.
-
-### Image Pull Timeout Separation (INT-1022, PR #1349)
-
-Image pulls and container creation now have separate timeouts. Image pulls get 15 minutes (`IMAGE_PULL_TIMEOUT_MS`) since they are network-bound, while container creation retains the 2-minute timeout (`CONTAINER_CREATE_TIMEOUT_MS`). This prevents slow network conditions from causing container creation to fail prematurely.
-
-### Fetch Error Cause Chain Logging (INT-1016, PR #1344)
-
-Fetch errors now log the full cause chain (e.g., `fetch failed -> connect ECONNREFUSED`) instead of just the top-level message, improving debugging for network-related failures.
-
-### MiniMax Model Migration (INT-1009, PR #1327)
-
-The MiniMax worker type now uses the M2.7 model (previously M2.5). The model identifier in `WORKER_TYPES` was updated from `MiniMax-M2.5` to `MiniMax-M2.7`.
-
-### Timeout Configuration Changes
-
-Task execution timeout increased from 2 hours to 3 hours (`TASK_TIMEOUT_KILL_MS = 180 * 60 * 1000`), with the warning threshold at 2 hours 55 minutes (`TASK_TIMEOUT_WARNING_MS = 175 * 60 * 1000`). Queue TTL increased to 6 hours.
+- Plan PR merge before execution dispatch removed (INT-1149)
+- Thinking effort set to `high` for opus workers (INT-1088)
+- V8 ignore blocks replaced with real tests across the codebase (INT-1071)
+- Restart failure fixed for expired worker containers — resume allowed when container expired but worktree exists (INT-1304)
+- Startup validation: port availability check, GCP credential validation, API key health checks at boot
+- Fatal exit code detection restricted to tail of raw logs (prevents false positives from mid-session crashes)
+- Development branch synced with origin after fetch in repo manager
+- Dead MCP config processing removed from worktree manager
+- Process-level timeout removed from Codex entrypoint
+- Linear MCP timeout contract enforced in orchestrator and code-worker
 
 ## API Endpoints
 
@@ -247,7 +260,7 @@ Verification rejects requests with timestamps older than 5 minutes and replayed 
 ```typescript
 {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi' | 'codex';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi' | 'codex' | 'codex-xhigh' | 'openrouter-free';
   prompt: string;
   repository?: string;
   baseBranch?: string;
@@ -259,12 +272,12 @@ Verification rejects requests with timestamps older than 5 minutes and replayed 
   webhookUrl: string;
   webhookSecret: string;
   actionId?: string;
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
-  trackingCommentId?: string;           // Existing PR tracking comment to reuse
-  continuationPrNumber?: number;         // Existing PR number to continue
-  continuationPrBranch?: string;         // Existing PR branch to continue
-  planningPrBranch?: string;             // Branch to merge into execution worktree
-  planningPrUrl?: string;               // PR URL to close after successful execution
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent';
+  executionMemoryContext?: ExecutionMemoryPromptContext;
+  trackingCommentId?: string;
+  prNumber?: number;
+  continuationPrNumber?: number;
+  continuationPrBranch?: string;
   reviewTypes?: ('code_quality' | 'security' | 'architecture' | 'plan_review')[];
 }
 ```
@@ -283,6 +296,8 @@ Verification rejects requests with timestamps older than 5 minutes and replayed 
 
 - If the task is `running`: the message is queued and delivered when the current attempt finishes
 - If the task is `completed`, `failed`, or `interrupted`: a new worker session is started with the message as the prompt (using `continueSession: true`)
+- If `agentType` is `review` or `remediation`: returns `409` (messages not supported)
+- If `agentType` is `ask_agent`: message delivered directly without PR resume preamble
 - Returns `409` if the task status does not allow messages (e.g., `cancelled`)
 
 ## Domain Model
@@ -305,25 +320,14 @@ stateDiagram-v2
     cancelled --> [*]
 ```
 
-### OrchestratorState
-
-```typescript
-interface OrchestratorState {
-  tasks: Record<string, Task>;
-  githubToken: {
-    token: string;
-    expiresAt: string;
-  } | null;
-  pendingWebhooks: PendingWebhook[];
-}
-```
-
 ### Task
 
 ```typescript
 interface Task {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi' | 'codex';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi' | 'codex' | 'codex-xhigh' | 'openrouter-free';
+  runtime?: 'claude' | 'codex';
+  runtimeSessionId?: string;
   prompt: string;
   repository: string;
   baseBranch: string;
@@ -336,12 +340,12 @@ interface Task {
   webhookSecret: string;
   actionId?: string;
   retriedFrom?: string;
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent';
+  executionMemoryContext?: ExecutionMemoryPromptContext;
   trackingCommentId?: string;
+  prNumber?: number;
   continuationPrNumber?: number;
   continuationPrBranch?: string;
-  planningPrBranch?: string;
-  planningPrUrl?: string;
   reviewTypes?: ('code_quality' | 'security' | 'architecture' | 'plan_review')[];
   status: 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
   worktreePath: string;
@@ -355,19 +359,6 @@ interface Task {
   resumedAfterSuccess?: boolean;
   lastSuccessResult?: TaskResult;
   pendingResumeStart?: PendingResumeStart;
-}
-
-interface TaskVerificationRecord {
-  attempt: number;
-  passed: boolean;
-  missingFields: string[];
-  verifierFailure: boolean;
-  createdAt: string;
-}
-
-interface PendingResumeStart {
-  prompt: string;
-  acceptedAt: string;
 }
 ```
 
@@ -386,16 +377,26 @@ interface TaskResult {
   planning_superpowers_writing_plans_used?: '0' | '1';
   planning_linear_url?: string;
   planning_is_complex?: '0' | '1';
+  planning_has_plan_doc?: '0' | '1';
   planning_subtask_urls?: string;
   planning_pr_url?: string;
   planning_unclear_clarification?: string;
   execution_outcome_label?: 'implemented' | 'already_completed';
-  execution_superpowers_executing_plans_used?: '0' | '1';
+  execution_superpowers_subagent_driven_dev_used?: '0' | '1';
   execution_superpowers_requesting_code_review_used?: '0' | '1';
+  execution_memory_ids_used?: string;
+  execution_memory_ids_rejected?: string;
+  execution_memory_usage_summary?: string;
   execution_linear_issue_url?: string;
   review_comments_posted?: string;
+  review_id?: string;
   review_types?: string;
   requirements_tracker_updated?: string;
+  gh_actions_status?: string;
+  needs_remediation?: string;
+  review_body?: string;
+  review_inline_comments?: string;
+  requires_re_review?: string;
   rebaseResult?: {
     attempted: boolean;
     success: boolean;
@@ -411,11 +412,11 @@ interface TaskResult {
 The central coordinator. Manages the full task lifecycle:
 
 1. Docker health check via `isHealthy()` — rejects with `503 docker_unavailable` if unhealthy
-2. Atomic capacity check via `async-mutex`
-3. Worktree creation via `WorktreeManager` (with optional `continuationPrBranch` checkout)
-4. Planning PR branch merge (if `planningPrBranch` is set)
+2. Worker auth availability check — rejects with `503 auth_unavailable` if selected runtime auth is not ready
+3. Atomic capacity check via `async-mutex`
+4. Worktree creation via `WorktreeManager` (with optional `continuationPrBranch` checkout)
 5. API key validation via `ApiKeyValidator` (checks OAuth monitor or API endpoint)
-6. System prompt construction via `buildSystemPrompt()` (versioned PromptBuilder)
+6. System prompt construction via `buildSystemPrompt()` (versioned PromptBuilder, execution memory injection)
 7. Image pull via `DockerProvider.pullImage()` with 15-minute timeout (separated from container creation)
 8. Container creation via `DockerProvider` (`startWorkerAttempt`) with 2-minute timeout
 9. Token registration via `TokenRefresher`
@@ -423,28 +424,28 @@ The central coordinator. Manages the full task lifecycle:
 11. Completion monitoring (30s polling interval) with activity heartbeat logging
 12. Timeout warning at 2h55m, hard kill at 3h
 13. On container exit: result extraction via `gh pr list` + `gh pr checks`, then completion verification via `CompletionVerifier`
-14. Fatal exit codes (137/139) skip Gemini verification and trigger immediate retry
+14. Fatal exit codes (137/139) — detected from tail of raw logs — skip Gemini verification and trigger immediate retry
 15. If verification fails and `attempt < maxAttempts`: resume the session with a targeted follow-up prompt (auto-continue loop)
-16. If verification passes: deep validation for execution tasks (transcript analysis, PR comment via code-agent Linear proxy), then turn metrics collection via `TurnMetricsCollector`, then webhook delivery
+16. If verification passes: Agent Compliance Validation for execution tasks (transcript analysis, PR comment), then turn metrics collection via `TurnMetricsCollector`, then webhook delivery
 17. Queued messages (from `POST /tasks/:id/message` during execution) are delivered as the next session when verification passes
-18. Exposes `sendMessage()` for mid-task message injection and task resume after completion
+18. `sendMessage()` for mid-task message injection and task resume after completion — ask_agent skips PR resume preamble
 19. `adoptTask()` for startup recovery re-attachment to running containers
 20. `recoverPendingResumeTask()` for recovering accepted resumes that were interrupted by a restart
+21. Pending messages flushed before teardown in ask-agent completion path
 
-### OrchestratorExecutionDeepValidator
+### AgentComplianceValidator (replaces ExecutionDeepValidator)
 
 Performs post-completion transcript analysis for execution tasks:
 
-- Reads the full Claude session transcript from JSONL files via `readSessionTranscript()`
-- Formats the transcript into a human-readable MSG-NNN numbered format via `formatTranscript()`
-- Fetches Linear issue context via code-agent proxy (`fetchLinearIssueContextViaCodeAgent()`) instead of querying Linear GraphQL directly
-- Resolves plan documents from the code-agent response's `planDocumentPath` field (falls back to deprecated `readPlanReferencedInLinearIssue` for backwards compatibility)
-- Sends the full context (transcript, agent claims, Linear issue, plan) to Gemini 2.5 Flash
-- Validates the response: must contain five required sections as markdown tables, no bullet lists
-- Posts the structured Deep Validation Report as a GitHub PR comment via `gh pr comment`
-- Uses visual severity indicators: Critical (red), Warning (orange), Minor (yellow), Pass (green)
-- Reports split across multiple comments if they exceed the 65KB GitHub comment limit
-- Uses `@intexuraos/llm-factory` for client creation and `OrchestratorFileAuditSink` for audit logging
+- Reads session transcripts via `readSessionTranscript()` from JSONL files
+- Formats transcripts into numbered `MSG-NNN` format via `formatTranscript()`
+- Builds compliance prompts comparing agent claims (from `ExecutionAgentData`) against transcript evidence
+- Sends the prompt to an independent LLM via OpenRouter (configurable model, default: `xiaomi/mimo-v2-pro`)
+- Validates the response against `AgentComplianceReportSchema` (Zod) with auto-repair on parse failure
+- Report covers: claim verification (CI called? PR created? commit count? summary accurate?), contract compliance (skills invoked? correct order? code reviewer dispatched?), anomaly detection (fabrication, hallucination, protocol violation), execution metrics
+- Posts formatted PR comments via `gh pr comment` with severity indicators (Critical, Warning, Minor, Pass)
+- Uses `OrchestratorFileAuditSink` for LLM audit logging
+- Transcript size limit: 720,000 characters
 
 ### DockerProvider
 
@@ -455,15 +456,24 @@ Manages Docker container lifecycle via `dockerode`:
 - **Network:** `code-worker-net`
 - **Limits:** 8GB memory, 4 CPUs per container
 - **Security:** `CapDrop: ALL`, `CapAdd: NET_RAW`, `SecurityOpt: no-new-privileges`
-- **Mounts:** Worktree at `/repo` (rw), secrets at `/secrets` (ro), main `.git` dir for worktree support (rw), shared OAuth credentials at `/home/claude/.claude` (rw)
+- **Mounts:** Worktree at `/repo` (rw), secrets at `/secrets` (ro), main `.git` dir for worktree support (rw), shared OAuth credentials at `/home/claude/.claude` (rw), shared Codex auth at `/home/claude/.codex` (rw)
 - **Tmpfs:** `/tmp` (2GB, noexec) and `/home/claude` (500MB, noexec, uid=1001)
 - **Interactive mode:** `OpenStdin: true`, `Tty: true`, attach before start to capture all output
 - **Container creation timeout:** 2 minutes
 - **Health gate:** `isHealthy()` checks Docker daemon connectivity and disk availability
 - **Managed attempts:** When enabled, the DockerProvider handles multi-attempt container lifecycle
-- **Forensics mode:** When enabled (`INTEXURAOS_CODE_WORKER_FORENSICS=1`), captures core dumps and crash snapshots to the forensics directory
+- **Forensics mode:** When enabled (`INTEXURAOS_CODE_WORKER_FORENSICS=1`), captures core dumps and crash snapshots
 - **Container discovery:** `listWorkerContainers()` discovers running `code-worker-*` containers for startup recovery
 - **Periodic stale cleanup:** Removes orphaned containers not tracked in state.json after a configurable idle threshold
+- **Codex state preservation:** Codex runtime state preserved across cleanup cycles
+
+### RuntimeAdapter
+
+Abstracts runtime-specific log processing:
+
+- `claude` runtime: Claude log processor strips Docker headers, detects session IDs, and surfaces `FATAL:` error markers
+- `codex` runtime: Codex log processor handles different streaming output format, detects completion signals, and produces human-readable output
+- Both runtimes emit `RuntimeEvent` types: `log`, `runtime_session_started`, `attempt_completed`, `attempt_failed`
 
 ### WorktreeManager
 
@@ -471,23 +481,20 @@ Creates isolated git worktrees per task:
 
 - `git worktree add -b "{taskId}" "{path}" "origin/{baseBranch}"` — base branch is fetched from origin first
 - Supports `continuationPrBranch` checkout for retried tasks inheriting an existing PR branch
-- Copies `.mcp.json` template with environment variable substitution (Linear API key, Sentry auth token)
 - Copies `.claude/settings.local.json` from `workers/code-worker/config-defaults/`
-- `mergePlanningBranch()`: fetches and merges a planning PR branch into the execution worktree
 - All git operations serialized via `async-mutex` to prevent index corruption
 - Removes worktrees with `git worktree remove --force`
+- `worktreeExists()` for resume availability checks
 
 ### LogForwarder
 
 Streams container output to code-agent in near-real-time:
 
 - Receives log chunks via `appendChunk()` callback from Docker attach stream
-- Also supports file-polling mode (100ms interval) for non-Docker providers
 - Buffers content and flushes every 3 seconds or when buffer exceeds 64KB
 - Strips Docker multiplexed stream headers and ANSI escape codes via `stripDockerHeaders()`
 - Strips heavyweight `tool_use_result` metadata from JSONL lines via `stripBulkMetadata()`
 - Prefixes each log line with a local timestamp (`HH:MM:ss.mmm`)
-- Reassembles partial lines across chunk boundaries
 - Sends up to 5 chunks per batch to `POST /internal/logs`
 - Signs payloads with HMAC-SHA256 using the task's webhook secret
 - Limits: 4MB total per task
@@ -536,10 +543,11 @@ Manages per-container GitHub tokens:
 
 Coordinates shared worker auth state across runtimes:
 
-- Tracks provider-specific auth state for `claude` and `codex`
+- Manages provider-specific auth for `claude` and `codex` via pluggable managers
 - Exposes `/health` data via `workerAuths`
 - Blocks new task submission with `503 auth_unavailable` when the selected runtime is not ready
-- Triggers background refresh only when no tasks are running
+- Triggers background refresh when credentials are expiring soon and no tasks are running
+- 5-minute buffer before expiry triggers proactive refresh
 
 ### ClaudeAuthManager / CredentialRefresher
 
@@ -575,6 +583,17 @@ Collects per-task resource and token metrics after completion:
 - Publishes metrics to code-agent via `POST /internal/turn-metrics`
 - Non-fatal: zero values on macOS (no cgroup exposure)
 
+### CompletionVerifier
+
+LLM-backed task completion validation (Gemini 2.5 Flash):
+
+- Six agent-specific Zod schemas: planning, execution, pull_request, review, remediation, ask_agent
+- Extracts structured metadata from the last 50 lines of worker output
+- Validates mandatory fields per agent type (PR URL, outcome labels, skill usage proofs)
+- Fatal exit codes (137/139) skip Gemini and trigger immediate retry
+- Evidence PR required for all execution outcomes including `already_completed`
+- Returns verdict with `passed`, `missingFields`, `verifierFailure`, and extracted `agentData`
+
 ## Configuration
 
 | Variable                                  | Required | Default                            |
@@ -591,7 +610,10 @@ Collects per-task resource and token metrics after completion:
 | `INTEXURAOS_GEMINI_APP_API_KEY`           | Yes      | -                                  |
 | `INTEXURAOS_MINIMAX_APP_API_KEY`          | Yes      | -                                  |
 | `INTEXURAOS_DASHSCOPE_APP_API_KEY`        | Yes      | -                                  |
+| `INTEXURAOS_ZAI_APP_API_KEY`              | Yes      | -                                  |
 | `GOOGLE_APPLICATION_CREDENTIALS`          | Yes      | -                                  |
+| `INTEXURAOS_OPENROUTER_APP_API_KEY`       | No       | (empty — disables compliance)      |
+| `INTEXURAOS_COMPLIANCE_MODEL`             | No       | `xiaomi/mimo-v2-pro`               |
 | `INTEXURAOS_REPOSITORY_PATH`              | No       | `~/.code-orchestrator/repo`        |
 | `INTEXURAOS_WORKER_CAPACITY`              | No       | `2`                                |
 | `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`      | No       | `3`                                |
@@ -612,10 +634,12 @@ Collects per-task resource and token metrics after completion:
 - **Git mutex scope:** The worktree mutex serializes all git operations across all tasks. Two concurrent worktree creations are sequential, not parallel.
 - **Nonce cache is in-memory:** If the orchestrator restarts, all nonces are lost. Replayed requests during the 5-minute timestamp window after a restart will be accepted.
 - **State file is a single JSON blob:** All tasks are stored in one file. Very high task volumes could cause write contention.
-- **Container preservation is selective:** Only execution and planning containers are preserved on completion. Review and pull request containers are destroyed immediately.
+- **Container preservation is selective:** Only execution and planning containers are preserved on completion. Review, pull request, and remediation containers are destroyed immediately. One preserved container per PR is enforced.
 - **macOS metrics are zero:** `TurnMetricsCollector` relies on cgroup v2. macOS Docker does not expose cgroup paths, so CPU and memory metrics are always zero.
-- **Deep validation is fire-and-forget:** A failed Deep Validation does not affect the task outcome or webhook delivery. The task still completes successfully.
-- **Linear proxy fallback:** The Deep Validator falls back to deprecated direct Linear GraphQL queries if the code-agent proxy is unreachable. This fallback will be removed in a future version.
+- **Compliance validation requires OpenRouter key:** Without `INTEXURAOS_OPENROUTER_APP_API_KEY`, the Agent Compliance Validator is not created and compliance reports are not posted on PRs. Completion verification (Gemini) still runs.
+- **Ask Agent skips resume preamble:** When a completed ask_agent task is resumed via `sendMessage()`, the user's message is sent directly without the standard orchestrator context wrapper.
+- **Codex auth is separate:** Codex uses ChatGPT device-auth, managed independently from Claude OAuth. Both must be configured for their respective worker types to function.
+- **Fatal exit code detection reads tail only:** The orchestrator scans only the last portion of raw logs for fatal exit codes to prevent false positives from mid-session crash output.
 
 ## File Structure
 
@@ -631,10 +655,26 @@ workers/orchestrator/src/
 │   │   ├── docker-provider.ts
 │   │   ├── token-refresher.ts
 │   │   └── types.ts
+│   ├── runtime/
+│   │   ├── claude-runtime.ts
+│   │   ├── codex-runtime.ts
+│   │   ├── processors/
+│   │   │   ├── claude-log-processor.ts
+│   │   │   └── codex-log-processor.ts
+│   │   ├── index.ts
+│   │   └── types.ts
+│   ├── worker-auth/
+│   │   ├── claude-auth-manager.ts
+│   │   ├── codex-auth-manager.ts
+│   │   ├── codex-auth-refresher.ts
+│   │   ├── index.ts
+│   │   ├── registry.ts
+│   │   └── types.ts
+│   ├── agent-compliance-validator.ts
 │   ├── api-key-validator.ts
+│   ├── compliance-report-schema.ts
 │   ├── completion-verifier.ts
 │   ├── deep-validator-helpers.ts
-│   ├── execution-deep-validator.ts
 │   ├── log-formatter.ts
 │   ├── log-forwarder.ts
 │   ├── orchestrator-audit-sink.ts
@@ -652,6 +692,7 @@ workers/orchestrator/src/
 ├── types/
 │   ├── api.ts
 │   ├── config.ts
+│   ├── execution-memory.ts
 │   ├── schemas.ts
 │   ├── state.ts
 │   └── task.ts

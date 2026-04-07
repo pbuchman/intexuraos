@@ -502,4 +502,4 @@ curl -X DELETE "https://calendar-agent.intexuraos.com/calendar/failed-events/fai
 
 ---
 
-**Last updated:** 2026-03-22
+**Last updated:** 2026-04-07

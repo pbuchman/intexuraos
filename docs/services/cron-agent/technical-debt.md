@@ -1,7 +1,7 @@
 # Cron Agent — Technical Debt
 
-**Last Updated:** 2026-03-22
-**Analysis Run:** [2026-03-22 entry](../../documentation-runs.md)
+**Last Updated:** 2026-04-07
+**Analysis Run:** [2026-04-07 entry](../../documentation-runs.md)
 
 ---
 
@@ -75,7 +75,11 @@ None identified.
 
 ## Resolved Issues
 
-No previous documentation runs exist for this service (new in v3.4.0).
+| Date       | Issue                                                | Resolution                                                                                                  |
+| ---------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| 2026-04-05 | `description` field naming ambiguity                 | Replaced with `schedule` (input) and `scheduleSummary` (stored), removing confusion with action instruction |
+| 2026-04-05 | No operation-level access control on target services | Added per-service `allowedOperations` in service catalog; empty services filtered from discovery            |
+| 2026-04-05 | Tool calls not scoped to schedule owner              | `userId` now injected into all tool calls via `X-Cron-User-Id` header and prompt enforcement                |
 
 ---
 

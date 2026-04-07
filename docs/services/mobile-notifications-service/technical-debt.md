@@ -1,7 +1,7 @@
 # Mobile Notifications Service — Technical Debt
 
-**Last Updated:** 2026-03-15
-**Analysis Run:** [2026-03-15 documentation refresh](../../documentation-runs.md)
+**Last Updated:** 2026-04-07
+**Analysis Run:** [2026-04-07 v3.5.0 documentation refresh](../../documentation-runs.md)
 
 ---
 
@@ -64,7 +64,7 @@ _None found in codebase._
 
 ## SRP Violations
 
-_None identified. Largest file is `filterRoutes.ts` at 293 lines (under 300-line threshold)._
+_None identified. All route files are within the 300-line threshold._
 
 ---
 
@@ -84,6 +84,7 @@ _None identified._
 
 | Date       | Issue                                   | Resolution                                                                                    |
 | ---------- | --------------------------------------- | --------------------------------------------------------------------------------------------- |
+| 2026-03-24 | v8 ignore explanations lacked blockers  | Updated annotations with correct blocker keywords as part of platform-wide enforcement pass   |
 | 2026-03-11 | v8 ignore blocks in repositories/routes | Replaced with real tests for Firestore error paths; reduced to 10 directives across 4 files   |
 | 2026-02-01 | Response contract violations            | All routes migrated to standardized `reply.ok()` / `reply.fail()` contract                    |
 | 2026-02-01 | Direct pino() usage                     | Replaced with `createAppLogger()` from `@intexuraos/infra-sentry`                             |

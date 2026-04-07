@@ -1,7 +1,7 @@
 # Chat Agent — Technical Debt
 
-**Last Updated:** 2026-03-22
-**Analysis Run:** [2026-03-22 entry](../../documentation-runs.md)
+**Last Updated:** 2026-04-07
+**Analysis Run:** [2026-04-07 entry](../../documentation-runs.md)
 
 ---
 
@@ -9,11 +9,12 @@
 
 | Category               | Count  | Severity |
 | ---------------------- | ------ | -------- |
-| v8 ignore exemptions   | 5      | Low      |
+| v8 ignore exemptions   | 2      | Low      |
 | Architectural concerns | 3      | Medium   |
 | Missing features       | 4      | Medium   |
 | Test coverage gaps     | 1      | Low      |
-| **Total**              | **13** | —        |
+| Code smells            | 1      | Low      |
+| **Total**              | **11** | —        |
 
 ---
 
@@ -75,19 +76,11 @@ The `extractSuggestedAction` function uses a regex (`/\[ACTION:\s*(create_comman
 
 The field extraction logic (reading `content`, `filePath`, `section`, `docType`, `createdAt` from Firestore data with type guards and defaults) is duplicated between `findNearest` and `findById`. A shared `toDocChunk(data, id)` helper would reduce duplication.
 
-### Large v8 ignore Blocks in chatClient.ts
-
-**File:** `apps/chat-agent/src/infra/llm/chatClient.ts`
-
-The `generate` method contains a v8 ignore block covering a significant amount of logic: prompt building, LLM calling, error handling, and action extraction. While the exemption reason is valid (LLM output-dependent paths tested through fakes), the block size is large.
-
 ---
 
 ## Test Coverage Gaps
 
-### chatClient.ts Real Integration
-
-The `chatClient.ts` adapter is largely covered by v8 ignore exemptions because its behavior depends on real LLM output format. Integration tests with recorded LLM responses (snapshot testing) would increase confidence without requiring live LLM calls.
+No open test coverage gaps. The previous chatClient.ts v8 ignore blocks were resolved by adding tests for the LLM-dependent code paths (see Resolved Issues `cea26781`).
 
 ---
 
@@ -108,13 +101,10 @@ No TODO or FIXME comments found in the codebase.
 
 ## v8 Ignore Exemptions
 
-| File                                  | Category   | Reason                                                      |
-| ------------------------------------- | ---------- | ----------------------------------------------------------- |
-| `routes/chatRoutes.ts`                | upstream   | Fallback for unknown error codes from domain layer          |
-| `infra/llm/chatClient.ts`             | upstream   | LLM client error paths tested in fakes, not real LLM        |
-| `infra/llm/chatClient.ts`             | upstream   | Branches depend on LLM output format                        |
-| `infra/llm/chatClient.ts`             | upstream   | String.replace branch depends on action being present       |
-| `domain/usecases/generateResponse.ts` | test-infra | Fallback impossible to trigger (split always returns array) |
+| File                                  | Category   | Reason                                                            |
+| ------------------------------------- | ---------- | ----------------------------------------------------------------- |
+| `routes/chatRoutes.ts`                | upstream   | Fallback for unknown error codes from domain layer                |
+| `domain/usecases/generateResponse.ts` | ts-type    | split() always returns at least one element for non-empty strings |
 
 ---
 
@@ -129,15 +119,17 @@ No TODO or FIXME comments found in the codebase.
 
 ## Resolved Issues
 
-| Issue      | Description                                           | Resolution                                                          |
-| ---------- | ----------------------------------------------------- | ------------------------------------------------------------------- |
-| `47b1b9e9` | Redundant "Say yes to confirm" in system prompt       | Removed; confirmation prompt simplified to "Shall I create this?"   |
-| `99febe66` | FakeUserServiceClient missing resolveGitHubUsername   | Added stub method to conform to updated UserServiceClient interface |
-| `e6782f64` | INTEXURAOS_LLM_MODEL env var no longer needed         | Removed; model selection via user-service                           |
-| `332fd990` | EmbeddingClient had tight OpenAI coupling             | Refactored to function injection pattern                            |
-| `0f37ed41` | Shared LLM client across all users                    | Refactored to per-request client from user-service                  |
-| `63170e4a` | Inconsistent GLM "free" terminology in LLM factory    | Removed; all clients now created via `createLlmClient` uniformly    |
-| `c72b7c53` | Default LLM (GLM) had no Gemini fallback for platform | Switched default to Gemini 2.5 Flash; added Gemini platform key     |
+| Issue      | Description                                                  | Resolution                                                          |
+| ---------- | ------------------------------------------------------------ | ------------------------------------------------------------------- |
+| `cea26781` | chatClient.ts had 3 v8 ignore blocks for LLM-dependent paths | Added tests covering v8-ignore blocks; all 3 exemptions removed     |
+| `287db2b6` | FakeUserServiceClient missing getUserTimezone                | Added stub method to conform to updated UserServiceClient interface |
+| `47b1b9e9` | Redundant "Say yes to confirm" in system prompt              | Removed; confirmation prompt simplified to "Shall I create this?"   |
+| `99febe66` | FakeUserServiceClient missing resolveGitHubUsername          | Added stub method to conform to updated UserServiceClient interface |
+| `e6782f64` | INTEXURAOS_LLM_MODEL env var no longer needed                | Removed; model selection via user-service                           |
+| `332fd990` | EmbeddingClient had tight OpenAI coupling                    | Refactored to function injection pattern                            |
+| `0f37ed41` | Shared LLM client across all users                           | Refactored to per-request client from user-service                  |
+| `63170e4a` | Inconsistent GLM "free" terminology in LLM factory           | Removed; all clients now created via `createLlmClient` uniformly    |
+| `c72b7c53` | Default LLM (GLM) had no Gemini fallback for platform        | Switched default to Gemini 2.5 Flash; added Gemini platform key     |
 
 ---
 

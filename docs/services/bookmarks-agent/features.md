@@ -24,7 +24,7 @@ If the page is temporarily unreachable, the system retries automatically. Perman
 
 ### AI-Generated Summaries
 
-After enrichment, the system reads the page and generates a concise AI summary. The summary is stored alongside the bookmark, so every link in your collection carries its own explanation — turning forgotten URLs into a readable collection you can scan and act on.
+After enrichment, the system reads the page and generates a concise AI summary. The summarization request includes the page title and description as contextual hints, helping the AI focus on the most relevant content. The summary is stored alongside the bookmark, so every link in your collection carries its own explanation — turning forgotten URLs into a readable collection you can scan and act on.
 
 ### WhatsApp Delivery
 

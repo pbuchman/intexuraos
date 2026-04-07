@@ -1,29 +1,30 @@
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
+  Archive,
   ArrowRight,
   Bell,
   Bot,
   Brain,
   CheckCircle2,
   ChevronRight,
-  ClipboardCheck,
   Clock,
   Code2,
   Container,
   Eye,
-  GitMerge,
+  Globe,
   GitPullRequest,
   Layers,
   Lock,
   Mail,
   MessageSquare,
   Mic,
+  PenTool,
+  RefreshCw,
+  Route,
   Shield,
   Smartphone,
   Terminal,
-  Timer,
-  Waypoints,
   Zap,
 } from 'lucide-react';
 import React from 'react';
@@ -205,7 +206,7 @@ function HeroSection(): React.JSX.Element {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-500" />
             </span>
-            IntexuraOS v3.4.0
+            IntexuraOS v3.5.0
           </div>
 
           <p className="mx-auto mb-4 max-w-xl text-lg leading-relaxed text-neutral-600">
@@ -604,88 +605,88 @@ function WhatsNewSection(): React.JSX.Element {
     {
       title: 'Hellscript Agent',
       description:
-        'A new scripting service with backend, web UI, and infrastructure for authoring and running Hellscript tasks.',
-      icon: Terminal,
+        'AI-powered writing following user style and preferences with categorized writing configuration.',
+      icon: PenTool,
       borderColor: 'border-purple-200',
       bgGradient: 'bg-gradient-to-br from-purple-50 to-white',
       iconBg: 'bg-purple-100',
       iconColor: 'text-purple-700',
     },
     {
-      title: 'Merge Queue',
+      title: 'Codex Runtime',
       description:
-        'Pull requests are queued and auto-merged in order without conflicts.',
-      icon: GitMerge,
+        'OpenAI Codex as a full execution backend with authentication, log processing, and worker types.',
+      icon: Terminal,
       borderColor: 'border-cyan-200',
       bgGradient: 'bg-gradient-to-br from-cyan-50 to-white',
       iconBg: 'bg-cyan-100',
       iconColor: 'text-cyan-700',
     },
     {
-      title: 'Review Agent Plan Awareness',
+      title: 'Execution Memory',
       description:
-        'Code reviews now check whether implementation matches the original plan.',
-      icon: ClipboardCheck,
+        'Data collection pipeline with vector retrieval and post-run distillation — agents learn from past tasks.',
+      icon: Brain,
       borderColor: 'border-emerald-200',
       bgGradient: 'bg-gradient-to-br from-emerald-50 to-white',
       iconBg: 'bg-emerald-100',
       iconColor: 'text-emerald-700',
     },
     {
-      title: 'Cron Agent',
+      title: 'Remediation Agent',
       description:
-        'Schedule and execute recurring tasks automatically with a dedicated service.',
-      icon: Timer,
+        'Autonomous auto-improvement loop with cross-LLM checks and event-sourcing for AI-native improvements.',
+      icon: RefreshCw,
       borderColor: 'border-blue-200',
       bgGradient: 'bg-gradient-to-br from-blue-50 to-white',
       iconBg: 'bg-blue-100',
       iconColor: 'text-blue-700',
     },
     {
-      title: 'Merge Conflict Reconciliation',
+      title: 'OpenRouter Integration',
       description:
-        'Conflict detection moved to a dedicated cron job for reliable, non-blocking operation.',
-      icon: Shield,
+        'Route tasks through OpenRouter models with backend infrastructure, frontend selection, and pricing.',
+      icon: Route,
       borderColor: 'border-violet-200',
       bgGradient: 'bg-gradient-to-br from-violet-50 to-white',
       iconBg: 'bg-violet-100',
       iconColor: 'text-violet-700',
     },
     {
-      title: 'GitHub Agent',
+      title: 'Ask Agent',
       description:
-        'A new agent evaluates pull requests using tool calling, with a unified webhook evaluator routing GitHub events.',
-      icon: GitPullRequest,
+        'Interactive back-and-forth Claude Code sessions directly from the UI.',
+      icon: MessageSquare,
       borderColor: 'border-amber-200',
       bgGradient: 'bg-gradient-to-br from-amber-50 to-white',
       iconBg: 'bg-amber-100',
       iconColor: 'text-amber-700',
     },
     {
-      title: 'Code Task Detail V2',
+      title: 'Code Task Groups',
       description:
-        'Completely redesigned code task experience with a modern detail page and issue-centric grouped list.',
-      icon: Code2,
+        'Backend grouping and pagination of code tasks by Linear issue with batch archive support.',
+      icon: Layers,
       borderColor: 'border-green-200',
       bgGradient: 'bg-gradient-to-br from-green-50 to-white',
       iconBg: 'bg-green-100',
       iconColor: 'text-green-700',
     },
     {
-      title: 'Agent-Based Routing',
+      title: 'Cloudflare Web Research',
       description:
-        'Requests automatically routed to the right specialist based on issue labels.',
-      icon: Waypoints,
+        'Replaced Crawl4AI with Cloudflare Browser Rendering for reliable JS-rendered page research.',
+      icon: Globe,
       borderColor: 'border-rose-200',
       bgGradient: 'bg-gradient-to-br from-rose-50 to-white',
       iconBg: 'bg-rose-100',
       iconColor: 'text-rose-700',
     },
     {
-      title: 'One-Click Implement',
+      title: 'Auto-Archive & CI Handling',
       description:
-        'Planned tasks go from design to pull request with a single button press.',
-      icon: Zap,
+        'Merged tasks archived automatically. Failed CI checks on agent PRs retried without intervention.',
+      icon: Archive,
       borderColor: 'border-indigo-200',
       bgGradient: 'bg-gradient-to-br from-indigo-50 to-white',
       iconBg: 'bg-indigo-100',
@@ -710,13 +711,13 @@ function WhatsNewSection(): React.JSX.Element {
             </a>
           </div>
           <h2 className="mb-6 text-4xl font-bold tracking-tight text-neutral-900 md:text-5xl">
-            v3.4.0 —{' '}
+            v3.5.0 —{' '}
             <span className="bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
-              5 new capabilities.
+              9 new capabilities.
             </span>
           </h2>
           <p className="text-lg leading-relaxed text-neutral-600">
-            Hellscript Agent, Merge Queue, Cron Agent, plan-aware code reviews, and more.
+            Codex Runtime, Execution Memory, Remediation Agent, OpenRouter, Ask Agent, and more.
           </p>
         </div>
 
@@ -983,7 +984,7 @@ function Footer(): React.JSX.Element {
         <div className="flex items-center gap-2">
           <div className="h-6 w-6 rounded-md bg-cyan-600" />
           <span className="font-bold text-neutral-900">IntexuraOS</span>
-          <span className="text-xs text-neutral-400">v3.4.0</span>
+          <span className="text-xs text-neutral-400">v3.5.0</span>
         </div>
         <p className="text-sm text-neutral-500">
           &copy; {new Date().getFullYear()}{' '}

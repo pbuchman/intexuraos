@@ -86,8 +86,12 @@ sequenceDiagram
 
 | Commit     | Description                                                           | Date       |
 | ---------- | --------------------------------------------------------------------- | ---------- |
-| `93aeac4a` | Remove ZAI provider and GLM-4.7 models, finalize GLM-5 (INT-836)      | 2026-03-12 |
+| `287db2b6` | Add getUserTimezone to UserServiceClient (test mock updates)          | 2026-03-27 |
+| `549c9698` | Enforce strict v8 ignore validation with blocker keyword checks       | 2026-03-24 |
+| `c6659005` | Release v3.4.0                                                        | 2026-03-22 |
+| `c4e3a13c` | Release v3.3.0                                                        | 2026-03-15 |
 | `ace7850b` | Write tests for v8-ignore blocks (INT-791)                            | 2026-03-13 |
+| `93aeac4a` | Remove ZAI provider and GLM-4.7 models, finalize GLM-5                | 2026-03-12 |
 | `44ea683a` | Release v3.2.0                                                        | 2026-03-07 |
 | `99febe66` | Wire GitHub OAuth integration and update cross-service mocks          | 2026-03-02 |
 | `3608e1d6` | INT-595: Align TransformedDataSchema with prompt empty-array contract | 2026-02-23 |
@@ -97,8 +101,6 @@ sequenceDiagram
 | `f00798da` | Add saved visualizations feature (full CRUD + auto-refresh)           | 2026-02-17 |
 | `6063175b` | Add dev-mode log formatting for PM2 readability                       | 2026-02-16 |
 | `a52a6bbc` | Add Dash0 OpenTelemetry integration                                   | 2026-02-16 |
-| `e60eafc1` | Standardize API key secrets to APP naming convention                  | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add fallback                 | 2026-02-15 |
 
 ## API Endpoints
 
@@ -157,17 +159,17 @@ sequenceDiagram
 
 ### CompositeFeed
 
-| Field                 | Type                         | Description                    |
-| --------------------- | ---------------------------- | ------------------------------ |
-| `id`                  | `string`                     | Unique identifier              |
-| `userId`              | `string`                     | Owner user ID                  |
-| `name`                | `string`                     | AI-generated feed name         |
-| `purpose`             | `string`                     | User-provided purpose (max 1K) |
-| `staticSourceIds`     | `string[]`                   | Data source IDs (max 5)        |
-| `notificationFilters` | `NotificationFilterConfig[]` | Notification filter configs    |
-| `dataInsights`        | `DataInsight[] \             | null`                          | AI analysis results |
-| `createdAt`           | `Date`                       | Creation timestamp             |
-| `updatedAt`           | `Date`                       | Last update timestamp          |
+| Field                 | Type                         | Description                             |
+| --------------------- | ---------------------------- | --------------------------------------- |
+| `id`                  | `string`                     | Unique identifier                       |
+| `userId`              | `string`                     | Owner user ID                           |
+| `name`                | `string`                     | AI-generated feed name (max 200)        |
+| `purpose`             | `string`                     | User-provided purpose (max 1,000)       |
+| `staticSourceIds`     | `string[]`                   | Data source IDs (max 5)                 |
+| `notificationFilters` | `NotificationFilterConfig[]` | Notification filter configs (max 3)     |
+| `dataInsights`        | `DataInsight[] \             | null`                                   | AI analysis results |
+| `createdAt`           | `Date`                       | Creation timestamp                      |
+| `updatedAt`           | `Date`                       | Last update timestamp                   |
 
 ### NotificationFilterConfig
 
@@ -181,14 +183,14 @@ sequenceDiagram
 
 ### DataInsight
 
-| Field                | Type          | Description                    |
-| -------------------- | ------------- | ------------------------------ |
-| `id`                 | `string`      | Unique identifier              |
-| `title`              | `string`      | Insight title                  |
-| `description`        | `string`      | Insight description            |
-| `trackableMetric`    | `string`      | Measurable metric to track     |
-| `suggestedChartType` | `ChartTypeId` | Recommended chart type (C1–C6) |
-| `generatedAt`        | `string`      | ISO timestamp                  |
+| Field                | Type          | Description                        |
+| -------------------- | ------------- | ---------------------------------- |
+| `id`                 | `string`      | Unique identifier                  |
+| `title`              | `string`      | Insight title                      |
+| `description`        | `string`      | Insight description                |
+| `trackableMetric`    | `string`      | Measurable metric to track         |
+| `suggestedChartType` | `ChartTypeId` | Recommended chart type (C1 -- C6)  |
+| `generatedAt`        | `string`      | ISO timestamp                      |
 
 **Chart Type Values:**
 
@@ -215,23 +217,32 @@ sequenceDiagram
 
 ### Visualization
 
-| Field                   | Type                                              | Description                     |
-| ----------------------- | ------------------------------------------------- | ------------------------------- |
-| `id`                    | `string`                                          | Unique identifier               |
-| `userId`                | `string`                                          | Owner user ID                   |
-| `feedId`                | `string`                                          | Associated composite feed ID    |
-| `feedName`              | `string`                                          | Feed name at creation time      |
-| `insightId`             | `string`                                          | Associated insight ID           |
-| `insightTitle`          | `string`                                          | Insight title at creation time  |
-| `trackableMetric`       | `string`                                          | Metric being tracked            |
-| `chartConfig`           | `object`                                          | Vega-Lite spec (without data)   |
-| `transformInstructions` | `string`                                          | LLM data transform instructions |
-| `chartData`             | `unknown[] \                                      | null`                           | Computed chart data |
-| `status`                | `'pending' \                                      | 'ready' \                       | 'refreshing' \ | 'error'` | Computation lifecycle status |
-| `lastError`             | `string?`                                         | Last error message if any       |
-| `lastRefreshedAt`       | `Date?`                                           | Timestamp of last data refresh  |
-| `createdAt`             | `Date`                                            | Creation timestamp              |
-| `updatedAt`             | `Date`                                            | Last update timestamp           |
+| Field                   | Type                  | Description                     |
+| ----------------------- | --------------------- | ------------------------------- |
+| `id`                    | `string`              | Unique identifier               |
+| `userId`                | `string`              | Owner user ID                   |
+| `feedId`                | `string`              | Associated composite feed ID    |
+| `feedName`              | `string`              | Feed name at creation time      |
+| `insightId`             | `string`              | Associated insight ID           |
+| `insightTitle`          | `string`              | Insight title at creation time  |
+| `trackableMetric`       | `string`              | Metric being tracked            |
+| `chartConfig`           | `object`              | Vega-Lite spec (without data)   |
+| `transformInstructions` | `string`              | LLM data transform instructions |
+| `chartData`             | `unknown[] \          | null`                           | Computed chart data |
+| `status`                | `VisualizationStatus` | Computation lifecycle status    |
+| `lastError`             | `string?`             | Last error message if any       |
+| `lastRefreshedAt`       | `Date?`               | Timestamp of last data refresh  |
+| `createdAt`             | `Date`                | Creation timestamp              |
+| `updatedAt`             | `Date`                | Last update timestamp           |
+
+**Status Values:**
+
+| Status       | Meaning                                        |
+| ------------ | ---------------------------------------------- |
+| `pending`    | Created, awaiting async computation            |
+| `ready`      | Computation complete, chart data available     |
+| `refreshing` | Manual refresh in progress                     |
+| `error`      | Computation failed (see `lastError` for cause) |
 
 **Status Lifecycle:** `pending` -> `ready` (or `error`). Manual refreshes use `refreshing` as intermediate state.
 
@@ -241,20 +252,20 @@ sequenceDiagram
 
 ### External Services
 
-| Service              | Purpose                                            | Failure Mode                       |
-| -------------------- | -------------------------------------------------- | ---------------------------------- |
-| LLM Providers        | Data analysis, title generation, chart generation  | Return error, prompt configure key |
-| Firestore            | Data persistence                                   | Propagate error                    |
-| user-service         | LLM client management, API key resolution          | Propagate error                    |
-| app-settings-service | LLM pricing data at startup                        | Fail-fast (startup crash)          |
+| Service              | Purpose                                           | Failure Mode                       |
+| -------------------- | ------------------------------------------------- | ---------------------------------- |
+| LLM Providers        | Data analysis, title generation, chart generation | Return error, prompt configure key |
+| Firestore            | Data persistence                                  | Propagate error                    |
+| user-service         | LLM client management, API key resolution         | Propagate error                    |
+| app-settings-service | LLM pricing data at startup                       | Fail-fast (startup crash)          |
 
 ### Internal Services
 
-| Service                      | Endpoint          | Purpose                      |
-| ---------------------------- | ----------------- | ---------------------------- |
-| user-service                 | (internal client) | Get user's LLM API key       |
-| mobile-notifications-service | (internal client) | Query filtered notifications |
-| app-settings-service         | (internal client) | Fetch LLM pricing at boot    |
+| Service                      | Endpoint                                    | Purpose                      |
+| ---------------------------- | ------------------------------------------- | ---------------------------- |
+| user-service                 | `getLlmClient()` via internal-clients       | Get user's LLM API key       |
+| mobile-notifications-service | `POST /internal/mobile-notifications/query` | Query filtered notifications |
+| app-settings-service         | Pricing fetch at boot                       | Fetch LLM pricing            |
 
 ## Configuration
 
@@ -274,9 +285,9 @@ sequenceDiagram
 
 ## LLM Models
 
-| Model             | Constant          | Purpose                             |
-| ----------------- | ----------------- | ----------------------------------- |
-| Gemini 2.5 Flash  | `Gemini25Flash`   | Default model for all LLM tasks     |
+| Model            | Constant        | Purpose                         |
+| ---------------- | --------------- | ------------------------------- |
+| Gemini 2.5 Flash | `Gemini25Flash` | Default model for all LLM tasks |
 
 ## Gotchas
 
@@ -284,7 +295,7 @@ sequenceDiagram
 - **LLM repair pattern**: Analysis auto-retries with repair prompt on parse failure (INT-79)
 - **Empty insights**: Returns success with empty array and `noInsightsReason` instead of error (INT-77)
 - **Empty transform results**: Data transform accepts empty arrays (`[]`) as valid output when zero rows match the transformation criteria (INT-595)
-- **Chart type IDs**: Use compact format (C1–C6) not full names in storage
+- **Chart type IDs**: Use compact format (C1 -- C6) not full names in storage
 - **Snapshot refresh**: Snapshots refresh on feed creation and update only (scheduled refresh was removed to save ~6.5M tokens/day)
 - **Snapshot ?refresh=true**: The `GET /composite-feeds/:id/snapshot` endpoint accepts a `refresh=true` query param to force on-demand refresh
 - **Visualization async compute**: `POST /visualizations` returns 201 immediately with `status: pending`; poll `GET /visualizations/:id` until `status: ready` or `error`
@@ -317,7 +328,7 @@ apps/data-insights-agent/src/
 │   │   └── usecases/        # refreshSnapshot, getDataInsightSnapshot
 │   ├── dataInsights/        # AI analysis capabilities
 │   │   ├── types.ts         # DataInsight, ChartTypeDefinition, MAX_INSIGHTS_PER_FEED
-│   │   ├── chartTypes.ts    # CHART_TYPES array (C1–C6 with Vega-Lite schemas)
+│   │   ├── chartTypes.ts    # CHART_TYPES array (C1 -- C6 with Vega-Lite schemas)
 │   │   ├── ports.ts         # DataAnalysisService, ChartDefinitionService, DataTransformService
 │   │   ├── utils.ts         # buildCompositeFeedSchema helper
 │   │   └── usecases/        # analyzeData, generateChartDefinition, transformDataForPreview
