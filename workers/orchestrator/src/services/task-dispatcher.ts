@@ -608,7 +608,10 @@ export class TaskDispatcher {
       if (!hasWorktree) {
         return {
           ok: false,
-          error: { type: 'not_found', message: 'Worker container and worktree no longer available for resume' },
+          error: {
+            type: 'not_found',
+            message: 'Worker container and worktree no longer available for resume',
+          },
         };
       }
 
@@ -629,9 +632,8 @@ export class TaskDispatcher {
       );
       /* v8 ignore stop @preserve */
 
-      const prompt = task.agentType === 'ask_agent'
-        ? message
-        : this.buildResumePreamble(task) + message;
+      const prompt =
+        task.agentType === 'ask_agent' ? message : this.buildResumePreamble(task) + message;
       task.status = 'running';
       task.containerId = '';
       task.startedAt = new Date().toISOString();
@@ -954,6 +956,7 @@ export class TaskDispatcher {
           'prompt',
           combinedPrompt.length > 200 ? combinedPrompt.slice(0, 200) + '\u2026' : combinedPrompt
         );
+        await this.flushTaskLogs(task.taskId);
         await this.teardownAttempt(task.taskId, true);
         const resumeResult = await this.startWorkerAttempt(task, {
           prompt: combinedPrompt,
