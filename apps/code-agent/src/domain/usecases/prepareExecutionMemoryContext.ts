@@ -2,6 +2,7 @@ import { Timestamp } from '@google-cloud/firestore';
 import { getErrorMessage, type Logger, type Result } from '@intexuraos/common-core';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { ExecutionMemoryType } from '../models/executionMemory.js';
+import type { ExecutionMemoryApplicationCandidate } from '../models/executionMemoryApplication.js';
 import { z } from 'zod';
 import type { CodeTask } from '../models/codeTask.js';
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
@@ -9,15 +10,16 @@ import type { ExecutionMemoryRepository } from '../repositories/executionMemoryR
 import type { ExecutionMemoryApplicationRepository } from '../repositories/executionMemoryApplicationRepository.js';
 import type { ExecutionMemoryPromptContext } from '../services/taskDispatcher.js';
 
-const QUERY_NORMALIZER_VERSION = 'execution-memory-query-normalizer@1.0.0';
+const QUERY_NORMALIZER_VERSION = 'execution-memory-query-normalizer@2.0.0';
 const RETRIEVAL_VERSION = 'execution-memory-retrieval@3.0.0';
 const MAX_DESCRIPTION_LENGTH = 2500;
 const MAX_COMMENT_LENGTH = 800;
 const MAX_TOTAL_CONTEXT_LENGTH = 5000;
 const MAX_MATCHES = 3;
-const MIN_RERANK_SCORE = 0.55;
+const MIN_RERANK_SCORE = 0.50;
 const TOP_LOG_CANDIDATES = 3;
 const CANDIDATE_LIMIT = 20;
+const TOP_CANDIDATES_LIMIT = 5;
 
 const QueryNormalizationSchema = z.object({
   semanticQuery: z.string().min(1),
@@ -172,19 +174,22 @@ export async function prepareExecutionMemoryContext(
     .filter((candidate) => candidate.rerankScore >= MIN_RERANK_SCORE)
     .slice(0, MAX_MATCHES);
 
-  // Observability: log top candidates with score breakdowns
-  const queryComponents = dedupeLower(normalization.components);
-  const topCandidates = reranked.slice(0, TOP_LOG_CANDIDATES).map((candidate) => ({
+  // Build top candidates for application records and context
+  const topCandidates: ExecutionMemoryApplicationCandidate[] = reranked.slice(0, TOP_CANDIDATES_LIMIT).map((candidate) => ({
     memoryId: candidate.memory.id,
     title: candidate.memory.title,
-    rerankScore: roundScore(candidate.rerankScore),
+    memoryType: candidate.memory.memoryType,
     vectorScore: candidate.memory.vectorScore,
-    componentOverlap: roundScore(overlapRatio(queryComponents, candidate.memory.componentHints)),
+    rerankScore: roundScore(candidate.rerankScore),
+    componentOverlap: roundScore(overlapRatio(normalization.components, candidate.memory.componentHints)),
     effectiveness: roundScore(
       (candidate.memory.positiveCount + 1) / (candidate.memory.applicationCount + 2)
     ),
     passedThreshold: candidate.rerankScore >= MIN_RERANK_SCORE,
   }));
+
+  // Observability: log top candidates with score breakdowns
+  const topLogCandidates = topCandidates.slice(0, TOP_LOG_CANDIDATES);
 
   logger.info(
     {
@@ -192,7 +197,7 @@ export async function prepareExecutionMemoryContext(
       candidateCount: reranked.length,
       matchedCount: matchedMemories.length,
       minRerankScore: MIN_RERANK_SCORE,
-      topCandidates,
+      topCandidates: topLogCandidates,
     },
     'Execution memory reranking complete'
   );
@@ -203,6 +208,7 @@ export async function prepareExecutionMemoryContext(
     normalization,
     status: matchedMemories.length > 0 ? 'matched' : 'no_match',
     matchedMemories,
+    topCandidates,
   });
 
   if (matchedMemories.length === 0) {
@@ -211,6 +217,7 @@ export async function prepareExecutionMemoryContext(
       ...(applicationId !== undefined && { applicationId }),
       retrievalVersion: RETRIEVAL_VERSION,
       querySummary: normalization.summary,
+      topCandidates,
     };
   }
 
@@ -219,6 +226,7 @@ export async function prepareExecutionMemoryContext(
     ...(applicationId !== undefined && { applicationId }),
     retrievalVersion: RETRIEVAL_VERSION,
     querySummary: normalization.summary,
+    topCandidates,
     matchedAt: Timestamp.now(),
     matchedMemories: matchedMemories.map((match) => ({
       memoryId: match.memory.id,
@@ -380,6 +388,11 @@ function buildNormalizationPrompt(
     '',
     'Schema:',
     '{"semanticQuery":"string","components":["string"],"riskFlags":["string"],"verificationGoals":["string"],"summary":"string"}',
+    '',
+    'components: Use single-word or hyphenated canonical identifiers matching service/module names.',
+    'Examples: "code-agent", "firestore", "routing", "testing", "web-app", "orchestrator",',
+    '"common-core", "linear", "pubsub", "migrations", "ci", "planning", "memory".',
+    'Do NOT use multi-word descriptive phrases like "code tasks filter" or "issue-groups API endpoint".',
   ].join('\n');
 }
 
@@ -392,11 +405,9 @@ function rerankMemories(
   memory: (typeof candidates)[number];
   rerankScore: number;
 }[] {
-  const queryComponents = dedupeLower(normalization.components);
-
   return candidates
     .map((memory) => {
-      const componentOverlap = overlapRatio(queryComponents, memory.componentHints);
+      const componentOverlap = overlapRatio(normalization.components, memory.componentHints);
       const effectiveness = (memory.positiveCount + 1) / (memory.applicationCount + 2);
       const rerankScore =
         (0.55 * memory.vectorScore)
@@ -422,6 +433,7 @@ async function createApplication(params: {
     };
     rerankScore: number;
   }[];
+  topCandidates?: ExecutionMemoryApplicationCandidate[];
 }): Promise<string | undefined> {
   const createResult = await params.executionMemoryApplicationRepo.create({
     taskId: params.task.id,
@@ -442,30 +454,25 @@ async function createApplication(params: {
     status: params.status,
     memoryIdsUsed: [],
     memoryIdsRejected: [],
+    ...(params.topCandidates !== undefined && { topCandidates: params.topCandidates }),
   });
 
   return createResult.ok ? createResult.value.id : undefined;
 }
 
-function dedupeLower(values: string[]): string[] {
-  return Array.from(new Set(values.map((value) => value.trim().toLowerCase()).filter((value) => value !== '')));
-}
-
 function overlapRatio(left: string[], right: string[]): number {
-  if (left.length === 0 || right.length === 0) {
+  const leftTokens = new Set(left.flatMap((v) => tokenize(v)));
+  const rightTokens = new Set(right.flatMap((v) => tokenize(v)));
+  if (leftTokens.size === 0 || rightTokens.size === 0) {
     return 0;
   }
-  const leftSet = new Set(dedupeLower(left));
-  const rightSet = new Set(dedupeLower(right));
   let overlap = 0;
-
-  for (const value of leftSet) {
-    if (rightSet.has(value)) {
+  for (const value of leftTokens) {
+    if (rightTokens.has(value)) {
       overlap += 1;
     }
   }
-
-  return overlap / Math.max(leftSet.size, 1);
+  return overlap / Math.max(leftTokens.size, 1);
 }
 
 function tokenize(input: string): string[] {

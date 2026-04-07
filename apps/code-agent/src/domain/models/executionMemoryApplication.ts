@@ -19,6 +19,17 @@ export interface ExecutionMemoryPerMemoryOutcome {
   confidence: number;
 }
 
+export interface ExecutionMemoryApplicationCandidate {
+  memoryId: string;
+  title: string;
+  memoryType: ExecutionMemoryType;
+  vectorScore: number;
+  rerankScore: number;
+  componentOverlap: number;
+  effectiveness: number;
+  passedThreshold: boolean;
+}
+
 export interface ExecutionMemoryApplication {
   id: string;
   taskId: string;
@@ -35,6 +46,7 @@ export interface ExecutionMemoryApplication {
   memoryIdsRejected: string[];
   evaluationSummary?: string;
   perMemoryOutcome?: ExecutionMemoryPerMemoryOutcome[];
+  topCandidates?: ExecutionMemoryApplicationCandidate[];
   createdAt: Timestamp;
   updatedAt: Timestamp;
   completedAt?: Timestamp;
