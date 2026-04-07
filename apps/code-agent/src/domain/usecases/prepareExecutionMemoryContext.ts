@@ -174,17 +174,14 @@ export async function prepareExecutionMemoryContext(
     .filter((candidate) => candidate.rerankScore >= MIN_RERANK_SCORE)
     .slice(0, MAX_MATCHES);
 
-  // Build top candidates for application records and context
   const topCandidates: ExecutionMemoryApplicationCandidate[] = reranked.slice(0, TOP_CANDIDATES_LIMIT).map((candidate) => ({
     memoryId: candidate.memory.id,
     title: candidate.memory.title,
     memoryType: candidate.memory.memoryType,
     vectorScore: candidate.memory.vectorScore,
     rerankScore: roundScore(candidate.rerankScore),
-    componentOverlap: roundScore(overlapRatio(normalization.components, candidate.memory.componentHints)),
-    effectiveness: roundScore(
-      (candidate.memory.positiveCount + 1) / (candidate.memory.applicationCount + 2)
-    ),
+    componentOverlap: roundScore(candidate.componentOverlap),
+    effectiveness: roundScore(candidate.effectiveness),
     passedThreshold: candidate.rerankScore >= MIN_RERANK_SCORE,
   }));
 
@@ -404,6 +401,8 @@ function rerankMemories(
 ): {
   memory: (typeof candidates)[number];
   rerankScore: number;
+  componentOverlap: number;
+  effectiveness: number;
 }[] {
   return candidates
     .map((memory) => {
@@ -414,7 +413,7 @@ function rerankMemories(
         + (0.25 * componentOverlap)
         + (0.20 * effectiveness);
 
-      return { memory, rerankScore };
+      return { memory, rerankScore, componentOverlap, effectiveness };
     })
     .sort((left, right) => right.rerankScore - left.rerankScore);
 }
