@@ -169,7 +169,7 @@ describe('CodeTaskLogViewer integration', () => {
     const buttons = screen.getAllByRole('button');
     const claudeButton = buttons.find((b) => b.textContent?.trim() === 'Claude');
     expect(claudeButton).toBeDefined();
-    expect(claudeButton).toHaveAttribute('aria-pressed');
+    expect(claudeButton).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('when claude filter is active, only claude-tagged lines (with links) are shown', async () => {

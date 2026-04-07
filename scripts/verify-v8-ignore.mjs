@@ -9,7 +9,6 @@ import { strict as assert } from 'node:assert';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = resolve(__dirname, '..');
 
-
 const VALID_CATEGORIES = [
   'ts-type',
   'regex',
