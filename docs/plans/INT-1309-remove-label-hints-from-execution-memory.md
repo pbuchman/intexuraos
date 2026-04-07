@@ -4,7 +4,7 @@
 
 **Goal:** Remove the `labelHints`/`labelOverlap` signal from the execution memory scoring pipeline — it contributes near-zero value (avg 0.012 pts) and wastes 15% of the reranking weight budget.
 
-**Architecture:** All changes are within the `code-agent` app. The label signal is threaded through four layers: model (`ExecutionMemory`), repository interfaces (`CreateExecutionMemoryInput`, `UpdateExecutionMemoryInput`), retrieval/scoring (`prepareExecutionMemoryContext`), and distillation (`processExecutionMemoryBacklog`). We remove `labelHints` from all layers and redistribute the freed 15% weight equally across the three remaining signals. Existing Firestore documents retain vestigial `labelHints` fields — no migration needed. The Firestore repository's `toExecutionMemory` mapper continues to read `labelHints` from documents but the field is no longer used in scoring.
+**Architecture:** All changes are within the `code-agent` app. The label signal is threaded through four layers: model (`ExecutionMemory`), repository interfaces (`CreateExecutionMemoryInput`, `UpdateExecutionMemoryInput`), retrieval/scoring (`prepareExecutionMemoryContext`), and distillation (`processExecutionMemoryBacklog`). We remove `labelHints` from all layers and redistribute the freed 15% weight equally across the three remaining signals. Existing Firestore documents retain vestigial `labelHints` data — no migration needed — but the mapper no longer maps the field.
 
 **Tech Stack:** TypeScript, Vitest, Zod, Firestore
 
@@ -14,17 +14,17 @@
 
 ## File Map
 
-| Action   | File                                                                                      | Responsibility                                                                                                |
-| -------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Modify   | `apps/code-agent/src/domain/models/executionMemory.ts:30`                                 | Remove `labelHints` from `ExecutionMemory` interface                                                          |
-| Modify   | `apps/code-agent/src/domain/repositories/executionMemoryRepository.ts:25,53`              | Remove `labelHints` from `CreateExecutionMemoryInput` and `UpdateExecutionMemoryInput`                        |
-| Modify   | `apps/code-agent/src/infra/repositories/firestoreExecutionMemoryRepository.ts:39`         | Remove `labelHints` from `toExecutionMemory` mapper                                                           |
-| Modify   | `apps/code-agent/src/domain/usecases/prepareExecutionMemoryContext.ts`                    | Remove `linearIssueLabels` param, `labelHints` schema/interface, `labelOverlap` scoring, redistribute weights |
-| Modify   | `apps/code-agent/src/domain/usecases/processExecutionMemoryBacklog.ts:49,316,531-532,779` | Remove `labelHints` from distillation schema, prompt, and persistence                                         |
-| Modify   | `apps/code-agent/src/domain/usecases/drainTaskQueue.ts:380`                               | Remove `linearIssueLabels` arg from `prepareExecutionMemoryContext()` call                                    |
-| Modify   | `apps/code-agent/src/domain/usecases/drainRetryQueue.ts:275`                              | Remove `linearIssueLabels` arg from `prepareExecutionMemoryContext()` call                                    |
-| Modify   | `apps/code-agent/src/__tests__/domain/useCases/prepareExecutionMemoryContext.test.ts`     | Update all test cases to remove label-related fields and assertions                                           |
-| Modify   | `apps/code-agent/src/__tests__/domain/useCases/processExecutionMemoryBacklog.test.ts`     | Remove `labelHints` from all test fixtures                                                                    |
+| Action   | File                                                                                          | Responsibility                                                                                                |
+| -------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Modify   | `apps/code-agent/src/domain/models/executionMemory.ts:30`                                     | Remove `labelHints` from `ExecutionMemory` interface                                                          |
+| Modify   | `apps/code-agent/src/domain/repositories/executionMemoryRepository.ts:25,53`                  | Remove `labelHints` from `CreateExecutionMemoryInput` and `UpdateExecutionMemoryInput`                        |
+| Modify   | `apps/code-agent/src/infra/repositories/firestoreExecutionMemoryRepository.ts:39`             | Remove `labelHints` from `toExecutionMemory` mapper                                                           |
+| Modify   | `apps/code-agent/src/domain/usecases/prepareExecutionMemoryContext.ts`                        | Remove `linearIssueLabels` param, `labelHints` schema/interface, `labelOverlap` scoring, redistribute weights |
+| Modify   | `apps/code-agent/src/domain/usecases/processExecutionMemoryBacklog.ts:49,316,531-532,552,779` | Remove `labelHints` from distillation schema, prompt, prompt example JSON, and persistence                    |
+| Modify   | `apps/code-agent/src/domain/usecases/drainTaskQueue.ts:380`                                   | Remove `linearIssueLabels` arg from `prepareExecutionMemoryContext()` call                                    |
+| Modify   | `apps/code-agent/src/domain/usecases/drainRetryQueue.ts:275`                                  | Remove `linearIssueLabels` arg from `prepareExecutionMemoryContext()` call                                    |
+| Modify   | `apps/code-agent/src/__tests__/domain/useCases/prepareExecutionMemoryContext.test.ts`         | Update all test cases to remove label-related fields and assertions                                           |
+| Modify   | `apps/code-agent/src/__tests__/domain/useCases/processExecutionMemoryBacklog.test.ts`         | Remove `labelHints` from all test fixtures                                                                    |
 
 ---
 
@@ -496,6 +496,13 @@ Find lines 531-532 in the prompt array and delete the `labelHints` guidance line
 ```
 
 Also remove `"labelHints":["string"]` from any schema description string in the prompt.
+
+**Also explicitly delete line 552** — the JSON example in `DISTILLATION_SCHEMA_BLOCK` contains a full example memory with `"labelHints":["testing","backend"]`:
+```typescript
+// DELETE from the Example (create) at line 552:
+"labelHints":["testing","backend"],
+// (keep the trailing comma after "keywords":[...]))
+```
 
 - [ ] **Step 5: Remove `labelHints` from memory persistence (two locations)**
 
