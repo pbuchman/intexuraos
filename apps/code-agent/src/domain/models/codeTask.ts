@@ -1,6 +1,7 @@
 import type { CodeTaskWorkerType } from '@intexuraos/common-core';
 import { Timestamp } from '@google-cloud/firestore';
 import type { ExecutionMemoryType } from './executionMemory.js';
+import type { ExecutionMemoryApplicationCandidate } from './executionMemoryApplication.js';
 
 /**
  * Worker type determines which model Claude uses.
@@ -112,6 +113,7 @@ export interface ExecutionMemoryContext {
   querySummary?: string;
   matchedAt?: Timestamp;
   matchedMemories?: ExecutionMemoryContextMemory[];
+  topCandidates?: ExecutionMemoryApplicationCandidate[];
   errorCode?: string;
   errorMessage?: string;
 }

@@ -199,12 +199,13 @@ describe('prepareExecutionMemoryContext', () => {
       executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       status: 'none',
       applicationId: 'app-no-match',
       retrievalVersion: 'execution-memory-retrieval@3.0.0',
       querySummary: expect.stringContaining('Fix the Auth0 callback route'),
     });
+    expect(result?.topCandidates).toBeDefined();
     expect(executionMemoryApplicationRepo.create).toHaveBeenCalledWith(expect.objectContaining({
       status: 'no_match',
       queryText: expect.stringContaining('Fix the Auth0 callback route'),
@@ -408,12 +409,13 @@ describe('prepareExecutionMemoryContext', () => {
       executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       status: 'none',
       applicationId: 'app-invalid-json',
       retrievalVersion: 'execution-memory-retrieval@3.0.0',
       querySummary: expect.stringContaining('Fix the Auth0 callback route'),
     });
+    expect(result?.topCandidates).toBeDefined();
     expect(logger.warn).toHaveBeenCalledTimes(2);
   });
 
@@ -680,6 +682,163 @@ describe('prepareExecutionMemoryContext', () => {
       }),
       expect.stringContaining('Execution memory reranking complete')
     );
+  });
+
+  describe('tokenized overlapRatio', () => {
+    it('matches multi-word phrases against single-word hints via tokenization', () => {
+      const result = prepareExecutionMemoryContextTestables.overlapRatio(
+        ['code tasks filter', 'firestore data'],
+        ['firestore', 'routing']
+      );
+      // leftTokens: tokenize('code tasks filter') = ['code', 'tasks', 'filter'] → 'code' is 4 chars, 'tasks' is 5, 'filter' is 6
+      //   tokenize('firestore data') = ['firestore'] → 'data' is 4 chars, so ['firestore', 'data']
+      // Actually: 'code' = 4 chars (passes), 'tasks' = 5 (passes), 'filter' = 6 (passes), 'firestore' = 9 (passes), 'data' = 4 (passes)
+      // leftTokens = {code, tasks, filter, firestore, data}
+      // rightTokens: tokenize('firestore') = ['firestore'], tokenize('routing') = ['routing']
+      // rightTokens = {firestore, routing}
+      // overlap = 1 (firestore), leftTokens.size = 5
+      // result = 1/5 = 0.2
+      expect(result).toBeCloseTo(0.2, 2);
+      expect(result).toBeGreaterThan(0);
+    });
+
+    it('returns 0 for empty arrays', () => {
+      expect(prepareExecutionMemoryContextTestables.overlapRatio([], [])).toBe(0);
+      expect(prepareExecutionMemoryContextTestables.overlapRatio(['firestore'], [])).toBe(0);
+      expect(prepareExecutionMemoryContextTestables.overlapRatio([], ['firestore'])).toBe(0);
+    });
+
+    it('returns 0 when all tokens are shorter than 4 characters', () => {
+      // 'a b c' tokenizes to ['a', 'b', 'c'] — all < 4 chars, filtered out
+      const result = prepareExecutionMemoryContextTestables.overlapRatio(
+        ['a b c'],
+        ['firestore']
+      );
+      expect(result).toBe(0);
+    });
+  });
+
+  describe('buildNormalizationPrompt', () => {
+    it('contains single-word or hyphenated canonical identifiers instruction', () => {
+      const prompt = prepareExecutionMemoryContextTestables.buildNormalizationPrompt(
+        { prompt: 'test prompt', sanitizedPrompt: 'test prompt' },
+        { description: null, comments: [] }
+      );
+      expect(prompt).toContain('single-word or hyphenated canonical identifiers');
+      expect(prompt).toContain('Do NOT use multi-word descriptive phrases');
+    });
+  });
+
+  describe('topCandidates', () => {
+    it('includes topCandidates in the application record and returned context with passedThreshold correctly set', async () => {
+      queryClient.generate.mockResolvedValue(ok({
+        content: JSON.stringify({
+          semanticQuery: 'auth route logging verification',
+          components: ['auth', 'route', 'logging', 'verification'],
+          riskFlags: [],
+          verificationGoals: [],
+          summary: 'Auth route logging',
+        }),
+        usage: { model: LlmModels.Gemini25Flash },
+      }));
+
+      embeddingClient.embed.mockResolvedValue(ok([0.1, 0.2, 0.3]));
+      executionMemoryRepo.findNearest.mockResolvedValue(ok([
+        createMatch('mem-high', {
+          vectorScore: 0.95,
+          componentHints: ['auth', 'route', 'logging', 'verification'],
+          applicationCount: 5,
+          positiveCount: 4,
+        }),
+        createMatch('mem-low', {
+          vectorScore: 0.3,
+          componentHints: ['unrelated-topic'],
+          applicationCount: 0,
+          positiveCount: 0,
+        }),
+      ]));
+      executionMemoryApplicationRepo.create.mockResolvedValue(ok({ id: 'app-top' }));
+
+      const result = await prepareExecutionMemoryContext({
+        task: createTask(),
+        logger,
+        linearAgentClient: linearAgentClient as never,
+        queryClient: queryClient as never,
+        embeddingClient: embeddingClient as never,
+        executionMemoryRepo: executionMemoryRepo as never,
+        executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+      });
+
+      // Verify topCandidates in return value
+      expect(result?.topCandidates).toBeDefined();
+      expect(result?.topCandidates).toHaveLength(2);
+      expect(result?.topCandidates?.[0]).toMatchObject({
+        memoryId: 'mem-high',
+        passedThreshold: true,
+      });
+      expect(result?.topCandidates?.[1]).toMatchObject({
+        memoryId: 'mem-low',
+        passedThreshold: false,
+      });
+
+      // Verify topCandidates passed to application repo
+      expect(executionMemoryApplicationRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          topCandidates: expect.arrayContaining([
+            expect.objectContaining({
+              memoryId: 'mem-high',
+              passedThreshold: true,
+            }),
+            expect.objectContaining({
+              memoryId: 'mem-low',
+              passedThreshold: false,
+            }),
+          ]),
+        })
+      );
+    });
+
+    it('includes topCandidates in no_match return path', async () => {
+      queryClient.generate.mockResolvedValue(ok({
+        content: JSON.stringify({
+          semanticQuery: 'completely unrelated query',
+          components: ['unrelated'],
+          riskFlags: [],
+          verificationGoals: [],
+          summary: 'Unrelated',
+        }),
+        usage: { model: LlmModels.Gemini25Flash },
+      }));
+
+      embeddingClient.embed.mockResolvedValue(ok([0.1, 0.2, 0.3]));
+      executionMemoryRepo.findNearest.mockResolvedValue(ok([
+        createMatch('mem-miss', {
+          vectorScore: 0.3,
+          componentHints: ['different'],
+          applicationCount: 0,
+          positiveCount: 0,
+        }),
+      ]));
+      executionMemoryApplicationRepo.create.mockResolvedValue(ok({ id: 'app-none' }));
+
+      const result = await prepareExecutionMemoryContext({
+        task: createTask(),
+        logger,
+        linearAgentClient: linearAgentClient as never,
+        queryClient: queryClient as never,
+        embeddingClient: embeddingClient as never,
+        executionMemoryRepo: executionMemoryRepo as never,
+        executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+      });
+
+      expect(result?.status).toBe('none');
+      expect(result?.topCandidates).toBeDefined();
+      expect(result?.topCandidates).toHaveLength(1);
+      expect(result?.topCandidates?.[0]).toMatchObject({
+        memoryId: 'mem-miss',
+        passedThreshold: false,
+      });
+    });
   });
 
   describe('parseJsonObject', () => {
