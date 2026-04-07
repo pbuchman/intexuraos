@@ -360,7 +360,6 @@ describe('firestoreExecutionMemoryRepository', () => {
       evidenceSummary: '',
       retrievalText: '',
       keywords: [],
-      labelHints: [],
       componentHints: [],
       fingerprint: '',
       distillationVersion: '',
