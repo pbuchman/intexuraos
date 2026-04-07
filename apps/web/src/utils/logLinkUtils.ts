@@ -9,11 +9,11 @@ export interface URLSegment {
   url: string;
 }
 
-const TRAILING_PUNCTUATION = new Set(['.', ',', ')', ';', "'"] as const);
+const TRAILING_PUNCTUATION = new Set<string>(['.', ',', ')', ';', "'"]);
 
 function stripTrailingPunctuation(url: string): string {
   let result = url;
-  while (result.length > 0 && TRAILING_PUNCTUATION.has(result[result.length - 1] as '.')) {
+  while (result.length > 0 && TRAILING_PUNCTUATION.has(result.charAt(result.length - 1))) {
     result = result.slice(0, -1);
   }
   return result;

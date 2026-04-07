@@ -4,7 +4,7 @@ import { formatUrlForDisplay, parseLogLine } from '../logLinkUtils.js';
 describe('parseLogLine', () => {
   it('line with single URL returns one URLSegment', () => {
     const result = parseLogLine('Check https://example.com for details');
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       'Check ',
       { type: 'url', url: 'https://example.com' },
       ' for details',
@@ -13,7 +13,7 @@ describe('parseLogLine', () => {
 
   it('line with multiple URLs returns all URLSegments', () => {
     const result = parseLogLine('See https://foo.com and https://bar.com');
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       'See ',
       { type: 'url', url: 'https://foo.com' },
       ' and ',
@@ -23,12 +23,12 @@ describe('parseLogLine', () => {
 
   it('line with no URL returns single plain text segment', () => {
     const result = parseLogLine('No links here at all');
-    expect(result).toEqual(['No links here at all']);
+    expect(result).toStrictEqual(['No links here at all']);
   });
 
   it('strips trailing period from URL', () => {
     const result = parseLogLine('See https://example.com.');
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       'See ',
       { type: 'url', url: 'https://example.com' },
       '.',
@@ -37,7 +37,7 @@ describe('parseLogLine', () => {
 
   it('strips trailing comma from URL', () => {
     const result = parseLogLine('Visit https://example.com, then continue');
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       'Visit ',
       { type: 'url', url: 'https://example.com' },
       ', then continue',
@@ -46,7 +46,7 @@ describe('parseLogLine', () => {
 
   it('strips trailing closing parenthesis from URL', () => {
     const result = parseLogLine('(see https://example.com)');
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       '(see ',
       { type: 'url', url: 'https://example.com' },
       ')',
@@ -55,7 +55,7 @@ describe('parseLogLine', () => {
 
   it('strips trailing semicolon from URL', () => {
     const result = parseLogLine('URL: https://example.com; next');
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       'URL: ',
       { type: 'url', url: 'https://example.com' },
       '; next',
@@ -64,7 +64,7 @@ describe('parseLogLine', () => {
 
   it("strips trailing single quote from URL", () => {
     const result = parseLogLine("it's at https://example.com'");
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       "it's at ",
       { type: 'url', url: 'https://example.com' },
       "'",
@@ -73,7 +73,7 @@ describe('parseLogLine', () => {
 
   it('strips multiple trailing punctuation characters repeatedly', () => {
     const result = parseLogLine('See https://example.com).');
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       'See ',
       { type: 'url', url: 'https://example.com' },
       ').',
@@ -85,12 +85,12 @@ describe('parseLogLine', () => {
     const url = 'https://' + 'a'.repeat(63) + '.com/path';
     expect(url.length).toBe(80);
     const result = parseLogLine(`Link: ${url}`);
-    expect(result).toEqual(['Link: ', { type: 'url', url }]);
+    expect(result).toStrictEqual(['Link: ', { type: 'url', url }]);
   });
 
   it('URL at start of line', () => {
     const result = parseLogLine('https://example.com is the link');
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       { type: 'url', url: 'https://example.com' },
       ' is the link',
     ]);
@@ -98,7 +98,7 @@ describe('parseLogLine', () => {
 
   it('URL in middle of line', () => {
     const result = parseLogLine('start https://example.com end');
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       'start ',
       { type: 'url', url: 'https://example.com' },
       ' end',
@@ -107,7 +107,7 @@ describe('parseLogLine', () => {
 
   it('URL at end of line', () => {
     const result = parseLogLine('the link is https://example.com');
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       'the link is ',
       { type: 'url', url: 'https://example.com' },
     ]);
@@ -115,7 +115,7 @@ describe('parseLogLine', () => {
 
   it('does not include empty strings in output', () => {
     const result = parseLogLine('https://example.com');
-    expect(result).toEqual([{ type: 'url', url: 'https://example.com' }]);
+    expect(result).toStrictEqual([{ type: 'url', url: 'https://example.com' }]);
     expect(result.every((seg) => seg !== '')).toBe(true);
   });
 });
