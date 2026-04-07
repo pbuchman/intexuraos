@@ -1408,4 +1408,18 @@ describe('system-prompt', () => {
     });
     expect(result).toContain(EXPECTED_WORKER_TYPE_FALLBACK);
   });
+
+  it('includes non-interactive environment instructions for ask_agent', () => {
+    const result = buildSystemPrompt({
+      taskId: 'task_test',
+      linearIssueLabels: [],
+      workerType: 'opus',
+      taskUrl: 'https://intexuraos.cloud/#/code-tasks/task_test',
+      agentType: 'ask_agent',
+    });
+
+    expect(result).toContain('non-interactive');
+    expect(result).toContain('AskUserQuestion');
+    expect(result).toContain('NEVER use interactive tools');
+  });
 });
