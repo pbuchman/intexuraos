@@ -275,6 +275,40 @@ const MemoExecutionMemoryCard = memo(function ExecutionMemoryCard({ task }: { ta
         </div>
       ) : null}
 
+      {context?.topCandidates !== undefined && context.topCandidates.length > 0 ? (
+        <div className="mb-4">
+          <h4 className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+            Top Candidates
+          </h4>
+          <div className="space-y-1.5">
+            {context.topCandidates.map((candidate) => (
+              <div
+                key={candidate.memoryId}
+                className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs ${
+                  candidate.passedThreshold
+                    ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/30'
+                    : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/40'
+                }`}
+              >
+                <span className={`font-mono font-medium ${
+                  candidate.passedThreshold
+                    ? 'text-emerald-700 dark:text-emerald-300'
+                    : 'text-slate-500 dark:text-slate-400'
+                }`}>
+                  {candidate.rerankScore.toFixed(3)}
+                </span>
+                <span className="truncate text-slate-700 dark:text-slate-200">{candidate.title}</span>
+                <span className="ml-auto flex shrink-0 gap-1.5 text-slate-400 dark:text-slate-500">
+                  <span title="Vector score">V:{candidate.vectorScore.toFixed(2)}</span>
+                  <span title="Component overlap">C:{candidate.componentOverlap.toFixed(2)}</span>
+                  <span title="Effectiveness">E:{candidate.effectiveness.toFixed(2)}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {postRun !== undefined ? (
         <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
           <div className="flex flex-wrap items-center gap-2">
