@@ -4,7 +4,7 @@
  * Triggered when all LLMs complete OR when user confirms 'proceed' with partial failure.
  */
 
-import { LlmModels, type GPTImage1, type Gemini25FlashImage } from '@intexuraos/llm-contract';
+import { LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import {
   buildSourceMap,
@@ -22,7 +22,7 @@ import type { ContextInferenceProvider } from '../ports/contextInference.js';
 import type { ShareInfo, AttributionStatus } from '../models/Research.js';
 import type { CoverImageInput, GeneratedByUserInfo } from '../utils/htmlGenerator.js';
 import { generateShareableHtml, slugify, generateShareToken } from '../utils/index.js';
-import type { ImageServiceClient, GeneratedImageData } from '../../../services.js';
+import type { ImageServiceClient, GeneratedImageData, PromptModel, ImageModel } from '../../../services.js';
 import type { ResearchExportSettingsPort } from '../ports/researchExportSettings.js';
 import { repairAttribution } from './repairAttribution.js';
 
@@ -432,34 +432,48 @@ export async function runSynthesis(
   return { ok: true };
 }
 
-type ImageModel = GPTImage1 | Gemini25FlashImage;
+interface ProviderPipeline {
+  name: string;
+  promptModel: PromptModel;
+  imageModel: ImageModel;
+}
 
 /**
- * Select image generation model based on available API keys and synthesis model.
- * When synthesis uses OpenAI (gpt-*), prefer GPT for images for consistency.
+ * Returns an ordered list of available provider pipelines (preferred first).
+ * When synthesis uses OpenAI (gpt-*), prefer OpenAI pipeline for consistency.
  * Otherwise, prefer Google (gemini) as default.
  */
-function selectImageModel(
+function getAvailableProviderPipelines(
   imageApiKeys: ImageApiKeys | undefined,
   synthesisModel?: string
-): ImageModel | null {
+): ProviderPipeline[] {
   const hasGoogleKey = imageApiKeys?.google !== undefined;
   const hasOpenAiKey = imageApiKeys?.openai !== undefined;
 
-  // If synthesis model is OpenAI-based, prefer GPT for images
+  const googlePipeline: ProviderPipeline = {
+    name: 'Google',
+    promptModel: LlmModels.Gemini25Pro,
+    imageModel: LlmModels.Gemini25FlashImage,
+  };
+
+  const openAiPipeline: ProviderPipeline = {
+    name: 'OpenAI',
+    promptModel: 'gpt-4.1' as PromptModel,
+    imageModel: LlmModels.GPTImage1,
+  };
+
   const preferOpenAi = synthesisModel?.startsWith('gpt-') === true;
+  const pipelines: ProviderPipeline[] = [];
 
   if (preferOpenAi) {
-    if (hasOpenAiKey) return LlmModels.GPTImage1;
-    /* v8 ignore start -- upstream: prior check for preferOpenAi guarantees this fallback is not reachable in unit test call chain @preserve */
-    if (hasGoogleKey) return LlmModels.Gemini25FlashImage;
-    /* v8 ignore stop @preserve */
+    if (hasOpenAiKey) pipelines.push(openAiPipeline);
+    if (hasGoogleKey) pipelines.push(googlePipeline);
   } else {
-    if (hasGoogleKey) return LlmModels.Gemini25FlashImage;
-    if (hasOpenAiKey) return LlmModels.GPTImage1;
+    if (hasGoogleKey) pipelines.push(googlePipeline);
+    if (hasOpenAiKey) pipelines.push(openAiPipeline);
   }
 
-  return null;
+  return pipelines;
 }
 
 async function generateCoverImage(
@@ -470,66 +484,99 @@ async function generateCoverImage(
   synthesisModel: string | undefined,
   logger: Logger
 ): Promise<GeneratedImageData | null> {
-  const promptModel = LlmModels.Gemini25Pro;
-  const imageModel = selectImageModel(imageApiKeys, synthesisModel);
+  const pipelines = getAvailableProviderPipelines(imageApiKeys, synthesisModel);
 
-  if (imageModel === null) {
-    logger.info(
-      {},
-      '[4.4.1a] No API keys available for image generation (neither Google nor OpenAI key set)'
-    );
+  if (pipelines.length === 0) {
+    logger.info({}, '[4.4.1a] No API keys available for image generation');
     return null;
   }
 
   logger.info(
-    {},
-    `[4.4.1b] Selected image model: ${imageModel} (Google key: ${imageApiKeys?.google !== undefined ? 'present' : 'missing'}, OpenAI key: ${imageApiKeys?.openai !== undefined ? 'present' : 'missing'})`
+    { providers: pipelines.map((p) => p.name) },
+    `[4.4.1] Starting cover image generation (${String(pipelines.length)} provider(s) available)`
   );
 
-  try {
+  const errors: { provider: string; step: string; code: string; message: string }[] = [];
+
+  for (const pipeline of pipelines) {
     logger.info(
       {},
-      `[4.4.2] Calling image-service /internal/images/prompts/generate (model: ${promptModel})`
+      `[4.4.2] Trying ${pipeline.name} provider (prompt: ${pipeline.promptModel}, image: ${pipeline.imageModel})`
     );
 
-    const promptResult = await client.generatePrompt(synthesizedResult, promptModel, userId);
-    if (!promptResult.ok) {
-      logger.error(
-        {
-          errorCode: promptResult.error.code,
-          errorMessage: promptResult.error.message,
-          model: promptModel,
-          userId,
-        },
-        '[4.4.2] Failed to generate cover image prompt from image-service'
+    try {
+      // Step 1: Generate prompt
+      const promptResult = await client.generatePrompt(
+        synthesizedResult,
+        pipeline.promptModel,
+        userId
       );
-      return null;
-    }
 
-    logger.info(
-      {},
-      `[4.4.3] Prompt generated (title: ${promptResult.value.title}), calling image-service /internal/images/generate (model: ${imageModel})`
-    );
+      if (!promptResult.ok) {
+        logger.warn(
+          { errorCode: promptResult.error.code, errorMessage: promptResult.error.message, provider: pipeline.name },
+          `[4.4.2] ${pipeline.name} prompt generation failed`
+        );
+        errors.push({
+          provider: pipeline.name,
+          step: 'prompt generation',
+          code: promptResult.error.code,
+          message: promptResult.error.message,
+        });
+        continue;
+      }
 
-    const imageResult = await client.generateImage(promptResult.value.prompt, imageModel, userId, {
-      title: promptResult.value.title,
-    });
-    if (!imageResult.ok) {
-      logger.error(
-        {
-          errorCode: imageResult.error.code,
-          errorMessage: imageResult.error.message,
-          model: imageModel,
-          userId,
-        },
-        '[4.4.3] Failed to generate cover image from image-service'
+      // Step 2: Generate image
+      logger.info(
+        {},
+        `[4.4.3] Prompt generated (title: ${promptResult.value.title}), generating image with ${pipeline.imageModel}`
       );
-      return null;
-    }
 
-    return imageResult.value;
-  } catch (error) {
-    logger.error({ error, userId }, '[4.4.ERR] Unexpected error during cover image generation');
-    return null;
+      const imageResult = await client.generateImage(
+        promptResult.value.prompt,
+        pipeline.imageModel,
+        userId,
+        { title: promptResult.value.title }
+      );
+
+      if (!imageResult.ok) {
+        logger.warn(
+          { errorCode: imageResult.error.code, errorMessage: imageResult.error.message, provider: pipeline.name },
+          `[4.4.3] ${pipeline.name} image generation failed`
+        );
+        errors.push({
+          provider: pipeline.name,
+          step: 'image generation',
+          code: imageResult.error.code,
+          message: imageResult.error.message,
+        });
+        continue;
+      }
+
+      logger.info(
+        { provider: pipeline.name },
+        `[4.4.4] Cover image generated successfully via ${pipeline.name}`
+      );
+      return imageResult.value;
+    } catch (error) {
+      logger.warn(
+        { error, provider: pipeline.name },
+        `[4.4.ERR] Unexpected error with ${pipeline.name} provider`
+      );
+      errors.push({
+        provider: pipeline.name,
+        step: 'unexpected',
+        code: 'UNEXPECTED_ERROR',
+        message: String(error),
+      });
+      continue;
+    }
   }
+
+  // All providers failed
+  logger.error(
+    { errors },
+    `[4.4.4] Cover image generation failed — all ${String(pipelines.length)} provider(s) exhausted. HTML will be generated without a cover image.`
+  );
+  return null;
 }
