@@ -316,9 +316,19 @@ You submit tasks while walking, while commuting, while thinking of something els
 ---
 
 <details>
-<summary><h2>What's New in v3.4.0</h2></summary>
+<summary><h2>What's New in v3.5.0</h2></summary>
 
 > See [CHANGELOG.md](CHANGELOG.md) for the complete history.
+
+#### v3.5.0
+
+| Improvement                         | Impact                                                                                    |
+| ----------------------------------- | ----------------------------------------------------------------------------------------- |
+| **Hellscript Categorized Writing**  | AI-powered writing following user style and preferences                                   |
+| **Codex Runtime Support**           | OpenAI Codex as an execution backend with auth, log processing, and worker types          |
+| **Execution Memory Graph**          | Visual representation of agent decision-making patterns for RAG tuning                    |
+| **Remediation Agent & Review Loop** | Autonomous auto-improvement loop with cross-LLM checks and event sourcing                 |
+| **OpenRouter Integration**          | Route tasks through OpenRouter models with backend infra, frontend selection, and pricing |
 
 #### v3.4.0
 

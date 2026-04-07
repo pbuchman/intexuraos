@@ -1,5 +1,42 @@
 # Changelog
 
+## 3.5.0
+
+### Added
+
+- Hellscript Categorized Writing Config — AI-powered writing following user style and preferences (INT-1064)
+- Codex Runtime Support — OpenAI Codex as an execution backend with auth, log processing, and worker types
+- Execution Memory Graph — Visual representation of agent decision-making patterns for RAG tuning (INT-1098)
+- Remediation Agent & Review Loop — Autonomous auto-improvement with cross-LLM checks and event sourcing
+- OpenRouter Integration — Route tasks through OpenRouter models with backend infra, frontend selection, and pricing (INT-1011, INT-1012)
+- Code Tasks V3 Server-Side Grouping — Backend grouping of code tasks for better performance at scale (INT-1173, INT-1184)
+- Batch Archive & V3 Loading UX improvements
+- Cloudflare Browser Rendering — Replaced Crawl4AI for more reliable JS-rendered page handling (INT-1121, INT-1153)
+- Per-Agent-Type Worker Settings — Different agent types tuned independently for performance and cost
+- Ask Agent — Interactive Claude Code Sessions with back-and-forth conversations from the UI (INT-1291)
+- CI Failure Auto-Handling — Failed checks on agent PRs retried or escalated without user intervention
+- Auto-Archive Merged Code Tasks — Task list stays clean with automatic archiving when PRs merge (INT-1276, INT-1174)
+- AI-Powered Linear Issue Cleanup — Stale/duplicate issues surfaced and removed automatically (INT-1168, INT-1169)
+- Cron Agent Security & Config hardening with enhanced authentication and validation (INT-1288)
+- Interactive links in code task logs for easier navigation (INT-1306)
+
+### Improved
+
+- Memory retrieval accuracy for better agent context awareness (INT-1302)
+- Memory scoring accuracy by removing Linear label influence (INT-1309)
+- Task completion verification by requiring PR evidence across all task types (INT-1279, INT-1292)
+- Plan reviews now require explicit approval before execution (INT-1255)
+
+### Fixed
+
+- Ask-agent losing conversation context unexpectedly (INT-1308)
+- Container restart failures when execution containers expired (INT-1304)
+- Merge action buttons remaining visible after PR was already merged (INT-1286)
+- Status not updating correctly when reviews are skipped (INT-1284)
+- Group status incorrectly deactivating before all tasks completed (INT-1243)
+- Transaction errors in fan-out operations (INT-1220)
+- PR comments being lost during task message retry operations (INT-1283)
+
 ## 3.4.0
 
 ### Added
