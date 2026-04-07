@@ -1164,12 +1164,23 @@ export interface CodeTaskError {
 export interface CodeTaskExecutionMemoryMatch {
   memoryId: string;
   title: string;
-  memoryType: 'implementation_pattern' | 'verification_pattern' | 'pitfall_pattern';
+  memoryType: 'implementation_pattern' | 'verification_pattern' | 'pitfall_pattern' | 'decomposition_pattern' | 'planning_decision' | 'review_finding';
   score: number;
   appliesWhen: string;
   action: string;
   avoid: string;
   verification: string;
+}
+
+export interface CodeTaskExecutionMemoryCandidate {
+  memoryId: string;
+  title: string;
+  memoryType: CodeTaskExecutionMemoryMatch['memoryType'];
+  vectorScore: number;
+  rerankScore: number;
+  componentOverlap: number;
+  effectiveness: number;
+  passedThreshold: boolean;
 }
 
 export interface CodeTaskExecutionMemoryContext {
@@ -1179,6 +1190,7 @@ export interface CodeTaskExecutionMemoryContext {
   querySummary?: string;
   matchedAt?: string;
   matchedMemories?: CodeTaskExecutionMemoryMatch[];
+  topCandidates?: CodeTaskExecutionMemoryCandidate[];
   errorCode?: string;
   errorMessage?: string;
 }
