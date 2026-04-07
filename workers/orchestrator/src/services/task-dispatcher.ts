@@ -632,7 +632,8 @@ export class TaskDispatcher {
       );
       /* v8 ignore stop @preserve */
 
-      const prompt = this.buildResumePreamble(task) + message;
+      const prompt =
+        task.agentType === 'ask_agent' ? message : this.buildResumePreamble(task) + message;
       task.status = 'running';
       task.containerId = '';
       task.startedAt = new Date().toISOString();
@@ -743,7 +744,7 @@ export class TaskDispatcher {
       const resumeResult = await this.startWorkerAttempt(task, {
         prompt,
         continueSession: true,
-        injectActiveGoal: true,
+        injectActiveGoal: task.agentType !== 'ask_agent',
       });
 
       if (!resumeResult.ok) {
@@ -938,6 +939,44 @@ export class TaskDispatcher {
           'Failed to flush logs on ask_agent task completion'
         );
       }
+
+      /* v8 ignore start -- upstream: pending messages delivery path requires sendMessage called on a completing ask_agent task; timing-dependent race cannot be reproduced with fake timer sequential execution @preserve */
+      // Check for pending messages before finalizing — user may have sent
+      // a follow-up while this attempt was completing.
+      const pendingQueue = this.pendingMessages.get(task.taskId);
+      if (pendingQueue !== undefined && pendingQueue.length > 0) {
+        this.pendingMessages.delete(task.taskId);
+        const combinedPrompt = pendingQueue.join('\n\n');
+        this.appendOrchestratorTaskLog(
+          task.taskId,
+          `Ask agent: delivering ${String(pendingQueue.length)} queued message(s) instead of finalizing`
+        );
+        this.appendTaggedTaskLog(
+          task.taskId,
+          'prompt',
+          combinedPrompt.length > 200 ? combinedPrompt.slice(0, 200) + '\u2026' : combinedPrompt
+        );
+        await this.flushTaskLogs(task.taskId);
+        await this.teardownAttempt(task.taskId, true);
+        const resumeResult = await this.startWorkerAttempt(task, {
+          prompt: combinedPrompt,
+          continueSession: true,
+          injectActiveGoal: false,
+        });
+        if (resumeResult.ok) {
+          task.containerId = resumeResult.containerId;
+          await this.saveTask(task);
+          this.claudeErrors.delete(task.taskId);
+          this.taskExitCodes.delete(task.taskId);
+          return;
+        }
+        this.appendOrchestratorTaskLog(
+          task.taskId,
+          'Failed to deliver queued messages, finalizing normally'
+        );
+      }
+      /* v8 ignore stop @preserve */
+
       const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
       const summary = getLast50ClaudeLines(rawLogs);
       this.appendOrchestratorTaskLog(
