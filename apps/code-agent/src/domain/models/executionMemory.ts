@@ -27,7 +27,6 @@ export interface ExecutionMemory {
   evidenceSummary: string;
   retrievalText: string;
   keywords: string[];
-  labelHints: string[];
   componentHints: string[];
   embeddingModel: ExecutionMemoryEmbeddingModel;
   fingerprint: string;
