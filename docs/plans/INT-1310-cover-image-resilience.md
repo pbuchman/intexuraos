@@ -1,10 +1,16 @@
-# Cover Image Generation Resilience Implementation Plan
+# Cover Image Generation Resilience — Provider Failover Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make cover image generation resilient to transient LLM API failures (503 "high demand") by adding retry-with-backoff for the prompt generation step and model fallback for image generation.
+**Goal:** Make cover image generation resilient to provider failures by adding provider failover. When the preferred provider fails (at any step — prompt or image generation), try the alternate provider. If both providers fail, generate HTML without a cover image and log the specific reason.
 
-**Architecture:** The fix targets two layers: (1) the `generateCoverImage` function in research-agent which orchestrates the image pipeline, and (2) a new retry utility in `common-core`. When the prompt generation call fails with a transient error (503/UNAVAILABLE/RATE_LIMITED), the system retries up to 2 times with exponential backoff. If the selected image model fails, it falls back to the alternate provider's model. No changes to image-service internals or HTML generation are needed.
+**Architecture:** The fix is contained entirely within the `generateCoverImage` function in research-agent. No new packages, no new utilities, no retry logic. The existing `selectImageModel` function picks a preferred provider based on synthesis model and API keys. The new logic wraps the full pipeline (prompt generation + image generation) in a try-with-fallback: if the preferred provider's pipeline fails, try the alternate provider's pipeline. Both providers have a prompt model (text LLM) and an image model.
+
+**Provider pipelines:**
+| Provider   | Prompt Model (text LLM)  | Image Model              |
+| ---------- | ------------------------ | ------------------------ |
+| Google     | `gemini-2.5-pro`         | `gemini-2.5-flash-image` |
+| OpenAI     | `gpt-4.1`                | `gpt-image-1`            |
 
 **Tech Stack:** TypeScript, Fastify, Result pattern (`@intexuraos/common-core`)
 
@@ -27,15 +33,9 @@ Research ID: `97c8b579-c778-45d5-8368-2bd852460fc7`
 6. `14:04:13.414Z` — `[4.5.1] Generating shareable HTML` (proceeds without image)
 7. `14:04:13.861Z` — `[4.5.3] HTML uploaded successfully` (no cover image in HTML)
 
-**Image-service logs confirm:**
-- `14:04:11.929Z` — Received prompt generation request, model: `gemini-2.5-pro`
-- `14:04:13.202Z` — LLM usage logged: `success: False`, `errorMessage: {"error":{"code":503,"message":"This model is currently experiencing high demand..."}}`
-- `14:04:13.304Z` — `Prompt generation failed`, `errorCode: API_ERROR`
-- `14:04:13.305Z` — Response: `statusCode: 502`
-
 ### Root Cause
 
-The Gemini 2.5 Pro model returned HTTP 503 (UNAVAILABLE) due to temporary high demand. The image-service correctly propagated this as a `DOWNSTREAM_ERROR` with HTTP 502. The research-agent's `generateCoverImage` function received the error and returned `null` — **there is zero retry logic anywhere in the image generation pipeline**. The HTML was generated and uploaded without a cover image, and there is no mechanism to retroactively add the image later.
+The Google provider (Gemini 2.5 Pro) returned HTTP 503 (UNAVAILABLE) during the prompt generation step. The research-agent's `generateCoverImage` function received the error and returned `null` with no fallback attempt. The user had both Google and OpenAI API keys configured, so the system could have tried the OpenAI provider instead. The HTML was uploaded without a cover image.
 
 ### Why No Image Appears
 
@@ -45,34 +45,26 @@ In `htmlGenerator.ts` (line 394-397), when `coverImage` is `undefined`, both the
 
 ## Design
 
-### Option A: Retry with backoff in `generateCoverImage` (Recommended)
+### Simple provider failover in `generateCoverImage`
 
-Add retry logic directly in the research-agent's `generateCoverImage` function for the prompt generation step. This is the simplest change with the highest impact because:
-- The 503 error is explicitly documented as "usually temporary"
-- The prompt generation call took only ~18 seconds — retrying 1-2 times adds acceptable latency
-- Both API keys were present (Google + OpenAI), but only Google was tried for prompt generation
+When the preferred provider fails at any step (prompt generation or image generation), try the alternate provider's full pipeline. No retry logic, no new utilities — just a straightforward fallback.
 
-**Retry scope:** Only the prompt generation step (`client.generatePrompt`) — not the image generation step. Prompt generation is the step that failed, and it's a lightweight LLM call (~1.4s when it works). Image generation is heavier and uses a different model/provider.
+**Flow:**
+1. Determine preferred and alternate providers based on synthesis model + available API keys
+2. Try full pipeline with preferred provider (prompt model → image model)
+3. If ANY step fails, log the error, then try full pipeline with alternate provider
+4. If alternate also fails, log the specific reason and return `null` (HTML generated without image)
 
-**Fallback scope:** For prompt generation, fall back from `gemini-2.5-pro` to `gpt-4.1` if the user has an OpenAI key and retries are exhausted. For image generation (already has model selection logic), add a fallback to the alternate model if the primary fails.
-
-### Option B: Async re-generation (Not recommended for now)
-
-Add a "regenerate image" endpoint that can be triggered manually or by a scheduled job. This is more complex and doesn't solve the immediate problem of transient failures.
-
-### Chosen: Option A
+**Key change:** The current `selectImageModel` function picks ONE model based on preference. The new approach builds a list of available provider pipelines (preferred first, alternate second) and tries them in order.
 
 ---
 
 ## File Structure
 
-| File                                                                              | Action   | Responsibility                               |
-| --------------------------------------------------------------------------------- | -------- | -------------------------------------------- |
-| `packages/common-core/src/retry.ts`                                               | Create   | Generic `retryWithBackoff` utility           |
-| `packages/common-core/src/index.ts`                                               | Modify   | Export the new retry utility                 |
-| `packages/common-core/src/__tests__/retry.test.ts`                                | Create   | Tests for retry utility                      |
-| `apps/research-agent/src/domain/research/usecases/runSynthesis.ts`                | Modify   | Add retry + fallback to `generateCoverImage` |
-| `apps/research-agent/src/__tests__/domain/research/usecases/runSynthesis.test.ts` | Modify   | Tests for retry/fallback behavior            |
+| File                                                                              | Action   | Responsibility                                              |
+| --------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------- |
+| `apps/research-agent/src/domain/research/usecases/runSynthesis.ts`                | Modify   | Add provider failover to `generateCoverImage`               |
+| `apps/research-agent/src/__tests__/domain/research/usecases/runSynthesis.test.ts` | Modify   | Tests for failover behavior                                 |
 
 ---
 
@@ -85,258 +77,66 @@ Add a "regenerate image" endpoint that can be triggered manually or by a schedul
 
 ---
 
-## Task 1: Create `retryWithBackoff` utility in `common-core`
+## Task 1: Add provider failover to `generateCoverImage`
 
 **Files:**
-- Create: `packages/common-core/src/retry.ts`
-- Create: `packages/common-core/src/__tests__/retry.test.ts`
-- Modify: `packages/common-core/src/index.ts`
-
-- [ ] **Step 1: Write the failing test for retryWithBackoff — success on first try**
-
-```typescript
-// packages/common-core/src/__tests__/retry.test.ts
-import { describe, it, expect, vi } from 'vitest';
-import { retryWithBackoff } from '../retry.js';
-import { ok, err, type Result } from '../index.js';
-
-describe('retryWithBackoff', () => {
-  it('returns immediately on first success', async () => {
-    const fn = vi.fn().mockResolvedValue(ok('done'));
-
-    const result = await retryWithBackoff(fn, {
-      maxRetries: 2,
-      baseDelayMs: 100,
-      shouldRetry: () => true,
-    });
-
-    expect(result).toEqual(ok('done'));
-    expect(fn).toHaveBeenCalledTimes(1);
-  });
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `cd packages/common-core && npx vitest run src/__tests__/retry.test.ts`
-Expected: FAIL — module `../retry.js` not found
-
-- [ ] **Step 3: Write minimal implementation**
-
-```typescript
-// packages/common-core/src/retry.ts
-import type { Result } from './result.js';
-
-export interface RetryOptions<E> {
-  /** Maximum number of retry attempts (0 = no retries, just one attempt) */
-  maxRetries: number;
-  /** Base delay in ms — actual delay is baseDelayMs * 2^attempt */
-  baseDelayMs: number;
-  /** Predicate: should this error be retried? */
-  shouldRetry: (error: E) => boolean;
-}
-
-export async function retryWithBackoff<T, E>(
-  fn: () => Promise<Result<T, E>>,
-  options: RetryOptions<E>
-): Promise<Result<T, E>> {
-  let lastResult: Result<T, E> | undefined;
-
-  for (let attempt = 0; attempt <= options.maxRetries; attempt++) {
-    const result = await fn();
-
-    if (result.ok) {
-      return result;
-    }
-
-    lastResult = result;
-
-    if (attempt < options.maxRetries && options.shouldRetry(result.error)) {
-      const delay = options.baseDelayMs * Math.pow(2, attempt);
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
-  }
-
-  // lastResult is guaranteed to be set because maxRetries >= 0 means at least one iteration
-  return lastResult!;
-}
-```
-
-- [ ] **Step 4: Export from index.ts**
-
-Add to `packages/common-core/src/index.ts`:
-
-```typescript
-export { retryWithBackoff, type RetryOptions } from './retry.js';
-```
-
-- [ ] **Step 5: Run test to verify it passes**
-
-Run: `cd packages/common-core && npx vitest run src/__tests__/retry.test.ts`
-Expected: PASS
-
-- [ ] **Step 6: Write additional tests — retry on failure, then succeed**
-
-```typescript
-it('retries on retryable error and succeeds', async () => {
-  const fn = vi
-    .fn()
-    .mockResolvedValueOnce(err({ code: 'TRANSIENT', message: 'temporary' }))
-    .mockResolvedValueOnce(ok('recovered'));
-
-  const result = await retryWithBackoff(fn, {
-    maxRetries: 2,
-    baseDelayMs: 10, // short for tests
-    shouldRetry: (e: { code: string }) => e.code === 'TRANSIENT',
-  });
-
-  expect(result).toEqual(ok('recovered'));
-  expect(fn).toHaveBeenCalledTimes(2);
-});
-
-it('does not retry non-retryable errors', async () => {
-  const fn = vi
-    .fn()
-    .mockResolvedValue(err({ code: 'PERMANENT', message: 'fatal' }));
-
-  const result = await retryWithBackoff(fn, {
-    maxRetries: 2,
-    baseDelayMs: 10,
-    shouldRetry: (e: { code: string }) => e.code === 'TRANSIENT',
-  });
-
-  expect(result).toEqual(err({ code: 'PERMANENT', message: 'fatal' }));
-  expect(fn).toHaveBeenCalledTimes(1);
-});
-
-it('returns last error after all retries exhausted', async () => {
-  const fn = vi
-    .fn()
-    .mockResolvedValue(err({ code: 'TRANSIENT', message: 'still failing' }));
-
-  const result = await retryWithBackoff(fn, {
-    maxRetries: 2,
-    baseDelayMs: 10,
-    shouldRetry: (e: { code: string }) => e.code === 'TRANSIENT',
-  });
-
-  expect(result).toEqual(err({ code: 'TRANSIENT', message: 'still failing' }));
-  expect(fn).toHaveBeenCalledTimes(3); // 1 initial + 2 retries
-});
-```
-
-- [ ] **Step 7: Run all retry tests**
-
-Run: `cd packages/common-core && npx vitest run src/__tests__/retry.test.ts`
-Expected: All PASS
-
-- [ ] **Step 8: Build common-core**
-
-Run: `cd packages/common-core && pnpm build`
-Expected: Build succeeds
-
-- [ ] **Step 9: Commit**
-
-```bash
-git add packages/common-core/src/retry.ts packages/common-core/src/__tests__/retry.test.ts packages/common-core/src/index.ts
-git commit -m "feat(common-core): add retryWithBackoff utility for transient error resilience"
-```
-
----
-
-## Task 2: Add retry + prompt model fallback to `generateCoverImage`
-
-**Files:**
-- Modify: `apps/research-agent/src/domain/research/usecases/runSynthesis.ts` (lines 465-535)
+- Modify: `apps/research-agent/src/domain/research/usecases/runSynthesis.ts` (lines 435-535)
 - Modify: `apps/research-agent/src/__tests__/domain/research/usecases/runSynthesis.test.ts`
 
-- [ ] **Step 1: Write the failing test — retry on transient prompt generation failure**
+### Data model
 
-Add to the existing `runSynthesis.test.ts`, in the cover image generation describe block:
+Define a `ProviderPipeline` type that pairs a prompt model with an image model:
 
 ```typescript
-it('retries prompt generation on transient API_ERROR and succeeds', async () => {
-  // First call fails with API_ERROR (simulating 503), second succeeds
-  const mockClient = {
-    generatePrompt: vi
-      .fn()
-      .mockResolvedValueOnce(err({ code: 'API_ERROR', message: 'HTTP 502: DOWNSTREAM_ERROR 503' }))
-      .mockResolvedValueOnce(ok({
-        title: 'Test',
-        visualSummary: 'summary',
-        prompt: 'a beautiful scene',
-        negativePrompt: '',
-        parameters: { framing: 'wide', realism: 'photorealistic', people: 'none' },
-      })),
-    generateImage: vi.fn().mockResolvedValue(ok({
-      id: 'img-1',
-      thumbnailUrl: 'https://example.com/thumb.jpg',
-      fullSizeUrl: 'https://example.com/full.jpg',
-    })),
-    deleteImage: vi.fn(),
-  };
-
-  // ... invoke runSynthesis with mockClient as imageServiceClient ...
-  // Assert generatePrompt was called twice
-  expect(mockClient.generatePrompt).toHaveBeenCalledTimes(2);
-  // Assert image was generated successfully
-  // Assert the research result has coverImageId set
-});
+interface ProviderPipeline {
+  name: string;           // 'Google' | 'OpenAI' — for logging
+  promptModel: PromptModel;
+  imageModel: ImageModel;
+}
 ```
 
-Note: The exact test setup depends on the existing test patterns in `runSynthesis.test.ts`. The engineer should read the existing tests and follow the same mock/service setup pattern.
+### New function: `getAvailableProviderPipelines`
 
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `cd apps/research-agent && npx vitest run src/__tests__/domain/research/usecases/runSynthesis.test.ts -t "retries prompt generation"`
-Expected: FAIL — no retry logic exists yet
-
-- [ ] **Step 3: Write the failing test — fallback prompt model when retries exhausted**
+Replace the current `selectImageModel` with a function that returns an ordered list of available provider pipelines (preferred first):
 
 ```typescript
-it('falls back to gpt-4.1 for prompt generation when gemini-2.5-pro retries exhausted and OpenAI key available', async () => {
-  // All gemini-2.5-pro calls fail, then gpt-4.1 succeeds
-  const mockClient = {
-    generatePrompt: vi
-      .fn()
-      .mockImplementation(async (_text: string, model: string, _userId: string) => {
-        if (model === 'gemini-2.5-pro') {
-          return err({ code: 'API_ERROR', message: 'HTTP 502: 503 high demand' });
-        }
-        return ok({
-          title: 'Test',
-          visualSummary: 'summary',
-          prompt: 'a scene',
-          negativePrompt: '',
-          parameters: { framing: 'wide', realism: 'photorealistic', people: 'none' },
-        });
-      }),
-    generateImage: vi.fn().mockResolvedValue(ok({
-      id: 'img-1',
-      thumbnailUrl: 'https://example.com/thumb.jpg',
-      fullSizeUrl: 'https://example.com/full.jpg',
-    })),
-    deleteImage: vi.fn(),
+function getAvailableProviderPipelines(
+  imageApiKeys: ImageApiKeys | undefined,
+  synthesisModel?: string
+): ProviderPipeline[] {
+  const hasGoogleKey = imageApiKeys?.google !== undefined;
+  const hasOpenAiKey = imageApiKeys?.openai !== undefined;
+
+  const googlePipeline: ProviderPipeline = {
+    name: 'Google',
+    promptModel: LlmModels.Gemini25Pro,
+    imageModel: LlmModels.Gemini25FlashImage,
   };
 
-  // imageApiKeys must have both google and openai keys set
-  // Assert generatePrompt was called 3 times with gemini-2.5-pro (1 + 2 retries)
-  // then 1 time with gpt-4.1
-  // Assert image was generated successfully
-});
+  const openAiPipeline: ProviderPipeline = {
+    name: 'OpenAI',
+    promptModel: 'gpt-4.1' as PromptModel,
+    imageModel: LlmModels.GPTImage1,
+  };
+
+  const preferOpenAi = synthesisModel?.startsWith('gpt-') === true;
+  const pipelines: ProviderPipeline[] = [];
+
+  if (preferOpenAi) {
+    if (hasOpenAiKey) pipelines.push(openAiPipeline);
+    if (hasGoogleKey) pipelines.push(googlePipeline);
+  } else {
+    if (hasGoogleKey) pipelines.push(googlePipeline);
+    if (hasOpenAiKey) pipelines.push(openAiPipeline);
+  }
+
+  return pipelines;
+}
 ```
 
-- [ ] **Step 4: Modify `generateCoverImage` to add retry + fallback**
-
-In `apps/research-agent/src/domain/research/usecases/runSynthesis.ts`, update the `generateCoverImage` function:
+### Reworked `generateCoverImage`
 
 ```typescript
-import { retryWithBackoff } from '@intexuraos/common-core';
-
-// Add these constants near the top of the file or inside generateCoverImage:
-const PROMPT_RETRY_MAX = 2;
-const PROMPT_RETRY_BASE_DELAY_MS = 2000;
-
 async function generateCoverImage(
   client: ImageServiceClient,
   synthesizedResult: string,
@@ -345,193 +145,224 @@ async function generateCoverImage(
   synthesisModel: string | undefined,
   logger: Logger
 ): Promise<GeneratedImageData | null> {
-  const primaryPromptModel = LlmModels.Gemini25Pro;
-  const imageModel = selectImageModel(imageApiKeys, synthesisModel);
+  const pipelines = getAvailableProviderPipelines(imageApiKeys, synthesisModel);
 
-  if (imageModel === null) {
-    logger.info(
-      {},
-      '[4.4.1a] No API keys available for image generation (neither Google nor OpenAI key set)'
-    );
+  if (pipelines.length === 0) {
+    logger.info({}, '[4.4.1a] No API keys available for image generation');
     return null;
   }
 
   logger.info(
-    {},
-    `[4.4.1b] Selected image model: ${imageModel} (Google key: ${imageApiKeys?.google !== undefined ? 'present' : 'missing'}, OpenAI key: ${imageApiKeys?.openai !== undefined ? 'present' : 'missing'})`
+    { providers: pipelines.map((p) => p.name) },
+    `[4.4.1] Starting cover image generation (${String(pipelines.length)} provider(s) available)`
   );
 
-  try {
-    // Step 1: Generate prompt with retry + fallback
-    const promptResult = await generatePromptWithResilience(
-      client,
-      synthesizedResult,
-      userId,
-      primaryPromptModel,
-      imageApiKeys,
-      logger
-    );
+  const errors: Array<{ provider: string; step: string; code: string; message: string }> = [];
 
-    if (promptResult === null) {
-      return null;
-    }
-
-    // Step 2: Generate image (existing logic, unchanged)
+  for (const pipeline of pipelines) {
     logger.info(
       {},
-      `[4.4.3] Prompt generated (title: ${promptResult.title}), calling image-service /internal/images/generate (model: ${imageModel})`
+      `[4.4.2] Trying ${pipeline.name} provider (prompt: ${pipeline.promptModel}, image: ${pipeline.imageModel})`
     );
 
-    const imageResult = await client.generateImage(promptResult.prompt, imageModel, userId, {
-      title: promptResult.title,
-    });
-    if (!imageResult.ok) {
-      logger.error(
-        {
-          errorCode: imageResult.error.code,
-          errorMessage: imageResult.error.message,
-          model: imageModel,
-          userId,
-        },
-        '[4.4.3] Failed to generate cover image from image-service'
+    try {
+      // Step 1: Generate prompt
+      const promptResult = await client.generatePrompt(
+        synthesizedResult,
+        pipeline.promptModel,
+        userId
       );
-      return null;
-    }
 
-    return imageResult.value;
-  } catch (error) {
-    logger.error({ error, userId }, '[4.4.ERR] Unexpected error during cover image generation');
-    return null;
+      if (!promptResult.ok) {
+        logger.warn(
+          { errorCode: promptResult.error.code, errorMessage: promptResult.error.message, provider: pipeline.name },
+          `[4.4.2] ${pipeline.name} prompt generation failed`
+        );
+        errors.push({
+          provider: pipeline.name,
+          step: 'prompt generation',
+          code: promptResult.error.code,
+          message: promptResult.error.message,
+        });
+        continue; // Try next provider
+      }
+
+      // Step 2: Generate image
+      logger.info(
+        {},
+        `[4.4.3] Prompt generated (title: ${promptResult.value.title}), generating image with ${pipeline.imageModel}`
+      );
+
+      const imageResult = await client.generateImage(
+        promptResult.value.prompt,
+        pipeline.imageModel,
+        userId,
+        { title: promptResult.value.title }
+      );
+
+      if (!imageResult.ok) {
+        logger.warn(
+          { errorCode: imageResult.error.code, errorMessage: imageResult.error.message, provider: pipeline.name },
+          `[4.4.3] ${pipeline.name} image generation failed`
+        );
+        errors.push({
+          provider: pipeline.name,
+          step: 'image generation',
+          code: imageResult.error.code,
+          message: imageResult.error.message,
+        });
+        continue; // Try next provider
+      }
+
+      logger.info(
+        { provider: pipeline.name },
+        `[4.4.4] Cover image generated successfully via ${pipeline.name}`
+      );
+      return imageResult.value;
+    } catch (error) {
+      logger.warn(
+        { error, provider: pipeline.name },
+        `[4.4.ERR] Unexpected error with ${pipeline.name} provider`
+      );
+      errors.push({
+        provider: pipeline.name,
+        step: 'unexpected',
+        code: 'UNEXPECTED_ERROR',
+        message: String(error),
+      });
+      continue; // Try next provider
+    }
   }
-}
 
-async function generatePromptWithResilience(
-  client: ImageServiceClient,
-  text: string,
-  userId: string,
-  primaryModel: PromptModel,
-  imageApiKeys: ImageApiKeys | undefined,
-  logger: Logger
-): Promise<ThumbnailPrompt | null> {
-  // Try primary model with retries
-  logger.info({}, `[4.4.2] Calling image-service /internal/images/prompts/generate (model: ${primaryModel})`);
-
-  const isTransientError = (error: ImageServiceError): boolean =>
-    error.code === 'API_ERROR' && (error.message.includes('503') || error.message.includes('UNAVAILABLE') || error.message.includes('high demand'));
-
-  const primaryResult = await retryWithBackoff(
-    () => client.generatePrompt(text, primaryModel, userId),
-    {
-      maxRetries: PROMPT_RETRY_MAX,
-      baseDelayMs: PROMPT_RETRY_BASE_DELAY_MS,
-      shouldRetry: (error) => {
-        const retryable = isTransientError(error);
-        if (retryable) {
-          logger.warn(
-            { errorCode: error.code, model: primaryModel },
-            '[4.4.2] Prompt generation failed with transient error, retrying...'
-          );
-        }
-        return retryable;
-      },
-    }
+  // All providers failed
+  logger.error(
+    { errors },
+    `[4.4.4] Cover image generation failed — all ${String(pipelines.length)} provider(s) exhausted. HTML will be generated without a cover image.`
   );
-
-  if (primaryResult.ok) {
-    return primaryResult.value;
-  }
-
-  // Primary model exhausted retries — try fallback model if available
-  const fallbackModel = selectFallbackPromptModel(primaryModel, imageApiKeys);
-
-  if (fallbackModel !== null) {
-    logger.warn(
-      { primaryModel, fallbackModel },
-      `[4.4.2b] Primary prompt model failed, falling back to ${fallbackModel}`
-    );
-
-    const fallbackResult = await client.generatePrompt(text, fallbackModel, userId);
-
-    if (fallbackResult.ok) {
-      logger.info({}, `[4.4.2b] Fallback prompt model ${fallbackModel} succeeded`);
-      return fallbackResult.value;
-    }
-
-    logger.error(
-      {
-        errorCode: fallbackResult.error.code,
-        errorMessage: fallbackResult.error.message,
-        model: fallbackModel,
-        userId,
-      },
-      '[4.4.2b] Fallback prompt model also failed'
-    );
-  } else {
-    logger.error(
-      {
-        errorCode: primaryResult.error.code,
-        errorMessage: primaryResult.error.message,
-        model: primaryModel,
-        userId,
-      },
-      '[4.4.2] Failed to generate cover image prompt (no fallback available)'
-    );
-  }
-
-  return null;
-}
-
-function selectFallbackPromptModel(
-  primaryModel: PromptModel,
-  imageApiKeys: ImageApiKeys | undefined
-): PromptModel | null {
-  // If primary was Gemini and user has OpenAI key, fall back to GPT
-  if (primaryModel === LlmModels.Gemini25Pro && imageApiKeys?.openai !== undefined) {
-    return 'gpt-4.1';
-  }
-  // If primary was GPT and user has Google key, fall back to Gemini
-  if (primaryModel === 'gpt-4.1' && imageApiKeys?.google !== undefined) {
-    return LlmModels.Gemini25Pro;
-  }
   return null;
 }
 ```
 
-- [ ] **Step 5: Run the tests**
+### Implementation steps
+
+- [ ] **Step 1: Write failing test — preferred provider fails, alternate succeeds**
+
+Add to the existing cover image generation describe block in `runSynthesis.test.ts`:
+
+```typescript
+it('falls back to alternate provider when preferred provider prompt generation fails', async () => {
+  // Google prompt fails (503), OpenAI prompt succeeds, OpenAI image succeeds
+  const mockClient = {
+    generatePrompt: vi.fn().mockImplementation(
+      async (_text: string, model: string, _userId: string) => {
+        if (model === 'gemini-2.5-pro') {
+          return err({ code: 'API_ERROR', message: 'HTTP 502: 503 high demand' });
+        }
+        return ok({ title: 'Test', visualSummary: 'summary', prompt: 'a scene', negativePrompt: '', parameters: { framing: 'wide', realism: 'photorealistic', people: 'none' } });
+      }
+    ),
+    generateImage: vi.fn().mockResolvedValue(ok({
+      id: 'img-1', thumbnailUrl: 'https://example.com/thumb.jpg', fullSizeUrl: 'https://example.com/full.jpg',
+    })),
+    deleteImage: vi.fn(),
+  };
+  // Provide both Google and OpenAI API keys
+  // Assert: generatePrompt called twice (once with gemini-2.5-pro, once with gpt-4.1)
+  // Assert: generateImage called once with gpt-image-1
+  // Assert: result has coverImageId set
+});
+```
+
+Note: Exact test setup depends on the existing patterns in `runSynthesis.test.ts`. The engineer should read the existing tests and follow the same mock/service setup pattern.
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd apps/research-agent && npx vitest run src/__tests__/domain/research/usecases/runSynthesis.test.ts -t "falls back"`
+Expected: FAIL — no failover logic exists yet
+
+- [ ] **Step 3: Write failing test — both providers fail, returns null with log**
+
+```typescript
+it('returns null and logs reason when all providers fail', async () => {
+  const mockClient = {
+    generatePrompt: vi.fn().mockResolvedValue(
+      err({ code: 'API_ERROR', message: 'provider unavailable' })
+    ),
+    generateImage: vi.fn(),
+    deleteImage: vi.fn(),
+  };
+  // Provide both Google and OpenAI API keys
+  // Assert: generatePrompt called twice (both providers attempted)
+  // Assert: generateImage never called
+  // Assert: result has no coverImageId
+  // Assert: logger.error called with message about all providers exhausted
+});
+```
+
+- [ ] **Step 4: Write failing test — preferred provider image generation fails, alternate succeeds**
+
+```typescript
+it('falls back to alternate provider when preferred provider image generation fails', async () => {
+  const mockClient = {
+    generatePrompt: vi.fn().mockResolvedValue(
+      ok({ title: 'Test', visualSummary: 'summary', prompt: 'a scene', negativePrompt: '', parameters: { framing: 'wide', realism: 'photorealistic', people: 'none' } })
+    ),
+    generateImage: vi.fn().mockImplementation(
+      async (_prompt: string, model: string, _userId: string) => {
+        if (model === 'gemini-2.5-flash-image') {
+          return err({ code: 'API_ERROR', message: 'image generation failed' });
+        }
+        return ok({ id: 'img-1', thumbnailUrl: 'https://example.com/thumb.jpg', fullSizeUrl: 'https://example.com/full.jpg' });
+      }
+    ),
+    deleteImage: vi.fn(),
+  };
+  // Provide both Google and OpenAI API keys
+  // Assert: generatePrompt called twice (once per provider — prompt is regenerated per provider)
+  // Assert: generateImage called twice (Google fails, OpenAI succeeds)
+  // Assert: result has coverImageId set
+});
+```
+
+- [ ] **Step 5: Implement the provider failover**
+
+Apply the changes described above:
+1. Add `ProviderPipeline` interface
+2. Replace `selectImageModel` with `getAvailableProviderPipelines`
+3. Rewrite `generateCoverImage` with the failover loop
+
+- [ ] **Step 6: Run tests to verify they pass**
 
 Run: `cd apps/research-agent && npx vitest run src/__tests__/domain/research/usecases/runSynthesis.test.ts`
 Expected: All PASS
 
-- [ ] **Step 6: Run full workspace verification**
+- [ ] **Step 7: Write test — single provider available, succeeds on first try**
+
+```typescript
+it('succeeds with single available provider (no fallback needed)', async () => {
+  // Only Google key available, Google pipeline succeeds
+  // Assert: generatePrompt called once with gemini-2.5-pro
+  // Assert: generateImage called once with gemini-2.5-flash-image
+});
+```
+
+- [ ] **Step 8: Run full workspace verification**
 
 Run: `pnpm run verify:workspace:tracked -- research-agent`
 Expected: PASS with coverage
 
-- [ ] **Step 7: Commit**
-
-```bash
-git add apps/research-agent/src/domain/research/usecases/runSynthesis.ts apps/research-agent/src/__tests__/domain/research/usecases/runSynthesis.test.ts
-git commit -m "feat(research-agent): add retry + fallback for cover image prompt generation
-
-Addresses transient 503 errors from Gemini API during prompt generation.
-Retries up to 2 times with exponential backoff, then falls back to
-alternate prompt model (gpt-4.1 <-> gemini-2.5-pro) if user has both keys."
-```
-
----
-
-## Task 3: Final verification
-
-- [ ] **Step 1: Build all packages**
-
-Run: `pnpm build`
-Expected: All packages build successfully
-
-- [ ] **Step 2: Run full CI**
+- [ ] **Step 9: Run full CI**
 
 Run: `pnpm run ci:tracked`
 Expected: All checks pass
 
-- [ ] **Step 3: Commit any remaining fixes**
+- [ ] **Step 10: Commit**
 
-If CI revealed issues, fix and commit.
+```bash
+git add apps/research-agent/src/domain/research/usecases/runSynthesis.ts apps/research-agent/src/__tests__/domain/research/usecases/runSynthesis.test.ts
+git commit -m "feat(research-agent): add provider failover for cover image generation
+
+When one image generation provider fails (at prompt or image step),
+automatically tries the alternate provider. If both fail, generates
+HTML without cover image and logs the specific reason per provider."
+```
