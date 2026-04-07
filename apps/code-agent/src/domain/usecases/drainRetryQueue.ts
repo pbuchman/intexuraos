@@ -272,7 +272,6 @@ async function handleNewTaskRetry(
   ) {
     taskExecutionMemoryContext = await prepareExecutionMemoryContext({
       task,
-      linearIssueLabels: dispatchLabels,
       logger,
       linearAgentClient,
       queryClient: deps.executionMemory?.queryClient,
