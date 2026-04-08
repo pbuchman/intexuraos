@@ -956,6 +956,64 @@ describe('GET /code/issue-groups', () => {
     expect(taskWithoutAgent).toBeDefined();
   });
 
+  it('serializes tasks with prMergedAt and prClosedAt when set', async () => {
+    // Covers: prMergedAt and prClosedAt serialization in taskToSerializedTask
+    // Uses ISO strings directly to bypass FakeFirestore's Timestamp handling issue
+    // (FakeFirestore's isFieldValueDelete falsely matches Timestamp.isEqual)
+    const r = await codeTaskRepo.create(makeTaskInput({
+      linearIssueId: 'INT-1300',
+      traceId: 'trace-pr-timestamps',
+      agentType: 'execution',
+    }));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+
+    await codeTaskRepo.update(r.value.id, {
+      status: 'implemented',
+      prNumber: 99,
+      result: { prUrl: 'https://github.com/org/repo/pull/99' },
+    });
+
+    // Set prMergedAt and prClosedAt directly as ISO strings on the Firestore document
+    const mergedAt = '2025-01-15T10:30:00.000Z';
+    const closedAt = '2025-01-20T14:45:00.000Z';
+    await fakeFirestore.collection('code_tasks').doc(r.value.id).set({
+      prMergedAt: mergedAt,
+      prClosedAt: closedAt,
+    }, { merge: true });
+
+    mockSummaries = [makeSummary({ linearIssueId: 'INT-1300', aggregateStatus: 'done', latestTaskStatus: 'implemented', hasPrUrl: true, prNumber: 99 })];
+    mockCounts = { ...mockCounts, done: 1, totalGroups: 1 };
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/issue-groups',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        groups: {
+          linearIssueId: string | null;
+          tasks: {
+            prNumber?: number;
+            prMergedAt?: string;
+            prClosedAt?: string;
+          }[];
+        }[];
+      };
+    };
+
+    const group = body.data.groups.find((g) => g.linearIssueId === 'INT-1300');
+    expect(group).toBeDefined();
+    const task = group?.tasks[0];
+    expect(task).toBeDefined();
+    expect(task?.prNumber).toBe(99);
+    expect(task?.prMergedAt).toBe(mergedAt);
+    expect(task?.prClosedAt).toBe(closedAt);
+  });
+
   it('resets statusFilter to undefined when all values are invalid', async () => {
     // Covers item 17: statusFilter empty check after filtering invalid values
     const r = await codeTaskRepo.create(makeTaskInput({ linearIssueId: 'INT-1500', traceId: 'trace-invalid-status' }));

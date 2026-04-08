@@ -657,7 +657,10 @@ describe('handlePrClose (merged and closed-without-merge)', () => {
 
       await new Promise(resolve => setTimeout(resolve, 0));
 
-      expect(mockCodeTaskRepo.update).not.toHaveBeenCalled();
+      // prMergedAt should not be set — but prClosedAt is now set (INT-1316)
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-closed', {
+        prClosedAt: new Date('2026-04-02T00:00:00.000Z'),
+      });
     });
 
     it('does not fail when prMergedAt update rejects (best-effort)', async () => {
@@ -667,6 +670,83 @@ describe('handlePrClose (merged and closed-without-merge)', () => {
 
       await expect(
         handlePrClose(buildDeps(), createMergedInput({
+          sourceTimestamp: '2026-04-01T12:00:00.000Z',
+        }))
+      ).resolves.toBeUndefined();
+    });
+  });
+
+  describe('prClosedAt population (INT-1316)', () => {
+    beforeEach(() => {
+      mockCodeTaskRepo.update = vi.fn().mockResolvedValue(ok(createBaseTask()));
+    });
+
+    it('sets prClosedAt on task found via findByPR when PR is closed without merge', async () => {
+      const task = createBaseTask({ id: 'task-closed-1', linearIssueId: 'INT-100', prNumber: 42 });
+      mockCodeTaskRepo.findByPR.mockResolvedValue(ok(task));
+
+      await handlePrClose(buildDeps(), createClosedInput({
+        sourceTimestamp: '2026-04-01T12:00:00.000Z',
+      }));
+
+      // Fire-and-forget — need to flush microtasks
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-closed-1', {
+        prClosedAt: new Date('2026-04-01T12:00:00.000Z'),
+      });
+    });
+
+    it('sets prClosedAt on task found via findLatestExecutionTaskByPR when PR is closed without merge', async () => {
+      const task = createBaseTask({ id: 'task-closed-2', linearIssueId: 'INT-200', prNumber: 42 });
+      mockCodeTaskRepo.findLatestExecutionTaskByPR.mockResolvedValue(ok(task));
+
+      await handlePrClose(buildDeps(), createClosedInput({
+        sourceTimestamp: '2026-04-02T08:00:00.000Z',
+      }));
+
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-closed-2', {
+        prClosedAt: new Date('2026-04-02T08:00:00.000Z'),
+      });
+    });
+
+    it('deduplicates when both discovery methods find same task', async () => {
+      const task = createBaseTask({ id: 'task-dedup', linearIssueId: 'INT-300', prNumber: 42 });
+      mockCodeTaskRepo.findByPR.mockResolvedValue(ok(task));
+      mockCodeTaskRepo.findLatestExecutionTaskByPR.mockResolvedValue(ok(task));
+
+      await handlePrClose(buildDeps(), createClosedInput({
+        sourceTimestamp: '2026-04-01T12:00:00.000Z',
+      }));
+
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT set prClosedAt when PR is merged', async () => {
+      const task = createBaseTask({ id: 'task-merged', linearIssueId: 'INT-400', prNumber: 43 });
+      mockCodeTaskRepo.findByPR.mockResolvedValue(ok(task));
+
+      await handlePrClose(buildDeps(), createMergedInput());
+
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      // prClosedAt should not be set — only prMergedAt
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-merged', {
+        prMergedAt: new Date('2026-04-02T00:00:00.000Z'),
+      });
+    });
+
+    it('does not fail when prClosedAt update rejects (best-effort)', async () => {
+      const task = createBaseTask({ id: 'task-fail', linearIssueId: 'INT-500', prNumber: 42 });
+      mockCodeTaskRepo.findByPR.mockResolvedValue(ok(task));
+      mockCodeTaskRepo.update.mockRejectedValue(new Error('Firestore down'));
+
+      await expect(
+        handlePrClose(buildDeps(), createClosedInput({
           sourceTimestamp: '2026-04-01T12:00:00.000Z',
         }))
       ).resolves.toBeUndefined();

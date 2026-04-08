@@ -19,7 +19,7 @@ export interface PipelineStepData {
 
 export interface PipelineState {
   steps: PipelineStepData[];
-  pr: { url: string; number: string } | null;
+  pr: { url: string; number: string; status: 'open' | 'merged' | 'closed' | 'mergeable' } | null;
   failedAttempts: number;
   archivedCount: number;
 }

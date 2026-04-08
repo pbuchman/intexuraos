@@ -503,6 +503,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.prMergedAt !== undefined) {
           updateData['prMergedAt'] = Timestamp.fromDate(input.prMergedAt);
         }
+        if (input.prClosedAt !== undefined) {
+          updateData['prClosedAt'] = Timestamp.fromDate(input.prClosedAt);
+        }
         if (input.executionMemoryContext !== undefined) {
           const serializedExecutionMemoryContext = serializeExecutionMemoryContext(
             input.executionMemoryContext
