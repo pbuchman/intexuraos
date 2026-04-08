@@ -8989,6 +8989,7 @@ describe('TaskDispatcher', () => {
       const task = await noRestartDispatcher.getTask('no-restart-test');
       expect(task?.status).toBe('running');
       expect(task?.inactivityRestartCount).toBeUndefined();
+      expect(mockIsolationProvider.destroyWorker).not.toHaveBeenCalledWith('no-restart-test');
 
       vi.useRealTimers();
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
